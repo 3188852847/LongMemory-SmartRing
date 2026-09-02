@@ -16,11 +16,11 @@ from longmemory.adapters.llm.openai_compatible import OpenAICompatibleAnswerGene
 from longmemory.application.chat.contracts import AnswerGenerationError, AnswerGenerator
 from longmemory.bootstrap import build_application
 from longmemory.infrastructure.config.settings import load_model_settings
+from longmemory.evaluation.scoring import SCORER_VERSION, check_answer
 
 
 ROOT = Path(__file__).resolve().parents[3]
-DEFAULT_DATASET = ROOT / "datasets/synthetic/memory_smoke_v1.json"
-REFUSAL_MARKERS = ("不知道", "不清楚", "没有找到", "没有相关", "没有提供", "未提供", "无法确定", "没有记录", "未记录", "不确定")
+DEFAULT_DATASET = ROOT / "datasets/synthetic/memory_smoke_v2.json"
 
 
 class ContextSwitch:
@@ -55,17 +55,16 @@ def run_cases(generator: AnswerGenerator, dataset: dict, *, temp_root: Path | No
                     response = app.chat(case["query"])
                     contents = [item.memory.content for item in app.list_memories()]
                     retrieved = [item.content for item in response.retrieved_memories]
-                    refusal = any(marker in response.answer for marker in REFUSAL_MARKERS)
                     # 两组必须使用同一份题目真值；不能为了让无记忆组通过而改答案。
                     requires_refusal = case["abstain"]
                     # 简单词面代理：保留原回答供人工复核，不能作为语义正确性的最终裁判。
-                    answer_ok = (refusal if requires_refusal else
-                                 case["answer_contains"] in response.answer and not refusal)
+                    answer_check = check_answer(response.answer, abstain=requires_refusal,
+                                                answer_contains=case["answer_contains"])
                     results.append({
                         "case_id": case["id"], "category": case["category"], "mode": mode,
                         "write_ok": contents == case["memories"], "persistence_ok": persistence_ok,
                         "retrieval_ok": retrieved == case["retrieved"],
-                        "answer_check_pass": answer_ok, "expected_abstention": requires_refusal,
+                        **answer_check, "expected_abstention": requires_refusal,
                         "answer": response.answer, "error": None,
                     })
                 except AnswerGenerationError as error:
@@ -128,6 +127,8 @@ def main(argv=None) -> int:
             "prompt_sha256": hashlib.sha256(SYSTEM_PROMPT.encode()).hexdigest(),
             "comparison": "仅关闭回答上下文；两组都运行相同写入/检索流程。",
             "scoring": "合成样例词面代理，拒答与正确性需人工复核，不是模型准确率。",
+            "scorer_version": SCORER_VERSION,
+            "scorer_sha256": hashlib.sha256(Path(__file__).with_name("scoring.py").read_bytes()).hexdigest(),
             "results": results,
         }
         json.dump(report, stream, ensure_ascii=False, indent=2)

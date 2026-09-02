@@ -2,6 +2,8 @@
 
 import re
 
+from longmemory.core.common.text import looks_like_question
+
 
 _CAT_NAME_PATTERN = re.compile(
     r"叫(?P<name>.+?)的猫"
@@ -23,7 +25,7 @@ class FakeAnswerGenerator:
     ) -> str:
         """根据固定规则产生可预测回答。"""
 
-        is_question = query.strip().endswith(("?", "？"))
+        is_question = looks_like_question(query)
 
         # 猫名证据不能回答猫的颜色等其他属性；Fake 也必须拒绝越界推断。
         if is_question and "猫" in query and ("叫什么" in query or "名字" in query):

@@ -1,5 +1,7 @@
 """验证最小长程记忆能够跨应用生命周期保存并回忆。"""
 
+import pytest
+
 from longmemory.adapters.storage.sqlite_conversation_store import (
     SQLiteConversationStore,
 )
@@ -8,7 +10,8 @@ from longmemory.core.conversation.models import MessageRole
 from longmemory.infrastructure.database.connection import open_database
 
 
-def test_memory_survives_application_restart(tmp_path) -> None:
+@pytest.mark.parametrize("query", ["我的猫叫什么？", "我的猫叫什么"])
+def test_memory_survives_application_restart(tmp_path, query) -> None:
     """关闭并重新创建应用后，仍然能够从 SQLite 中找回记忆。"""
 
     # pytest 会为当前测试创建一个临时目录。
@@ -50,10 +53,12 @@ def test_memory_survives_application_restart(tmp_path) -> None:
     # 使用同一个 SQLite 文件重新创建应用。
     # 如果记忆只是存在内存中，这一步之后就会丢失。
     restarted_app = build_application(database_path=database_path)
-    recall_result = restarted_app.chat("我的猫叫什么？")
+    recall_result = restarted_app.chat(query)
 
     # 查询问题本身不应该被错误地保存为长期记忆。
     assert recall_result.saved_memories == ()
+    assert recall_result.memory_operations == ()
+    assert len(restarted_app.list_memories()) == 1
 
     # 应该能检索到上一次运行中保存的记忆。
     assert [

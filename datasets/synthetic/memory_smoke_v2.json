@@ -1,0 +1,16 @@
+{
+  "version": "memory-smoke-v2",
+  "source": "项目人工构造的合成数据，不包含真实个人信息；保留 v1 五例并增加无问号回归",
+  "license": "CC0-1.0",
+  "limitations": "中文小样例；词面检查需要人工复核，不能宣称通用语义能力",
+  "cases": [
+    {"id": "remember", "category": "should_remember", "history": ["我养了一只叫豆包的猫。"], "query": "我的猫叫什么？", "memories": ["用户养了一只叫豆包的猫。"], "retrieved": ["用户养了一只叫豆包的猫。"], "answer_contains": "豆包", "abstain": false},
+    {"id": "duplicate", "category": "duplicate", "history": ["我养了一只叫豆包的猫。", "我养了一只叫豆包的猫！"], "query": "我的猫叫什么？", "memories": ["用户养了一只叫豆包的猫。"], "retrieved": ["用户养了一只叫豆包的猫。"], "answer_contains": "豆包", "abstain": false},
+    {"id": "skip", "category": "should_not_remember", "history": ["你好", "我喜欢什么？"], "query": "我的猫叫什么？", "memories": [], "retrieved": [], "answer_contains": null, "abstain": true},
+    {"id": "unknown", "category": "unknown", "history": ["我养了一只叫豆包的猫。"], "query": "我的狗叫什么？", "memories": ["用户养了一只叫豆包的猫。"], "retrieved": [], "answer_contains": null, "abstain": true},
+    {"id": "related_unknown", "category": "related_but_insufficient", "history": ["我养了一只叫豆包的猫。"], "query": "我的猫是什么颜色？", "memories": ["用户养了一只叫豆包的猫。"], "retrieved": ["用户养了一只叫豆包的猫。"], "answer_contains": null, "abstain": true},
+    {"id": "unpunctuated_recall", "category": "unpunctuated_question", "history": ["我养了一只叫豆包的猫"], "query": "我的猫叫什么", "memories": ["用户养了一只叫豆包的猫。"], "retrieved": ["用户养了一只叫豆包的猫。"], "answer_contains": "豆包", "abstain": false},
+    {"id": "unpunctuated_unknown", "category": "unpunctuated_question", "history": ["我养了一只叫豆包的猫"], "query": "我的猫是什么颜色", "memories": ["用户养了一只叫豆包的猫。"], "retrieved": ["用户养了一只叫豆包的猫。"], "answer_contains": null, "abstain": true},
+    {"id": "unpunctuated_history", "category": "should_not_remember", "history": ["我喜欢什么", "我的猫叫什么", "我的猫是什么颜色"], "query": "我的猫叫什么", "memories": [], "retrieved": [], "answer_contains": null, "abstain": true}
+  ]
+}

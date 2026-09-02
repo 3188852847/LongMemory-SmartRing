@@ -69,6 +69,21 @@ def test_extracts_first_person_statement_as_atomic_memory() -> None:
         "   ",
         "我。",
         "我的猫叫什么？",
+        "我的猫叫什么",
+        "我的猫是什么颜色",
+        "  我的猫叫什么。  ",
+        "我的猫叫什么呢",
+        "我的猫呢",
+        "我喜欢什么",
+        "我是不是养了猫",
+        "我有没有养猫",
+        "我养猫吗",
+        "我的生日在几月",
+        "我的猫在哪里",
+        "我想知道我的猫叫什么",
+        "我养了一只猫。我的猫叫什么",
+        "我不知道猫叫什么，能告诉我吗",
+        "我的猫叫什么？我忘了",
         "今天天气很好。",
     ],
 )
@@ -80,6 +95,20 @@ def test_ignores_input_that_baseline_does_not_consider_memory(
     service = make_extraction_service()
 
     assert service.extract(make_message(content)) == ()
+
+
+@pytest.mark.parametrize("content", [
+    "我养了一只叫豆包的猫",
+    "我的猫是白色的",
+    "我不知道猫是什么品种",
+    "我记得我的猫叫什么",
+    "我什么都喜欢",
+    "我哪里都不想去",
+])
+def test_declarative_sentences_are_not_rejected_for_question_words(content):
+    memories = make_extraction_service().extract(make_message(content))
+    assert len(memories) == 1
+    assert memories[0].content == f"用户{content[1:]}。"
 
 
 def test_does_not_extract_user_memory_from_assistant_message() -> None:

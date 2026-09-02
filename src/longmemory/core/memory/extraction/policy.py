@@ -1,5 +1,7 @@
 """判断输入是否值得记忆的基础策略。"""
 
+from longmemory.core.common.text import looks_like_question
+
 
 class RuleBasedMemoryPolicy:
     """使用简单、可解释规则生成候选记忆内容。
@@ -18,7 +20,7 @@ class RuleBasedMemoryPolicy:
             return ()
 
         # 当前基线不把用户提出的问题保存为长期事实。
-        if normalized_text.endswith(("?", "？")):
+        if looks_like_question(normalized_text):
             return ()
 
         # 当前基线只处理明确的第一人称陈述。
