@@ -1,0 +1,50 @@
+# Python 与测试缓存
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# 虚拟环境与本地工具
+.venv/
+.uv-cache/
+.idea/
+.vscode/
+
+# 密钥与本地配置
+.env
+.env.*
+!.env.example
+
+# LongMemory 运行数据：目录保留，真实内容不提交
+data/databases/*
+!data/databases/.gitkeep
+data/logs/*
+!data/logs/.gitkeep
+data/exports/*
+!data/exports/.gitkeep
+data/backups/*
+!data/backups/.gitkeep
+data/audio/*
+!data/audio/.gitkeep
+
+# 实验运行产物
+experiments/runs/*
+!experiments/runs/.gitkeep
+experiments/results/*
+!experiments/results/.gitkeep
+
+# 嵌入式构建产物和本地配置
+firmware/**/build/
+firmware/**/managed_components/
+firmware/**/sdkconfig
+firmware/**/sdkconfig.old
+
+# 常见临时文件
+*.log
+*.tmp
+*.bak
+Thumbs.db
+.DS_Store
