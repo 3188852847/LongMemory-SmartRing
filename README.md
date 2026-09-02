@@ -8,7 +8,7 @@
 
 ## 当前状态
 
-项目处于 **V0.1 首个纵向闭环实施前**。
+项目处于 **V0.1 首个纵向闭环已跑通、继续补齐版本能力** 阶段。
 
 已经完成：
 
@@ -17,16 +17,23 @@
 - [x] 确定 V0.1 只实现 L0 原始对话与 L1 原子记忆
 - [x] 建立工程骨架、协作规则、需求、ADR 和研究计划
 - [x] 完成 SmartRing-Plus-B 基础硬件识别验证
+- [x] 实现 L0 原始消息与 L1 原子记忆领域模型及来源追踪
+- [x] 实现 SQLite 建表、L0/L1 持久化和跨应用实例重开验证
+- [x] 实现确定性的第一人称陈述提取 Baseline
+- [x] 实现基础关键词检索、受控上下文构建和 Fake 回答生成器
+- [x] 实现聊天应用服务和 `build_application()` 装配入口
+- [x] 建立单元、SQLite 集成和写入—重开—回忆端到端测试
 
 尚未完成：
 
-- [ ] 可运行的 L0/L1 领域模型
-- [ ] SQLite 存储实现
-- [ ] 规则提取、基础检索和上下文构建
-- [ ] CLI 与 Fake LLM 纵向闭环
-- [ ] 自动化测试和无记忆 Baseline
+- [ ] 可交互的 PC 端 CLI
+- [ ] 记忆查看、删除和撤销应用用例
+- [ ] 重复记忆处理和助手回答的 L0 持久化
+- [ ] 关键路径脱敏日志和可观察信息
+- [ ] 固定评估数据集与无记忆 Baseline 对照实验
+- [ ] 真实模型适配器
 
-当前 `src/longmemory/` 中除说明文件外主要是空骨架，不应被视为已实现功能。
+当前闭环采用确定性规则和 Fake 回答生成器，目的是验证架构、持久化和测试链路。它不是通用语义记忆系统，也不代表已经接入真实 LLM。
 
 ## V0.1 目标
 
@@ -176,6 +183,7 @@ LongMemory-SmartRing/                              # 项目根目录
 │     │     └─ consolidation/                      # 记忆整合预留
 │     ├─ application/                              # 用例编排层
 │     │  ├─ chat/                                  # 一轮聊天闭环
+│     │  │  ├─ contracts.py                        # 回答生成器契约
 │     │  │  ├─ dto.py                              # 聊天输入输出
 │     │  │  └─ service.py                          # 聊天用例
 │     │  └─ memory_management/                     # 查看、删除和撤销
@@ -263,8 +271,10 @@ LongMemory-SmartRing/                              # 项目根目录
 cd "D:\02-项目\LongMemory-SmartRing"
 uv sync
 uv run python --version
-uv run pytest
+uv run pytest -p no:cacheprovider
 ```
+
+当前自动化测试覆盖领域模型、记忆提取、基础检索、聊天编排、SQLite 重开持久化和最小端到端闭环。`-p no:cacheprovider` 仅关闭 pytest 的本地缓存写入，不影响测试行为。
 
 PyCharm 解释器选择：
 
