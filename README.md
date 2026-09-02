@@ -23,11 +23,12 @@
 - [x] 实现基础关键词检索、受控上下文构建和 Fake 回答生成器
 - [x] 实现聊天应用服务和 `build_application()` 装配入口
 - [x] 建立单元、SQLite 集成和写入—重开—回忆端到端测试
+- [x] 实现 L1 记忆列表、单条来源查看、删除及删除持久化验证
 
 尚未完成：
 
 - [ ] 可交互的 PC 端 CLI
-- [ ] 记忆查看、删除和撤销应用用例
+- [ ] 记忆撤销/恢复和隐私级彻底删除
 - [ ] 重复记忆处理和助手回答的 L0 持久化
 - [ ] 关键路径脱敏日志和可观察信息
 - [ ] 固定评估数据集与无记忆 Baseline 对照实验
@@ -186,7 +187,7 @@ LongMemory-SmartRing/                              # 项目根目录
 │     │  │  ├─ contracts.py                        # 回答生成器契约
 │     │  │  ├─ dto.py                              # 聊天输入输出
 │     │  │  └─ service.py                          # 聊天用例
-│     │  └─ memory_management/                     # 查看、删除和撤销
+│     │  └─ memory_management/                     # 查看和 L1 删除；撤销能力预留
 │     │     ├─ dto.py                              # 管理输入输出
 │     │     └─ service.py                          # 管理用例
 │     ├─ adapters/                                 # 外部技术适配器
@@ -274,7 +275,7 @@ uv run python --version
 uv run pytest -p no:cacheprovider
 ```
 
-当前自动化测试覆盖领域模型、记忆提取、基础检索、聊天编排、SQLite 重开持久化和最小端到端闭环。`-p no:cacheprovider` 仅关闭 pytest 的本地缓存写入，不影响测试行为。
+当前自动化测试覆盖领域模型、记忆提取、基础检索、聊天编排、SQLite 重开持久化、记忆来源查看、L1 删除和最小端到端闭环。`-p no:cacheprovider` 仅关闭 pytest 的本地缓存写入，不影响测试行为。
 
 PyCharm 解释器选择：
 
