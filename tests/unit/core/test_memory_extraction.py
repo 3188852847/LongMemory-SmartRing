@@ -12,7 +12,10 @@ from longmemory.core.conversation.models import (
 from longmemory.core.memory.extraction.service import (
     MemoryExtractionService,
 )
-from longmemory.core.memory.models import AtomicMemory
+from longmemory.core.memory.models import (
+    CURRENT_USER_SUBJECT_ID,
+    AtomicMemory,
+)
 
 
 FIXED_TIME = datetime(2026, 9, 3, 12, 0, tzinfo=UTC)
@@ -52,9 +55,9 @@ def test_extracts_first_person_statement_as_atomic_memory() -> None:
     assert memories == (
         AtomicMemory(
             id=MemoryId("memory-001"),
+            subject_id=CURRENT_USER_SUBJECT_ID,
             content="用户养了一只叫豆包的猫。",
-            source_message_id=message.id,
-            created_at=FIXED_TIME,
+            recorded_at=FIXED_TIME,
         ),
     )
 

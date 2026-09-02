@@ -26,11 +26,16 @@
 - [x] 实现 L1 记忆列表、单条来源查看、删除及删除持久化验证
 - [x] 实现可交互 PC 端 CLI 及聊天、查看、删除和退出命令
 - [x] 补齐 src layout 打包配置、命令入口和安装状态回归测试
+- [x] 实现精确重复记忆复用，并保留每次陈述的多条来源证据
+- [x] 增加显式 ADD/NOOP 写入结果，固定未来 SUPERSEDE 接口语义
+- [x] 分离记忆声明与来源证据，移除领域模型中的唯一来源字段
+- [x] 增加单用户主体、事实有效时间和取代关系的数据结构
+- [x] 增加 SQLite V1/V2 → V3 非破坏性迁移和来源回填测试
 
 尚未完成：
 
 - [ ] 记忆撤销/恢复和隐私级彻底删除
-- [ ] 重复记忆处理和助手回答的 L0 持久化
+- [ ] 语义重复处理和助手回答的 L0 持久化
 - [ ] 关键路径脱敏日志和可观察信息
 - [ ] 固定评估数据集与无记忆 Baseline 对照实验
 - [ ] 真实模型适配器
@@ -62,7 +67,7 @@ V0.1 需要证明：
 - 单用户本地实验
 - L0、L1、SQLite 和来源追踪
 - 基础提取、检索、上下文注入和回答
-- 查看、删除和撤销记忆
+- 查看、删除和多来源证据追踪
 - 固定测试集、必要日志和无记忆 Baseline
 
 ### Out of Scope
@@ -123,7 +128,8 @@ LongMemory-SmartRing/                              # 项目根目录
 │  ├─ adr/                                         # Architecture Decision Record
 │  │  ├─ 0001-modular-monolith.md                  # 模块化单体
 │  │  ├─ 0002-l0-l1-memory-model.md                # L0/L1 模型
-│  │  └─ 0003-local-sqlite-storage.md              # 本地 SQLite
+│  │  ├─ 0003-local-sqlite-storage.md              # 本地 SQLite
+│  │  └─ 0004-memory-assertion-lifecycle-and-provenance.md # 声明、证据与生命周期
 │  ├─ development/                                 # 开发和排障指南
 │  │  ├─ setup.md                                  # uv 与 PyCharm 环境
 │  │  └─ troubleshooting.md                        # 已确认故障记录

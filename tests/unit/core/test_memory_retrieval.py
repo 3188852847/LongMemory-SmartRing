@@ -4,8 +4,11 @@ from datetime import UTC, datetime
 
 import pytest
 
-from longmemory.core.common.identifiers import MemoryId, MessageId
-from longmemory.core.memory.models import AtomicMemory
+from longmemory.core.common.identifiers import MemoryId
+from longmemory.core.memory.models import (
+    CURRENT_USER_SUBJECT_ID,
+    AtomicMemory,
+)
 from longmemory.core.memory.retrieval.context_builder import (
     build_memory_context,
 )
@@ -23,9 +26,9 @@ def make_memory(
 
     return AtomicMemory(
         id=MemoryId(memory_id),
+        subject_id=CURRENT_USER_SUBJECT_ID,
         content=content,
-        source_message_id=MessageId(f"source-{memory_id}"),
-        created_at=FIXED_TIME,
+        recorded_at=FIXED_TIME,
     )
 
 
@@ -53,6 +56,13 @@ class FakeMemoryStore:
 
     def list_all(self) -> tuple[AtomicMemory, ...]:
         return tuple(self._memories)
+
+    def list_active(self) -> tuple[AtomicMemory, ...]:
+        return tuple(
+            memory
+            for memory in self._memories
+            if memory.retired_at is None
+        )
 
     def delete(self, memory_id: MemoryId) -> bool:
         original_count = len(self._memories)
@@ -132,6 +142,24 @@ def test_returns_no_memory_for_empty_or_unrelated_query(
     retriever = KeywordMemoryRetriever(store)
 
     assert retriever.retrieve(query) == ()
+
+
+def test_does_not_retrieve_retired_memory() -> None:
+    """已退役记忆保留供审计，但不得继续参与当前回答。"""
+
+    retired_memory = AtomicMemory(
+        id=MemoryId("memory-retired"),
+        subject_id=CURRENT_USER_SUBJECT_ID,
+        content="用户养了一只叫豆包的猫。",
+        recorded_at=FIXED_TIME,
+        retired_at=FIXED_TIME,
+    )
+
+    retriever = KeywordMemoryRetriever(
+        FakeMemoryStore((retired_memory,))
+    )
+
+    assert retriever.retrieve("我的猫叫什么？") == ()
 
 
 def test_builds_inspectable_context_from_retrieved_memories() -> None:

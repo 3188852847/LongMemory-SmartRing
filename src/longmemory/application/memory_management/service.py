@@ -1,6 +1,9 @@
 """编排记忆查看、删除和来源追踪。"""
 
-from longmemory.application.memory_management.dto import MemoryDetails
+from longmemory.application.memory_management.dto import (
+    MemoryDetails,
+    MemoryEvidenceDetails,
+)
 from longmemory.core.common.identifiers import MemoryId
 from longmemory.core.conversation.contracts import ConversationStore
 from longmemory.core.memory.contracts import MemoryStore
@@ -55,11 +58,17 @@ class MemoryManagementService:
     ) -> MemoryDetails:
         """组装一条记忆及其原始来源。"""
 
-        source_message = self._conversation_store.get(
-            memory.source_message_id
+        sources = tuple(
+            MemoryEvidenceDetails(
+                evidence=evidence,
+                source_message=self._conversation_store.get(
+                    evidence.source_message_id
+                ),
+            )
+            for evidence in self._memory_store.list_evidence(memory.id)
         )
 
         return MemoryDetails(
             memory=memory,
-            source_message=source_message,
+            sources=sources,
         )

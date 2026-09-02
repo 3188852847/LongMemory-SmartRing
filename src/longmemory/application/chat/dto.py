@@ -3,7 +3,11 @@
 from dataclasses import dataclass
 
 from longmemory.core.conversation.models import ConversationMessage
-from longmemory.core.memory.models import AtomicMemory
+from longmemory.core.memory.models import (
+    AtomicMemory,
+    MemoryOperationType,
+    MemoryWriteOperation,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -15,6 +19,26 @@ class ChatResult:
     """
 
     user_message: ConversationMessage
-    saved_memories: tuple[AtomicMemory, ...]
+    memory_operations: tuple[MemoryWriteOperation, ...]
     retrieved_memories: tuple[AtomicMemory, ...]
     answer: str
+
+    @property
+    def saved_memories(self) -> tuple[AtomicMemory, ...]:
+        """返回本轮通过 ADD 新建的记忆，供调用方直接检查。"""
+
+        return tuple(
+            result.memory
+            for result in self.memory_operations
+            if result.operation == MemoryOperationType.ADD
+        )
+
+    @property
+    def reused_memories(self) -> tuple[AtomicMemory, ...]:
+        """返回本轮通过 NOOP 复用的已有记忆。"""
+
+        return tuple(
+            result.memory
+            for result in self.memory_operations
+            if result.operation == MemoryOperationType.NOOP
+        )

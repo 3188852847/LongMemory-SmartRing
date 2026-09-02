@@ -2,7 +2,10 @@
 
 from datetime import UTC, datetime
 
-from longmemory.application.memory_management.dto import MemoryDetails
+from longmemory.application.memory_management.dto import (
+    MemoryDetails,
+    MemoryEvidenceDetails,
+)
 from longmemory.application.memory_management.service import (
     MemoryManagementService,
 )
@@ -11,7 +14,12 @@ from longmemory.core.conversation.models import (
     ConversationMessage,
     MessageRole,
 )
-from longmemory.core.memory.models import AtomicMemory
+from longmemory.core.memory.models import (
+    CURRENT_USER_SUBJECT_ID,
+    AtomicMemory,
+    MemoryEvidence,
+    MemorySourceType,
+)
 
 
 FIXED_TIME = datetime(2026, 9, 3, 15, 0, tzinfo=UTC)
@@ -49,11 +57,35 @@ class FakeMemoryStore:
     def __init__(
         self,
         memories: tuple[AtomicMemory, ...] = (),
+        evidence: tuple[MemoryEvidence, ...] = (),
     ) -> None:
         self.memories = list(memories)
+        self.evidence = list(evidence)
 
-    def save(self, memory: AtomicMemory) -> None:
+    def save(
+        self,
+        memory: AtomicMemory,
+        evidence: MemoryEvidence,
+    ) -> None:
         self.memories.append(memory)
+        self.evidence.append(evidence)
+
+    def add_evidence(self, evidence: MemoryEvidence) -> bool:
+        if evidence in self.evidence:
+            return False
+
+        self.evidence.append(evidence)
+        return True
+
+    def list_evidence(
+        self,
+        memory_id: MemoryId,
+    ) -> tuple[MemoryEvidence, ...]:
+        return tuple(
+            evidence
+            for evidence in self.evidence
+            if evidence.memory_id == memory_id
+        )
 
     def get(
         self,
@@ -71,6 +103,13 @@ class FakeMemoryStore:
     def list_all(self) -> tuple[AtomicMemory, ...]:
         return tuple(self.memories)
 
+    def list_active(self) -> tuple[AtomicMemory, ...]:
+        return tuple(
+            memory
+            for memory in self.memories
+            if memory.retired_at is None
+        )
+
     def delete(self, memory_id: MemoryId) -> bool:
         original_count = len(self.memories)
 
@@ -78,6 +117,11 @@ class FakeMemoryStore:
             memory
             for memory in self.memories
             if memory.id != memory_id
+        ]
+        self.evidence = [
+            evidence
+            for evidence in self.evidence
+            if evidence.memory_id != memory_id
         ]
 
         return len(self.memories) < original_count
@@ -101,9 +145,23 @@ def make_memory(
 
     return AtomicMemory(
         id=MemoryId("memory-001"),
+        subject_id=CURRENT_USER_SUBJECT_ID,
         content="用户养了一只叫豆包的猫。",
+        recorded_at=FIXED_TIME,
+    )
+
+
+def make_evidence(
+    memory: AtomicMemory,
+    source_message: ConversationMessage,
+) -> MemoryEvidence:
+    """创建一条用户陈述来源证据。"""
+
+    return MemoryEvidence(
+        memory_id=memory.id,
         source_message_id=source_message.id,
-        created_at=FIXED_TIME,
+        source_type=MemorySourceType.USER_STATED,
+        linked_at=FIXED_TIME,
     )
 
 
@@ -112,9 +170,10 @@ def test_lists_and_gets_memory_with_original_source() -> None:
 
     source_message = make_source_message()
     memory = make_memory(source_message)
+    evidence = make_evidence(memory, source_message)
 
     service = MemoryManagementService(
-        memory_store=FakeMemoryStore((memory,)),
+        memory_store=FakeMemoryStore((memory,), (evidence,)),
         conversation_store=FakeConversationStore(
             (source_message,)
         ),
@@ -122,7 +181,12 @@ def test_lists_and_gets_memory_with_original_source() -> None:
 
     expected_details = MemoryDetails(
         memory=memory,
-        source_message=source_message,
+        sources=(
+            MemoryEvidenceDetails(
+                evidence=evidence,
+                source_message=source_message,
+            ),
+        ),
     )
 
     assert service.list_memories() == (expected_details,)
@@ -149,8 +213,9 @@ def test_deletes_l1_memory_but_preserves_l0_source() -> None:
 
     source_message = make_source_message()
     memory = make_memory(source_message)
+    evidence = make_evidence(memory, source_message)
 
-    memory_store = FakeMemoryStore((memory,))
+    memory_store = FakeMemoryStore((memory,), (evidence,))
     conversation_store = FakeConversationStore(
         (source_message,)
     )

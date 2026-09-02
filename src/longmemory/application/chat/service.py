@@ -21,6 +21,12 @@ from longmemory.core.memory.contracts import (
 from longmemory.core.memory.retrieval.context_builder import (
     build_memory_context,
 )
+from longmemory.core.memory.models import (
+    MemoryEvidence,
+    MemoryOperationType,
+    MemorySourceType,
+    MemoryWriteOperation,
+)
 
 
 def _new_message_id() -> MessageId:
@@ -74,10 +80,50 @@ class ChatService:
         self._conversation_store.save(user_message)
 
         # 从当前 L0 消息提取零条或多条 L1 记忆。
-        saved_memories = self._memory_extractor.extract(user_message)
+        candidate_memories = self._memory_extractor.extract(
+            user_message
+        )
 
-        for memory in saved_memories:
-            self._memory_store.save(memory)
+        memory_operations = []
+
+        for candidate_memory in candidate_memories:
+            existing_memory = self._memory_store.find_by_content(
+                candidate_memory.content,
+                subject_id=candidate_memory.subject_id,
+            )
+
+            # 记忆声明与来源证据分开保存。同一句事实再次出现时，
+            # 不创建重复 L1，但仍保留这次新的 L0 陈述作为证据。
+            evidence = MemoryEvidence(
+                memory_id=(
+                    existing_memory.id
+                    if existing_memory is not None
+                    else candidate_memory.id
+                ),
+                source_message_id=user_message.id,
+                source_type=MemorySourceType.USER_STATED,
+                linked_at=candidate_memory.recorded_at,
+            )
+
+            if existing_memory is not None:
+                self._memory_store.add_evidence(evidence)
+                memory_operations.append(
+                    MemoryWriteOperation(
+                        operation=MemoryOperationType.NOOP,
+                        memory=existing_memory,
+                        evidence=evidence,
+                    )
+                )
+                continue
+
+            self._memory_store.save(candidate_memory, evidence)
+            memory_operations.append(
+                MemoryWriteOperation(
+                    operation=MemoryOperationType.ADD,
+                    memory=candidate_memory,
+                    evidence=evidence,
+                )
+            )
 
         # 当前基线在写入后执行检索，因此本轮刚写入的记忆
         # 也可能参与本轮回答。
@@ -92,7 +138,7 @@ class ChatService:
 
         return ChatResult(
             user_message=user_message,
-            saved_memories=saved_memories,
+            memory_operations=tuple(memory_operations),
             retrieved_memories=retrieved_memories,
             answer=answer,
         )

@@ -4,13 +4,16 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from uuid import uuid4
 
-from longmemory.core.common.identifiers import MemoryId
+from longmemory.core.common.identifiers import MemoryId, MemorySubjectId
 from longmemory.core.conversation.models import (
     ConversationMessage,
     MessageRole,
 )
 from longmemory.core.memory.extraction.policy import RuleBasedMemoryPolicy
-from longmemory.core.memory.models import AtomicMemory
+from longmemory.core.memory.models import (
+    CURRENT_USER_SUBJECT_ID,
+    AtomicMemory,
+)
 
 
 def _new_memory_id() -> MemoryId:
@@ -33,6 +36,7 @@ class MemoryExtractionService:
         policy: RuleBasedMemoryPolicy | None = None,
         id_factory: Callable[[], MemoryId] = _new_memory_id,
         clock: Callable[[], datetime] = _utc_now,
+        subject_id: MemorySubjectId = CURRENT_USER_SUBJECT_ID,
     ) -> None:
         self._policy = (
             policy
@@ -41,6 +45,7 @@ class MemoryExtractionService:
         )
         self._id_factory = id_factory
         self._clock = clock
+        self._subject_id = subject_id
 
     def extract(
         self,
@@ -58,9 +63,9 @@ class MemoryExtractionService:
         return tuple(
             AtomicMemory(
                 id=self._id_factory(),
+                subject_id=self._subject_id,
                 content=content,
-                source_message_id=message.id,
-                created_at=self._clock(),
+                recorded_at=self._clock(),
             )
             for content in candidate_contents
         )

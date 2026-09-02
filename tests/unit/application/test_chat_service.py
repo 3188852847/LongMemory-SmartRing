@@ -7,12 +7,16 @@ import pytest
 from longmemory.adapters.llm.fake import FakeAnswerGenerator
 from longmemory.application.chat.service import ChatService
 from longmemory.core.common.exceptions import EmptyMessageError
-from longmemory.core.common.identifiers import MemoryId, MessageId
+from longmemory.core.common.identifiers import (
+    MemoryId,
+    MemorySubjectId,
+    MessageId,
+)
 from longmemory.core.conversation.models import ConversationMessage
 from longmemory.core.memory.extraction.service import (
     MemoryExtractionService,
 )
-from longmemory.core.memory.models import AtomicMemory
+from longmemory.core.memory.models import AtomicMemory, MemoryEvidence
 from longmemory.core.memory.retrieval.service import (
     KeywordMemoryRetriever,
 )
@@ -49,9 +53,32 @@ class FakeMemoryStore:
 
     def __init__(self) -> None:
         self.memories: list[AtomicMemory] = []
+        self.evidence: list[MemoryEvidence] = []
 
-    def save(self, memory: AtomicMemory) -> None:
+    def save(
+        self,
+        memory: AtomicMemory,
+        evidence: MemoryEvidence,
+    ) -> None:
         self.memories.append(memory)
+        self.evidence.append(evidence)
+
+    def add_evidence(self, evidence: MemoryEvidence) -> bool:
+        if evidence in self.evidence:
+            return False
+
+        self.evidence.append(evidence)
+        return True
+
+    def list_evidence(
+        self,
+        memory_id: MemoryId,
+    ) -> tuple[MemoryEvidence, ...]:
+        return tuple(
+            evidence
+            for evidence in self.evidence
+            if evidence.memory_id == memory_id
+        )
 
     def get(
         self,
@@ -66,8 +93,31 @@ class FakeMemoryStore:
             None,
         )
 
+    def find_by_content(
+        self,
+        content: str,
+        *,
+        subject_id: MemorySubjectId,
+    ) -> AtomicMemory | None:
+        return next(
+            (
+                memory
+                for memory in self.memories
+                if memory.content == content
+                and memory.subject_id == subject_id
+            ),
+            None,
+        )
+
     def list_all(self) -> tuple[AtomicMemory, ...]:
         return tuple(self.memories)
+
+    def list_active(self) -> tuple[AtomicMemory, ...]:
+        return tuple(
+            memory
+            for memory in self.memories
+            if memory.retired_at is None
+        )
 
     def delete(self, memory_id: MemoryId) -> bool:
         original_count = len(self.memories)
@@ -135,7 +185,7 @@ def test_chat_saves_then_recalls_memory() -> None:
     assert first_result.saved_memories[0].content == (
         "用户养了一只叫豆包的猫。"
     )
-    assert first_result.saved_memories[0].source_message_id == (
+    assert first_result.memory_operations[0].evidence.source_message_id == (
         first_result.user_message.id
     )
 
@@ -164,3 +214,40 @@ def test_chat_rejects_blank_message_without_writing_data() -> None:
 
     assert conversation_store.messages == []
     assert memory_store.memories == []
+
+
+def test_chat_reuses_exact_duplicate_memory() -> None:
+    """重复陈述应保留新 L0，但不新增重复 L1。"""
+
+    conversation_store = FakeConversationStore()
+    memory_store = FakeMemoryStore()
+    chat_service = build_test_chat_service(
+        conversation_store,
+        memory_store,
+    )
+
+    first_result = chat_service.chat(
+        "我养了一只叫豆包的猫。"
+    )
+    duplicate_result = chat_service.chat(
+        "我养了一只叫豆包的猫！"
+    )
+
+    assert len(conversation_store.messages) == 2
+    assert len(memory_store.memories) == 1
+    assert len(memory_store.evidence) == 2
+    assert tuple(
+        evidence.source_message_id
+        for evidence in memory_store.evidence
+    ) == (
+        first_result.user_message.id,
+        duplicate_result.user_message.id,
+    )
+
+    assert len(first_result.saved_memories) == 1
+    assert first_result.reused_memories == ()
+
+    assert duplicate_result.saved_memories == ()
+    assert duplicate_result.reused_memories == (
+        first_result.saved_memories[0],
+    )

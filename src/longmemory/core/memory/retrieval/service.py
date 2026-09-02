@@ -57,7 +57,9 @@ class KeywordMemoryRetriever:
 
         scored_memories: list[tuple[int, AtomicMemory]] = []
 
-        for memory in self._memory_store.list_all():
+        # 已被未来冲突更新流程退役的历史记忆仍可供审计，
+        # 但不能继续参与当前回答。
+        for memory in self._memory_store.list_active():
             memory_terms = _extract_terms(memory.content)
             overlap_count = len(query_terms & memory_terms)
 

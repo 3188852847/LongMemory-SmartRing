@@ -54,7 +54,7 @@ def test_cli_can_chat_list_and_delete_memory(tmp_path) -> None:
         assert "内容：用户养了一只叫豆包的猫。" in (
             combined_output
         )
-        assert "来源：我养了一只叫豆包的猫。" in (
+        assert "来源 1（user_stated）：我养了一只叫豆包的猫。" in (
             combined_output
         )
 
@@ -75,3 +75,38 @@ def test_cli_can_chat_list_and_delete_memory(tmp_path) -> None:
         assert reopened_application.list_memories() == ()
     finally:
         reopened_application.close()
+
+
+def test_cli_reports_reused_memory(tmp_path) -> None:
+    """重复陈述时 CLI 应明确提示复用了已有记忆。"""
+
+    database_path = tmp_path / "longmemory.db"
+    application = build_application(
+        database_path=database_path
+    )
+
+    inputs = iter(
+        [
+            "我养了一只叫豆包的猫。",
+            "我养了一只叫豆包的猫！",
+            "/exit",
+        ]
+    )
+    outputs: list[str] = []
+
+    try:
+        run_chat_session(
+            application,
+            input_fn=lambda _: next(inputs),
+            output_fn=outputs.append,
+        )
+
+        combined_output = "\n".join(outputs)
+
+        assert "本轮保存了 1 条长期记忆。" in combined_output
+        assert "本轮复用了 1 条已有记忆。" in combined_output
+        memories = application.list_memories()
+        assert len(memories) == 1
+        assert len(memories[0].sources) == 2
+    finally:
+        application.close()

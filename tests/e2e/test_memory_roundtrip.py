@@ -21,7 +21,9 @@ def test_memory_survives_application_restart(tmp_path) -> None:
     assert saved_memory.content == "用户养了一只叫豆包的猫。"
 
     # 记忆必须保留来源，方便以后检查它是从哪条原始输入提取出来的。
-    assert saved_memory.source_message_id == first_result.user_message.id
+    assert first_result.memory_operations[0].evidence.source_message_id == (
+        first_result.user_message.id
+    )
 
     # 关闭第一个应用实例，模拟程序退出。
     first_app.close()

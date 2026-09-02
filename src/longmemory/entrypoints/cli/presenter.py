@@ -16,6 +16,11 @@ def format_chat_result(result: ChatResult) -> str:
             f"本轮保存了 {len(result.saved_memories)} 条长期记忆。"
         )
 
+    if result.reused_memories:
+        lines.append(
+            f"本轮复用了 {len(result.reused_memories)} 条已有记忆。"
+        )
+
     return "\n".join(lines)
 
 
@@ -24,17 +29,29 @@ def format_memory_details(details: MemoryDetails) -> str:
 
     memory = details.memory
 
-    if details.source_message is None:
-        source_content = "来源消息缺失"
+    if not details.sources:
+        source_lines = ["来源：来源证据缺失"]
     else:
-        source_content = details.source_message.content
+        source_lines = []
+
+        for index, source in enumerate(details.sources, start=1):
+            if source.source_message is None:
+                source_content = "来源消息缺失"
+            else:
+                source_content = source.source_message.content
+
+            source_lines.append(
+                f"来源 {index}（{source.evidence.source_type.value}）："
+                f"{source_content}"
+            )
 
     return "\n".join(
         [
             f"记忆 ID：{memory.id}",
+            f"主体：{memory.subject_id}",
             f"内容：{memory.content}",
-            f"来源：{source_content}",
-            f"创建时间：{memory.created_at.isoformat()}",
+            *source_lines,
+            f"记录时间：{memory.recorded_at.isoformat()}",
         ]
     )
 

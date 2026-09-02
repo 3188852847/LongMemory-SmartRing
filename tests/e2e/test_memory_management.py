@@ -24,8 +24,11 @@ def test_memory_can_be_inspected_and_deleted_persistently(
 
     assert len(listed_memories) == 1
     assert listed_memories[0].memory == saved_memory
-    assert listed_memories[0].source_message == (
-        first_result.user_message
+    assert tuple(
+        source.source_message
+        for source in listed_memories[0].sources
+    ) == (
+        first_result.user_message,
     )
 
     first_app.close()
@@ -41,8 +44,9 @@ def test_memory_can_be_inspected_and_deleted_persistently(
     assert restored_details.memory.content == (
         "用户养了一只叫豆包的猫。"
     )
-    assert restored_details.source_message is not None
-    assert restored_details.source_message.content == (
+    assert len(restored_details.sources) == 1
+    assert restored_details.sources[0].source_message is not None
+    assert restored_details.sources[0].source_message.content == (
         "我养了一只叫豆包的猫。"
     )
 

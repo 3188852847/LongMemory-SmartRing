@@ -7,3 +7,4 @@ from typing import NewType
 # 避免以后把两种 ID 错误地传给数据库或业务接口。
 MessageId = NewType("MessageId", str)
 MemoryId = NewType("MemoryId", str)
+MemorySubjectId = NewType("MemorySubjectId", str)

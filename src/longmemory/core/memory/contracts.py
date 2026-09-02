@@ -2,24 +2,52 @@
 
 from typing import Protocol
 
-from longmemory.core.common.identifiers import MemoryId
+from longmemory.core.common.identifiers import MemoryId, MemorySubjectId
 from longmemory.core.conversation.models import ConversationMessage
-from longmemory.core.memory.models import AtomicMemory
+from longmemory.core.memory.models import AtomicMemory, MemoryEvidence
 
 
 class MemoryStore(Protocol):
     """核心层要求长期记忆存储提供的最小能力。"""
 
-    def save(self, memory: AtomicMemory) -> None:
-        """持久化一条原子记忆。"""
+    def save(
+        self,
+        memory: AtomicMemory,
+        evidence: MemoryEvidence,
+    ) -> None:
+        """在同一事务中持久化原子记忆及其首条来源证据。"""
+        ...
+
+    def add_evidence(self, evidence: MemoryEvidence) -> bool:
+        """给已有记忆关联来源；已经关联时返回 False。"""
+        ...
+
+    def list_evidence(
+        self,
+        memory_id: MemoryId,
+    ) -> tuple[MemoryEvidence, ...]:
+        """按稳定顺序返回指定记忆的全部来源证据。"""
         ...
 
     def get(self, memory_id: MemoryId) -> AtomicMemory | None:
         """根据稳定标识符读取记忆；不存在时返回 None。"""
         ...
 
+    def find_by_content(
+        self,
+        content: str,
+        *,
+        subject_id: MemorySubjectId,
+    ) -> AtomicMemory | None:
+        """在指定主体的当前有效记忆中查找完全相同的内容。"""
+        ...
+
     def list_all(self) -> tuple[AtomicMemory, ...]:
         """按稳定顺序返回全部记忆。"""
+        ...
+
+    def list_active(self) -> tuple[AtomicMemory, ...]:
+        """按稳定顺序返回尚未退出当前有效集合的记忆。"""
         ...
 
     def delete(self, memory_id: MemoryId) -> bool:
