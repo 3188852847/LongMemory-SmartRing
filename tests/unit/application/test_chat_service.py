@@ -12,7 +12,10 @@ from longmemory.core.common.identifiers import (
     MemorySubjectId,
     MessageId,
 )
-from longmemory.core.conversation.models import ConversationMessage
+from longmemory.core.conversation.models import (
+    ConversationMessage,
+    MessageRole,
+)
 from longmemory.core.memory.extraction.service import (
     MemoryExtractionService,
 )
@@ -141,6 +144,8 @@ def build_test_chat_service(
         [
             MessageId("message-001"),
             MessageId("message-002"),
+            MessageId("message-003"),
+            MessageId("message-004"),
         ]
     )
 
@@ -179,7 +184,21 @@ def test_chat_saves_then_recalls_memory() -> None:
         "我的猫叫什么？"
     )
 
-    assert len(conversation_store.messages) == 2
+    assert len(conversation_store.messages) == 4
+    assert tuple(
+        message.role for message in conversation_store.messages
+    ) == (
+        MessageRole.USER,
+        MessageRole.ASSISTANT,
+        MessageRole.USER,
+        MessageRole.ASSISTANT,
+    )
+    assert first_result.assistant_message.content == (
+        first_result.answer
+    )
+    assert recall_result.assistant_message.content == (
+        "你的猫叫豆包。"
+    )
 
     assert len(first_result.saved_memories) == 1
     assert first_result.saved_memories[0].content == (
@@ -233,7 +252,7 @@ def test_chat_reuses_exact_duplicate_memory() -> None:
         "我养了一只叫豆包的猫！"
     )
 
-    assert len(conversation_store.messages) == 2
+    assert len(conversation_store.messages) == 4
     assert len(memory_store.memories) == 1
     assert len(memory_store.evidence) == 2
     assert tuple(

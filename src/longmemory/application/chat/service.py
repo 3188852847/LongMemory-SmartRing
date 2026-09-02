@@ -136,8 +136,19 @@ class ChatService:
             memory_context=memory_context,
         )
 
+        # 助手回答同样属于 L0 原始对话。保存角色和原文，
+        # 但不把它重新送入记忆提取器，避免生成内容变成用户事实。
+        assistant_message = ConversationMessage(
+            id=self._message_id_factory(),
+            role=MessageRole.ASSISTANT,
+            content=answer,
+            created_at=self._clock(),
+        )
+        self._conversation_store.save(assistant_message)
+
         return ChatResult(
             user_message=user_message,
+            assistant_message=assistant_message,
             memory_operations=tuple(memory_operations),
             retrieved_memories=retrieved_memories,
             answer=answer,

@@ -19,6 +19,7 @@ class ChatResult:
     """
 
     user_message: ConversationMessage
+    assistant_message: ConversationMessage
     memory_operations: tuple[MemoryWriteOperation, ...]
     retrieved_memories: tuple[AtomicMemory, ...]
     answer: str

@@ -1,6 +1,11 @@
 """验证最小长程记忆能够跨应用生命周期保存并回忆。"""
 
+from longmemory.adapters.storage.sqlite_conversation_store import (
+    SQLiteConversationStore,
+)
 from longmemory.bootstrap import build_application
+from longmemory.core.conversation.models import MessageRole
+from longmemory.infrastructure.database.connection import open_database
 
 
 def test_memory_survives_application_restart(tmp_path) -> None:
@@ -27,6 +32,20 @@ def test_memory_survives_application_restart(tmp_path) -> None:
 
     # 关闭第一个应用实例，模拟程序退出。
     first_app.close()
+
+    # 直接重新打开数据库，确认助手回答也作为 L0 原文持久化。
+    inspection_connection = open_database(database_path)
+    conversation_store = SQLiteConversationStore(
+        inspection_connection
+    )
+    restored_assistant = conversation_store.get(
+        first_result.assistant_message.id
+    )
+
+    assert restored_assistant == first_result.assistant_message
+    assert restored_assistant.role == MessageRole.ASSISTANT
+
+    inspection_connection.close()
 
     # 使用同一个 SQLite 文件重新创建应用。
     # 如果记忆只是存在内存中，这一步之后就会丢失。

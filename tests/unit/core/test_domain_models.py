@@ -32,6 +32,12 @@ def test_chat_result_preserves_memory_source_relationship() -> None:
         content="我养了一只叫豆包的猫。",
         created_at=created_at,
     )
+    assistant_message = ConversationMessage(
+        id=MessageId("message-002"),
+        role=MessageRole.ASSISTANT,
+        content="好的，我记住了。",
+        created_at=created_at,
+    )
 
     memory = AtomicMemory(
         id=MemoryId("memory-001"),
@@ -48,6 +54,7 @@ def test_chat_result_preserves_memory_source_relationship() -> None:
 
     result = ChatResult(
         user_message=user_message,
+        assistant_message=assistant_message,
         memory_operations=(
             MemoryWriteOperation(
                 operation=MemoryOperationType.ADD,
@@ -60,6 +67,7 @@ def test_chat_result_preserves_memory_source_relationship() -> None:
     )
 
     assert result.user_message.content == "我养了一只叫豆包的猫。"
+    assert result.assistant_message.role == MessageRole.ASSISTANT
     assert result.saved_memories == (memory,)
     assert result.retrieved_memories == ()
     assert result.memory_operations[0].evidence.source_message_id == (
