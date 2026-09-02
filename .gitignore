@@ -10,6 +10,7 @@ htmlcov/
 # 虚拟环境与本地工具
 .venv/
 .uv-cache/
+*.egg-info/
 .idea/
 .vscode/
 

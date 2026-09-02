@@ -24,10 +24,11 @@
 - [x] 实现聊天应用服务和 `build_application()` 装配入口
 - [x] 建立单元、SQLite 集成和写入—重开—回忆端到端测试
 - [x] 实现 L1 记忆列表、单条来源查看、删除及删除持久化验证
+- [x] 实现可交互 PC 端 CLI 及聊天、查看、删除和退出命令
+- [x] 补齐 src layout 打包配置、命令入口和安装状态回归测试
 
 尚未完成：
 
-- [ ] 可交互的 PC 端 CLI
 - [ ] 记忆撤销/恢复和隐私级彻底删除
 - [ ] 重复记忆处理和助手回答的 L0 持久化
 - [ ] 关键路径脱敏日志和可观察信息
@@ -273,9 +274,12 @@ cd "D:\02-项目\LongMemory-SmartRing"
 uv sync
 uv run python --version
 uv run pytest -p no:cacheprovider
+uv run longmemory
 ```
 
-当前自动化测试覆盖领域模型、记忆提取、基础检索、聊天编排、SQLite 重开持久化、记忆来源查看、L1 删除和最小端到端闭环。`-p no:cacheprovider` 仅关闭 pytest 的本地缓存写入，不影响测试行为。
+`uv sync` 会把 src layout 项目以可编辑方式安装到 `.venv`。CLI 也可以使用 `uv run python -m longmemory` 启动，默认数据库位于 `data/databases/longmemory.db`。
+
+当前自动化测试覆盖项目安装状态、领域模型、记忆提取、基础检索、聊天编排、SQLite 重开持久化、记忆来源查看、L1 删除、CLI 交互和最小端到端闭环。`-p no:cacheprovider` 仅关闭 pytest 的本地缓存写入，不影响测试行为。
 
 PyCharm 解释器选择：
 

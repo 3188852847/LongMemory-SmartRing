@@ -1,3 +1,7 @@
+[build-system]
+requires = ["setuptools>=77,<82"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "longmemory-smartring"
 version = "0.1.0"
@@ -6,10 +10,16 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = []
 
+[project.scripts]
+longmemory = "longmemory.entrypoints.cli.app:main"
+
 [dependency-groups]
 dev = [
     "pytest>=9.1.1",
 ]
+
+[tool.setuptools.packages.find]
+where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
