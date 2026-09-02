@@ -3,6 +3,8 @@
 from collections.abc import Callable
 from datetime import UTC, datetime
 from uuid import uuid4
+from time import monotonic
+
 
 from longmemory.application.chat.contracts import AnswerGenerator
 from longmemory.application.chat.dto import ChatResult
@@ -41,6 +43,10 @@ def _utc_now() -> datetime:
     return datetime.now(UTC)
 
 
+def _ignore_event(event: str, **fields: object) -> None:
+    """默认不绑定任何日志设施；正式装配时注入审计接收函数。"""
+
+
 class ChatService:
     """执行一次文本聊天所需的完整应用流程。"""
 
@@ -54,6 +60,7 @@ class ChatService:
         answer_generator: AnswerGenerator,
         message_id_factory: Callable[[], MessageId] = _new_message_id,
         clock: Callable[[], datetime] = _utc_now,
+        audit_sink: Callable[..., None] = _ignore_event,
     ) -> None:
         self._conversation_store = conversation_store
         self._memory_store = memory_store
@@ -62,6 +69,7 @@ class ChatService:
         self._answer_generator = answer_generator
         self._message_id_factory = message_id_factory
         self._clock = clock
+        self._audit = audit_sink
 
     def chat(self, text: str) -> ChatResult:
         """处理一条用户输入并返回可检查的完整结果。"""
@@ -78,6 +86,9 @@ class ChatService:
             created_at=self._clock(),
         )
         self._conversation_store.save(user_message)
+        turn_id = str(user_message.id)
+        started = monotonic()
+        self._audit("user_saved", turn_id=turn_id)
 
         # 从当前 L0 消息提取零条或多条 L1 记忆。
         candidate_memories = self._memory_extractor.extract(
@@ -127,14 +138,24 @@ class ChatService:
 
         # 当前基线在写入后执行检索，因此本轮刚写入的记忆
         # 也可能参与本轮回答。
+        for result in memory_operations:
+            self._audit("memory_write", turn_id=turn_id,
+                      memory_id=str(result.memory.id), operation=result.operation.value)
+        self._audit("extraction_done", turn_id=turn_id, count=len(memory_operations))
         retrieved_memories = self._memory_retriever.retrieve(text)
+        self._audit("memory_retrieved", turn_id=turn_id,
+                  memory_ids=[str(memory.id) for memory in retrieved_memories])
 
         memory_context = build_memory_context(retrieved_memories)
 
-        answer = self._answer_generator.generate(
-            query=text,
-            memory_context=memory_context,
-        )
+        self._audit("context_built", turn_id=turn_id,
+                  memory_ids=[str(memory.id) for memory in retrieved_memories])
+        try:
+            answer = self._answer_generator.generate(query=text, memory_context=memory_context)
+        except Exception:
+            self._audit("answer_failed", turn_id=turn_id,
+                      duration_ms=round((monotonic() - started) * 1000))
+            raise
 
         # 助手回答同样属于 L0 原始对话。保存角色和原文，
         # 但不把它重新送入记忆提取器，避免生成内容变成用户事实。
@@ -145,6 +166,8 @@ class ChatService:
             created_at=self._clock(),
         )
         self._conversation_store.save(assistant_message)
+        self._audit("assistant_saved", turn_id=turn_id, assistant_id=str(assistant_message.id),
+                  duration_ms=round((monotonic() - started) * 1000))
 
         return ChatResult(
             user_message=user_message,

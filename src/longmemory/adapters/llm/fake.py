@@ -25,7 +25,8 @@ class FakeAnswerGenerator:
 
         is_question = query.strip().endswith(("?", "？"))
 
-        if is_question and "猫" in query:
+        # 猫名证据不能回答猫的颜色等其他属性；Fake 也必须拒绝越界推断。
+        if is_question and "猫" in query and ("叫什么" in query or "名字" in query):
             match = _CAT_NAME_PATTERN.search(memory_context)
 
             if match is not None:

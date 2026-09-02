@@ -3,6 +3,10 @@
 from typing import Protocol
 
 
+class AnswerGenerationError(RuntimeError):
+    """回答服务失败；对外消息不得包含凭据或远程响应正文。"""
+
+
 class AnswerGenerator(Protocol):
     """聊天用例所依赖的回答生成接口。
 

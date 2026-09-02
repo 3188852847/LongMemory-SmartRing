@@ -32,16 +32,26 @@
 - [x] 增加单用户主体、事实有效时间和取代关系的数据结构
 - [x] 增加 SQLite V1/V2 → V3 非破坏性迁移和来源回填测试
 - [x] 将助手回答作为带角色的 L0 原始消息持久化
+- [x] 实现可配置的非流式兼容模型适配器、超时/错误处理和模拟 HTTP 测试（真实服务待校园网验证）
+- [x] 实现元数据 JSONL 审计日志，跟踪写入、检索、上下文使用与回答失败
+- [x] 建立固定合成样例与回答上下文消融评估，报告保留代码/数据/提示哈希
+- [x] 验证两个独立 CLI 进程之间的 SQLite 记忆持久化
 
 尚未完成：
 
 - [ ] 记忆撤销/恢复和隐私级彻底删除
 - [ ] 语义重复处理
-- [ ] 关键路径脱敏日志和可观察信息
-- [ ] 固定评估数据集与无记忆 Baseline 对照实验
-- [ ] 真实模型适配器
+- [ ] 校园网内真实模型连通性、合成问答与拒答验证（用户执行）
+- [ ] 更大范围的真实模型对照与人工复核；当前小样例不代表通用能力
+- [ ] V0.1-Demo 的 Xiaozhi 服务端选型/接口核对、设备语音链路与实机演示
 
-当前闭环采用确定性规则和 Fake 回答生成器，目的是验证架构、持久化和测试链路。它不是通用语义记忆系统，也不代表已经接入真实 LLM。
+当前默认闭环采用确定性规则、关键词检索和 Fake 回答生成器，目的是验证架构、持久化和测试链路。真实模型适配代码已经实现，但校园网服务尚未验证；时间抽取与自动冲突更新也尚未实现。
+
+### 最新推进顺序
+
+用户已决定提前圆屏演示：先验证私有部署模型接口并接入 PC 回答链路，补齐必要日志、最小评估和进程重启验收，随后立即进行 **V0.1-Demo：Xiaozhi + SmartRing-Plus-B 圆屏记忆演示**，不等待后续记忆算法研究完成。
+
+模型候选标识为 `DeepSeek-V4-Flash`。用户已确认服务需要校园网；助手负责离线开发与模拟测试，用户切换校园网后负责真实调用验证。接口兼容性与安全连接尚未验证；真实模型、语音链路和圆屏记忆演示均未完成。详细边界见 [路线图](ROADMAP.md) 与 [ADR-0005](docs/adr/0005-early-device-demo-and-private-model.md)，执行步骤见 [校园网验证指南](docs/development/campus-model-validation.md)。
 
 ## V0.1 目标
 
@@ -130,10 +140,12 @@ LongMemory-SmartRing/                              # 项目根目录
 │  │  ├─ 0001-modular-monolith.md                  # 模块化单体
 │  │  ├─ 0002-l0-l1-memory-model.md                # L0/L1 模型
 │  │  ├─ 0003-local-sqlite-storage.md              # 本地 SQLite
-│  │  └─ 0004-memory-assertion-lifecycle-and-provenance.md # 声明、证据与生命周期
+│  │  ├─ 0004-memory-assertion-lifecycle-and-provenance.md # 声明、证据与生命周期
+│  │  └─ 0005-early-device-demo-and-private-model.md # 提前圆屏演示与模型接入边界
 │  ├─ development/                                 # 开发和排障指南
 │  │  ├─ setup.md                                  # uv 与 PyCharm 环境
-│  │  └─ troubleshooting.md                        # 已确认故障记录
+│  │  ├─ troubleshooting.md                        # 已确认故障记录
+│  │  └─ campus-model-validation.md                # 校园网真实调用与合成验证步骤
 │  ├─ research/                                    # 研究问题和评估设计
 │  │  ├─ research-questions.md                     # 当前研究问题
 │  │  ├─ baseline-plan.md                          # Baseline 计划

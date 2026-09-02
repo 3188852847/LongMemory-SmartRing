@@ -26,6 +26,7 @@ from longmemory.core.memory.retrieval.service import (
 )
 from longmemory.infrastructure.database.connection import open_database
 from longmemory.infrastructure.database.schema import initialize_schema
+from longmemory.infrastructure.logging.setup import log_event
 
 
 class LongMemoryApplication:
@@ -124,6 +125,7 @@ def build_application(
             memory_extractor=memory_extractor,
             memory_retriever=memory_retriever,
             answer_generator=selected_answer_generator,
+            audit_sink=log_event,
         )
 
         memory_management_service = MemoryManagementService(
