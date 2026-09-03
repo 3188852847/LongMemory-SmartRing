@@ -21,7 +21,7 @@
 **D1 检索消融完成首次真实最小验证**：本地 BGE 固定快照已校验，CPU 离线完成两份冻结事实库 × 两种检索器 × 8 题，共 32 次检索；充分来源覆盖分别为规则库关键词 4/6、向量 5/6，模型提取库关键词 5/6、向量 6/6。两库姓名均从未召回变为排名第一，但小语料 top-5 接近全量，不能据此声称问答质量提高；未知题噪声和语义重复仍存在。见[逐题复核](docs/research/semantic-retrieval-review-2026-09-03.md)、[实验指南](docs/research/semantic-retrieval.md)与 [ADR-0011](docs/adr/0011-frozen-corpus-semantic-retrieval.md)。本次不重新提取或生成回答；旧基线、网页、圆屏与个人库不变。
 详见 [ADR-0008](docs/adr/0008-replaceable-memory-methods-and-research-protocols.md)、[验收范围](docs/requirements/research-platform.md)、[方法接口与限制](docs/architecture/method-boundary.md)。
 
-**冻结检索后的回答对照入口已实现**：四组复用本轮召回，不重提取或编码；统一完整条目的字符预算，每题独立回答，分别记录召回/注入来源，失败不重试。真实检索报告的 Fake 重放 32 行通过，不代表问答质量；下一步由用户在校园网运行[回答比较命令](docs/research/semantic-retrieval.md#冻结召回结果后的回答比较)，真实结果尚未验收。见 [ADR-0012](docs/adr/0012-frozen-retrieval-answer-replay.md)。
+**冻结检索后的首次真实回答对照已完成**：用户在校园网完成四组各 8/8，不重提取或编码。原词面初筛为 5/8、6/8、7/8、8/8；助手逐题复核为 6/8、7/8、7/8、8/8，两组毛色拒答被初筛漏判。姓名召回改善转化为本题回答改善，但 5/7 条小语料、未知题仅两道，不证明长历史或论文级表现。见[本轮复核](docs/research/retrieval-answer-review-2026-09-03.md)与 [ADR-0012](docs/adr/0012-frozen-retrieval-answer-replay.md)。下一步扩展带干扰事实的独立开发集；日常网页/圆屏仍不替换算法。
 
 已经完成：
 

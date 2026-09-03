@@ -88,6 +88,6 @@ uv run --locked --extra console --extra semantic --env-file .env python -m longm
 
 原关键词与向量使用相同预算规则；不强制凑成相同长度。当前小语料在 4000 字符下基本全保留，因此姓名有望受益，但其他排名提升未必改变答案。不要据此宣称向量或模型提取必然更好。
 
-助手已用真实检索输入配合 Fake 跑通 32 行工程流程，不访问校园模型；真实问答验证仍待用户运行。报告可使用现有 `longmemory.evaluation.comparison.review` 工具创建独立复核附页；其组 ID 已区分“原方法/检索器”。
+助手已用真实检索输入配合 Fake 跑通 32 行工程流程，不访问校园模型；用户随后完成 32 行真实回答，见[首轮复核](retrieval-answer-review-2026-09-03.md)。上面的命令保留供复现，不要求为已完成验收重复调用。报告可使用现有 `longmemory.evaluation.comparison.review` 工具创建独立复核附页；其组 ID 已区分“原方法/检索器”。
 
 完整边界见 [ADR-0011](../adr/0011-frozen-corpus-semantic-retrieval.md)。
