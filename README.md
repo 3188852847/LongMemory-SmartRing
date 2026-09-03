@@ -16,8 +16,8 @@
 **C 最小版已实现**：[历史回放与冻结问答](docs/research/method-comparison.md)，原子事实与原始对话分块两种方法、独立实验状态、相同上下文预算和逐题报告。默认 8 个合成开发题，4 个保留题本轮不运行。完整日常会话持久化、语义检索升级和 MemRL **未实现**。
 网页新聊天不删除长期记忆；当前页面刷新另开聊天，服务重启不恢复聊天列表。模型和角色复用现有配置格式/文件，但网页与小智启动配置尚未自动同步，需核对。校园网和双入口实际体验待用户验证。
 本轮没有新依赖、schema 或个人库迁移，没有调用校园模型或替用户操作设备。开发预览只使用隔离合成库。
-最新全量回归：310 项 Python、11 项 Node 测试通过。用户已完成首次学校模型比较，两方法各完成 8/8；原词面初筛均 5/8，存在措辞误判，见[独立复核记录](docs/research/comparison-dev-review-2026-09-03.md)。原报告与分数保持不变，未运行保留题。
-**D1 已开始**：来源绑定的语义候选接口、整批校验和独立兼容模型适配器已通过离线测试；不复用回答人格、不允许模型指定来源或更新数据库。新增复核附页工具区分自动初筛与复核判断。候选提取尚未装配进新实验方法，未进行真实模型提取验收，现用 v1/网页/圆屏算法不变，见 [ADR-0010](docs/adr/0010-source-bound-extraction-candidates.md)。
+最新全量回归：322 项 Python、11 项 Node 测试通过。用户已完成首次学校模型比较，两方法各完成 8/8；原词面初筛均 5/8，存在措辞误判，见[独立复核记录](docs/research/comparison-dev-review-2026-09-03.md)。原报告与分数保持不变，未运行保留题。
+**D1 提取条件已离线装配**：`longmemory_llm_extract_v2` 使用来源绑定的模型候选＋原关键词检索；网络调用在写事务外，L0/L1/来源/候选审计一起提交或回滚。比较命令显式增加 `--include-llm-extraction` 才运行三组，默认最多 7 次额外提取及 24 次回答，见[运行说明](docs/research/method-comparison.md#d1加入模型提取条件)。新方法已通过离线替身与模拟 HTTP 验证，真实模型提取质量仍待校园网验收；现用 v1/网页/圆屏算法不变，见 [ADR-0010](docs/adr/0010-source-bound-extraction-candidates.md)。
 详见 [ADR-0008](docs/adr/0008-replaceable-memory-methods-and-research-protocols.md)、[验收范围](docs/requirements/research-platform.md)、[方法接口与限制](docs/architecture/method-boundary.md)。
 
 已经完成：
@@ -219,9 +219,13 @@ LongMemory-SmartRing/                              # 项目根目录
 │     ├─ bootstrap.py                              # 依赖装配
 │     ├─ methods/                                  # 完整记忆方法的中立入口（阶段 A 已实现）
 │     │  ├─ contracts.py                           # 消息、结果与方法能力；不依赖 L1/SQLite
-│     │  ├─ factory.py                             # 方法白名单装配，现仅 longmemory_v1
-│     │  └─ longmemory_v1/                         # 包装现有基线，不复制核心算法
-│     │     └─ method.py                           # 方法状态、接收消息、召回和资源释放
+│     │  ├─ factory.py                             # 通用白名单：v1 与原始对话分块；日常仍用 v1
+│     │  ├─ longmemory_v1/                          # 包装现有基线，不复制核心算法
+│     │  │  └─ method.py                           # 方法状态、接收消息、召回和资源释放
+│     │  ├─ dialogue_chunks/                       # 原始消息分块批处理对照，保留角色/会话
+│     │  │  └─ method.py                           # 封存历史与关键词召回
+│     │  └─ llm_extract/                           # D1 实验模型提取条件，不自动用于日常库
+│     │     └─ method.py                           # 网络提取与写事务分离、来源审计及冻结重开
 │     ├─ core/                                     # 不依赖外部技术的核心层
 │     │  ├─ common/                                # 公共类型和领域异常
 │     │  │  ├─ identifiers.py                      # 稳定标识符
@@ -234,7 +238,8 @@ LongMemory-SmartRing/                              # 项目根目录
 │     │     ├─ contracts.py                        # 记忆存储和模型契约
 │     │     ├─ extraction/                         # 记忆判断与规范化
 │     │     │  ├─ policy.py                        # 提取规则
-│     │     │  └─ service.py                       # 提取服务
+│     │     │  ├─ service.py                       # 原规则提取服务
+│     │     │  └─ candidates.py                    # D1 候选协议、来源摘录及整批校验
 │     │     ├─ retrieval/                          # 基础召回和上下文构建
 │     │     │  ├─ service.py                       # 检索服务
 │     │     │  └─ context_builder.py               # 受控上下文

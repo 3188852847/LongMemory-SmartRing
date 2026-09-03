@@ -12,12 +12,16 @@ src/longmemory/methods/         # 方法级入口，与应用/实验入口解耦
 ├─ factory.py                  # 显式白名单；原子事实和对话分块两种方法
 ├─ longmemory_v1/               # 现有基线包装，不复制核心规则
 │  └─ method.py                # 状态生命周期与旧组件适配
-└─ dialogue_chunks/             # 同会话两条消息分块的批处理对照
-   └─ method.py                # 原始事件封存、角色/时间/来源与关键词召回
+├─ dialogue_chunks/             # 同会话两条消息分块的批处理对照
+│  └─ method.py                # 原始事件封存、角色/时间/来源与关键词召回
+└─ llm_extract/                # D1 实验专用模型提取条件，未加入日常工厂
+   └─ method.py                # 事务外候选生成、原子落库、候选审计及冻结读取
 ```
 
 `core/` 保留现有实现；`application/memory_turn.py` 提供 observe/recall，prepare 保留旧日常流程。
 bootstrap 通过方法工厂创建基线。旧聊天/管理仍使用 L1 DTO，属于仅基线可用的兼容路径，对话分块不能假装实现这些 DTO。实验的 session 元数据档案、冻结生命周期、状态哈希和逐题隔离由 evaluation/comparison 层负责，不修改日常方法能力声明。
+
+D1 的 `longmemory_llm_extract_v2` 由 `evaluation/comparison/methods.py` 显式装配，不自动暴露为日常入口。它复用 v1 存储/检索组件但不调用旧规则提取器：候选先在事务外形成，固定候选随后与 L0/L1/证据一起写入全新实验库，审计表写失败也整批回滚。冻结重开验证该方法自己的身份表；没有个人库升级或自动切换。真实提取模型效果待校园网验收，见 ADR-0010。
 
 ## 安全的合成示例
 
