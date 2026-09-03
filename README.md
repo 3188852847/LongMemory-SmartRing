@@ -6,6 +6,8 @@
 
 > SmartRing-Plus 是基于 ESP32-S3 的智能圆形显示屏开发板，不是可穿戴戒指。
 
+**日常启动与操作：[使用说明.md](使用说明.md)**。按场景复制 PowerShell 命令，包含实验、文字聊天、圆屏、参数填写和常见故障；只用实验中心时从第 1 节开始。
+
 ## 当前状态
 
 控制台新增[实验中心](docs/deployment/experiment-console.md)：实验列表、逐题回答/注入/来源对照、独立人工复核；现在可显式启用“冻结检索回答对照”的网页预检、预算确认、运行进度、停止后续请求和打开新结果。查看/预检不联网，真实模型只在确认后调用；原报告只读、新结果另存，不修改个人库。见 [ADR-0013](docs/adr/0013-local-experiment-viewer.md) 与 [ADR-0014](docs/adr/0014-local-experiment-jobs.md)。
