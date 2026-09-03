@@ -21,6 +21,7 @@ htmlcov/
 !.env.example
 
 # LongMemory 运行数据：目录保留，真实内容不提交
+data/control/
 data/databases/*
 !data/databases/.gitkeep
 data/logs/*

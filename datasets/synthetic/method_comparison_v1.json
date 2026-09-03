@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "synthetic": true,
+  "name": "method-comparison-synthetic",
+  "version": "1",
+  "history": [
+    {"event_id":"e01","session_id":"s01","role":"user","content":"我叫林澄。","occurred_at":"2026-01-01T09:00:00+00:00"},
+    {"event_id":"e02","session_id":"s01","role":"assistant","content":"你好，林澄。","occurred_at":"2026-01-01T09:00:01+00:00"},
+    {"event_id":"e03","session_id":"s01","role":"user","content":"我养了一只叫豆包的猫。","occurred_at":"2026-01-01T09:01:00+00:00"},
+    {"event_id":"e04","session_id":"s01","role":"assistant","content":"我猜它的毛色是白色，但这只是猜测，你没有提供毛色。","occurred_at":"2026-01-01T09:01:01+00:00"},
+    {"event_id":"e05","session_id":"s01","role":"user","content":"我喜欢喝乌龙茶。","occurred_at":"2026-01-01T09:02:00+00:00"},
+    {"event_id":"e06","session_id":"s01","role":"assistant","content":"你喜欢乌龙茶。","occurred_at":"2026-01-01T09:02:01+00:00"},
+    {"event_id":"e07","session_id":"s02","role":"user","content":"研究方向：机器人导航。","occurred_at":"2026-01-02T09:00:00+00:00"},
+    {"event_id":"e08","session_id":"s02","role":"assistant","content":"收到。","occurred_at":"2026-01-02T09:00:01+00:00"},
+    {"event_id":"e09","session_id":"s02","role":"user","content":"我给机器人项目起名为晨星。","occurred_at":"2026-01-02T09:01:00+00:00"},
+    {"event_id":"e10","session_id":"s02","role":"assistant","content":"项目名是晨星。","occurred_at":"2026-01-02T09:01:01+00:00"},
+    {"event_id":"e11","session_id":"s03","role":"user","content":"我养了一只叫豆包的猫。","occurred_at":"2026-01-03T09:00:00+00:00"},
+    {"event_id":"e12","session_id":"s03","role":"assistant","content":"这与之前的陈述一致。","occurred_at":"2026-01-03T09:00:01+00:00"},
+    {"event_id":"e13","session_id":"s03","role":"user","content":"我每周六练习游泳。","occurred_at":"2026-01-03T09:01:00+00:00"},
+    {"event_id":"e14","session_id":"s03","role":"assistant","content":"好的。","occurred_at":"2026-01-03T09:01:01+00:00"}
+  ],
+  "questions": [
+    {"id":"dev-name","split":"dev","category":"identity_paraphrase","query":"我是谁？","abstain":false,"answer_contains":"林澄","evidence_sets":[["e01"]]},
+    {"id":"dev-cat","split":"dev","category":"cross_session_fact","query":"我的猫叫什么？","abstain":false,"answer_contains":"豆包","evidence_sets":[["e03"],["e11"]]},
+    {"id":"dev-tea","split":"dev","category":"preference","query":"我喜欢喝什么茶？","abstain":false,"answer_contains":"乌龙茶","evidence_sets":[["e05"]]},
+    {"id":"dev-research","split":"dev","category":"non_first_person_statement","query":"我的研究方向是什么？","abstain":false,"answer_contains":"机器人导航","evidence_sets":[["e07"]]},
+    {"id":"dev-project","split":"dev","category":"project_fact","query":"我的机器人项目叫什么？","abstain":false,"answer_contains":"晨星","evidence_sets":[["e09"]]},
+    {"id":"dev-color","split":"dev","category":"assistant_guess_not_fact","query":"我明确说过猫是什么毛色吗？","abstain":true,"answer_contains":null,"evidence_sets":[]},
+    {"id":"dev-birthday","split":"dev","category":"unknown_fact","query":"我的生日是哪天？","abstain":true,"answer_contains":null,"evidence_sets":[]},
+    {"id":"dev-multi","split":"dev","category":"multi_session_evidence","query":"我的猫名和机器人项目名分别是什么？","abstain":false,"answer_contains":"豆包、晨星","required_terms":["豆包","晨星"],"evidence_sets":[["e03","e09"],["e11","e09"]]},
+    {"id":"holdout-name","split":"holdout","category":"identity_paraphrase","query":"你还记得我的姓名吗？","abstain":false,"answer_contains":"林澄","evidence_sets":[["e01"]]},
+    {"id":"holdout-tea","split":"holdout","category":"preference_paraphrase","query":"我爱喝的茶是哪一种？","abstain":false,"answer_contains":"乌龙茶","evidence_sets":[["e05"]]},
+    {"id":"holdout-swim","split":"holdout","category":"schedule","query":"我通常在星期几游泳？","abstain":false,"answer_contains":"周六","evidence_sets":[["e13"]]},
+    {"id":"holdout-age","split":"holdout","category":"unknown_fact","query":"我今年几岁？","abstain":true,"answer_contains":null,"evidence_sets":[]}
+  ]
+}

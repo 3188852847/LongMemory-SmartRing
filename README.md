@@ -2,13 +2,23 @@
 
 一个面向个人智能终端的长程记忆研究项目。
 
-本项目以独立、可测试的 LongMemory Core 为研究主体，后续通过适配层接入 Xiaozhi Server 和 SmartRing-Plus 智能圆屏。
+本项目以独立、可测试的 LongMemory Core 为研究主体，通过适配层接入 Xiaozhi Server 和 SmartRing-Plus 智能圆屏；当前圆屏合成记忆闭环已由用户完成实机最小验收。
 
 > SmartRing-Plus 是基于 ESP32-S3 的智能圆形显示屏开发板，不是可穿戴戒指。
 
 ## 当前状态
 
-项目处于 **V0.1 首个纵向闭环已跑通、继续补齐版本能力** 阶段。
+项目处于 **V0.1/圆屏最小闭环已跑通，迁移到可替换方法研究平台** 阶段。
+
+最新路线：A 方法边界 → B 网页文字聊天 → C 最小跨方法冻结问答 → D1 LongMemory 算法升级 / D2 论文复现交替迭代。
+**A 已完成**：`longmemory_v1` 包装复用旧规则；新方法接口将接收消息与召回分开，原 CLI/小智行为保留。239 项 Python、9 项 Node 合成回归通过。
+**B 已实现**：新增[文字聊天页](docs/deployment/local-console.md#文字聊天网页入口)，共用 longmemory_v1 和已有记忆库，网页临时会话独立；展示真实写入、召回、注入和失败阶段。用户已开始实际使用，姓名问题暴露关键词召回局限，不代表两端数据库不共享。
+**C 最小版已实现**：[历史回放与冻结问答](docs/research/method-comparison.md)，原子事实与原始对话分块两种方法、独立实验状态、相同上下文预算和逐题报告。默认 8 个合成开发题，4 个保留题本轮不运行。完整日常会话持久化、语义检索升级和 MemRL **未实现**。
+网页新聊天不删除长期记忆；当前页面刷新另开聊天，服务重启不恢复聊天列表。模型和角色复用现有配置格式/文件，但网页与小智启动配置尚未自动同步，需核对。校园网和双入口实际体验待用户验证。
+本轮没有新依赖、schema 或个人库迁移，没有调用校园模型或替用户操作设备。开发预览只使用隔离合成库。
+最新全量回归：310 项 Python、11 项 Node 测试通过。用户已完成首次学校模型比较，两方法各完成 8/8；原词面初筛均 5/8，存在措辞误判，见[独立复核记录](docs/research/comparison-dev-review-2026-09-03.md)。原报告与分数保持不变，未运行保留题。
+**D1 已开始**：来源绑定的语义候选接口、整批校验和独立兼容模型适配器已通过离线测试；不复用回答人格、不允许模型指定来源或更新数据库。新增复核附页工具区分自动初筛与复核判断。候选提取尚未装配进新实验方法，未进行真实模型提取验收，现用 v1/网页/圆屏算法不变，见 [ADR-0010](docs/adr/0010-source-bound-extraction-candidates.md)。
+详见 [ADR-0008](docs/adr/0008-replaceable-memory-methods-and-research-protocols.md)、[验收范围](docs/requirements/research-platform.md)、[方法接口与限制](docs/architecture/method-boundary.md)。
 
 已经完成：
 
@@ -38,22 +48,46 @@
 - [x] 验证两个独立 CLI 进程之间的 SQLite 记忆持久化
 - [x] 用户在校园网完成真实接口调用、v1 合成问答与手动重启召回，助手已复核本地报告
 - [x] 修复常见无问号提问误入库与拒答措辞漏判；新增 v2 合成回归数据和评分器版本
+- [x] 用户完成 v2 校园网合成复验：有记忆上下文 8/8、无上下文 5/8，通过数仅指该合成集工程检查
+- [x] 用户反馈厂商 B 版小智固件可配网和语音对话；尚未接入本项目记忆服务
+- [x] 编译并实机运行 AXP2101 只读诊断：诊断期间电脑 USB 供电下报告恒压充电、4192–4193 mV、估算 100%；不等于小智运行时的同步读数
+- [x] 核对厂家 B V2 下载固件：与厂家 Git blob 一致，内部校验通过；用户烧录后报告校验通过，待机照片及用户反馈确认低电量提示消失；电量精度和充放电切换尚未验证
+- [x] 完整备份此前已配网的旧版小智，诊断后曾恢复且写入校验通过；该备份和原厂备份均保留，不是当前 B V2 的备份
+- [x] 用户准备独立 Xiaozhi Python 环境，反馈依赖检查、FFmpeg 与 Opus 静音编解码验证通过；完整语音服务尚未启动
+- [x] 用户反馈 SenseVoiceSmall 中文识别、SileroVAD 加载和 EdgeTTS 合成播放检查通过；提供无密钥配置模板、本机启动工具与流式验证命令
+- [x] 用户在校园网完成学校模型流式检查（3 个非空内容块、5 字符）和本机服务启动；HTTP/WS 检查通过，助手只读确认 8000/8003 均监听 127.0.0.1；尚未接通圆屏或长期记忆
+- [x] 准备显式指定 IP 的局域网启动模式与可撤销的窄范围防火墙脚本；修复 Windows PowerShell 5.1 中文编码解析问题
+- [x] 用户提供圆屏接入自建小智后的 ASR、回复音频生成发送和再次监听日志；此阶段 Memory=nomem，不算长期记忆验收
+- [x] 抽出共享 MemoryTurnService，实现小智本机子进程记忆适配、独立连接实例和安装/启动入口；138 项离线回归通过，含真实 Python 3.10 → 3.12 与 SQLite 重开召回，未替用户启用
+- [x] 用户随后启用 LongMemory，提供猫名召回及未知毛色不编造的实机日志，并明确确认服务重启召回和来源查看完成；V0.1-Demo 小规模合成最小验收通过，不代表长期运行或通用能力验证
+- [x] 静态审查用户提供的 elysia.skill ZIP，准备独立的爱莉希雅风格与普通助手候选文本，保留上游 MIT 声明；141 项离线测试通过，尚未修改运行中的人格或音色
 
 尚未完成：
 
 - [ ] 记忆撤销/恢复和隐私级彻底删除
 - [ ] 语义重复处理
-- [ ] 修复后的 v2 合成样例真实模型复验（离线回归与真实调用分开）
+- [ ] 查清圆屏 0% / 未充电提示与实际电池充电状态是否一致
 - [ ] 更大范围的真实模型对照与人工复核；当前小样例不代表通用能力
-- [ ] V0.1-Demo 的 Xiaozhi 服务端选型/接口核对、设备语音链路与实机演示
+- [ ] 助手角色的系统性事实边界评估；用户已完成初步听感体验，语义检索等后续研究尚未开始
+- [x] 用户已体验并暂时接受助手角色表达；未更换 TTS 音色，不扩大为全面人格/事实边界评估
+- [x] 新增可选的本机音量控制技术验证入口，默认关闭，独立客户端令牌鉴权；不改固件或记忆核心
+- [x] 用户确认唤醒后 B V2 音量通道操作可用；待机可能无活动连接
+- [x] 实现本机控制台“设备与状态”页：查看连接、读音量、设置与回执核对，浏览器不持有设备令牌
+- [x] 用户确认网页音量控制可用；设备页实机操作通过
+- [x] 实现记忆管理页：已有库只读浏览、分页/文字筛选、来源查看，以及显式启用后的单条删除确认
+- [ ] 记忆页真实浏览器体验；助手角色和运行记录页面仍待实现
 
 当前默认闭环采用确定性规则、关键词检索和 Fake 回答生成器；真实回答器可显式启用，校园网首轮调用已由用户验证。问句过滤仍是有限中文规则，不保证覆盖所有表达；时间抽取与自动冲突更新尚未实现。已有数据库中的误提取记忆不会自动清理。
 
-### 最新推进顺序
+### 已完成演示与控制台历史进展（后续执行以文首及 ROADMAP 为准）
 
 用户已决定提前圆屏演示：先验证私有部署模型接口并接入 PC 回答链路，补齐必要日志、最小评估和进程重启验收，随后立即进行 **V0.1-Demo：Xiaozhi + SmartRing-Plus-B 圆屏记忆演示**，不等待后续记忆算法研究完成。
 
-配置的模型标识为 `DeepSeek-V4-Flash`，服务实际模型身份未独立核实。用户已完成校园网真实接口首轮验证；当前 HTTP 仍不加密。助手继续只做离线工作，语音链路与圆屏记忆演示尚未完成。详细边界见 [路线图](ROADMAP.md) 与 [ADR-0005](docs/adr/0005-early-device-demo-and-private-model.md)，执行步骤见 [校园网验证指南](docs/development/campus-model-validation.md)。
+配置的模型标识为 `DeepSeek-V4-Flash`，服务实际模型身份未独立核实。用户已完成校园网接口、自建小智链路及圆屏跨会话合成记忆最小验收；当前 HTTP 仍不加密。详细边界见 [路线图](ROADMAP.md)、[ADR-0005](docs/adr/0005-early-device-demo-and-private-model.md) 与 [ADR-0006](docs/adr/0006-xiaozhi-local-process-memory-bridge.md)。
+
+当前厂家 B V2 低电量提示已消失，圆屏记忆演示已跑通。[七步启用指南](docs/deployment/xiaozhi-longmemory-demo.md) 保留用于复现。适配器逐轮保存用户 ASR 正文，暂不归档小智助手回答；PC 仍保存双方 L0。用户已体验并暂时接受 [助手角色文本](docs/third_party/elysia-skill-review.md)，不改记忆核心、不新增剧情 RAG、不切换音色。电量精度及充放电切换仍未验证。
+
+本机控制台：设备与状态页已由用户确认可控制圆屏；记忆管理页现已实现分页/文字筛选、来源查看、单条删除确认。用 `--database` 指定已有库，默认只读、不自动建库/迁移，删除需额外启用且 L0 原文仍保留。浏览器界面不等于设备常在线，进入聆听状态后才可能可控。启动与使用见[本机控制台指南](docs/deployment/local-console.md)。当前 223 项 Python 回归和 9 项前端测试通过；记忆页真实浏览器交互尚未验证，没有替用户删除真实数据。
 
 ## V0.1 目标
 
@@ -169,6 +203,8 @@ LongMemory-SmartRing/                              # 项目根目录
 │  │  └─ docs/                                     # 设备端说明
 │  ├─ configs/                                     # 可提交的设备配置示例
 │  ├─ patches/                                     # 针对明确上游版本的补丁
+│  ├─ diagnostics/                                 # 独立硬件诊断，不自动烧录
+│  │  └─ axp2101_readonly/                         # 只读 PMIC 状态与充电排查
 │  └─ README.md                                    # 上游边界和使用约定
 ├─ notebooks/                                      # 探索性分析，稳定逻辑迁回源码
 ├─ scripts/                                        # 可重复执行的辅助脚本
@@ -181,6 +217,11 @@ LongMemory-SmartRing/                              # 项目根目录
 │     ├─ __init__.py                               # 包标识和版本
 │     ├─ __main__.py                               # python -m longmemory 入口
 │     ├─ bootstrap.py                              # 依赖装配
+│     ├─ methods/                                  # 完整记忆方法的中立入口（阶段 A 已实现）
+│     │  ├─ contracts.py                           # 消息、结果与方法能力；不依赖 L1/SQLite
+│     │  ├─ factory.py                             # 方法白名单装配，现仅 longmemory_v1
+│     │  └─ longmemory_v1/                         # 包装现有基线，不复制核心算法
+│     │     └─ method.py                           # 方法状态、接收消息、召回和资源释放
 │     ├─ core/                                     # 不依赖外部技术的核心层
 │     │  ├─ common/                                # 公共类型和领域异常
 │     │  │  ├─ identifiers.py                      # 稳定标识符
@@ -213,6 +254,8 @@ LongMemory-SmartRing/                              # 项目根目录
 │     │     ├─ dto.py                              # 管理输入输出
 │     │     └─ service.py                          # 管理用例
 │     ├─ adapters/                                 # 外部技术适配器
+│     │  ├─ device_control/                        # 本机小智控制桥客户端，不进入记忆核心
+│     │  │  └─ xiaozhi.py                          # 保管令牌、限制字段、处理未知执行结果
 │     │  ├─ storage/                               # SQLite 存储实现
 │     │  │  ├─ sqlite_conversation_store.py        # L0 SQLite 实现
 │     │  │  └─ sqlite_memory_store.py              # L1 SQLite 实现
@@ -233,8 +276,13 @@ LongMemory-SmartRing/                              # 项目根目录
 │     │  │  ├─ app.py                              # CLI 启动
 │     │  │  ├─ commands.py                         # 管理命令
 │     │  │  └─ presenter.py                        # 输出格式
-│     │  ├─ api/                                   # 后续 HTTP API
-│     │  │  └─ routes/                             # API 路由预留
+│     │  ├─ api/                                   # 本机控制台 HTTP API
+│     │  │  ├─ __main__.py                         # python -m longmemory.entrypoints.api
+│     │  │  ├─ server.py                           # 白名单静态资源与设备接口
+│     │  │  ├─ security.py                         # 同源会话、CSRF、Host 与安全响应头
+│     │  │  ├─ memory_backend.py                   # 已有库装配、只读访问和删除前快照核对
+│     │  │  └─ routes/                             # 分功能 API 路由
+│     │  │     └─ memories.py                     # 记忆列表、详情和单条删除请求
 │     │  └─ xiaozhi/                               # 后续 Xiaozhi 入口
 │     │     ├─ adapter.py                          # 协议适配
 │     │     └─ mapping.py                          # 消息映射
@@ -256,17 +304,27 @@ LongMemory-SmartRing/                              # 项目根目录
 │  │  ├─ database/                                 # 数据库集成
 │  │  └─ memory_pipeline/                          # 记忆流水线集成
 │  ├─ e2e/                                         # 写入—重启—回忆闭环
+│  ├─ web/                                         # Node 原生前端状态测试，不访问实机
 │  ├─ regression/                                  # 已修复问题回归
 │  ├─ data/                                        # 测试内部小型 fixture
 │  └─ conftest.py                                  # pytest 公共夹具
-├─ web/                                            # 后续 Web 管理界面
-│  ├─ public/                                      # 静态资源
-│  ├─ src/                                         # 前端源码
+├─ web/                                            # 本机控制台，无 CDN、无构建步骤
+│  ├─ index.html                                   # 设备与状态页面
+│  ├─ memories.html                                # 记忆列表、来源详情与删除确认页面
+│  ├─ assets/                                      # 当前本地资源，只有白名单文件由后端提供
+│  │  ├─ app.js                                    # 会话、状态轮询、音量操作和纯文本渲染
+│  │  ├─ state.mjs                                 # 可独立测试的状态与结果映射
+│  │  ├─ memories.js                               # 记忆页面交互、纯文本来源显示和删除确认
+│  │  ├─ memory-view.mjs                            # 记忆元数据、时间与分页文案
+│  │  ├─ console.css                               # 响应式本地样式
+│  │  └─ favicon.svg                               # 本地站点图标
+│  ├─ public/                                      # 早期骨架预留，当前不由后端公开
+│  ├─ src/                                         # 早期模块化位置预留，尚未搬迁
 │  │  ├─ api/                                      # 后端请求
 │  │  ├─ components/                               # 通用组件
 │  │  ├─ features/                                 # 业务功能
 │  │  └─ styles/                                   # 全局样式
-│  └─ README.md                                    # V0.1 不选型
+│  └─ README.md                                    # 当前前端方案、边界与启动入口
 ├─ .env.example                                    # 安全配置示例
 ├─ .gitattributes                                  # 换行和二进制属性
 ├─ .gitignore                                      # 密钥、数据和构建产物排除
@@ -332,11 +390,17 @@ V0.9  长周期实验和主动记忆
 
 ## 参考资料
 
+新增执行里程碑：[本机控制台决策](docs/adr/0007-local-console-and-device-control.md)，设备页实机操作已由用户确认可用，[记忆管理页](docs/deployment/local-console.md)已实现；接着推进助手角色和运行记录，收尾后回到 V0.2。
+
 - [SmartRing-Plus](https://gitee.com/VIEWESMART/SmartRing-Plus)
 - [Xiaozhi AI 开发资料](https://xiaozhi.dev/)
 - [Xiaozhi ESP32](https://github.com/78/xiaozhi-esp32)
 - [Xiaozhi ESP32 Server](https://github.com/xinnan-tech/xiaozhi-esp32-server)
 - [TencentDB Agent Memory](https://github.com/TencentCloud/TencentDB-Agent-Memory)
+- [VibeVoice](https://github.com/microsoft/VibeVoice)：语音模型候选资料，暂不接入。
+- [voice-studio](https://github.com/mjlzz/voice-studio)：语音工作台与离线 TTS 参考，暂不接入。
+
+2026-09-03 用户决定：上述两个语音项目先收藏，优先完成主线；当前先体验已有爱莉希雅风格提示词，继续使用 EdgeTTS，不启动音色优化或新增依赖。
 
 ## 许可证
 

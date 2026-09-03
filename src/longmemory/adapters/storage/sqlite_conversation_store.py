@@ -13,8 +13,9 @@ from longmemory.core.conversation.models import (
 class SQLiteConversationStore:
     """使用 SQLite 实现 ConversationStore 契约。"""
 
-    def __init__(self, connection: Connection) -> None:
+    def __init__(self, connection: Connection, *, commit_changes: bool = True) -> None:
         self._connection = connection
+        self._commit_changes = commit_changes
 
     def save(self, message: ConversationMessage) -> None:
         """持久化一条原始消息。"""
@@ -36,7 +37,8 @@ class SQLiteConversationStore:
                 message.created_at.isoformat(),
             ),
         )
-        self._connection.commit()
+        if self._commit_changes:
+            self._connection.commit()
 
     def get(self, message_id: MessageId) -> ConversationMessage | None:
         """根据 ID 读取一条原始消息。"""

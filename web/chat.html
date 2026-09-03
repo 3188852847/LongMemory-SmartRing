@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>文字聊天 · LongMemory</title>
+  <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/assets/console.css">
+  <script type="module" src="/assets/chat.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">跳到文字聊天</a>
+  <div class="layout">
+    <aside class="sidebar" aria-label="控制台导航">
+      <a class="brand" href="/"><span class="brand-mark" aria-hidden="true">L</span><span>LongMemory<small>本机控制台</small></span></a>
+      <nav><span class="nav-label">工作区</span>
+        <a class="nav-item" href="/">设备与状态</a>
+        <a class="nav-item active" href="/chat" aria-current="page">文字聊天</a>
+        <a class="nav-item" href="/memories">记忆管理</a>
+        <span class="nav-item upcoming" aria-disabled="true">助手角色 <small>待接入</small></span>
+        <span class="nav-item upcoming" aria-disabled="true">运行记录 <small>待接入</small></span>
+      </nav>
+      <div class="sidebar-footer">仅本机访问<small>文字不会让圆屏自动播音</small></div>
+    </aside>
+    <main id="main">
+      <header class="page-header"><div><p class="eyebrow">日常记忆空间</p><h1>文字聊天</h1><p class="muted">用打字体验记忆，逐轮检查系统实际做了什么。</p></div><button id="new-chat" class="button secondary" disabled>新聊天</button></header>
+      <div id="chat-notice" class="notice" role="status">正在检查聊天配置…</div>
+      <section class="panel" aria-label="当前配置"><p id="chat-config" class="muted"></p><p id="chat-database" class="hint"></p><p class="hint">与圆屏使用同一数据库时共用长期记忆；当前短期上下文独立，仅传最近六轮成功对话。新聊天不会删除长期记忆。刷新页面会另开聊天，服务重启不恢复本页历史；原始输入与回答仍归档在 L0。</p></section>
+      <section class="panel chat-panel" aria-labelledby="conversation-title">
+        <div class="section-heading"><h2 id="conversation-title">当前聊天</h2><span id="chat-count" class="subtle-tag">0 / 40 轮</span></div>
+        <div id="chat-turns" aria-live="polite" aria-relevant="additions"></div>
+        <p id="chat-empty" class="empty-state">可以先说一句合成事实，再在新聊天中提问，检查长期记忆是否召回。</p>
+        <form id="chat-form">
+          <label for="chat-input">消息</label>
+          <textarea id="chat-input" maxlength="1000" rows="3" placeholder="例如：我养了一只叫豆包的猫" autocomplete="off" disabled></textarea>
+          <div class="chat-actions"><span class="hint">最多 1000 字；点击发送。Enter 换行。</span><button id="chat-send" class="button primary" type="submit" disabled>发送</button></div>
+        </form>
+        <button id="chat-recover" class="button secondary hidden" type="button">查询上一条处理结果（不重发）</button>
+      </section>
+      <footer class="page-footer"><span>LongMemory / 文字聊天</span><span>日常体验不是论文评估；不自动进入实验数据集</span></footer>
+      <noscript><p class="notice">请启用 JavaScript。消息只按纯文本显示。</p></noscript>
+    </main>
+  </div>
+</body>
+</html>

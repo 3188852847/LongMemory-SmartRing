@@ -1,0 +1,66 @@
+# 由 setup.py init 复制到外部小智服务目录 data/.config.yaml。
+# 此模板不得填写真实密钥；只在复制后的本地文件中填写。
+server:
+  # 首次验收仅允许电脑本机访问，圆屏此时无法连接是预期行为。
+  ip: 127.0.0.1
+  port: 8000
+  http_port: 8003
+  websocket: ws://127.0.0.1:8000/xiaozhi/v1/
+  vision_explain: http://127.0.0.1:8003/mcp/vision/explain
+  auth:
+    enabled: false
+    allowed_devices: []
+manager-api:
+  url: ""
+selected_module:
+  VAD: SileroVAD
+  ASR: FunASR
+  LLM: CampusLLM
+  VLLM: null
+  TTS: EdgeTTS
+  Memory: nomem
+  Intent: nointent
+LLM:
+  CampusLLM:
+    type: openai
+    # 本地填入此前已验证的 /v1 地址；不支持 ${环境变量} 自动替换。
+    base_url: "https://YOUR_MODEL_HOST/v1"
+    api_key: "FILL_LOCALLY"
+    model_name: "DeepSeek-V4-Flash"
+    timeout: 60
+    max_tokens: 256
+ASR:
+  FunASR:
+    type: fun_local
+    model_dir: models/SenseVoiceSmall
+    output_dir: tmp/
+    language: zh
+VAD:
+  SileroVAD:
+    type: silero
+    model_dir: models/snakers4_silero-vad
+    threshold: 0.5
+    threshold_low: 0.3
+    min_silence_duration_ms: 600
+TTS:
+  EdgeTTS:
+    type: edge
+    voice: zh-CN-XiaoxiaoNeural
+    output_dir: tmp/
+Memory:
+  nomem:
+    type: nomem
+Intent:
+  nointent:
+    type: nointent
+delete_audio: true
+enable_wakeup_words_response_cache: false
+enable_greeting: false
+mcp_endpoint: null
+context_providers: []
+prompt: |
+  你是语音链路测试助手，请用简短中文回答。
+  当前尚未接入长期记忆，不要声称能够记住跨会话信息。
+  不知道的信息请说明不知道，不要编造设备状态或个人事实。
+log:
+  log_level: INFO

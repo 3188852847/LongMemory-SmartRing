@@ -1,0 +1,111 @@
+"""技术验证用本机 HTTP 窄接口。复用小智现有 aiohttp，不新增依赖。
+
+无网页、无 CORS、拒绝带 Origin 的浏览器请求，只接受带本地令牌的客户端。
+后续控制台必须重新设计同源会话/CSRF，不能直接把令牌放进网页。
+"""
+
+import re
+import secrets
+from pathlib import Path
+
+from device_control import ControlError
+
+
+PORT = 8766
+TOKEN_FILE = Path(__file__).resolve().parents[3] / "data/control/device-control.token"
+
+
+def read_token(path=TOKEN_FILE):
+    value = path.read_text(encoding="ascii").strip()
+    if not re.fullmatch(r"[0-9a-f]{64}", value):
+        raise ValueError("控制令牌文件格式错误；未输出内容。")
+    return value
+
+
+def ensure_token(path=TOKEN_FILE):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with path.open("x", encoding="ascii") as handle:
+            handle.write(secrets.token_hex(32))
+    except FileExistsError:
+        pass
+    return read_token(path)
+
+
+def create_app(control, token, port=PORT):
+    from aiohttp import web
+
+    @web.middleware
+    async def guard(request, handler):
+        # 固定 Host 防止 DNS rebinding；不依赖 CORS 来阻止带副作用的请求。
+        if (request.remote != "127.0.0.1"
+                or request.headers.get("Host") != f"127.0.0.1:{port}"
+                or "Origin" in request.headers
+                or "Sec-Fetch-Site" in request.headers):
+            return web.json_response({"error": "local_cli_only"}, status=403)
+        supplied = request.headers.get("Authorization", "")
+        if not secrets.compare_digest(supplied.encode(), f"Bearer {token}".encode()):
+            return web.json_response({"error": "unauthorized"}, status=401)
+        try:
+            response = await handler(request)
+        except ControlError as exc:
+            response = web.json_response({"error": exc.code}, status=exc.status)
+        except web.HTTPException as exc:
+            response = web.json_response({"error": "http_request_rejected"}, status=exc.status)
+        except Exception:
+            response = web.json_response({"error": "control_internal_error"}, status=500)
+        response.headers["Cache-Control"] = "no-store"
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        return response
+
+    async def status(request):
+        return web.json_response(control.status())
+
+    async def read_volume(request):
+        return web.json_response(await control.read_volume())
+
+    async def set_volume(request):
+        if request.content_type != "application/json":
+            raise ControlError("json_required", 415)
+        try:
+            body = await request.json()
+        except (ValueError, UnicodeError):
+            raise ControlError("invalid_json", 400) from None
+        if not isinstance(body, dict) or set(body) != {"volume"}:
+            raise ControlError("invalid_fields", 400)
+        return web.json_response(await control.set_volume(body["volume"]))
+
+    app = web.Application(middlewares=[guard], client_max_size=1024)
+    app.router.add_get("/api/device", status, allow_head=False)
+    app.router.add_get("/api/device/volume", read_volume, allow_head=False)
+    app.router.add_post("/api/device/volume", set_volume)
+    return app
+
+
+def install_control_server(server_class, connection_class):
+    """随小智 WebSocket 任务启动/清理，避免另一个线程跨事件循环操作连接。"""
+    from device_control import DeviceControl, install_connection_tracking
+    original = server_class.start
+
+    async def start(server):
+        from aiohttp import web
+        config = server.config
+        name = config["selected_module"]["Memory"]
+        allowed_id = config["Memory"][name]["allowed_device_id"]
+        control = DeviceControl(allowed_id)
+        runner = web.AppRunner(create_app(control, ensure_token()), access_log=None)
+        previous_handle = connection_class.handle_connection
+        install_connection_tracking(connection_class, control)
+        try:
+            await runner.setup()
+            await web.TCPSite(runner, "127.0.0.1", PORT).start()
+            print(f"设备控制已开启：http://127.0.0.1:{PORT}（仅令牌客户端，无网页）", flush=True)
+            return await original(server)
+        except OSError:
+            print("设备控制端口启动失败；未自动换端口，请检查 8766 是否占用。", flush=True)
+            raise
+        finally:
+            connection_class.handle_connection = previous_handle
+            await runner.cleanup()
+
+    server_class.start = start

@@ -50,20 +50,34 @@ def send_request(settings: ModelSettings, body: bytes) -> tuple[int, bytes]:
 class OpenAICompatibleAnswerGenerator:
     """将受控记忆上下文与当前问题发送到用户配置的私有模型服务。"""
 
-    def __init__(self, settings: ModelSettings, *, transport: Transport = send_request):
+    def __init__(self, settings: ModelSettings, *, transport: Transport = send_request, role_prompt: str = ""):
         if settings.provider != "openai_compatible":
             raise ValueError("此适配器需要 openai_compatible 配置。")
         self._settings = settings
         self._transport = transport
+        self._role_prompt = role_prompt
 
     def generate(self, *, query: str, memory_context: str) -> str:
+        return self.generate_turn(query=query, memory_context=memory_context, history=())
+
+    def generate_turn(self, *, query: str, memory_context: str, history: tuple) -> str:
+        """短期上下文来自当前网页会话，不从共享 L0 表猜测会话归属。
+
+        历史保留 user/assistant 角色；不将其冒充长期记忆，也不重新提取。
+        原 generate 接口不变，已有 CLI 和评估继续是原来的单轮协议。
+        """
+        if any(item.get("role") not in {"user", "assistant"}
+               or not isinstance(item.get("content"), str) for item in history):
+            raise ValueError("历史只能包含已知角色的文本。")
         # JSON 编码区分证据与问题；这是提示约束，并不宣称彻底防御提示注入。
         evidence = json.dumps({"memory_evidence": memory_context}, ensure_ascii=False)
         body = json.dumps({
             "model": self._settings.model,
             "messages": [
                 {"role": "system", "content": SYSTEM_PROMPT},
+                *([{"role": "system", "content": self._role_prompt}] if self._role_prompt else []),
                 {"role": "user", "content": evidence},
+                *history,
                 {"role": "user", "content": query},
             ],
             "stream": False,

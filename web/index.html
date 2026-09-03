@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="LongMemory 本机控制台：查看智能圆屏连接状态和调整扬声器音量。">
+  <title>设备与状态 · LongMemory</title>
+  <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/assets/console.css">
+  <script type="module" src="/assets/app.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">跳到设备控制</a>
+  <div class="layout">
+    <aside class="sidebar" aria-label="控制台导航">
+      <a class="brand" href="/" aria-label="LongMemory 首页"><span class="brand-mark" aria-hidden="true">L</span><span>LongMemory<small>本机控制台</small></span></a>
+      <nav>
+        <span class="nav-label">工作区</span>
+        <a class="nav-item active" href="/" aria-current="page"><span aria-hidden="true">◉</span>设备与状态</a>
+        <a class="nav-item" href="/chat">文字聊天</a>
+        <a class="nav-item" href="/memories">记忆管理</a>
+        <span class="nav-item upcoming" aria-disabled="true">助手角色 <small>待接入</small></span>
+        <span class="nav-item upcoming" aria-disabled="true">运行记录 <small>待接入</small></span>
+      </nav>
+      <div class="sidebar-footer"><span class="local-dot" aria-hidden="true"></span>仅本机访问<small>不向浏览器提供设备令牌</small></div>
+    </aside>
+    <main id="main">
+      <header class="page-header"><div><p class="eyebrow">终端管理</p><h1>设备与状态</h1><p class="muted">查看连接，调整智能圆屏的扬声器音量。</p></div><button id="refresh-status" class="button secondary" type="button">刷新状态</button></header>
+      <div id="session-notice" class="notice hidden" role="alert"></div>
+      <section class="device-card" aria-labelledby="device-heading">
+        <div class="device-summary"><div class="device-icon" aria-hidden="true">◉</div><div><p class="eyebrow">当前终端</p><h2 id="device-heading">SmartRing-Plus B V2</h2><p class="muted">ESP32-S3 智能圆屏</p></div><span id="connection-badge" class="badge" role="status">正在连接控制服务</span></div>
+        <div class="status-grid">
+          <div><span class="field-label">小智控制服务</span><strong id="bridge-state">检查中</strong></div>
+          <div><span class="field-label">圆屏连接</span><strong id="device-state">尚未读取</strong></div>
+          <div><span class="field-label">音量工具</span><strong id="tool-state">尚未读取</strong></div>
+        </div>
+        <p id="connection-help" class="connection-help">正在读取连接状态，不会自动调整音量。</p>
+        <div class="card-foot"><span id="updated-at">尚未刷新</span><span>每 5 秒检查连接 · 不轮询设备音量</span></div>
+      </section>
+      <div class="workspace-grid">
+        <section class="panel" aria-labelledby="volume-heading">
+          <div class="section-heading"><h2 id="volume-heading">扬声器音量</h2><button id="read-volume" class="button secondary small" type="button" disabled>读取当前值</button></div>
+          <div class="volume-reading"><strong id="current-volume">—</strong><span>/ 100</span></div>
+          <p id="volume-freshness" class="muted">还没有读取设备音量。</p>
+          <form id="volume-form">
+            <fieldset id="volume-controls" disabled>
+              <div class="target-heading"><label for="volume-slider">目标音量</label><div class="number-input"><input id="volume-number" name="volume" type="number" min="5" max="60" step="1" value="30" required aria-label="目标音量数值"><span>/ 100</span></div></div>
+              <input id="volume-slider" type="range" min="5" max="60" step="1" value="30" aria-describedby="volume-help">
+              <div class="range-labels"><span>5 · 轻声</span><span>60 · 本阶段上限</span></div>
+              <p id="volume-help" class="hint">拖动只选择数值，点击“应用音量”才发送。不会改变语速或音色。</p>
+              <button id="apply-volume" class="button primary" type="submit">应用音量</button>
+            </fieldset>
+          </form>
+        </section>
+        <section class="panel result-panel" aria-labelledby="result-heading">
+          <div class="section-heading"><h2 id="result-heading">最近一次操作</h2><span class="subtle-tag">本页会话</span></div>
+          <div id="operation-result" class="result-content" role="status" aria-live="polite"><span class="result-symbol" aria-hidden="true">—</span><h3 id="result-title">尚未发送指令</h3><p id="result-description">先读取当前音量，或选择目标音量后应用。设备回执与读回结果会显示在这里。</p></div>
+          <dl id="result-details" class="result-details hidden"></dl>
+          <p class="hint result-footnote">若请求超时，音量可能已改变。先读取核对，不要连续重试。</p>
+        </section>
+      </div>
+      <section class="help-strip" aria-labelledby="connection-note"><h2 id="connection-note">待机时可能暂不可控</h2><p>圆屏进入聆听状态后才可能建立活动连接。显示“请唤醒圆屏”时，先轻触设备，再刷新状态。不需要重新配网。</p></section>
+      <footer class="page-footer"><span>LongMemory / 设备控制</span><span>记忆核心、助手角色与设备控制相互独立</span></footer>
+      <noscript><p class="notice">本机控制台需要启用 JavaScript，才能读取状态与提交音量操作。</p></noscript>
+    </main>
+  </div>
+</body>
+</html>

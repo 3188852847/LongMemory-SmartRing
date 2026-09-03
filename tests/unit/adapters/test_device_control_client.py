@@ -1,0 +1,85 @@
+import asyncio
+import json
+
+import pytest
+
+pytest.importorskip("aiohttp", reason="网页适配层测试需要 console extra")
+from longmemory.adapters.device_control.xiaozhi import XiaozhiControlClient, BridgeError
+
+
+class Response:
+    def __init__(self, value, status=200):
+        self.raw = json.dumps(value).encode()
+        self.status = status
+        self.content = self
+
+    async def __aenter__(self): return self
+    async def __aexit__(self, *_): pass
+    async def iter_chunked(self, size):
+        # 模拟拆包，客户端不能只读第一段就解析 JSON。
+        for offset in range(0, len(self.raw), 7):
+            yield self.raw[offset:offset + 7]
+
+
+class Session:
+    def __init__(self, response): self.response, self.calls = response, []
+    def request(self, *args, **kwargs):
+        self.calls.append((args, kwargs))
+        return self.response
+    async def close(self): pass
+
+
+def client_for(tmp_path, value, status=200):
+    token = tmp_path / "synthetic-token"
+    token.write_text("a" * 64)
+    client = XiaozhiControlClient(token)
+    client._session = Session(Response(value, status))
+    return client
+
+
+def test_token_is_backend_only_and_volume_is_projected(tmp_path):
+    client = client_for(tmp_path, {"volume": 25, "wifi_password": "synthetic-secret", "message": "<script>alert(1)</script>"})
+    assert asyncio.run(client.read_volume()) == {"volume": 25}
+    args, options = client._session.calls[0]
+    assert args == ("GET", "http://127.0.0.1:8766/api/device/volume")
+    assert options["allow_redirects"] is False
+    assert options["headers"]["Authorization"] == "Bearer " + "a" * 64
+
+
+@pytest.mark.parametrize("volume", [True, None, "30", -1, 101])
+def test_invalid_readback_is_never_a_success(tmp_path, volume):
+    client = client_for(tmp_path, {"volume": volume})
+    with pytest.raises(BridgeError, match="bridge_invalid_response"):
+        asyncio.run(client.read_volume())
+
+
+def test_acknowledgement_without_readback_remains_unverified(tmp_path):
+    value = {"requested_volume": 30, "previous_volume": 25, "acknowledged": True,
+             "readback_volume": None, "verified": False, "reason": "device_timeout_outcome_unknown"}
+    client = client_for(tmp_path, value)
+    assert asyncio.run(client.set_volume(30)) == value
+    assert len(client._session.calls) == 1
+
+
+def test_inconsistent_verified_response_is_rejected(tmp_path):
+    client = client_for(tmp_path, {"requested_volume": 30, "previous_volume": 25, "acknowledged": True,
+                                  "readback_volume": 20, "verified": True})
+    with pytest.raises(BridgeError): asyncio.run(client.set_volume(30))
+
+
+@pytest.mark.parametrize("status, code", [(401, "bridge_auth_failed"), (302, "bridge_invalid_response"), (500, "bridge_error")])
+def test_untrusted_error_text_is_not_forwarded(tmp_path, status, code):
+    client = client_for(tmp_path, {"error": "<script>secret</script>"}, status)
+    with pytest.raises(BridgeError) as error: asyncio.run(client.read_volume())
+    assert error.value.code == code
+
+
+def test_missing_token_does_not_create_or_contact_bridge(tmp_path):
+    client = XiaozhiControlClient(tmp_path / "absent")
+    with pytest.raises(BridgeError, match="bridge_not_configured"): asyncio.run(client.status())
+    assert client._session is None
+
+
+def test_oversized_response_rejected(tmp_path):
+    client = client_for(tmp_path, {"volume": 25, "extra": "x" * 20000})
+    with pytest.raises(BridgeError, match="bridge_invalid_response"): asyncio.run(client.read_volume())

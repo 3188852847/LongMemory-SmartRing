@@ -1,15 +1,10 @@
 """装配 V0.1 长程记忆应用所需的具体实现。"""
 
 from pathlib import Path
+from contextlib import contextmanager
 from sqlite3 import Connection
 
 from longmemory.adapters.llm.fake import FakeAnswerGenerator
-from longmemory.adapters.storage.sqlite_conversation_store import (
-    SQLiteConversationStore,
-)
-from longmemory.adapters.storage.sqlite_memory_store import (
-    SQLiteMemoryStore,
-)
 from longmemory.application.chat.contracts import AnswerGenerator
 from longmemory.application.chat.dto import ChatResult
 from longmemory.application.chat.service import ChatService
@@ -18,15 +13,33 @@ from longmemory.application.memory_management.service import (
     MemoryManagementService,
 )
 from longmemory.core.common.identifiers import MemoryId
-from longmemory.core.memory.extraction.service import (
-    MemoryExtractionService,
-)
-from longmemory.core.memory.retrieval.service import (
-    KeywordMemoryRetriever,
-)
-from longmemory.infrastructure.database.connection import open_database
-from longmemory.infrastructure.database.schema import initialize_schema
 from longmemory.infrastructure.logging.setup import log_event
+from longmemory.methods.factory import create_method
+from longmemory.methods.longmemory_v1.method import LongMemoryV1
+
+
+def _legacy_method(database_path: Path, method_name: str) -> LongMemoryV1:
+    """旧聊天/管理返回值仍使用 L1 DTO，本阶段仅兼容 longmemory_v1。
+
+    通用实验调用直接使用 methods.factory；未来方法不能被强制转换成 L1。
+    """
+    if method_name != "longmemory_v1":
+        raise ValueError("当前聊天兼容入口仅支持 longmemory_v1。")
+    method = create_method(name=method_name, state_path=database_path)
+    if not isinstance(method, LongMemoryV1):
+        method.close()
+        raise TypeError("旧入口的方法适配类型不匹配。")
+    return method
+
+
+@contextmanager
+def open_memory_service(database_path: Path, *, method_name: str = "longmemory_v1"):
+    """仅装配记忆能力；退出时关闭 SQLite，不创建/调用回答器。"""
+    method = _legacy_method(database_path, method_name)
+    try:
+        yield method.turn_service
+    finally:
+        method.close()
 
 
 class LongMemoryApplication:
@@ -38,10 +51,12 @@ class LongMemoryApplication:
         chat_service: ChatService,
         memory_management_service: MemoryManagementService,
         connection: Connection,
+        method: LongMemoryV1 | None = None,
     ) -> None:
         self._chat_service = chat_service
         self._memory_management_service = memory_management_service
         self._connection = connection
+        self._method = method
         self._closed = False
 
     def chat(self, text: str) -> ChatResult:
@@ -81,7 +96,10 @@ class LongMemoryApplication:
         if self._closed:
             return
 
-        self._connection.close()
+        if self._method is not None:
+            self._method.close()
+        else:
+            self._connection.close()
         self._closed = True
 
     def _ensure_open(self) -> None:
@@ -95,6 +113,7 @@ def build_application(
     *,
     database_path: Path,
     answer_generator: AnswerGenerator | None = None,
+    method_name: str = "longmemory_v1",
 ) -> LongMemoryApplication:
     """使用指定 SQLite 文件创建一个完整应用实例。
 
@@ -102,16 +121,11 @@ def build_application(
     在没有网络和 API Key 的环境中也能运行和测试。
     """
 
-    connection = open_database(database_path)
+    method = _legacy_method(database_path, method_name)
 
     try:
-        initialize_schema(connection)
-
-        conversation_store = SQLiteConversationStore(connection)
-        memory_store = SQLiteMemoryStore(connection)
-
-        memory_extractor = MemoryExtractionService()
-        memory_retriever = KeywordMemoryRetriever(memory_store)
+        conversation_store = method.conversation_store
+        memory_store = method.memory_store
 
         selected_answer_generator = (
             answer_generator
@@ -122,10 +136,11 @@ def build_application(
         chat_service = ChatService(
             conversation_store=conversation_store,
             memory_store=memory_store,
-            memory_extractor=memory_extractor,
-            memory_retriever=memory_retriever,
+            memory_extractor=method.extractor,
+            memory_retriever=method.retriever,
             answer_generator=selected_answer_generator,
             audit_sink=log_event,
+            memory_turn_service=method.turn_service,
         )
 
         memory_management_service = MemoryManagementService(
@@ -136,10 +151,11 @@ def build_application(
         return LongMemoryApplication(
             chat_service=chat_service,
             memory_management_service=memory_management_service,
-            connection=connection,
+            connection=method.connection,
+            method=method,
         )
 
     except BaseException:
         # 如果初始化过程中发生异常，确保已经打开的连接不会泄漏。
-        connection.close()
+        method.close()
         raise

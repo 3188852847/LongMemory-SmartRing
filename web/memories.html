@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="在本机查看长期记忆及原始来源。">
+  <title>记忆管理 · LongMemory</title>
+  <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/assets/console.css">
+  <script type="module" src="/assets/memories.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">跳到记忆管理</a>
+  <div class="layout">
+    <aside class="sidebar" aria-label="控制台导航">
+      <a class="brand" href="/"><span class="brand-mark" aria-hidden="true">L</span><span>LongMemory<small>本机控制台</small></span></a>
+      <nav><span class="nav-label">工作区</span>
+        <a class="nav-item" href="/">设备与状态</a>
+        <a class="nav-item" href="/chat">文字聊天</a>
+        <a class="nav-item active" href="/memories" aria-current="page">记忆管理</a>
+        <span class="nav-item upcoming" aria-disabled="true">助手角色 <small>待接入</small></span>
+        <span class="nav-item upcoming" aria-disabled="true">运行记录 <small>待接入</small></span>
+      </nav>
+      <div class="sidebar-footer"><span class="local-dot" aria-hidden="true"></span>仅本机访问<small>原始对话不会作为网页文件公开</small></div>
+    </aside>
+    <main id="main">
+      <header class="page-header"><div><p class="eyebrow">长期记忆</p><h1>记忆管理</h1><p class="muted">检查系统记住了什么，以及它来自哪句话。</p></div><button id="memory-refresh" class="button secondary" type="button" disabled>刷新列表</button></header>
+      <div id="memory-notice" class="notice hidden" role="alert"></div>
+      <section class="panel database-panel" aria-label="当前数据库"><div><span class="field-label">当前数据库</span><strong id="memory-database">尚未连接</strong></div><span id="memory-mode" class="badge">检查中</span></section>
+      <form id="memory-search" class="search-toolbar" role="search">
+        <div class="search-field"><label for="memory-query">搜索记忆内容</label><input id="memory-query" type="search" maxlength="200" placeholder="例如：豆包、咖啡" autocomplete="off"></div>
+        <div><label for="memory-filter">显示范围</label><select id="memory-filter"><option value="active">当前记忆（未退役）</option><option value="all">全部记忆</option><option value="retired">已退役</option></select></div>
+        <button id="memory-search-button" class="button secondary" type="submit" disabled>搜索</button>
+      </form>
+      <p class="hint search-note">按文字包含关系筛选，不是语义检索。来源仅在打开单条详情时读取。</p>
+      <div class="memory-workspace">
+        <section class="panel memory-list-panel" aria-labelledby="memory-list-title">
+          <div class="section-heading"><h2 id="memory-list-title">记忆列表</h2><span id="memory-count" class="subtle-tag" role="status">尚未加载</span></div>
+          <p id="memory-list-state" class="empty-state" role="status">正在建立本机会话…</p>
+          <ul id="memory-list" class="memory-list"></ul>
+          <div class="pagination"><button id="memory-previous" class="button secondary small" type="button" disabled>上一页</button><span id="memory-page">—</span><button id="memory-next" class="button secondary small" type="button" disabled>下一页</button></div>
+        </section>
+        <section class="panel memory-detail-panel" aria-labelledby="memory-detail-title">
+          <div class="section-heading"><h2 id="memory-detail-title">内容与来源</h2><button id="memory-delete" class="button danger small" type="button" disabled>删除此条</button></div>
+          <p id="memory-detail-state" class="empty-state" role="status">选择左侧一条记忆，查看完整内容和原始对话。</p>
+          <div id="memory-detail" class="hidden"><p id="memory-content" class="memory-content"></p><dl id="memory-metadata" class="metadata-grid"></dl><h3 class="source-heading">原始来源</h3><div id="memory-sources"></div></div>
+          <p class="hint">“记忆内容”是规范化后的陈述，“原始来源”才是当时记录的话。来源缺失会明确显示，不补写猜测。</p>
+        </section>
+      </div>
+      <section class="help-strip"><h2>删除记忆不等于清除原始对话</h2><p>删除后，该条长期记忆和来源关联会移除，但 L0 原始对话仍保留。当前没有一键恢复或直接编辑事实；事实纠正与完整隐私擦除将单独实现。</p></section>
+      <footer class="page-footer"><span>LongMemory / 记忆管理</span><span>不自动提取、不调用大模型、不修改数据库结构</span></footer>
+      <noscript><p class="notice">请启用 JavaScript 以查看记忆。页面不会把数据库直接作为静态文件提供。</p></noscript>
+    </main>
+  </div>
+  <dialog id="delete-dialog" aria-labelledby="delete-title" aria-describedby="delete-impact">
+    <h2 id="delete-title">删除这一条长期记忆？</h2><p id="delete-content" class="memory-content"></p><p id="delete-id" class="hint"></p>
+    <p id="delete-impact">将移除这条 L1 记忆、它的来源关联，以及其他记忆指向它的取代链接。原始对话 L0 和备份不会删除。当前没有一键恢复。</p>
+    <label class="confirm-line"><input id="delete-understood" type="checkbox">我理解以上影响，确认只删除这一条。</label>
+    <div class="dialog-actions"><button id="delete-cancel" class="button secondary" type="button" autofocus>取消</button><button id="delete-confirm" class="button danger" type="button" disabled>确认删除</button></div>
+  </dialog>
+</body>
+</html>

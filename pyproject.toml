@@ -10,8 +10,12 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = []
 
+[project.optional-dependencies]
+console = ["aiohttp==3.13.2"]
+
 [project.scripts]
 longmemory = "longmemory.entrypoints.cli.app:main"
+longmemory-console = "longmemory.entrypoints.api.server:main"
 
 [dependency-groups]
 dev = [

@@ -18,8 +18,10 @@ from longmemory.core.memory.models import (
 class SQLiteMemoryStore:
     """使用 SQLite 实现 MemoryStore 契约。"""
 
-    def __init__(self, connection: Connection) -> None:
+    def __init__(self, connection: Connection, *, commit_changes: bool = True) -> None:
         self._connection = connection
+        # 用例拥有整轮事务时，存储操作不能提前释放 SQLite 写锁。
+        self._commit_changes = commit_changes
 
     def save(
         self,
@@ -61,7 +63,8 @@ class SQLiteMemoryStore:
                 ),
             )
             self._insert_evidence(evidence)
-            self._connection.commit()
+            if self._commit_changes:
+                self._connection.commit()
         except BaseException:
             self._connection.rollback()
             raise
@@ -71,7 +74,8 @@ class SQLiteMemoryStore:
 
         try:
             cursor = self._insert_evidence(evidence)
-            self._connection.commit()
+            if self._commit_changes:
+                self._connection.commit()
             return cursor.rowcount == 1
         except BaseException:
             self._connection.rollback()
@@ -208,6 +212,35 @@ class SQLiteMemoryStore:
         ).fetchall()
 
         return tuple(self._row_to_memory(row) for row in rows)
+
+    def list_page(self, *, query: str = "", state: str = "active", limit: int = 25,
+                  offset: int = 0) -> tuple[int, tuple[AtomicMemory, ...]]:
+        """管理页的字面子串筛选；不是聊天召回，也不改变检索算法。
+
+        限定每页大小，在 SQL 中分页，不将整个数据库或所有 L0 来源发给浏览器。
+        调用方若需要总数与列表的同一快照，应在读取事务中调用。
+        """
+        if (state not in {"active", "retired", "all"} or len(query) > 200
+                or type(limit) is not int or not 1 <= limit <= 100
+                or type(offset) is not int or not 0 <= offset <= 100000):
+            raise ValueError("无效的记忆分页参数")
+        conditions = ["instr(lower(content), lower(?)) > 0"] if query else ["1 = 1"]
+        parameters = [query] if query else []
+        if state == "active":
+            conditions.append("retired_at IS NULL")
+        elif state == "retired":
+            conditions.append("retired_at IS NOT NULL")
+        # 这里只组合固定的 SQL 片段；用户搜索内容始终通过参数绑定。
+        predicate = " AND ".join(conditions)
+        total = self._connection.execute(
+            "SELECT COUNT(*) FROM atomic_memories WHERE " + predicate, parameters
+        ).fetchone()[0]
+        rows = self._connection.execute(
+            "SELECT * FROM atomic_memories WHERE " + predicate
+            + " ORDER BY recorded_at DESC, id DESC LIMIT ? OFFSET ?",
+            [*parameters, limit, offset],
+        ).fetchall()
+        return total, tuple(self._row_to_memory(row) for row in rows)
 
     def delete(self, memory_id: MemoryId) -> bool:
         """删除指定记忆，并返回是否删除成功。"""
