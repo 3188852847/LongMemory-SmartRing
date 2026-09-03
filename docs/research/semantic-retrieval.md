@@ -62,6 +62,32 @@ uv run --locked --extra console --extra semantic python -m longmemory.evaluation
 
 默认 top-5 无相似度阈值；小语料可能接近全量召回，要看排名和噪声，不要只看覆盖率。未进行阈值校准；`--min-score` 为显式研究参数，配置记录入 manifest，不能挑最好的一次当通用结论。
 
-没有答案，不评拒答和最终问答。暂不使用 holdout；首轮排名已复核，下一阶段接相同回答条件与更多干扰事实。
+上面的检索步骤没有答案，不评拒答和最终问答。暂不使用 holdout；首轮排名已复核，下面的独立入口用于接回答对照；更多干扰事实仍待扩展。
+
+## 冻结召回结果后的回答比较
+
+实现边界见 [ADR-0012](../adr/0012-frozen-retrieval-answer-replay.md)。仅使用已保存的召回，不重提取、不编码、不修改原报告或个人库。下面这次实验是四组各 8 题，最多 32 次回答请求，失败不重试；不是只给向量组补答后与旧时间的关键词答案拼接比较。
+
+在项目根目录、能访问学校模型的网络下执行。`.env` 仍使用此前有效配置，HTTP 风险确认仍由原配置控制；不要把 Key 发进报告或 Git。
+
+```powershell
+uv run --locked --extra console --extra semantic --env-file .env python -m longmemory.evaluation.comparison.retrieval_answers --retrieval-report experiments/runs/retrieval-92deeedf9d8d4d419abdec3f2e45f4c4/report.json --source-report experiments/runs/comparison-c356e00df09548ceaeb436d37c130bd2/report.json --provider openai_compatible
+```
+
+不需要启动圆屏或小智。保留两个 extra 是避免 uv 同步时移除当前已装的控制台/向量依赖；入口本身不加载向量模型。不需要重复运行模型下载或原来的三组提取实验。
+
+先检查四组是否各完成 8/8；不足则查看逐题脱敏的 `error`，不要把完成数当准确率。新报告位于 `experiments/runs/retrieval-answers-<唯一ID>/report.json`。运行失败不会自动重试或续跑；重新执行会创建新报告并重新调用，不覆盖旧结果。
+
+- `support`：原始完整召回。
+- `injected_support` / `injected_context`：真正交给模型的完整条目前缀，默认总上限 4000 字符。
+- `retrieved_evidence_complete`：原始召回是否包含充分来源。
+- `evidence_complete`：实际注入是否包含充分来源，未知题为 null；不是回答分数。
+- `answer_proxy_pass`：沿用词面初筛，需要结合完整回答复核。
+- `state_unchanged`：原比较/检索目录本轮前后摘要保持一致。
+- `answer_attempts`：含失败/中断的调用尝试；Fake 的尝试不是网络请求。
+
+原关键词与向量使用相同预算规则；不强制凑成相同长度。当前小语料在 4000 字符下基本全保留，因此姓名有望受益，但其他排名提升未必改变答案。不要据此宣称向量或模型提取必然更好。
+
+助手已用真实检索输入配合 Fake 跑通 32 行工程流程，不访问校园模型；真实问答验证仍待用户运行。报告可使用现有 `longmemory.evaluation.comparison.review` 工具创建独立复核附页；其组 ID 已区分“原方法/检索器”。
 
 完整边界见 [ADR-0011](../adr/0011-frozen-corpus-semantic-retrieval.md)。

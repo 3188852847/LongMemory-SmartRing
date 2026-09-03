@@ -16,10 +16,12 @@
 **C 最小版已实现**：[历史回放与冻结问答](docs/research/method-comparison.md)，原子事实与原始对话分块两种方法、独立实验状态、相同上下文预算和逐题报告。默认 8 个合成开发题，4 个保留题本轮不运行。完整日常会话持久化、语义检索升级和 MemRL **未实现**。
 网页新聊天不删除长期记忆；当前页面刷新另开聊天，服务重启不恢复聊天列表。模型和角色复用现有配置格式/文件，但网页与小智启动配置尚未自动同步，需核对。校园网和双入口实际体验待用户验证。
 本轮没有新依赖、schema 或个人库迁移，没有调用校园模型或替用户操作设备。开发预览只使用隔离合成库。
-最新全量回归：350 项 Python、11 项 Node 测试通过。用户已完成首次学校模型比较，两方法各完成 8/8；原词面初筛均 5/8，存在措辞误判，见[独立复核记录](docs/research/comparison-dev-review-2026-09-03.md)。原报告与分数保持不变，未运行保留题。
+最新全量回归：367 项 Python、11 项 Node 测试通过。用户已完成首次学校模型比较，两方法各完成 8/8；原词面初筛均 5/8，存在措辞误判，见[独立复核记录](docs/research/comparison-dev-review-2026-09-03.md)。原报告与分数保持不变，未运行保留题。
 **D1 提取条件完成首次真实最小验证**：用户已运行三组各 8/8，新增提取请求 7 次；新方法保留了旧规则漏掉的非第一人称研究方向，但姓名仍因关键词检索失败，且模型改写产生语义重复。原初筛 4/8、7/8、6/8 含措辞误判，不代表真实排名，见[本次复核](docs/research/d1-extraction-review-2026-09-03.md)。`longmemory_llm_extract_v2` 仅用于隔离实验，现用 v1/网页/圆屏不变；完整提取质量和语义检索升级未完成，见 [ADR-0010](docs/adr/0010-source-bound-extraction-candidates.md)。
 **D1 检索消融完成首次真实最小验证**：本地 BGE 固定快照已校验，CPU 离线完成两份冻结事实库 × 两种检索器 × 8 题，共 32 次检索；充分来源覆盖分别为规则库关键词 4/6、向量 5/6，模型提取库关键词 5/6、向量 6/6。两库姓名均从未召回变为排名第一，但小语料 top-5 接近全量，不能据此声称问答质量提高；未知题噪声和语义重复仍存在。见[逐题复核](docs/research/semantic-retrieval-review-2026-09-03.md)、[实验指南](docs/research/semantic-retrieval.md)与 [ADR-0011](docs/adr/0011-frozen-corpus-semantic-retrieval.md)。本次不重新提取或生成回答；旧基线、网页、圆屏与个人库不变。
 详见 [ADR-0008](docs/adr/0008-replaceable-memory-methods-and-research-protocols.md)、[验收范围](docs/requirements/research-platform.md)、[方法接口与限制](docs/architecture/method-boundary.md)。
+
+**冻结检索后的回答对照入口已实现**：四组复用本轮召回，不重提取或编码；统一完整条目的字符预算，每题独立回答，分别记录召回/注入来源，失败不重试。真实检索报告的 Fake 重放 32 行通过，不代表问答质量；下一步由用户在校园网运行[回答比较命令](docs/research/semantic-retrieval.md#冻结召回结果后的回答比较)，真实结果尚未验收。见 [ADR-0012](docs/adr/0012-frozen-retrieval-answer-replay.md)。
 
 已经完成：
 
