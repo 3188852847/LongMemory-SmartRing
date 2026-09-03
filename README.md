@@ -17,7 +17,7 @@
 网页新聊天不删除长期记忆；当前页面刷新另开聊天，服务重启不恢复聊天列表。模型和角色复用现有配置格式/文件，但网页与小智启动配置尚未自动同步，需核对。校园网和双入口实际体验待用户验证。
 本轮没有新依赖、schema 或个人库迁移，没有调用校园模型或替用户操作设备。开发预览只使用隔离合成库。
 最新全量回归：322 项 Python、11 项 Node 测试通过。用户已完成首次学校模型比较，两方法各完成 8/8；原词面初筛均 5/8，存在措辞误判，见[独立复核记录](docs/research/comparison-dev-review-2026-09-03.md)。原报告与分数保持不变，未运行保留题。
-**D1 提取条件已离线装配**：`longmemory_llm_extract_v2` 使用来源绑定的模型候选＋原关键词检索；网络调用在写事务外，L0/L1/来源/候选审计一起提交或回滚。比较命令显式增加 `--include-llm-extraction` 才运行三组，默认最多 7 次额外提取及 24 次回答，见[运行说明](docs/research/method-comparison.md#d1加入模型提取条件)。新方法已通过离线替身与模拟 HTTP 验证，真实模型提取质量仍待校园网验收；现用 v1/网页/圆屏算法不变，见 [ADR-0010](docs/adr/0010-source-bound-extraction-candidates.md)。
+**D1 提取条件完成首次真实最小验证**：用户已运行三组各 8/8，新增提取请求 7 次；新方法保留了旧规则漏掉的非第一人称研究方向，但姓名仍因关键词检索失败，且模型改写产生语义重复。原初筛 4/8、7/8、6/8 含措辞误判，不代表真实排名，见[本次复核](docs/research/d1-extraction-review-2026-09-03.md)。`longmemory_llm_extract_v2` 仅用于隔离实验，现用 v1/网页/圆屏不变；完整提取质量和语义检索升级未完成，见 [ADR-0010](docs/adr/0010-source-bound-extraction-candidates.md)。
 详见 [ADR-0008](docs/adr/0008-replaceable-memory-methods-and-research-protocols.md)、[验收范围](docs/requirements/research-platform.md)、[方法接口与限制](docs/architecture/method-boundary.md)。
 
 已经完成：

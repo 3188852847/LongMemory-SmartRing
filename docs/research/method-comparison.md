@@ -43,6 +43,8 @@ uv run --locked --env-file .env python -m longmemory.evaluation.comparison.runne
 
 候选接口、兼容适配器及实验装配已离线验证。由用户在校园网执行：
 
+首次真实三组运行已完成，见[复核记录](d1-extraction-review-2026-09-03.md)。以下命令供复现，不要求对已完成运行重复调用或追求更高初筛分数。
+
 ```powershell
 uv run --locked --env-file .env python -m longmemory.evaluation.comparison.runner --provider openai_compatible --include-llm-extraction
 ```
