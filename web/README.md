@@ -1,6 +1,6 @@
 # Web 界面
 
-新增 `experiments.html`、`assets/experiments.js`、`assets/experiment-view.mjs` 与 `assets/experiments.css`：研究档案和四组逐题对照、独立人工复核版本保存。固定读取三种实验协议，动态文本不解析为 HTML。运行按钮暂不提供，不新增前端依赖，见[实验中心指南](../docs/deployment/experiment-console.md)。
+`experiments.html`、`assets/experiments.js`、`assets/experiment-view.mjs` 与 `assets/experiments.css` 提供研究档案和逐题对照、独立人工复核。新增 `assets/experiment-jobs.mjs` 隔离单作业预检/明确确认、只读进度轮询、停止后续题与结果打开。动态文本不解析为 HTML，不新增前端依赖；启动开关、模型配置和风险说明见[实验中心指南](../docs/deployment/experiment-console.md)。
 
 本目录是本机控制台的前端位置；已实现“设备与状态”“记忆管理”和“文字聊天”页，助手角色与完整运行记录页仍显示待接入。
 

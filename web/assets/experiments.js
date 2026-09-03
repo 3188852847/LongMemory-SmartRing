@@ -1,9 +1,11 @@
 import {groupLabel, statusLabel, verdictLabel, evidenceLabel, filterRuns, node, disclosure, renderEvidence} from "/assets/experiment-view.mjs";
+import {initExperimentJobs} from "/assets/experiment-jobs.mjs";
 const $ = id => document.getElementById(id), el = (tag, text, cls) => node(document, tag, text, cls);
 let csrf, runs = [], page = 0, selected, detail, generation = 0, busy = false, activeQuestion, activeReviewer = "我";
 const dirty = new Set();
 const errors = {session_required:"本机会话已失效，请刷新页面。", review_changed:"此署名的复核已变化，请重新选择实验后再修改。", report_changed:"原报告已变化，请刷新档案；旧复核不会覆盖新报告。", experiment_unreadable:"报告或复核格式无效，未显示为通过。", review_limit:"复核版本数量达到本页上限。", csrf_rejected:"安全校验失败，请刷新页面。"};
 function notice(text) {$('notice').textContent = text;}
+Object.assign(errors, {experiment_busy:'已有实验正在运行，请刷新任务查看。', experiment_runs_disabled:'当前控制台未启用实验运行。', model_not_configured:'服务启动时没有有效模型配置。', quote_expired:'预检已过期或会话已变化，请重新预检。', report_changed:'冻结来源已变化，未启动新实验。', source_not_unique:'找不到唯一匹配的原方法实验，请检查档案。', job_input_or_storage_invalid:'实验来源或任务存储校验失败，未自动重试。', network_confirmation_required:'必须明确接受模型调用与 HTTP 风险。', job_not_owned_or_finished:'任务已结束或由另一个控制台运行，请到启动它的控制台停止。'});
 async function api(path, method="GET", body) {
   const headers = method === "GET" ? {} : {"X-Console-CSRF":csrf, "Content-Type":"application/json"};
   const response = await fetch(path, {method, headers, credentials:"same-origin", cache:"no-store", body:body ? JSON.stringify(body) : undefined});
@@ -117,4 +119,4 @@ $('reviewer').addEventListener('change',()=>{if(mayLeave())openQuestion();else $
 for(const id of ['run-search','run-filter'])$(id).addEventListener('input',()=>{page=0;renderList();});
 $('previous').addEventListener('click',()=>{page--;renderList();});$('next').addEventListener('click',()=>{page++;renderList();});
 window.addEventListener('beforeunload',event=>{if(dirty.size||busy){event.preventDefault();event.returnValue='';}});
-try {const response=await fetch('/api/session',{headers:{'X-Console-Bootstrap':'1'},credentials:'same-origin',cache:'no-store'});if(!response.ok)throw new Error('本机会话建立失败，请刷新页面。');csrf=(await response.json()).csrf;await refresh();}catch(error){notice(error.message);}
+try {const response=await fetch('/api/session',{headers:{'X-Console-Bootstrap':'1'},credentials:'same-origin',cache:'no-store'});if(!response.ok)throw new Error('本机会话建立失败，请刷新页面。');csrf=(await response.json()).csrf;await refresh();await initExperimentJobs(api,async id=>{if(!mayLeave())return;dirty.clear();selected=id;await refresh();});}catch(error){notice(error.message);}

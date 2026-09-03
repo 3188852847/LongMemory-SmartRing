@@ -34,6 +34,7 @@ data/audio/*
 !data/audio/.gitkeep
 
 # 实验运行产物
+experiments/jobs/
 data/models/
 experiments/runs/*
 !experiments/runs/.gitkeep

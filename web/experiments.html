@@ -18,6 +18,26 @@
   <main id="main">
     <header class="page-header"><div><p class="eyebrow">研究工作区</p><h1>实验中心</h1><p class="muted">从分组差异，追到每条记忆和回答。</p></div><button class="button secondary" id="refresh">刷新档案</button></header>
     <p id="notice" class="notice" role="status">正在读取本机实验档案…</p>
+    <section class="panel experiment-launch" aria-labelledby="launch-title">
+      <h2 id="launch-title">运行回答对照</h2><p class="hint">沿用冻结的记忆和检索，只重新生成回答。固定四组、开发集；不提取、不编码、不写个人记忆。</p>
+      <p id="job-notice" class="hint" role="status">正在读取运行配置…</p>
+      <form id="job-form">
+        <label>冻结检索档案<select id="job-source" required></select></label>
+        <label>回答模型<select id="job-provider"><option value="fake">Fake（只验证流程）</option><option value="openai_compatible" disabled>兼容模型（未配置）</option></select></label>
+        <label>记忆上限（字符）<input id="job-budget" type="number" min="1" max="16000" value="4000" required></label>
+        <button id="job-prepare" class="button" type="submit" disabled>预检与核对预算</button>
+      </form>
+      <div id="job-current" class="hidden" aria-live="polite">
+        <h3 id="job-title"></h3><progress id="job-progress" max="1" value="0" aria-label="已完成或失败的回答数"></progress><p id="job-progress-text" class="hint"></p>
+        <div class="job-actions"><button id="job-poll" type="button" class="button small secondary">刷新任务</button><button id="job-stop" type="button" class="button small secondary">停止后续请求</button><button id="job-result" type="button" class="button small">打开结果</button></div>
+      </div>
+    </section>
+    <dialog id="job-confirm" aria-labelledby="job-confirm-title">
+      <h2 id="job-confirm-title">核对这一次实验</h2><p id="job-quote-summary"></p><p id="job-quote-groups" class="hint"></p><p id="job-quote-risk" class="notice"></p>
+      <p class="hint">预算是请求次数上限，不是费用报价；字符不等于 token。失败不重试；真实模型结果仍需逐题复核。</p>
+      <label class="job-consent"><input id="job-consent" type="checkbox">我已核对模型、预算与网络风险，启动这一次实验。</label><p id="job-confirm-error" role="alert"></p>
+      <div class="job-actions"><button id="job-cancel" type="button" class="button secondary">返回修改</button><button id="job-start" type="button" class="button" disabled>确认启动</button></div>
+    </dialog>
     <div class="experiment-workspace">
       <section class="panel experiment-sidebar" aria-label="选择实验">
         <h2>实验档案</h2>
@@ -36,7 +56,7 @@
         </div>
       </section>
     </div>
-    <footer class="page-footer"><span>只读原实验 · 复核另存版本</span><span>本页不运行实验、不修改个人记忆</span></footer>
+    <footer class="page-footer"><span>只读原实验 · 新运行与复核分别保存</span><span>查看不联网 · 启动须明确确认</span></footer>
     <noscript><p class="notice">请启用 JavaScript。所有记忆与回答按纯文本显示。</p></noscript>
   </main>
 </div>

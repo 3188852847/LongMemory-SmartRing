@@ -175,3 +175,20 @@ def test_failed_scored_row_does_not_inflate_evidence():
     result = qa.answer_summary([row])["group"]
     assert result["evidence_complete"] == result["answer_proxy_pass"] == 0
     assert result["answerable_denominator_all_questions"] == 1
+
+
+def test_progress_notification_failure_prevents_model_call(inputs, tmp_path):
+    def failed_progress(*args):
+        raise OSError("cannot persist progress")
+    def no_call():
+        pytest.fail("must stop when progress cannot be recorded")
+    with pytest.raises(OSError):
+        execute(inputs, tmp_path, no_call, on_progress=failed_progress)
+
+
+def test_stop_before_first_request_keeps_all_rows(inputs, tmp_path):
+    def no_call():
+        pytest.fail("stopped job must not call model")
+    _, report = execute(inputs, tmp_path, no_call, should_stop=lambda: True)
+    assert report["answer_attempts"] == 0 and report["status"] == "incomplete"
+    assert report["stop_requested"] and len(report["questions"]) == 32

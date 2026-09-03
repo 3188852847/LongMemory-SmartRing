@@ -13,6 +13,8 @@ from .routes.memories import register_memory_routes
 from .routes.chat import register_chat_routes
 from .routes.experiments import register_experiment_routes
 from .experiment_backend import ExperimentBackend
+from .experiment_jobs import ExperimentJobs
+from .routes.experiment_jobs import register_job_routes
 
 ROOT = Path(__file__).resolve().parents[4]
 STATIC_FILES = {
@@ -21,6 +23,7 @@ STATIC_FILES = {
     "/chat": ("chat.html", "text/html"),
     "/experiments": ("experiments.html", "text/html"),
     "/assets/experiments.js": ("assets/experiments.js", "text/javascript"),
+    "/assets/experiment-jobs.mjs": ("assets/experiment-jobs.mjs", "text/javascript"),
     "/assets/experiment-view.mjs": ("assets/experiment-view.mjs", "text/javascript"),
     "/assets/experiments.css": ("assets/experiments.css", "text/css"),
     "/assets/chat.js": ("assets/chat.js", "text/javascript"),
@@ -34,7 +37,7 @@ STATIC_FILES = {
 }
 
 
-def create_app(*, port=8765, bridge=None, web_root=None, database=None, allow_memory_delete=False, chat_backend=None, experiment_backend=None):
+def create_app(*, port=8765, bridge=None, web_root=None, database=None, allow_memory_delete=False, chat_backend=None, experiment_backend=None, job_backend=None):
     sessions = Sessions()
     assets = web_root or ROOT / "web"
     client = bridge if bridge is not None else XiaozhiControlClient(ROOT / "data/control/device-control.token")
@@ -96,7 +99,9 @@ def create_app(*, port=8765, bridge=None, web_root=None, database=None, allow_me
     app.router.add_post("/api/device/volume", volume)
     register_memory_routes(app, MemoryBackend(database, allow_delete=allow_memory_delete))
     register_chat_routes(app, chat_backend)
-    register_experiment_routes(app, experiment_backend if experiment_backend is not None else ExperimentBackend(ROOT / "experiments"))
+    experiments = experiment_backend if experiment_backend is not None else ExperimentBackend(ROOT / "experiments")
+    register_experiment_routes(app, experiments)
+    register_job_routes(app, job_backend if job_backend is not None else ExperimentJobs(experiments))
     app.on_cleanup.append(close)
     return app
 
@@ -109,6 +114,7 @@ def main():
     parser.add_argument("--enable-chat", action="store_true", help="允许网页向指定已有记忆库写入对话和记忆")
     parser.add_argument("--chat-provider", choices=("fake", "openai_compatible"), default="fake")
     parser.add_argument("--assistant-role", choices=("plain_v1", "elysia_v1"), default="plain_v1")
+    parser.add_argument("--enable-experiment-runs", action="store_true", help="允许网页确认后运行冻结检索回答对照；默认只读实验")
     args = parser.parse_args()
     if not 1024 <= args.port <= 65535:
         parser.error("port 必须在 1024–65535 之间")
@@ -117,6 +123,16 @@ def main():
     if args.enable_chat and args.database is None:
         parser.error("启用文字聊天前必须用 --database 指定已有数据库")
     chat_backend = None
+    job_backend = None
+    if args.enable_experiment_runs:
+        from longmemory.infrastructure.config.settings import load_model_settings
+        try:
+            experiment_settings = load_model_settings(provider="openai_compatible")
+        except ValueError:
+            experiment_settings = None
+        job_backend = ExperimentJobs(ExperimentBackend(ROOT / "experiments"), enabled=True, settings=experiment_settings)
+        print("实验作业已启用；仅用户在网页预检并确认后执行。" +
+              ("兼容模型配置可用（未联网验证）。" if experiment_settings else "未配置兼容模型，目前仅能运行 Fake。"))
     if args.enable_chat:
         from longmemory.adapters.llm.fake import FakeAnswerGenerator
         from longmemory.adapters.llm.openai_compatible import OpenAICompatibleAnswerGenerator
@@ -144,7 +160,7 @@ def main():
     if chat_backend:
         print(f"文字聊天已启用：{args.chat_provider} / {args.assistant_role}；会写入 L0/L1，不驱动圆屏播音。")
     try:
-        web.run_app(create_app(port=args.port, database=args.database, allow_memory_delete=args.allow_memory_delete, chat_backend=chat_backend),
+        web.run_app(create_app(port=args.port, database=args.database, allow_memory_delete=args.allow_memory_delete, chat_backend=chat_backend, job_backend=job_backend),
                     host="127.0.0.1", port=args.port, access_log=None, print=None)
     except OSError:
         parser.exit(1, f"控制台未能绑定 127.0.0.1:{args.port}。请检查旧控制台是否仍在运行或端口权限；未自动停止其他进程、未换端口。\n")

@@ -136,7 +136,8 @@ def validate_inputs(retrieval_path, source_path, dataset):
 
 
 def run_answers(retrieval_path, source_path, dataset, generator_factory, *, output_root,
-                model_config, context_chars=4000):
+                model_config, context_chars=4000, on_progress=None, should_stop=None,
+                expected_frozen_sha256=None):
     if (type(context_chars) is not int or not 1 <= context_chars <= 16000
             or not model_config or set(model_config) - MODEL_FIELDS):
         raise ValueError("预算或模型元数据无效。")
@@ -146,6 +147,8 @@ def run_answers(retrieval_path, source_path, dataset, generator_factory, *, outp
     # 整体摘要同时保护报告、索引、原数据库与 manifest；错误正文不披露。
     roots = (source_path.parent, retrieval_path.parent)
     digests = tuple(state_digest(p) for p in roots)
+    if expected_frozen_sha256 is not None and digests != tuple(expected_frozen_sha256):
+        raise ValueError("冻结来源与用户预检确认时不同。")
     parent, parent_hash, names, questions, supports = validate_inputs(retrieval_path, source_path, dataset)
 
     def unchanged():
@@ -191,9 +194,19 @@ def run_answers(retrieval_path, source_path, dataset, generator_factory, *, outp
             json.dump(report, stream, ensure_ascii=False, indent=2, allow_nan=False)
             stream.truncate()
             stream.flush()
+            # 控制台只接收进度投影，不截获模型正文或改变实验评分协议。
+            # 先持久化报告再通知界面；通知失败时停止后续调用，不能隐去已发请求。
+            if on_progress is not None:
+                on_progress(directory.name, {"status": report["status"],
+                    "total": len(rows), "attempts": report["answer_attempts"],
+                    "completed": sum(r["status"] == "completed" for r in rows),
+                    "failed": sum(r["status"] == "failed" for r in rows)})
         checkpoint()
         try:
             for row, (q, (n, s)) in zip(rows, ordered):
+                if should_stop is not None and should_stop():
+                    report["stop_requested"] = True
+                    break
                 if not unchanged():
                     row.update(status="failed", error="frozen_source_changed", state_unchanged=False)
                     break
