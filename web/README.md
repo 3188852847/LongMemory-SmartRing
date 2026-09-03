@@ -1,5 +1,7 @@
 # Web 界面
 
+新增 `experiments.html`、`assets/experiments.js`、`assets/experiment-view.mjs` 与 `assets/experiments.css`：研究档案和四组逐题对照、独立人工复核版本保存。固定读取三种实验协议，动态文本不解析为 HTML。运行按钮暂不提供，不新增前端依赖，见[实验中心指南](../docs/deployment/experiment-console.md)。
+
 本目录是本机控制台的前端位置；已实现“设备与状态”“记忆管理”和“文字聊天”页，助手角色与完整运行记录页仍显示待接入。
 
 按 ADR-0008 已新增 `chat.html`、`assets/chat.js` 和 `assets/chat-view.mjs`：临时网页会话和逐轮过程展示，共用指定的已有长期记忆库。不默认播放网页回答到设备；刷新另开聊天，服务重启不恢复聊天历史列表。网页与小智配置需核对，尚未自动同步。实验数据另行隔离，现有前端选型和本机安全约束不变。

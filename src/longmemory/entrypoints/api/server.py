@@ -11,12 +11,18 @@ from .security import COOKIE, MAX_AGE, Sessions, security_middleware
 from .memory_backend import MemoryBackend
 from .routes.memories import register_memory_routes
 from .routes.chat import register_chat_routes
+from .routes.experiments import register_experiment_routes
+from .experiment_backend import ExperimentBackend
 
 ROOT = Path(__file__).resolve().parents[4]
 STATIC_FILES = {
     "/": ("index.html", "text/html"),
     "/memories": ("memories.html", "text/html"),
     "/chat": ("chat.html", "text/html"),
+    "/experiments": ("experiments.html", "text/html"),
+    "/assets/experiments.js": ("assets/experiments.js", "text/javascript"),
+    "/assets/experiment-view.mjs": ("assets/experiment-view.mjs", "text/javascript"),
+    "/assets/experiments.css": ("assets/experiments.css", "text/css"),
     "/assets/chat.js": ("assets/chat.js", "text/javascript"),
     "/assets/chat-view.mjs": ("assets/chat-view.mjs", "text/javascript"),
     "/assets/console.css": ("assets/console.css", "text/css"),
@@ -28,7 +34,7 @@ STATIC_FILES = {
 }
 
 
-def create_app(*, port=8765, bridge=None, web_root=None, database=None, allow_memory_delete=False, chat_backend=None):
+def create_app(*, port=8765, bridge=None, web_root=None, database=None, allow_memory_delete=False, chat_backend=None, experiment_backend=None):
     sessions = Sessions()
     assets = web_root or ROOT / "web"
     client = bridge if bridge is not None else XiaozhiControlClient(ROOT / "data/control/device-control.token")
@@ -90,6 +96,7 @@ def create_app(*, port=8765, bridge=None, web_root=None, database=None, allow_me
     app.router.add_post("/api/device/volume", volume)
     register_memory_routes(app, MemoryBackend(database, allow_delete=allow_memory_delete))
     register_chat_routes(app, chat_backend)
+    register_experiment_routes(app, experiment_backend if experiment_backend is not None else ExperimentBackend(ROOT / "experiments"))
     app.on_cleanup.append(close)
     return app
 

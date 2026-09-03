@@ -8,6 +8,8 @@
 
 ## 当前状态
 
+控制台新增[实验中心](docs/deployment/experiment-console.md)：已有实验列表、分组结果、逐题回答/注入/来源对照，以及独立人工复核保存。原报告只读、复核追加新版本；不提供运行实验按钮、不调用模型或修改个人库。见 [ADR-0013](docs/adr/0013-local-experiment-viewer.md)。
+
 项目处于 **V0.1/圆屏最小闭环已跑通，迁移到可替换方法研究平台** 阶段。
 
 最新路线：A 方法边界 → B 网页文字聊天 → C 最小跨方法冻结问答 → D1 LongMemory 算法升级 / D2 论文复现交替迭代。
@@ -16,7 +18,7 @@
 **C 最小版已实现**：[历史回放与冻结问答](docs/research/method-comparison.md)，原子事实与原始对话分块两种方法、独立实验状态、相同上下文预算和逐题报告。默认 8 个合成开发题，4 个保留题本轮不运行。完整日常会话持久化、语义检索升级和 MemRL **未实现**。
 网页新聊天不删除长期记忆；当前页面刷新另开聊天，服务重启不恢复聊天列表。模型和角色复用现有配置格式/文件，但网页与小智启动配置尚未自动同步，需核对。校园网和双入口实际体验待用户验证。
 本轮没有新依赖、schema 或个人库迁移，没有调用校园模型或替用户操作设备。开发预览只使用隔离合成库。
-最新全量回归：367 项 Python、11 项 Node 测试通过。用户已完成首次学校模型比较，两方法各完成 8/8；原词面初筛均 5/8，存在措辞误判，见[独立复核记录](docs/research/comparison-dev-review-2026-09-03.md)。原报告与分数保持不变，未运行保留题。
+最新全量回归：381 项 Python、14 项 Node 测试通过。用户已完成首次学校模型比较，两方法各完成 8/8；原词面初筛均 5/8，存在措辞误判，见[独立复核记录](docs/research/comparison-dev-review-2026-09-03.md)。原报告与分数保持不变，未运行保留题。
 **D1 提取条件完成首次真实最小验证**：用户已运行三组各 8/8，新增提取请求 7 次；新方法保留了旧规则漏掉的非第一人称研究方向，但姓名仍因关键词检索失败，且模型改写产生语义重复。原初筛 4/8、7/8、6/8 含措辞误判，不代表真实排名，见[本次复核](docs/research/d1-extraction-review-2026-09-03.md)。`longmemory_llm_extract_v2` 仅用于隔离实验，现用 v1/网页/圆屏不变；完整提取质量和语义检索升级未完成，见 [ADR-0010](docs/adr/0010-source-bound-extraction-candidates.md)。
 **D1 检索消融完成首次真实最小验证**：本地 BGE 固定快照已校验，CPU 离线完成两份冻结事实库 × 两种检索器 × 8 题，共 32 次检索；充分来源覆盖分别为规则库关键词 4/6、向量 5/6，模型提取库关键词 5/6、向量 6/6。两库姓名均从未召回变为排名第一，但小语料 top-5 接近全量，不能据此声称问答质量提高；未知题噪声和语义重复仍存在。见[逐题复核](docs/research/semantic-retrieval-review-2026-09-03.md)、[实验指南](docs/research/semantic-retrieval.md)与 [ADR-0011](docs/adr/0011-frozen-corpus-semantic-retrieval.md)。本次不重新提取或生成回答；旧基线、网页、圆屏与个人库不变。
 详见 [ADR-0008](docs/adr/0008-replaceable-memory-methods-and-research-protocols.md)、[验收范围](docs/requirements/research-platform.md)、[方法接口与限制](docs/architecture/method-boundary.md)。
@@ -319,11 +321,16 @@ LongMemory-SmartRing/                              # 项目根目录
 ├─ web/                                            # 本机控制台，无 CDN、无构建步骤
 │  ├─ index.html                                   # 设备与状态页面
 │  ├─ memories.html                                # 记忆列表、来源详情与删除确认页面
+│  ├─ chat.html                                    # 文字聊天和逐轮记忆轨迹
+│  ├─ experiments.html                             # 实验档案、逐题对照和人工复核
 │  ├─ assets/                                      # 当前本地资源，只有白名单文件由后端提供
 │  │  ├─ app.js                                    # 会话、状态轮询、音量操作和纯文本渲染
 │  │  ├─ state.mjs                                 # 可独立测试的状态与结果映射
 │  │  ├─ memories.js                               # 记忆页面交互、纯文本来源显示和删除确认
 │  │  ├─ memory-view.mjs                            # 记忆元数据、时间与分页文案
+│  │  ├─ experiments.js                            # 实验选择、逐题请求与追加式复核操作
+│  │  ├─ experiment-view.mjs                        # 可测试的实验文案和纯文本证据展示
+│  │  ├─ experiments.css                           # 档案列表与横向对照卡片样式
 │  │  ├─ console.css                               # 响应式本地样式
 │  │  └─ favicon.svg                               # 本地站点图标
 │  ├─ public/                                      # 早期骨架预留，当前不由后端公开

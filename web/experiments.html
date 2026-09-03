@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>实验中心 · LongMemory</title>
+  <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/assets/console.css"><link rel="stylesheet" href="/assets/experiments.css">
+  <script type="module" src="/assets/experiments.js"></script>
+</head>
+<body>
+<a class="skip-link" href="#main">跳到实验结果</a>
+<div class="layout">
+  <aside class="sidebar" aria-label="控制台导航">
+    <a class="brand" href="/"><span class="brand-mark" aria-hidden="true">L</span><span>LongMemory<small>本机控制台</small></span></a>
+    <nav><span class="nav-label">工作区</span><a class="nav-item" href="/">设备与状态</a><a class="nav-item" href="/chat">文字聊天</a><a class="nav-item" href="/memories">记忆管理</a><a class="nav-item active" href="/experiments" aria-current="page">实验中心</a></nav>
+    <div class="sidebar-footer">仅本机访问<small>查看结果不调用模型</small></div>
+  </aside>
+  <main id="main">
+    <header class="page-header"><div><p class="eyebrow">研究工作区</p><h1>实验中心</h1><p class="muted">从分组差异，追到每条记忆和回答。</p></div><button class="button secondary" id="refresh">刷新档案</button></header>
+    <p id="notice" class="notice" role="status">正在读取本机实验档案…</p>
+    <div class="experiment-workspace">
+      <section class="panel experiment-sidebar" aria-label="选择实验">
+        <h2>实验档案</h2>
+        <label for="run-search">搜索模型、数据集或编号</label><input id="run-search" type="search" placeholder="例如：DeepSeek">
+        <label for="run-filter">实验类型</label><select id="run-filter"><option value="all">全部</option><option value="real">真实模型回答</option><option value="fake">Fake 工程验证</option><option value="retrieval">仅检索</option></select>
+        <div id="run-list"></div><div class="pagination"><button id="previous" class="button small secondary">上一页</button><span id="page-count"></span><button id="next" class="button small secondary">下一页</button></div>
+      </section>
+      <section class="experiment-content" aria-label="实验详情">
+        <div id="empty" class="panel empty-state">选择一条实验，查看各组结果和逐题证据。不会重新运行实验。</div>
+        <div id="detail" class="hidden">
+          <section class="panel"><h2 id="run-title"></h2><p id="run-meta" class="hint"></p><p id="run-warning" class="hint"></p><div id="group-summary" class="table-scroll"></div><div id="review-summary"></div>
+            <details><summary>如何理解分数与来源</summary><p class="hint">词面初筛可能漏判正确措辞，需结合逐题回答复核。证据覆盖不是回答准确率，未知题不进入证据分母。失败与未完成题保留在完成数和初筛总分母中。</p><p class="hint">检索报告只测召回；回答重放报告的证据覆盖测实际注入；早期比较报告可能测截断前召回。不同协议不可直接拼成排名。当前界面不重新校验所有模型文件或数据库。</p><p id="run-hash" class="hint"></p></details>
+          </section>
+          <section class="panel question-toolbar"><label for="question-select">逐题对照</label><select id="question-select"></select><div class="reviewer-field"><label for="reviewer">我的复核署名</label><input id="reviewer" value="我" maxlength="60"><span class="hint">自报署名，不是身份认证；同一署名继续原复核。</span></div></section>
+          <p id="source-note" class="hint"></p><div id="question-grid" class="question-grid"></div>
+        </div>
+      </section>
+    </div>
+    <footer class="page-footer"><span>只读原实验 · 复核另存版本</span><span>本页不运行实验、不修改个人记忆</span></footer>
+    <noscript><p class="notice">请启用 JavaScript。所有记忆与回答按纯文本显示。</p></noscript>
+  </main>
+</div>
+</body></html>
