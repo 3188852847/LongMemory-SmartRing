@@ -1,6 +1,6 @@
 # 冻结 L1 的本地检索消融
 
-这一步只回答“相同事实库换检索器有什么变化”，不是完整问答对比。当前工程实现已提供，真实 BGE 结果需等模型文件齐全，不能用测试编码器输出代替。
+这一步只回答“相同事实库换检索器有什么变化”，不是完整问答对比。2026-09-03 已完成官方固定快照校验和首次真实 CPU 离线运行，32 次检索全部完成，见[结果复核](semantic-retrieval-review-2026-09-03.md)。这不是最终问答或成熟记忆系统验收。
 
 ## 新代码各自做什么
 
@@ -13,14 +13,14 @@
 
 ## 环境与模型准备
 
-在项目根目录 PowerShell 执行，普通终端即可，不需要 ESP-IDF 或校园模型：
+以下用于新环境复现；当前机器已准备完成，不必重新安装或导入。在项目根目录 PowerShell 执行，普通终端即可，不需要 ESP-IDF 或校园模型：
 
 ```powershell
 uv sync --locked --extra console --extra semantic
 uv run --locked --extra console --extra semantic python scripts/development/prepare_embedding.py
 ```
 
-本轮已完成依赖安装和权重下载，分词器传输失败，不需要重复下载权重。用户手动准备以下文件后，通过导入命令校验（此示例文件夹需替换为实际路径）：
+本轮曾在下载分词器时发生传输失败，随后从用户提供的 `G:\00-下载\bge-small` 导入以下文件，并逐项通过官方固定版本 Git/LFS 哈希校验；未修改用户下载目录，也未重复下载已有权重。以后遇到相同情况可按下面方式手动准备（示例文件夹需替换为实际路径）：
 
 - tokenizer.json
 - tokenizer_config.json
@@ -62,6 +62,6 @@ uv run --locked --extra console --extra semantic python -m longmemory.evaluation
 
 默认 top-5 无相似度阈值；小语料可能接近全量召回，要看排名和噪声，不要只看覆盖率。未进行阈值校准；`--min-score` 为显式研究参数，配置记录入 manifest，不能挑最好的一次当通用结论。
 
-没有答案，不评拒答和最终问答。暂不使用 holdout；下一阶段先复核本轮排名，再接相同回答条件与更多干扰事实。
+没有答案，不评拒答和最终问答。暂不使用 holdout；首轮排名已复核，下一阶段接相同回答条件与更多干扰事实。
 
 完整边界见 [ADR-0011](../adr/0011-frozen-corpus-semantic-retrieval.md)。
