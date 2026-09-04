@@ -9,6 +9,7 @@ from pathlib import Path
 
 from runtime import Manager, Options, ROOT, Singleton, VOICE_ROOT
 from network import local_addresses, config_action, load_choice, save_choice
+from firewall_panel import open_panel
 
 
 def main():
@@ -75,6 +76,7 @@ def main():
 
     ttk.Button(address_row, text='刷新地址', command=refresh).pack(side='left', padx=8)
     ttk.Button(address_row, text='同步小智地址', command=sync_address).pack(side='left')
+    ttk.Button(address_row, text='网络与防火墙', command=lambda: open_panel(window, ip.get(), ROOT)).pack(side='left', padx=8)
     ttk.Label(box, textvariable=network_status, wraplength=710).pack(anchor='w', pady=8)
     refresh()
     row = ttk.Frame(box)
