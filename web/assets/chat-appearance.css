@@ -1,0 +1,27 @@
+/* 只作用于聊天页。明暗色板独立，不改变设备/实验页含义或状态颜色。 */
+:root[data-theme=dark]{color-scheme:dark;--canvas:#101722;--surface:#192331;--ink:#edf2fa;--muted:#b3bfd1;--line:#344456;--accent:#94b7ff;--accent-light:#243957;--sidebar:#0b121c}
+:root[data-reading=large]{font-size:18px}
+:root[data-reading=larger]{font-size:20px}
+.chat-home main{max-width:1120px;padding-top:26px}
+.chat-home .page-header{margin-bottom:16px}
+.chat-home .panel{margin-bottom:14px}
+.chat-home .chat-panel{margin-top:14px}
+.chat-home .chat-tools{display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:16px 22px}
+.chat-tools select{flex:1;min-width:160px;max-width:100%}
+.chat-home select{font:inherit;background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:8px 12px}
+.chat-home select:focus-visible,.chat-home summary:focus-visible{outline:3px solid var(--accent);outline-offset:3px}
+.chat-settings{padding:14px 22px}
+.chat-settings summary{cursor:pointer;font-weight:600}
+.appearance-controls{display:flex;flex-wrap:wrap;gap:16px;align-items:end;margin-top:14px}
+.appearance-controls label{display:grid;gap:6px}
+.chat-home .chat-turn{padding:24px 0}
+.chat-home .chat-text{padding:14px 18px;background:var(--canvas);border-radius:12px;line-height:1.8}
+.chat-home .chat-turn>p:nth-of-type(1){background:var(--accent-light);margin-left:12%;border-radius:12px 12px 2px 12px}
+.chat-home .chat-turn>h3:first-child{text-align:right}
+.chat-home .button.secondary{background:var(--surface);color:var(--ink);border-color:var(--line)}
+.chat-home .button.secondary:hover:not(:disabled){background:var(--accent-light)}
+.chat-home .subtle-tag{background:var(--canvas);font-size:.875rem}
+.chat-home .notice{background:var(--accent-light);border-color:var(--line);color:var(--ink)}
+.chat-home .button.primary{background:#245bd7;color:#fff}
+.chat-home .chat-settings .hint{overflow-wrap:anywhere}
+@media(max-width:680px){.chat-home main{padding:20px 14px}.chat-home .chat-tools{padding:14px}.chat-tools label{flex-basis:100%}.chat-home .chat-text{padding:12px}.chat-home .chat-turn>p:nth-of-type(1){margin-left:5%}.appearance-controls{align-items:stretch}.appearance-controls>*{flex:1 1 100%}}

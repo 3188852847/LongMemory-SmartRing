@@ -5,9 +5,11 @@
   <title>文字聊天 · LongMemory</title>
   <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/assets/console.css">
+  <link rel="stylesheet" href="/assets/chat-appearance.css">
+  <script type="module" src="/assets/appearance.js"></script>
   <script type="module" src="/assets/chat.js"></script>
 </head>
-<body>
+<body class="chat-home">
   <a class="skip-link" href="#main">跳到文字聊天</a>
   <div class="layout">
     <aside class="sidebar" aria-label="控制台导航">
@@ -22,10 +24,10 @@
       <div class="sidebar-footer">仅本机访问<small>文字不会让圆屏自动播音</small></div>
     </aside>
     <main id="main">
-      <header class="page-header"><div><p class="eyebrow">日常记忆空间</p><h1>文字聊天</h1><p class="muted">用打字体验记忆，逐轮检查系统实际做了什么。</p></div><button id="new-chat" class="button secondary" disabled>新聊天</button></header>
+      <header class="page-header"><div><p class="eyebrow">LongMemory · 日常空间</p><h1>聊聊今天</h1></div><button id="new-chat" class="button secondary" disabled>新聊天</button></header>
       <div id="chat-notice" class="notice" role="status">正在检查聊天配置…</div>
-      <section class="panel" aria-label="会话列表"><label for="chat-select">已保存的聊天</label><select id="chat-select" aria-label="切换聊天"></select> <button id="rename-chat" class="button secondary" disabled>重命名</button><p class="hint">新聊天保留旧会话和长期记忆。档案保存在电脑；同一浏览器可在重启后恢复。清除浏览器 Cookie 会失去此浏览器的会话入口。</p></section>
-      <section class="panel" aria-label="当前配置"><p id="chat-config" class="muted"></p><p id="chat-database" class="hint"></p><p class="hint">与圆屏共用长期记忆，短期上下文独立。续聊仅传最近六轮成功对话；历史存档不等于全部送给模型。更新前未分组的旧消息不会自动出现在会话列表中。</p></section>
+      <section class="panel chat-tools" aria-label="会话列表"><label for="chat-select">已保存的聊天</label><select id="chat-select" aria-label="切换聊天"></select> <button id="rename-chat" class="button secondary" disabled>重命名</button></section>
+      <details class="panel chat-settings"><summary>外观与阅读</summary><div class="appearance-controls"><label>主题<select id="appearance-theme"><option value="system">跟随系统</option><option value="light">浅色</option><option value="dark">深色</option></select></label><label>字号<select id="appearance-size"><option value="normal">标准</option><option value="large">大</option><option value="larger">更大</option></select></label><button id="appearance-reset" class="button secondary" type="button">恢复默认</button></div><p id="appearance-notice" class="hint" role="status">仅影响此浏览器的聊天网页，不影响圆屏。</p></details>
       <section class="panel chat-panel" aria-labelledby="conversation-title">
         <div class="section-heading"><h2 id="conversation-title">当前聊天</h2><span id="chat-count" class="subtle-tag">0 / 40 轮</span></div>
         <div id="chat-turns" aria-live="polite" aria-relevant="additions"></div>
@@ -37,6 +39,7 @@
         </form>
         <button id="chat-recover" class="button secondary hidden" type="button">查询上一条处理结果（不重发）</button>
       </section>
+      <details class="panel chat-settings"><summary>运行配置与记忆说明</summary><p id="chat-config" class="muted"></p><p id="chat-database" class="hint"></p><p class="hint">与圆屏共用长期记忆，短期上下文独立。续聊仅传最近六轮成功对话；历史存档不等于全部送给模型。旧未分组消息不自动导入。新聊天保留旧会话和长期记忆；清除 Cookie 会失去会话入口。逐轮写入与召回证据仍可展开查看。</p></details>
       <footer class="page-footer"><span>LongMemory / 文字聊天</span><span>日常体验不是论文评估；不自动进入实验数据集</span></footer>
       <noscript><p class="notice">请启用 JavaScript。消息只按纯文本显示。</p></noscript>
     </main>
