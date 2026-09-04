@@ -71,7 +71,7 @@ def security_middleware(authority: str, sessions: Sessions):
             # 仅 React HTML 允许本次随机 nonce 的动态样式，旧页面不放宽。
             policy = response.headers['Content-Security-Policy']
             response.headers['Content-Security-Policy'] = policy.replace(
-                "style-src 'self'", "style-src 'self' 'nonce-" + request['react_style_nonce'] + "'")
+                "style-src 'self'", "style-src 'self' 'nonce-" + request['react_style_nonce'] + "'") + "; media-src blob:"
         return response
 
     return protect

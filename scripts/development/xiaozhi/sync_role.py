@@ -53,6 +53,11 @@ def sync(server, body):
     if body.get('action') not in {'check', 'apply'} or not isinstance(body.get('prompt'), str) or not 1 <= len(body['prompt']) <= 16000:
         raise ValueError('invalid_request')
     original, updated, matches = prepare(path, body['prompt'], body['database'], body['project'])
+    return commit_change(path, body, original, updated, matches)
+
+
+def commit_change(path, body, original, updated, matches):
+    """角色和音色共用排他锁、原文备份与版本检查，不覆盖并发修改。"""
     digest = hashlib.sha256(original).hexdigest()
     result = {'config_matches': matches, 'digest': digest, 'runtime': 'unverified'}
     if body['action'] == 'check':

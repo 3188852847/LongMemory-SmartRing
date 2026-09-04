@@ -1,6 +1,12 @@
 // 所有请求复用本机 Cookie/CSRF；不持久缓存正文，不自动重试写请求。
 export class ChatApi {
   private csrf = '';
+  async voicePreview(voice: string): Promise<Blob> {
+    const response = await fetch('/api/voice-settings/preview', {method: 'POST', credentials: 'same-origin', cache: 'no-store',
+      headers: {'Content-Type': 'application/json', 'X-Console-CSRF': this.csrf}, body: JSON.stringify({voice})});
+    if (!response.ok) throw new Error('试听失败，请检查网络与小智环境；未自动重试。');
+    return response.blob();
+  }
   async bootstrap() {
     const response = await fetch('/api/session', {headers: {'X-Console-Bootstrap': '1'}, cache: 'no-store'});
     if (!response.ok) throw new Error('无法建立本机会话，请刷新页面。');

@@ -19,6 +19,7 @@ from .routes.experiment_jobs import register_job_routes
 from .react_assets import register_react_routes
 from .routes.assistant_role import register_role_routes
 from .device_role import DeviceRole
+from .voice_settings import VoiceSettings, register_voice_routes
 
 ROOT = Path(__file__).resolve().parents[4]
 STATIC_FILES = {
@@ -113,6 +114,7 @@ def create_app(*, port=8765, bridge=None, web_root=None, database=None, allow_me
     register_chat_routes(app, chat_backend)
     device_role = DeviceRole(xiaozhi_server, chat_backend.roles, chat_backend.database, ROOT) if xiaozhi_server and chat_backend else None
     register_role_routes(app, chat_backend, device_role)
+    register_voice_routes(app, VoiceSettings(xiaozhi_server, chat_backend.database, ROOT) if xiaozhi_server and chat_backend else None)
     experiments = experiment_backend if experiment_backend is not None else ExperimentBackend(ROOT / "experiments")
     register_experiment_routes(app, experiments)
     register_job_routes(app, job_backend if job_backend is not None else ExperimentJobs(experiments))
