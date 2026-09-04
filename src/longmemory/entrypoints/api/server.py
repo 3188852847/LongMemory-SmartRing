@@ -2,6 +2,7 @@
 
 import argparse
 import asyncio
+import os
 from pathlib import Path
 
 from aiohttp import web
@@ -37,7 +38,7 @@ STATIC_FILES = {
 }
 
 
-def create_app(*, port=8765, bridge=None, web_root=None, database=None, allow_memory_delete=False, chat_backend=None, experiment_backend=None, job_backend=None):
+def create_app(*, port=8765, bridge=None, web_root=None, database=None, allow_memory_delete=False, chat_backend=None, experiment_backend=None, job_backend=None, instance_id=None):
     sessions = Sessions()
     assets = web_root or ROOT / "web"
     client = bridge if bridge is not None else XiaozhiControlClient(ROOT / "data/control/device-control.token")
@@ -47,7 +48,11 @@ def create_app(*, port=8765, bridge=None, web_root=None, database=None, allow_me
     async def static(request):
         # 不把仓库当作静态文件目录，避免 .env、数据库和令牌被网页下载。
         filename, mime = STATIC_FILES[request.path]
-        return web.Response(body=(assets / filename).read_bytes(), content_type=mime)
+        response = web.Response(body=(assets / filename).read_bytes(), content_type=mime)
+        # 启动器只用随机实例标识核对就绪，不承担认证，也不泄漏模型配置。
+        if instance_id:
+            response.headers["X-LongMemory-Instance"] = instance_id
+        return response
 
     async def session(request):
         # 自定义头不能由跨源 HTML 表单发出；没有 CORS 放行预检。
@@ -160,7 +165,8 @@ def main():
     if chat_backend:
         print(f"文字聊天已启用：{args.chat_provider} / {args.assistant_role}；会写入 L0/L1，不驱动圆屏播音。")
     try:
-        web.run_app(create_app(port=args.port, database=args.database, allow_memory_delete=args.allow_memory_delete, chat_backend=chat_backend, job_backend=job_backend),
+        web.run_app(create_app(port=args.port, database=args.database, allow_memory_delete=args.allow_memory_delete, chat_backend=chat_backend, job_backend=job_backend,
+                               instance_id=os.environ.get("LONGMEMORY_LAUNCHER_INSTANCE")),
                     host="127.0.0.1", port=args.port, access_log=None, print=None)
     except OSError:
         parser.exit(1, f"控制台未能绑定 127.0.0.1:{args.port}。请检查旧控制台是否仍在运行或端口权限；未自动停止其他进程、未换端口。\n")
