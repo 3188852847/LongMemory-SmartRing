@@ -6,11 +6,25 @@
 
 > SmartRing-Plus 是基于 ESP32-S3 的智能圆形显示屏开发板，不是可穿戴戒指。
 
-**日常启动与操作：[使用说明.md](使用说明.md)**。按场景复制 PowerShell 命令，包含实验、文字聊天、圆屏、参数填写和常见故障；只用实验中心时从第 1 节开始。
+**日常启动与操作：[使用说明](docs/guides/使用说明.md)**。文字聊天从第 3 节开始，圆屏再加第 4 节；仍用现有终端命令，一键启动尚未实现。
 
-**产品自定义候选：[自定义功能清单.md](自定义功能清单.md)**。按外观、声音、助手角色、记忆、主动交流与启动管理列出选项，区分已有能力、候选新增与需验证能力；供挑选，不代表全部已实现或承诺开发。
+**产品自定义候选：[自定义功能清单](docs/requirements/自定义功能清单.md)**。区分已有能力、候选新增与需验证能力，不代表全部承诺开发。
 
 ## 当前状态
+
+2026-09-04 用户决定：先做愿意日常使用的可定制陪伴助手，再研究论文。已有文字/语音最小闭环、记忆管理、音量控制与实验中心保留；研究优先顺序已被产品主线取代。当前日常仍是规则提取＋关键词召回，隔离实验中的模型提取/语义检索未自动上线。
+
+当前产品顺序：**P1 日常入口 → P2 个性化体验 → P3 日常记忆 → P4 可控主动交流 → P5 习惯驱动陪伴**。本轮仅整理文档，尚未实现统一启动、会话恢复、自定义设置页或主动联系。
+
+- [路线图](ROADMAP.md)：先后顺序与历史记录。
+- [产品范围与验收](docs/requirements/companion-product.md)：各阶段做什么、怎样算完成。
+- [系统架构](docs/architecture/overview.md)：模块、进程与数据归属。
+- [运行流程](docs/architecture/workflows.md)：当前步骤、失败行为和未来流程。
+- [路线变更决策 ADR-0015](docs/adr/0015-product-first-companion-roadmap.md)：变更原因与边界。
+
+## 2026-09-03 研究平台阶段记录（历史）
+
+以下保留当时进展；其中“最新路线/下一步”按当日语境阅读。当前执行以文首与 ROADMAP 为准，测试数量是历史记录，不是本次重新执行的结果。
 
 控制台新增[实验中心](docs/deployment/experiment-console.md)：实验列表、逐题回答/注入/来源对照、独立人工复核；现在可显式启用“冻结检索回答对照”的网页预检、预算确认、运行进度、停止后续请求和打开新结果。查看/预检不联网，真实模型只在确认后调用；原报告只读、新结果另存，不修改个人库。见 [ADR-0013](docs/adr/0013-local-experiment-viewer.md) 与 [ADR-0014](docs/adr/0014-local-experiment-jobs.md)。
 
@@ -175,10 +189,15 @@ LongMemory-SmartRing/                              # 项目根目录
 │  ├─ regression/                                  # 固定回归数据
 │  └─ README.md                                    # 数据来源、格式和许可
 ├─ docs/                                           # 长期文档和决策记录
+│  ├─ guides/                                      # 面向用户的日常操作指南
+│  │  └─ 使用说明.md                               # 当前启动命令、参数、页面操作与排障
 │  ├─ requirements/                                # 版本范围与完成标准
+│  │  ├─ companion-product.md                      # P1–P5 产品范围与验收标准
+│  │  ├─ 自定义功能清单.md                         # 自定义候选、当前状态和实施优先级
 │  │  └─ v0.1.md                                   # V0.1 需求
 │  ├─ architecture/                                # 架构和数据流
 │  │  ├─ overview.md                               # 总体模块边界
+│  │  ├─ workflows.md                              # 当前与拟议运行流程，含失败和停止行为
 │  │  ├─ memory-pipeline.md                        # 记忆纵向流水线
 │  │  └─ repository-structure.md                   # 仓库结构约定
 │  ├─ adr/                                         # Architecture Decision Record
@@ -396,6 +415,8 @@ D:\02-项目\LongMemory-SmartRing\.venv\Scripts\python.exe
 
 ## 路线图
 
+当前产品主线见 [ROADMAP](ROADMAP.md) 的 P1–P5。下列原版本标识仅为历史候选，不再作为执行顺序；基础小智/圆屏演示已经前移完成。
+
 ```text
 V0.1  PC 文本版 L0/L1 持久记忆闭环
 V0.2  语义检索和混合召回
@@ -410,7 +431,7 @@ V0.9  长周期实验和主动记忆
 
 ## 参考资料
 
-新增执行里程碑：[本机控制台决策](docs/adr/0007-local-console-and-device-control.md)，设备页实机操作已由用户确认可用，[记忆管理页](docs/deployment/local-console.md)已实现；接着推进助手角色和运行记录，收尾后回到 V0.2。
+历史里程碑见[本机控制台决策](docs/adr/0007-local-console-and-device-control.md)；设备页实机操作已确认，[记忆管理页](docs/deployment/local-console.md)已实现。当前优先级以 ADR-0015 和产品路线为准。
 
 - [SmartRing-Plus](https://gitee.com/VIEWESMART/SmartRing-Plus)
 - [Xiaozhi AI 开发资料](https://xiaozhi.dev/)
