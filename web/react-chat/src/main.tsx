@@ -5,6 +5,7 @@ import {ChatApi, type Config, type Snapshot, type Summary, type Turn} from './ap
 import {KEY, normalize, read, save, apply} from '../../assets/appearance.mjs';
 import {turnSummary} from '../../assets/chat-view.mjs';
 import './style.css';
+import {RoleEditor} from './RoleEditor';
 
 const api = new ChatApi();
 const nonce = document.querySelector<HTMLMetaElement>('meta[name="style-nonce"]')?.content;
@@ -91,7 +92,7 @@ function App() {
       <label htmlFor="conversation">最近会话</label><Select id="conversation" className="wide" aria-label="最近会话" value={chat?.chat_id} disabled={busy || unknown}
         options={chats.map(c => ({value: c.chat_id, label: `${c.title} · ${c.turn_count} 轮`}))} onChange={changeChat}/>
       <Button disabled={disabled} onClick={() => {setTitle(chat?.title ?? ''); setRename(true);}}>重命名</Button>
-      <nav><a href="/">设备与状态</a><a href="/memories">记忆管理</a><a href="/experiments">实验中心</a><a href="/chat">返回原版聊天</a></nav>
+      <nav><RoleEditor api={api} disabled={busy || !config?.enabled} onSaved={() => {void api.request<Config>('/api/chat-config').then(setConfig).catch(() => setNotice('角色已保存，但运行配置显示未刷新，请重新读取。'));}}/><a href="/">设备与状态</a><a href="/memories">记忆管理</a><a href="/experiments">实验中心</a><a href="/chat">返回原版聊天</a></nav>
       <details><summary>外观与阅读</summary><label>主题</label><Select className="wide" aria-label="主题" value={prefs.theme} onChange={value => appearance({...prefs, theme: value})} options={[{value:'system',label:'跟随系统'},{value:'light',label:'浅色'},{value:'dark',label:'深色'}]}/>
         <label>字号</label><Select className="wide" aria-label="字号" value={prefs.size} onChange={value => appearance({...prefs,size:value})} options={[{value:'normal',label:'标准'},{value:'large',label:'大'},{value:'larger',label:'更大'}]}/><Button onClick={() => appearance(normalize(null))}>恢复默认</Button></details>
     </aside><main><header><h1>聊聊今天</h1><span>{chat?.turns.length ?? 0} / 40 轮 · React 预览</span></header>

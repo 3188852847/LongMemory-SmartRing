@@ -17,6 +17,7 @@ from .experiment_backend import ExperimentBackend
 from .experiment_jobs import ExperimentJobs
 from .routes.experiment_jobs import register_job_routes
 from .react_assets import register_react_routes
+from .routes.assistant_role import register_role_routes
 
 ROOT = Path(__file__).resolve().parents[4]
 STATIC_FILES = {
@@ -109,6 +110,7 @@ def create_app(*, port=8765, bridge=None, web_root=None, database=None, allow_me
     app.router.add_post("/api/device/volume", volume)
     register_memory_routes(app, MemoryBackend(database, allow_delete=allow_memory_delete))
     register_chat_routes(app, chat_backend)
+    register_role_routes(app, chat_backend)
     experiments = experiment_backend if experiment_backend is not None else ExperimentBackend(ROOT / "experiments")
     register_experiment_routes(app, experiments)
     register_job_routes(app, job_backend if job_backend is not None else ExperimentJobs(experiments))

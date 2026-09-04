@@ -10,6 +10,7 @@ import sqlite3
 from longmemory.application.chat.contracts import AnswerGenerationError
 from longmemory.methods.contracts import MemoryEvent
 from longmemory.methods.longmemory_v1.method import LongMemoryV1
+from .role_settings import RoleSettings
 
 
 class ChatBackend:
@@ -17,10 +18,12 @@ class ChatBackend:
         self.database = database.resolve()
         self.generator = generator
         self.provider, self.model, self.role = provider, model, role
+        self.roles = RoleSettings(self.database, role)
 
     def info(self):
+        role = self.roles.current()
         return {"enabled": True, "method": "longmemory_v1", "subject": "user:self",
-                "provider": self.provider, "model": self.model, "role": self.role,
+                "provider": self.provider, "model": self.model, "role": role['name'], "role_revision": role['revision'],
                 "database": str(self.database), "history_persistent": True,
                 "speaks_on_device": False}
 
@@ -38,6 +41,12 @@ class ChatBackend:
                   "history_messages": len(history)}
         method = None
         try:
+            # 开始处理时固定本轮角色。保存新版本不改变已经开始的回答。
+            role = self.roles.current()
+            result.update(role=role['name'], role_revision=role['revision'])
+            generator = self.generator
+            if role['revision'] and self.provider != 'fake':
+                generator = generator.with_role_prompt(role['prompt'])
             method = LongMemoryV1(self.database, existing_only=True)
             event = MemoryEvent(str(uuid4()), "user", text, datetime.now(UTC))
             observed = method.observe(event)
@@ -48,9 +57,9 @@ class ChatBackend:
                           retrieved=[asdict(item) for item in support.retrieved])
             # Fake 只验证工程闭环，页面明确标出它不模拟角色/多轮语义能力。
             if self.provider == "fake":
-                answer = self.generator.generate(query=text, memory_context=support.context)
+                answer = generator.generate(query=text, memory_context=support.context)
             else:
-                answer = self.generator.generate_turn(query=text, memory_context=support.context, history=history)
+                answer = generator.generate_turn(query=text, memory_context=support.context, history=history)
             if not isinstance(answer, str) or not answer.strip() or len(answer) > 16000:
                 raise AnswerGenerationError("empty_answer")
             result["answer"] = answer

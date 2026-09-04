@@ -60,6 +60,10 @@ class OpenAICompatibleAnswerGenerator:
     def generate(self, *, query: str, memory_context: str) -> str:
         return self.generate_turn(query=query, memory_context=memory_context, history=())
 
+    def with_role_prompt(self, prompt: str):
+        """为本轮复制配置，不修改正在回答的其他线程所用提示词。"""
+        return type(self)(self._settings, transport=self._transport, role_prompt=prompt)
+
     def generate_turn(self, *, query: str, memory_context: str, history: tuple) -> str:
         """短期上下文来自当前网页会话，不从共享 L0 表猜测会话归属。
 
