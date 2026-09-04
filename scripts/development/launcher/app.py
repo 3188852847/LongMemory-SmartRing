@@ -8,13 +8,14 @@ import webbrowser
 from pathlib import Path
 
 from runtime import Manager, Options, ROOT, Singleton, VOICE_ROOT
+from network import local_addresses, config_action, load_choice, save_choice
 
 
 def main():
     window = tk.Tk()
     window.title("LongMemory · 日常启动")
-    window.geometry("820x600")
-    window.minsize(760, 560)
+    window.geometry("820x730")
+    window.minsize(760, 700)
     try:
         lock = Singleton()
     except ValueError as error:
@@ -31,13 +32,51 @@ def main():
     consent = tk.BooleanVar(value=False)
     database = tk.StringVar(value=str(ROOT / "data/databases/xiaozhi-demo-v1.db"))
     server = tk.StringVar(value=str(VOICE_ROOT))
-    ip = tk.StringVar(value="192.168.124.45")
+    choice_path = ROOT / 'data/control/launcher.json'
+    ip = tk.StringVar(value=load_choice(choice_path))
     role = tk.StringVar(value="elysia_v1")
     ttk.Checkbutton(box, text="同时启动圆屏语音（默认只启动文字聊天）", variable=voice).pack(anchor="w")
-    for label, variable in [("日常数据库（已有文件）", database), ("小智目录（仅语音模式）", server),
-                            ("电脑局域网 IP（仅语音模式，须与配置一致）", ip)]:
+    for label, variable in [("日常数据库（已有文件）", database), ("小智目录（仅语音模式）", server)]:
         ttk.Label(box, text=label).pack(anchor="w", pady=(8, 0))
         ttk.Entry(box, textvariable=variable).pack(fill="x")
+    ttk.Label(box, text='电脑局域网 IP（多网卡时请选择圆屏能访问的地址）').pack(anchor='w', pady=(8, 0))
+    address_row = ttk.Frame(box)
+    address_row.pack(fill='x')
+    addresses = ttk.Combobox(address_row, textvariable=ip, state='readonly', width=23)
+    addresses.pack(side='left')
+    network_status = tk.StringVar()
+
+    def refresh():
+        try:
+            values = local_addresses()
+            previous = ip.get()
+            addresses.config(values=values)
+            if previous not in values:
+                ip.set(values[0] if len(values) == 1 else '')
+            network_status.set(f'上次地址 {previous} 已失效；请选择并同步配置。' if previous and previous not in values
+                               else '已刷新；同步后还需检查圆屏 OTA 地址和防火墙。')
+        except (ValueError, OSError):
+            network_status.set('无法读取本机网卡，请连接网络后刷新。')
+
+    def sync_address():
+        if manager.services:
+            messagebox.showinfo('请先停止', '请先停止本面板服务；也请结束外部终端中的小智服务。')
+            return
+        try:
+            selected = ip.get().strip()
+            info = config_action(Path(server.get()), selected)
+            if messagebox.askyesno('同步小智网络配置？',
+                    f"配置地址 {info['old_ip']} → {selected}\n仅修改监听、WebSocket、视觉接口地址，原目录备份。\n请确认外部小智服务已停止。不会修改防火墙或圆屏。"):
+                config_action(Path(server.get()), selected, apply=True)
+                save_choice(choice_path, selected)
+                network_status.set(f'已同步。圆屏 OTA：http://{selected}:8003/xiaozhi/ota/；防火墙见指南。')
+        except (ValueError, OSError) as error:
+            messagebox.showerror('未完成同步', str(error))
+
+    ttk.Button(address_row, text='刷新地址', command=refresh).pack(side='left', padx=8)
+    ttk.Button(address_row, text='同步小智地址', command=sync_address).pack(side='left')
+    ttk.Label(box, textvariable=network_status, wraplength=710).pack(anchor='w', pady=8)
+    refresh()
     row = ttk.Frame(box)
     row.pack(fill="x", pady=8)
     ttk.Label(row, text="网页角色：").pack(side="left")
@@ -74,6 +113,10 @@ def main():
 
     def start():
         try:
+            if voice.get():
+                info = config_action(Path(server.get()), ip.get().strip())
+                if info['changed']:
+                    raise ValueError(f"小智配置仍为 {info['old_ip']}，请先点击同步小智地址。")
             options = Options(database=Path(database.get()), voice=voice.get(), voice_root=Path(server.get()),
                               lan_ip=ip.get().strip(), role=role.get(), consent=consent.get())
             manager.start(options)

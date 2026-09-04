@@ -63,7 +63,7 @@ def test_voice_command_uses_own_environment(options):
     voice = options.root / "voice"
     (voice / ".venv/Scripts").mkdir(parents=True)
     (voice / ".venv/Scripts/python.exe").touch()
-    cmd = runtime.build_commands(replace(options, voice=True, voice_root=voice), uv="synthetic-uv")[1][1]
+    cmd = runtime.build_commands(replace(options, voice=True, voice_root=voice, lan_ip="192.168.1.2"), uv="synthetic-uv")[1][1]
     assert cmd[0] == str(voice / ".venv/Scripts/python.exe")
     assert cmd[1].endswith("voice.py")
     assert str(options.database.resolve()) in cmd
@@ -139,7 +139,16 @@ def test_job_stops_descendant_but_not_external_process(tmp_path):
         with pytest.raises(ValueError):
             runtime.require_free("127.0.0.1", port)
         service.stop()
-        runtime.require_free("127.0.0.1", port)
+        # 与控制台关闭测试一致：进程退出和网络栈释放端口不是同一瞬间。
+        deadline = time.monotonic() + 5
+        while True:
+            try:
+                runtime.require_free("127.0.0.1", port)
+                break
+            except ValueError:
+                if time.monotonic() >= deadline:
+                    raise
+                time.sleep(0.05)
         assert external.poll() is None
     finally:
         if service is not None:
@@ -186,6 +195,7 @@ def test_owned_console_instance_ready_and_shutdown(tmp_path):
 
 @pytest.mark.skipif(os.name != "nt", reason="Windows Tk panel")
 def test_panel_constructs_without_starting_services(monkeypatch):
+    monkeypatch.syspath_prepend(str(DIRECTORY))
     import tkinter as tk
     spec = importlib.util.spec_from_file_location("launcher_app_test", DIRECTORY / "app.py")
     app = importlib.util.module_from_spec(spec)
@@ -207,3 +217,41 @@ def test_panel_constructs_without_starting_services(monkeypatch):
     real_lock = runtime.Singleton
     monkeypatch.setattr(app, "Singleton", lambda: real_lock(port=0))
     app.main()
+
+
+def test_network_sync_preserves_other_configuration_and_backups(tmp_path, monkeypatch):
+    monkeypatch.syspath_prepend(str(DIRECTORY))
+    from sync_network import sync
+    pytest.importorskip('yaml')
+    config = tmp_path / '.config.yaml'
+    original = ('server:\n  ip: 192.168.1.2\n  port: 8000\n'
+                '  websocket: ws://192.168.1.2:8000/xiaozhi/v1/\n'
+                '  vision_explain: http://192.168.1.2:8003/mcp/vision/explain\n'
+                'prompt: |\n  synthetic role\nLLM:\n  key: synthetic-only\n')
+    config.write_text(original, encoding='utf-8')
+    assert sync(config, '192.168.1.3')['changed']
+    assert config.read_text(encoding='utf-8') == original
+    sync(config, '192.168.1.3', True)
+    assert list(tmp_path.glob('*.bak'))[0].read_text(encoding='utf-8') == original
+    assert 'synthetic role' in config.read_text(encoding='utf-8')
+    assert not sync(config, '192.168.1.3')['changed']
+
+
+def test_network_choices_and_rejection(tmp_path, monkeypatch):
+    monkeypatch.syspath_prepend(str(DIRECTORY))
+    from network import load_choice, save_choice, private_ipv4
+    path = tmp_path / 'settings.json'
+    assert load_choice(path) == ''
+    save_choice(path, '192.168.1.3')
+    assert load_choice(path) == '192.168.1.3'
+    for bad in ['0.0.0.0', '127.0.0.1', '100.64.1.1', 'bad']:
+        with pytest.raises(ValueError):
+            private_ipv4(bad)
+
+
+def test_network_sync_rejects_ambiguous_format(monkeypatch):
+    monkeypatch.syspath_prepend(str(DIRECTORY))
+    from sync_network import updated_text
+    pytest.importorskip('yaml')
+    with pytest.raises(ValueError):
+        updated_text('server: {ip: 192.168.1.2}\n', '192.168.1.3')

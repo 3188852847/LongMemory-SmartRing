@@ -25,7 +25,7 @@ class Options:
     role: str = "elysia_v1"
     voice: bool = False
     voice_root: Path = VOICE_ROOT
-    lan_ip: str = "192.168.124.45"
+    lan_ip: str = ""
     consent: bool = False
 
 
@@ -36,8 +36,12 @@ def require_free(host, port):
             sock.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
         try:
             sock.bind((host, port))
-        except OSError:
-            raise ValueError(f"地址 {host}:{port} 不可绑定。请检查 IP 或停止旧服务；未自动关闭其他程序。") from None
+        except OSError as error:
+            code = getattr(error, 'winerror', None) or error.errno
+            reason = {10049: '此 IP 不属于本机，请刷新局域网地址并同步小智配置。',
+                      10048: '端口已被占用，请停止原终端中的旧服务后重试。',
+                      10013: '系统拒绝绑定，可能是独占占用或端口保留；不要关闭防火墙。'}.get(code, f'系统错误 {code}，请检查地址和端口。')
+            raise ValueError(f"地址 {host}:{port} 不可绑定：{reason} 未关闭其他程序。") from None
 
 
 def build_commands(options, uv=None):
