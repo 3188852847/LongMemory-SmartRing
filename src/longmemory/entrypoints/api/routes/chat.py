@@ -1,16 +1,20 @@
 """会话归属、限额、幂等提交。浏览器不能指定数据库、角色或模型目标。"""
 
 import asyncio
-from dataclasses import dataclass, field
-import time
+from dataclasses import asdict, dataclass, field
+import hashlib
+import secrets
+import re
 from uuid import uuid4, UUID
 
 from aiohttp import web
-from ..security import COOKIE, MAX_AGE
+from ..chat_store import ChatStore
 
 MAX_TURNS = 40
 MAX_CHATS = 32
 HISTORY_PAIRS = 6
+HISTORY_CHARACTERS = 24000
+OWNER_COOKIE = 'longmemory_chat_owner'
 
 
 @dataclass
@@ -20,21 +24,39 @@ class Chat:
     turns: list = field(default_factory=list)
     request_ids: dict = field(default_factory=dict)
     pending: bool = False
+    title: str = '新聊天'
+    active_request: dict | None = None
 
 
 def register_chat_routes(app, backend):
-    chats = {}
+    store = ChatStore(backend.database) if backend else None
+    chats = {key: Chat(**value) for key, value in store.load().items()} if store else {}
+    # 崩溃中断不是模型失败或“未写入”：保留请求号，禁止自动重复执行。
+    for chat in chats.values():
+        if chat.pending and chat.active_request:
+            result = dict(chat.active_request, status='interrupted', answer=None, writes=None,
+                          retrieved=None, memory_context=None, user_saved=False, assistant_saved=False,
+                          duration_ms=0, error='interrupted_write_state_unknown')
+            chat.turns.append(result)
+            chat.request_ids[result['request_id']] = result
+        chat.pending = False
+        chat.active_request = None
     tasks = set()
 
+    def owner(request):
+        token = request.cookies.get(OWNER_COOKIE, '')
+        return hashlib.sha256(token.encode()).hexdigest() if re.fullmatch('[0-9a-f]{64}', token) else None
+
+    def persist(key, chat):
+        store.save(key, asdict(chat))
+
     def prune():
-        for key, chat in list(chats.items()):
-            if not chat.pending and chat.expires <= time.monotonic():
-                del chats[key]
+        pass  # 持久会话不按短期认证 cookie 的寿命删除。
 
     def selected(request):
         prune()
         chat = chats.get(request.match_info["chat_id"])
-        if chat is None or chat.owner != request.cookies.get(COOKIE):
+        if chat is None or chat.owner != owner(request):
             raise web.HTTPNotFound()
         return chat
 
@@ -48,28 +70,63 @@ def register_chat_routes(app, backend):
         if len(chats) >= MAX_CHATS:
             return web.json_response({"error": "chat_capacity"}, status=429)
         key = str(uuid4())
-        chats[key] = Chat(request.cookies[COOKIE], time.monotonic() + MAX_AGE)
-        return web.json_response({"chat_id": key, "turns": [], "limit": MAX_TURNS}, status=201)
+        token = request.cookies.get(OWNER_COOKIE, '')
+        if not re.fullmatch('[0-9a-f]{64}', token):
+            token = secrets.token_hex(32)
+        chat = Chat(hashlib.sha256(token.encode()).hexdigest(), 0)
+        persist(key, chat)
+        chats[key] = chat
+        response = web.json_response({"chat_id": key, "title": chat.title, "turns": [], "limit": MAX_TURNS}, status=201)
+        response.set_cookie(OWNER_COOKIE, token, httponly=True, samesite='Strict', path='/', max_age=31536000)
+        return response
+
+    async def listing(request):
+        return web.json_response({'chats': [{'chat_id': key, 'title': chat.title, 'turn_count': len(chat.turns)}
+                                           for key, chat in reversed(list(chats.items())) if chat.owner == owner(request)]})
+
+    async def rename(request):
+        chat = selected(request)
+        if chat.pending:
+            return web.json_response({'error': 'chat_busy'}, status=409)
+        try:
+            body = await request.json()
+            title = body['title']
+            if set(body) != {'title'} or not isinstance(title, str) or not 1 <= len(title.strip()) <= 60:
+                raise ValueError
+        except (ValueError, TypeError, KeyError):
+            return web.json_response({'error': 'invalid_title'}, status=400)
+        old = chat.title
+        chat.title = title.strip()
+        try:
+            persist(request.match_info['chat_id'], chat)
+        except Exception:
+            chat.title = old
+            raise
+        return web.json_response({'title': chat.title})
 
     async def get(request):
         chat = selected(request)
         return web.json_response({"chat_id": request.match_info["chat_id"],
-                                  "turns": chat.turns, "pending": chat.pending, "limit": MAX_TURNS})
+                                  "title": chat.title, "turns": chat.turns, "pending": chat.pending, "limit": MAX_TURNS})
 
     async def forget(request):
         chat = selected(request)
         if chat.pending:
             return web.json_response({"error": "chat_busy"}, status=409)
-        # 仅丢弃当前临时上下文，绝不调用数据库删除接口。
+        # 兼容原删除接口：只删除网页会话档案，不删除 L0/L1；页面不默认调用。
+        store.remove(request.match_info['chat_id'])
         del chats[request.match_info["chat_id"]]
         return web.json_response({"forgotten": True, "long_term_memory_preserved": True})
 
-    async def finish(chat, request_id, text, history):
+    async def finish(key, chat, request_id, text, history):
         try:
             result = await asyncio.to_thread(backend.run, text, history)
             result["request_id"] = request_id
             chat.turns.append(result)
             chat.request_ids[request_id] = result
+            chat.pending = False
+            chat.active_request = None
+            persist(key, chat)
             return result
         finally:
             chat.pending = False
@@ -100,11 +157,25 @@ def register_chat_routes(app, backend):
         if len(chat.turns) >= MAX_TURNS:
             return web.json_response({"error": "chat_turn_limit"}, status=409)
         # 只用本会话已完成的最近六轮。失败输入仍在 L0，但不伪造对应回答。
+        recent, used = [], 0
+        for turn in reversed([t for t in chat.turns if t['status'] == 'completed'][-HISTORY_PAIRS:]):
+            size = len(turn['input']) + len(turn['answer'])
+            if used + size > HISTORY_CHARACTERS:
+                break
+            recent.append(turn)
+            used += size
         history = tuple({"role": role, "content": turn[key]}
-                        for turn in [t for t in chat.turns if t["status"] == "completed"][-HISTORY_PAIRS:]
+                        for turn in reversed(recent)
                         for role, key in (("user", "input"), ("assistant", "answer")))
         chat.pending = True
-        task = asyncio.create_task(finish(chat, request_id, text, history))
+        chat.active_request = {'request_id': request_id, 'input': text}
+        try:
+            persist(request.match_info['chat_id'], chat)
+        except Exception:
+            chat.pending = False
+            chat.active_request = None
+            raise
+        task = asyncio.create_task(finish(request.match_info['chat_id'], chat, request_id, text, history))
         tasks.add(task)
         task.add_done_callback(tasks.discard)
         # 断网/关闭页面不取消已经开始的写入，更不会自动重试模型。
@@ -114,9 +185,13 @@ def register_chat_routes(app, backend):
         if tasks:
             await asyncio.gather(*tuple(tasks), return_exceptions=True)
         chats.clear()
+        if store:
+            store.close()
 
     app.router.add_get("/api/chat-config", config, allow_head=False)
     app.router.add_post("/api/chats", create)
+    app.router.add_get('/api/chats', listing, allow_head=False)
+    app.router.add_post('/api/chats/{chat_id}/title', rename)
     app.router.add_get("/api/chats/{chat_id}", get, allow_head=False)
     app.router.add_post("/api/chats/{chat_id}/messages", send)
     app.router.add_delete("/api/chats/{chat_id}", forget)

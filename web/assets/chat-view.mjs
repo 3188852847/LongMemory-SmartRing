@@ -1,5 +1,6 @@
 // 不使用 HTML/Markdown 插值：用户话语、模型回答和记忆证据均是不可信文本。
 export function turnSummary(turn) {
+  if (turn.status === 'interrupted') return '服务中断 · 写入状态未知，不自动重发；请检查记忆和来源';
   const writes = turn.writes;
   const writeText = writes === null ? "写入结果未提供" :
     `新增 ${writes.filter(x => x.operation === "add").length} 条，复用 ${writes.filter(x => x.operation === "noop").length} 条`;

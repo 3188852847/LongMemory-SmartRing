@@ -19,7 +19,13 @@ test("render data as text including malicious model and evidence strings", () =>
   const script = readFileSync(new URL("../../web/assets/chat.js", import.meta.url), "utf8");
   const view = readFileSync(new URL("../../web/assets/chat-view.mjs", import.meta.url), "utf8");
   const html = readFileSync(new URL("../../web/chat.html", import.meta.url), "utf8");
-  assert.ok(!/innerHTML|insertAdjacentHTML|document\.write|eval\(|localStorage|sessionStorage/.test(script + view));
+  assert.ok(!/innerHTML|insertAdjacentHTML|document\.write|eval\(|sessionStorage/.test(script + view));
+  // 仅保留最后选择的会话 ID；正文/证据仍由服务端档案恢复。
+  assert.ok(script.includes('localStorage.setItem(selectionKey, chatId)'));
   assert.ok(!/(?:src|href)=["']https?:/.test(html));
   assert.ok(!/setInterval|setTimeout/.test(script)); // 不靠轮询重发写入。
+});
+
+test('interrupted turn does not claim input was not saved', () => {
+  assert.match(turnSummary({status:'interrupted'}), /写入状态未知/);
 });

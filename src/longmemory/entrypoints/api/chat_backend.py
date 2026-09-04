@@ -1,4 +1,4 @@
-"""网页文本闭环：复用方法接口；短期会话由路由层隔离，不迁移个人库。"""
+"""网页文本闭环：复用方法接口；会话由路由/旁库隔离，不迁移个人库。"""
 
 from dataclasses import asdict
 from datetime import UTC, datetime
@@ -21,7 +21,7 @@ class ChatBackend:
     def info(self):
         return {"enabled": True, "method": "longmemory_v1", "subject": "user:self",
                 "provider": self.provider, "model": self.model, "role": self.role,
-                "database": str(self.database), "history_persistent": False,
+                "database": str(self.database), "history_persistent": True,
                 "speaks_on_device": False}
 
     def run(self, text, history):
