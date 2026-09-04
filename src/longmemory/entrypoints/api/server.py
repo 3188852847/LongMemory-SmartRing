@@ -16,6 +16,7 @@ from .routes.experiments import register_experiment_routes
 from .experiment_backend import ExperimentBackend
 from .experiment_jobs import ExperimentJobs
 from .routes.experiment_jobs import register_job_routes
+from .react_assets import register_react_routes
 
 ROOT = Path(__file__).resolve().parents[4]
 STATIC_FILES = {
@@ -101,6 +102,7 @@ def create_app(*, port=8765, bridge=None, web_root=None, database=None, allow_me
 
     for path in STATIC_FILES:
         app.router.add_get(path, static)
+    register_react_routes(app, assets / 'react-chat/dist')
     app.router.add_get("/api/session", session, allow_head=False)
     app.router.add_get("/api/device", device, allow_head=False)
     app.router.add_get("/api/device/volume", volume, allow_head=False)

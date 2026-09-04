@@ -48,6 +48,9 @@ firmware/**/sdkconfig
 firmware/**/sdkconfig.old
 
 # 常见临时文件
+web/react-chat/node_modules/
+web/react-chat/dist/
+.pnpm-store/
 *.log
 *.tmp
 *.bak

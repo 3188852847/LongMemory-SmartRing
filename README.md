@@ -12,7 +12,7 @@
 
 ## 当前状态
 
-P2 前端选型已确定为 React + TypeScript + Vite + antd，先迁移聊天页；当前运行的仍是原生页面，尚未切换。见[迁移清单](docs/architecture/react-chat-migration.md)。日常启动方式与记忆系统不变。
+P2 新增 React + TypeScript + Vite + antd 聊天预览 `/chat-react`，已接入现有会话与聊天 API；默认 `/chat` 保留原版，尚未替换。见[体验指南](docs/guides/React聊天页.md)与[迁移清单](docs/architecture/react-chat-migration.md)。日常启动方式与记忆系统不变。
 
 P2 第一小步：聊天页支持浅色/深色/跟随系统及字号保存，配置默认折叠。见[外观设置](docs/guides/外观设置.md)。角色编辑与音色试听尚未实现；此次不改日常记忆算法。
 

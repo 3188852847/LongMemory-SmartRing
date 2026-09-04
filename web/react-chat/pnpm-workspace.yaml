@@ -1,0 +1,2 @@
+# 不自动豁免刚发布的依赖；遇到版本年龄限制时明确报错。
+minimumReleaseAgeStrict: true

@@ -1,6 +1,6 @@
 # Web 界面
 
-选型更新：后续聊天页采用 React + TypeScript + Vite + antd，见 [ADR-0021](../docs/adr/0021-react-chat-migration.md) 和[迁移清单](../docs/architecture/react-chat-migration.md)。尚未安装或切换，以下描述当前原生实现。
+选型更新：`react-chat/` 已实现 React + TypeScript + Vite + antd 独立聊天预览，由 Python 提供 `/chat-react` 和构建清单中的资源。默认 `/chat` 未切换。见[体验及构建指南](../docs/guides/React聊天页.md)。以下描述保留的原生实现。
 
 P2 已新增聊天页 `appearance.mjs`（校验/存取/应用显示偏好）、`appearance.js`（控件绑定）与 `chat-appearance.css`（局部主题）。沿用原生前端，见 ADR-0020。本浏览器持久缓存仅用于外观枚举和最后选中会话 ID，不保存聊天正文。
 

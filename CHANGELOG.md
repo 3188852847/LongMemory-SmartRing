@@ -4,6 +4,12 @@
 
 ## Unreleased
 
+### React chat preview（2026-09-04）
+
+- 新增固定版本 React/antd/TypeScript/Vite 工程与锁文件，接入聊天列表、发送、恢复、重命名、证据与外观；保留 `/chat`。
+- 新增 `/chat-react` 和构建清单资源白名单，随机样式 nonce 仅作用新页；不修改认证、记忆库、小智配置。
+- 生产构建与类型检查通过，434 项 Python、24 项前端/API 测试通过；HTTP 返回 200。浏览器视觉/交互和校园模型未验证，默认入口未切换。
+
 ### React migration decision（2026-09-04）
 
 - 记录 ADR-0021 和聊天页迁移清单，明确替代 ADR-0020 的后续选型。
