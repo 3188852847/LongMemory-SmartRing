@@ -37,6 +37,7 @@ def test_command_preserves_paths_and_does_not_enable_deletion_or_jobs(options):
     name, cmd, cwd = runtime.build_commands(options, uv="synthetic-uv")[0]
     assert name == "console" and cwd == options.root.resolve()
     assert str(options.database) in cmd
+    assert cmd[cmd.index('--env-file') + 1] == '.env'
     assert "--no-sync" in cmd and "--offline" in cmd
     assert "--allow-memory-delete" not in cmd
     assert "--enable-experiment-runs" not in cmd
@@ -57,6 +58,24 @@ def test_missing_database_does_not_create_it(options):
     with pytest.raises(ValueError):
         runtime.build_commands(replace(options, database=missing), uv="synthetic-uv")
     assert not missing.exists()
+
+
+@pytest.mark.skipif(os.name != 'nt', reason='Windows uv integration')
+def test_real_uv_env_file_with_chinese_and_spaces(options, tmp_path):
+    import shutil
+    uv = shutil.which('uv')
+    if not uv:
+        pytest.skip('uv not installed')
+    command = runtime.build_commands(options, uv=uv)[0][1]
+    # 使用实际生成的 env-file 参数，仅查询解释器版本；合成 .env 无密钥。
+    command = command[:command.index('python')] + [sys.executable, '--version']
+    env = os.environ.copy()
+    env['UV_CACHE_DIR'] = str(tmp_path / 'uv-cache')
+    service = runtime.OwnedService(command, options.root, env)
+    try:
+        assert service.process.wait(timeout=15) == 0
+    finally:
+        service.stop()
 
 
 def test_voice_command_uses_own_environment(options):

@@ -4,6 +4,11 @@
 
 ## Unreleased
 
+### Launcher uv env-file path fix（2026-09-04）
+
+- 定位 console 退出码 2：当前 uv 对反斜杠/空格绝对 env-file 路径解析失败，导致找不到环境文件。在明确项目 cwd 中使用相对 .env，不修改文件内容。
+- 新增真实 uv + Windows Job 的合成中文/空格路径测试；版本查询不启动服务、不访问模型。
+
 ### Launcher LAN address repair（2026-09-04）
 
 - 修复固定旧 IP 导致无法绑定的问题：发现本机局域网地址、保留同步后的选择、区分绑定错误原因。

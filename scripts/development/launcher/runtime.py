@@ -60,7 +60,9 @@ def build_commands(options, uv=None):
     uv = uv or shutil.which("uv")
     if not uv:
         raise ValueError("未找到 uv，请检查已有安装的 PATH。启动器不自动安装依赖。")
-    console = [str(uv), "run", "--offline", "--no-sync", "--env-file", str(root / ".env"),
+    # 当前 uv 的 env-file 参数会拆分反斜杠/空格路径。子进程 cwd 已明确
+    # 固定为项目根目录，使用相对 .env 同时规避两种路径解析问题。
+    console = [str(uv), "run", "--offline", "--no-sync", "--env-file", ".env",
                "python", "-m", "longmemory.entrypoints.api", "--port", str(options.port),
                "--database", str(options.database.resolve()), "--enable-chat",
                "--chat-provider", "openai_compatible", "--assistant-role", options.role]
