@@ -1,6 +1,7 @@
 import {useRef, useState} from 'react';
 import {Button, Input, Modal, Select} from 'antd';
 import {ChatApi} from './api';
+import {DeviceRoleSync} from './DeviceRoleSync';
 
 interface Role {revision: number; name: string; prompt: string; saved_at: string | null}
 interface Settings {current: Role; presets: {name: string; prompt: string}[]; web: string; device: string}
@@ -27,7 +28,7 @@ export function RoleEditor({api, disabled, onSaved}: {api: ChatApi; disabled: bo
     try {
       const result = await api.request<Omit<Settings, 'presets'>>('/api/assistant-role', 'POST', {expected_revision: settings.current.revision, name, prompt});
       setSettings({...settings, ...result}); setName(result.current.name); setPrompt(result.current.prompt);
-      setNotice(`已保存版本 ${result.current.revision}。网页下一轮使用；正在回答的轮次不变。圆屏未同步。`); onSaved();
+      setNotice(`已保存版本 ${result.current.revision}。网页下一轮使用；正在回答的轮次不变。未自动同步圆屏，请在下方检查。`); onSaved();
     } catch (error) {setUnknown(true); setNotice(`${String(error)} 请先重新读取，勿重复保存；草稿仍保留在编辑框。`);}
     finally {lock.current = false; setBusy(false);}
   }
@@ -39,7 +40,7 @@ export function RoleEditor({api, disabled, onSaved}: {api: ChatApi; disabled: bo
   return <><Button disabled={disabled} onClick={() => {setOpen(true); void load();}}>助手角色设置</Button>
     <Modal title="助手角色设置" open={open} onCancel={close} footer={null} width={720}>
       <p>这是助手的表达方式，不是你的个人画像。不要在这里填写密码或密钥。</p>
-      <p>网页：{settings?.web === 'fake_no_persona' ? 'Fake 仅保存配置，不模拟人格' : '保存后下一轮使用'}。圆屏：未同步，仍使用小智配置。</p>
+      <p>网页：{settings?.web === 'fake_no_persona' ? 'Fake 仅保存配置，不模拟人格' : '保存后下一轮使用'}。圆屏：需单独检查与同步，运行生效不自动确认。</p>
       <p>当前保存版本：{settings?.current.revision ?? '未读取'} · {settings?.current.name ?? ''}</p>
       <label>载入预设（只填入草稿）</label><Select className="wide" aria-label="载入角色预设" placeholder="选择预设" value={null} disabled={busy || !settings} options={settings?.presets.map(p => ({value:p.name,label:p.name}))}
         onChange={value => {const preset = settings?.presets.find(p => p.name === value); if (preset) {setName(preset.name); setPrompt(preset.prompt);}}}/>
@@ -49,5 +50,6 @@ export function RoleEditor({api, disabled, onSaved}: {api: ChatApi; disabled: bo
       <Button type="primary" disabled={busy || unknown || !settings || !name.trim() || !prompt.trim()} onClick={() => void save()}>保存并用于网页下一轮</Button>{' '}
       <Button disabled={busy} onClick={() => {if (confirm('重新读取会替换当前草稿，继续吗？')) void load();}}>重新读取</Button>
       <p role="status">{notice}</p>
+      <DeviceRoleSync key={settings?.current.revision ?? -1} api={api} disabled={busy || unknown || !settings}/>
     </Modal></>;
 }

@@ -65,7 +65,8 @@ def build_commands(options, uv=None):
     console = [str(uv), "run", "--offline", "--no-sync", "--env-file", ".env",
                "python", "-m", "longmemory.entrypoints.api", "--port", str(options.port),
                "--database", str(options.database.resolve()), "--enable-chat",
-               "--chat-provider", "openai_compatible", "--assistant-role", options.role]
+               "--chat-provider", "openai_compatible", "--assistant-role", options.role,
+               "--xiaozhi-server", str(options.voice_root.resolve())]
     # 实验启动与删除默认关闭；不因日常启动隐式开启高风险管理功能。
     commands = [("console", console, root)]
     if options.voice:

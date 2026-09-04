@@ -18,6 +18,7 @@ from .experiment_jobs import ExperimentJobs
 from .routes.experiment_jobs import register_job_routes
 from .react_assets import register_react_routes
 from .routes.assistant_role import register_role_routes
+from .device_role import DeviceRole
 
 ROOT = Path(__file__).resolve().parents[4]
 STATIC_FILES = {
@@ -43,7 +44,7 @@ STATIC_FILES = {
 }
 
 
-def create_app(*, port=8765, bridge=None, web_root=None, database=None, allow_memory_delete=False, chat_backend=None, experiment_backend=None, job_backend=None, instance_id=None):
+def create_app(*, port=8765, bridge=None, web_root=None, database=None, allow_memory_delete=False, chat_backend=None, experiment_backend=None, job_backend=None, instance_id=None, xiaozhi_server=None):
     sessions = Sessions()
     assets = web_root or ROOT / "web"
     client = bridge if bridge is not None else XiaozhiControlClient(ROOT / "data/control/device-control.token")
@@ -110,7 +111,8 @@ def create_app(*, port=8765, bridge=None, web_root=None, database=None, allow_me
     app.router.add_post("/api/device/volume", volume)
     register_memory_routes(app, MemoryBackend(database, allow_delete=allow_memory_delete))
     register_chat_routes(app, chat_backend)
-    register_role_routes(app, chat_backend)
+    device_role = DeviceRole(xiaozhi_server, chat_backend.roles, chat_backend.database, ROOT) if xiaozhi_server and chat_backend else None
+    register_role_routes(app, chat_backend, device_role)
     experiments = experiment_backend if experiment_backend is not None else ExperimentBackend(ROOT / "experiments")
     register_experiment_routes(app, experiments)
     register_job_routes(app, job_backend if job_backend is not None else ExperimentJobs(experiments))
@@ -126,6 +128,7 @@ def main():
     parser.add_argument("--enable-chat", action="store_true", help="允许网页向指定已有记忆库写入对话和记忆")
     parser.add_argument("--chat-provider", choices=("fake", "openai_compatible"), default="fake")
     parser.add_argument("--assistant-role", choices=("plain_v1", "elysia_v1"), default="plain_v1")
+    parser.add_argument("--xiaozhi-server", type=Path, help="允许用户确认后同步角色到此小智目录；不会自动修改配置或重启")
     parser.add_argument("--enable-experiment-runs", action="store_true", help="允许网页确认后运行冻结检索回答对照；默认只读实验")
     args = parser.parse_args()
     if not 1024 <= args.port <= 65535:
@@ -173,7 +176,7 @@ def main():
         print(f"文字聊天已启用：{args.chat_provider} / {args.assistant_role}；会写入 L0/L1，不驱动圆屏播音。")
     try:
         web.run_app(create_app(port=args.port, database=args.database, allow_memory_delete=args.allow_memory_delete, chat_backend=chat_backend, job_backend=job_backend,
-                               instance_id=os.environ.get("LONGMEMORY_LAUNCHER_INSTANCE")),
+                               instance_id=os.environ.get("LONGMEMORY_LAUNCHER_INSTANCE"), xiaozhi_server=args.xiaozhi_server),
                     host="127.0.0.1", port=args.port, access_log=None, print=None)
     except OSError:
         parser.exit(1, f"控制台未能绑定 127.0.0.1:{args.port}。请检查旧控制台是否仍在运行或端口权限；未自动停止其他进程、未换端口。\n")

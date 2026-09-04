@@ -45,14 +45,14 @@ class FakeBridge:
 
 
 @asynccontextmanager
-async def console(database=None, allow_memory_delete=False, chat_backend=None):
+async def console(database=None, allow_memory_delete=False, chat_backend=None, xiaozhi_server=None):
     # 先占用随机回环端口，再把精确 Host 交给应用，避免探测后抢占端口。
     sock = socket.socket()
     sock.bind(("127.0.0.1", 0))
     port = sock.getsockname()[1]
     bridge = FakeBridge()
     runner = web.AppRunner(create_app(port=port, bridge=bridge, database=database,
-                                     allow_memory_delete=allow_memory_delete, chat_backend=chat_backend), access_log=None)
+                                     allow_memory_delete=allow_memory_delete, chat_backend=chat_backend, xiaozhi_server=xiaozhi_server), access_log=None)
     await runner.setup()
     await web.SockSite(runner, sock).start()
     try:
