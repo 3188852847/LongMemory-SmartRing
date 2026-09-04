@@ -1,12 +1,14 @@
 # Web 界面
 
+选型更新：后续聊天页采用 React + TypeScript + Vite + antd，见 [ADR-0021](../docs/adr/0021-react-chat-migration.md) 和[迁移清单](../docs/architecture/react-chat-migration.md)。尚未安装或切换，以下描述当前原生实现。
+
 P2 已新增聊天页 `appearance.mjs`（校验/存取/应用显示偏好）、`appearance.js`（控件绑定）与 `chat-appearance.css`（局部主题）。沿用原生前端，见 ADR-0020。本浏览器持久缓存仅用于外观枚举和最后选中会话 ID，不保存聊天正文。
 
 `experiments.html`、`assets/experiments.js`、`assets/experiment-view.mjs` 与 `assets/experiments.css` 提供研究档案和逐题对照、独立人工复核。新增 `assets/experiment-jobs.mjs` 隔离单作业预检/明确确认、只读进度轮询、停止后续题与结果打开。动态文本不解析为 HTML，不新增前端依赖；启动开关、模型配置和风险说明见[实验中心指南](../docs/deployment/experiment-console.md)。
 
 本目录是本机控制台的前端位置；已实现“设备与状态”“记忆管理”和“文字聊天”页，助手角色与完整运行记录页仍显示待接入。
 
-按 ADR-0008 已新增 `chat.html`、`assets/chat.js` 和 `assets/chat-view.mjs`：临时网页会话和逐轮过程展示，共用指定的已有长期记忆库。不默认播放网页回答到设备；刷新另开聊天，服务重启不恢复聊天历史列表。网页与小智配置需核对，尚未自动同步。实验数据另行隔离，现有前端选型和本机安全约束不变。
+按 ADR-0008 已新增 `chat.html`、`assets/chat.js` 和 `assets/chat-view.mjs`，随后增加独立旁库会话恢复：同一浏览器可刷新、重启续聊，支持列表、切换和重命名。共用指定的已有长期记忆库，不默认播放网页回答到设备。网页与小智配置需核对，尚未自动同步。实验数据另行隔离。
 
 2026-09-03 按用户决定新增控制台里程碑，覆盖原“V0.1 不选型”的预留状态。
 方案：静态 HTML + 原生 JavaScript 模块 + 本地 CSS + JSON API，由 Python 后端统一提供静态资源。
