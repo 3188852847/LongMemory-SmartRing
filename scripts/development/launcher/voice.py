@@ -61,13 +61,14 @@ def main():
         import yaml
         import setup
         config = yaml.safe_load((server / "data/.config.yaml").read_text(encoding="utf-8"))
-        setup.validate_config(config, lan_ip)
+        setup.validate_config(config, lan_ip, tts_backend)
         if not shared_paths_match(config, root, database) or not tts_matches(config, tts_backend):
             return 3
         if tts_backend == "voxcpm2" and not wait_for_voxcpm():
             return 4
         sys.argv = [str(root / "scripts/development/xiaozhi/setup.py"), "start", "--server-dir", str(server),
-                    "--lan-ip", lan_ip, "--allow-insecure-http", "--device-control"]
+                    "--lan-ip", lan_ip, "--allow-insecure-http", "--device-control",
+                    "--tts-backend", tts_backend]
         return setup.main()
     except Exception:
         return 3  # 私有配置/路径错误，绝不回传 YAML 或第三方异常正文。

@@ -11,7 +11,9 @@
 - 新增 Edge/VoxCPM2 私有配置检查与显式同步，兼容只覆盖 EdgeTTS 的精简 `.config.yaml`，使用摘要复核、原文备份及 90 秒 TTS 超时；真实配置只读确认当前仍为 EdgeTTS，未自动切换。
 - 统一启动面板增加声音后端选择和同步入口；VoxCPM2 模式由同一 Windows Job 托管，模型服务就绪后小智才启动，关闭面板释放显存。
 - 修复健康检查连接遗留 `TIME_WAIT` 时无法立即重启：VoxCPM2 仅拒绝真实监听者并允许环回服务重绑；其他端口仍按独占方式预检。
-- 验证：475 项 Python 与 2 项 React 测试通过；真实本机 HTTP 请求返回 48 kHz、单声道、16 位、2.88 秒有效 WAV。尚未完成 Xiaozhi/圆屏端到端试听。
+- 修复统一启动器的旧配置校验仍写死 `EdgeTTS`、导致已同步 VoxCPM2 后 voice 以退出码 3 退出；启动链现在显式传递并严格核对所选 TTS 后端。
+- 配置预检允许学校新网关的“实例路径 + `/v1`”基础地址，同时继续拒绝完整 `chat/completions` 路径和非 API 根路径。
+- 验证：482 项 Python 与 2 项 React 测试通过；真实本机 HTTP 请求返回 48 kHz、单声道、16 位、2.88 秒有效 WAV。尚未完成 Xiaozhi/圆屏端到端试听。
 
 ### Campus model endpoint update（2026-09-05）
 

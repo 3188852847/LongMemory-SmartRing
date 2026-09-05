@@ -30,6 +30,41 @@ def test_local_config_is_accepted(config):
     assert setup.validate_config(config)["model_name"] == "synthetic-model"
 
 
+def test_provider_instance_prefix_before_v1_is_accepted(config):
+    config["LLM"]["CampusLLM"]["base_url"] = "http://example.invalid/instance-123/v1"
+    assert setup.validate_config(config)["model_name"] == "synthetic-model"
+
+
+@pytest.mark.parametrize("path", ["/v1/chat/completions", "/api", "/v10"])
+def test_non_base_model_paths_are_rejected(config, path):
+    config["LLM"]["CampusLLM"]["base_url"] = f"https://example.invalid{path}"
+    with pytest.raises(setup.SetupError):
+        setup.validate_config(config)
+
+
+def test_voxcpm2_config_is_accepted_only_when_explicitly_selected(config):
+    config["selected_module"]["TTS"] = "CustomTTS"
+    config["TTS"] = {"CustomTTS": {
+        "type": "custom", "method": "POST",
+        "url": "http://127.0.0.1:18768/v1/audio/speech", "format": "wav",
+        "params": {"input": "{prompt_text}", "response_format": "wav", "stream": False},
+    }}
+    assert setup.validate_config(config, tts_backend="voxcpm2")["model_name"] == "synthetic-model"
+    with pytest.raises(setup.SetupError):
+        setup.validate_config(config)
+
+
+def test_voxcpm2_contract_rejects_wrong_local_endpoint(config):
+    config["selected_module"]["TTS"] = "CustomTTS"
+    config["TTS"] = {"CustomTTS": {
+        "type": "custom", "method": "POST", "url": "http://example.invalid/speech",
+        "format": "wav",
+        "params": {"input": "{prompt_text}", "response_format": "wav", "stream": False},
+    }}
+    with pytest.raises(setup.SetupError):
+        setup.validate_config(config, tts_backend="voxcpm2")
+
+
 @pytest.mark.parametrize("host", ["0.0.0.0", "::", "192.168.1.2"])
 def test_non_local_listen_is_rejected(config, host):
     config["server"]["ip"] = host

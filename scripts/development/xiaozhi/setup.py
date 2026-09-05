@@ -51,7 +51,37 @@ def validate_lan_ip(value: str) -> str:
     return str(address)
 
 
-def validate_config(config: dict, lan_ip: str | None = None) -> dict:
+def validate_tts_config(config: dict, backend: str) -> None:
+    """按本次明确选择的后端核对配置，避免把另一个合法后端误判为配置损坏。"""
+    selected = config.get("selected_module", {}).get("TTS")
+    if backend == "edge":
+        if selected != "EdgeTTS":
+            raise SetupError("当前启动选择 EdgeTTS，但私有配置尚未同步为 EdgeTTS。")
+        return
+    if backend != "voxcpm2":
+        raise SetupError("--tts-backend 只允许 edge 或 voxcpm2。")
+
+    custom = config.get("TTS", {}).get("CustomTTS", {})
+    params = custom.get("params", {}) if isinstance(custom, dict) else {}
+    expected = {
+        "type": "custom",
+        "method": "POST",
+        "url": "http://127.0.0.1:18768/v1/audio/speech",
+        "format": "wav",
+    }
+    if (
+        selected != "CustomTTS"
+        or not isinstance(custom, dict)
+        or any(custom.get(key) != value for key, value in expected.items())
+        or not isinstance(params, dict)
+        or params.get("input") != "{prompt_text}"
+        or params.get("response_format") != "wav"
+        or params.get("stream") is not False
+    ):
+        raise SetupError("当前启动选择 VoxCPM2，但 CustomTTS 配置与本机适配服务契约不一致。")
+
+
+def validate_config(config: dict, lan_ip: str | None = None, tts_backend: str = "edge") -> dict:
     """检查本阶段边界，避免沿用上游默认公网监听或默认模型。"""
     server = config.get("server", {})
     expected_ip = validate_lan_ip(lan_ip) if lan_ip else "127.0.0.1"
@@ -84,8 +114,9 @@ def validate_config(config: dict, lan_ip: str | None = None) -> dict:
                 raise SetupError("LongMemory 的四个本地路径必须完整填写为绝对路径。")
         if "<memory>" not in config.get("prompt", "") or "</memory>" not in config.get("prompt", ""):
             raise SetupError("prompt 必须包含 <memory></memory>，否则上游快速提示阶段不会注入记忆。")
+    validate_tts_config(config, tts_backend)
     expected = dict(VAD="SileroVAD", ASR="FunASR", LLM="CampusLLM",
-                    TTS="EdgeTTS", Memory=memory_name, Intent="nointent")
+                    Memory=memory_name, Intent="nointent")
     if any(selected.get(key) != value for key, value in expected.items()):
         raise SetupError("所选模块与本阶段模板不一致，请核对 selected_module。")
     model = config.get("LLM", {}).get("CampusLLM", {})
@@ -102,8 +133,8 @@ def validate_config(config: dict, lan_ip: str | None = None) -> dict:
         raise SetupError("模型地址必须是 HTTP(S) URL。")
     if url.username or url.password or url.query or url.fragment:
         raise SetupError("模型 URL 不应带账户、密码、查询参数或片段。")
-    if url.path.rstrip("/") != "/v1":
-        raise SetupError("本阶段使用已验证的 /v1 基础地址，不填完整 chat/completions 路径。")
+    if not url.path.rstrip("/").endswith("/v1"):
+        raise SetupError("模型基础地址必须以 /v1 结尾，不填完整 chat/completions 路径。")
     return model
 
 
@@ -180,6 +211,8 @@ def main() -> int:
     parser.add_argument("--allow-insecure-http", action="store_true")
     parser.add_argument("--lan-ip", help="显式启用局域网演示，填写电脑有线 IPv4 地址")
     parser.add_argument("--device-control", action="store_true", help="显式开启本机 8766 音量验证接口")
+    parser.add_argument("--tts-backend", choices=["edge", "voxcpm2"], default="edge",
+                        help="核对本次实际选择的声音后端；默认 edge")
     args = parser.parse_args()
     try:
         server_dir = args.server_dir.resolve()
@@ -195,7 +228,7 @@ def main() -> int:
             config = yaml.safe_load(handle)
         if not isinstance(config, dict):
             raise SetupError("私有配置必须是 YAML 映射，不能是空文件。")
-        model = validate_config(config, args.lan_ip)
+        model = validate_config(config, args.lan_ip, args.tts_backend)
         if args.device_control and (args.action != "start" or config["selected_module"]["Memory"] != "LongMemory"):
             raise SetupError("--device-control 仅支持已配置 LongMemory 的 start 操作。")
         if args.device_control:
