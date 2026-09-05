@@ -10,6 +10,7 @@ from pathlib import Path
 from runtime import Manager, Options, ROOT, Singleton, VOICE_ROOT
 from network import local_addresses, config_action, load_choice, save_choice
 from firewall_panel import open_panel
+from tts import config_action as tts_config_action
 
 
 def main():
@@ -36,6 +37,7 @@ def main():
     choice_path = ROOT / 'data/control/launcher.json'
     ip = tk.StringVar(value=load_choice(choice_path))
     role = tk.StringVar(value="elysia_v1")
+    tts_backend = tk.StringVar(value="EdgeTTS（联网标准音色）")
     ttk.Checkbutton(box, text="同时启动圆屏语音（默认只启动文字聊天）", variable=voice).pack(anchor="w")
     for label, variable in [("日常数据库（已有文件）", database), ("小智目录（仅语音模式）", server)]:
         ttk.Label(box, text=label).pack(anchor="w", pady=(8, 0))
@@ -84,6 +86,36 @@ def main():
     ttk.Label(row, text="网页角色：").pack(side="left")
     ttk.Combobox(row, textvariable=role, values=("elysia_v1", "plain_v1"), state="readonly", width=18).pack(side="left")
     ttk.Label(row, text="  不自动改变小智角色；控制台端口 8767").pack(side="left")
+    tts_row = ttk.Frame(box)
+    tts_row.pack(fill="x", pady=8)
+    ttk.Label(tts_row, text="圆屏声音：").pack(side="left")
+    ttk.Combobox(tts_row, textvariable=tts_backend,
+                 values=("EdgeTTS（联网标准音色）", "VoxCPM2（本地 plain）"),
+                 state="readonly", width=27).pack(side="left")
+
+    def selected_tts():
+        return "voxcpm2" if tts_backend.get().startswith("VoxCPM2") else "edge"
+
+    def sync_tts():
+        if manager.services:
+            messagebox.showinfo("请先停止", "请先停止本面板服务；也请结束外部终端中的小智服务。")
+            return
+        try:
+            backend = selected_tts()
+            checked = tts_config_action(Path(server.get()), ROOT, backend)
+            if checked["config_matches"]:
+                messagebox.showinfo("无需同步", "小智磁盘配置已经匹配；运行中是否生效仍需重启验证。")
+                return
+            label = "VoxCPM2 本地声音" if backend == "voxcpm2" else "EdgeTTS"
+            if messagebox.askyesno("同步圆屏声音？",
+                    f"将小智 TTS 切换为 {label}。\n只修改 TTS 选择与固定接口字段，原配置会备份；不会启动服务。"):
+                tts_config_action(Path(server.get()), ROOT, backend, apply=True,
+                                  expected_digest=checked["digest"])
+                messagebox.showinfo("同步完成", "磁盘配置已更新；下次启动小智加载，实机效果仍需试听。")
+        except (ValueError, OSError, KeyError):
+            messagebox.showerror("未完成同步", "TTS 配置检查或同步失败；未显示私有配置内容。")
+
+    ttk.Button(tts_row, text="检查并同步", command=sync_tts).pack(side="left", padx=8)
     tk.Checkbutton(box, variable=consent, anchor="w", justify="left",
                     text="我了解：聊天会写入记忆；当前 HTTP 会明文发送凭据与内容，仅用非敏感合成体验。",
                     wraplength=710).pack(anchor="w", pady=8)
@@ -119,8 +151,12 @@ def main():
                 info = config_action(Path(server.get()), ip.get().strip())
                 if info['changed']:
                     raise ValueError(f"小智配置仍为 {info['old_ip']}，请先点击同步小智地址。")
+                voice_config = tts_config_action(Path(server.get()), ROOT, selected_tts())
+                if not voice_config["config_matches"]:
+                    raise ValueError("小智 TTS 配置与所选声音不一致，请先点击“检查并同步”。")
             options = Options(database=Path(database.get()), voice=voice.get(), voice_root=Path(server.get()),
-                              lan_ip=ip.get().strip(), role=role.get(), consent=consent.get())
+                              lan_ip=ip.get().strip(), role=role.get(), consent=consent.get(),
+                              tts_backend=selected_tts())
             manager.start(options)
             state.update(started=time.monotonic(), opened=False, failed=False)
             start_button.config(state="disabled")
@@ -145,7 +181,11 @@ def main():
                 if not state["opened"]:
                     state["opened"] = True
                     open_page()
-                suffix = "；语音进程运行中，设备连接请在网页查看" if manager.options.voice else ""
+                if manager.options.voice and manager.options.tts_backend == "voxcpm2":
+                    suffix = ("；VoxCPM2 与语音进程运行中" if manager.voxcpm_ready()
+                              else "；VoxCPM2 正在加载，圆屏语音尚未就绪")
+                else:
+                    suffix = "；语音进程运行中，设备连接请在网页查看" if manager.options.voice else ""
                 status.set("控制台已就绪" + suffix + "。学校模型未探测。保留此面板，关闭网页不会停止服务。")
             elif time.monotonic() - state["started"] > 90:
                 stopped = stop(False)

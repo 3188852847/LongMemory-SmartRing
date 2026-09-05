@@ -88,6 +88,21 @@ def test_voice_command_uses_own_environment(options):
     assert str(options.database.resolve()) in cmd
 
 
+def test_voxcpm_commands_use_isolated_environment_and_start_before_voice(options):
+    voice = options.root / "voice"; (voice / ".venv/Scripts").mkdir(parents=True)
+    (voice / ".venv/Scripts/python.exe").touch()
+    voxcpm = options.root / "scripts/development/voxcpm"
+    (voxcpm / ".venv/Scripts").mkdir(parents=True)
+    (voxcpm / ".venv/Scripts/python.exe").touch(); (voxcpm / "service.py").touch()
+    commands = runtime.build_commands(replace(options, voice=True, voice_root=voice,
+                                               lan_ip="192.168.1.2", tts_backend="voxcpm2"),
+                                      uv="synthetic-uv")
+    assert [item[0] for item in commands] == ["console", "voxcpm2", "voice"]
+    assert commands[1][1][0] == str(voxcpm / ".venv/Scripts/python.exe")
+    assert commands[1][1][1] == str(voxcpm / "service.py")
+    assert commands[2][1][-1] == "voxcpm2"
+
+
 @pytest.mark.parametrize("mismatch", [None, "database_path", "project_root", "python_executable", "nomem"])
 def test_voice_shared_paths_are_checked_without_loading_private_config(options, mismatch):
     spec = importlib.util.spec_from_file_location("launcher_voice_test", DIRECTORY / "voice.py")
@@ -101,6 +116,18 @@ def test_voice_shared_paths_are_checked_without_loading_private_config(options, 
     elif mismatch:
         memory[mismatch] = str(options.root / "wrong")
     assert voice.shared_paths_match(config, options.root, options.database) is (mismatch is None)
+
+
+def test_voice_tts_contract_is_strict():
+    spec = importlib.util.spec_from_file_location("launcher_voice_tts_test", DIRECTORY / "voice.py")
+    voice = importlib.util.module_from_spec(spec); spec.loader.exec_module(voice)
+    config = {"selected_module": {"TTS": "CustomTTS"}, "TTS": {"CustomTTS": {
+        "type": "custom", "method": "POST", "url": "http://127.0.0.1:18768/v1/audio/speech",
+        "format": "wav", "params": {"input": "{prompt_text}", "response_format": "wav", "stream": False}}}}
+    assert voice.tts_matches(config, "voxcpm2")
+    config["TTS"]["CustomTTS"]["url"] = "http://example.invalid"
+    assert not voice.tts_matches(config, "voxcpm2")
+    assert voice.tts_matches({"selected_module": {"TTS": "EdgeTTS"}}, "edge")
 
 
 def test_singleton_and_occupied_port_are_non_destructive():

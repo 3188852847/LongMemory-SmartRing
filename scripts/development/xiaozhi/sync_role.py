@@ -78,13 +78,13 @@ def commit_change(path, body, original, updated, matches, backup_label='role'):
         try:
             if path.read_bytes() != original:
                 raise ValueError('config_changed')
-            if backup_label not in {'role', 'model'}:
+            if backup_label not in {'role', 'model', 'tts'}:
                 raise ValueError('invalid_backup_label')
             backup = path.with_name(path.name + '.' + backup_label + '-' + uuid.uuid4().hex + '.bak')
             with backup.open('xb') as handle:
                 handle.write(original)
                 handle.flush(); os.fsync(handle.fileno())
-            temporary = path.with_name(path.name + '.role-' + uuid.uuid4().hex + '.tmp')
+            temporary = path.with_name(path.name + '.' + backup_label + '-' + uuid.uuid4().hex + '.tmp')
             with temporary.open('xb') as handle:
                 handle.write(updated)
                 handle.flush(); os.fsync(handle.fileno())

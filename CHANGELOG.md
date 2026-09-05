@@ -4,6 +4,14 @@
 
 ## Unreleased
 
+### VoxCPM2 Xiaozhi adapter（2026-09-05）
+
+- 核对当前 Xiaozhi TTS Provider 契约，复用上游 `CustomTTS` 与 WAV→设备采样率→Opus 转换，不修改圆屏固件或复制上游 Provider。
+- 新增仅环回监听的 VoxCPM2 常驻服务：固定模型校验、有限文本、单路 GPU 生成、重复句内存缓存、拒绝浏览器 Origin；不读取聊天库或校园模型密钥。
+- 新增 Edge/VoxCPM2 私有配置检查与显式同步，兼容只覆盖 EdgeTTS 的精简 `.config.yaml`，使用摘要复核、原文备份及 90 秒 TTS 超时；真实配置只读确认当前仍为 EdgeTTS，未自动切换。
+- 统一启动面板增加声音后端选择和同步入口；VoxCPM2 模式由同一 Windows Job 托管，模型服务就绪后小智才启动，关闭面板释放显存。
+- 验证：475 项 Python 与 2 项 React 测试通过；真实本机 HTTP 请求返回 48 kHz、单声道、16 位、2.88 秒有效 WAV。尚未完成 Xiaozhi/圆屏端到端试听。
+
 ### Campus model endpoint update（2026-09-05）
 
 - 更新 LongMemory 与小智私有配置中的学校模型基础地址、模型名及凭据；完整 Chat Completions 地址规范化为由客户端追加路径的 `/v1` 基础地址。

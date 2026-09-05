@@ -15,6 +15,7 @@ from winjob import Job
 
 ROOT = Path(__file__).resolve().parents[3]
 VOICE_ROOT = Path(r"D:\ESP32-Workspace\xiaozhi-esp32-server\main\xiaozhi-server")
+VOXCPM_PORT = 18768
 
 
 @dataclass(frozen=True)
@@ -24,6 +25,7 @@ class Options:
     port: int = 8767
     role: str = "elysia_v1"
     voice: bool = False
+    tts_backend: str = "edge"
     voice_root: Path = VOICE_ROOT
     lan_ip: str = ""
     consent: bool = False
@@ -52,6 +54,8 @@ def build_commands(options, uv=None):
         raise ValueError("控制台端口需在 1024–65535 且不占用小智端口。")
     if options.role not in {"plain_v1", "elysia_v1"}:
         raise ValueError("未知助手角色。")
+    if options.tts_backend not in {"edge", "voxcpm2"}:
+        raise ValueError("未知语音后端。")
     root = options.root.resolve()
     if not options.database.is_file():
         raise ValueError("请选择已有日常数据库；启动器不会创建或迁移数据库。")
@@ -81,9 +85,17 @@ def build_commands(options, uv=None):
         python = options.voice_root / ".venv/Scripts/python.exe"
         if not python.is_file():
             raise ValueError("未找到小智自己的 Python 环境。")
+        if options.tts_backend == "voxcpm2":
+            voxcpm_python = root / "scripts/development/voxcpm/.venv/Scripts/python.exe"
+            service = root / "scripts/development/voxcpm/service.py"
+            if not voxcpm_python.is_file() or not service.is_file():
+                raise ValueError("VoxCPM2 独立环境或服务脚本不完整。")
+            commands.append(("voxcpm2", [str(voxcpm_python), str(service),
+                                           "--host", "127.0.0.1", "--port", str(VOXCPM_PORT)],
+                             service.parent))
         commands.append(("voice", [str(python), str(Path(__file__).with_name("voice.py")),
                                   str(root), str(options.voice_root.resolve()), str(options.database.resolve()),
-                                  str(ip)], options.voice_root.resolve()))
+                                  str(ip), options.tts_backend], options.voice_root.resolve()))
     return commands
 
 
@@ -145,6 +157,8 @@ class Manager:
         if options.voice:
             for host, port in [(options.lan_ip, 8000), (options.lan_ip, 8003), ("127.0.0.1", 8766)]:
                 require_free(host, port)
+            if options.tts_backend == "voxcpm2":
+                require_free("127.0.0.1", VOXCPM_PORT)
         self.options = options
         self.instance = secrets.token_hex(24)
         env = os.environ.copy()
@@ -167,6 +181,20 @@ class Manager:
             # 实例标识不是认证令牌，仅避免把占用端口的别的服务误判为本次实例。
             return response.status == 200 and response.getheader("X-LongMemory-Instance") == self.instance
         except (OSError, http.client.HTTPException):
+            return False
+        finally:
+            conn.close()
+
+    def voxcpm_ready(self):
+        if "voxcpm2" not in self.services or self.services["voxcpm2"].process.poll() is not None:
+            return False
+        conn = http.client.HTTPConnection("127.0.0.1", VOXCPM_PORT, timeout=0.25)
+        try:
+            conn.request("GET", "/health")
+            response = conn.getresponse()
+            body = json.loads(response.read(4096))
+            return response.status == 200 and body.get("ready") is True and body.get("provider") == "voxcpm2"
+        except (OSError, http.client.HTTPException, json.JSONDecodeError):
             return False
         finally:
             conn.close()
