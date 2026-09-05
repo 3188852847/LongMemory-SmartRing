@@ -16,6 +16,12 @@ from winjob import Job
 ROOT = Path(__file__).resolve().parents[3]
 VOICE_ROOT = Path(r"D:\ESP32-Workspace\xiaozhi-esp32-server\main\xiaozhi-server")
 VOXCPM_PORT = 18768
+DEFAULT_CHAT_PATH = "/chat-react"
+
+
+def console_url(port: int) -> str:
+    """统一日常入口；旧版 /chat 仍保留用于回退。"""
+    return f"http://127.0.0.1:{port}{DEFAULT_CHAT_PATH}"
 
 
 @dataclass(frozen=True)

@@ -7,7 +7,7 @@ from tkinter import messagebox, ttk
 import webbrowser
 from pathlib import Path
 
-from runtime import Manager, Options, ROOT, Singleton, VOICE_ROOT
+from runtime import Manager, Options, ROOT, Singleton, VOICE_ROOT, console_url
 from network import local_addresses, config_action, load_choice, save_choice
 from firewall_panel import open_panel
 from tts import config_action as tts_config_action
@@ -127,7 +127,7 @@ def main():
 
     def open_page():
         if manager.ready():
-            webbrowser.open(f"http://127.0.0.1:{manager.options.port}/chat")
+            webbrowser.open(console_url(manager.options.port))
         else:
             messagebox.showinfo("尚未就绪", "请先启动并等待控制台就绪。")
 

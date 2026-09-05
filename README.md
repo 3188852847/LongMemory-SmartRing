@@ -18,7 +18,7 @@ P2 新增声音设置：四种 Edge TTS 音色、固定文本联网试听和确�
 
 P2 助手角色设置已接入 `/chat-react`：网页编辑、版本化保存；圆屏可检查并明确确认同步到小智配置，之后需重启小智，实机生效待验收。见[助手角色设置](docs/guides/助手角色设置.md)。
 
-P2 新增 React + TypeScript + Vite + antd 聊天预览 `/chat-react`，已接入现有会话与聊天 API；默认 `/chat` 保留原版，尚未替换。见[体验指南](docs/guides/React聊天页.md)与[迁移清单](docs/architecture/react-chat-migration.md)。日常启动方式与记忆系统不变。
+P2 React + TypeScript + Vite + antd 聊天页 `/chat-react` 已接入现有会话与聊天 API，并成为统一启动面板默认入口；原版 `/chat` 保留回退，两边可互相切换。见[体验指南](docs/guides/React聊天页.md)与[迁移清单](docs/architecture/react-chat-migration.md)。日常启动方式与记忆系统不变。
 
 P2：聊天页支持浅色/深色/跟随系统及字号保存，配置默认折叠。见[外观设置](docs/guides/外观设置.md)。角色编辑、显式圆屏配置同步及音色试听已实现；不改日常记忆算法。
 

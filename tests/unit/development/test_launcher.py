@@ -88,6 +88,10 @@ def test_voice_command_uses_own_environment(options):
     assert str(options.database.resolve()) in cmd
 
 
+def test_default_console_url_opens_react_chat():
+    assert runtime.console_url(8767) == "http://127.0.0.1:8767/chat-react"
+
+
 def test_voxcpm_commands_use_isolated_environment_and_start_before_voice(options):
     voice = options.root / "voice"; (voice / ".venv/Scripts").mkdir(parents=True)
     (voice / ".venv/Scripts/python.exe").touch()

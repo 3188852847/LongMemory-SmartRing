@@ -23,6 +23,7 @@ def test_chat_disabled_and_static_security():
         async with console() as (client, base, _):
             headers = await login(client, base)
             response = await client.get(base + "/chat")
+            assert '/chat-react' in await response.text()
             assert response.status == 200
             assert "script-src 'self'" in response.headers["Content-Security-Policy"]
             assert (await (await client.get(base + "/api/chat-config")).json()) == {"enabled": False}
