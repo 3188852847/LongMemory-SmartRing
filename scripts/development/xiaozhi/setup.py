@@ -6,6 +6,7 @@ check-stream 才访问用户配置的模型，start 才启动本机服务。
 """
 
 import argparse
+import hashlib
 import ipaddress
 import os
 from pathlib import Path
@@ -20,6 +21,12 @@ DEFAULT_FFMPEG = Path(
     r"C:\Users\12280\AppData\Local\Microsoft\WinGet\Packages"
     r"\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\ffmpeg-8.1.2-full_build\bin"
 )
+LEGACY_MEMORY_PROVIDER_SHA256 = {
+    # 逐轮启动 Python 3.12 子进程的已发布版本；只允许从这个精确内容升级。
+    "aeb5df153de32986df4cfece8cf8d6ecea6b49dd936f250497b684eb41ca3ac4",
+    # P3.1 本机首次安装后追加 URL/令牌严格校验前的过渡版本。
+    "c0dfe5b56b83ba3c26742147a345f15ca5600d03e293a10fd6b0d59e3aefdf81",
+}
 
 
 class SetupError(Exception):
@@ -144,7 +151,7 @@ def reject_ota_binaries(server_dir: Path) -> None:
         raise SetupError("data/bin 中存在固件；本轮不做 OTA 升级，请先单独处理这些文件，不会自动删除。")
 
 
-def install_memory_provider(server_dir: Path) -> Path:
+def install_memory_provider(server_dir: Path, *, allow_known_update: bool = False) -> Path:
     """只新增自己的提供器文件；已有不同内容时拒绝覆盖。"""
     if not (server_dir / "core/providers/memory/base.py").is_file():
         raise SetupError("目标不是预期的小智服务目录。")
@@ -152,7 +159,10 @@ def install_memory_provider(server_dir: Path) -> Path:
     content = Path(__file__).with_name("longmemory_provider.py").read_bytes()
     if target.exists():
         if target.read_bytes() != content:
-            raise SetupError("已有不同版本 LongMemory 提供器，未覆盖，请先核对。")
+            digest = hashlib.sha256(target.read_bytes()).hexdigest()
+            if not allow_known_update or digest not in LEGACY_MEMORY_PROVIDER_SHA256:
+                raise SetupError("已有不同或用户修改过的 LongMemory 提供器，未覆盖，请先核对。")
+            target.write_bytes(content)
         return target
     target.parent.mkdir(parents=True, exist_ok=True)
     with target.open("xb") as handle:
@@ -205,7 +215,7 @@ def probe_stream(client, model: dict) -> tuple[int, int]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=["init", "install-memory", "check-config", "check-stream", "start"])
+    parser.add_argument("action", choices=["init", "install-memory", "update-memory", "check-config", "check-stream", "start"])
     parser.add_argument("--server-dir", type=Path, default=DEFAULT_SERVER)
     parser.add_argument("--ffmpeg-dir", type=Path, default=DEFAULT_FFMPEG)
     parser.add_argument("--allow-insecure-http", action="store_true")
@@ -221,6 +231,9 @@ def main() -> int:
             return 0
         if args.action == "install-memory":
             print(f"已安装/确认提供器：{install_memory_provider(server_dir)}；未修改配置，未启动服务。")
+            return 0
+        if args.action == "update-memory":
+            print(f"已升级/确认提供器：{install_memory_provider(server_dir, allow_known_update=True)}；未修改私有配置，未启动服务。")
             return 0
         # 延迟导入，只依赖小智已经安装的 PyYAML，不给记忆核心新增依赖。
         import yaml

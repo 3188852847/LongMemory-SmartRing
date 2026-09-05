@@ -52,7 +52,7 @@ with TemporaryDirectory(prefix="longmemory-method-example-") as directory:
 ## 明确限制
 
 - state_path 由调用方明确提供；工厂沿用原建库/建表行为，不是控制台已有库只读后端，不能用于自动选取个人库。
-- 每个实例连接由自己拥有，不能跨线程共享。close 可重复，不删除文件。
+- 普通方法实例的连接由自己拥有，不能跨线程共享。日常 `MemoryRuntime` 是唯一例外：显式关闭 SQLite 线程检查，并用自己的互斥锁保证连接不会并发操作。close 可重复，不删除文件。
 - session_id 暂不落库，有值即报不支持，不静默丢掉会话边界；目前只有 user/assistant 消息，无工具事件接口。
 - 不接受测试答案、奖励或反馈，不声明冻结协议支持；能力不满足应在实验开始前拒绝。
 - 阶段 B 为 longmemory_v1 的 observe 增加 SQLite BEGIN IMMEDIATE：同一事件的 L0、去重、L1、来源共同提交/回滚；模型调用不在事务内。方法级重复 event_id 仍由 L0 主键拒绝；网页另有会话内请求去重，不能当作持久幂等协议。

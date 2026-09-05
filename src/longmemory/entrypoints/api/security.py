@@ -32,19 +32,30 @@ class Sessions:
         return record[0]
 
 
-def security_middleware(authority: str, sessions: Sessions):
+def security_middleware(authority: str, sessions: Sessions, internal_token: str | None = None):
     origin = "http://" + authority
 
     @web.middleware
     async def protect(request, handler):
         response = None
         try:
+            internal = request.path.startswith("/api/internal/memory/")
             # Host 限定阻挡 DNS 重绑定；跨源网站不能借用本机浏览器管理设备。
-            if (request.remote != "127.0.0.1" or request.host != authority
-                    or request.headers.get("Origin") not in {None, origin}
+            if request.remote != "127.0.0.1" or request.host != authority:
+                response = web.json_response({"error": "origin_rejected"}, status=403)
+            elif internal and (
+                internal_token is None
+                or not secrets.compare_digest(
+                    request.headers.get("Authorization", "").encode(),
+                    ("Bearer " + internal_token).encode(),
+                )
+            ):
+                response = web.json_response({"error": "runtime_auth_required"}, status=401)
+            elif not internal and (
+                    request.headers.get("Origin") not in {None, origin}
                     or request.headers.get("Sec-Fetch-Site") not in {None, "none", "same-origin"}):
                 response = web.json_response({"error": "origin_rejected"}, status=403)
-            elif request.path.startswith("/api/") and request.path != "/api/session":
+            elif not internal and request.path.startswith("/api/") and request.path != "/api/session":
                 csrf = sessions.csrf(request.cookies.get(COOKIE))
                 if csrf is None:
                     response = web.json_response({"error": "session_required"}, status=401)

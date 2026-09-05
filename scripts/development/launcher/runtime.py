@@ -84,7 +84,8 @@ def build_commands(options, uv=None):
                "python", "-m", "longmemory.entrypoints.api", "--port", str(options.port),
                "--database", str(options.database.resolve()), "--enable-chat",
                "--chat-provider", "openai_compatible", "--assistant-role", options.role,
-               "--xiaozhi-server", str(options.voice_root.resolve())]
+               "--xiaozhi-server", str(options.voice_root.resolve()),
+               "--memory-audit-log", str(root / "data/logs/xiaozhi-demo-v1.jsonl")]
     # 实验启动与删除默认关闭；不因日常启动隐式开启高风险管理功能。
     commands = [("console", console, root)]
     if options.voice:
@@ -175,8 +176,17 @@ class Manager:
                 require_no_listener("127.0.0.1", VOXCPM_PORT)
         self.options = options
         self.instance = secrets.token_hex(24)
+        runtime_token = secrets.token_hex(32)
         env = os.environ.copy()
-        env.update(PYTHONUTF8="1", LONGMEMORY_LAUNCHER_INSTANCE=self.instance)
+        env.update(
+            PYTHONUTF8="1",
+            LONGMEMORY_LAUNCHER_INSTANCE=self.instance,
+            LONGMEMORY_MEMORY_TRANSPORT="runtime",
+            LONGMEMORY_RUNTIME_URL=(
+                f"http://127.0.0.1:{options.port}/api/internal/memory/prepare"
+            ),
+            LONGMEMORY_RUNTIME_TOKEN=runtime_token,
+        )
         try:
             for name, command, cwd in commands:
                 self.services[name] = OwnedService(command, cwd, env)

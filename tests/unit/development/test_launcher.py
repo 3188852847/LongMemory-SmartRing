@@ -180,6 +180,28 @@ def test_partial_start_rolls_back_only_owned_services(options, monkeypatch):
     assert calls[-1] == "stopped" and manager.services == {}
 
 
+def test_manager_gives_console_and_voice_one_ephemeral_runtime_identity(options, monkeypatch):
+    captured = []
+
+    class Owned:
+        def __init__(self, command, cwd, env):
+            captured.append(env)
+        def stop(self): pass
+
+    monkeypatch.setattr(runtime, "build_commands", lambda _: [("console", [], options.root), ("voice", [], options.root)])
+    monkeypatch.setattr(runtime, "require_free", lambda *args: None)
+    monkeypatch.setattr(runtime, "OwnedService", Owned)
+    manager = runtime.Manager()
+    try:
+        manager.start(options)
+        assert len(captured) == 2
+        assert captured[0]["LONGMEMORY_MEMORY_TRANSPORT"] == "runtime"
+        assert captured[0]["LONGMEMORY_RUNTIME_TOKEN"] == captured[1]["LONGMEMORY_RUNTIME_TOKEN"]
+        assert captured[0]["LONGMEMORY_RUNTIME_URL"].endswith("/api/internal/memory/prepare")
+    finally:
+        manager.stop()
+
+
 @pytest.mark.skipif(os.name != "nt", reason="Windows Job integration")
 def test_job_stops_descendant_but_not_external_process(tmp_path):
     # 孙进程占据合成端口，停止 Job 后端口释放；另一个独立进程仍活着。

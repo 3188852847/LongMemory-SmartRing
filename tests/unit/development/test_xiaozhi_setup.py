@@ -205,6 +205,20 @@ def test_install_memory_is_idempotent_and_preserves_other_content(tmp_path):
     assert base.read_text(encoding='utf-8') == 'unchanged'
 
 
+def test_update_memory_only_replaces_known_legacy_provider(tmp_path, monkeypatch):
+    base = tmp_path / 'core/providers/memory/base.py'
+    base.parent.mkdir(parents=True)
+    base.write_text('unchanged', encoding='utf-8')
+    target = tmp_path / 'core/providers/memory/longmemory/longmemory.py'
+    target.parent.mkdir(parents=True)
+    target.write_text('known legacy', encoding='utf-8')
+    digest = __import__('hashlib').sha256(target.read_bytes()).hexdigest()
+    monkeypatch.setattr(setup, 'LEGACY_MEMORY_PROVIDER_SHA256', {digest})
+    setup.install_memory_provider(tmp_path, allow_known_update=True)
+    assert target.read_bytes() == (SCRIPT.parent / 'longmemory_provider.py').read_bytes()
+    assert base.read_text(encoding='utf-8') == 'unchanged'
+
+
 def test_longmemory_config_requires_prompt_slot_and_explicit_device(config, tmp_path):
     config['selected_module']['Memory'] = 'LongMemory'
     config['Memory'] = {'LongMemory': dict(

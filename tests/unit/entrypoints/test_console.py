@@ -45,14 +45,17 @@ class FakeBridge:
 
 
 @asynccontextmanager
-async def console(database=None, allow_memory_delete=False, chat_backend=None, xiaozhi_server=None):
+async def console(database=None, allow_memory_delete=False, chat_backend=None,
+                  xiaozhi_server=None, memory_runtime_token=None):
     # 先占用随机回环端口，再把精确 Host 交给应用，避免探测后抢占端口。
     sock = socket.socket()
     sock.bind(("127.0.0.1", 0))
     port = sock.getsockname()[1]
     bridge = FakeBridge()
     runner = web.AppRunner(create_app(port=port, bridge=bridge, database=database,
-                                     allow_memory_delete=allow_memory_delete, chat_backend=chat_backend, xiaozhi_server=xiaozhi_server), access_log=None)
+                                     allow_memory_delete=allow_memory_delete, chat_backend=chat_backend,
+                                     xiaozhi_server=xiaozhi_server,
+                                     memory_runtime_token=memory_runtime_token), access_log=None)
     await runner.setup()
     await web.SockSite(runner, sock).start()
     try:
@@ -222,4 +225,33 @@ def test_memory_without_config_is_not_a_fake_empty_database():
             assert (await response.json())["error"] == "memory_not_configured"
             # 缺少记忆库时，设备页仍然工作，不制造两条链路之间的耦合。
             assert (await client.get(base + "/api/device")).status == 200
+    asyncio.run(run())
+
+
+def test_internal_runtime_requires_token_and_is_immediately_shared_with_web(tmp_path):
+    from longmemory.adapters.llm.fake import FakeAnswerGenerator
+    from longmemory.entrypoints.api.chat_backend import ChatBackend
+    from longmemory.methods.longmemory_v1.method import LongMemoryV1
+
+    database = tmp_path / "shared-runtime.db"
+    LongMemoryV1(database).close()
+    backend = ChatBackend(database, FakeAnswerGenerator())
+    token = "a" * 64
+
+    async def run():
+        async with console(database, chat_backend=backend, memory_runtime_token=token) as (client, base, _bridge):
+            endpoint = base + "/api/internal/memory/prepare"
+            body = {"version": 1, "query": "我养了一只叫豆包的猫"}
+            assert (await client.post(endpoint, json=body)).status == 401
+            assert (await client.post(endpoint, headers={"Authorization": "Bearer wrong"}, json=body)).status == 401
+            response = await client.post(endpoint, headers={"Authorization": "Bearer " + token}, json=body)
+            assert response.status == 200
+            written = await response.json()
+            assert written["added"] == 1 and "豆包" in written["context"]
+
+            # 网页后端没有另开一套运行时；同一进程立刻读取圆屏刚写入的事实。
+            recalled = await asyncio.to_thread(backend.run, "我的猫叫什么", ())
+            assert recalled["status"] == "completed" and "豆包" in recalled["answer"]
+            assert recalled["retrieved"][0]["source_event_ids"] == (written["turn_id"],)
+
     asyncio.run(run())

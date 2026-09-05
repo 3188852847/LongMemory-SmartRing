@@ -34,7 +34,7 @@ P1 网页会话恢复已实现：列表、新建、切换、重命名，同一�
 
 当前产品顺序：**P1 日常入口 → P2 个性化体验 → P3 日常记忆 → P4 可控主动交流 → P5 习惯驱动陪伴**。P1 最小启动面板及网页会话恢复已实现；P2 的本地声音启动和状态展示已完成，待用户试听验收后进入 P3。
 
-P3 目标已明确为四层个人记忆：L0 原始证据、L1 原子记忆、L2 场景、L3 用户画像。L0 与派生层之间保持可信性边界；外部文档进入并列知识平面，不作为 L4，也不自动成为用户事实。先实现框架无关的统一常驻 Memory Runtime 和可靠 L0/L1，再渐进增加 L2/L3 与轻量知识库；当前不引入大型智能体或知识图谱框架作为核心地基。见 [ADR-0026](docs/adr/0026-layered-memory-and-knowledge-plane.md)。
+P3 目标已明确为四层个人记忆：L0 原始证据、L1 原子记忆、L2 场景、L3 用户画像。P3.1 已离线实现网页/圆屏共享的常驻 Memory Runtime，保留旧子进程为显式回退；真实圆屏双入口待验收，算法仍是规则提取和关键词召回。外部文档进入并列知识平面，不作为 L4，也不自动成为用户事实。见 [ADR-0026](docs/adr/0026-layered-memory-and-knowledge-plane.md) 与 [ADR-0027](docs/adr/0027-shared-persistent-memory-runtime.md)。
 
 - [路线图](ROADMAP.md)：先后顺序与历史记录。
 - [产品范围与验收](docs/requirements/companion-product.md)：各阶段做什么、怎样算完成。
@@ -42,6 +42,7 @@ P3 目标已明确为四层个人记忆：L0 原始证据、L1 原子记忆、L2
 - [运行流程](docs/architecture/workflows.md)：当前步骤、失败行为和未来流程。
 - [路线变更决策 ADR-0015](docs/adr/0015-product-first-companion-roadmap.md)：变更原因与边界。
 - [分层记忆与知识边界 ADR-0026](docs/adr/0026-layered-memory-and-knowledge-plane.md)：P3 目标、来源隔离与框架边界。
+- [共享常驻 Runtime ADR-0027](docs/adr/0027-shared-persistent-memory-runtime.md)：网页/圆屏统一实例、回环令牌与失败边界。
 
 ## 2026-09-03 研究平台阶段记录（历史）
 
@@ -301,6 +302,7 @@ LongMemory-SmartRing/                              # 项目根目录
 │     │     ├─ forgetting/                         # 遗忘机制预留
 │     │     └─ consolidation/                      # 记忆整合预留
 │     ├─ application/                              # 用例编排层
+│     │  ├─ memory_runtime.py                      # 网页与圆屏共享的常驻记忆实例及串行边界
 │     │  ├─ chat/                                  # 一轮聊天闭环
 │     │  │  ├─ contracts.py                        # 回答生成器契约
 │     │  │  ├─ dto.py                              # 聊天输入输出
@@ -337,7 +339,8 @@ LongMemory-SmartRing/                              # 项目根目录
 │     │  │  ├─ security.py                         # 同源会话、CSRF、Host 与安全响应头
 │     │  │  ├─ memory_backend.py                   # 已有库装配、只读访问和删除前快照核对
 │     │  │  └─ routes/                             # 分功能 API 路由
-│     │  │     └─ memories.py                     # 记忆列表、详情和单条删除请求
+│     │  │     ├─ memories.py                     # 记忆列表、详情和单条删除请求
+│     │  │     └─ memory_runtime.py               # 仅回环、令牌鉴权的小智 Runtime 接口
 │     │  └─ xiaozhi/                               # 后续 Xiaozhi 入口
 │     │     ├─ adapter.py                          # 协议适配
 │     │     └─ mapping.py                          # 消息映射

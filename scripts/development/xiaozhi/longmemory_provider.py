@@ -9,8 +9,12 @@ import html
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 import threading
+from urllib import error as urlerror
+from urllib import request as urlrequest
+from urllib.parse import urlsplit
 
 from core.providers.memory.base import MemoryProviderBase, logger
 
@@ -46,11 +50,49 @@ class MemoryProvider(MemoryProviderBase):
             raise ValueError("当前设备不在 LongMemory 单设备演示范围内")
         super().init_memory(role_id, llm, **kwargs)
 
-    def _request(self, query):
+    def _validate_query(self, query):
         if str(self.role_id).lower() != self.allowed_device_id:
             raise RuntimeError("LongMemory 设备未初始化")
         if not isinstance(query, str) or not query.strip() or len(query) > 16000:
             raise ValueError("LongMemory 输入为空或过长")
+        return query
+
+    def _runtime_request(self, query):
+        """调用同机常驻 Runtime；写入请求失败后绝不自动重试。"""
+        url = os.environ.get("LONGMEMORY_RUNTIME_URL", "")
+        token = os.environ.get("LONGMEMORY_RUNTIME_TOKEN", "")
+        parsed = urlsplit(url)
+        try:
+            port = parsed.port
+        except ValueError:
+            port = None
+        if (parsed.scheme != "http" or parsed.hostname != "127.0.0.1" or port is None
+                or parsed.username is not None or parsed.password is not None
+                or parsed.path != "/api/internal/memory/prepare"
+                or parsed.query or parsed.fragment
+                or re.fullmatch(r"[0-9a-f]{64}", token) is None):
+            raise RuntimeError("LongMemory Runtime 启动环境无效")
+        body = json.dumps({"version": 1, "query": query}).encode("utf-8")
+        request = urlrequest.Request(
+            url,
+            data=body,
+            method="POST",
+            headers={"Content-Type": "application/json", "Authorization": "Bearer " + token},
+        )
+        try:
+            with self._lock, urlrequest.urlopen(request, timeout=20) as result:
+                if result.status != 200:
+                    raise RuntimeError("invalid status")
+                response_body = result.read(65537)
+                if len(response_body) > 65536:
+                    raise RuntimeError("response too large")
+                response = json.loads(response_body)
+        except (OSError, urlerror.URLError, ValueError, TypeError, RuntimeError, json.JSONDecodeError):
+            raise RuntimeError("LongMemory Runtime 调用失败") from None
+        return response
+
+    def _subprocess_request(self, query):
+        """兼容旧教学入口；只有显式选择时才逐轮启动子进程。"""
         env = os.environ.copy()
         env["PYTHONUTF8"] = "1"
         # 模型 Key 不作为参数或配置交给记忆入口；入口不读取模型环境变量。
@@ -65,11 +107,27 @@ class MemoryProvider(MemoryProviderBase):
                     timeout=20, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
                 )
             response = json.loads(result.stdout)
-            if result.returncode or response.get("version") != 1 or not isinstance(response.get("context"), str):
+            if result.returncode:
                 raise RuntimeError("invalid response")
         except Exception:
             # 失败即中止本轮，不返回空上下文伪装为成功，也不自动重试导致重复 L0。
             raise RuntimeError("LongMemory 调用失败；本轮未完成，未输出请求正文。") from None
+        return response
+
+    def _request(self, query):
+        query = self._validate_query(query)
+        transport = os.environ.get("LONGMEMORY_MEMORY_TRANSPORT", "subprocess")
+        if transport == "runtime":
+            response = self._runtime_request(query)
+        elif transport == "subprocess":
+            response = self._subprocess_request(query)
+        else:
+            raise RuntimeError("LongMemory 传输方式无效")
+        if (response.get("version") != 1 or not isinstance(response.get("context"), str)
+                or not isinstance(response.get("turn_id"), str)
+                or type(response.get("added")) is not int
+                or type(response.get("retrieved")) is not int):
+            raise RuntimeError("LongMemory 返回协议无效")
         logger.bind(tag="LongMemory").info(
             "记忆处理完成 turn_id={} added={} retrieved={}",
             response["turn_id"], response["added"], response["retrieved"],

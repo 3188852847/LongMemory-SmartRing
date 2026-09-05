@@ -26,7 +26,8 @@ class LongMemoryV1:
     implementation_version = "1"
     capabilities = MethodCapabilities(source_trace=True)
 
-    def __init__(self, database_path: Path, *, existing_only: bool = False, read_only: bool = False) -> None:
+    def __init__(self, database_path: Path, *, existing_only: bool = False,
+                 read_only: bool = False, allow_cross_thread: bool = False) -> None:
         # 沿用原实时装配的建库/版本检查行为；不能据此声称是只读实验入口。
         # 每个实例自己拥有连接，不缓存全局数据库，也不跨线程共享。
         if read_only and not existing_only:
@@ -34,7 +35,14 @@ class LongMemoryV1:
         if existing_only:
             # 网页不能隐式建库或升级；mode=rw 在文件缺失时直接失败。
             mode = "ro" if read_only else "rw"
-            self.connection = sqlite3.connect(database_path.resolve().as_uri() + "?mode=" + mode, uri=True, timeout=2)
+            self.connection = sqlite3.connect(
+                database_path.resolve().as_uri() + "?mode=" + mode,
+                uri=True,
+                timeout=2,
+                # 常驻 Runtime 会用自己的互斥锁串行化访问。普通调用方仍保留
+                # SQLite 默认的线程归属检查，不能无意间跨线程共享连接。
+                check_same_thread=not allow_cross_thread,
+            )
             self.connection.row_factory = sqlite3.Row
             self.connection.execute("PRAGMA foreign_keys = ON")
             self.connection.execute("PRAGMA trusted_schema = OFF")

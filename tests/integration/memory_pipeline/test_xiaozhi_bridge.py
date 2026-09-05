@@ -9,6 +9,7 @@ import re
 import sqlite3
 import subprocess
 import sys
+from urllib.error import URLError
 from types import ModuleType, SimpleNamespace
 
 import pytest
@@ -161,6 +162,46 @@ def test_context_survives_upstream_regex_replacement(provider_class, config, mon
     prompt = re.sub(r"<memory>.*?</memory>", f"<memory>\n{rendered}\n</memory>", "<memory></memory>", flags=re.DOTALL)
     assert "C:\\new\\1" in prompt
     assert prompt.count("</memory>") == 1
+
+
+def test_provider_uses_runtime_transport_without_starting_subprocess(provider_class, config, monkeypatch):
+    provider = provider_class(config)
+    provider.init_memory(config["allowed_device_id"], None)
+    calls = []
+
+    class Response:
+        status = 200
+        def __enter__(self): return self
+        def __exit__(self, *_args): return None
+        def read(self, _limit):
+            return json.dumps({"version": 1, "context": "用户养猫。", "turn_id": "turn-1",
+                               "added": 1, "retrieved": 1}).encode()
+
+    def open_request(request, timeout):
+        calls.append((request, timeout))
+        return Response()
+
+    monkeypatch.setenv("LONGMEMORY_MEMORY_TRANSPORT", "runtime")
+    monkeypatch.setenv("LONGMEMORY_RUNTIME_URL", "http://127.0.0.1:8767/api/internal/memory/prepare")
+    monkeypatch.setenv("LONGMEMORY_RUNTIME_TOKEN", "a" * 64)
+    monkeypatch.setattr("urllib.request.urlopen", open_request)
+    monkeypatch.setattr(subprocess, "run", lambda *_a, **_k: pytest.fail("不应启动逐轮子进程"))
+    assert "养猫" in asyncio.run(provider.query_memory("我养猫"))
+    request, timeout = calls[0]
+    assert request.get_header("Authorization") == "Bearer " + "a" * 64
+    assert timeout == 20
+
+
+def test_runtime_failure_does_not_fall_back_and_duplicate_write(provider_class, config, monkeypatch):
+    provider = provider_class(config)
+    provider.init_memory(config["allowed_device_id"], None)
+    monkeypatch.setenv("LONGMEMORY_MEMORY_TRANSPORT", "runtime")
+    monkeypatch.setenv("LONGMEMORY_RUNTIME_URL", "http://127.0.0.1:8767/api/internal/memory/prepare")
+    monkeypatch.setenv("LONGMEMORY_RUNTIME_TOKEN", "b" * 64)
+    monkeypatch.setattr("urllib.request.urlopen", lambda *_a, **_k: (_ for _ in ()).throw(URLError("synthetic")))
+    monkeypatch.setattr(subprocess, "run", lambda *_a, **_k: pytest.fail("失败后不得自动回退"))
+    with pytest.raises(RuntimeError):
+        asyncio.run(provider.query_memory("我养猫"))
 
 
 def test_bridge_scripts_have_python310_syntax():

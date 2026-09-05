@@ -4,6 +4,7 @@ import argparse
 import asyncio
 import os
 from pathlib import Path
+import re
 
 from aiohttp import web
 
@@ -18,8 +19,10 @@ from .experiment_jobs import ExperimentJobs
 from .routes.experiment_jobs import register_job_routes
 from .react_assets import register_react_routes
 from .routes.assistant_role import register_role_routes
+from .routes.memory_runtime import register_memory_runtime_routes
 from .device_role import DeviceRole
 from .voice_settings import VoiceSettings, register_voice_routes
+from longmemory.infrastructure.logging.setup import configure_file_logging, close_file_logging
 
 ROOT = Path(__file__).resolve().parents[4]
 STATIC_FILES = {
@@ -45,12 +48,16 @@ STATIC_FILES = {
 }
 
 
-def create_app(*, port=8765, bridge=None, web_root=None, database=None, allow_memory_delete=False, chat_backend=None, experiment_backend=None, job_backend=None, instance_id=None, xiaozhi_server=None):
+def create_app(*, port=8765, bridge=None, web_root=None, database=None, allow_memory_delete=False,
+               chat_backend=None, experiment_backend=None, job_backend=None, instance_id=None,
+               xiaozhi_server=None, memory_runtime_token=None):
     sessions = Sessions()
     assets = web_root or ROOT / "web"
     client = bridge if bridge is not None else XiaozhiControlClient(ROOT / "data/control/device-control.token")
     operation_lock = asyncio.Lock()
-    app = web.Application(client_max_size=1024, middlewares=[security_middleware(f"127.0.0.1:{port}", sessions)])
+    app = web.Application(client_max_size=1024, middlewares=[
+        security_middleware(f"127.0.0.1:{port}", sessions, memory_runtime_token)
+    ])
 
     async def static(request):
         # 不把仓库当作静态文件目录，避免 .env、数据库和令牌被网页下载。
@@ -112,6 +119,8 @@ def create_app(*, port=8765, bridge=None, web_root=None, database=None, allow_me
     app.router.add_post("/api/device/volume", volume)
     register_memory_routes(app, MemoryBackend(database, allow_delete=allow_memory_delete))
     register_chat_routes(app, chat_backend)
+    if memory_runtime_token:
+        register_memory_runtime_routes(app, chat_backend)
     device_role = DeviceRole(xiaozhi_server, chat_backend.roles, chat_backend.database, ROOT) if xiaozhi_server and chat_backend else None
     register_role_routes(app, chat_backend, device_role)
     register_voice_routes(app, VoiceSettings(xiaozhi_server, chat_backend.database, ROOT) if xiaozhi_server and chat_backend else None)
@@ -128,6 +137,7 @@ def main():
     parser.add_argument("--database", type=Path, help="已有 V3 记忆数据库；不自动建库或迁移")
     parser.add_argument("--allow-memory-delete", action="store_true", help="启用网页单条删除；默认只读")
     parser.add_argument("--enable-chat", action="store_true", help="允许网页向指定已有记忆库写入对话和记忆")
+    parser.add_argument("--memory-audit-log", type=Path, help="共享记忆 Runtime 的脱敏审计日志")
     parser.add_argument("--chat-provider", choices=("fake", "openai_compatible"), default="fake")
     parser.add_argument("--assistant-role", choices=("plain_v1", "elysia_v1"), default="plain_v1")
     parser.add_argument("--xiaozhi-server", type=Path, help="允许用户确认后同步角色到此小智目录；不会自动修改配置或重启")
@@ -139,6 +149,8 @@ def main():
         parser.error("启用删除前必须用 --database 指定已有数据库")
     if args.enable_chat and args.database is None:
         parser.error("启用文字聊天前必须用 --database 指定已有数据库")
+    if args.memory_audit_log and not args.enable_chat:
+        parser.error("记忆审计日志仅在启用文字聊天/共享 Runtime 时有效")
     chat_backend = None
     job_backend = None
     if args.enable_experiment_runs:
@@ -171,17 +183,27 @@ def main():
             print("警告：模型 HTTP 会明文传输凭据、对话和检索证据；仅用于已确认风险的校园网合成体验。")
     if not all((ROOT / "web" / path).is_file() for path, _mime in STATIC_FILES.values()):
         parser.error("控制台静态资源缺失；当前入口需要从完整源代码仓库可编辑安装后启动")
+    runtime_token = os.environ.get("LONGMEMORY_RUNTIME_TOKEN")
+    if runtime_token is not None and re.fullmatch(r"[0-9a-f]{64}", runtime_token) is None:
+        parser.error("LONGMEMORY_RUNTIME_TOKEN 必须是启动器生成的 64 位小写十六进制值")
     print(f"控制台：http://127.0.0.1:{args.port}；仅本机访问，Ctrl+C 停止。")
     if args.database:
         print(f"记忆库：{args.database.resolve()}；管理页" + ("允许单条删除（L0 保留）" if args.allow_memory_delete else "只读"))
     if chat_backend:
         print(f"文字聊天已启用：{args.chat_provider} / {args.assistant_role}；会写入 L0/L1，不驱动圆屏播音。")
+    audit_handler = configure_file_logging(args.memory_audit_log) if args.memory_audit_log else None
     try:
         web.run_app(create_app(port=args.port, database=args.database, allow_memory_delete=args.allow_memory_delete, chat_backend=chat_backend, job_backend=job_backend,
-                               instance_id=os.environ.get("LONGMEMORY_LAUNCHER_INSTANCE"), xiaozhi_server=args.xiaozhi_server),
+                               instance_id=os.environ.get("LONGMEMORY_LAUNCHER_INSTANCE"), xiaozhi_server=args.xiaozhi_server,
+                               memory_runtime_token=runtime_token),
                     host="127.0.0.1", port=args.port, access_log=None, print=None)
     except OSError:
         parser.exit(1, f"控制台未能绑定 127.0.0.1:{args.port}。请检查旧控制台是否仍在运行或端口权限；未自动停止其他进程、未换端口。\n")
+    finally:
+        if chat_backend is not None:
+            chat_backend.close()
+        if audit_handler is not None:
+            close_file_logging(audit_handler)
 
 
 if __name__ == "__main__":

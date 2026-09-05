@@ -109,3 +109,23 @@ def test_model_payload_preserves_roles_and_legacy_generate_protocol(database):
     assert payloads[0]["messages"][1]["content"] == "synthetic role"
     generator.generate(query="独立问题", memory_context="")
     assert "上一句" not in json.dumps(payloads[1], ensure_ascii=False)
+
+
+def test_shared_runtime_serializes_two_entry_threads(database):
+    backend = ChatBackend(database, FakeAnswerGenerator())
+    barrier = threading.Barrier(2)
+
+    def prepare(_index):
+        barrier.wait(timeout=3)
+        return backend.memory_runtime().prepare_user("我养了一只叫豆包的猫")
+
+    try:
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            turns = list(pool.map(prepare, (1, 2)))
+        operations = sorted(turn.observation.writes[0].operation for turn in turns)
+        assert operations == ["add", "noop"]
+        with sqlite3.connect(database) as connection:
+            assert connection.execute("SELECT count(*) FROM atomic_memories").fetchone()[0] == 1
+            assert connection.execute("SELECT count(*) FROM memory_evidence").fetchone()[0] == 2
+    finally:
+        backend.close()
