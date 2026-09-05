@@ -56,7 +56,7 @@ def sync(server, body):
     return commit_change(path, body, original, updated, matches)
 
 
-def commit_change(path, body, original, updated, matches):
+def commit_change(path, body, original, updated, matches, backup_label='role'):
     """角色和音色共用排他锁、原文备份与版本检查，不覆盖并发修改。"""
     digest = hashlib.sha256(original).hexdigest()
     result = {'config_matches': matches, 'digest': digest, 'runtime': 'unverified'}
@@ -78,7 +78,9 @@ def commit_change(path, body, original, updated, matches):
         try:
             if path.read_bytes() != original:
                 raise ValueError('config_changed')
-            backup = path.with_name(path.name + '.role-' + uuid.uuid4().hex + '.bak')
+            if backup_label not in {'role', 'model'}:
+                raise ValueError('invalid_backup_label')
+            backup = path.with_name(path.name + '.' + backup_label + '-' + uuid.uuid4().hex + '.bak')
             with backup.open('xb') as handle:
                 handle.write(original)
                 handle.flush(); os.fsync(handle.fileno())

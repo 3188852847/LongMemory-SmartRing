@@ -4,6 +4,11 @@
 
 ## Unreleased
 
+### Campus model endpoint update（2026-09-05）
+
+- 更新 LongMemory 与小智私有配置中的学校模型基础地址、模型名及凭据；完整 Chat Completions 地址规范化为由客户端追加路径的 `/v1` 基础地址。
+- 小智修改前创建私有备份，新增只替换三个模型标量的离线同步工具和合成测试；未调用校园网模型，密钥、私有配置与备份不提交 Git。
+
 ### VoxCPM2 isolated trial（2026-09-05）
 
 - 增加固定版本、独立 Python/CUDA 环境和离线试听脚本；模型与音频保持 Git 忽略，不侵入主项目和小智环境。
