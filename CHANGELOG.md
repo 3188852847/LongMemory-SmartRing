@@ -13,7 +13,9 @@
 - 修复健康检查连接遗留 `TIME_WAIT` 时无法立即重启：VoxCPM2 仅拒绝真实监听者并允许环回服务重绑；其他端口仍按独占方式预检。
 - 修复统一启动器的旧配置校验仍写死 `EdgeTTS`、导致已同步 VoxCPM2 后 voice 以退出码 3 退出；启动链现在显式传递并严格核对所选 TTS 后端。
 - 配置预检允许学校新网关的“实例路径 + `/v1`”基础地址，同时继续拒绝完整 `chat/completions` 路径和非 API 根路径。
-- 验证：482 项 Python 与 2 项 React 测试通过；真实本机 HTTP 请求返回 48 kHz、单声道、16 位、2.88 秒有效 WAV。尚未完成 Xiaozhi/圆屏端到端试听。
+- React 声音设置现在只读展示当前 EdgeTTS/VoxCPM2 后端、配置契约与本机模型服务就绪状态；VoxCPM2 参数仍由统一启动面板管理。
+- VoxCPM2 拒绝浏览器 Origin 前仅排空有限请求体，避免 Windows 连接重置吞掉预期的 403；不解析或合成被拒绝文本。
+- 验证：484 项 Python 与 2 项 React 测试、TypeScript 检查及生产构建通过；真实本机 HTTP 请求返回 48 kHz、单声道、16 位、2.88 秒有效 WAV。尚未完成 Xiaozhi/圆屏端到端试听。
 
 ### Campus model endpoint update（2026-09-05）
 

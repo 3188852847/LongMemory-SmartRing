@@ -122,11 +122,21 @@ class VoxCPMHandler(BaseHTTPRequestHandler):
         # 不提供 CORS；网页不能把本服务当作任意本机 GPU 接口。
         self._json(405, {"error": "method_not_allowed"})
 
+    def _discard_small_body(self):
+        """拒绝请求前排空有限正文，避免 Windows 用 TCP reset 吞掉 HTTP 错误响应。"""
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+        except ValueError:
+            return
+        if 0 < length <= MAX_REQUEST_BYTES:
+            self.rfile.read(length)
+
     def do_POST(self):
         if self.path != "/v1/audio/speech":
             self._json(404, {"error": "not_found"})
             return
         if self.headers.get("Origin") is not None:
+            self._discard_small_body()
             self._json(403, {"error": "browser_origin_rejected"})
             return
         content_type = self.headers.get_content_type()

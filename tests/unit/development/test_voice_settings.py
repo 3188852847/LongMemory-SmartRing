@@ -21,6 +21,7 @@ def test_voice_config_only_changes_voice_and_backs_up(tmp_path):
     path.write_text(yaml.safe_dump(config), encoding='utf-8'); original = path.read_bytes()
     body = {'action':'check', 'database':str(tmp_path / 'test.db'), 'project':str(tmp_path)}
     checked = module.settings(tmp_path, body)
+    assert checked['backend'] == 'edge' and checked['config_matches'] is True
     assert path.read_bytes() == original and len(list(path.parent.iterdir())) == 1
     apply = body | {'action':'apply', 'voice':module.VOICES[1], 'expected_digest':checked['digest']}
     result = module.settings(tmp_path, apply)
@@ -32,6 +33,27 @@ def test_voice_config_only_changes_voice_and_backs_up(tmp_path):
     config['TTS']['EdgeTTS']['private_voice'] = 'override'
     path.write_text(yaml.safe_dump(config), encoding='utf-8')
     with pytest.raises(ValueError): module.settings(tmp_path, body)
+
+
+def test_voxcpm_status_is_read_only_and_sanitized(tmp_path):
+    import yaml
+    server = tmp_path
+    config = {'prompt': 'synthetic', 'selected_module': {'Memory': 'LongMemory', 'TTS': 'CustomTTS'},
+              'Memory': {'LongMemory': {'database_path': str(tmp_path / 'demo.db'),
+                                        'project_root': str(tmp_path / 'project')}},
+              'TTS': {'CustomTTS': {'type': 'custom', 'method': 'POST', 'url': module.VOX_URL,
+                                     'format': 'wav', 'params': {'input': '{prompt_text}',
+                                                                 'response_format': 'wav', 'stream': False}}},
+              'LLM': {'secret': 'SYNTHETIC_SECRET'}}
+    path = server / 'data/.config.yaml'; path.parent.mkdir(parents=True)
+    path.write_text(yaml.safe_dump(config, allow_unicode=True), encoding='utf-8')
+    body = {'action': 'check', 'database': str(tmp_path / 'demo.db'), 'project': str(tmp_path / 'project')}
+    result = module.settings(server, body)
+    assert result['backend'] == 'voxcpm2' and result['voice'] == 'plain'
+    assert result['config_matches'] is True and result['editable'] is False
+    assert 'SYNTHETIC_SECRET' not in str(result)
+    with pytest.raises(ValueError):
+        module.settings(server, body | {'action': 'apply', 'voice': 'plain'})
 
 
 def test_preview_fixed_text_and_size_limit():

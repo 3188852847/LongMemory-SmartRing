@@ -1,9 +1,26 @@
 import asyncio
+import json
 from test_console import console, login
 from longmemory.entrypoints.api import server
 from longmemory.entrypoints.api.chat_backend import ChatBackend
 from longmemory.adapters.llm.fake import FakeAnswerGenerator
 from longmemory.methods.longmemory_v1.method import LongMemoryV1
+
+
+def test_voxcpm_health_requires_expected_local_service(monkeypatch):
+    class Response:
+        status = 200
+        def read(self, _limit):
+            return json.dumps({'ready': True, 'provider': 'voxcpm2'}).encode()
+    class Connection:
+        def __init__(self, host, port, timeout):
+            assert (host, port, timeout) == ('127.0.0.1', 18768, 0.5)
+        def request(self, method, path):
+            assert (method, path) == ('GET', '/health')
+        def getresponse(self): return Response()
+        def close(self): pass
+    monkeypatch.setattr('longmemory.entrypoints.api.voice_settings.http.client.HTTPConnection', Connection)
+    assert server.VoiceSettings.voxcpm_ready() is True
 
 
 def test_voice_api_auth_strict_body_and_audio(tmp_path, monkeypatch):

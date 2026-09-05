@@ -1,6 +1,7 @@
-"""在小智环境中运行；仅操作 EdgeTTS.voice，试听只合成固定文本。"""
+"""在小智环境中读取声音后端；仅 EdgeTTS 支持音色修改与固定文本试听。"""
 import asyncio
 import copy
+import hashlib
 import json
 from pathlib import Path
 import sys
@@ -9,6 +10,17 @@ from sync_role import commit_change, prepare
 
 VOICES = ('zh-CN-XiaoxiaoNeural', 'zh-CN-XiaoyiNeural', 'zh-CN-YunxiNeural', 'zh-CN-YunjianNeural')
 TEXT = '你好，很高兴见到你。今天过得怎么样？我们慢慢聊。'
+VOX_URL = 'http://127.0.0.1:18768/v1/audio/speech'
+
+
+def _voxcpm_contract(config):
+    custom = config.get('TTS', {}).get('CustomTTS', {})
+    params = custom.get('params', {}) if isinstance(custom, dict) else {}
+    return (isinstance(custom, dict) and custom.get('type') == 'custom'
+            and custom.get('method') == 'POST' and custom.get('url') == VOX_URL
+            and custom.get('format') == 'wav' and isinstance(params, dict)
+            and params.get('input') == '{prompt_text}'
+            and params.get('response_format') == 'wav' and params.get('stream') is False)
 
 
 def settings(server, body):
@@ -20,8 +32,18 @@ def settings(server, body):
     original, _, _ = prepare(path, before.get('prompt'), body['database'], body['project'])
     if original != raw:
         raise ValueError('config_changed')
-    if before.get('selected_module', {}).get('TTS') != 'EdgeTTS':
-        raise ValueError('unsupported_tts')
+    selected = before.get('selected_module', {}).get('TTS')
+    digest = hashlib.sha256(raw).hexdigest()
+    if selected == 'CustomTTS':
+        if body.get('action') != 'check':
+            raise ValueError('unsupported_tts_operation')
+        return {'backend': 'voxcpm2', 'voice': 'plain', 'voices': [], 'digest': digest,
+                'text': TEXT, 'config_matches': _voxcpm_contract(before), 'editable': False}
+    if selected != 'EdgeTTS':
+        if body.get('action') != 'check':
+            raise ValueError('unsupported_tts_operation')
+        return {'backend': 'unsupported', 'voice': None, 'voices': [], 'digest': digest,
+                'text': TEXT, 'config_matches': False, 'editable': False}
     config = before.get('TTS', {}).get('EdgeTTS', {})
     if config.get('type') != 'edge' or config.get('private_voice'):
         raise ValueError('unsupported_tts')
@@ -50,7 +72,8 @@ def settings(server, body):
     if yaml.safe_load(updated) != expected:
         raise ValueError('unexpected_config_change')
     result = commit_change(path, body, raw, updated.encode('utf-8'), current == voice)
-    return result | {'voice': voice, 'voices': list(VOICES), 'text': TEXT}
+    return result | {'backend': 'edge', 'voice': voice, 'voices': list(VOICES), 'text': TEXT,
+                     'config_matches': True, 'editable': True, 'service_ready': None}
 
 
 async def preview(voice, factory=None):

@@ -1,5 +1,6 @@
 """本机音色窄接口：固定进程、固定文本、单次请求、不自动重试。"""
 import asyncio
+import http.client
 import json
 import os
 from pathlib import Path
@@ -13,6 +14,20 @@ class VoiceSettings:
         self.server, self.database, self.project = Path(server).resolve(), database, Path(project)
         self.lock = asyncio.Lock()
         self.last_preview = float('-inf')
+
+    @staticmethod
+    def voxcpm_ready():
+        """只读取固定环回健康端点；失败表示未就绪，不把底层异常返回页面。"""
+        connection = http.client.HTTPConnection('127.0.0.1', 18768, timeout=0.5)
+        try:
+            connection.request('GET', '/health')
+            response = connection.getresponse()
+            body = json.loads(response.read(4096))
+            return response.status == 200 and body.get('ready') is True and body.get('provider') == 'voxcpm2'
+        except (OSError, http.client.HTTPException, json.JSONDecodeError):
+            return False
+        finally:
+            connection.close()
 
     async def call(self, body):
         if self.lock.locked():
@@ -35,7 +50,12 @@ class VoiceSettings:
                 raise ValueError('voice_operation_unverified') from None
             if result.returncode or not result.stdout or len(result.stdout) > 2 * 1024 * 1024:
                 raise ValueError('voice_operation_failed')
-            return result.stdout if body['action'] == 'preview' else json.loads(result.stdout)
+            if body['action'] == 'preview':
+                return result.stdout
+            value = json.loads(result.stdout)
+            if body['action'] == 'check' and value.get('backend') == 'voxcpm2':
+                value['service_ready'] = await asyncio.to_thread(self.voxcpm_ready)
+            return value
 
 
 def register_voice_routes(app, backend):
