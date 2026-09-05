@@ -4,6 +4,13 @@
 
 ## Unreleased
 
+### P3 layered memory and knowledge boundary（2026-09-05）
+
+- 接受 L0 原始证据、L1 原子记忆、L2 场景、L3 用户画像的目标抽象；“双层表示”改为 L0 证据与 L1/L2/L3 派生数据之间的可信性边界。
+- 将外部知识定义为并列平面而非 L4，预留中立 `KnowledgeProvider`；文档主张、模型推断和用户陈述必须保持来源隔离。
+- 明确 P3 先统一常驻 Memory Runtime 和可靠 L0/L1，再渐进建设 L2/L3 与轻量知识库；LangChain、LangGraph、Deep Agents 和 Semantica 当前均不作为核心依赖。
+- 本次只更新决策、架构、流程与路线文档；未新增依赖、schema 或运行服务，未迁移个人数据库。
+
 ### VoxCPM2 Xiaozhi adapter（2026-09-05）
 
 - 核对当前 Xiaozhi TTS Provider 契约，复用上游 `CustomTTS` 与 WAV→设备采样率→Opus 转换，不修改圆屏固件或复制上游 Provider。
