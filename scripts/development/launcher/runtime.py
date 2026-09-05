@@ -46,6 +46,14 @@ def require_free(host, port):
             raise ValueError(f"地址 {host}:{port} 不可绑定：{reason} 未关闭其他程序。") from None
 
 
+def require_no_listener(host, port):
+    """VoxCPM2 可越过旧健康连接的 TIME_WAIT，但不覆盖真实监听者。"""
+    with socket.socket() as sock:
+        sock.settimeout(0.25)
+        if sock.connect_ex((host, port)) == 0:
+            raise ValueError(f"地址 {host}:{port} 已有服务监听；未关闭该程序。")
+
+
 def build_commands(options, uv=None):
     """返回参数列表，绝不拼接 shell 命令；只引用现有环境和配置。"""
     if not options.consent:
@@ -158,7 +166,7 @@ class Manager:
             for host, port in [(options.lan_ip, 8000), (options.lan_ip, 8003), ("127.0.0.1", 8766)]:
                 require_free(host, port)
             if options.tts_backend == "voxcpm2":
-                require_free("127.0.0.1", VOXCPM_PORT)
+                require_no_listener("127.0.0.1", VOXCPM_PORT)
         self.options = options
         self.instance = secrets.token_hex(24)
         env = os.environ.copy()

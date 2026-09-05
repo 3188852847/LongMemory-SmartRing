@@ -144,6 +144,17 @@ def test_singleton_and_occupied_port_are_non_destructive():
     runtime.require_free("127.0.0.1", port)
 
 
+def test_voxcpm_listener_check_rejects_listener_but_not_closed_port():
+    listener = socket.socket(); listener.bind(("127.0.0.1", 0)); listener.listen(1)
+    port = listener.getsockname()[1]
+    try:
+        with pytest.raises(ValueError):
+            runtime.require_no_listener("127.0.0.1", port)
+    finally:
+        listener.close()
+    runtime.require_no_listener("127.0.0.1", port)
+
+
 def test_partial_start_rolls_back_only_owned_services(options, monkeypatch):
     calls = []
 

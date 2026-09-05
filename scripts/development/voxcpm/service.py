@@ -85,7 +85,9 @@ class VoxCPMSynthesizer:
 
 class VoxCPMHTTPServer(ThreadingHTTPServer):
     daemon_threads = True
-    allow_reuse_address = False
+    # Xiaozhi/启动面板会轮询健康接口，停止后 Windows 留下 TIME_WAIT。
+    # 仅环回监听且启动器另行拒绝真实 listener，允许立即重启同一服务端口。
+    allow_reuse_address = True
 
     def __init__(self, address, synthesizer: SpeechSynthesizer):
         super().__init__(address, VoxCPMHandler)
