@@ -12,7 +12,7 @@
 
 ## 当前状态
 
-VoxCPM2 正进行独立本地试听准备：模型已到位并通过官方 SHA256 校验，独立依赖安装仍未完成，尚未生成真实试听；不替换 Edge TTS。见 [VoxCPM2 独立试听](docs/guides/VoxCPM2独立试听.md)。
+VoxCPM2 独立本地试听已跑通：固定官方权重、CUDA 加载与两段 48 kHz 合成音频均验证成功；尚未接入小智或替换 Edge TTS，真实听感待用户判断。见 [VoxCPM2 独立试听](docs/guides/VoxCPM2独立试听.md)。
 
 P2 新增声音设置：四种 Edge TTS 音色、固定文本联网试听和确认保存。入口 `/chat-react`，保存后需重启小智；实机听感待验收。见[声音设置](docs/guides/声音设置.md)。
 

@@ -49,6 +49,10 @@ def main():
     from voxcpm import VoxCPM
     if not torch.cuda.is_available():
         raise SystemExit('CUDA 不可用，停止而不是悄悄改用 CPU。')
+    # PyPI 2.0.3 的 generate 尚不接受官方 main 分支文档里的 seed 参数；
+    # 固定 PyTorch 随机源用于尽量减少试听波动，但不宣称跨平台完全确定。
+    torch.manual_seed(42)
+    torch.cuda.manual_seed_all(42)
     started = time.perf_counter()
     model = VoxCPM.from_pretrained(str(MODEL), load_denoiser=False, optimize=False, device='cuda')
     load_seconds = time.perf_counter() - started
@@ -60,7 +64,7 @@ def main():
     for name, text in samples:
         started = time.perf_counter()
         wav = model.generate(text=text, cfg_value=2.0, inference_timesteps=10,
-                             seed=42, normalize=False, denoise=False, retry_badcase=False, max_len=300)
+                             normalize=False, denoise=False, retry_badcase=False, max_len=300)
         elapsed = time.perf_counter() - started
         if not len(wav) or not np.isfinite(wav).all():
             raise RuntimeError('无有效音频')
@@ -70,7 +74,8 @@ def main():
                         'audio_seconds':len(wav)/rate, 'sample_rate':rate})
     report = {'revision':REVISION, 'load_seconds':load_seconds, 'torch':torch.__version__,
               'gpu':torch.cuda.get_device_name(), 'peak_allocated_bytes':torch.cuda.max_memory_allocated(),
-              'samples':records, 'note':'单次独立试听，不代表流式延迟或圆屏端到端性能。'}
+              'samples':records, 'randomness':'torch manual seed 42；PyPI 2.0.3 API 无 seed 参数，不保证完全确定',
+              'note':'单次独立试听，不代表流式延迟或圆屏端到端性能。'}
     (output / 'report.json').write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding='utf-8')
     print(json.dumps(report, ensure_ascii=False, indent=2))
     print('试听目录：', output)
