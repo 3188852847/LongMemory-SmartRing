@@ -1,7 +1,7 @@
 import {useEffect, useRef, useState} from 'react';
-import {Button, Card, Checkbox, ConfigProvider, Descriptions, Drawer, Empty, Input, List, Modal, Select, Space, Switch, Tabs, Tag, theme} from 'antd';
+import {Button, Card, Checkbox, Descriptions, Drawer, Empty, Input, List, Modal, Select, Space, Switch, Tabs, Tag} from 'antd';
 import {ChatApi} from './api';
-import {normalize, read, apply} from '../../assets/appearance.mjs';
+import {AppShell, ConsoleNav} from './AppShell';
 
 type MemoryConfig = {configured: boolean; database: string | null; allow_delete: boolean; allow_correction: boolean};
 type RuntimeMode = {write_enabled: boolean; use_enabled: boolean; persistent: boolean; l0_archived_when_write_disabled: boolean};
@@ -14,7 +14,6 @@ type L0Detail = {id: string; role: 'user' | 'assistant'; content: string; create
 type Page<T> = {items: T[]; total: number; limit: number; offset: number};
 
 const api = new ChatApi();
-const nonce = document.querySelector<HTMLMetaElement>('meta[name="style-nonce"]')?.content;
 const displayTime = (value?: string | null) => value ? new Date(value).toLocaleString('zh-CN') : '未记录';
 const sourceName = (value: string) => value === 'user_stated' ? '用户陈述' : value === 'user_corrected' ? '用户纠正' : value;
 
@@ -38,16 +37,6 @@ export function MemoryApp() {
   const [deleting, setDeleting] = useState(false);
   const [deleteUnderstood, setDeleteUnderstood] = useState(false);
   const locked = useRef(false);
-  const [prefs] = useState(() => {try {return read(localStorage);} catch {return normalize(null);}});
-  const [dark, setDark] = useState(matchMedia('(prefers-color-scheme: dark)').matches);
-
-  useEffect(() => {
-    const media = matchMedia('(prefers-color-scheme: dark)');
-    const change = () => setDark(media.matches);
-    media.addEventListener('change', change);
-    return () => media.removeEventListener('change', change);
-  }, []);
-  useEffect(() => {apply(document.documentElement, prefs, dark);}, [prefs, dark]);
 
   async function fetchL1(offset = 0, search = query, stateFilter = l1State) {
     const params = new URLSearchParams({q: search, state: stateFilter, offset: String(offset), limit: '25'});
@@ -132,12 +121,11 @@ export function MemoryApp() {
   }
 
   const page = tab === 'l1' ? l1 : l0;
-  return <ConfigProvider csp={{nonce}} theme={{algorithm: (prefs.theme === 'dark' || (prefs.theme === 'system' && dark)) ? theme.darkAlgorithm : theme.defaultAlgorithm,
-    token: {colorPrimary: '#b62e68', fontSize: prefs.size === 'larger' ? 20 : prefs.size === 'large' ? 18 : 16, borderRadius: 10}}}>
-    <div className="shell memory-shell"><aside><a className="brand" href="/chat-react">LongMemory</a><p>可追溯的个人记忆</p>
-      <nav><a href="/chat-react">文字聊天</a><strong>记忆管理</strong><a href="/">设备与状态</a><a href="/experiments">实验中心</a><a href="/memories-legacy">返回原版记忆页</a></nav>
+  const sidebar = <>
+      <ConsoleNav active="memories" legacyPath="/memories-legacy"/>
       <Card size="small" title="层级说明"><p><Tag color="magenta">L1</Tag>规范化、可召回的派生事实</p><p><Tag color="blue">L0</Tag>用户或助手当时说过的原文</p></Card>
-    </aside><main><header><div><h1>记忆管理</h1><small>{config?.database ?? '未指定记忆库'}</small></div><Button loading={busy} disabled={!config?.configured} onClick={() => void refresh(page.offset)}>刷新</Button></header>
+    </>;
+  return <><AppShell subtitle="可追溯的个人记忆" className="memory-shell" sidebar={sidebar}><header><div><h1>记忆管理</h1><small>{config?.database ?? '未指定记忆库'}</small></div><Button loading={busy} disabled={!config?.configured} onClick={() => void refresh(page.offset)}>刷新</Button></header>
       {mode && <Card className="mode-card" title="本次运行的记忆模式"><Space wrap size="large">
         <Space><Switch checked={modeDraft.write_enabled} disabled={busy} onChange={value => setModeDraft({...modeDraft, write_enabled: value})}/><span>从新对话生成 L1</span></Space>
         <Space><Switch checked={modeDraft.use_enabled} disabled={busy} onChange={value => setModeDraft({...modeDraft, use_enabled: value})}/><span>回答时使用已有记忆</span></Space>
@@ -155,7 +143,7 @@ export function MemoryApp() {
           <List.Item.Meta title={<Space><Tag color="blue">L0</Tag><Tag>{item.role === 'user' ? '用户' : '助手'}</Tag><span>{item.content}{item.truncated ? '…' : ''}</span></Space>} description={<Space wrap><span>{displayTime(item.created_at)}</span><Tag color={item.linked_memory_count ? 'green' : 'default'}>{item.linked_memory_count ? `已关联 ${item.linked_memory_count} 条 L1` : '未形成 L1'}</Tag></Space>}/></List.Item>}/>}
       <div className="pagination"><Button disabled={busy || page.offset === 0} onClick={() => void refresh(Math.max(0, page.offset - page.limit))}>上一页</Button><span>{page.total ? `${page.offset + 1}–${Math.min(page.offset + page.limit, page.total)} / ${page.total}` : '0 条'}</span><Button disabled={busy || page.offset + page.limit >= page.total} onClick={() => void refresh(page.offset + page.limit)}>下一页</Button></div>
       <p role="status">{notice}</p>
-    </main></div>
+    </AppShell>
     <Drawer width={620} title="L1 原子记忆" open={Boolean(selectedL1)} onClose={() => setSelectedL1(undefined)} extra={<Space><Button disabled={!config?.allow_correction || selectedL1?.state !== 'active'} onClick={() => setCorrecting(true)}>纠正</Button><Button danger disabled={!config?.allow_delete} onClick={() => setDeleting(true)}>删除</Button></Space>}>
       {selectedL1 && <><p className="detail-content">{selectedL1.content}</p><Descriptions column={1} size="small" items={[{key:'state',label:'层级与状态',children:<Space><Tag color="magenta">L1</Tag><Tag>{selectedL1.state === 'active' ? '当前' : '已退役'}</Tag></Space>},{key:'id',label:'记忆 ID',children:selectedL1.id},{key:'time',label:'记录时间',children:displayTime(selectedL1.recorded_at)},{key:'superseded',label:'取代它的记忆',children:selectedL1.superseded_by_id ?? '无'}]}/>
         <h3>L0 原始来源</h3>{selectedL1.sources.length ? selectedL1.sources.map(source => <Card size="small" className="source-card" key={`${source.source_message_id}:${source.source_type}`} title={<Space><Tag color="blue">L0</Tag><span>{sourceName(source.source_type)}</span></Space>}><p>{source.message?.content ?? '原始来源缺失，无法核对原文。'}</p><small>{source.message ? `${source.message.role === 'user' ? '用户' : '助手'} · ${displayTime(source.message.created_at)}` : source.source_message_id}</small></Card>) : <Empty description="这条 L1 没有可用来源，需要核查"/>}</>}
@@ -170,5 +158,5 @@ export function MemoryApp() {
     <Modal title="删除这条 L1 记忆？" open={deleting} okText="确认删除 L1" cancelText="取消" confirmLoading={busy} okButtonProps={{danger: true, disabled: !deleteUnderstood}} onCancel={() => {setDeleting(false); setDeleteUnderstood(false);}} onOk={() => void removeMemory()}>
       <p>只删除 L1 及来源关联；L0 原始对话和备份仍然保留，目前没有一键恢复。</p><Checkbox checked={deleteUnderstood} onChange={event => setDeleteUnderstood(event.target.checked)}>我理解以上影响，只删除这一条 L1。</Checkbox>
     </Modal>
-  </ConfigProvider>;
+  </>;
 }

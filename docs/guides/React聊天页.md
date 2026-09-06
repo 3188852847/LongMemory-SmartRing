@@ -21,11 +21,10 @@
 ```powershell
 Set-Location "D:\02-项目\LongMemory-SmartRing\web\react-chat"
 pnpm install --frozen-lockfile
-node node_modules/typescript/bin/tsc --noEmit
-if ($LASTEXITCODE -ne 0) { throw "类型检查失败，请勿继续构建" }
-node node_modules/vite/bin/vite.js build
-if ($LASTEXITCODE -ne 0) { throw "构建失败" }
-node --test src/api.test.ts
+pnpm test
+if ($LASTEXITCODE -ne 0) { throw "前端测试失败，请勿继续构建" }
+pnpm build
+if ($LASTEXITCODE -ne 0) { throw "类型检查或构建失败" }
 ```
 
 助手当前使用的随附 pnpm 不代表用户终端已有 `pnpm` 命令。若提示找不到命令，先核对开发工具路径，不重新安装 Python 或删除项目。
@@ -38,4 +37,4 @@ node --test src/api.test.ts
 - `web/react-chat/dist/`：生成的生产页面与资源，不手写。
 - `web/react-chat/node_modules/`：包管理器安装的开发依赖，不手写。
 
-当前聊天入口块约 595 kB、记忆页动态块约 170 kB（均为未压缩构建输出）；记忆代码不会在聊天入口初始加载。构建器仍对主包给出体积提醒但无构建错误，后续按真实加载体验决定是否继续拆分。最新验证数量见 CHANGELOG；自动测试不代表浏览器视觉、弹窗及个人库内容验收已完成。
+当前共享聊天入口块约 658 kB、记忆页动态块约 169 kB（均为未压缩构建输出）；记忆代码不会在聊天入口初始加载。构建器仍对主包给出体积提醒但无构建错误，设备与实验页面迁移时继续按路由拆分，之后再根据真实加载体验决定是否做更细的依赖分块。最新验证数量见 CHANGELOG；自动测试不代表浏览器视觉、弹窗及个人库内容验收已完成。

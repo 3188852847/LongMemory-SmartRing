@@ -1,23 +1,28 @@
 import {lazy, Suspense, useEffect, useRef, useState} from 'react';
 import {createRoot} from 'react-dom/client';
-import {Button, ConfigProvider, Input, Modal, Select, theme} from 'antd';
+import {Button, Input, Modal, Select} from 'antd';
+import {QueryClientProvider} from '@tanstack/react-query';
+import {BrowserRouter, Navigate, Route, Routes} from 'react-router-dom';
 import {ChatApi, type Config, type Snapshot, type Summary, type Turn} from './api';
-import {KEY, normalize, read, save, apply} from '../../assets/appearance.mjs';
 import {turnSummary} from '../../assets/chat-view.mjs';
 import './style.css';
+import {AppearanceProvider, useAppearance} from './AppearanceProvider';
+import {AppShell, ConsoleNav} from './AppShell';
+import {createConsoleQueryClient} from './queryClient';
 import {RoleEditor} from './RoleEditor';
 import {VoiceSettings} from './VoiceSettings';
 
 const MemoryApp = lazy(() => import('./MemoryApp').then(module => ({default: module.MemoryApp})));
 
 const api = new ChatApi();
-const nonce = document.querySelector<HTMLMetaElement>('meta[name="style-nonce"]')?.content;
+const queryClient = createConsoleQueryClient();
 function memoryWarning(turn: Turn) {
   return turn.memory_warning === 'l1_persistence_failed'
     ? '本轮 L0 原始对话已保存，但 L1 记忆写入失败。'
     : '本轮 L0 原始对话已保存，但 L1 记忆提取失败。';
 }
 function ChatApp() {
+  const {prefs, update: updateAppearance, reset: resetAppearance} = useAppearance();
   const [config, setConfig] = useState<Config>();
   const [chats, setChats] = useState<Summary[]>([]);
   const [chat, setChat] = useState<Snapshot>();
@@ -27,25 +32,13 @@ function ChatApp() {
   const [notice, setNotice] = useState('正在连接本机服务…');
   const [rename, setRename] = useState(false);
   const [title, setTitle] = useState('');
-  const [prefs, setPrefs] = useState(() => {try {return read(localStorage);} catch {return normalize(null);}});
-  const [dark, setDark] = useState(matchMedia('(prefers-color-scheme: dark)').matches);
   // ref 在同一事件循环内立即锁定，避免 React 尚未重绘时的双击重复写入。
   const locked = useRef(false);
   const selectionKey = useRef('');
   const turnsEnd = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const media = matchMedia('(prefers-color-scheme: dark)');
-    const change = () => setDark(media.matches);
-    const storage = (event: StorageEvent) => {if (event.key === KEY || event.key === null) {try {setPrefs(read(localStorage));} catch {setPrefs(normalize(null));}}};
-    media.addEventListener('change', change); window.addEventListener('storage', storage);
-    return () => {media.removeEventListener('change', change); window.removeEventListener('storage', storage);};
-  }, []);
-  useEffect(() => {apply(document.documentElement, prefs, dark);}, [prefs, dark]);
   useEffect(() => {turnsEnd.current?.scrollIntoView({block: 'nearest'});}, [chat?.turns.length]);
   function appearance(value: typeof prefs) {
-    setPrefs(normalize(value));
-    try {if (!save(localStorage, value)) throw new Error();}
-    catch {setNotice('浏览器无法保存外观设置，本页仍可使用。');}
+    if (!updateAppearance(value)) setNotice('浏览器无法保存外观设置，本页仍可使用。');
   }
   async function list() {
     const data = await api.request<{chats: Summary[]}>('/api/chats'); setChats(data.chats); return data.chats;
@@ -97,18 +90,18 @@ function ChatApp() {
     });
   }
   const disabled = busy || unknown || !chat;
-  return <ConfigProvider csp={{nonce}} theme={{algorithm: (prefs.theme === 'dark' || (prefs.theme === 'system' && dark)) ? theme.darkAlgorithm : theme.defaultAlgorithm,
-    token: {colorPrimary: '#b62e68', fontSize: prefs.size === 'larger' ? 20 : prefs.size === 'large' ? 18 : 16, borderRadius: 10}}}>
-    <div className="shell"><aside><a className="brand" href="/">LongMemory</a><p>你的日常聊天空间</p>
+  const sidebar = <>
       <Button block disabled={disabled} onClick={() => changeChat()}>新聊天</Button>
       <label htmlFor="conversation">最近会话</label><Select id="conversation" className="wide" aria-label="最近会话" value={chat?.chat_id} disabled={busy || unknown}
         options={chats.map(c => ({value: c.chat_id, label: `${c.title} · ${c.turn_count} 轮`}))} onChange={changeChat}/>
       <Button disabled={disabled} onClick={() => {setTitle(chat?.title ?? ''); setRename(true);}}>重命名</Button>
       <VoiceSettings api={api} disabled={busy || !config?.enabled}/>
-      <nav><RoleEditor api={api} disabled={busy || !config?.enabled} onSaved={() => {void api.request<Config>('/api/chat-config').then(setConfig).catch(() => setNotice('角色已保存，但运行配置显示未刷新，请重新读取。'));}}/><a href="/">设备与状态</a><a href="/memories">记忆管理</a><a href="/experiments">实验中心</a><a href="/chat">返回原版聊天</a></nav>
+      <RoleEditor api={api} disabled={busy || !config?.enabled} onSaved={() => {void api.request<Config>('/api/chat-config').then(setConfig).catch(() => setNotice('角色已保存，但运行配置显示未刷新，请重新读取。'));}}/>
+      <ConsoleNav active="chat" legacyPath="/chat"/>
       <details><summary>外观与阅读</summary><label>主题</label><Select className="wide" aria-label="主题" value={prefs.theme} onChange={value => appearance({...prefs, theme: value})} options={[{value:'system',label:'跟随系统'},{value:'light',label:'浅色'},{value:'dark',label:'深色'}]}/>
-        <label>字号</label><Select className="wide" aria-label="字号" value={prefs.size} onChange={value => appearance({...prefs,size:value})} options={[{value:'normal',label:'标准'},{value:'large',label:'大'},{value:'larger',label:'更大'}]}/><Button onClick={() => appearance(normalize(null))}>恢复默认</Button></details>
-    </aside><main><header><h1>聊聊今天</h1><span>{chat?.turns.length ?? 0} / 40 轮 · React 预览</span></header>
+        <label>字号</label><Select className="wide" aria-label="字号" value={prefs.size} onChange={value => appearance({...prefs,size:value})} options={[{value:'normal',label:'标准'},{value:'large',label:'大'},{value:'larger',label:'更大'}]}/><Button onClick={() => {if (!resetAppearance()) setNotice('浏览器无法保存外观设置，本页仍可使用。');}}>恢复默认</Button></details>
+    </>;
+  return <><AppShell subtitle="你的日常聊天空间" sidebar={sidebar}><header><h1>聊聊今天</h1><span>{chat?.turns.length ?? 0} / 40 轮 · React 预览</span></header>
       <section className="messages" aria-label="聊天记录">{!chat?.turns.length && <div className="empty"><h2>今天想聊些什么？</h2><p>可以说说今天的事，也可以继续上次的话题。</p></div>}
         {chat?.turns.map((turn, i) => <article key={i}><div className="bubble user"><strong>你</strong><p>{turn.input}</p></div><div className="bubble assistant"><strong>助手</strong><p>{turn.answer ?? '未获得完整回答。'}</p></div>
           {turn.memory_processing === 'source_only' && <p className="memory-warning">{memoryWarning(turn)} 可继续聊天，之后需要重新整理这条来源。</p>}
@@ -118,13 +111,18 @@ function ChatApp() {
         <div className="send-row"><small>发送会先保存原始输入，再按当前提取策略生成长期记忆。</small><Button type="primary" htmlType="submit" disabled={disabled || !draft.trim() || (chat?.turns.length ?? 0) >= 40}>发送</Button></div></form>
       <p role="status">{notice}</p>{unknown && <Button disabled={busy} onClick={() => void action(async () => {if (!chat) return; const result = await load(chat.chat_id); if (!result.pending && result.turns.length > chat.turns.length) setDraft(''); setNotice(result.pending ? '后台仍在处理，没有重发。' : '已查询。服务中断时不能据此保证未写入，请检查过程。');})}>只查询结果，不重发</Button>}
       <details className="runtime"><summary>运行配置与记忆说明</summary><p>{config?.enabled ? `${config.model} · ${config.role} · ${config.provider}` : '聊天未启用'}</p>{config?.provider === 'fake' && <p>Fake 是离线工程替身，不具备角色和多轮理解能力。</p>}<p>提取：{config?.method === 'longmemory_daily_llm_v2' ? '模型辅助 P3.2（失败保留 L0）' : '规则基线'}；检索：{config?.retrieval === 'keyword_dense_rrf_v1' ? '关键词＋本地 BGE 融合 P3.2' : '关键词基线'}。网页不自动驱动圆屏播放。</p>{config?.enabled && <p>记忆库：{config.database}</p>}</details>
-    </main></div>
+    </AppShell>
     <Modal title="重命名聊天" open={rename} onCancel={() => setRename(false)} confirmLoading={busy} okText="保存" cancelText="取消" okButtonProps={{disabled: !title.trim() || busy}}
       onOk={() => void action(async () => {await api.request(`/api/chats/${chat?.chat_id}/title`, 'POST', {title}); await list(); if (chat) setChat({...chat,title}); setRename(false);})}><Input aria-label="聊天名称" maxLength={60} value={title} onChange={event => setTitle(event.target.value)}/></Modal>
-  </ConfigProvider>;
+  </>;
 }
-createRoot(document.getElementById('root')!).render(
-  location.pathname === '/memories'
-    ? <Suspense fallback={<p className="page-loading">正在加载记忆管理…</p>}><MemoryApp/></Suspense>
-    : <ChatApp/>,
-);
+
+function ConsoleApp() {
+  return <QueryClientProvider client={queryClient}><AppearanceProvider><BrowserRouter><Routes>
+    <Route path="/chat-react" element={<ChatApp/>}/>
+    <Route path="/memories" element={<Suspense fallback={<p className="page-loading">正在加载记忆管理…</p>}><MemoryApp/></Suspense>}/>
+    <Route path="*" element={<Navigate to="/chat-react" replace/>}/>
+  </Routes></BrowserRouter></AppearanceProvider></QueryClientProvider>;
+}
+
+createRoot(document.getElementById('root')!).render(<ConsoleApp/>);

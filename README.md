@@ -18,7 +18,7 @@ P2 新增声音设置：四种 Edge TTS 音色、固定文本联网试听和确�
 
 P2 助手角色设置已接入 `/chat-react`：网页编辑、版本化保存；圆屏可检查并明确确认同步到小智配置，之后需重启小智，实机生效待验收。见[助手角色设置](docs/guides/助手角色设置.md)。
 
-Web 控制台开始渐进统一到 React + TypeScript + Vite + antd：聊天页 `/chat-react` 已是默认入口，记忆页 `/memories` 已提供 L1/L0 分层与双向来源检查；原版 `/chat`、`/memories-legacy` 暂留回退。设备与实验页面尚未迁移。见[体验指南](docs/guides/React聊天页.md)、[迁移清单](docs/architecture/react-chat-migration.md)与 [ADR-0032](docs/adr/0032-progressive-react-console-migration.md)。
+Web 控制台开始渐进统一到 React + TypeScript + Vite + antd：聊天页 `/chat-react` 已是默认入口，记忆页 `/memories` 已提供 L1/L0 分层与双向来源检查；两页现由 React Router、共享 AppShell 与统一外观状态承载，TanStack Query 已建立“不隐式重试写操作”的基础策略，组件测试使用 Vitest/React Testing Library。原版 `/chat`、`/memories-legacy` 暂留回退，设备与实验页面尚未迁移。见[体验指南](docs/guides/React聊天页.md)、[技术策略](docs/architecture/technology-strategy.md)、[迁移清单](docs/architecture/react-chat-migration.md)与 [ADR-0032](docs/adr/0032-progressive-react-console-migration.md)。
 
 P2：聊天页支持浅色/深色/跟随系统及字号保存，配置默认折叠。见[外观设置](docs/guides/外观设置.md)。角色编辑、显式圆屏配置同步及音色试听已实现；不改日常记忆算法。
 

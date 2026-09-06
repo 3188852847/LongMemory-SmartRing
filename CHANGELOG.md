@@ -1,5 +1,12 @@
 # Changelog
 
+### React console foundation: routing, queries and component tests（2026-09-06）
+
+- React 控制台以 React Router 取代入口文件中的 `location.pathname` 分支；`/chat-react` 与 `/memories` 使用客户端路由，共享 AppShell、导航和外观状态，旧页面回退入口继续保留。
+- 建立 TanStack Query 的统一 QueryClient；查询和 mutation 默认不自动重试，避免聊天发送、纠正、删除与设备操作在网络状态不明时被隐式重放。现有页面尚未批量改写为 query hooks。
+- 前端测试迁移到 Vitest，并加入 React Testing Library；覆盖 API 的 CSRF/不重放约束、共享导航和 QueryClient 重试策略。
+- 验证：4 项前端测试、TypeScript 检查、Vite 生产构建及 45 项相关 Python 回归通过。构建器仍提示主入口块约 658 kB，后续迁移设备页时按路由继续拆分，不把警告误写为运行故障。
+
 ### Progressive React console: memory page（2026-09-06）
 
 - `/memories` 迁移到现有 React + TypeScript + antd 工程；新增 L1 原子记忆与 L0 原始记录页签、层级标签、分页/筛选、双向来源详情、运行期记忆模式、纠正和受限删除。原生页暂留 `/memories-legacy`。

@@ -60,9 +60,9 @@
 
 ## 6. 近期实施顺序
 
-1. 建立 React Router、TanStack Query 和统一 AppShell。
-2. 加入组件测试基础，验证路由、错误状态与危险 mutation 不重试。
-3. 以设备与状态页验证新基础，保留旧页回退。
+1. 已建立 React Router、TanStack Query 的安全默认值和统一 AppShell。
+2. 已加入 Vitest/React Testing Library，验证共享导航、API 安全约束与危险 mutation 默认不重试；页面级错误状态随迁移继续补充。
+3. 下一步以设备与状态页验证查询、轮询和受控 mutation，保留旧页回退。
 4. 迁移角色/声音设置与实验中心，逐项清理旧资源。
 5. 选择一个小型 Python API 做 Pydantic 契约试点；验证后渐进覆盖。
 6. React 页面基本统一后加入 Playwright 关键流程。

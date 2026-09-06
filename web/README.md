@@ -1,6 +1,6 @@
 # Web 界面
 
-选型更新：`react-chat/` 已实现 React + TypeScript + Vite + antd 独立聊天预览，由 Python 提供 `/chat-react` 和构建清单中的资源。默认 `/chat` 未切换。见[体验及构建指南](../docs/guides/React聊天页.md)。以下描述保留的原生实现。
+选型更新：`react-chat/` 已承载 React + TypeScript + Vite + antd 的文字聊天与记忆管理，由 Python 提供 `/chat-react`、`/memories` 和构建清单中的资源。统一启动默认进入 `/chat-react`；原生 `/chat` 与 `/memories-legacy` 保留回退。React Router、共享 AppShell、TanStack Query 安全默认值和 Vitest/React Testing Library 已建立，设备与实验页仍是原生实现。见[体验及构建指南](../docs/guides/React聊天页.md)。以下描述主要记录保留的原生实现。
 
 P2 已新增聊天页 `appearance.mjs`（校验/存取/应用显示偏好）、`appearance.js`（控件绑定）与 `chat-appearance.css`（局部主题）。沿用原生前端，见 ADR-0020。本浏览器持久缓存仅用于外观枚举和最后选中会话 ID，不保存聊天正文。
 
