@@ -43,6 +43,20 @@ def test_preview_is_strict_and_does_not_allow_unknown_source_ids():
         )
 
 
+def test_v2_can_abstain_instead_of_forcing_unrelated_memories_together():
+    raw = json.dumps({"schema_version": 2, "candidate": None})
+    assert parse_scenario_proposal(
+        raw, allowed_source_ids=(MemoryId("l1-a"), MemoryId("l1-b"))
+    ) is None
+
+    class Producer:
+        def propose(self, *, sources):
+            return raw
+
+    with pytest.raises(ScenarioProposalError, match="scenario_proposal_no_coherent_group"):
+        ScenarioProposalService(Producer()).preview(_sources())
+
+
 def test_source_threshold_is_checked_before_model_call():
     class Producer:
         called = False

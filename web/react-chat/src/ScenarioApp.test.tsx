@@ -96,9 +96,9 @@ describe('L2 生活场景页', () => {
         {id:'l1-a',content:'用户周五要答辩。',subject_id:'user:self',state:'active'},
         {id:'l1-b',content:'用户正在修改 PPT。',subject_id:'user:self',state:'active'},
       ],total:2,limit:100,offset:0};
-      if (path === '/api/scenario-proposals' && method === 'POST') return {title:'准备答辩',summary:'用户周五要答辩并正在修改 PPT。',source_memory_ids:['l1-a','l1-b'],generator_name:'model_assisted_console',generator_version:'l2-scenario-preview-v1',model:'synthetic-model',persisted:false};
+      if (path === '/api/scenario-proposals' && method === 'POST') return {title:'准备答辩',summary:'用户周五要答辩并正在修改 PPT。',source_memory_ids:['l1-a','l1-b'],generator_name:'model_assisted_console',generator_version:'l2-scenario-preview-v2',model:'synthetic-model',persisted:false};
       if (path === '/api/scenarios' && method === 'POST') return {id:'scenario-1'};
-      if (path === '/api/scenarios/scenario-1') return {id:'scenario-1',subject_id:'user:self',title:'准备答辩',summary:'用户周五要答辩并正在修改 PPT。',generated_at:'2026-09-06T10:00:00Z',valid_from:null,valid_to:null,status:'candidate',generator_name:'model_assisted_console',generator_version:'l2-scenario-preview-v1',revision:1,sources:[],lifecycle_events:[]};
+      if (path === '/api/scenarios/scenario-1') return {id:'scenario-1',subject_id:'user:self',title:'准备答辩',summary:'用户周五要答辩并正在修改 PPT。',generated_at:'2026-09-06T10:00:00Z',valid_from:null,valid_to:null,status:'candidate',generator_name:'model_assisted_console',generator_version:'l2-scenario-preview-v2',revision:1,sources:[],lifecycle_events:[]};
       throw new Error(`unexpected ${method ?? 'GET'} ${path}`);
     });
     const client = createConsoleQueryClient();
@@ -151,6 +151,40 @@ describe('L2 生活场景页', () => {
     await waitFor(() => expect(calls.filter(([path, method]) => path.endsWith('/lifecycle') && method === 'POST')).toHaveLength(1));
     const body = calls.find(([path, method]) => path.endsWith('/lifecycle') && method === 'POST')?.[2];
     expect(body).toEqual({action:'manual_end',expected_revision:2,confirm_action:true});
+    view.unmount(); client.clear();
+  });
+
+  test('待整理入口确认后只生成一个未保存的相关子集草稿', async () => {
+    vi.spyOn(ChatApi.prototype, 'bootstrap').mockResolvedValue(undefined);
+    const calls: Array<[string, string | undefined, unknown]> = [];
+    const items = [
+      {id:'l1-a',content:'用户周五要答辩。',subject_id:'user:self',state:'active',recorded_at:'2026-09-06T08:00:00Z',source_message_count:1},
+      {id:'l1-b',content:'用户正在修改答辩 PPT。',subject_id:'user:self',state:'active',recorded_at:'2026-09-06T09:00:00Z',source_message_count:1},
+      {id:'l1-c',content:'用户喜欢喝乌龙茶。',subject_id:'user:self',state:'active',recorded_at:'2026-09-06T10:00:00Z',source_message_count:1},
+    ];
+    vi.spyOn(ChatApi.prototype, 'request').mockImplementation(async (path: string, method?: string, body?: unknown) => {
+      calls.push([path, method, body]);
+      if (path === '/api/memory-config') return {configured:true,database:'synthetic.db',allow_scenario_management:true,scenario_model_preview_available:true,scenario_model:'synthetic-model'};
+      if (path.startsWith('/api/scenarios?')) return {items:[],total:0,limit:100,offset:0};
+      if (path === '/api/scenario-source-inbox') return {items,total:3,limited:false,selection_is_semantic:false};
+      if (path.startsWith('/api/memories?')) return {items,total:3,limit:100,offset:0};
+      if (path === '/api/scenario-proposals' && method === 'POST') return {title:'准备答辩',summary:'用户周五要答辩并正在修改 PPT。',source_memory_ids:['l1-a','l1-b'],generator_name:'model_assisted_console',generator_version:'l2-scenario-preview-v2',model:'synthetic-model',persisted:false};
+      throw new Error(`unexpected ${method ?? 'GET'} ${path}`);
+    });
+    const client = createConsoleQueryClient();
+    const view = render(<QueryClientProvider client={client}><MemoryRouter><ScenarioApp/></MemoryRouter></QueryClientProvider>);
+
+    const recommend = await screen.findByRole('button',{name:'从待整理 L1 推荐一个草稿'});
+    await waitFor(() => expect(recommend.hasAttribute('disabled')).toBe(false));
+    fireEvent.click(recommend);
+    expect(await screen.findByText(/模型可以只选其中相关的子集/)).toBeTruthy();
+    expect(calls.filter(([path]) => path === '/api/scenario-proposals')).toHaveLength(0);
+    fireEvent.click(screen.getByRole('button',{name:'生成不落库草稿'}));
+    await waitFor(() => expect(calls.filter(([path]) => path === '/api/scenario-proposals')).toHaveLength(1));
+    expect((screen.getByLabelText('场景标题') as HTMLInputElement).value).toBe('准备答辩');
+    expect(calls.filter(([path]) => path === '/api/scenarios')).toHaveLength(0);
+    const body = calls.find(([path]) => path === '/api/scenario-proposals')?.[2] as {source_memory_ids:string[]};
+    expect(body.source_memory_ids).toEqual(['l1-a','l1-b','l1-c']);
     view.unmount(); client.clear();
   });
 });

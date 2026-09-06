@@ -46,6 +46,7 @@ export function ScenarioApp() {
   const [validTo, setValidTo] = useState('');
   const [draftOrigin, setDraftOrigin] = useState<'manual' | 'model_assisted'>('manual');
   const [confirmingModel, setConfirmingModel] = useState(false);
+  const [previewMode, setPreviewMode] = useState<'selected' | 'inbox'>('selected');
   const [reviewDecision, setReviewDecision] = useState<'accepted' | 'rejected'>();
   const [ending, setEnding] = useState(false);
   const [inboxOnly, setInboxOnly] = useState(false);
@@ -125,7 +126,16 @@ export function ScenarioApp() {
     .filter(item => !inboxOnly || inboxIds.has(item.id))
     .sort((left, right) => Number(inboxIds.has(right.id)) - Number(inboxIds.has(left.id)))
     .map(item => ({value:item.id,label:`${inboxIds.has(item.id) ? '待整理 · ' : ''}${item.content}`}));
-  const sidebar = <><Button type="primary" block disabled={!canManage} onClick={openCreator}>新建 L2 候选</Button>
+  const recommendFromInbox = () => {
+    setTitle(''); setSummary(''); setValidFrom(''); setValidTo(''); setDraftOrigin('manual');
+    setInboxOnly(true); setSourceIds((sourceInbox.data?.items ?? []).slice(0, 20).map(item => item.id));
+    setCreating(true); setPreviewMode('inbox'); setConfirmingModel(true);
+  };
+  const sidebar = <><Space direction="vertical" className="wide">
+      <Button type="primary" block disabled={!canManage} onClick={openCreator}>新建 L2 候选</Button>
+      <Button block disabled={!canManage || !config.data?.scenario_model_preview_available || (sourceInbox.data?.total ?? 0) < 2}
+        onClick={recommendFromInbox}>从待整理 L1 推荐一个草稿</Button>
+    </Space>
     <ConsoleNav active="scenarios" legacyPath="/memories"/></>;
 
   return <><AppShell subtitle="可复核的生活场景" className="scenario-shell" sidebar={sidebar}>
@@ -200,6 +210,7 @@ export function ScenarioApp() {
     onCancel={() => !previewCandidate.isPending && setConfirmingModel(false)}
     onOk={() => previewCandidate.mutate()}>
     <p>本次会把你明确选择的 {sourceIds.length} 条 L1 记忆发送给当前学校模型，用于生成一个 L2 草稿。</p>
+    {previewMode === 'inbox' && <p>模型可以只选其中相关的子集；如果找不到至少两条共同支持同一场景的记忆，应拒绝生成，而不是强行合并。</p>}
     <p>模型只调用一次，不自动重试；返回内容不会自动写入数据库，也不会进入聊天回答。</p>
     <p>当前模型：{config.data?.scenario_model ?? '未标记'}</p>
   </Modal>
@@ -223,7 +234,7 @@ export function ScenarioApp() {
     <Space direction="vertical" className="wide">
       <Button block loading={previewCandidate.isPending}
         disabled={!config.data?.scenario_model_preview_available || sourceIds.length < 2}
-        onClick={() => setConfirmingModel(true)}>用学校模型生成草稿</Button>
+        onClick={() => {setPreviewMode('selected'); setConfirmingModel(true);}}>用学校模型生成草稿</Button>
       {!config.data?.scenario_model_preview_available && <small>当前启动方式没有可用的 L2 模型预览；仍可人工填写。</small>}
       {draftOrigin === 'model_assisted' && <Alert type="warning" showIcon title="当前内容来自模型辅助草稿"
         description="尚未写库。请核对标题、总结和来源；你可以直接修改，创建后仍是待复核候选。"/>}

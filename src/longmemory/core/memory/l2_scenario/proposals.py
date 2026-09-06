@@ -48,7 +48,7 @@ def parse_scenario_proposal(
     raw: str,
     *,
     allowed_source_ids: tuple[MemoryId, ...],
-) -> ScenarioProposal:
+) -> ScenarioProposal | None:
     """只接受一个候选，并禁止模型引用未发送给它的 L1。"""
 
     if not isinstance(raw, str) or not raw.strip() or len(raw) > MAX_PROPOSAL_OUTPUT_CHARS:
@@ -58,9 +58,16 @@ def parse_scenario_proposal(
         data = json.loads(raw, object_pairs_hook=_unique_object)
         if not isinstance(data, dict) or set(data) != {"schema_version", "candidate"}:
             raise ValueError
-        if type(data["schema_version"]) is not int or data["schema_version"] != 1:
+        version = data["schema_version"]
+        if type(version) is not int or version not in {1, 2}:
             raise ValueError
         candidate = data["candidate"]
+        # V2 允许模型明确表示当前输入没有可靠场景。V1 保持兼容，
+        # 但不能用 null 绕过旧契约。
+        if candidate is None:
+            if version != 2:
+                raise ValueError
+            return None
         if not isinstance(candidate, dict) or set(candidate) != {
             "title", "summary", "source_memory_ids"
         }:
@@ -77,4 +84,3 @@ def parse_scenario_proposal(
         )
     except (ValueError, TypeError, KeyError, RecursionError):
         raise ScenarioProposalError("scenario_proposal_schema_invalid") from None
-

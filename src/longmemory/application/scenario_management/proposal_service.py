@@ -32,6 +32,8 @@ class ScenarioProposalService:
         proposal = parse_scenario_proposal(
             raw, allowed_source_ids=tuple(item.memory_id for item in sources)
         )
+        if proposal is None:
+            raise ScenarioProposalError("scenario_proposal_no_coherent_group")
         # 输入池整体满足门槛还不够：模型选出的子集本身也必须覆盖两个
         # 不同 L0，否则页面会拿到一个注定无法保存的伪多证据候选。
         by_id = {item.memory_id: item for item in sources}

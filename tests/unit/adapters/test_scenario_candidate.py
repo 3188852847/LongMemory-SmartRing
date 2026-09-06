@@ -26,7 +26,7 @@ def _sources():
 
 
 def test_request_contains_only_prompt_and_selected_l1_data():
-    answer = '{"schema_version":1,"candidate":{"title":"合成","summary":"合成摘要",' \
+    answer = '{"schema_version":2,"candidate":{"title":"合成","summary":"合成摘要",' \
              '"source_memory_ids":["l1-a","l1-b"]}}'
     calls = []
 
