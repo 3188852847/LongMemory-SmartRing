@@ -4,6 +4,7 @@ import {ChatApi, type Config} from './api';
 import {AppShell, ConsoleNav} from './AppShell';
 import {RoleEditor} from './RoleEditor';
 import {VoiceSettings} from './VoiceSettings';
+import {ProactiveSettings} from './ProactiveSettings';
 import {useAppearance} from './AppearanceProvider';
 
 const api = new ChatApi();
@@ -36,6 +37,10 @@ export function SettingsApp() {
           <label>字号</label><Select className="wide" aria-label="字号" value={prefs.size} onChange={size => update({...prefs, size})} options={[{value:'normal',label:'标准'},{value:'large',label:'大'},{value:'larger',label:'更大'}]}/>
           <Button onClick={() => reset()}>恢复默认</Button>
         </Space>
+      </Card>
+      <Card title="主动交流" extra={<span className="setting-scope">持久许可边界</span>}>
+        <p>设置系统什么时候可以联系你。当前只保存设置；后台触发和圆屏投递尚未接入。</p>
+        <ProactiveSettings api={api} ready={session.isSuccess}/>
       </Card>
     </div>
     {!enabled && !session.isError && !config.isError && <p role="status">正在读取设置能力；未启用文字服务时角色和声音设置不可操作。</p>}

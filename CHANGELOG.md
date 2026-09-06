@@ -1,5 +1,12 @@
 # Changelog
 
+### P4.4 proactive settings React control（2026-09-06）
+
+- 个性化设置页新增主动交流卡片，可查看默认关闭状态并编辑星期、允许时段、每日次数、最短间隔及一小时临时勿扰。
+- 使用 TanStack Query 读取与受控保存 V15 设置；写请求不重试，revision 冲突要求重新读取，未保存改动可放弃。
+- 页面明确声明保存或打开许可开关不会创建消息、启动后台或证明圆屏投递可用；执行编排仍未接入。
+- 17 项 React 测试与 TypeScript/Vite 生产构建通过。
+
 ### P4.4 persistent proactive policy settings foundation（2026-09-06）
 
 - SQLite 代码结构升级为 V15，新增每主体一行的主动联系设置；缺少记录表示默认关闭，迁移不插入设置、不创建候选或投递。
