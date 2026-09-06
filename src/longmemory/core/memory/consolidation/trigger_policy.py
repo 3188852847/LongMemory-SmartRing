@@ -21,6 +21,7 @@ class ConsolidationTriggerReason(StrEnum):
     COOLDOWN_ACTIVE = "cooldown_active"
     DAILY_BUDGET_EXHAUSTED = "daily_budget_exhausted"
     RUN_ALREADY_ACTIVE = "run_already_active"
+    RISK_ASSESSMENT_INCOMPLETE = "risk_assessment_incomplete"
 
 
 @dataclass(frozen=True, slots=True)

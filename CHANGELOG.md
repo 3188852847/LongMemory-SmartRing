@@ -3,8 +3,10 @@
 ### P3.9 explicit risk-completeness gate（2026-09-06）
 
 - L2/L3 自动生效风险对象新增必填 `assessment_complete`；未完成评估以稳定原因 `risk_assessment_incomplete` 进入 HOLD，证据数量不能覆盖这一门槛。
+- 两个一次性执行器在该门槛未满足时于模型调用之前停止，不写运行记录、不消耗预算、不推进游标，避免证据被永久跨过。
 - 不用关键词未命中冒充安全结论，也不改变人工复核和既有 active 记忆。见 ADR-0055。
 - 验证：27 项风险门控/执行器定向测试通过；其余 692 项 Python 回归通过，已知本机 Tk 构造项因首次全量进程内 Tcl 资源失败而单独复跑通过。
+- 前置停止补充验证：23 项定向、694 项其余 Python 回归和 1 项独立 Tk 构造测试，以及 16 项 React 测试通过。
 
 ### P3.9 consolidation observability and recovery primitive（2026-09-06）
 

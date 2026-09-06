@@ -17,6 +17,7 @@ const reasonName:Record<string,string> = {
   ready:'已达到触发门槛', no_pending_evidence:'没有新的可整理来源',
   below_source_threshold:'新来源尚未达到门槛', cooldown_active:'仍在冷却时间内',
   daily_budget_exhausted:'今天的模型调用预算已用完', run_already_active:'已有一次整理正在运行',
+  risk_assessment_incomplete:'风险评估尚未完成',
 };
 const stageName:Record<StageName,string> = {l1_to_l2:'L1 → L2 场景整理',l2_to_l3:'L2 → L3 画像整理'};
 

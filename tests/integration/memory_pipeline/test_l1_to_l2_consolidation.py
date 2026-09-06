@@ -138,3 +138,17 @@ def test_policy_block_is_completed_but_never_persists_scenario(tmp_path):
     assert result.scenario is None
     assert connection.execute("SELECT count(*) FROM scenario_memories").fetchone()[0] == 0
     connection.close()
+
+
+def test_incomplete_risk_check_does_not_call_model_or_advance_cursor(tmp_path):
+    producer = Producer(
+        '{"schema_version":2,"candidate":{"title":"不应调用",'
+        '"summary":"不应调用。","source_memory_ids":["l1-1","l1-2","l1-3"]}}'
+    )
+    connection, ledger, service = prepared(tmp_path, producer)
+    result = run(service, ScenarioRiskAssessment(assessment_complete=False))
+    assert result.run is None
+    assert result.trigger_decision.reason.value == "risk_assessment_incomplete"
+    assert producer.calls == 0
+    assert ledger.latest_cursor("user:self", ConsolidationStage.L1_TO_L2) is None
+    connection.close()

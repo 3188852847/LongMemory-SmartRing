@@ -24,6 +24,7 @@ from longmemory.core.memory.consolidation.trigger_policy import (
     ConsolidationTriggerAction,
     ConsolidationTriggerConfig,
     ConsolidationTriggerDecision,
+    ConsolidationTriggerReason,
 )
 from longmemory.core.memory.l3_persona.activation_policy import (
     PersonaActivationDecision,
@@ -93,6 +94,14 @@ class L2ToL3ConsolidationService:
         generator_name: str,
         generator_version: str,
     ) -> L2ToL3ConsolidationResult:
+        if not risk.assessment_complete:
+            return L2ToL3ConsolidationResult(
+                ConsolidationTriggerDecision(
+                    ConsolidationTriggerAction.HOLD,
+                    ConsolidationTriggerReason.RISK_ASSESSMENT_INCOMPLETE,
+                ),
+                None,
+            )
         started_at = self._clock()
         batch = self._source_reader.read_batch(
             subject_id,

@@ -77,11 +77,11 @@ def prepared(tmp_path, producer, count=3):
     return connection, ledger, store, service
 
 
-def run(service):
+def run(service, risk=PersonaRiskAssessment(assessment_complete=True)):
     return service.run_once(
         subject_id="user:self",
         trigger=ConsolidationTrigger.NEW_EVIDENCE,
-        risk=PersonaRiskAssessment(assessment_complete=True),
+        risk=risk,
         budget_window_start=NOW.replace(hour=0),
         generator_name="model_consolidation_runtime",
         generator_version="l3-persona-consolidation-v1",
@@ -117,4 +117,17 @@ def test_persona_noop_advances_once_and_does_not_repeat_without_new_l2(tmp_path)
     assert first.run.outcome_code == "persona_noop"
     assert second.run is None and producer.calls == 1
     assert ledger.latest_cursor("user:self", ConsolidationStage.L2_TO_L3).source_id == "l2-3"
+    connection.close()
+
+
+def test_incomplete_risk_check_does_not_call_model_or_advance_cursor(tmp_path):
+    producer = Producer(
+        '{"schema_version":1,"operation":"NOOP","candidate":null,"replaces":[]}'
+    )
+    connection, ledger, _store, service = prepared(tmp_path, producer)
+    result = run(service, PersonaRiskAssessment(assessment_complete=False))
+    assert result.run is None
+    assert result.trigger_decision.reason.value == "risk_assessment_incomplete"
+    assert producer.calls == 0
+    assert ledger.latest_cursor("user:self", ConsolidationStage.L2_TO_L3) is None
     connection.close()

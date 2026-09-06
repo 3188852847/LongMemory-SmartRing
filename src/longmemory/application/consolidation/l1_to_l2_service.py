@@ -24,6 +24,7 @@ from longmemory.core.memory.consolidation.trigger_policy import (
     ConsolidationTriggerAction,
     ConsolidationTriggerConfig,
     ConsolidationTriggerDecision,
+    ConsolidationTriggerReason,
 )
 from longmemory.core.memory.l1_atomic.contracts import MemoryStore
 from longmemory.core.memory.l2_scenario.activation_policy import (
@@ -83,6 +84,17 @@ class L1ToL2ConsolidationService:
         generator_version: str,
     ) -> L1ToL2ConsolidationResult:
         """执行一次且不重试；失败保留账本，只有完成结果推进来源游标。"""
+
+        # 未完成风险检查不是“低风险”。在读取正文和调用外部模型之前停止，
+        # 也不创建账本或推进游标，使后续评估器就绪后仍能处理同一批来源。
+        if not risk.assessment_complete:
+            return L1ToL2ConsolidationResult(
+                ConsolidationTriggerDecision(
+                    ConsolidationTriggerAction.HOLD,
+                    ConsolidationTriggerReason.RISK_ASSESSMENT_INCOMPLETE,
+                ),
+                None,
+            )
 
         started_at = self._clock()
         previous_cursor = self._run_store.latest_cursor(
