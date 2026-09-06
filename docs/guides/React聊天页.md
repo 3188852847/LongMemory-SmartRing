@@ -16,7 +16,7 @@
 
 实验中心位于 `/experiments-react`，可选择冻结检索档案、预检预算、明确确认后运行回答对照、查看/停止任务、搜索档案、核对逐题证据并另存人工复核。预检不调用模型；真实模型确认会显示请求上限和网络风险；活动任务只用 GET 刷新进度。复核不会改原报告或自动初筛，响应未知时只刷新核对。原版 `/experiments` 暂留回退。
 
-浏览器交互尚待验收。遇到空白页、弹窗或下拉异常，先返回原版，并提供现象；不要关闭安全策略解决。
+隔离 Fake 环境的真实 Chromium 验收已经覆盖发送/刷新恢复和统一导航；它不替代个人数据库、真实模型、声音、圆屏或视觉体验验收。遇到空白页、弹窗或下拉异常，先返回原版并提供现象；不要关闭安全策略解决。
 
 ## 换电脑或源码更新后怎么构建
 
@@ -33,6 +33,15 @@ pnpm build
 if ($LASTEXITCODE -ne 0) { throw "类型检查或构建失败" }
 ```
 
+需要运行真实浏览器关键路径时，在同一目录执行：
+
+```powershell
+pnpm test:e2e
+if ($LASTEXITCODE -ne 0) { throw "Playwright 浏览器验收失败，请查看 test-results" }
+```
+
+该命令会先构建生产资源，再自动启动 `127.0.0.1:18777` 的临时 Fake 控制台。它创建临时 SQLite，不读 `.env`、个人数据库、校园模型或圆屏。通过时终端显示 `2 passed`；失败截图和 trace 位于 `web/react-chat/test-results/`，HTML 报告位于 `web/react-chat/playwright-report/`，二者都被 Git 忽略。若提示浏览器不存在，只安装与锁定版本配套的 Chromium：`pnpm exec playwright install chromium`；这一步需要联网。
+
 助手当前使用的随附 pnpm 不代表用户终端已有 `pnpm` 命令。若提示找不到命令，先核对开发工具路径，不重新安装 Python 或删除项目。
 
 构建输出在 `web/react-chat/dist/`，不提交 Git；依赖锁文件提交，个人数据库不提交。出现 503 表示缺少或无效构建；出现 404 通常先检查是否仍运行旧控制台进程。旧版入口不依赖这些产物。
@@ -40,6 +49,8 @@ if ($LASTEXITCODE -ne 0) { throw "类型检查或构建失败" }
 ## 目录用途
 
 - `web/react-chat/src/`：React 页面、接口封装、局部样式和接口测试。
+- `web/react-chat/e2e/`：Playwright 真实浏览器关键路径，只连接隔离 Fake 控制台。
+- `web/react-chat/playwright.config.ts`：浏览器、临时服务、trace 和报告设置。
 - `web/react-chat/dist/`：生成的生产页面与资源，不手写。
 - `web/react-chat/node_modules/`：包管理器安装的开发依赖，不手写。
 

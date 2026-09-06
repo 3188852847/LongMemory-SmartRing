@@ -50,6 +50,8 @@ firmware/**/sdkconfig.old
 # 常见临时文件
 web/react-chat/node_modules/
 web/react-chat/dist/
+web/react-chat/playwright-report/
+web/react-chat/test-results/
 .pnpm-store/
 *.log
 *.tmp

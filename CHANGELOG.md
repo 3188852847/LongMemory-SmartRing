@@ -1,5 +1,12 @@
 # Changelog
 
+### Playwright isolated console acceptance（2026-09-06）
+
+- 前端锁定 `@playwright/test` 1.62.1，并增加单独的 Chromium 验收配置；Vitest 只扫描 `src/**/*.test.ts(x)`，两种测试运行器互不误收集。
+- 新增一次性 Fake 控制台：使用系统临时 SQLite、离线设备桥和空实验目录，不读取 `.env`、个人记忆、校园模型或圆屏；测试退出后清理临时数据。
+- 首批真实浏览器路径覆盖：聊天发送与刷新恢复、设备/设置/记忆/实验统一导航、无第三方 HTTP 请求，以及只读实验服务不能误启动作业。失败保留截图和 trace，产物不提交 Git。
+- 验证：2 项 Chromium 端到端验收、7 项 Vitest 组件测试及 TypeScript/Vite 生产构建通过。首次受限运行的 `spawn EPERM` 是浏览器进程权限，不是页面故障；获准运行后发现并修正了测试定位范围。
+
 ### Pydantic API contract pilot（2026-09-06）
 
 - `console` 可选依赖锁定 Pydantic 2.13.5；首个试点仅覆盖聊天消息提交，在 aiohttp 与 Memory Core 之间集中约束严格字段、正文长度/空白和规范 UUID。

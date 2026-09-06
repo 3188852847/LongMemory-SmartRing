@@ -3,5 +3,6 @@ import {defineConfig} from 'vitest/config';
 export default defineConfig({
   base: '/react-chat/',
   build: {manifest: true},
-  test: {environment: 'jsdom', setupFiles: './src/test-setup.ts', clearMocks: true},
+  test: {environment: 'jsdom', setupFiles: './src/test-setup.ts', clearMocks: true,
+    include: ['src/**/*.test.{ts,tsx}']},
 });
