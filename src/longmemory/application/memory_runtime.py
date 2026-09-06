@@ -17,6 +17,8 @@ class PreparedMemoryTurn:
     event: MemoryEvent
     observation: ObservationResult
     support: MemorySupport
+    write_enabled: bool
+    use_enabled: bool
 
 
 class MemoryRuntime:
@@ -34,14 +36,26 @@ class MemoryRuntime:
         )
         self._lock = RLock()
         self._closed = False
+        self._write_enabled = True
+        self._use_enabled = True
 
     def prepare_user(self, text: str) -> PreparedMemoryTurn:
         event = MemoryEvent(str(uuid4()), "user", text, datetime.now(UTC))
         with self._lock:
             self._ensure_open()
-            observation = self._method.observe(event)
-            support = self._method.recall(text)
-        return PreparedMemoryTurn(event, observation, support)
+            observation = (
+                self._method.observe(event)
+                if self._write_enabled
+                else self._method.archive(event)
+            )
+            support = (
+                self._method.recall(text)
+                if self._use_enabled
+                else MemorySupport(str(uuid4()), "", (), "disabled_by_user", None)
+            )
+            write_enabled = self._write_enabled
+            use_enabled = self._use_enabled
+        return PreparedMemoryTurn(event, observation, support, write_enabled, use_enabled)
 
     def record_assistant(self, text: str) -> ObservationResult:
         event = MemoryEvent(str(uuid4()), "assistant", text, datetime.now(UTC))
@@ -59,7 +73,21 @@ class MemoryRuntime:
                 "implementation_version": self._method.implementation_version,
                 "retrieval": getattr(self._method, "retrieval_name", "unknown"),
                 "database": str(self.database),
+                "write_enabled": self._write_enabled,
+                "use_enabled": self._use_enabled,
+                "settings_persistent": False,
             }
+
+    def configure(self, *, write_enabled: bool, use_enabled: bool) -> dict:
+        """原子更新运行期模式；重启恢复默认开启，不写数据库或配置文件。"""
+
+        if type(write_enabled) is not bool or type(use_enabled) is not bool:
+            raise ValueError("memory_mode_invalid")
+        with self._lock:
+            self._ensure_open()
+            self._write_enabled = write_enabled
+            self._use_enabled = use_enabled
+            return self.status()
 
     def close(self) -> None:
         with self._lock:

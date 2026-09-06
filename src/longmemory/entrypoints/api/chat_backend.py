@@ -38,6 +38,9 @@ class ChatBackend:
                 "subject": "user:self",
                 "provider": self.provider, "model": self.model, "role": role['name'], "role_revision": role['revision'],
                 "database": str(self.database), "history_persistent": True,
+                "memory_write_enabled": runtime["write_enabled"],
+                "memory_use_enabled": runtime["use_enabled"],
+                "memory_mode_persistent": runtime["settings_persistent"],
                 "speaks_on_device": False}
 
     def run(self, text, history):
@@ -58,6 +61,8 @@ class ChatBackend:
             runtime = self.memory_runtime()
             runtime_status = runtime.status()
             result["method"] = runtime_status["method"]
+            result["memory_write_enabled"] = runtime_status["write_enabled"]
+            result["memory_use_enabled"] = runtime_status["use_enabled"]
             # 开始处理时固定本轮角色。保存新版本不改变已经开始的回答。
             role = self.roles.current()
             result.update(role=role['name'], role_revision=role['revision'])
@@ -66,6 +71,8 @@ class ChatBackend:
                 generator = generator.with_role_prompt(role['prompt'])
             prepared = runtime.prepare_user(text)
             event, observed, support = prepared.event, prepared.observation, prepared.support
+            result["memory_write_enabled"] = prepared.write_enabled
+            result["memory_use_enabled"] = prepared.use_enabled
             result.update(user_saved=True, event_id=event.event_id,
                           writes=[asdict(item) for item in observed.writes],
                           memory_processing=observed.processing_status,

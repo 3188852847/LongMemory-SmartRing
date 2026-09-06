@@ -35,6 +35,8 @@ def register_memory_runtime_routes(app, backend):
             "memory_warning": prepared.observation.warning_code,
             "retrieval_strategy": prepared.support.retrieval_strategy,
             "retrieval_warning": prepared.support.warning_code,
+            "memory_write_enabled": prepared.write_enabled,
+            "memory_use_enabled": prepared.use_enabled,
         })
 
     app.router.add_get("/api/internal/memory/status", status, allow_head=False)

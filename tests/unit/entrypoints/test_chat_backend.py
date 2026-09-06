@@ -182,3 +182,98 @@ def test_chat_reports_hybrid_retrieval_without_hiding_dense_fallback(database):
         assert result["retrieval_warning"] is None
     finally:
         backend.close()
+
+
+def test_runtime_memory_modes_are_independent_and_keep_l0(database):
+    """暂停派生记忆不等于停止审计；暂停召回也不影响独立的写入开关。"""
+
+    backend = ChatBackend(database, FakeAnswerGenerator())
+    runtime = backend.memory_runtime()
+    try:
+        assert runtime.status()["write_enabled"] is True
+        assert runtime.status()["use_enabled"] is True
+        assert runtime.status()["settings_persistent"] is False
+
+        # 先建立一条已知长期记忆，再暂停新的 L1 写入。
+        backend.run("我养了一只叫豆包的猫", ())
+        runtime.configure(write_enabled=False, use_enabled=True)
+        result = backend.run("我喜欢一种叫暮雪的合成饮料", ())
+        assert result["status"] == "completed"
+        assert result["memory_write_enabled"] is False
+        assert result["memory_use_enabled"] is True
+        assert result["writes"] == []
+
+        # 已有记忆仍可召回；暂停期间的原文进 L0，但不会派生为 L1。
+        recalled = backend.run("我的猫叫什么", ())
+        assert "豆包" in recalled["answer"]
+        with sqlite3.connect(database) as connection:
+            assert connection.execute(
+                "SELECT count(*) FROM conversation_messages WHERE content LIKE '%暮雪%'"
+            ).fetchone()[0] == 1
+            assert connection.execute(
+                "SELECT count(*) FROM atomic_memories WHERE content LIKE '%暮雪%'"
+            ).fetchone()[0] == 0
+
+        # 重新允许写入、关闭召回：本轮能产生 L1，但不会把旧证据注入回答。
+        runtime.configure(write_enabled=True, use_enabled=False)
+        no_context = backend.run("我喜欢青色", ())
+        assert no_context["memory_write_enabled"] is True
+        assert no_context["memory_use_enabled"] is False
+        assert no_context["memory_context"] == ""
+        assert no_context["retrieved"] == []
+        assert no_context["retrieval_strategy"] == "disabled_by_user"
+        assert no_context["writes"][0]["operation"] == "add"
+    finally:
+        backend.close()
+
+
+@pytest.mark.parametrize(
+    "write_enabled,use_enabled",
+    [(1, True), (True, 0), ("true", True), (True, None)],
+)
+def test_runtime_rejects_non_boolean_memory_modes(database, write_enabled, use_enabled):
+    runtime = MemoryRuntime(database)
+    try:
+        with pytest.raises(ValueError, match="memory_mode_invalid"):
+            runtime.configure(write_enabled=write_enabled, use_enabled=use_enabled)
+        # 失败更新不能产生半配置状态。
+        assert runtime.status()["write_enabled"] is True
+        assert runtime.status()["use_enabled"] is True
+    finally:
+        runtime.close()
+
+
+def test_runtime_memory_modes_reset_for_a_new_process_runtime(database):
+    first = MemoryRuntime(database)
+    first.configure(write_enabled=False, use_enabled=False)
+    first.close()
+
+    second = MemoryRuntime(database)
+    try:
+        assert second.status()["write_enabled"] is True
+        assert second.status()["use_enabled"] is True
+        assert second.status()["settings_persistent"] is False
+    finally:
+        second.close()
+
+
+def test_paused_write_skips_daily_llm_extraction_but_archives_source(database):
+    class MustNotRunProducer:
+        def propose(self, **_kwargs):
+            raise AssertionError("暂停 L1 写入后不应调用提取模型")
+
+    method = DailyLLMMemory(database, producer=MustNotRunProducer(), allow_cross_thread=True)
+    runtime = MemoryRuntime(database, method=method)
+    try:
+        runtime.configure(write_enabled=False, use_enabled=True)
+        prepared = runtime.prepare_user("我喜欢暮雪饮料")
+        assert prepared.observation.processing_status == "completed"
+        assert prepared.observation.writes == ()
+        with sqlite3.connect(database) as connection:
+            assert connection.execute(
+                "SELECT count(*) FROM conversation_messages WHERE id=?",
+                (prepared.event.event_id,),
+            ).fetchone()[0] == 1
+            assert connection.execute("SELECT count(*) FROM atomic_memories").fetchone()[0] == 0
+    finally:
+        runtime.close()

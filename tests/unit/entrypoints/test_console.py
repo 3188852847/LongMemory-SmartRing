@@ -290,3 +290,93 @@ def test_internal_runtime_requires_token_and_is_immediately_shared_with_web(tmp_
             assert recalled["retrieved"][0]["source_event_ids"] == (written["turn_id"],)
 
     asyncio.run(run())
+
+
+def test_memory_mode_http_controls_the_shared_web_and_voice_runtime(tmp_path):
+    from longmemory.adapters.llm.fake import FakeAnswerGenerator
+    from longmemory.entrypoints.api.chat_backend import ChatBackend
+    from longmemory.methods.longmemory_v1.method import LongMemoryV1
+
+    database = tmp_path / "memory-mode.db"
+    LongMemoryV1(database).close()
+    backend = ChatBackend(database, FakeAnswerGenerator())
+    token = "b" * 64
+
+    async def run():
+        async with console(database, chat_backend=backend, memory_runtime_token=token) as (client, base, _bridge):
+            headers = await login(client, base)
+            current = await client.get(base + "/api/memory-mode")
+            assert current.status == 200
+            assert await current.json() == {
+                "write_enabled": True,
+                "use_enabled": True,
+                "persistent": False,
+                "l0_archived_when_write_disabled": True,
+            }
+
+            # 修改状态属于受保护操作，必须来自本机已建立的控制台会话。
+            body = {"write_enabled": False, "use_enabled": False}
+            assert (await client.put(base + "/api/memory-mode", headers={"Origin": base}, json=body)).status == 403
+            changed = await client.put(base + "/api/memory-mode", headers=headers, json=body)
+            assert changed.status == 200
+            assert (await changed.json())["persistent"] is False
+
+            # 同一个 Runtime 立即影响内部小智接口，并清楚回报本轮未写、未召回。
+            voice = await client.post(
+                base + "/api/internal/memory/prepare",
+                headers={"Authorization": "Bearer " + token},
+                json={"version": 1, "query": "我喜欢暮雪饮料"},
+            )
+            assert voice.status == 200
+            payload = await voice.json()
+            assert payload["memory_write_enabled"] is False
+            assert payload["memory_use_enabled"] is False
+            assert payload["added"] == 0 and payload["retrieved"] == 0
+            assert payload["context"] == ""
+            assert payload["retrieval_strategy"] == "disabled_by_user"
+
+            web_result = await asyncio.to_thread(backend.run, "我喜欢青色", ())
+            assert web_result["writes"] == []
+            assert web_result["memory_context"] == ""
+
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        {},
+        {"write_enabled": True},
+        {"write_enabled": True, "use_enabled": True, "extra": False},
+        {"write_enabled": 1, "use_enabled": True},
+        {"write_enabled": True, "use_enabled": "false"},
+        [],
+    ],
+)
+def test_memory_mode_http_rejects_invalid_bodies(tmp_path, body):
+    from longmemory.adapters.llm.fake import FakeAnswerGenerator
+    from longmemory.entrypoints.api.chat_backend import ChatBackend
+    from longmemory.methods.longmemory_v1.method import LongMemoryV1
+
+    database = tmp_path / "invalid-memory-mode.db"
+    LongMemoryV1(database).close()
+    backend = ChatBackend(database, FakeAnswerGenerator())
+
+    async def run():
+        async with console(database, chat_backend=backend) as (client, base, _bridge):
+            headers = await login(client, base)
+            response = await client.put(base + "/api/memory-mode", headers=headers, json=body)
+            assert response.status == 400
+            status = backend.memory_runtime().status()
+            assert status["write_enabled"] is True and status["use_enabled"] is True
+
+    asyncio.run(run())
+
+
+def test_memory_mode_reports_chat_disabled_instead_of_fake_state():
+    async def run():
+        async with console() as (client, base, _bridge):
+            await login(client, base)
+            assert (await client.get(base + "/api/memory-mode")).status == 503
+
+    asyncio.run(run())

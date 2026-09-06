@@ -120,8 +120,8 @@ class MemoryTurnService:
     def archive(self, message: ConversationMessage) -> None:
         """先单独持久化 L0，供会失败的外部提取器使用。
 
-        规则基线仍使用 observe 的原子事务。只有显式选择的日常模型提取
-        路径调用本方法，从而避免校园模型暂时不可用时丢掉原始对话。
+        规则基线正常写入仍使用 observe 的原子事务。日常模型提取先用本
+        方法保住来源；运行期暂停 L1 写入时也复用它，避免形成审计断层。
         """
         if not message.content.strip():
             raise EmptyMessageError("聊天消息不能为空。")

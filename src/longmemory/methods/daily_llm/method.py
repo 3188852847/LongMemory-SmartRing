@@ -113,6 +113,11 @@ class DailyLLMMemory:
     def recall(self, query: str):
         return self._base.recall(query)
 
+    def archive(self, event: MemoryEvent) -> ObservationResult:
+        """复用基础方法的 L0-only 语义，不调用候选提取模型。"""
+
+        return self._base.archive(event)
+
     def wait_until_ready(self) -> None:
         self._base.wait_until_ready()
 

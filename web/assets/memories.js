@@ -2,7 +2,8 @@ import {memoryError, displayTime, pageState, metadata} from "./memory-view.mjs";
 
 const el = id => document.getElementById(id);
 const state = {csrf: null, config: null, items: [], total: 0, offset: 0, limit: 25,
-  query: "", filter: "active", loading: false, writing: false, selected: null, listSeq: 0, detailSeq: 0};
+  query: "", filter: "active", loading: false, writing: false, modeReady: false, modeBusy: false,
+  selected: null, listSeq: 0, detailSeq: 0};
 
 async function api(path, options = {}) {
   const controller = new AbortController(), timeout = setTimeout(() => controller.abort(), 12000);
@@ -31,6 +32,20 @@ function controls() {
   el("memory-correct").disabled = !available || !state.selected || state.selected.state !== "active" || !state.config?.allow_correction || state.writing;
   el("memory-query").disabled = !available || state.writing;
   el("memory-filter").disabled = !available || state.writing;
+  for (const id of ["runtime-write-enabled", "runtime-use-enabled", "runtime-mode-save"])
+    el(id).disabled = !state.modeReady || state.modeBusy || state.writing;
+}
+async function loadRuntimeMode() {
+  try {
+    const mode = await api("/api/memory-mode");
+    el("runtime-write-enabled").checked = mode.write_enabled;
+    el("runtime-use-enabled").checked = mode.use_enabled;
+    el("runtime-mode-note").textContent = "两项互相独立；重启服务后恢复为全部开启。暂停 L1 写入时仍保留 L0 原始对话。";
+    state.modeReady = true;
+  } catch (error) {
+    state.modeReady = false;
+    el("runtime-mode-note").textContent = "文字聊天未启用，当前没有共享 Memory Runtime 可控制。";
+  } finally { controls(); }
 }
 function clearDetails(message = "选择一条记忆，查看完整内容和原始来源。") {
   state.detailSeq += 1; state.selected = null;
@@ -112,6 +127,18 @@ el("memory-search").addEventListener("submit", event => {
 el("memory-refresh").addEventListener("click", () => { state.offset = 0; void loadList(); });
 el("memory-previous").addEventListener("click", () => { state.offset = Math.max(0, state.offset - state.limit); void loadList(); });
 el("memory-next").addEventListener("click", () => { state.offset += state.limit; void loadList(); });
+el("runtime-mode-save").addEventListener("click", async () => {
+  if (!state.modeReady || state.modeBusy) return;
+  state.modeBusy = true; controls(); notice(null);
+  try {
+    const mode = await api("/api/memory-mode", {method: "PUT", body: {
+      write_enabled: el("runtime-write-enabled").checked,
+      use_enabled: el("runtime-use-enabled").checked,
+    }});
+    el("runtime-mode-note").textContent = `已应用：写入${mode.write_enabled ? "开启" : "暂停"}，使用${mode.use_enabled ? "开启" : "暂停"}。设置不会跨服务重启保存。`;
+  } catch (error) { notice(error); await loadRuntimeMode(); }
+  finally { state.modeBusy = false; controls(); }
+});
 el("memory-delete").addEventListener("click", () => {
   if (!state.selected || !state.config?.allow_delete) return;
   el("delete-content").textContent = state.selected.content; el("delete-id").textContent = `记忆 ID：${state.selected.id}`;
@@ -173,5 +200,6 @@ try {
   el("memory-mode").dataset.tone = state.config.allow_delete ? "warning" : "good";
   if (state.config.configured) await loadList();
   else { notice(new Error("memory_not_configured")); el("memory-list-state").textContent = "启动时指定已有记忆库后，这里才会显示记忆。"; }
+  await loadRuntimeMode();
 } catch (error) { notice(error); el("memory-list-state").textContent = "无法连接控制台，请检查网页服务并刷新。"; }
 finally { controls(); }

@@ -26,6 +26,12 @@
       <header class="page-header"><div><p class="eyebrow">长期记忆</p><h1>记忆管理</h1><p class="muted">检查系统记住了什么，以及它来自哪句话。</p></div><button id="memory-refresh" class="button secondary" type="button" disabled>刷新列表</button></header>
       <div id="memory-notice" class="notice hidden" role="alert"></div>
       <section class="panel database-panel" aria-label="当前数据库"><div><span class="field-label">当前数据库</span><strong id="memory-database">尚未连接</strong></div><span id="memory-mode" class="badge">检查中</span></section>
+      <section class="panel memory-mode-panel" aria-labelledby="runtime-mode-title">
+        <div><h2 id="runtime-mode-title">本次运行的记忆模式</h2><p id="runtime-mode-note" class="hint">正在读取共享 Memory Runtime…</p></div>
+        <label class="confirm-line"><input id="runtime-write-enabled" type="checkbox" disabled>从新对话生成 L1 长期记忆</label>
+        <label class="confirm-line"><input id="runtime-use-enabled" type="checkbox" disabled>回答时使用已有长期记忆</label>
+        <button id="runtime-mode-save" class="button secondary small" type="button" disabled>应用到网页与圆屏</button>
+      </section>
       <form id="memory-search" class="search-toolbar" role="search">
         <div class="search-field"><label for="memory-query">搜索记忆内容</label><input id="memory-query" type="search" maxlength="200" placeholder="例如：豆包、咖啡" autocomplete="off"></div>
         <div><label for="memory-filter">显示范围</label><select id="memory-filter"><option value="active">当前记忆（未退役）</option><option value="all">全部记忆</option><option value="retired">已退役</option></select></div>

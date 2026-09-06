@@ -1,5 +1,12 @@
 # Changelog
 
+### P3.4 runtime memory mode controls（2026-09-06）
+
+- 记忆管理页新增两个独立的本次运行开关：是否从新用户对话生成 L1、是否在回答时检索并注入已有记忆；网页与统一启动的圆屏共享同一个 `MemoryRuntime` 状态。
+- 暂停 L1 写入仍保存 L0 原始对话；暂停使用返回空上下文和 `disabled_by_user`，不删除数据库内容，也不阻止独立写入开关。
+- 设置不持久化，服务重启恢复全部开启；不是“完全不留痕”、仅明确要求才记或隐私擦除模式。无 schema 与依赖变更。
+- P3.3 真实纠正已由用户验收。验证：531 项 Python 回归（520 项主组＋11 项 Tk 启动面板组）、2 项 React API 测试、记忆页脚本语法检查及 TypeScript/Vite 生产构建通过；双入口实机体验待完成。
+
 ### P3.3 auditable manual correction first slice（2026-09-06）
 
 - schema V4 新增 `user_corrected` 证据类型；人工纠正以追加新 L0/L1 并 SUPERSEDE 旧 L1 实现，不原地覆盖历史。

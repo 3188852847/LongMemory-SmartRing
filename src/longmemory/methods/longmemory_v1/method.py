@@ -90,7 +90,7 @@ class LongMemoryV1:
 
     def observe(self, event: MemoryEvent) -> ObservationResult:
         self._ensure_open()
-        # 现有 V3 表不保存会话 ID。宁可拒绝，也不能悄悄丢失历史边界。
+        # 当前通用表不保存会话 ID。宁可拒绝，也不能悄悄丢失历史边界。
         if event.session_id is not None:
             raise UnsupportedCapabilityError("当前基线尚不支持持久化会话元数据。")
         operations = self.turn_service.observe(ConversationMessage(
@@ -101,6 +101,18 @@ class LongMemoryV1:
             WriteTrace(op.operation.value, str(op.memory.id), (event.event_id,))
             for op in operations
         ))
+
+    def archive(self, event: MemoryEvent) -> ObservationResult:
+        """暂停 L1 写入时仍保留 L0，避免制造不可解释的审计断层。"""
+
+        self._ensure_open()
+        if event.session_id is not None:
+            raise UnsupportedCapabilityError("当前基线尚不支持持久化会话元数据。")
+        self.turn_service.archive(ConversationMessage(
+            id=MessageId(event.event_id), role=MessageRole(event.role),
+            content=event.content, created_at=event.occurred_at,
+        ))
+        return ObservationResult(event.event_id, ())
 
     def wait_until_ready(self) -> None:
         """本实现同步完成写入，无后台任务；关闭后不能假装仍然就绪。"""
