@@ -1,11 +1,18 @@
 # Changelog
 
+### Progressive React console: device page（2026-09-06）
+
+- 新增 React `/device`，迁移活动连接、5 秒状态轮询、显式读取音量、5–60 音量设置、设备回执/读回结果及离线唤醒说明；原生 `/` 保留回退，不增加未经验证的电量、亮度、屏幕 UI 或重启控制。
+- 设备状态首次使用 TanStack Query；读取和设置建模为仅由用户触发的 mutation，默认不重试，操作后才刷新连接状态。轮询失败会立即清除旧“可控制”判断和音量读数，避免用陈旧状态放行写操作。
+- `/device`、`/memories` 均按路由动态加载。当前未压缩构建块约为共享 antd/AppShell 473 kB、聊天入口 187 kB、设备 78 kB、记忆 84 kB；构建成功但共享块仍有体积提醒。
+- 验证：5 项前端测试、TypeScript 检查、Vite 生产构建及 61 项设备/会话/React 资源 Python 回归通过；真实圆屏浏览器操作待用户体验。
+
 ### React console foundation: routing, queries and component tests（2026-09-06）
 
 - React 控制台以 React Router 取代入口文件中的 `location.pathname` 分支；`/chat-react` 与 `/memories` 使用客户端路由，共享 AppShell、导航和外观状态，旧页面回退入口继续保留。
 - 建立 TanStack Query 的统一 QueryClient；查询和 mutation 默认不自动重试，避免聊天发送、纠正、删除与设备操作在网络状态不明时被隐式重放。现有页面尚未批量改写为 query hooks。
 - 前端测试迁移到 Vitest，并加入 React Testing Library；覆盖 API 的 CSRF/不重放约束、共享导航和 QueryClient 重试策略。
-- 验证：4 项前端测试、TypeScript 检查、Vite 生产构建及 45 项相关 Python 回归通过。构建器仍提示主入口块约 658 kB，后续迁移设备页时按路由继续拆分，不把警告误写为运行故障。
+- 验证：4 项前端测试、TypeScript 检查、Vite 生产构建及 45 项相关 Python 回归通过。该切片发现入口体积提醒，随后在设备页迁移时进一步按路由拆分；不把构建警告误写为运行故障。
 
 ### Progressive React console: memory page（2026-09-06）
 

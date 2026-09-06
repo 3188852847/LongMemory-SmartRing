@@ -1,7 +1,7 @@
 import type {ReactNode} from 'react';
 import {Link} from 'react-router-dom';
 
-type Page = 'chat' | 'memories';
+type Page = 'device' | 'chat' | 'memories';
 
 /** 控制台各 React 页面共享的外壳；页面只负责自己的业务控件。 */
 export function AppShell({subtitle, className = '', sidebar, children}: {
@@ -19,9 +19,9 @@ export function AppShell({subtitle, className = '', sidebar, children}: {
 /** React 内部页面使用客户端路由；尚未迁移的页面继续由 Python 完整加载。 */
 export function ConsoleNav({active, legacyPath}: {active: Page; legacyPath: string}) {
   return <nav aria-label="控制台导航">
+    {active === 'device' ? <strong>设备与状态</strong> : <Link to="/device">设备与状态</Link>}
     {active === 'chat' ? <strong>文字聊天</strong> : <Link to="/chat-react">文字聊天</Link>}
     {active === 'memories' ? <strong>记忆管理</strong> : <Link to="/memories">记忆管理</Link>}
-    <a href="/">设备与状态</a>
     <a href="/experiments">实验中心</a>
     <a href={legacyPath}>返回原版页面</a>
   </nav>;

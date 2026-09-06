@@ -12,6 +12,7 @@ import {createConsoleQueryClient} from './queryClient';
 import {RoleEditor} from './RoleEditor';
 import {VoiceSettings} from './VoiceSettings';
 
+const DeviceApp = lazy(() => import('./DeviceApp').then(module => ({default: module.DeviceApp})));
 const MemoryApp = lazy(() => import('./MemoryApp').then(module => ({default: module.MemoryApp})));
 
 const api = new ChatApi();
@@ -119,6 +120,7 @@ function ChatApp() {
 
 function ConsoleApp() {
   return <QueryClientProvider client={queryClient}><AppearanceProvider><BrowserRouter><Routes>
+    <Route path="/device" element={<Suspense fallback={<p className="page-loading">正在加载设备控制…</p>}><DeviceApp/></Suspense>}/>
     <Route path="/chat-react" element={<ChatApp/>}/>
     <Route path="/memories" element={<Suspense fallback={<p className="page-loading">正在加载记忆管理…</p>}><MemoryApp/></Suspense>}/>
     <Route path="*" element={<Navigate to="/chat-react" replace/>}/>

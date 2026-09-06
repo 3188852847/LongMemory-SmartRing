@@ -18,7 +18,7 @@ P2 新增声音设置：四种 Edge TTS 音色、固定文本联网试听和确�
 
 P2 助手角色设置已接入 `/chat-react`：网页编辑、版本化保存；圆屏可检查并明确确认同步到小智配置，之后需重启小智，实机生效待验收。见[助手角色设置](docs/guides/助手角色设置.md)。
 
-Web 控制台开始渐进统一到 React + TypeScript + Vite + antd：聊天页 `/chat-react` 已是默认入口，记忆页 `/memories` 已提供 L1/L0 分层与双向来源检查；两页现由 React Router、共享 AppShell 与统一外观状态承载，TanStack Query 已建立“不隐式重试写操作”的基础策略，组件测试使用 Vitest/React Testing Library。原版 `/chat`、`/memories-legacy` 暂留回退，设备与实验页面尚未迁移。见[体验指南](docs/guides/React聊天页.md)、[技术策略](docs/architecture/technology-strategy.md)、[迁移清单](docs/architecture/react-chat-migration.md)与 [ADR-0032](docs/adr/0032-progressive-react-console-migration.md)。
+Web 控制台开始渐进统一到 React + TypeScript + Vite + antd：聊天 `/chat-react`、记忆 `/memories` 与设备 `/device` 已共用 React Router、AppShell 和外观状态；记忆页提供 L1/L0 分层与双向来源，设备页用 TanStack Query 管理连接轮询及不自动重试的音量操作。原版 `/chat`、`/memories-legacy`、`/` 暂留回退，实验页面尚未迁移；组件测试使用 Vitest/React Testing Library。见[体验指南](docs/guides/React聊天页.md)、[技术策略](docs/architecture/technology-strategy.md)、[迁移清单](docs/architecture/react-chat-migration.md)与 [ADR-0032](docs/adr/0032-progressive-react-console-migration.md)。
 
 P2：聊天页支持浅色/深色/跟随系统及字号保存，配置默认折叠。见[外观设置](docs/guides/外观设置.md)。角色编辑、显式圆屏配置同步及音色试听已实现；不改日常记忆算法。
 
@@ -136,7 +136,7 @@ P3 目标已明确为四层个人记忆：L0 原始证据、L1 原子记忆、L2
 
 当前厂家 B V2 低电量提示已消失，圆屏记忆演示已跑通。[七步启用指南](docs/deployment/xiaozhi-longmemory-demo.md) 保留用于复现。适配器逐轮保存用户 ASR 正文，暂不归档小智助手回答；PC 仍保存双方 L0。用户已体验并暂时接受 [助手角色文本](docs/third_party/elysia-skill-review.md)，不改记忆核心、不新增剧情 RAG、不切换音色。电量精度及充放电切换仍未验证。
 
-本机控制台：设备与状态页已由用户确认可控制圆屏；记忆管理页现已实现分页/文字筛选、来源查看、单条删除确认。用 `--database` 指定已有库，默认只读、不自动建库/迁移，删除需额外启用且 L0 原文仍保留。浏览器界面不等于设备常在线，进入聆听状态后才可能可控。启动与使用见[本机控制台指南](docs/deployment/local-console.md)。当前 223 项 Python 回归和 9 项前端测试通过；记忆页真实浏览器交互尚未验证，没有替用户删除真实数据。
+本机控制台：设备与状态页已由用户确认可控制圆屏；React 设备页位于 `/device`，原生 `/` 保留回退。记忆管理页已实现分页/文字筛选、来源查看、纠正、运行期开关和受限单条删除。用 `--database` 指定已有库，不自动建库；删除需额外启用且 L0 原文仍保留。浏览器界面不等于设备常在线，进入聆听状态后才可能可控。启动与使用见[本机控制台指南](docs/deployment/local-console.md)，最新自动验证数量见 CHANGELOG；没有替用户删除真实数据。
 
 ## V0.1 目标
 

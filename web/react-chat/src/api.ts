@@ -1,4 +1,11 @@
 // 所有请求复用本机 Cookie/CSRF；不持久缓存正文，不自动重试写请求。
+export class ApiError extends Error {
+  constructor(public readonly code: string, public readonly status: number) {
+    super(`请求未完成（${code}）。不要自动重发消息。`);
+    this.name = 'ApiError';
+  }
+}
+
 export class ChatApi {
   private csrf = '';
   async voicePreview(voice: string): Promise<Blob> {
@@ -17,7 +24,7 @@ export class ChatApi {
       headers: method === 'GET' ? {} : {'Content-Type': 'application/json', 'X-Console-CSRF': this.csrf},
       body: body === undefined ? undefined : JSON.stringify(body)});
     const data = await response.json();
-    if (!response.ok) throw new Error(`请求未完成（${data.error ?? response.status}）。不要自动重发消息。`);
+    if (!response.ok) throw new ApiError(String(data.error ?? response.status), response.status);
     return data;
   }
 }
