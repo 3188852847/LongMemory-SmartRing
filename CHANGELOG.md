@@ -1,5 +1,12 @@
 # Changelog
 
+### Progressive React console: personalized settings（2026-09-06）
+
+- 新增 React `/settings`，聚合助手角色、声音与浏览器外观；聊天侧栏移除三组编辑控件，只保留会话操作和统一导航。
+- 明确三类设置边界：助手角色不是 L3 用户画像，网页与圆屏角色同步分开；Edge/VoxCPM2 继续沿用原有试听、配置备份和重启语义；主题/字号只保存浏览器枚举，不保存正文。
+- 设置页复用既有角色和声音安全 API，并通过 TanStack Query 管理会话启动与聊天配置读取；没有改变小智配置格式、记忆数据库或 TTS 适配层。
+- 验证：5 项前端测试、TypeScript 检查、Vite 生产构建及 20 项角色/声音/React 资源 Python 回归通过；真实浏览器角色、声音弹窗体验待用户验证。
+
 ### Progressive React console: device page（2026-09-06）
 
 - 新增 React `/device`，迁移活动连接、5 秒状态轮询、显式读取音量、5–60 音量设置、设备回执/读回结果及离线唤醒说明；原生 `/` 保留回退，不增加未经验证的电量、亮度、屏幕 UI 或重启控制。

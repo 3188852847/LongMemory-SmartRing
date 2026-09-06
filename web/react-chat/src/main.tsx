@@ -6,14 +6,13 @@ import {BrowserRouter, Navigate, Route, Routes} from 'react-router-dom';
 import {ChatApi, type Config, type Snapshot, type Summary, type Turn} from './api';
 import {turnSummary} from '../../assets/chat-view.mjs';
 import './style.css';
-import {AppearanceProvider, useAppearance} from './AppearanceProvider';
+import {AppearanceProvider} from './AppearanceProvider';
 import {AppShell, ConsoleNav} from './AppShell';
 import {createConsoleQueryClient} from './queryClient';
-import {RoleEditor} from './RoleEditor';
-import {VoiceSettings} from './VoiceSettings';
 
 const DeviceApp = lazy(() => import('./DeviceApp').then(module => ({default: module.DeviceApp})));
 const MemoryApp = lazy(() => import('./MemoryApp').then(module => ({default: module.MemoryApp})));
+const SettingsApp = lazy(() => import('./SettingsApp').then(module => ({default: module.SettingsApp})));
 
 const api = new ChatApi();
 const queryClient = createConsoleQueryClient();
@@ -23,7 +22,6 @@ function memoryWarning(turn: Turn) {
     : '本轮 L0 原始对话已保存，但 L1 记忆提取失败。';
 }
 function ChatApp() {
-  const {prefs, update: updateAppearance, reset: resetAppearance} = useAppearance();
   const [config, setConfig] = useState<Config>();
   const [chats, setChats] = useState<Summary[]>([]);
   const [chat, setChat] = useState<Snapshot>();
@@ -38,9 +36,6 @@ function ChatApp() {
   const selectionKey = useRef('');
   const turnsEnd = useRef<HTMLDivElement>(null);
   useEffect(() => {turnsEnd.current?.scrollIntoView({block: 'nearest'});}, [chat?.turns.length]);
-  function appearance(value: typeof prefs) {
-    if (!updateAppearance(value)) setNotice('浏览器无法保存外观设置，本页仍可使用。');
-  }
   async function list() {
     const data = await api.request<{chats: Summary[]}>('/api/chats'); setChats(data.chats); return data.chats;
   }
@@ -96,11 +91,7 @@ function ChatApp() {
       <label htmlFor="conversation">最近会话</label><Select id="conversation" className="wide" aria-label="最近会话" value={chat?.chat_id} disabled={busy || unknown}
         options={chats.map(c => ({value: c.chat_id, label: `${c.title} · ${c.turn_count} 轮`}))} onChange={changeChat}/>
       <Button disabled={disabled} onClick={() => {setTitle(chat?.title ?? ''); setRename(true);}}>重命名</Button>
-      <VoiceSettings api={api} disabled={busy || !config?.enabled}/>
-      <RoleEditor api={api} disabled={busy || !config?.enabled} onSaved={() => {void api.request<Config>('/api/chat-config').then(setConfig).catch(() => setNotice('角色已保存，但运行配置显示未刷新，请重新读取。'));}}/>
       <ConsoleNav active="chat" legacyPath="/chat"/>
-      <details><summary>外观与阅读</summary><label>主题</label><Select className="wide" aria-label="主题" value={prefs.theme} onChange={value => appearance({...prefs, theme: value})} options={[{value:'system',label:'跟随系统'},{value:'light',label:'浅色'},{value:'dark',label:'深色'}]}/>
-        <label>字号</label><Select className="wide" aria-label="字号" value={prefs.size} onChange={value => appearance({...prefs,size:value})} options={[{value:'normal',label:'标准'},{value:'large',label:'大'},{value:'larger',label:'更大'}]}/><Button onClick={() => {if (!resetAppearance()) setNotice('浏览器无法保存外观设置，本页仍可使用。');}}>恢复默认</Button></details>
     </>;
   return <><AppShell subtitle="你的日常聊天空间" sidebar={sidebar}><header><h1>聊聊今天</h1><span>{chat?.turns.length ?? 0} / 40 轮 · React 预览</span></header>
       <section className="messages" aria-label="聊天记录">{!chat?.turns.length && <div className="empty"><h2>今天想聊些什么？</h2><p>可以说说今天的事，也可以继续上次的话题。</p></div>}
@@ -123,6 +114,7 @@ function ConsoleApp() {
     <Route path="/device" element={<Suspense fallback={<p className="page-loading">正在加载设备控制…</p>}><DeviceApp/></Suspense>}/>
     <Route path="/chat-react" element={<ChatApp/>}/>
     <Route path="/memories" element={<Suspense fallback={<p className="page-loading">正在加载记忆管理…</p>}><MemoryApp/></Suspense>}/>
+    <Route path="/settings" element={<Suspense fallback={<p className="page-loading">正在加载个性化设置…</p>}><SettingsApp/></Suspense>}/>
     <Route path="*" element={<Navigate to="/chat-react" replace/>}/>
   </Routes></BrowserRouter></AppearanceProvider></QueryClientProvider>;
 }

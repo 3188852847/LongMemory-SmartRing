@@ -51,4 +51,5 @@ def register_react_routes(app, root: Path):
     app.router.add_get('/chat-react', page)
     app.router.add_get('/device', page)
     app.router.add_get('/memories', page)
+    app.router.add_get('/settings', page)
     app.router.add_get('/react-chat/{path:.*}', asset)

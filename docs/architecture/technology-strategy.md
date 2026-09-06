@@ -63,7 +63,7 @@
 1. 已建立 React Router、TanStack Query 的安全默认值和统一 AppShell。
 2. 已加入 Vitest/React Testing Library，验证共享导航、API 安全约束与危险 mutation 默认不重试；页面级错误状态随迁移继续补充。
 3. 已以设备与状态页验证查询、5 秒轮询和受控 mutation，保留旧页回退。
-4. 下一步聚合角色/声音设置；实验中心随后迁移，逐项清理旧资源。
+4. 已聚合角色、声音与浏览器外观；下一步迁移实验中心，逐项清理旧资源。
 5. 选择一个小型 Python API 做 Pydantic 契约试点；验证后渐进覆盖。
 6. React 页面基本统一后加入 Playwright 关键流程。
 7. 收束基础设施并回到 P3：事实变化、L2 场景、L3 用户画像和日常召回质量。
