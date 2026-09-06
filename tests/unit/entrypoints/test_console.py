@@ -603,6 +603,14 @@ def test_persona_http_requires_csrf_and_explicit_capability(tmp_path):
                     '"label":"饮品偏好","statement":"用户平时喜欢喝乌龙茶。",'
                     '"sources":[{"layer":"l1","id":"l1-tea"}]}}')
 
+        def propose_consolidation(self, *, basis, sources, active_personas):
+            self.calls += 1
+            assert active_personas == ()
+            return ('{"schema_version":1,"operation":"ADD","candidate":{'
+                    '"kind":"preference","label":"饮品偏好",'
+                    '"statement":"用户平时喜欢喝乌龙茶。",'
+                    '"sources":[{"layer":"l1","id":"l1-tea"}]},"replaces":[]}')
+
     producer = ProposalProducer()
 
     async def run():
@@ -640,6 +648,20 @@ def test_persona_http_requires_csrf_and_explicit_capability(tmp_path):
             assert proposal["persisted"] is False
             assert proposal["sources"] == [{"layer": "l1", "id": "l1-tea"}]
             assert producer.calls == 1
+
+            consolidation_response = await client.post(
+                base + "/api/persona-consolidation-proposals",
+                headers=headers, json=proposal_body,
+            )
+            consolidation = await consolidation_response.json()
+            assert consolidation_response.status == 200
+            assert consolidation["operation"] == "ADD"
+            assert consolidation["candidate"]["sources"] == [
+                {"layer": "l1", "id": "l1-tea"}
+            ]
+            assert consolidation["replaces"] == []
+            assert consolidation["persisted"] is False
+            assert producer.calls == 2
 
             assert (await client.post(base + "/api/personas", json=body)).status == 403
             created_response = await client.post(

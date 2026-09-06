@@ -283,7 +283,9 @@ def register_memory_routes(app, backend):
         if (not isinstance(body, dict)
                 or not required_fields <= set(body) <= allowed_fields
                 or body.get("confirm_candidate") is not True
-                or body.get("creation_kind", "manual") not in {"manual", "model_assisted"}
+                or body.get("creation_kind", "manual") not in {
+                    "manual", "model_assisted", "model_consolidation",
+                }
                 or body.get("kind") not in {"preference", "habit", "interaction_style", "behavior_pattern"}
                 or body.get("basis") not in {"user_declared", "system_inferred"}
                 or not isinstance(body.get("label"), str)
@@ -346,6 +348,34 @@ def register_memory_routes(app, backend):
             backend.preview_persona, basis=body["basis"], sources=sources,
         )
 
+    async def persona_consolidation_proposal(request):
+        if request.content_type != "application/json":
+            raise web.HTTPBadRequest()
+        try:
+            body = await request.json()
+        except (ValueError, UnicodeError):
+            raise web.HTTPBadRequest() from None
+        sources = body.get("sources") if isinstance(body, dict) else None
+        if (not isinstance(body, dict)
+                or set(body) != {"basis", "sources", "confirm_model_call"}
+                or body.get("basis") not in {"user_declared", "system_inferred"}
+                or body.get("confirm_model_call") is not True
+                or not isinstance(sources, list) or not 1 <= len(sources) <= 20):
+            raise web.HTTPBadRequest()
+        keys = []
+        for item in sources:
+            if (not isinstance(item, dict) or set(item) != {"layer", "id"}
+                    or item.get("layer") not in {"l1", "l2"}
+                    or not isinstance(item.get("id"), str)
+                    or not 1 <= len(item["id"]) <= 128):
+                raise web.HTTPBadRequest()
+            keys.append((item["layer"], item["id"]))
+        if len(set(keys)) != len(keys):
+            raise web.HTTPBadRequest()
+        return await invoke(
+            backend.preview_persona_consolidation, basis=body["basis"], sources=sources,
+        )
+
     async def persona_detail(request):
         persona_id = request.match_info["persona_id"]
         if not persona_id or len(persona_id) > 128 or any(ord(c) < 32 for c in persona_id):
@@ -392,5 +422,6 @@ def register_memory_routes(app, backend):
     app.router.add_get("/api/persona-source-options", persona_source_options, allow_head=False)
     app.router.add_post("/api/personas", persona_collection)
     app.router.add_post("/api/persona-proposals", persona_proposal)
+    app.router.add_post("/api/persona-consolidation-proposals", persona_consolidation_proposal)
     app.router.add_get("/api/personas/{persona_id}", persona_detail, allow_head=False)
     app.router.add_post("/api/personas/{persona_id}/reviews", persona_review)

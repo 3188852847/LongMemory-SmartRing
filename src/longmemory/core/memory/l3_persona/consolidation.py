@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 from enum import Enum
 import json
+from typing import Protocol
 
 from longmemory.core.common.identifiers import PersonaId
 
@@ -12,6 +13,7 @@ from .proposals import (
     PersonaProposal,
     PersonaProposalError,
     parse_persona_proposal,
+    PersonaProposalInput,
 )
 
 
@@ -28,6 +30,16 @@ class PersonaConsolidationSuggestion:
     operation: PersonaConsolidationOperation
     candidate: PersonaProposal | None
     replaces: tuple[PersonaId, ...]
+
+
+class PersonaConsolidationProducer(Protocol):
+    def propose_consolidation(
+        self,
+        *,
+        basis: PersonaBasis,
+        sources: tuple[PersonaProposalInput, ...],
+        active_personas: tuple[PersonaMemory, ...],
+    ) -> str: ...
 
 
 def _unique_object(pairs):

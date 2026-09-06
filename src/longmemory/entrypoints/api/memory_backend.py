@@ -17,6 +17,7 @@ from longmemory.application.scenario_management.service import ScenarioManagemen
 from longmemory.application.scenario_management.proposal_service import ScenarioProposalService
 from longmemory.application.persona_management.service import PersonaManagementService
 from longmemory.application.persona_management.proposal_service import PersonaProposalService
+from longmemory.application.persona_management.consolidation_service import PersonaConsolidationService
 from longmemory.application.persona_management.profile import build_persona_profile
 from longmemory.core.common.identifiers import MemoryId, PersonaId, ScenarioId
 from longmemory.core.memory.l1_atomic.models import CURRENT_USER_SUBJECT_ID
@@ -26,7 +27,10 @@ from longmemory.core.memory.l2_scenario.proposals import (
     ScenarioProposalInput,
 )
 from longmemory.adapters.llm.scenario_candidate import SCENARIO_PROMPT_VERSION
-from longmemory.adapters.llm.persona_candidate import PERSONA_PROMPT_VERSION
+from longmemory.adapters.llm.persona_candidate import (
+    PERSONA_CONSOLIDATION_PROMPT_VERSION,
+    PERSONA_PROMPT_VERSION,
+)
 from longmemory.core.memory.l3_persona.models import (
     PersonaBasis,
     PersonaKind,
@@ -676,19 +680,23 @@ class MemoryBackend:
                     parsed_valid_to = datetime.fromisoformat(valid_to) if valid_to else None
                 except ValueError:
                     raise MemoryAccessError("persona_valid_time_invalid", 400) from None
-                if creation_kind == "model_assisted" and self.persona_producer is None:
+                if creation_kind in {"model_assisted", "model_consolidation"} and self.persona_producer is None:
                     raise MemoryAccessError("persona_model_preview_unavailable", 503)
+                model_generated = creation_kind in {"model_assisted", "model_consolidation"}
                 persona = service.create_candidate(
                     kind=PersonaKind(kind), basis=PersonaBasis(basis), label=label,
                     statement=statement,
                     source_refs=tuple((PersonaSourceLayer(item["layer"]), item["id"])
                                       for item in sources),
                     generator_name=(
-                        "model_assisted_console" if creation_kind == "model_assisted"
+                        "model_assisted_console" if model_generated
                         else "manual_console"
                     ),
                     generator_version=(
-                        PERSONA_PROMPT_VERSION if creation_kind == "model_assisted" else "1"
+                        PERSONA_CONSOLIDATION_PROMPT_VERSION
+                        if creation_kind == "model_consolidation"
+                        else PERSONA_PROMPT_VERSION if creation_kind == "model_assisted"
+                        else "1"
                     ),
                     valid_from=parsed_valid_from, valid_to=parsed_valid_to,
                     replaces=tuple(PersonaId(item) for item in replaces),
@@ -755,6 +763,74 @@ class MemoryBackend:
                         for layer, source_id in proposal.source_refs],
             "generator_name": "model_assisted_console",
             "generator_version": PERSONA_PROMPT_VERSION,
+            "model": self.persona_model,
+            "persisted": False,
+        }
+
+    def preview_persona_consolidation(self, *, basis, sources):
+        """读取显式来源与当前有效画像后关闭数据库，再生成整理建议。"""
+
+        if not self.allow_persona_management:
+            raise MemoryAccessError("persona_management_disabled", 403)
+        if self.persona_producer is None:
+            raise MemoryAccessError("persona_model_preview_unavailable", 503)
+        try:
+            parsed_basis = PersonaBasis(basis)
+        except ValueError:
+            raise MemoryAccessError("persona_basis_invalid", 400) from None
+        inputs = []
+        with self._open() as connection:
+            store = SQLitePersonaStore(connection)
+            active_personas = store.list_active(CURRENT_USER_SUBJECT_ID)
+            for item in sources:
+                layer = PersonaSourceLayer(item["layer"])
+                resolved = store.resolve_source(layer, item["id"])
+                if resolved is None:
+                    raise MemoryAccessError("persona_source_missing_or_inactive", 400)
+                if layer == PersonaSourceLayer.L1:
+                    rows = connection.execute(
+                        "SELECT m.id,m.content,m.created_at FROM memory_evidence e "
+                        "JOIN conversation_messages m ON m.id=e.source_message_id "
+                        "WHERE e.memory_id=? AND m.role='user' ORDER BY m.created_at,m.id",
+                        (item["id"],),
+                    ).fetchall()
+                else:
+                    rows = connection.execute(
+                        "SELECT DISTINCT m.id,m.content,m.created_at FROM scenario_memory_sources s "
+                        "JOIN memory_evidence e ON e.memory_id=s.memory_id "
+                        "JOIN conversation_messages m ON m.id=e.source_message_id "
+                        "WHERE s.scenario_id=? AND m.role='user' ORDER BY m.created_at,m.id",
+                        (item["id"],),
+                    ).fetchall()
+                inputs.append(PersonaProposalInput(
+                    layer, item["id"], resolved.subject_id, resolved.content_snapshot,
+                    tuple(PersonaProposalEvidence(
+                        row["id"], row["content"],
+                        datetime.fromisoformat(row["created_at"]).astimezone(UTC).date().isoformat(),
+                    ) for row in rows),
+                ))
+        try:
+            suggestion = PersonaConsolidationService(self.persona_producer).preview(
+                basis=parsed_basis,
+                sources=tuple(inputs),
+                active_personas=active_personas,
+            )
+        except PersonaProposalError as error:
+            raise MemoryAccessError(str(error), 400) from None
+        candidate = suggestion.candidate
+        return {
+            "operation": suggestion.operation.value,
+            "candidate": None if candidate is None else {
+                "kind": candidate.kind.value,
+                "basis": candidate.basis.value,
+                "label": candidate.label,
+                "statement": candidate.statement,
+                "sources": [{"layer": layer.value, "id": source_id}
+                            for layer, source_id in candidate.source_refs],
+            },
+            "replaces": [str(item) for item in suggestion.replaces],
+            "generator_name": "model_assisted_console",
+            "generator_version": PERSONA_CONSOLIDATION_PROMPT_VERSION,
             "model": self.persona_model,
             "persisted": False,
         }

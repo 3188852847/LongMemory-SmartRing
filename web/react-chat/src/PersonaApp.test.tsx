@@ -47,10 +47,10 @@ describe('L3 用户画像页', () => {
     vi.spyOn(ChatApi.prototype,'request').mockImplementation(async(path:string,method?:string,body?:unknown) => {
       calls.push([path,method,body]);
       if(path==='/api/memory-config') return {configured:true,database:'synthetic.db',allow_persona_management:true,persona_model_preview_available:true,persona_model:'synthetic-model'};
-      if(path==='/api/persona-profile') return {subject_id:'user:self',representation:'aggregated_active_assertions_v1',updated_at:null,active_assertion_count:0,status_counts:{candidate:0,active:0,rejected:0,stale:0},sections:[]};
+      if(path==='/api/persona-profile') return {subject_id:'user:self',representation:'aggregated_active_assertions_v1',updated_at:null,active_assertion_count:1,status_counts:{candidate:0,active:1,rejected:0,stale:0},sections:[{kind:'interaction_style',items:[{id:'active-listen',subject_id:'user:self',kind:'interaction_style',basis:'user_declared',label:'旧互动方式',statement:'用户希望先被倾听。',generated_at:'2026-09-05T10:00:00Z',valid_from:null,valid_to:null,status:'active',generator_name:'manual_console',generator_version:'1',revision:2}]}]};
       if(path.startsWith('/api/personas?')) return {items:[],total:0,limit:100,offset:0};
       if(path==='/api/persona-source-options') return {l1:[{layer:'l1',id:'l1-a',subject_id:'user:self',content:'用户明确希望先被倾听。',recorded_at:'2026-09-06T10:00:00Z'}],l2:[],selection_is_semantic:false};
-      if(path==='/api/persona-proposals'&&method==='POST') return {kind:'interaction_style',basis:'user_declared',label:'建议前先倾听',statement:'用户希望助手先倾听，再询问是否需要建议。',sources:[{layer:'l1',id:'l1-a'}],generator_name:'model_assisted_console',generator_version:'l3-persona-preview-v1',model:'synthetic-model',persisted:false};
+      if(path==='/api/persona-consolidation-proposals'&&method==='POST') return {operation:'UPDATE',candidate:{kind:'interaction_style',basis:'user_declared',label:'建议前先倾听',statement:'用户希望助手先倾听，再询问是否需要建议。',sources:[{layer:'l1',id:'l1-a'}]},replaces:['active-listen'],generator_name:'model_assisted_console',generator_version:'l3-persona-consolidation-v1',model:'synthetic-model',persisted:false};
       throw new Error(`unexpected ${method??'GET'} ${path}`);
     });
     const client=createConsoleQueryClient();
@@ -60,11 +60,12 @@ describe('L3 用户画像页', () => {
     fireEvent.click(create);
     fireEvent.mouseDown(screen.getByLabelText('画像证据来源'));
     fireEvent.click(await screen.findByText(/L1 · 用户明确希望先被倾听/));
-    fireEvent.click(screen.getByRole('button',{name:'让模型生成不落库草稿'}));
-    expect(calls.filter(([path])=>path==='/api/persona-proposals')).toHaveLength(0);
-    fireEvent.click(screen.getByRole('button',{name:'生成不落库草稿'}));
-    await waitFor(()=>expect(calls.filter(([path])=>path==='/api/persona-proposals')).toHaveLength(1));
+    fireEvent.click(screen.getByRole('button',{name:'让模型提出整理建议'}));
+    expect(calls.filter(([path])=>path==='/api/persona-consolidation-proposals')).toHaveLength(0);
+    fireEvent.click(screen.getByRole('button',{name:'生成不落库建议'}));
+    await waitFor(()=>expect(calls.filter(([path])=>path==='/api/persona-consolidation-proposals')).toHaveLength(1));
     expect((screen.getByLabelText('简短标签') as HTMLInputElement).value).toBe('建议前先倾听');
+    expect(screen.getByText('这是追加＋取代，不是原地覆盖')).toBeTruthy();
     expect(calls.filter(([path])=>path==='/api/personas')).toHaveLength(0);
     view.unmount();client.clear();
   });

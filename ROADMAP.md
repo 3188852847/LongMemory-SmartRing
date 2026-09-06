@@ -26,7 +26,7 @@ P3.1 已将网页和统一启动模式下的小智改为共享一个常驻 `Memo
 
 L2 第一版“可复核的时间化场景候选”已完成候选、来源、模型预览、人工复核、现实有效期和审计式手动结束。已接受且当前有效的 L2 可通过独立、默认关闭的运行期开关参与网页与圆屏回答；第一版只做标题/摘要关键词重叠，最多 3 条，并单独记录 L2→L1→L0 来源。来源 L1 退役/删除或用户手动结束都会留下生命周期事件；个人库已在一致性备份后迁移至 V6。控制台另有只读“待整理 L1”收件箱，并允许用户明确确认后让学校模型从最多 20 条来源中推荐一个可编辑、不落库草稿；模型可以拒绝不可靠分组。尚未实现自动后台整理、一次生成多个候选、语义 L2 召回、场景重建或持久策略。见 [ADR-0035](docs/adr/0035-reviewable-l2-scenario-candidates.md)、[ADR-0037](docs/adr/0037-controlled-l2-answer-context.md)、[ADR-0038](docs/adr/0038-audited-l2-lifecycle.md)与 [L2 验收需求](docs/requirements/l2-scenario-memory.md)。
 
-L3 不从一次 L2 直接推断习惯：画像被拆成独立候选，并区分用户明确声明 `user_declared` 与系统归纳 `system_inferred`。后者的保守下限是至少两个来源、三条用户原话和两个 UTC 观察日。控制台将当前有效断言聚合成一份统一用户画像，但不另存不可追溯的大文本。V9 已增加人工候选式取代：新内容先复核，接受时才原子失效旧画像；个人库已在一致性备份后迁移。低频整理的 `ADD / UPDATE / NOOP` 领域契约已建立，但尚未连接模型、调度器或写入路径。下一步完成显式整理预览装配与真实页面体验；L3 受控回答注入在整合规则验证后再独立启用。见 [ADR-0039](docs/adr/0039-reviewable-l3-persona-foundation.md)至 [ADR-0046](docs/adr/0046-l3-consolidation-operation-contract.md)与 [L3 验收需求](docs/requirements/l3-user-persona.md)。
+L3 不从一次 L2 直接推断习惯：画像被拆成独立候选，并区分用户明确声明 `user_declared` 与系统归纳 `system_inferred`。后者的保守下限是至少两个来源、三条用户原话和两个 UTC 观察日。控制台将当前有效断言聚合成一份统一用户画像，但不另存不可追溯的大文本。V9 已增加人工候选式取代：新内容先复核，接受时才原子失效旧画像；个人库已在一致性备份后迁移。`ADD / UPDATE / NOOP` 整理契约现已接入显式、不落库的模型预览，UPDATE 继续复用候选式取代。下一步是真实页面体验与低频触发/预算设计；L3 受控回答注入在整合规则验证后再独立启用。见 [ADR-0039](docs/adr/0039-reviewable-l3-persona-foundation.md)至 [ADR-0046](docs/adr/0046-l3-consolidation-operation-contract.md)与 [L3 验收需求](docs/requirements/l3-user-persona.md)。
 
 ## 历史执行顺序：研究平台迁移（2026-09-03，执行优先级由 ADR-0015 替代）
 

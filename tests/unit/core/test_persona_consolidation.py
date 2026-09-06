@@ -5,6 +5,7 @@ import json
 
 import pytest
 
+from longmemory.application.persona_management.consolidation_service import PersonaConsolidationService
 from longmemory.core.common.identifiers import MemorySubjectId, PersonaId
 from longmemory.core.memory.l3_persona.consolidation import (
     PersonaConsolidationOperation,
@@ -17,7 +18,11 @@ from longmemory.core.memory.l3_persona.models import (
     PersonaSourceLayer,
     PersonaStatus,
 )
-from longmemory.core.memory.l3_persona.proposals import PersonaProposalError
+from longmemory.core.memory.l3_persona.proposals import (
+    PersonaProposalError,
+    PersonaProposalEvidence,
+    PersonaProposalInput,
+)
 
 
 def active(identifier: str, kind: PersonaKind = PersonaKind.PREFERENCE) -> PersonaMemory:
@@ -60,6 +65,15 @@ def parse(raw: str, personas=()):
     )
 
 
+def source_inputs():
+    return tuple(PersonaProposalInput(
+        PersonaSourceLayer.L1, f"l1-{index}", MemorySubjectId("user:self"), text,
+        (PersonaProposalEvidence(f"l0-{index}", original, day),),
+    ) for index, text, original, day in (
+        ("new", "用户现在喜欢清淡乌龙茶。", "我现在更喜欢清淡乌龙茶。", "2026-09-06"),
+    ))
+
+
 def test_consolidation_accepts_add_update_and_noop_contracts():
     added = parse(payload("ADD"))
     updated = parse(payload("UPDATE", replaces=("old",)), (active("old"),))
@@ -91,3 +105,23 @@ def test_consolidation_rejects_sources_outside_explicit_input():
     raw = payload("ADD").replace("l1-new", "l1-hidden")
     with pytest.raises(PersonaProposalError, match="persona_proposal_schema_invalid"):
         parse(raw)
+
+
+def test_consolidation_service_returns_reviewable_update_without_writing():
+    class Producer:
+        calls = 0
+
+        def propose_consolidation(self, *, basis, sources, active_personas):
+            self.calls += 1
+            assert active_personas[0].id == PersonaId("old")
+            return payload("UPDATE", replaces=("old",))
+
+    producer = Producer()
+    suggestion = PersonaConsolidationService(producer).preview(
+        basis=PersonaBasis.USER_DECLARED,
+        sources=source_inputs(),
+        active_personas=(active("old"),),
+    )
+    assert suggestion.operation == PersonaConsolidationOperation.UPDATE
+    assert suggestion.replaces == (PersonaId("old"),)
+    assert producer.calls == 1
