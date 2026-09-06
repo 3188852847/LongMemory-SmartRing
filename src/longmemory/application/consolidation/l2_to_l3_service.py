@@ -131,6 +131,7 @@ class L2ToL3ConsolidationService:
             selected_source_count=len(batch.sources) or None,
             now=started_at,
             budget_window_start=budget_window_start,
+            risk_reviewer_version=self._risk_reviewer.version,
         )
         if start.run is None:
             return L2ToL3ConsolidationResult(start.decision, None)
@@ -251,7 +252,16 @@ class L2ToL3ConsolidationService:
 
     def _terminal(self, running, status, outcome, cursor, *, model_calls):
         return ConsolidationRun(
-            running.id, running.subject_id, running.stage, running.trigger,
-            status, running.started_at, running.source_count, model_calls,
-            self._clock(), outcome, cursor,
+            id=running.id,
+            subject_id=running.subject_id,
+            stage=running.stage,
+            trigger=running.trigger,
+            status=status,
+            started_at=running.started_at,
+            source_count=running.source_count,
+            model_call_count=model_calls,
+            finished_at=self._clock(),
+            outcome_code=outcome,
+            cursor=cursor,
+            risk_reviewer_version=running.risk_reviewer_version,
         )

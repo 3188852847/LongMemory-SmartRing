@@ -1,4 +1,4 @@
-"""V11 低频整理账本的持久化、互斥、游标与预算回归。"""
+"""低频整理账本的持久化、互斥、游标与审计字段回归。"""
 
 from datetime import UTC, datetime, timedelta
 
@@ -26,6 +26,7 @@ def running(run_id="run-1", stage=ConsolidationStage.L1_TO_L2):
     return ConsolidationRun(
         run_id, "user:self", stage, ConsolidationTrigger.NEW_EVIDENCE,
         ConsolidationRunStatus.RUNNING, START,
+        risk_reviewer_version="risk-review-v1",
     )
 
 
@@ -47,6 +48,7 @@ def test_run_survives_reopen_and_completed_cursor_advances(tmp_path):
     store = SQLiteConsolidationRunStore(connection)
     recent = store.list_recent("user:self", ConsolidationStage.L1_TO_L2)
     assert len(recent) == 1 and recent[0].status == ConsolidationRunStatus.COMPLETED
+    assert recent[0].risk_reviewer_version == "risk-review-v1"
     assert store.latest_cursor("user:self", ConsolidationStage.L1_TO_L2).source_id == "l1-last"
     assert store.model_calls_since(
         "user:self", ConsolidationStage.L1_TO_L2, START - timedelta(days=1)
@@ -156,6 +158,8 @@ def test_v11_upgrade_preserves_user_scenario_review_and_adds_policy_fields(tmp_p
             scenario_revision INTEGER NOT NULL CHECK (scenario_revision >= 1),
             FOREIGN KEY (scenario_id) REFERENCES scenario_memories (id) ON DELETE CASCADE
         );
+        ALTER TABLE memory_consolidation_runs
+            DROP COLUMN risk_reviewer_version;
         PRAGMA user_version=11;
     """)
     connection.execute(
@@ -175,4 +179,36 @@ def test_v11_upgrade_preserves_user_scenario_review_and_adds_policy_fields(tmp_p
     assert tuple(row) == ("accepted", "user", None, None)
     assert connection.execute("SELECT count(*) FROM memory_consolidation_runs").fetchone()[0] == 0
     assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
+    connection.close()
+
+
+def test_v12_upgrade_preserves_legacy_run_and_adds_reviewer_field(tmp_path):
+    connection = open_database(tmp_path / "v12.db")
+    initialize_schema(connection)
+    connection.executescript("""
+        DROP INDEX idx_consolidation_recent;
+        DROP INDEX idx_consolidation_one_running;
+        ALTER TABLE memory_consolidation_runs
+            DROP COLUMN risk_reviewer_version;
+        CREATE UNIQUE INDEX idx_consolidation_one_running
+            ON memory_consolidation_runs (subject_id, stage) WHERE status = 'running';
+        CREATE INDEX idx_consolidation_recent
+            ON memory_consolidation_runs (subject_id, stage, started_at DESC);
+        PRAGMA user_version=12;
+    """)
+    connection.execute(
+        "INSERT INTO memory_consolidation_runs "
+        "(id,subject_id,stage,trigger_kind,status,started_at,source_count,model_call_count) "
+        "VALUES ('legacy-run','user:self','l1_to_l2','new_evidence','running',?,4,1)",
+        (START.isoformat(),),
+    )
+    connection.commit()
+
+    initialize_schema(connection)
+
+    row = connection.execute(
+        "SELECT id,risk_reviewer_version FROM memory_consolidation_runs"
+    ).fetchone()
+    assert tuple(row) == ("legacy-run", None)
+    assert connection.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION
     connection.close()

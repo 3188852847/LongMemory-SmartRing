@@ -15,6 +15,9 @@ from longmemory.methods.contracts import (
 from longmemory.application.scenario_recall import ScenarioRecallItem, ScenarioRecallResult
 from longmemory.application.persona_recall import PersonaRecallItem, PersonaRecallResult
 from longmemory.application.natural_memory_commands import NaturalMemoryCommandResult
+from longmemory.application.consolidation.scheduler import (
+    LowFrequencyConsolidationScheduler,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -42,7 +45,8 @@ class MemoryRuntime:
     """
 
     def __init__(self, database: Path, *, method: MemoryMethod, scenario_provider=None,
-                 persona_provider=None, memory_command_handler=None) -> None:
+                 persona_provider=None, memory_command_handler=None,
+                 consolidation_scheduler: LowFrequencyConsolidationScheduler | None = None) -> None:
         self.database = database.resolve()
         # Runtime 只编排统一方法契约。具体使用规则、LLM 提取还是其他方法，
         # 必须由进程入口的装配层决定，不能在应用层偷偷选择实现。
@@ -57,6 +61,7 @@ class MemoryRuntime:
         self._persona_provider = persona_provider
         self._persona_use_enabled = False
         self._memory_command_handler = memory_command_handler
+        self._consolidation_scheduler = consolidation_scheduler
 
     def prepare_user(self, text: str) -> PreparedMemoryTurn:
         event = MemoryEvent(str(uuid4()), "user", text, datetime.now(UTC))
@@ -114,6 +119,9 @@ class MemoryRuntime:
             use_enabled = self._use_enabled
             scenario_use_enabled = self._scenario_use_enabled
             persona_use_enabled = self._persona_use_enabled
+        # 通知发生在 SQLite 互斥锁之外；它只唤醒后台线程，不让聊天等待整理。
+        if observation.writes and self._consolidation_scheduler is not None:
+            self._consolidation_scheduler.notify_new_evidence()
         return PreparedMemoryTurn(
             event, observation, support, write_enabled, use_enabled,
             scenario_use_enabled, scenario_result.items,
@@ -143,6 +151,11 @@ class MemoryRuntime:
                 "persona_use_enabled": self._persona_use_enabled,
                 "persona_available": self._persona_provider is not None,
                 "settings_persistent": False,
+                "consolidation_scheduler": (
+                    self._consolidation_scheduler.status().to_dict()
+                    if self._consolidation_scheduler is not None
+                    else {"enabled": False, "available": False}
+                ),
             }
 
     def configure(self, *, write_enabled: bool, use_enabled: bool,
@@ -172,6 +185,8 @@ class MemoryRuntime:
         with self._lock:
             if not self._closed:
                 try:
+                    if self._consolidation_scheduler is not None:
+                        self._consolidation_scheduler.close()
                     self._method.close()
                 finally:
                     if self._scenario_provider is not None:

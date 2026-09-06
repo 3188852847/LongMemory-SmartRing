@@ -123,6 +123,7 @@ class L1ToL2ConsolidationService:
             selected_source_count=len(batch.sources) or None,
             now=started_at,
             budget_window_start=budget_window_start,
+            risk_reviewer_version=self._risk_reviewer.version,
         )
         if start.run is None:
             return L1ToL2ConsolidationResult(start.decision, None)
@@ -228,4 +229,5 @@ class L1ToL2ConsolidationService:
             finished_at=self._clock(),
             outcome_code=outcome,
             cursor=cursor,
+            risk_reviewer_version=running.risk_reviewer_version,
         )

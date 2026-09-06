@@ -60,6 +60,7 @@ class ConsolidationRun:
     finished_at: datetime | None = None
     outcome_code: str | None = None
     cursor: ConsolidationCursor | None = None
+    risk_reviewer_version: str | None = None
 
     def __post_init__(self) -> None:
         if not self.id.strip() or not self.subject_id.strip():
@@ -76,6 +77,10 @@ class ConsolidationRun:
                 raise ValueError("consolidation_run_time_invalid")
         if self.outcome_code is not None and not self.outcome_code.strip():
             raise ValueError("consolidation_run_outcome_invalid")
+        if self.risk_reviewer_version is not None:
+            version = self.risk_reviewer_version.strip()
+            if not version or len(version) > 120:
+                raise ValueError("consolidation_risk_reviewer_version_invalid")
         if (self.status == ConsolidationRunStatus.COMPLETED) != (self.cursor is not None):
             raise ValueError("consolidation_completed_cursor_required")
         if self.status == ConsolidationRunStatus.COMPLETED and self.source_count < 1:

@@ -24,11 +24,12 @@ class SQLiteConsolidationRunStore:
             self._connection.execute(
                 "INSERT INTO memory_consolidation_runs "
                 "(id,subject_id,stage,trigger_kind,status,started_at,source_count,"
-                "model_call_count) VALUES (?,?,?,?,?,?,?,?)",
+                "model_call_count,risk_reviewer_version) VALUES (?,?,?,?,?,?,?,?,?)",
                 (
                     run.id, run.subject_id, run.stage.value, run.trigger.value,
                     run.status.value, run.started_at.isoformat(), run.source_count,
                     run.model_call_count,
+                    run.risk_reviewer_version,
                 ),
             )
             if self._commit_changes:
@@ -167,4 +168,5 @@ class SQLiteConsolidationRunStore:
             ),
             outcome_code=row["outcome_code"],
             cursor=cursor,
+            risk_reviewer_version=row["risk_reviewer_version"],
         )

@@ -49,6 +49,7 @@ def start(store, pending=4, selected=None):
         selected_source_count=selected,
         now=NOW,
         budget_window_start=NOW.replace(hour=0),
+        risk_reviewer_version="risk-review-v1",
     )
 
 
@@ -59,6 +60,7 @@ def test_allowed_run_is_reserved_in_ledger():
     assert result.run is store.started[0]
     assert result.run.status == ConsolidationRunStatus.RUNNING
     assert result.run.source_count == 9
+    assert result.run.risk_reviewer_version == "risk-review-v1"
 
 
 def test_actual_batch_count_includes_old_context_but_stays_within_limit():

@@ -49,6 +49,7 @@ class ConsolidationRunCoordinator:
         selected_source_count: int | None = None,
         now: datetime,
         budget_window_start: datetime,
+        risk_reviewer_version: str | None = None,
     ) -> ConsolidationStartResult:
         """允许时创建 running 记录；并发抢占失败返回稳定 BLOCK 结果。"""
 
@@ -91,6 +92,7 @@ class ConsolidationRunCoordinator:
             status=ConsolidationRunStatus.RUNNING,
             started_at=now,
             source_count=selected_count,
+            risk_reviewer_version=risk_reviewer_version,
         )
         try:
             self._store.start(run)

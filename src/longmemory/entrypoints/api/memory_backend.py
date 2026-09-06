@@ -249,6 +249,7 @@ class MemoryBackend:
                 "outcome_code": latest.outcome_code,
                 "source_count": latest.source_count,
                 "model_call_count": latest.model_call_count,
+                "risk_reviewer_version": latest.risk_reviewer_version,
             },
         }
 

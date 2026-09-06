@@ -1,6 +1,6 @@
 """当前 SQLite V12 的完整结构定义；不包含历史迁移步骤。"""
 
-SCHEMA_VERSION = 12
+SCHEMA_VERSION = 13
 
 LATEST_SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS conversation_messages (
@@ -207,6 +207,10 @@ CREATE TABLE IF NOT EXISTS memory_consolidation_runs (
     model_call_count INTEGER NOT NULL DEFAULT 0 CHECK (model_call_count >= 0),
     cursor_recorded_at TEXT,
     cursor_source_id TEXT,
+    risk_reviewer_version TEXT CHECK (
+        risk_reviewer_version IS NULL
+        OR length(trim(risk_reviewer_version)) BETWEEN 1 AND 120
+    ),
     CHECK (
         (status = 'running' AND finished_at IS NULL AND outcome_code IS NULL)
         OR
