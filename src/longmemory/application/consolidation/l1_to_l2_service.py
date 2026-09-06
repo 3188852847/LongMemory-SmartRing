@@ -152,7 +152,7 @@ class L1ToL2ConsolidationService:
                 batch.next_cursor,
             )
             self._run_store.finish(terminal)
-        except BaseException:
+        except Exception:
             terminal = self._terminal(
                 running,
                 ConsolidationRunStatus.FAILED,

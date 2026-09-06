@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Protocol
 
 from .models import ConsolidationCursor, ConsolidationRun, ConsolidationStage
-from .sources import L1ConsolidationBatch
+from .sources import L1ConsolidationBatch, L2ConsolidationBatch
 
 
 class ConsolidationRunStore(Protocol):
@@ -35,3 +35,14 @@ class L1ConsolidationSourceReader(Protocol):
         after: ConsolidationCursor | None,
         limit: int,
     ) -> L1ConsolidationBatch: ...
+
+
+class L2ConsolidationSourceReader(Protocol):
+    def read_batch(
+        self,
+        subject_id: str,
+        *,
+        after: ConsolidationCursor | None,
+        limit: int,
+        now: datetime,
+    ) -> L2ConsolidationBatch: ...
