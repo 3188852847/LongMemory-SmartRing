@@ -14,7 +14,7 @@
 
 已完成文档归档、统一启动入口与网页会话恢复（ADR-0016、ADR-0019）。P2 已采用 React + TypeScript + Vite + antd，并完成角色、Edge 音色、VoxCPM2 本机适配及声音后端状态显示。用户完成圆屏延迟/听感验收后，P2 收口并进入 P3 日常记忆；不为试听改记忆库。见[迁移清单](docs/architecture/react-chat-migration.md)与 [ADR-0025](docs/adr/0025-local-voxcpm2-tts-adapter.md)。
 
-Web 控制台依据 ADR-0032 渐进统一到 React，不进行一次性重写。聊天、记忆、设备和个性化设置已迁移；设置页聚合助手角色、声音和浏览器外观，同时保留各自不同的生效边界。原生入口继续保留回退，下一迁移对象是实验中心。Python Tk 启动面板不属于本轮 Web 迁移。
+Web 控制台依据 ADR-0032 渐进统一到 React，不进行一次性重写。聊天、记忆、设备和个性化设置已迁移。实验中心 `/experiments-react` 已完成只读档案与逐题证据切片；预算确认、作业控制和人工复核仍由原生 `/experiments` 承担，完成写路径迁移前不切换默认导航。Python Tk 启动面板不属于本轮 Web 迁移。
 
 技术基础按 ADR-0033 分阶段收敛：React Router、共享 AppShell、Vitest/React Testing Library 已建立，TanStack Query 已在设备与设置页验证查询、轮询和受控 mutation；下一步迁移实验中心，再做 Python API 的 Pydantic 契约试点，继续保留 aiohttp。FastAPI、FTS5、APScheduler、SSE/WebSocket、独立向量库和智能体框架均按明确触发条件评估，不视为已采用。详见[技术策略](docs/architecture/technology-strategy.md)。
 

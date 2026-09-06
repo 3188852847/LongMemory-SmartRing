@@ -17,3 +17,7 @@ Object.defineProperty(window, 'matchMedia', {
     dispatchEvent: () => false,
   }),
 });
+
+// antd 的表格会查询伪元素样式；jsdom 尚未实现第二参数，测试中忽略它即可。
+const computedStyle = window.getComputedStyle.bind(window);
+window.getComputedStyle = (element: Element) => computedStyle(element);

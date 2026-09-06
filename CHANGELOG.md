@@ -1,5 +1,12 @@
 # Changelog
 
+### Progressive React console: experiment read-only slice（2026-09-06）
+
+- 新增 `/experiments-react` 只读预览，支持档案搜索、类型筛选、分页、分组摘要、逐题回答、注入上下文、检索上下文、召回来源、原始来源、评分参照和已有复核查看。
+- 模型回答与记忆通过 React 文本节点渲染；组件测试验证 HTML 注入片段不会被解释为脚本。查看只调用既有 GET API，不运行模型、不写复核、不改变报告。
+- 预算预检、作业启动/停止和人工复核暂留完整原生 `/experiments`；统一导航在这些写操作完成迁移前仍进入原版，React 预览明确提供原版入口，不宣称实验中心已完整替换。
+- 验证：6 项前端测试、TypeScript 检查、Vite 构建及 28 项实验/作业/React 资源 Python 回归通过。真实历史档案的浏览器可读性待用户体验。
+
 ### Progressive React console: personalized settings（2026-09-06）
 
 - 新增 React `/settings`，聚合助手角色、声音与浏览器外观；聊天侧栏移除三组编辑控件，只保留会话操作和统一导航。

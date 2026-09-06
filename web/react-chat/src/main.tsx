@@ -13,6 +13,7 @@ import {createConsoleQueryClient} from './queryClient';
 const DeviceApp = lazy(() => import('./DeviceApp').then(module => ({default: module.DeviceApp})));
 const MemoryApp = lazy(() => import('./MemoryApp').then(module => ({default: module.MemoryApp})));
 const SettingsApp = lazy(() => import('./SettingsApp').then(module => ({default: module.SettingsApp})));
+const ExperimentApp = lazy(() => import('./ExperimentApp').then(module => ({default: module.ExperimentApp})));
 
 const api = new ChatApi();
 const queryClient = createConsoleQueryClient();
@@ -115,6 +116,7 @@ function ConsoleApp() {
     <Route path="/chat-react" element={<ChatApp/>}/>
     <Route path="/memories" element={<Suspense fallback={<p className="page-loading">正在加载记忆管理…</p>}><MemoryApp/></Suspense>}/>
     <Route path="/settings" element={<Suspense fallback={<p className="page-loading">正在加载个性化设置…</p>}><SettingsApp/></Suspense>}/>
+    <Route path="/experiments-react" element={<Suspense fallback={<p className="page-loading">正在加载实验档案…</p>}><ExperimentApp/></Suspense>}/>
     <Route path="*" element={<Navigate to="/chat-react" replace/>}/>
   </Routes></BrowserRouter></AppearanceProvider></QueryClientProvider>;
 }
