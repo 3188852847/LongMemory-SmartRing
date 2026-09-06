@@ -18,7 +18,7 @@ P2 新增声音设置：四种 Edge TTS 音色、固定文本联网试听和确�
 
 P2 助手角色设置已接入 `/chat-react`：网页编辑、版本化保存；圆屏可检查并明确确认同步到小智配置，之后需重启小智，实机生效待验收。见[助手角色设置](docs/guides/助手角色设置.md)。
 
-Web 控制台已渐进统一到 React + TypeScript + Vite + antd：聊天 `/chat-react`、记忆 `/memories`、设备 `/device`、个性化 `/settings` 与实验 `/experiments-react` 共用 React Router、AppShell 和外观状态；TanStack Query 管理服务器状态及不自动重试的写操作。实验页保留预检/确认分离、任务进度与逐题复核；原生入口暂留回退。组件测试使用 Vitest/React Testing Library。见[体验指南](docs/guides/React聊天页.md)、[技术策略](docs/architecture/technology-strategy.md)、[迁移清单](docs/architecture/react-chat-migration.md)与 [ADR-0032](docs/adr/0032-progressive-react-console-migration.md)。
+Web 控制台已渐进统一到 React + TypeScript + Vite + antd：聊天 `/chat-react`、L0/L1 记忆 `/memories`、L2 生活场景 `/scenarios`、设备 `/device`、个性化 `/settings` 与实验 `/experiments-react` 共用 React Router、AppShell 和外观状态；TanStack Query 管理服务器状态及不自动重试的写操作。实验页保留预检/确认分离、任务进度与逐题复核；原生入口暂留回退。组件测试使用 Vitest/React Testing Library。见[体验指南](docs/guides/React聊天页.md)、[技术策略](docs/architecture/technology-strategy.md)、[迁移清单](docs/architecture/react-chat-migration.md)与 [ADR-0032](docs/adr/0032-progressive-react-console-migration.md)。
 
 Python HTTP 入口继续使用 aiohttp；Pydantic 2.13.5 已在聊天消息 POST 完成首个严格契约试点，保持原有 400 错误、响应和幂等行为，不进入 Memory Core，也不代表已决定迁移 FastAPI。见 [ADR-0033](docs/adr/0033-staged-technology-adoption.md)。
 
@@ -38,9 +38,9 @@ P1 网页会话恢复已实现：列表、新建、切换、重命名，同一�
 
 当前产品顺序：**P1 日常入口 → P2 个性化体验 → P3 日常记忆 → P4 可控主动交流 → P5 习惯驱动陪伴**。P1 最小启动面板及网页会话恢复已实现；P2 的本地声音启动和状态展示已完成，待用户试听验收后进入 P3。
 
-P3 目标已明确为四层个人记忆：L0 原始证据、L1 原子记忆、L2 场景、L3 用户画像。P3.1 已实现并验收网页/圆屏共享的常驻 Memory Runtime。P3.2 的模型辅助提取与关键词＋本地 BGE 混合召回已完成首轮真实组合体验。P3.3 人工错误纠正及个人库 V4 迁移已完成真实验收，并新增“事实后来变化”的显式时间化取代入口。P3.4 第一切片已提供共享运行期开关。L2 的 V5 空结构与迁移已实现，但领域服务、候选生成、复核页面和回答注入尚未实现；升级结构不等于已经具备场景记忆。自动识别变化、撤销、跨层传播及持久策略配置仍未实现。见 [ADR-0026](docs/adr/0026-layered-memory-and-knowledge-plane.md)至 [ADR-0036](docs/adr/0036-incremental-memory-architecture-calibration.md)。
+P3 目标已明确为四层个人记忆：L0 原始证据、L1 原子记忆、L2 场景、L3 用户画像。P3.1 已实现并验收网页/圆屏共享的常驻 Memory Runtime。P3.2 的模型辅助提取与关键词＋本地 BGE 混合召回已完成首轮真实组合体验。P3.3 人工错误纠正及个人库 V4 迁移已完成真实验收，并新增“事实后来变化”的显式时间化取代入口。P3.4 第一切片已提供共享运行期开关。L2 已完成 V5、领域服务、受限 API 和 `/scenarios` 复核页面；当前只能由用户显式选择至少两条合格 L1 创建候选，尚未进行模型候选生成，也未接入聊天回答。自动识别变化、撤销、跨层重建及持久策略配置仍未实现。见 [ADR-0026](docs/adr/0026-layered-memory-and-knowledge-plane.md)至 [ADR-0036](docs/adr/0036-incremental-memory-architecture-calibration.md)。
 
-L2 设计已接受：先生成可追溯、需复核的时间化场景候选，确认前不进入回答；稳定习惯仍属于 L3。当前尚未升级 V4 个人库或调用模型，见 [ADR-0035](docs/adr/0035-reviewable-l2-scenario-candidates.md)和 [L2 第一版验收](docs/requirements/l2-scenario-memory.md)。
+L2 设计已接受：先生成可追溯、需复核的时间化场景候选，确认前不进入回答；稳定习惯仍属于 L3。个人库已在一致性备份后迁移到 V5，仍为 0 条 L2；本切片未调用模型或改写既有 L0/L1，见 [ADR-0035](docs/adr/0035-reviewable-l2-scenario-candidates.md)和 [L2 第一版验收](docs/requirements/l2-scenario-memory.md)。
 
 - [路线图](ROADMAP.md)：先后顺序与历史记录。
 - [产品范围与验收](docs/requirements/companion-product.md)：各阶段做什么、怎样算完成。

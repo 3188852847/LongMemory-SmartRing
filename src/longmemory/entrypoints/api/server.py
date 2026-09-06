@@ -50,7 +50,7 @@ STATIC_FILES = {
 
 
 def create_app(*, port=8765, bridge=None, web_root=None, database=None, allow_memory_delete=False,
-               allow_memory_correction=False,
+               allow_memory_correction=False, allow_scenario_management=False,
                chat_backend=None, experiment_backend=None, job_backend=None, instance_id=None,
                xiaozhi_server=None, memory_runtime_token=None):
     sessions = Sessions()
@@ -123,6 +123,7 @@ def create_app(*, port=8765, bridge=None, web_root=None, database=None, allow_me
         database,
         allow_delete=allow_memory_delete,
         allow_correction=allow_memory_correction,
+        allow_scenario_management=allow_scenario_management,
     ))
     register_chat_routes(app, chat_backend)
     register_memory_mode_routes(app, chat_backend)
@@ -144,6 +145,7 @@ def main():
     parser.add_argument("--database", type=Path, help="已有当前版本记忆数据库；不自动建库或迁移")
     parser.add_argument("--allow-memory-delete", action="store_true", help="启用网页单条删除；默认只读")
     parser.add_argument("--allow-memory-correction", action="store_true", help="启用网页人工纠正；旧记忆保留并标记为已取代")
+    parser.add_argument("--allow-scenario-management", action="store_true", help="启用显式 L2 候选创建与复核；默认只读")
     parser.add_argument("--enable-chat", action="store_true", help="允许网页向指定已有记忆库写入对话和记忆")
     parser.add_argument("--memory-audit-log", type=Path, help="共享记忆 Runtime 的脱敏审计日志")
     parser.add_argument("--chat-provider", choices=("fake", "openai_compatible"), default="fake")
@@ -253,6 +255,7 @@ def main():
     try:
         web.run_app(create_app(port=args.port, database=args.database, allow_memory_delete=args.allow_memory_delete,
                                allow_memory_correction=args.allow_memory_correction,
+                               allow_scenario_management=args.allow_scenario_management,
                                chat_backend=chat_backend, job_backend=job_backend,
                                instance_id=os.environ.get("LONGMEMORY_LAUNCHER_INSTANCE"), xiaozhi_server=args.xiaozhi_server,
                                memory_runtime_token=runtime_token),

@@ -99,6 +99,7 @@ def build_commands(options, uv=None):
     # 人工纠正每次都需要在网页中核对旧内容并再次确认；日常入口默认开放这一
     # 可追溯写入能力。不可恢复的硬删除仍保持关闭。
     console.append("--allow-memory-correction")
+    console.append("--allow-scenario-management")
     if options.memory_retrieval == "hybrid":
         if not options.embedding_model_dir.is_dir():
             raise ValueError("混合召回需要已有的本地 BGE 快照目录。")

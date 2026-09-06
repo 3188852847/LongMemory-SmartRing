@@ -1,0 +1,127 @@
+import {useEffect, useState} from 'react';
+import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
+import {Alert, Button, Card, Descriptions, Drawer, Empty, Input, List, Modal, Select, Space, Tag} from 'antd';
+import {ChatApi} from './api';
+import {AppShell, ConsoleNav} from './AppShell';
+
+type ScenarioState = 'candidate' | 'active' | 'rejected' | 'stale';
+type MemoryConfig = {configured: boolean; database: string | null; allow_scenario_management: boolean};
+type L1 = {id: string; content: string; subject_id: string; state: 'active' | 'retired'};
+type Scenario = {
+  id: string; subject_id: string; title: string; summary: string; generated_at: string;
+  valid_from: string | null; valid_to: string | null; status: ScenarioState;
+  generator_name: string; generator_version: string; revision: number;
+};
+type ScenarioSource = {
+  memory_id: string; memory_content_snapshot: string; linked_at: string;
+  current_content: string | null; retired_at: string | null;
+  l0_sources: Array<{source_message_id: string; source_type: string; linked_at: string; role: string | null; content: string | null; created_at: string | null}>;
+};
+type ScenarioDetail = Scenario & {sources: ScenarioSource[]};
+type Page<T> = {items: T[]; total: number; limit: number; offset: number};
+
+const api = new ChatApi();
+const stateName: Record<ScenarioState, string> = {candidate: '待复核', active: '已接受', rejected: '已拒绝', stale: '来源已变化'};
+const stateColor: Record<ScenarioState, string> = {candidate: 'gold', active: 'green', rejected: 'default', stale: 'red'};
+const displayTime = (value?: string | null) => value ? new Date(value).toLocaleString('zh-CN') : '未记录';
+
+/** L2 是多条 L1 汇总出的生活场景；页面只管理候选，不改变聊天注入策略。 */
+export function ScenarioApp() {
+  const queryClient = useQueryClient();
+  const [ready, setReady] = useState(false);
+  const [notice, setNotice] = useState('正在连接本机记忆服务…');
+  const [filter, setFilter] = useState<'all' | ScenarioState>('all');
+  const [selectedId, setSelectedId] = useState<string>();
+  const [creating, setCreating] = useState(false);
+  const [title, setTitle] = useState('');
+  const [summary, setSummary] = useState('');
+  const [sourceIds, setSourceIds] = useState<string[]>([]);
+
+  useEffect(() => {void api.bootstrap().then(() => setReady(true)).catch(error => setNotice(String(error)));}, []);
+  const config = useQuery({queryKey: ['memory-config'], enabled: ready,
+    queryFn: () => api.request<MemoryConfig>('/api/memory-config')});
+  const scenarios = useQuery({queryKey: ['scenarios', filter], enabled: ready && config.data?.configured === true,
+    queryFn: () => api.request<Page<Scenario>>(`/api/scenarios?state=${filter}&offset=0&limit=100`)});
+  const memories = useQuery({queryKey: ['scenario-source-l1'], enabled: ready && config.data?.configured === true,
+    queryFn: () => api.request<Page<L1>>('/api/memories?state=active&q=&offset=0&limit=100')});
+  const detail = useQuery({queryKey: ['scenario', selectedId], enabled: ready && Boolean(selectedId),
+    queryFn: () => api.request<ScenarioDetail>(`/api/scenarios/${encodeURIComponent(selectedId!)}`)});
+
+  const createCandidate = useMutation({
+    mutationFn: () => api.request<{id: string}>('/api/scenarios', 'POST', {
+      title: title.trim(), summary: summary.trim(), source_memory_ids: sourceIds, confirm_candidate: true,
+    }),
+    onSuccess: async result => {
+      setCreating(false); setTitle(''); setSummary(''); setSourceIds([]); setSelectedId(result.id);
+      await queryClient.invalidateQueries({queryKey: ['scenarios']});
+      setNotice('L2 候选已创建，尚未进入已接受状态。');
+    },
+    onError: error => setNotice(String(error)),
+  });
+  const review = useMutation({
+    mutationFn: (decision: 'accepted' | 'rejected') => api.request(`/api/scenarios/${encodeURIComponent(selectedId!)}/reviews`, 'POST', {
+      decision, expected_revision: detail.data!.revision, confirm_review: true,
+    }),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({queryKey: ['scenarios']}),
+        queryClient.invalidateQueries({queryKey: ['scenario', selectedId]}),
+      ]);
+      setNotice('复核结果已保存；本阶段仍不会把 L2 自动注入回答。');
+    },
+    onError: error => setNotice(String(error)),
+  });
+  const busy = config.isFetching || scenarios.isFetching || memories.isFetching || detail.isFetching || createCandidate.isPending || review.isPending;
+  const canManage = config.data?.allow_scenario_management === true;
+  const sidebar = <><Button type="primary" block disabled={!canManage} onClick={() => setCreating(true)}>新建 L2 候选</Button>
+    <ConsoleNav active="scenarios" legacyPath="/memories"/></>;
+
+  return <><AppShell subtitle="可复核的生活场景" className="scenario-shell" sidebar={sidebar}>
+    <header><div><h1>生活场景（L2）</h1><small>{config.data?.database ?? '未指定记忆库'}</small></div>
+      <Button loading={busy} onClick={() => void queryClient.invalidateQueries({queryKey: ['scenarios']})}>刷新</Button></header>
+    <Alert className="mode-card" type="info" showIcon title="当前是可复核 L2 基础设施"
+      description="L2 把多条 L1 原子记忆汇总成生活场景。当前只支持人工创建候选与复核；接受后仍不参与聊天检索或回答。"/>
+    {!canManage && config.data?.configured && <Alert type="warning" showIcon title="当前进程没有开启 L2 管理权限" description="通过日常启动面板启动时会开启；只读浏览仍可使用。"/>}
+    <div className="scenario-toolbar"><Select aria-label="场景状态" value={filter} onChange={value => setFilter(value)} options={[
+      {value:'all',label:'全部状态'}, {value:'candidate',label:'待复核'}, {value:'active',label:'已接受'},
+      {value:'rejected',label:'已拒绝'}, {value:'stale',label:'来源已变化'},
+    ]}/></div>
+    <List loading={scenarios.isFetching} dataSource={scenarios.data?.items ?? []} locale={{emptyText:<Empty description="尚无 L2 生活场景"/>}}
+      renderItem={item => <List.Item className="memory-item" onClick={() => setSelectedId(item.id)} actions={[<Button key="open" type="link">查看来源</Button>]}
+        ><List.Item.Meta title={<Space wrap><span>{item.title}</span><Tag color={stateColor[item.status]}>{stateName[item.status]}</Tag></Space>}
+          description={<><p className="scenario-summary">{item.summary}</p><small>{displayTime(item.generated_at)} · 修订 {item.revision}</small></>}/></List.Item>}/>
+    <p role="status">{config.error ? String(config.error) : scenarios.error ? String(scenarios.error) : notice}</p>
+  </AppShell>
+
+  <Drawer title="L2 场景详情" size="large" open={Boolean(selectedId)} onClose={() => setSelectedId(undefined)} loading={detail.isFetching}>
+    {detail.data && <><Space wrap><h2>{detail.data.title}</h2><Tag color={stateColor[detail.data.status]}>{stateName[detail.data.status]}</Tag></Space>
+      <p className="detail-content">{detail.data.summary}</p>
+      <Descriptions column={1} size="small" bordered items={[
+        {key:'subject',label:'主体',children:detail.data.subject_id}, {key:'generated',label:'生成时间',children:displayTime(detail.data.generated_at)},
+        {key:'generator',label:'生成方式',children:`${detail.data.generator_name} ${detail.data.generator_version}`},
+        {key:'revision',label:'修订号',children:String(detail.data.revision)},
+      ]}/>
+      <h3>构成此场景的 L1 来源</h3>{detail.data.sources.map(source => <Card className="source-card" key={source.memory_id} size="small" title={source.memory_id}
+        extra={<Tag color={source.retired_at ? 'red' : 'green'}>{source.retired_at ? '已退役' : '仍活跃'}</Tag>}>
+        <p>{source.memory_content_snapshot}</p>{source.current_content !== source.memory_content_snapshot && <p className="memory-warning">当前 L1 内容与创建时快照不同：{source.current_content ?? '来源已不存在'}</p>}
+        <details><summary>查看 L0 原话（{source.l0_sources.length}）</summary>{source.l0_sources.map(item => <blockquote key={`${item.source_message_id}-${item.source_type}`}>
+          <p>{item.content ?? '原始记录已不存在'}</p><small>{item.source_type} · {displayTime(item.created_at)}</small>
+        </blockquote>)}</details>
+      </Card>)}
+      {detail.data.status === 'candidate' && <Space><Button type="primary" disabled={!canManage} loading={review.isPending}
+        onClick={() => Modal.confirm({title:'接受这个 L2 场景？',content:'只改变复核状态，当前不会注入聊天。',okText:'接受',cancelText:'取消',onOk:() => review.mutateAsync('accepted')})}>接受</Button>
+        <Button danger disabled={!canManage} loading={review.isPending}
+          onClick={() => Modal.confirm({title:'拒绝这个 L2 候选？',content:'候选会保留用于审计，不会物理删除。',okText:'拒绝',okButtonProps:{danger:true},cancelText:'取消',onOk:() => review.mutateAsync('rejected')})}>拒绝</Button></Space>}
+    </>}
+  </Drawer>
+
+  <Modal title="新建 L2 候选" open={creating} confirmLoading={createCandidate.isPending} okText="创建候选" cancelText="取消"
+    okButtonProps={{disabled: !title.trim() || !summary.trim() || sourceIds.length < 2}}
+    onCancel={() => setCreating(false)} onOk={() => createCandidate.mutate()}>
+    <p>这是显式的人工候选，不是模型自动总结。至少选择两条同一主体、来源可追溯的活跃 L1。</p>
+    <label htmlFor="scenario-title">场景标题</label><Input id="scenario-title" value={title} maxLength={120} onChange={event => setTitle(event.target.value)}/>
+    <label htmlFor="scenario-summary">场景总结</label><Input.TextArea id="scenario-summary" value={summary} maxLength={2000} rows={5} onChange={event => setSummary(event.target.value)}/>
+    <label htmlFor="scenario-sources">L1 来源（至少两条）</label><Select id="scenario-sources" aria-label="L1 来源" mode="multiple" className="wide" value={sourceIds} onChange={setSourceIds}
+      optionFilterProp="label" options={(memories.data?.items ?? []).map(item => ({value:item.id,label:item.content}))}/>
+  </Modal></>;
+}

@@ -224,3 +224,50 @@ def test_fact_change_rejects_bad_time_without_partial_write(recorded):
     assert backend.get(memory_id) == before
     with sqlite3.connect(path) as connection:
         assert connection.execute("SELECT COUNT(*) FROM atomic_memories").fetchone()[0] == 1
+
+
+def test_scenario_candidate_and_review_use_separate_capability(recorded):
+    path, first_id, first_source_id = recorded
+    with sqlite3.connect(path) as connection:
+        connection.execute(
+            "INSERT INTO conversation_messages VALUES (?,?,?,?)",
+            ("l0-second", "user", "我正在修改答辩 PPT。", "2026-09-06T10:00:00+00:00"),
+        )
+        connection.execute(
+            "INSERT INTO atomic_memories VALUES (?,?,?,?,NULL,NULL,NULL,NULL)",
+            ("l1-second", "user:self", "用户正在修改答辩 PPT。", "2026-09-06T10:00:00+00:00"),
+        )
+        connection.execute(
+            "INSERT INTO memory_evidence VALUES (?,?,?,?)",
+            ("l1-second", "l0-second", "user_stated", "2026-09-06T10:00:00+00:00"),
+        )
+
+    with pytest.raises(MemoryAccessError, match="scenario_management_disabled"):
+        MemoryBackend(path).create_scenario(
+            title="准备答辩", summary="用户最近正在准备答辩。",
+            source_memory_ids=[first_id, "l1-second"],
+        )
+
+    backend = MemoryBackend(path, allow_scenario_management=True)
+    created = backend.create_scenario(
+        title="准备答辩", summary="用户最近正在准备答辩。",
+        source_memory_ids=[first_id, "l1-second"],
+    )
+    assert created["status"] == "candidate"
+    assert backend.list_scenarios(state="candidate")["total"] == 1
+    detail = backend.get_scenario(created["id"])
+    assert detail["generator_name"] == "manual_console"
+    assert len(detail["sources"]) == 2
+    assert {source["l0_sources"][0]["role"] for source in detail["sources"]} == {"user"}
+    assert {source["l0_sources"][0]["source_message_id"] for source in detail["sources"]} == {
+        first_source_id, "l0-second",
+    }
+
+    reviewed = backend.review_scenario(
+        created["id"], decision="accepted", expected_revision=1,
+    )
+    assert reviewed["status"] == "active" and reviewed["revision"] == 2
+    with pytest.raises(MemoryAccessError, match="scenario_review_conflict"):
+        backend.review_scenario(
+            created["id"], decision="rejected", expected_revision=2,
+        )

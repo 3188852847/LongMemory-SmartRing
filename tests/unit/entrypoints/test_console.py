@@ -2,6 +2,7 @@
 
 import asyncio
 import socket
+import sqlite3
 from contextlib import asynccontextmanager
 
 import pytest
@@ -47,7 +48,7 @@ class FakeBridge:
 
 @asynccontextmanager
 async def console(database=None, allow_memory_delete=False, chat_backend=None,
-                  allow_memory_correction=False,
+                  allow_memory_correction=False, allow_scenario_management=False,
                   xiaozhi_server=None, memory_runtime_token=None):
     # 先占用随机回环端口，再把精确 Host 交给应用，避免探测后抢占端口。
     sock = socket.socket()
@@ -57,6 +58,7 @@ async def console(database=None, allow_memory_delete=False, chat_backend=None,
     runner = web.AppRunner(create_app(port=port, bridge=bridge, database=database,
                                      allow_memory_delete=allow_memory_delete, chat_backend=chat_backend,
                                      allow_memory_correction=allow_memory_correction,
+                                     allow_scenario_management=allow_scenario_management,
                                      xiaozhi_server=xiaozhi_server,
                                      memory_runtime_token=memory_runtime_token), access_log=None)
     await runner.setup()
@@ -315,7 +317,8 @@ def test_memory_without_config_is_not_a_fake_empty_database():
             await login(client, base)
             config = await (await client.get(base + "/api/memory-config")).json()
             assert config == {"configured": False, "database": None, "allow_delete": False,
-                              "allow_correction": False, "allow_change": False}
+                              "allow_correction": False, "allow_change": False,
+                              "allow_scenario_management": False}
             response = await client.get(base + "/api/memories")
             assert response.status == 503
             assert (await response.json())["error"] == "memory_not_configured"
@@ -439,5 +442,51 @@ def test_memory_mode_reports_chat_disabled_instead_of_fake_state():
         async with console() as (client, base, _bridge):
             await login(client, base)
             assert (await client.get(base + "/api/memory-mode")).status == 503
+
+    asyncio.run(run())
+
+
+def test_scenario_http_requires_csrf_and_explicit_capability(tmp_path):
+    from longmemory.methods.longmemory_v1.method import LongMemoryV1
+
+    database = tmp_path / "scenario-http.db"
+    LongMemoryV1(database).close()
+    with sqlite3.connect(database) as connection:
+        for suffix, content in (("a", "用户周五答辩。"), ("b", "用户正在修改 PPT。")):
+            connection.execute(
+                "INSERT INTO conversation_messages VALUES (?,?,?,?)",
+                (f"l0-{suffix}", "user", content, "2026-09-06T10:00:00+00:00"),
+            )
+            connection.execute(
+                "INSERT INTO atomic_memories VALUES (?,?,?,?,NULL,NULL,NULL,NULL)",
+                (f"l1-{suffix}", "user:self", content, "2026-09-06T10:00:00+00:00"),
+            )
+            connection.execute(
+                "INSERT INTO memory_evidence VALUES (?,?,?,?)",
+                (f"l1-{suffix}", f"l0-{suffix}", "user_stated", "2026-09-06T10:00:00+00:00"),
+            )
+
+    async def run():
+        async with console(database, allow_scenario_management=True) as (client, base, _bridge):
+            headers = await login(client, base)
+            body = {"title": "准备答辩", "summary": "用户最近正在准备答辩。",
+                    "source_memory_ids": ["l1-a", "l1-b"], "confirm_candidate": True}
+            assert (await client.post(base + "/api/scenarios", json=body)).status == 403
+            created_response = await client.post(base + "/api/scenarios", headers=headers, json=body)
+            assert created_response.status == 200
+            created = await created_response.json()
+            listed = await (await client.get(base + "/api/scenarios?state=candidate")).json()
+            assert listed["total"] == 1
+            detail = await (await client.get(base + "/api/scenarios/" + created["id"])).json()
+            assert {source["l0_sources"][0]["content"] for source in detail["sources"]} == {
+                "用户周五答辩。", "用户正在修改 PPT。",
+            }
+            reviewed = await client.post(
+                base + "/api/scenarios/" + created["id"] + "/reviews",
+                headers=headers,
+                json={"decision": "accepted", "expected_revision": detail["revision"],
+                      "confirm_review": True},
+            )
+            assert reviewed.status == 200 and (await reviewed.json())["status"] == "active"
 
     asyncio.run(run())

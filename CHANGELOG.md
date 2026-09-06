@@ -1,5 +1,12 @@
 # Changelog
 
+### P3 L2 manual candidate and review console（2026-09-06）
+
+- 新增受限的 L2 列表、详情、人工候选创建和复核 API；写入使用独立 `--allow-scenario-management` 能力，沿用本机会话与 CSRF，普通日常启动链显式传入该能力。
+- React 新增 `/scenarios`：按状态查看候选、核对 L1 内容快照与当前状态、显式选择至少两条 L1 创建候选，并用 revision 接受或拒绝；打开页面不会自动生成或写入 L2。
+- 接受只表示候选通过人工复核；本切片不调用模型、不把 L2 注入网页或圆屏回答，也未向个人库创建任何真实候选。
+- 定向 API 回归 68 项、8 项前端组件测试、TypeScript/Vite 生产构建及 573 项 Python 全量回归通过；未调用模型或写个人记忆库。
+
 ### P3 L2 scenario schema V5（2026-09-06）
 
 - 新增 V5 场景、L1 来源快照、生成审计和人工复核结构；候选默认不会参与回答，当前没有生成 L2。
@@ -7,7 +14,7 @@
 - 合成 V1→V5、V2→V5、V3→V5、V4→V5、备份哈希、外键和失效触发回归通过；个人库迁移结果另行记录。
 - 经用户明确授权并确认相关服务未监听后，日常 `xiaozhi-demo-v1.db` 已从 V4 迁移到 V5；迁移前一致性备份为 `data/backups/xiaozhi-demo-v1-pre-v5-20260906-143534.db`，SHA-256 `0CF17D8B45CAA7C23613984A50BA9899A18CDBFFEE6EEB324284ED9B89DF66CA`。迁移后 quick_check 正常、外键违规为 0，L2 为空；备份文件不提交 Git。
 - 新增 L2 技术中立领域模型、Store 契约、SQLite 实现和应用服务。候选必须来自同主体的至少两条有效 L1，并覆盖至少两个不同用户 L0；候选、来源快照和生成审计原子保存，复核使用 revision 防止过期页面覆盖。
-- 571 项 Python 全量回归通过；尚未增加 API、页面、模型候选生成或回答注入，个人库仍为 0 条 L2。
+- 571 项 Python 全量回归通过（当时节点）；API 与页面由后续切片实现，模型候选生成和回答注入仍未实现，个人库仍为 0 条 L2。
 
 ### Memory architecture calibration R1（2026-09-06）
 

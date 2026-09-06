@@ -10,8 +10,11 @@ from pathlib import Path
 
 from longmemory.adapters.storage.sqlite_conversation_store import SQLiteConversationStore
 from longmemory.adapters.storage.sqlite_memory_store import SQLiteMemoryStore
+from longmemory.adapters.storage.sqlite_scenario_store import SQLiteScenarioStore
 from longmemory.application.memory_management.service import MemoryManagementService
-from longmemory.core.common.identifiers import MemoryId
+from longmemory.application.scenario_management.service import ScenarioManagementService
+from longmemory.core.common.identifiers import MemoryId, ScenarioId
+from longmemory.core.memory.l2_scenario.models import ScenarioReviewDecision
 from longmemory.infrastructure.database.schema import SCHEMA_VERSION
 
 
@@ -52,11 +55,13 @@ def revision(data):
 
 
 class MemoryBackend:
-    def __init__(self, database: Path | None, *, allow_delete=False, allow_correction=False):
+    def __init__(self, database: Path | None, *, allow_delete=False, allow_correction=False,
+                 allow_scenario_management=False):
         # 路径只来自启动参数；任何 HTTP 请求都不能选文件或切换数据库。
         self.database = database.resolve() if database is not None else None
         self.allow_delete = allow_delete
         self.allow_correction = allow_correction
+        self.allow_scenario_management = allow_scenario_management
 
     def info(self):
         return {"configured": self.database is not None,
@@ -65,7 +70,10 @@ class MemoryBackend:
                 "allow_correction": self.allow_correction and self.database is not None,
                 # 当前两个操作共用同一个显式启动权限，但对前端公开独立能力名，
                 # 以后拆分权限时不需要再改变页面语义。
-                "allow_change": self.allow_correction and self.database is not None}
+                "allow_change": self.allow_correction and self.database is not None,
+                "allow_scenario_management": (
+                    self.allow_scenario_management and self.database is not None
+                )}
 
     @contextmanager
     def _open(self, *, write_capability=None):
@@ -77,6 +85,8 @@ class MemoryBackend:
             raise MemoryAccessError("memory_read_only", 403)
         if write_capability == "correction" and not self.allow_correction:
             raise MemoryAccessError("memory_correction_disabled", 403)
+        if write_capability == "scenario" and not self.allow_scenario_management:
+            raise MemoryAccessError("scenario_management_disabled", 403)
         connection = None
         try:
             # mode=ro/rw 都不创建文件；不用 open_database 或 build_application，
@@ -304,3 +314,89 @@ class MemoryBackend:
                 "effective_at": result.effective_at.isoformat(),
                 "old_l0_preserved": True,
             }
+
+    def list_scenarios(self, *, state="all", limit=25, offset=0):
+        if state not in {"all", "candidate", "active", "rejected", "stale"}:
+            raise MemoryAccessError("scenario_filter_invalid", 400)
+        with self._open() as connection:
+            where, parameters = ("", []) if state == "all" else (" WHERE status=?", [state])
+            total = connection.execute(
+                "SELECT count(*) FROM scenario_memories" + where, parameters
+            ).fetchone()[0]
+            rows = connection.execute(
+                "SELECT * FROM scenario_memories" + where
+                + " ORDER BY generated_at DESC, id DESC LIMIT ? OFFSET ?",
+                [*parameters, limit, offset],
+            ).fetchall()
+            return {"items": [self._scenario_json(row) for row in rows],
+                    "total": total, "limit": limit, "offset": offset}
+
+    def get_scenario(self, scenario_id):
+        with self._open() as connection:
+            row = connection.execute(
+                "SELECT * FROM scenario_memories WHERE id=?", (scenario_id,)
+            ).fetchone()
+            if row is None:
+                raise MemoryAccessError("scenario_not_found", 404)
+            data = self._scenario_json(row)
+            sources = [dict(source) for source in connection.execute(
+                "SELECT s.*, a.content AS current_content, a.retired_at "
+                "FROM scenario_memory_sources s LEFT JOIN atomic_memories a ON a.id=s.memory_id "
+                "WHERE s.scenario_id=? ORDER BY s.linked_at, s.memory_id",
+                (scenario_id,),
+            ).fetchall()]
+            # L2 详情必须能沿 L1 继续回到 L0 原话；否则“来源快照”仍只是
+            # 另一个派生结论，用户无法判断场景总结有没有超出原始证据。
+            for source in sources:
+                source["l0_sources"] = [dict(item) for item in connection.execute(
+                    "SELECT e.source_message_id, e.source_type, e.linked_at, "
+                    "m.role, m.content, m.created_at FROM memory_evidence e "
+                    "LEFT JOIN conversation_messages m ON m.id=e.source_message_id "
+                    "WHERE e.memory_id=? ORDER BY e.linked_at, e.source_message_id",
+                    (source["memory_id"],),
+                ).fetchall()]
+            data["sources"] = sources
+            return data
+
+    def create_scenario(self, *, title, summary, source_memory_ids):
+        with self._open(write_capability="scenario") as connection:
+            service = ScenarioManagementService(
+                memory_store=SQLiteMemoryStore(connection, commit_changes=False),
+                scenario_store=SQLiteScenarioStore(connection, commit_changes=False),
+            )
+            try:
+                scenario = service.create_candidate(
+                    title=title,
+                    summary=summary,
+                    source_memory_ids=tuple(MemoryId(value) for value in source_memory_ids),
+                    generator_name="manual_console",
+                    generator_version="1",
+                )
+            except (ValueError, LookupError) as error:
+                raise MemoryAccessError(str(error), 400) from None
+            connection.commit()
+            return {"created": True, "id": str(scenario.id), "status": scenario.status.value}
+
+    def review_scenario(self, scenario_id, *, decision, expected_revision):
+        with self._open(write_capability="scenario") as connection:
+            service = ScenarioManagementService(
+                memory_store=SQLiteMemoryStore(connection, commit_changes=False),
+                scenario_store=SQLiteScenarioStore(connection, commit_changes=False),
+            )
+            try:
+                scenario = service.review(
+                    ScenarioId(scenario_id), ScenarioReviewDecision(decision),
+                    expected_revision=expected_revision,
+                )
+            except ValueError as error:
+                raise MemoryAccessError(str(error), 409) from None
+            connection.commit()
+            return {"reviewed": True, "id": scenario_id,
+                    "status": scenario.status.value, "revision": scenario.revision}
+
+    @staticmethod
+    def _scenario_json(row):
+        return {key: row[key] for key in (
+            "id", "subject_id", "title", "summary", "generated_at", "valid_from",
+            "valid_to", "status", "generator_name", "generator_version", "revision",
+        )}
