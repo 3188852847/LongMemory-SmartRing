@@ -346,6 +346,29 @@ class MemoryBackend:
             return {"items": [self._scenario_json(row) for row in rows],
                     "total": total, "limit": limit, "offset": offset}
 
+    def list_scenario_source_inbox(self):
+        """列出尚未进入当前候选/已接受 L2 的活跃 L1；只读且不判断主题。"""
+
+        with self._open() as connection:
+            rows = connection.execute(
+                "SELECT a.id, a.subject_id, a.content, a.recorded_at, "
+                "count(DISTINCT e.source_message_id) AS source_message_count "
+                "FROM atomic_memories a "
+                "JOIN memory_evidence e ON e.memory_id=a.id "
+                "JOIN conversation_messages m ON m.id=e.source_message_id AND m.role='user' "
+                "WHERE a.retired_at IS NULL AND NOT EXISTS ("
+                "SELECT 1 FROM scenario_memory_sources s "
+                "JOIN scenario_memories l2 ON l2.id=s.scenario_id "
+                "WHERE s.memory_id=a.id AND l2.status IN ('candidate','active')) "
+                "GROUP BY a.id ORDER BY a.recorded_at DESC, a.id DESC LIMIT 100"
+            ).fetchall()
+            return {
+                "items": [dict(row) for row in rows],
+                "total": len(rows),
+                "limited": len(rows) == 100,
+                "selection_is_semantic": False,
+            }
+
     def get_scenario(self, scenario_id):
         with self._open() as connection:
             row = connection.execute(

@@ -266,6 +266,10 @@ def test_scenario_candidate_and_review_use_separate_capability(recorded):
     assert {source["l0_sources"][0]["source_message_id"] for source in detail["sources"]} == {
         first_source_id, "l0-second",
     }
+    # 现有 candidate 已覆盖两条来源，因此待整理收件箱暂时为空；这不是语义判断。
+    inbox = backend.list_scenario_source_inbox()
+    assert inbox["items"] == []
+    assert inbox["selection_is_semantic"] is False
 
     with pytest.raises(MemoryAccessError, match="valid_from_timezone_required"):
         backend.create_scenario(

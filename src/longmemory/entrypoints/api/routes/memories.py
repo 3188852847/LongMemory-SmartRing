@@ -148,6 +148,11 @@ def register_memory_routes(app, backend):
             raise web.HTTPBadRequest()
         return await invoke(backend.list_scenarios, state=state, offset=offset, limit=limit)
 
+    async def scenario_source_inbox(request):
+        if request.query:
+            raise web.HTTPBadRequest()
+        return await invoke(backend.list_scenario_source_inbox)
+
     async def scenario_collection(request):
         if request.content_type != "application/json":
             raise web.HTTPBadRequest()
@@ -247,6 +252,7 @@ def register_memory_routes(app, backend):
     app.router.add_post("/api/memories/{memory_id}/corrections", correction)
     app.router.add_post("/api/memories/{memory_id}/changes", change)
     app.router.add_get("/api/scenarios", scenario_listing, allow_head=False)
+    app.router.add_get("/api/scenario-source-inbox", scenario_source_inbox, allow_head=False)
     app.router.add_post("/api/scenarios", scenario_collection)
     app.router.add_post("/api/scenario-proposals", scenario_proposal)
     app.router.add_get("/api/scenarios/{scenario_id}", scenario_detail, allow_head=False)

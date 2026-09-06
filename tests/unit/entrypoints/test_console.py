@@ -502,6 +502,11 @@ def test_scenario_http_requires_csrf_and_explicit_capability(tmp_path):
             assert proposal["persisted"] is False and proposal["model"] == "synthetic-model"
             assert producer.calls == 1
             assert (await (await client.get(base + "/api/scenarios?state=all")).json())["total"] == 0
+            inbox_before = await (
+                await client.get(base + "/api/scenario-source-inbox")
+            ).json()
+            assert inbox_before["total"] == 2
+            assert inbox_before["selection_is_semantic"] is False
             body = {"title": "准备答辩", "summary": "用户最近正在准备答辩。",
                     "source_memory_ids": ["l1-a", "l1-b"], "creation_kind": "manual",
                     "confirm_candidate": True,
@@ -511,6 +516,9 @@ def test_scenario_http_requires_csrf_and_explicit_capability(tmp_path):
             created_response = await client.post(base + "/api/scenarios", headers=headers, json=body)
             assert created_response.status == 200
             created = await created_response.json()
+            assert (await (
+                await client.get(base + "/api/scenario-source-inbox")
+            ).json())["total"] == 0
             listed = await (await client.get(base + "/api/scenarios?state=candidate")).json()
             assert listed["total"] == 1
             detail = await (await client.get(base + "/api/scenarios/" + created["id"])).json()

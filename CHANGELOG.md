@@ -1,5 +1,11 @@
 # Changelog
 
+### P3 L2 source inbox（2026-09-06）
+
+- 新增只读 L2 来源收件箱：列出尚未被 `candidate/active` 场景覆盖的活跃 L1，并保留用户 L0 证据数量；不会自动分组、调用模型或写入 L2。
+- 新建场景时可只显示待整理 L1，选择框优先标记这些来源，同时明确提示“未覆盖”不等于“主题相关”。
+- 聚焦验证覆盖只读 API、创建候选后的覆盖变化、React 呈现与生产构建；个人数据库内容未被自动整理。
+
 ### P3 audited L2 lifecycle（2026-09-06）
 
 - SQLite 代码结构升级为 V6，新增 L2 生命周期事件；手动结束记录 `manual_end/user`，L1 退役或删除触发失效分别记录 `source_retired/system` 与 `source_deleted/system`。

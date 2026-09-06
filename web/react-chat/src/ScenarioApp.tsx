@@ -1,6 +1,6 @@
 import {useEffect, useState} from 'react';
 import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
-import {Alert, Button, Card, Descriptions, Drawer, Empty, Input, List, Modal, Select, Space, Tag} from 'antd';
+import {Alert, Button, Card, Checkbox, Descriptions, Drawer, Empty, Input, List, Modal, Select, Space, Tag} from 'antd';
 import {ChatApi} from './api';
 import {AppShell, ConsoleNav} from './AppShell';
 
@@ -23,6 +23,8 @@ type ScenarioDetail = Scenario & {sources: ScenarioSource[]; lifecycle_events: S
 type Page<T> = {items: T[]; total: number; limit: number; offset: number};
 type ScenarioProposal = {title: string; summary: string; source_memory_ids: string[];
   generator_name: string; generator_version: string; model: string | null; persisted: false};
+type SourceInbox = {items: Array<{id:string;content:string;subject_id:string;recorded_at:string;source_message_count:number}>; total:number;
+  limited:boolean; selection_is_semantic:false};
 
 const api = new ChatApi();
 const stateName: Record<ScenarioState, string> = {candidate: '待复核', active: '已接受', rejected: '已拒绝', stale: '已失效'};
@@ -46,6 +48,7 @@ export function ScenarioApp() {
   const [confirmingModel, setConfirmingModel] = useState(false);
   const [reviewDecision, setReviewDecision] = useState<'accepted' | 'rejected'>();
   const [ending, setEnding] = useState(false);
+  const [inboxOnly, setInboxOnly] = useState(false);
 
   useEffect(() => {void api.bootstrap().then(() => setReady(true)).catch(error => setNotice(String(error)));}, []);
   const config = useQuery({queryKey: ['memory-config'], enabled: ready,
@@ -54,6 +57,8 @@ export function ScenarioApp() {
     queryFn: () => api.request<Page<Scenario>>(`/api/scenarios?state=${filter}&offset=0&limit=100`)});
   const memories = useQuery({queryKey: ['scenario-source-l1'], enabled: ready && config.data?.configured === true,
     queryFn: () => api.request<Page<L1>>('/api/memories?state=active&q=&offset=0&limit=100')});
+  const sourceInbox = useQuery({queryKey: ['scenario-source-inbox'], enabled: ready && config.data?.configured === true,
+    queryFn: () => api.request<SourceInbox>('/api/scenario-source-inbox')});
   const detail = useQuery({queryKey: ['scenario', selectedId], enabled: ready && Boolean(selectedId),
     queryFn: () => api.request<ScenarioDetail>(`/api/scenarios/${encodeURIComponent(selectedId!)}`)});
 
@@ -67,6 +72,7 @@ export function ScenarioApp() {
     onSuccess: async result => {
       setCreating(false); setTitle(''); setSummary(''); setSourceIds([]); setValidFrom(''); setValidTo(''); setDraftOrigin('manual'); setSelectedId(result.id);
       await queryClient.invalidateQueries({queryKey: ['scenarios']});
+      await queryClient.invalidateQueries({queryKey: ['scenario-source-inbox']});
       setNotice('L2 候选已创建，尚未进入已接受状态。');
     },
     onError: error => setNotice(String(error)),
@@ -111,9 +117,14 @@ export function ScenarioApp() {
     },
     onError: error => {setEnding(false); setNotice(String(error));},
   });
-  const busy = config.isFetching || scenarios.isFetching || memories.isFetching || detail.isFetching || createCandidate.isPending || previewCandidate.isPending || review.isPending || endScenario.isPending;
+  const busy = config.isFetching || scenarios.isFetching || memories.isFetching || sourceInbox.isFetching || detail.isFetching || createCandidate.isPending || previewCandidate.isPending || review.isPending || endScenario.isPending;
   const canManage = config.data?.allow_scenario_management === true;
-  const openCreator = () => {setTitle(''); setSummary(''); setSourceIds([]); setValidFrom(''); setValidTo(''); setDraftOrigin('manual'); setCreating(true);};
+  const openCreator = () => {setTitle(''); setSummary(''); setSourceIds([]); setValidFrom(''); setValidTo(''); setDraftOrigin('manual'); setInboxOnly(false); setCreating(true);};
+  const inboxIds = new Set((sourceInbox.data?.items ?? []).map(item => item.id));
+  const sourceOptions = (memories.data?.items ?? [])
+    .filter(item => !inboxOnly || inboxIds.has(item.id))
+    .sort((left, right) => Number(inboxIds.has(right.id)) - Number(inboxIds.has(left.id)))
+    .map(item => ({value:item.id,label:`${inboxIds.has(item.id) ? '待整理 · ' : ''}${item.content}`}));
   const sidebar = <><Button type="primary" block disabled={!canManage} onClick={openCreator}>新建 L2 候选</Button>
     <ConsoleNav active="scenarios" legacyPath="/memories"/></>;
 
@@ -203,7 +214,12 @@ export function ScenarioApp() {
     <label htmlFor="scenario-valid-to">现实结束时间（可选）</label><Input id="scenario-valid-to" type="datetime-local" value={validTo} onChange={event => setValidTo(event.target.value)}/>
     {validFrom && validTo && new Date(validTo) < new Date(validFrom) && <Alert type="error" showIcon title="结束时间不能早于开始时间"/>}
     <label htmlFor="scenario-sources">L1 来源（至少两条）</label><Select id="scenario-sources" aria-label="L1 来源" mode="multiple" className="wide" value={sourceIds} onChange={setSourceIds}
-      optionFilterProp="label" options={(memories.data?.items ?? []).map(item => ({value:item.id,label:item.content}))}/>
+      optionFilterProp="label" options={sourceOptions}/>
+    <Checkbox checked={inboxOnly} onChange={event => setInboxOnly(event.target.checked)}>
+      只显示待整理 L1（{sourceInbox.data?.total ?? 0}）
+    </Checkbox>
+    <Alert type="info" showIcon title="待整理只表示尚未被当前 L2 覆盖"
+      description="系统没有判断这些记忆属于同一个主题。仍需由你选择真正相关的至少两条来源；不会自动调用模型或写入场景。"/>
     <Space direction="vertical" className="wide">
       <Button block loading={previewCandidate.isPending}
         disabled={!config.data?.scenario_model_preview_available || sourceIds.length < 2}

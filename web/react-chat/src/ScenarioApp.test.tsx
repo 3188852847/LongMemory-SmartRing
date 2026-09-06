@@ -16,6 +16,10 @@ describe('L2 生活场景页', () => {
       calls.push([path, method, body]);
       if (path === '/api/memory-config') return {configured:true,database:'synthetic.db',allow_scenario_management:true,scenario_model_preview_available:false,scenario_model:null};
       if (path.startsWith('/api/scenarios?')) return {items:[],total:0,limit:100,offset:0};
+      if (path === '/api/scenario-source-inbox') return {items:[
+        {id:'l1-a',content:'用户工作日午后经常聊天。',subject_id:'user:self',recorded_at:'2026-09-06T09:00:00Z',source_message_count:1},
+        {id:'l1-b',content:'用户忙碌时希望得到温和问候。',subject_id:'user:self',recorded_at:'2026-09-06T10:00:00Z',source_message_count:1},
+      ],total:2,limited:false,selection_is_semantic:false};
       if (path.startsWith('/api/memories?')) return {items:[
         {id:'l1-a',content:'用户工作日午后经常聊天。',subject_id:'user:self',state:'active'},
         {id:'l1-b',content:'用户忙碌时希望得到温和问候。',subject_id:'user:self',state:'active'},
@@ -31,13 +35,15 @@ describe('L2 生活场景页', () => {
     await waitFor(() => expect(createButton.hasAttribute('disabled')).toBe(false));
     expect(calls.filter(([, method]) => method === 'POST')).toHaveLength(0);
     fireEvent.click(createButton);
+    expect(await screen.findByText('只显示待整理 L1（2）')).toBeTruthy();
+    expect(screen.getByText('待整理只表示尚未被当前 L2 覆盖')).toBeTruthy();
     fireEvent.change(screen.getByLabelText('场景标题'), {target:{value:'午后陪伴'}});
     fireEvent.change(screen.getByLabelText('场景总结'), {target:{value:'工作日下午适合温和问候。'}});
     // Ant Design 多选框的键盘交互比直接操作隐藏 input 更接近真实使用。
     fireEvent.mouseDown(screen.getByLabelText('L1 来源'));
-    fireEvent.click(await screen.findByText('用户工作日午后经常聊天。'));
+    fireEvent.click(await screen.findByText(/用户工作日午后经常聊天。/));
     fireEvent.mouseDown(screen.getByLabelText('L1 来源'));
-    fireEvent.click(await screen.findByText('用户忙碌时希望得到温和问候。'));
+    fireEvent.click(await screen.findByText(/用户忙碌时希望得到温和问候。/));
     fireEvent.click(screen.getByRole('button',{name:'创建待复核候选'}));
 
     await waitFor(() => expect(calls.filter(([path, method]) => path === '/api/scenarios' && method === 'POST')).toHaveLength(1));
@@ -56,6 +62,7 @@ describe('L2 生活场景页', () => {
       calls.push([path, method, body]);
       if (path === '/api/memory-config') return {configured:true,database:'synthetic.db',allow_scenario_management:true,scenario_model_preview_available:false,scenario_model:null};
       if (path.startsWith('/api/scenarios?')) return {items:[scenario],total:1,limit:100,offset:0};
+      if (path === '/api/scenario-source-inbox') return {items:[],total:0,limited:false,selection_is_semantic:false};
       if (path.startsWith('/api/memories?')) return {items:[],total:0,limit:100,offset:0};
       if (path === '/api/scenarios/scenario-1' && (method === undefined || method === 'GET')) return {...scenario,sources:[],lifecycle_events:[]};
       if (path === '/api/scenarios/scenario-1/reviews' && method === 'POST') return {reviewed:true,status:'active',revision:2};
@@ -84,6 +91,7 @@ describe('L2 生活场景页', () => {
       calls.push([path, method, body]);
       if (path === '/api/memory-config') return {configured:true,database:'synthetic.db',allow_scenario_management:true,scenario_model_preview_available:true,scenario_model:'synthetic-model'};
       if (path.startsWith('/api/scenarios?')) return {items:[],total:0,limit:100,offset:0};
+      if (path === '/api/scenario-source-inbox') return {items:[],total:0,limited:false,selection_is_semantic:false};
       if (path.startsWith('/api/memories?')) return {items:[
         {id:'l1-a',content:'用户周五要答辩。',subject_id:'user:self',state:'active'},
         {id:'l1-b',content:'用户正在修改 PPT。',subject_id:'user:self',state:'active'},
@@ -125,6 +133,7 @@ describe('L2 生活场景页', () => {
       calls.push([path, method, body]);
       if (path === '/api/memory-config') return {configured:true,database:'synthetic.db',allow_scenario_management:true,scenario_model_preview_available:false,scenario_model:null};
       if (path.startsWith('/api/scenarios?')) return {items:[scenario],total:1,limit:100,offset:0};
+      if (path === '/api/scenario-source-inbox') return {items:[],total:0,limited:false,selection_is_semantic:false};
       if (path.startsWith('/api/memories?')) return {items:[],total:0,limit:100,offset:0};
       if (path === '/api/scenarios/scenario-1' && (method === undefined || method === 'GET')) return {...scenario,sources:[],lifecycle_events:[]};
       if (path === '/api/scenarios/scenario-1/lifecycle' && method === 'POST') return {ended:true,status:'stale',revision:3};
