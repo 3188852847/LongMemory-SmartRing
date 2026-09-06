@@ -34,7 +34,7 @@ P1 网页会话恢复已实现：列表、新建、切换、重命名，同一�
 
 当前产品顺序：**P1 日常入口 → P2 个性化体验 → P3 日常记忆 → P4 可控主动交流 → P5 习惯驱动陪伴**。P1 最小启动面板及网页会话恢复已实现；P2 的本地声音启动和状态展示已完成，待用户试听验收后进入 P3。
 
-P3 目标已明确为四层个人记忆：L0 原始证据、L1 原子记忆、L2 场景、L3 用户画像。P3.1 已实现并验收网页/圆屏共享的常驻 Memory Runtime。P3.2 的模型辅助提取与关键词＋本地 BGE 混合召回已完成首轮真实组合体验。P3.3 已实现人工错误纠正第一切片：新建 `user_corrected` 来源的 L1，并用 SUPERSEDE 保留旧事实历史；事实后来变化、撤销和自动冲突仍未实现。既有 V3 个人库尚未迁移到 V4。见 [ADR-0026](docs/adr/0026-layered-memory-and-knowledge-plane.md)、[ADR-0027](docs/adr/0027-shared-persistent-memory-runtime.md)、[ADR-0028](docs/adr/0028-daily-llm-l1-extraction.md)、[ADR-0029](docs/adr/0029-optional-daily-hybrid-retrieval.md)与 [ADR-0030](docs/adr/0030-auditable-manual-memory-correction.md)。
+P3 目标已明确为四层个人记忆：L0 原始证据、L1 原子记忆、L2 场景、L3 用户画像。P3.1 已实现并验收网页/圆屏共享的常驻 Memory Runtime。P3.2 的模型辅助提取与关键词＋本地 BGE 混合召回已完成首轮真实组合体验。P3.3 已实现人工错误纠正第一切片：新建 `user_corrected` 来源的 L1，并用 SUPERSEDE 保留旧事实历史；事实后来变化、撤销和自动冲突仍未实现。日常个人库已在一致性备份后由 V3 迁移到 V4，待控制台真实纠正体验。见 [ADR-0026](docs/adr/0026-layered-memory-and-knowledge-plane.md)、[ADR-0027](docs/adr/0027-shared-persistent-memory-runtime.md)、[ADR-0028](docs/adr/0028-daily-llm-l1-extraction.md)、[ADR-0029](docs/adr/0029-optional-daily-hybrid-retrieval.md)与 [ADR-0030](docs/adr/0030-auditable-manual-memory-correction.md)。
 
 - [路线图](ROADMAP.md)：先后顺序与历史记录。
 - [产品范围与验收](docs/requirements/companion-product.md)：各阶段做什么、怎样算完成。
