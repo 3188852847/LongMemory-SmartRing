@@ -40,6 +40,8 @@ def register_memory_runtime_routes(app, backend):
             "memory_use_enabled": prepared.use_enabled,
             "scenario_use_enabled": prepared.scenario_use_enabled,
             "scenario_retrieved": [asdict(item) for item in prepared.scenarios],
+            "persona_use_enabled": prepared.persona_use_enabled,
+            "persona_retrieved": [asdict(item) for item in prepared.personas],
         })
 
     app.router.add_get("/api/internal/memory/status", status, allow_head=False)

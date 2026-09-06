@@ -19,24 +19,29 @@ def register_memory_mode_routes(app, backend):
                 body = await request.json()
             except (ValueError, UnicodeError):
                 raise web.HTTPBadRequest() from None
+            allowed = {"write_enabled", "use_enabled", "scenario_use_enabled", "persona_use_enabled"}
             if (not isinstance(body, dict)
-                    or set(body) not in ({"write_enabled", "use_enabled"},
-                                         {"write_enabled", "use_enabled", "scenario_use_enabled"})
+                    or not {"write_enabled", "use_enabled"} <= set(body)
+                    or not set(body) <= allowed
                     or type(body["write_enabled"]) is not bool
                     or type(body["use_enabled"]) is not bool
-                    or ("scenario_use_enabled" in body and type(body["scenario_use_enabled"]) is not bool)):
+                    or ("scenario_use_enabled" in body and type(body["scenario_use_enabled"]) is not bool)
+                    or ("persona_use_enabled" in body and type(body["persona_use_enabled"]) is not bool)):
                 raise web.HTTPBadRequest()
             status = await asyncio.to_thread(
                 runtime.configure,
                 write_enabled=body["write_enabled"],
                 use_enabled=body["use_enabled"],
                 scenario_use_enabled=body.get("scenario_use_enabled"),
+                persona_use_enabled=body.get("persona_use_enabled"),
             )
         return web.json_response({
             "write_enabled": status["write_enabled"],
             "use_enabled": status["use_enabled"],
             "scenario_use_enabled": status["scenario_use_enabled"],
             "scenario_available": status["scenario_available"],
+            "persona_use_enabled": status["persona_use_enabled"],
+            "persona_available": status["persona_available"],
             "persistent": status["settings_persistent"],
             "l0_archived_when_write_disabled": True,
         })

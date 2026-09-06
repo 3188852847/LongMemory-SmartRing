@@ -11,6 +11,7 @@ from longmemory.adapters.llm.fake import FakeAnswerGenerator
 from longmemory.adapters.llm.openai_compatible import OpenAICompatibleAnswerGenerator
 from longmemory.application.chat.contracts import AnswerGenerationError
 from longmemory.application.memory_runtime import MemoryRuntime
+from longmemory.application.persona_recall import PersonaRecallItem, PersonaRecallResult
 from longmemory.application.scenario_recall import ScenarioRecallItem, ScenarioRecallResult
 from longmemory.bootstrap import build_memory_runtime
 from longmemory.core.memory.retrieval.service import HybridMemoryRetriever
@@ -298,6 +299,41 @@ def test_runtime_rejects_unavailable_l2_without_partial_mode_change(database):
         assert runtime.status()["scenario_use_enabled"] is False
     finally:
         runtime.close()
+
+
+def test_runtime_l3_use_is_opt_in_shared_and_separately_traced(database):
+    class PersonaProvider:
+        def recall(self, query, *, limit=3, max_chars=1200):
+            assert query == "我平时喜欢喝什么"
+            return PersonaRecallResult(
+                "以下是与当前问题相关、已有证据支持的用户画像（L3）：\n- 饮品偏好：用户喜欢喝乌龙茶。",
+                (PersonaRecallItem(
+                    "l3-a", "preference", "user_declared", "饮品偏好",
+                    "用户喜欢喝乌龙茶。", (("l1", "l1-a"),), ("l0-a",),
+                ),),
+            )
+
+        def close(self):
+            pass
+
+    runtime = MemoryRuntime(
+        database,
+        method=LongMemoryV1(database, existing_only=True),
+        persona_provider=PersonaProvider(),
+    )
+    backend = ChatBackend(database, FakeAnswerGenerator(), runtime=runtime)
+    try:
+        assert backend.run("我平时喜欢喝什么", ())["persona_retrieved"] == []
+        runtime.configure(
+            write_enabled=True, use_enabled=True, persona_use_enabled=True,
+        )
+        result = backend.run("我平时喜欢喝什么", ())
+        assert result["persona_use_enabled"] is True
+        assert result["persona_retrieved"][0]["persona_id"] == "l3-a"
+        assert result["persona_retrieved"][0]["source_message_ids"] == ("l0-a",)
+        assert "已有证据支持" in result["memory_context"]
+    finally:
+        backend.close()
 
 
 def test_paused_write_skips_daily_llm_extraction_but_archives_source(database):

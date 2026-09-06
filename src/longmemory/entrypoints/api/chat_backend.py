@@ -43,6 +43,8 @@ class ChatBackend:
                 "memory_use_enabled": runtime["use_enabled"],
                 "scenario_use_enabled": runtime["scenario_use_enabled"],
                 "scenario_available": runtime["scenario_available"],
+                "persona_use_enabled": runtime["persona_use_enabled"],
+                "persona_available": runtime["persona_available"],
                 "memory_mode_persistent": runtime["settings_persistent"],
                 "speaks_on_device": False}
 
@@ -60,7 +62,8 @@ class ChatBackend:
                   "history_messages": len(history), "memory_processing": None,
                   "memory_warning": None, "retrieval_strategy": None,
                   "retrieval_warning": None, "scenario_retrieved": None,
-                  "scenario_use_enabled": False}
+                  "scenario_use_enabled": False, "persona_retrieved": None,
+                  "persona_use_enabled": False}
         try:
             runtime = self.memory_runtime()
             runtime_status = runtime.status()
@@ -68,6 +71,7 @@ class ChatBackend:
             result["memory_write_enabled"] = runtime_status["write_enabled"]
             result["memory_use_enabled"] = runtime_status["use_enabled"]
             result["scenario_use_enabled"] = runtime_status["scenario_use_enabled"]
+            result["persona_use_enabled"] = runtime_status["persona_use_enabled"]
             # 开始处理时固定本轮角色。保存新版本不改变已经开始的回答。
             role = self.roles.current()
             result.update(role=role['name'], role_revision=role['revision'])
@@ -80,6 +84,8 @@ class ChatBackend:
             result["memory_use_enabled"] = prepared.use_enabled
             result["scenario_use_enabled"] = prepared.scenario_use_enabled
             result["scenario_retrieved"] = [asdict(item) for item in prepared.scenarios]
+            result["persona_use_enabled"] = prepared.persona_use_enabled
+            result["persona_retrieved"] = [asdict(item) for item in prepared.personas]
             result.update(user_saved=True, event_id=event.event_id,
                           writes=[asdict(item) for item in observed.writes],
                           memory_processing=observed.processing_status,

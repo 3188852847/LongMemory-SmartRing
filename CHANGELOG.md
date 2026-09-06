@@ -1,5 +1,12 @@
 # Changelog
 
+### P3.7 controlled L3 answer context（2026-09-06）
+
+- 新增 L3 只读召回契约与 SQLite 适配器，只使用 active、当前有效且与问题有关键词重叠的画像；最多 3 条、L3 上下文最多 1200 字符。
+- Memory Runtime 增加默认关闭的独立 L3 使用开关，网页与圆屏共享；关闭总记忆使用时不会召回 L2/L3。
+- 网页/内部语音接口与聊天轨迹返回实际使用的 L3 及其 L1/L2→L0 来源，React 记忆页可开关，聊天页显示本轮 L3 标签。
+- 验证：69 项定向 Python、15 项 React 和生产构建通过；全量 642 项通过，1 项既有 Windows 端口回收测试首次超时、单独重跑通过。无 schema 迁移或个人数据改写。
+
 ### P3.6 controlled L3 automatic activation executor（2026-09-06）
 
 - 新增应用层 L3 自动生效执行器：从存储重新计算真实证据，再调用 `persona-activation-v1`；不信任模型提供的计数或安全等级。

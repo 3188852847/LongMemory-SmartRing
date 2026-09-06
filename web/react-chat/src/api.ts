@@ -32,7 +32,8 @@ export interface Turn {
   input: string; answer?: string; status: string; writes: {operation: string}[] | null;
   user_saved: boolean; duration_ms: number; memory_processing?: 'completed' | 'source_only' | null;
   memory_warning?: string | null; retrieval_strategy?: string | null;
-  retrieval_warning?: string | null; scenario_use_enabled?: boolean;
+  retrieval_warning?: string | null; scenario_use_enabled?: boolean; persona_use_enabled?: boolean;
+  persona_retrieved?: Array<{persona_id: string; label: string; statement: string}>;
   scenario_retrieved?: {scenario_id:string; title:string; summary:string; source_memory_ids:string[]; source_message_ids:string[]}[] | null;
   [key: string]: unknown;
 }

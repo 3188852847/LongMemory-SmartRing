@@ -32,7 +32,7 @@ L3 用于保存经过来源核对的稳定认识，例如：
 ## 当前明确不包含
 
 - 定时扫描、批量回填、自动选择来源或自动创建候选。
-- 将已接受 L3 注入网页或圆屏回答。
+- 更强的语义 L3 召回；当前已提供默认关闭的关键词安全基线。
 - 自动合并重复/冲突断言，以及长期规划、价值观、兴趣和关系等新增画像类型。
 - 自动发现应更新的画像、模型自动改写或自动接受；第一版更新由用户从一条旧画像显式发起。
 - 自动重建失效画像、撤销复核或画像版本链。
@@ -60,5 +60,6 @@ L3 用于保存经过来源核对的稳定认识，例如：
 10. 创建更新候选不改变旧画像；接受时新旧状态和取代时间原子提交，目标状态或 revision 冲突时全部回滚。
 11. 用户和策略复核身份不可混用；策略接受必须可在 API 与控制台查看版本和原因，V9 人工复核迁移后仍保持用户身份。
 12. 自动执行器不采用模型自报的证据数量；HOLD、ASK、BLOCK 和 NOOP 均不产生 active 画像，UPDATE 继续使用目标 revision 与原子取代。
+13. L3 回答使用默认关闭；开启后只注入相关、active 且当前有效的画像并遵守数量/字符预算，每轮保留 L3→来源→L0 轨迹。
 
 操作步骤见 [L3 用户画像测试指南](../guides/L3用户画像测试.md)，架构决定见 [ADR-0039](../adr/0039-reviewable-l3-persona-foundation.md)、[ADR-0042](../adr/0042-reviewable-l3-persona-management.md)、[ADR-0043](../adr/0043-explicit-l3-model-preview.md)、[ADR-0044](../adr/0044-unified-persona-profile-projection.md)、[ADR-0045](../adr/0045-audited-l3-replacement.md)、[ADR-0048](../adr/0048-distinct-policy-review-audit.md)与 [ADR-0049](../adr/0049-controlled-l3-automatic-activation-executor.md)。

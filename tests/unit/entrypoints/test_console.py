@@ -387,8 +387,10 @@ def test_memory_mode_http_controls_the_shared_web_and_voice_runtime(tmp_path):
             assert await current.json() == {
                 "write_enabled": True,
                 "use_enabled": True,
-                "scenario_use_enabled": False,
-                "scenario_available": True,
+                    "scenario_use_enabled": False,
+                    "scenario_available": True,
+                    "persona_use_enabled": False,
+                    "persona_available": False,
                 "persistent": False,
                 "l0_archived_when_write_disabled": True,
             }

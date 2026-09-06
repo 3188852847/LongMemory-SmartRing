@@ -102,6 +102,7 @@ function ChatApp() {
           {turn.memory_processing === 'source_only' && <p className="memory-warning">{memoryWarning(turn)} 可继续聊天，之后需要重新整理这条来源。</p>}
           {turn.retrieval_warning === 'dense_retrieval_failed' && <p className="memory-warning">本轮本地 BGE 检索失败，已使用关键词结果继续回答；展开过程可查看实际策略。</p>}
           {Boolean(turn.scenario_retrieved?.length) && <p className="scenario-trace">本轮使用 L2：{turn.scenario_retrieved!.map(item => item.title).join('、')}</p>}
+          {Boolean(turn.persona_retrieved?.length) && <p className="scenario-trace">本轮使用 L3：{turn.persona_retrieved!.map(item => item.label).join('、')}</p>}
           <details><summary>{turnSummary(turn)}</summary><pre>{JSON.stringify(turn, null, 2)}</pre></details></article>)}<div ref={turnsEnd}/></section>
       <form onSubmit={event => {event.preventDefault(); void send();}}><Input.TextArea aria-label="消息" value={draft} maxLength={1000} rows={3} disabled={disabled || (chat?.turns.length ?? 0) >= 40} onChange={event => setDraft(event.target.value)} placeholder="写下想说的话…"/>
         <div className="send-row"><small>发送会先保存原始输入，再按当前提取策略生成长期记忆。</small><Button type="primary" htmlType="submit" disabled={disabled || !draft.trim() || (chat?.turns.length ?? 0) >= 40}>发送</Button></div></form>
