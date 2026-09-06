@@ -5,6 +5,7 @@
 - 新增 V5 场景、L1 来源快照、生成审计和人工复核结构；候选默认不会参与回答，当前没有生成 L2。
 - V4→V5 迁移只增加空表和触发器，不改写 L0/L1；L1 退役或硬删除会把关联 candidate/active 场景标为 stale，同时来源快照继续保留。
 - 合成 V1→V5、V2→V5、V3→V5、V4→V5、备份哈希、外键和失效触发回归通过；个人库迁移结果另行记录。
+- 经用户明确授权并确认相关服务未监听后，日常 `xiaozhi-demo-v1.db` 已从 V4 迁移到 V5；迁移前一致性备份为 `data/backups/xiaozhi-demo-v1-pre-v5-20260906-143534.db`，SHA-256 `0CF17D8B45CAA7C23613984A50BA9899A18CDBFFEE6EEB324284ED9B89DF66CA`。迁移后 quick_check 正常、外键违规为 0，L2 为空；备份文件不提交 Git。
 
 ### Memory architecture calibration R1（2026-09-06）
 
