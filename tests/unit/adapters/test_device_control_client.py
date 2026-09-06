@@ -1,5 +1,6 @@
 import asyncio
 import json
+from datetime import datetime, timezone
 
 import pytest
 
@@ -83,3 +84,44 @@ def test_missing_token_does_not_create_or_contact_bridge(tmp_path):
 def test_oversized_response_rejected(tmp_path):
     client = client_for(tmp_path, {"volume": 25, "extra": "x" * 20000})
     with pytest.raises(BridgeError, match="bridge_invalid_response"): asyncio.run(client.read_volume())
+
+
+def test_announcement_is_strictly_projected_without_claiming_playback(tmp_path):
+    expires_at = datetime(2026, 9, 6, 12, 0, tzinfo=timezone.utc)
+    expires_at_ms = int(expires_at.timestamp() * 1000)
+    value = {
+        "operation_id": "b" * 32,
+        "state": "queued",
+        "playback_acknowledgement": "unavailable",
+        "expires_at_ms": expires_at_ms,
+        "private_device_state": "must-not-escape",
+    }
+    client = client_for(tmp_path, value)
+    assert asyncio.run(client.announce("合成问候。", expires_at)) == {
+        key: value[key] for key in (
+            "operation_id", "state", "playback_acknowledgement", "expires_at_ms",
+        )
+    }
+    args, options = client._session.calls[0]
+    assert args == ("POST", "http://127.0.0.1:8766/api/device/announcement")
+    assert options["json"] == {"text": "合成问候。", "expires_at_ms": expires_at_ms}
+
+
+@pytest.mark.parametrize("change", [
+    {"operation_id": "not-hex"},
+    {"state": "played"},
+    {"playback_acknowledgement": "available"},
+    {"expires_at_ms": 1},
+])
+def test_announcement_rejects_unproven_or_mismatched_response(tmp_path, change):
+    expires_at = datetime(2026, 9, 6, 12, 0, tzinfo=timezone.utc)
+    value = {
+        "operation_id": "b" * 32,
+        "state": "queued",
+        "playback_acknowledgement": "unavailable",
+        "expires_at_ms": int(expires_at.timestamp() * 1000),
+        **change,
+    }
+    client = client_for(tmp_path, value)
+    with pytest.raises(BridgeError, match="bridge_invalid_response"):
+        asyncio.run(client.announce("合成问候。", expires_at))

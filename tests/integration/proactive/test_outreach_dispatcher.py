@@ -93,7 +93,7 @@ def test_delivery_rejection_or_exception_is_audited_as_failed(tmp_path, outcome)
             raise RuntimeError("private upstream detail")
         if outcome == "invalid_contract":
             return None
-        return DeliveryQueueResult(DeliveryQueueStatus.REJECTED, "device_offline")
+        return DeliveryQueueResult(DeliveryQueueStatus.FAILED, "device_offline")
 
     connection, ledger, dispatcher = setup_dispatcher(tmp_path, delivery)
     outreach = candidate(ledger)

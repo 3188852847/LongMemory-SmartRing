@@ -24,7 +24,7 @@ class DeliveryQueueStatus(StrEnum):
     """当前适配层只承认服务端排队，不推测设备侧结果。"""
 
     ACCEPTED = "accepted"
-    REJECTED = "rejected"
+    FAILED = "failed"
 
 
 @dataclass(frozen=True, slots=True)
@@ -137,7 +137,7 @@ class ProactiveOutreachDispatcher:
             )
             return OutreachDispatchResult(decision, failed)
 
-        if delivery.status == DeliveryQueueStatus.REJECTED:
+        if delivery.status == DeliveryQueueStatus.FAILED:
             failed = self._ledger.record_transition(
                 queued.id,
                 expected_revision=queued.revision,

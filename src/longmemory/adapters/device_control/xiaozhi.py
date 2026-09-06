@@ -3,6 +3,7 @@
 import asyncio
 import json
 import re
+from datetime import datetime
 from pathlib import Path
 
 import aiohttp
@@ -25,6 +26,8 @@ REASONS = frozenset({
     "set_not_acknowledged_outcome_unknown",
     "device_offline", "device_not_ready", "tools_not_ready", "readback_mismatch",
     "volume_out_of_range", "tool_unavailable",
+    "invalid_announcement", "invalid_expiry", "announcement_expired",
+    "tts_not_ready", "device_busy", "announcement_enqueue_failed",
 })
 
 
@@ -125,3 +128,32 @@ class XiaozhiControlClient:
         if "reason" in data:
             result["reason"] = safe_reason(data["reason"])
         return result
+
+    async def announce(self, text: str, expires_at: datetime) -> dict:
+        """请求现有小智 TTS 队列接收短文本，不声称设备已经播放。"""
+
+        if (not isinstance(text, str) or text != text.strip() or not text
+                or len(text) > 80 or any(ord(char) < 32 for char in text)):
+            raise BridgeError("invalid_announcement", 400)
+        if (not isinstance(expires_at, datetime) or expires_at.tzinfo is None
+                or expires_at.utcoffset() is None):
+            raise BridgeError("invalid_expiry", 400)
+        expires_at_ms = int(expires_at.timestamp() * 1000)
+        data = await self._request(
+            "POST", "/api/device/announcement",
+            {"text": text, "expires_at_ms": expires_at_ms},
+        )
+        operation_id = data.get("operation_id")
+        if (not isinstance(operation_id, str)
+                or re.fullmatch(r"[0-9a-f]{32}", operation_id) is None
+                or data.get("state") != "queued"
+                or data.get("playback_acknowledgement") != "unavailable"
+                or data.get("expires_at_ms") != expires_at_ms):
+            raise BridgeError("bridge_invalid_response", 502)
+        # 只保留编排需要的非敏感字段；上游额外数据不向应用层扩散。
+        return {
+            "operation_id": operation_id,
+            "state": "queued",
+            "playback_acknowledgement": "unavailable",
+            "expires_at_ms": expires_at_ms,
+        }
