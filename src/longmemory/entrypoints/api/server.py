@@ -52,7 +52,8 @@ STATIC_FILES = {
 def create_app(*, port=8765, bridge=None, web_root=None, database=None, allow_memory_delete=False,
                allow_memory_correction=False, allow_scenario_management=False,
                chat_backend=None, experiment_backend=None, job_backend=None, instance_id=None,
-               xiaozhi_server=None, memory_runtime_token=None):
+               xiaozhi_server=None, memory_runtime_token=None, scenario_producer=None,
+               scenario_model=None):
     sessions = Sessions()
     assets = web_root or ROOT / "web"
     client = bridge if bridge is not None else XiaozhiControlClient(ROOT / "data/control/device-control.token")
@@ -124,6 +125,8 @@ def create_app(*, port=8765, bridge=None, web_root=None, database=None, allow_me
         allow_delete=allow_memory_delete,
         allow_correction=allow_memory_correction,
         allow_scenario_management=allow_scenario_management,
+        scenario_producer=scenario_producer,
+        scenario_model=scenario_model,
     ))
     register_chat_routes(app, chat_backend)
     register_memory_mode_routes(app, chat_backend)
@@ -179,6 +182,8 @@ def main():
         parser.error("hybrid 必须且只有 hybrid 可以指定 --embedding-model-dir")
     chat_backend = None
     job_backend = None
+    scenario_producer = None
+    scenario_model = None
     if args.enable_experiment_runs:
         from longmemory.infrastructure.config.settings import load_model_settings
         try:
@@ -230,6 +235,10 @@ def main():
             chat_backend = ChatBackend(args.database, generator, provider=settings.provider,
                                        model=settings.model or "fake", role=args.assistant_role,
                                        runtime=runtime)
+            if args.allow_scenario_management and settings.provider == "openai_compatible":
+                from longmemory.adapters.llm.scenario_candidate import OpenAICompatibleScenarioProposalProducer
+                scenario_producer = OpenAICompatibleScenarioProposalProducer(settings)
+                scenario_model = settings.model
         except Exception:
             parser.error("文字聊天配置无效：请检查已有数据库版本、模型环境变量和角色文件。未建库或迁移。")
         if settings.base_url.startswith("http://"):
@@ -258,7 +267,8 @@ def main():
                                allow_scenario_management=args.allow_scenario_management,
                                chat_backend=chat_backend, job_backend=job_backend,
                                instance_id=os.environ.get("LONGMEMORY_LAUNCHER_INSTANCE"), xiaozhi_server=args.xiaozhi_server,
-                               memory_runtime_token=runtime_token),
+                               memory_runtime_token=runtime_token,
+                               scenario_producer=scenario_producer, scenario_model=scenario_model),
                     host="127.0.0.1", port=args.port, access_log=None, print=None)
     except OSError:
         parser.exit(1, f"控制台未能绑定 127.0.0.1:{args.port}。请检查旧控制台是否仍在运行或端口权限；未自动停止其他进程、未换端口。\n")

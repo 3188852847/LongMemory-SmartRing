@@ -13,8 +13,14 @@ from longmemory.adapters.storage.sqlite_memory_store import SQLiteMemoryStore
 from longmemory.adapters.storage.sqlite_scenario_store import SQLiteScenarioStore
 from longmemory.application.memory_management.service import MemoryManagementService
 from longmemory.application.scenario_management.service import ScenarioManagementService
+from longmemory.application.scenario_management.proposal_service import ScenarioProposalService
 from longmemory.core.common.identifiers import MemoryId, ScenarioId
 from longmemory.core.memory.l2_scenario.models import ScenarioReviewDecision
+from longmemory.core.memory.l2_scenario.proposals import (
+    ScenarioProposalError,
+    ScenarioProposalInput,
+)
+from longmemory.adapters.llm.scenario_candidate import SCENARIO_PROMPT_VERSION
 from longmemory.infrastructure.database.schema import SCHEMA_VERSION
 
 
@@ -56,12 +62,15 @@ def revision(data):
 
 class MemoryBackend:
     def __init__(self, database: Path | None, *, allow_delete=False, allow_correction=False,
-                 allow_scenario_management=False):
+                 allow_scenario_management=False, scenario_producer=None,
+                 scenario_model=None):
         # 路径只来自启动参数；任何 HTTP 请求都不能选文件或切换数据库。
         self.database = database.resolve() if database is not None else None
         self.allow_delete = allow_delete
         self.allow_correction = allow_correction
         self.allow_scenario_management = allow_scenario_management
+        self.scenario_producer = scenario_producer
+        self.scenario_model = scenario_model
 
     def info(self):
         return {"configured": self.database is not None,
@@ -73,7 +82,13 @@ class MemoryBackend:
                 "allow_change": self.allow_correction and self.database is not None,
                 "allow_scenario_management": (
                     self.allow_scenario_management and self.database is not None
-                )}
+                ),
+                "scenario_model_preview_available": (
+                    self.allow_scenario_management
+                    and self.database is not None
+                    and self.scenario_producer is not None
+                ),
+                "scenario_model": self.scenario_model if self.scenario_producer else None}
 
     @contextmanager
     def _open(self, *, write_capability=None):
@@ -358,19 +373,64 @@ class MemoryBackend:
             data["sources"] = sources
             return data
 
-    def create_scenario(self, *, title, summary, source_memory_ids):
+    def preview_scenario(self, *, source_memory_ids):
+        """读取所选来源后释放数据库，再调用模型生成不落库草稿。"""
+
+        if not self.allow_scenario_management:
+            raise MemoryAccessError("scenario_management_disabled", 403)
+        if self.scenario_producer is None:
+            raise MemoryAccessError("scenario_model_preview_unavailable", 503)
+        with self._open() as connection:
+            store = SQLiteMemoryStore(connection)
+            sources = []
+            for value in source_memory_ids:
+                memory = store.get(MemoryId(value))
+                if memory is None:
+                    raise MemoryAccessError("scenario_source_l1_missing", 400)
+                if memory.retired_at is not None:
+                    raise MemoryAccessError("scenario_source_l1_retired", 400)
+                sources.append(ScenarioProposalInput(
+                    memory.id,
+                    memory.subject_id,
+                    memory.content,
+                    tuple(str(item.source_message_id) for item in store.list_evidence(memory.id)),
+                ))
+        try:
+            proposal = ScenarioProposalService(self.scenario_producer).preview(tuple(sources))
+        except ScenarioProposalError as error:
+            raise MemoryAccessError(str(error), 400) from None
+        return {
+            "title": proposal.title,
+            "summary": proposal.summary,
+            "source_memory_ids": [str(value) for value in proposal.source_memory_ids],
+            "generator_name": "model_assisted_console",
+            "generator_version": SCENARIO_PROMPT_VERSION,
+            "model": self.scenario_model,
+            "persisted": False,
+        }
+
+    def create_scenario(self, *, title, summary, source_memory_ids, creation_kind="manual"):
         with self._open(write_capability="scenario") as connection:
             service = ScenarioManagementService(
                 memory_store=SQLiteMemoryStore(connection, commit_changes=False),
                 scenario_store=SQLiteScenarioStore(connection, commit_changes=False),
             )
             try:
+                if creation_kind == "model_assisted" and self.scenario_producer is None:
+                    raise MemoryAccessError("scenario_model_preview_unavailable", 503)
+                generator_name = (
+                    "model_assisted_console" if creation_kind == "model_assisted"
+                    else "manual_console"
+                )
+                generator_version = (
+                    SCENARIO_PROMPT_VERSION if creation_kind == "model_assisted" else "1"
+                )
                 scenario = service.create_candidate(
                     title=title,
                     summary=summary,
                     source_memory_ids=tuple(MemoryId(value) for value in source_memory_ids),
-                    generator_name="manual_console",
-                    generator_version="1",
+                    generator_name=generator_name,
+                    generator_version=generator_version,
                 )
             except (ValueError, LookupError) as error:
                 raise MemoryAccessError(str(error), 400) from None

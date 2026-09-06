@@ -157,8 +157,9 @@ def register_memory_routes(app, backend):
             raise web.HTTPBadRequest() from None
         ids = body.get("source_memory_ids") if isinstance(body, dict) else None
         if (not isinstance(body, dict)
-                or set(body) != {"title", "summary", "source_memory_ids", "confirm_candidate"}
+                or set(body) != {"title", "summary", "source_memory_ids", "creation_kind", "confirm_candidate"}
                 or body.get("confirm_candidate") is not True
+                or body.get("creation_kind") not in {"manual", "model_assisted"}
                 or not isinstance(body.get("title"), str)
                 or not 1 <= len(body["title"].strip()) <= 120
                 or not isinstance(body.get("summary"), str)
@@ -168,7 +169,25 @@ def register_memory_routes(app, backend):
                 or len(set(ids)) != len(ids)):
             raise web.HTTPBadRequest()
         return await invoke(backend.create_scenario, title=body["title"].strip(),
-                            summary=body["summary"].strip(), source_memory_ids=ids)
+                            summary=body["summary"].strip(), source_memory_ids=ids,
+                            creation_kind=body["creation_kind"])
+
+    async def scenario_proposal(request):
+        if request.content_type != "application/json":
+            raise web.HTTPBadRequest()
+        try:
+            body = await request.json()
+        except (ValueError, UnicodeError):
+            raise web.HTTPBadRequest() from None
+        ids = body.get("source_memory_ids") if isinstance(body, dict) else None
+        if (not isinstance(body, dict)
+                or set(body) != {"source_memory_ids", "confirm_model_call"}
+                or body.get("confirm_model_call") is not True
+                or not isinstance(ids, list) or not 2 <= len(ids) <= 20
+                or any(not isinstance(value, str) or not value or len(value) > 128 for value in ids)
+                or len(set(ids)) != len(ids)):
+            raise web.HTTPBadRequest()
+        return await invoke(backend.preview_scenario, source_memory_ids=ids)
 
     async def scenario_detail(request):
         scenario_id = request.match_info["scenario_id"]
@@ -204,5 +223,6 @@ def register_memory_routes(app, backend):
     app.router.add_post("/api/memories/{memory_id}/changes", change)
     app.router.add_get("/api/scenarios", scenario_listing, allow_head=False)
     app.router.add_post("/api/scenarios", scenario_collection)
+    app.router.add_post("/api/scenario-proposals", scenario_proposal)
     app.router.add_get("/api/scenarios/{scenario_id}", scenario_detail, allow_head=False)
     app.router.add_post("/api/scenarios/{scenario_id}/reviews", scenario_review)

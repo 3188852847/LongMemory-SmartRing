@@ -49,7 +49,8 @@ class FakeBridge:
 @asynccontextmanager
 async def console(database=None, allow_memory_delete=False, chat_backend=None,
                   allow_memory_correction=False, allow_scenario_management=False,
-                  xiaozhi_server=None, memory_runtime_token=None):
+                  xiaozhi_server=None, memory_runtime_token=None,
+                  scenario_producer=None, scenario_model=None):
     # 先占用随机回环端口，再把精确 Host 交给应用，避免探测后抢占端口。
     sock = socket.socket()
     sock.bind(("127.0.0.1", 0))
@@ -60,7 +61,9 @@ async def console(database=None, allow_memory_delete=False, chat_backend=None,
                                      allow_memory_correction=allow_memory_correction,
                                      allow_scenario_management=allow_scenario_management,
                                      xiaozhi_server=xiaozhi_server,
-                                     memory_runtime_token=memory_runtime_token), access_log=None)
+                                     memory_runtime_token=memory_runtime_token,
+                                     scenario_producer=scenario_producer,
+                                     scenario_model=scenario_model), access_log=None)
     await runner.setup()
     await web.SockSite(runner, sock).start()
     try:
@@ -318,7 +321,9 @@ def test_memory_without_config_is_not_a_fake_empty_database():
             config = await (await client.get(base + "/api/memory-config")).json()
             assert config == {"configured": False, "database": None, "allow_delete": False,
                               "allow_correction": False, "allow_change": False,
-                              "allow_scenario_management": False}
+                              "allow_scenario_management": False,
+                              "scenario_model_preview_available": False,
+                              "scenario_model": None}
             response = await client.get(base + "/api/memories")
             assert response.status == 503
             assert (await response.json())["error"] == "memory_not_configured"
@@ -466,11 +471,35 @@ def test_scenario_http_requires_csrf_and_explicit_capability(tmp_path):
                 (f"l1-{suffix}", f"l0-{suffix}", "user_stated", "2026-09-06T10:00:00+00:00"),
             )
 
+    class ProposalProducer:
+        calls = 0
+
+        def propose(self, *, sources):
+            self.calls += 1
+            return ('{"schema_version":1,"candidate":{"title":"准备答辩",'
+                    '"summary":"用户最近正在准备答辩并修改 PPT。",'
+                    '"source_memory_ids":["l1-a","l1-b"]}}')
+
+    producer = ProposalProducer()
+
     async def run():
-        async with console(database, allow_scenario_management=True) as (client, base, _bridge):
+        async with console(database, allow_scenario_management=True,
+                           scenario_producer=producer, scenario_model="synthetic-model") as (client, base, _bridge):
             headers = await login(client, base)
+            proposal_body = {"source_memory_ids": ["l1-a", "l1-b"],
+                             "confirm_model_call": True}
+            assert (await client.post(base + "/api/scenario-proposals", json=proposal_body)).status == 403
+            proposal_response = await client.post(
+                base + "/api/scenario-proposals", headers=headers, json=proposal_body
+            )
+            proposal = await proposal_response.json()
+            assert proposal_response.status == 200
+            assert proposal["persisted"] is False and proposal["model"] == "synthetic-model"
+            assert producer.calls == 1
+            assert (await (await client.get(base + "/api/scenarios?state=all")).json())["total"] == 0
             body = {"title": "准备答辩", "summary": "用户最近正在准备答辩。",
-                    "source_memory_ids": ["l1-a", "l1-b"], "confirm_candidate": True}
+                    "source_memory_ids": ["l1-a", "l1-b"], "creation_kind": "manual",
+                    "confirm_candidate": True}
             assert (await client.post(base + "/api/scenarios", json=body)).status == 403
             created_response = await client.post(base + "/api/scenarios", headers=headers, json=body)
             assert created_response.status == 200
