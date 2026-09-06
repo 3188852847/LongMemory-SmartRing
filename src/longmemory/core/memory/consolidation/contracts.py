@@ -24,4 +24,3 @@ class ConsolidationRunStore(Protocol):
     def list_recent(
         self, subject_id: str, stage: ConsolidationStage, *, limit: int = 20,
     ) -> tuple[ConsolidationRun, ...]: ...
-

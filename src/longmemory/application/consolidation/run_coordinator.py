@@ -94,4 +94,3 @@ class ConsolidationRunCoordinator:
             )
             return ConsolidationStartResult(raced, None)
         return ConsolidationStartResult(decision, run)
-

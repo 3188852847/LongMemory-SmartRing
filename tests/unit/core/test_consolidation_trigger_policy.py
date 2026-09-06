@@ -94,4 +94,3 @@ def test_invalid_config_and_naive_time_are_rejected():
             state=ConsolidationTriggerState(4, 0),
             now=datetime(2026, 9, 6, 12, 0),
         )
-

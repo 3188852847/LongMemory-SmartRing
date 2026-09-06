@@ -118,4 +118,3 @@ def decide_consolidation_trigger(
         ConsolidationTriggerReason.READY,
         source_limit,
     )
-

@@ -43,7 +43,6 @@ def test_run_survives_reopen_and_completed_cursor_advances(tmp_path):
         cursor=ConsolidationCursor(START - timedelta(minutes=1), "l1-last"),
     ))
     connection.close()
-
     connection = open_database(path)
     store = SQLiteConsolidationRunStore(connection)
     recent = store.list_recent("user:self", ConsolidationStage.L1_TO_L2)
@@ -109,4 +108,3 @@ def test_v10_upgrade_adds_empty_ledger_without_changing_existing_memory(tmp_path
     assert connection.execute("SELECT count(*) FROM memory_consolidation_runs").fetchone()[0] == 0
     assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
     connection.close()
-
