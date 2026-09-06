@@ -436,6 +436,12 @@ class MemoryBackend:
                 "WHERE scenario_id=? ORDER BY occurred_at, id",
                 (scenario_id,),
             ).fetchall()]
+            review = connection.execute(
+                "SELECT decision,reviewer_type,reviewed_at,scenario_revision,"
+                "policy_version,decision_reason FROM scenario_reviews WHERE scenario_id=?",
+                (scenario_id,),
+            ).fetchone()
+            data["review"] = dict(review) if review is not None else None
             return data
 
     def preview_scenario(self, *, source_memory_ids):

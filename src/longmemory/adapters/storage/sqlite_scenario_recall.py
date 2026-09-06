@@ -61,7 +61,7 @@ class SQLiteScenarioRecallProvider:
             lines = "\n".join(
                 f"- {item.title}：{item.summary}" for item in items
             )
-            context = "以下是与当前问题相关、已经用户复核的生活场景（L2）：\n" + lines
+            context = "以下是与当前问题相关、已经复核或策略门控的生活场景（L2）：\n" + lines
         return ScenarioRecallResult(context, tuple(items))
 
     def close(self) -> None:

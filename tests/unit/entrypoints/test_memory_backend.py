@@ -286,6 +286,9 @@ def test_scenario_candidate_and_review_use_separate_capability(recorded):
         created["id"], decision="accepted", expected_revision=1,
     )
     assert reviewed["status"] == "active" and reviewed["revision"] == 2
+    review_detail = backend.get_scenario(created["id"])["review"]
+    assert review_detail["reviewer_type"] == "user"
+    assert review_detail["policy_version"] is None
     with pytest.raises(MemoryAccessError, match="scenario_review_conflict"):
         backend.review_scenario(
             created["id"], decision="rejected", expected_revision=2,

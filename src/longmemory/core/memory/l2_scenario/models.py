@@ -26,6 +26,11 @@ class ScenarioReviewDecision(StrEnum):
     REJECTED = "rejected"
 
 
+class ScenarioReviewerType(StrEnum):
+    USER = "user"
+    POLICY = "policy"
+
+
 class ScenarioLifecycleAction(StrEnum):
     MANUAL_END = "manual_end"
     SOURCE_RETIRED = "source_retired"
@@ -109,11 +114,27 @@ class ScenarioReview:
     decision: ScenarioReviewDecision
     reviewed_at: datetime
     scenario_revision: int
+    reviewer_type: ScenarioReviewerType = ScenarioReviewerType.USER
+    policy_version: str | None = None
+    decision_reason: str | None = None
 
     def __post_init__(self) -> None:
         _require_aware(self.reviewed_at, "reviewed_at")
         if self.scenario_revision < 1:
             raise ValueError("scenario_revision_invalid")
+        if self.reviewer_type == ScenarioReviewerType.USER:
+            if self.policy_version is not None or self.decision_reason is not None:
+                raise ValueError("scenario_user_review_policy_metadata_forbidden")
+            return
+        if self.decision != ScenarioReviewDecision.ACCEPTED:
+            raise ValueError("scenario_policy_review_must_accept")
+        if (
+            self.policy_version is None
+            or self.decision_reason is None
+            or not 1 <= len(self.policy_version.strip()) <= 120
+            or not 1 <= len(self.decision_reason.strip()) <= 120
+        ):
+            raise ValueError("scenario_policy_review_metadata_required")
 
 
 @dataclass(frozen=True, slots=True)

@@ -17,6 +17,7 @@ from longmemory.core.memory.l2_scenario.models import (
     ScenarioMemory,
     ScenarioReview,
     ScenarioReviewDecision,
+    ScenarioReviewerType,
     ScenarioSource,
     ScenarioStatus,
     ScenarioLifecycleAction,
@@ -87,12 +88,16 @@ class ScenarioManagementService:
         *,
         expected_revision: int,
         reviewed_at: datetime | None = None,
+        reviewer_type: ScenarioReviewerType = ScenarioReviewerType.USER,
+        policy_version: str | None = None,
+        decision_reason: str | None = None,
     ) -> ScenarioMemory:
         """记录用户接受或拒绝；过期页面 revision 会被存储层拒绝。"""
 
         review = ScenarioReview(
             ScenarioReviewId(str(uuid4())), scenario_id, decision,
             reviewed_at or datetime.now(UTC), expected_revision,
+            reviewer_type, policy_version, decision_reason,
         )
         return self._scenario_store.review(review, expected_revision=expected_revision)
 

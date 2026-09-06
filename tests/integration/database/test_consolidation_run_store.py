@@ -108,3 +108,46 @@ def test_v10_upgrade_adds_empty_ledger_without_changing_existing_memory(tmp_path
     assert connection.execute("SELECT count(*) FROM memory_consolidation_runs").fetchone()[0] == 0
     assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
     connection.close()
+
+
+def test_v11_upgrade_preserves_user_scenario_review_and_adds_policy_fields(tmp_path):
+    connection = open_database(tmp_path / "v11.db")
+    initialize_schema(connection)
+    connection.execute(
+        "INSERT INTO scenario_memories VALUES "
+        "('l2-v11','user:self','答辩准备','用户正在准备答辩。',?,NULL,NULL,"
+        "'active','synthetic','1',2)",
+        (START.isoformat(),),
+    )
+    # 恢复真实 V11 表形状，验证迁移不会把旧人工记录冒充策略接受。
+    connection.executescript("""
+        DROP TABLE scenario_reviews;
+        CREATE TABLE scenario_reviews (
+            id TEXT PRIMARY KEY,
+            scenario_id TEXT NOT NULL UNIQUE,
+            decision TEXT NOT NULL CHECK (decision IN ('accepted', 'rejected')),
+            reviewer_type TEXT NOT NULL CHECK (reviewer_type IN ('user')),
+            reviewed_at TEXT NOT NULL,
+            scenario_revision INTEGER NOT NULL CHECK (scenario_revision >= 1),
+            FOREIGN KEY (scenario_id) REFERENCES scenario_memories (id) ON DELETE CASCADE
+        );
+        PRAGMA user_version=11;
+    """)
+    connection.execute(
+        "INSERT INTO scenario_reviews VALUES "
+        "('review-v11','l2-v11','accepted','user',?,1)",
+        (START.isoformat(),),
+    )
+    connection.commit()
+
+    initialize_schema(connection)
+
+    assert connection.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION
+    row = connection.execute(
+        "SELECT decision,reviewer_type,policy_version,decision_reason "
+        "FROM scenario_reviews WHERE id='review-v11'"
+    ).fetchone()
+    assert tuple(row) == ("accepted", "user", None, None)
+    assert connection.execute("SELECT count(*) FROM memory_consolidation_runs").fetchone()[0] == 0
+    assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
+    connection.close()

@@ -24,6 +24,8 @@ class ScenarioStore(Protocol):
 
     def list_sources(self, scenario_id: ScenarioId) -> tuple[ScenarioSource, ...]: ...
 
+    def get_review(self, scenario_id: ScenarioId) -> ScenarioReview | None: ...
+
     def review(
         self,
         review: ScenarioReview,

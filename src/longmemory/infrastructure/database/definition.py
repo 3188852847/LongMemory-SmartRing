@@ -1,6 +1,6 @@
-"""当前 SQLite V11 的完整结构定义；不包含历史迁移步骤。"""
+"""当前 SQLite V12 的完整结构定义；不包含历史迁移步骤。"""
 
-SCHEMA_VERSION = 11
+SCHEMA_VERSION = 12
 
 LATEST_SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS conversation_messages (
@@ -74,9 +74,18 @@ CREATE TABLE IF NOT EXISTS scenario_reviews (
     id TEXT PRIMARY KEY,
     scenario_id TEXT NOT NULL UNIQUE,
     decision TEXT NOT NULL CHECK (decision IN ('accepted', 'rejected')),
-    reviewer_type TEXT NOT NULL CHECK (reviewer_type IN ('user')),
+    reviewer_type TEXT NOT NULL CHECK (reviewer_type IN ('user', 'policy')),
     reviewed_at TEXT NOT NULL,
     scenario_revision INTEGER NOT NULL CHECK (scenario_revision >= 1),
+    policy_version TEXT,
+    decision_reason TEXT,
+    CHECK (
+        (reviewer_type = 'user' AND policy_version IS NULL AND decision_reason IS NULL)
+        OR
+        (reviewer_type = 'policy' AND decision = 'accepted'
+            AND length(trim(policy_version)) BETWEEN 1 AND 120
+            AND length(trim(decision_reason)) BETWEEN 1 AND 120)
+    ),
     FOREIGN KEY (scenario_id) REFERENCES scenario_memories (id) ON DELETE CASCADE
 );
 

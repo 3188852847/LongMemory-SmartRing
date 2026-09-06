@@ -8,12 +8,14 @@ from longmemory.core.common.identifiers import (
     MemorySubjectId,
     ScenarioId,
     ScenarioLifecycleEventId,
+    ScenarioReviewId,
 )
 from longmemory.core.memory.l2_scenario.models import (
     ScenarioGenerationAudit,
     ScenarioMemory,
     ScenarioReview,
     ScenarioReviewDecision,
+    ScenarioReviewerType,
     ScenarioSource,
     ScenarioStatus,
     ScenarioLifecycleAction,
@@ -124,6 +126,20 @@ class SQLiteScenarioStore:
             row["memory_content_snapshot"], datetime.fromisoformat(row["linked_at"]),
         ) for row in rows)
 
+    def get_review(self, scenario_id: ScenarioId) -> ScenarioReview | None:
+        row = self._connection.execute(
+            "SELECT * FROM scenario_reviews WHERE scenario_id=?", (str(scenario_id),),
+        ).fetchone()
+        if row is None:
+            return None
+        return ScenarioReview(
+            ScenarioReviewId(row["id"]), ScenarioId(row["scenario_id"]),
+            ScenarioReviewDecision(row["decision"]),
+            datetime.fromisoformat(row["reviewed_at"]), row["scenario_revision"],
+            ScenarioReviewerType(row["reviewer_type"]),
+            row["policy_version"], row["decision_reason"],
+        )
+
     def review(self, review: ScenarioReview, *, expected_revision: int) -> ScenarioMemory:
         """仅复核仍为 candidate 的同一 revision；原摘要和来源不改写。"""
 
@@ -143,10 +159,14 @@ class SQLiteScenarioStore:
             if cursor.rowcount != 1:
                 raise ValueError("scenario_review_conflict")
             self._connection.execute(
-                "INSERT INTO scenario_reviews VALUES (?, ?, ?, 'user', ?, ?)",
+                "INSERT INTO scenario_reviews "
+                "(id,scenario_id,decision,reviewer_type,reviewed_at,scenario_revision,"
+                "policy_version,decision_reason) VALUES (?,?,?,?,?,?,?,?)",
                 (
                     str(review.id), str(review.scenario_id), review.decision.value,
-                    review.reviewed_at.isoformat(), review.scenario_revision,
+                    review.reviewer_type.value, review.reviewed_at.isoformat(),
+                    review.scenario_revision, review.policy_version,
+                    review.decision_reason,
                 ),
             )
             if self._commit_changes:
