@@ -40,7 +40,7 @@ P1 网页会话恢复已实现：列表、新建、切换、重命名，同一�
 
 P3 目标已明确为四层个人记忆：L0 原始证据、L1 原子记忆、L2 场景、L3 用户画像。P3.1 已实现并验收网页/圆屏共享的常驻 Memory Runtime。P3.2 的模型辅助提取与关键词＋本地 BGE 混合召回已完成首轮真实组合体验。P3.3 人工错误纠正及个人库 V4 迁移已完成真实验收，并新增“事实后来变化”的显式时间化取代入口。P3.4 第一切片已在记忆管理页提供“生成新 L1”和“使用已有记忆”两个独立运行期开关；网页和圆屏共享，服务重启恢复开启，关闭 L1 写入仍保留 L0 原始对话。自动识别变化、撤销、跨层传播及持久策略配置仍未实现。见 [ADR-0026](docs/adr/0026-layered-memory-and-knowledge-plane.md)至 [ADR-0031](docs/adr/0031-runtime-memory-mode-controls.md)，以及 [ADR-0034](docs/adr/0034-temporal-fact-change.md)。
 
-L2 已形成实现前提案：先生成可追溯、需复核的时间化场景候选，确认前不进入回答；稳定习惯仍属于 L3。该提案尚待确认，也未升级 V4 个人库或调用模型，见 [ADR-0035](docs/adr/0035-reviewable-l2-scenario-candidates.md)和 [L2 第一版验收](docs/requirements/l2-scenario-memory.md)。
+L2 设计已接受：先生成可追溯、需复核的时间化场景候选，确认前不进入回答；稳定习惯仍属于 L3。当前尚未升级 V4 个人库或调用模型，见 [ADR-0035](docs/adr/0035-reviewable-l2-scenario-candidates.md)和 [L2 第一版验收](docs/requirements/l2-scenario-memory.md)。
 
 - [路线图](ROADMAP.md)：先后顺序与历史记录。
 - [产品范围与验收](docs/requirements/companion-product.md)：各阶段做什么、怎样算完成。
