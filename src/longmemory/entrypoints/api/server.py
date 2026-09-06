@@ -54,7 +54,8 @@ def create_app(*, port=8765, bridge=None, web_root=None, database=None, allow_me
                allow_persona_management=False,
                chat_backend=None, experiment_backend=None, job_backend=None, instance_id=None,
                xiaozhi_server=None, memory_runtime_token=None, scenario_producer=None,
-               scenario_model=None, persona_producer=None, persona_model=None):
+               scenario_model=None, persona_producer=None, persona_model=None,
+               consolidation_background_enabled=False):
     sessions = Sessions()
     assets = web_root or ROOT / "web"
     client = bridge if bridge is not None else XiaozhiControlClient(ROOT / "data/control/device-control.token")
@@ -131,6 +132,7 @@ def create_app(*, port=8765, bridge=None, web_root=None, database=None, allow_me
         scenario_model=scenario_model,
         persona_producer=persona_producer,
         persona_model=persona_model,
+        consolidation_background_enabled=consolidation_background_enabled,
     ))
     register_chat_routes(app, chat_backend)
     register_memory_mode_routes(app, chat_backend)
@@ -155,6 +157,10 @@ def main():
     parser.add_argument("--allow-scenario-management", action="store_true", help="启用显式 L2 候选创建与复核；默认只读")
     parser.add_argument("--allow-persona-management", action="store_true", help="启用显式 L3 候选创建与复核；默认只读")
     parser.add_argument("--enable-chat", action="store_true", help="允许网页向指定已有记忆库写入对话和记忆")
+    parser.add_argument(
+        "--enable-memory-consolidation", action="store_true",
+        help="显式启用单一后台 L1→L2→L3 整理；默认关闭并且不会扫描数据库",
+    )
     parser.add_argument("--memory-audit-log", type=Path, help="共享记忆 Runtime 的脱敏审计日志")
     parser.add_argument("--chat-provider", choices=("fake", "openai_compatible"), default="fake")
     parser.add_argument("--memory-extraction", choices=("rules", "llm"), default="rules",
@@ -179,6 +185,10 @@ def main():
         parser.error("启用文字聊天前必须用 --database 指定已有数据库")
     if args.memory_audit_log and not args.enable_chat:
         parser.error("记忆审计日志仅在启用文字聊天/共享 Runtime 时有效")
+    if args.enable_memory_consolidation and not args.enable_chat:
+        parser.error("后台记忆整理只能由启用文字聊天的共享 Runtime 单一拥有")
+    if args.enable_memory_consolidation and args.chat_provider != "openai_compatible":
+        parser.error("后台记忆整理需要 openai_compatible 候选生成与独立风险复核")
     if args.memory_extraction == "llm" and not args.enable_chat:
         parser.error("模型辅助提取仅在启用文字聊天/共享 Runtime 时有效")
     if args.memory_retrieval == "hybrid" and not args.enable_chat:
@@ -215,6 +225,8 @@ def main():
         from longmemory.methods.daily_llm.method import DailyLLMMemory
         from longmemory.methods.longmemory_v1.method import LongMemoryV1
         from .chat_backend import ChatBackend
+        consolidation_scheduler = None
+        runtime = None
         try:
             # 只读预检；不能为了打开网页而创建或迁移用户的记忆库。
             MemoryBackend(args.database).list_page(limit=1)
@@ -223,12 +235,41 @@ def main():
             role_prompt = role_prompt.replace("<memory></memory>", "（证据见独立 memory_evidence 消息。）")
             generator = (FakeAnswerGenerator() if settings.provider == "fake" else
                          OpenAICompatibleAnswerGenerator(settings, role_prompt=role_prompt))
+            if args.enable_memory_consolidation:
+                from longmemory.adapters.llm.consolidation_risk import (
+                    OpenAICompatibleConsolidationRiskReviewer,
+                )
+                from longmemory.adapters.llm.persona_candidate import (
+                    OpenAICompatiblePersonaProposalProducer,
+                    PERSONA_CONSOLIDATION_PROMPT_VERSION,
+                )
+                from longmemory.adapters.llm.scenario_candidate import (
+                    OpenAICompatibleScenarioProposalProducer,
+                    SCENARIO_PROMPT_VERSION,
+                )
+                from longmemory.application.consolidation.cycle import (
+                    LowFrequencyConsolidationCycle,
+                )
+                from longmemory.application.consolidation.scheduler import (
+                    LowFrequencyConsolidationScheduler,
+                )
+                cycle = LowFrequencyConsolidationCycle(
+                    database=args.database,
+                    scenario_producer=OpenAICompatibleScenarioProposalProducer(settings),
+                    persona_producer=OpenAICompatiblePersonaProposalProducer(settings),
+                    risk_reviewer=OpenAICompatibleConsolidationRiskReviewer(settings),
+                    generator_name=settings.model,
+                    scenario_generator_version=SCENARIO_PROMPT_VERSION,
+                    persona_generator_version=PERSONA_CONSOLIDATION_PROMPT_VERSION,
+                )
+                consolidation_scheduler = LowFrequencyConsolidationScheduler(
+                    subject_id="user:self", run_cycle=cycle, enabled=True,
+                )
             retriever_factory = None
             if args.memory_retrieval == "hybrid":
                 from longmemory.adapters.llm.local_embedding import LocalBGEEncoder
                 encoder = LocalBGEEncoder(args.embedding_model_dir)
                 retriever_factory = lambda store: HybridMemoryRetriever(store, encoder)
-            runtime = None
             if args.memory_extraction == "llm":
                 method = DailyLLMMemory(
                     args.database,
@@ -240,7 +281,8 @@ def main():
                 runtime = MemoryRuntime(args.database, method=method,
                                         scenario_provider=SQLiteScenarioRecallProvider(args.database),
                                         persona_provider=SQLitePersonaRecallProvider(args.database),
-                                        memory_command_handler=SQLiteNaturalMemoryCommandHandler(args.database))
+                                        memory_command_handler=SQLiteNaturalMemoryCommandHandler(args.database),
+                                        consolidation_scheduler=consolidation_scheduler)
             elif retriever_factory is not None:
                 method = LongMemoryV1(
                     args.database, existing_only=True, allow_cross_thread=True,
@@ -249,7 +291,8 @@ def main():
                 runtime = MemoryRuntime(args.database, method=method,
                                         scenario_provider=SQLiteScenarioRecallProvider(args.database),
                                         persona_provider=SQLitePersonaRecallProvider(args.database),
-                                        memory_command_handler=SQLiteNaturalMemoryCommandHandler(args.database))
+                                        memory_command_handler=SQLiteNaturalMemoryCommandHandler(args.database),
+                                        consolidation_scheduler=consolidation_scheduler)
             else:
                 method = LongMemoryV1(
                     args.database, existing_only=True, allow_cross_thread=True,
@@ -259,6 +302,7 @@ def main():
                     scenario_provider=SQLiteScenarioRecallProvider(args.database),
                     persona_provider=SQLitePersonaRecallProvider(args.database),
                     memory_command_handler=SQLiteNaturalMemoryCommandHandler(args.database),
+                    consolidation_scheduler=consolidation_scheduler,
                 )
             chat_backend = ChatBackend(args.database, generator, provider=settings.provider,
                                        model=settings.model or "fake", role=args.assistant_role,
@@ -272,6 +316,10 @@ def main():
                 persona_producer = OpenAICompatiblePersonaProposalProducer(settings)
                 persona_model = settings.model
         except Exception:
+            if runtime is not None:
+                runtime.close()
+            elif consolidation_scheduler is not None:
+                consolidation_scheduler.close()
             parser.error("文字聊天配置无效：请检查已有数据库版本、模型环境变量和角色文件。未建库或迁移。")
         if settings.base_url.startswith("http://"):
             print("警告：模型 HTTP 会明文传输凭据、对话和检索证据；仅用于已确认风险的校园网合成体验。")
@@ -304,7 +352,8 @@ def main():
                                instance_id=os.environ.get("LONGMEMORY_LAUNCHER_INSTANCE"), xiaozhi_server=args.xiaozhi_server,
                                memory_runtime_token=runtime_token,
                                scenario_producer=scenario_producer, scenario_model=scenario_model,
-                               persona_producer=persona_producer, persona_model=persona_model),
+                               persona_producer=persona_producer, persona_model=persona_model,
+                               consolidation_background_enabled=args.enable_memory_consolidation),
                     host="127.0.0.1", port=args.port, access_log=None, print=None)
     except OSError:
         parser.exit(1, f"控制台未能绑定 127.0.0.1:{args.port}。请检查旧控制台是否仍在运行或端口权限；未自动停止其他进程、未换端口。\n")

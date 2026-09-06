@@ -18,6 +18,7 @@ DEFAULTS = {
     "role": "elysia_v1",
     "memory_extraction": "rules",
     "memory_retrieval": "keyword",
+    "memory_consolidation": False,
     "embedding_model_dir": "",
     "tts_backend": "edge",
     "http_risk_ack": False,
@@ -44,6 +45,8 @@ def load_preferences(path: Path) -> dict:
         return result
     if isinstance(raw.get("voice"), bool):
         result["voice"] = raw["voice"]
+    if isinstance(raw.get("memory_consolidation"), bool):
+        result["memory_consolidation"] = raw["memory_consolidation"]
     for field, allowed in _CHOICES.items():
         if raw.get(field) in allowed:
             result[field] = raw[field]
@@ -74,6 +77,7 @@ def save_preferences(path: Path, values: dict) -> None:
         "memory_retrieval": values.get(
             "memory_retrieval", DEFAULTS["memory_retrieval"]
         ),
+        "memory_consolidation": bool(values.get("memory_consolidation", False)),
         "embedding_model_dir": str(values.get("embedding_model_dir", ""))[:2048],
         "tts_backend": values.get("tts_backend", DEFAULTS["tts_backend"]),
         "http_risk_ack_version": (

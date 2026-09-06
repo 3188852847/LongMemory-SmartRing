@@ -104,6 +104,7 @@ def main():
     memory_extraction = tk.StringVar(value=extraction_labels[saved["memory_extraction"]])
     memory_retrieval = tk.StringVar(value=retrieval_labels[saved["memory_retrieval"]])
     allow_memory_delete = tk.BooleanVar(value=DEFAULT_SESSION_ALLOW_MEMORY_DELETE)
+    memory_consolidation = tk.BooleanVar(value=saved["memory_consolidation"])
     embedding_model = tk.StringVar(value=saved["embedding_model_dir"] or str(DEFAULT_BGE_MODEL))
     tts_backend = tk.StringVar(value=tts_labels[saved["tts_backend"]])
 
@@ -126,6 +127,7 @@ def main():
             "role": role.get(),
             "memory_extraction": selected_extraction(),
             "memory_retrieval": selected_retrieval(),
+            "memory_consolidation": memory_consolidation.get(),
             "embedding_model_dir": embedding_model.get().strip(),
             "tts_backend": selected_tts(),
             "http_risk_ack": consent.get(),
@@ -207,6 +209,11 @@ def main():
         text="允许 L1 单条删除（本机日常默认开启；仍保留 L0 原话）",
         variable=allow_memory_delete,
     ).pack(anchor="w", pady=(0, 4))
+    ttk.Checkbutton(
+        behavior_box,
+        text="启用低频自动整理（L1→L2→L3；有预算与风险复核，默认关闭）",
+        variable=memory_consolidation,
+    ).pack(anchor="w", pady=(0, 4))
     ttk.Label(behavior_box, text="BGE 本地快照（仅混合召回使用）").pack(anchor="w", pady=(4, 0))
     embedding_row = ttk.Frame(behavior_box)
     embedding_row.pack(fill="x")
@@ -253,9 +260,10 @@ def main():
     def update_summary(*_):
         mode = "网页＋圆屏语音" if voice.get() else "网页文字聊天"
         delete = " · 本次允许 L1 删除" if allow_memory_delete.get() else ""
+        consolidation = " · 低频整理开启" if memory_consolidation.get() else ""
         summary.set(
             f"{mode}  ·  {role.get()}  ·  {selected_extraction()} / "
-            f"{selected_retrieval()}  ·  {selected_tts()}{delete}"
+            f"{selected_retrieval()}  ·  {selected_tts()}{delete}{consolidation}"
         )
 
     summary_box = ttk.LabelFrame(daily, text="本次配置", style="Section.TLabelframe")
@@ -267,7 +275,7 @@ def main():
         style="Subtitle.TLabel",
     ).pack(anchor="w", pady=(4, 0))
     for variable in (voice, role, memory_extraction, memory_retrieval,
-                     tts_backend, allow_memory_delete):
+                     tts_backend, allow_memory_delete, memory_consolidation):
         variable.trace_add("write", update_summary)
     update_summary()
 
@@ -325,6 +333,7 @@ def main():
                               tts_backend=selected_tts(),
                               memory_extraction=selected_extraction(),
                               memory_retrieval=selected_retrieval(),
+                              enable_memory_consolidation=memory_consolidation.get(),
                               allow_memory_delete=allow_memory_delete.get(),
                               embedding_model_dir=Path(embedding_model.get()))
             manager.start(options)

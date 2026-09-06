@@ -25,6 +25,7 @@ def test_preferences_roundtrip_and_never_persist_delete_permission(tmp_path):
         "role": "plain_v1",
         "memory_extraction": "llm",
         "memory_retrieval": "hybrid",
+        "memory_consolidation": True,
         "embedding_model_dir": "D:/bge",
         "tts_backend": "voxcpm2",
         "http_risk_ack": True,
@@ -36,6 +37,7 @@ def test_preferences_roundtrip_and_never_persist_delete_permission(tmp_path):
     loaded = preferences.load_preferences(path)
     assert loaded["voice"] is True
     assert loaded["memory_retrieval"] == "hybrid"
+    assert loaded["memory_consolidation"] is True
     assert loaded["http_risk_ack"] is True
     assert "allow_memory_delete" not in raw
     assert "must-not-be-written" not in raw

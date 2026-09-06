@@ -97,7 +97,8 @@ class MemoryBackend:
     def __init__(self, database: Path | None, *, allow_delete=False, allow_correction=False,
                  allow_scenario_management=False, allow_persona_management=False,
                  scenario_producer=None,
-                 scenario_model=None, persona_producer=None, persona_model=None):
+                 scenario_model=None, persona_producer=None, persona_model=None,
+                 consolidation_background_enabled=False):
         # 路径只来自启动参数；任何 HTTP 请求都不能选文件或切换数据库。
         self.database = database.resolve() if database is not None else None
         self.allow_delete = allow_delete
@@ -108,6 +109,7 @@ class MemoryBackend:
         self.scenario_model = scenario_model
         self.persona_producer = persona_producer
         self.persona_model = persona_model
+        self.consolidation_background_enabled = consolidation_background_enabled
 
     def info(self):
         return {"configured": self.database is not None,
@@ -213,7 +215,7 @@ class MemoryBackend:
             return {
                 "subject_id": str(CURRENT_USER_SUBJECT_ID),
                 "observed_at": now.isoformat(),
-                "background_enabled": False,
+                "background_enabled": self.consolidation_background_enabled,
                 "stages": [self._consolidation_status_json(item) for item in statuses],
             }
 

@@ -33,6 +33,15 @@ def test_read_only_browse_does_not_change_file(recorded):
     assert hashlib.sha256(path.read_bytes()).hexdigest() == digest
 
 
+def test_consolidation_status_reports_actual_process_configuration(recorded):
+    path, _, _ = recorded
+
+    assert MemoryBackend(path).consolidation_status()["background_enabled"] is False
+    assert MemoryBackend(
+        path, consolidation_background_enabled=True,
+    ).consolidation_status()["background_enabled"] is True
+
+
 def test_l0_browse_distinguishes_linked_and_unlinked_sources(recorded):
     path, memory_id, source_id = recorded
     with sqlite3.connect(path) as connection:

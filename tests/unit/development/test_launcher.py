@@ -42,6 +42,7 @@ def test_command_preserves_paths_and_does_not_enable_deletion_or_jobs(options):
     assert "--allow-memory-delete" not in cmd
     assert "--allow-memory-correction" in cmd
     assert "--enable-experiment-runs" not in cmd
+    assert "--enable-memory-consolidation" not in cmd
     assert "--chat-provider" in cmd
     assert cmd[cmd.index("--memory-extraction") + 1] == "rules"
     assert cmd[cmd.index("--memory-retrieval") + 1] == "keyword"
@@ -55,6 +56,14 @@ def test_explicit_launcher_choice_enables_l1_delete_capability(options):
     )[0][1]
 
     assert cmd.count("--allow-memory-delete") == 1
+
+
+def test_explicit_launcher_choice_enables_single_consolidation_owner(options):
+    cmd = runtime.build_commands(
+        replace(options, enable_memory_consolidation=True), uv="synthetic-uv"
+    )[0][1]
+
+    assert cmd.count("--enable-memory-consolidation") == 1
 
 
 def test_hybrid_retrieval_requires_and_passes_existing_snapshot(options):
