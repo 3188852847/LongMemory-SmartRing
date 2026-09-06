@@ -1,6 +1,6 @@
-"""当前 SQLite V10 的完整结构定义；不包含历史迁移步骤。"""
+"""当前 SQLite V11 的完整结构定义；不包含历史迁移步骤。"""
 
-SCHEMA_VERSION = 10
+SCHEMA_VERSION = 11
 
 LATEST_SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS conversation_messages (
@@ -184,6 +184,39 @@ CREATE TABLE IF NOT EXISTS persona_lifecycle_events (
 );
 CREATE INDEX IF NOT EXISTS idx_persona_lifecycle_persona
     ON persona_lifecycle_events (persona_id, occurred_at);
+
+CREATE TABLE IF NOT EXISTS memory_consolidation_runs (
+    id TEXT PRIMARY KEY,
+    subject_id TEXT NOT NULL CHECK (length(trim(subject_id)) > 0),
+    stage TEXT NOT NULL CHECK (stage IN ('l1_to_l2', 'l2_to_l3')),
+    trigger_kind TEXT NOT NULL CHECK (trigger_kind IN ('new_evidence', 'manual', 'rebuild')),
+    status TEXT NOT NULL CHECK (status IN ('running', 'completed', 'skipped', 'failed')),
+    started_at TEXT NOT NULL,
+    finished_at TEXT,
+    outcome_code TEXT,
+    source_count INTEGER NOT NULL DEFAULT 0 CHECK (source_count >= 0),
+    model_call_count INTEGER NOT NULL DEFAULT 0 CHECK (model_call_count >= 0),
+    cursor_recorded_at TEXT,
+    cursor_source_id TEXT,
+    CHECK (
+        (status = 'running' AND finished_at IS NULL AND outcome_code IS NULL)
+        OR
+        (status <> 'running' AND finished_at IS NOT NULL
+            AND length(trim(outcome_code)) > 0)
+    ),
+    CHECK (
+        (status = 'completed' AND source_count > 0
+            AND cursor_recorded_at IS NOT NULL
+            AND length(trim(cursor_source_id)) > 0)
+        OR
+        (status <> 'completed' AND cursor_recorded_at IS NULL
+            AND cursor_source_id IS NULL)
+    )
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_consolidation_one_running
+    ON memory_consolidation_runs (subject_id, stage) WHERE status = 'running';
+CREATE INDEX IF NOT EXISTS idx_consolidation_recent
+    ON memory_consolidation_runs (subject_id, stage, started_at DESC);
 
 CREATE TRIGGER IF NOT EXISTS trg_scenario_stale_on_l1_retire
 AFTER UPDATE OF retired_at ON atomic_memories
