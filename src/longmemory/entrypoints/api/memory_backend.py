@@ -5,7 +5,7 @@ import json
 import secrets
 import sqlite3
 from contextlib import contextmanager
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from longmemory.adapters.storage.sqlite_conversation_store import SQLiteConversationStore
@@ -15,6 +15,8 @@ from longmemory.adapters.storage.sqlite_persona_store import SQLitePersonaStore
 from longmemory.adapters.storage.sqlite_consolidation_run_store import (
     SQLiteConsolidationRunStore,
 )
+from longmemory.adapters.storage.sqlite_proactive_policy_store import SQLiteProactivePolicyStore
+from longmemory.core.proactive import OutreachPolicyConfig, ProactivePolicySettings
 from longmemory.adapters.storage.sqlite_l1_consolidation_source_reader import (
     SQLiteL1ConsolidationSourceReader,
 )
@@ -137,6 +139,59 @@ class MemoryBackend:
                     and self.persona_producer is not None
                 ),
                 "persona_model": self.persona_model if self.persona_producer else None}
+
+    @staticmethod
+    def _proactive_json(settings):
+        config = settings.config
+        return {
+            "subject_id": settings.subject_id,
+            "enabled": config.enabled,
+            "utc_offset_minutes": config.utc_offset_minutes,
+            "allowed_weekdays": list(config.allowed_weekdays),
+            "allowed_start_minute": config.allowed_start_minute,
+            "allowed_end_minute": config.allowed_end_minute,
+            "daily_limit": config.daily_limit,
+            "minimum_interval_seconds": int(config.minimum_interval.total_seconds()),
+            "maximum_lifetime_seconds": int(config.maximum_lifetime.total_seconds()),
+            "quiet_until": settings.quiet_until.isoformat() if settings.quiet_until else None,
+            "policy_version": config.policy_version,
+            "revision": settings.revision,
+            "updated_at": settings.updated_at.isoformat() if settings.updated_at else None,
+        }
+
+    def proactive_policy(self):
+        with self._open() as connection:
+            return self._proactive_json(
+                SQLiteProactivePolicyStore(connection).get("user:self")
+            )
+
+    def update_proactive_policy(self, request):
+        # 在取得写锁前完成纯配置验证；非法输入不能被误报成数据库损坏。
+        try:
+            config = OutreachPolicyConfig(
+                enabled=request.enabled,
+                utc_offset_minutes=request.utc_offset_minutes,
+                allowed_weekdays=tuple(request.allowed_weekdays),
+                allowed_start_minute=request.allowed_start_minute,
+                allowed_end_minute=request.allowed_end_minute,
+                daily_limit=request.daily_limit,
+                minimum_interval=timedelta(seconds=request.minimum_interval_seconds),
+                maximum_lifetime=timedelta(seconds=request.maximum_lifetime_seconds),
+            )
+        except ValueError:
+            raise MemoryAccessError("invalid_proactive_policy", 400) from None
+        with self._open(write_capability="proactive") as connection:
+            store = SQLiteProactivePolicyStore(connection)
+            current = store.get("user:self")
+            if current.revision != request.expected_revision:
+                raise MemoryAccessError("proactive_settings_conflict", 409)
+            updated = ProactivePolicySettings(
+                "user:self", config, request.quiet_until,
+                current.revision + 1, datetime.now(UTC),
+            )
+            return self._proactive_json(
+                store.save(updated, expected_revision=current.revision)
+            )
 
     @contextmanager
     def _open(self, *, write_capability=None):

@@ -21,6 +21,7 @@ from .react_assets import register_react_routes
 from .routes.assistant_role import register_role_routes
 from .routes.memory_runtime import register_memory_runtime_routes
 from .routes.memory_mode import register_memory_mode_routes
+from .routes.proactive_policy import register_proactive_policy_routes
 from .device_role import DeviceRole
 from .voice_settings import VoiceSettings, register_voice_routes
 from longmemory.infrastructure.logging.setup import configure_file_logging, close_file_logging
@@ -122,7 +123,7 @@ def create_app(*, port=8765, bridge=None, web_root=None, database=None, allow_me
     app.router.add_get("/api/device", device, allow_head=False)
     app.router.add_get("/api/device/volume", volume, allow_head=False)
     app.router.add_post("/api/device/volume", volume)
-    register_memory_routes(app, MemoryBackend(
+    memory_backend = MemoryBackend(
         database,
         allow_delete=allow_memory_delete,
         allow_correction=allow_memory_correction,
@@ -133,7 +134,9 @@ def create_app(*, port=8765, bridge=None, web_root=None, database=None, allow_me
         persona_producer=persona_producer,
         persona_model=persona_model,
         consolidation_background_enabled=consolidation_background_enabled,
-    ))
+    )
+    register_memory_routes(app, memory_backend)
+    register_proactive_policy_routes(app, memory_backend)
     register_chat_routes(app, chat_backend)
     register_memory_mode_routes(app, chat_backend)
     if memory_runtime_token:

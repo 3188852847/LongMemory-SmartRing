@@ -17,6 +17,7 @@ from .policy import (
     OutreachPolicyState,
     decide_outreach,
 )
+from .settings import ProactivePolicySettings
 
 __all__ = [
     "OutreachEvent",
@@ -25,6 +26,7 @@ __all__ = [
     "OutreachTrigger",
     "ProactiveOutreach",
     "ProactiveOutreachStore",
+    "ProactivePolicySettings",
     "OutreachPolicyAction",
     "OutreachPolicyConfig",
     "OutreachPolicyDecision",

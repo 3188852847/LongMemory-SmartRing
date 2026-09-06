@@ -1,6 +1,6 @@
-"""当前 SQLite V14 的完整结构定义；不包含历史迁移步骤。"""
+"""当前 SQLite V15 的完整结构定义；不包含历史迁移步骤。"""
 
-SCHEMA_VERSION = 14
+SCHEMA_VERSION = 15
 
 LATEST_SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS conversation_messages (
@@ -293,6 +293,23 @@ CREATE TABLE IF NOT EXISTS proactive_outreach_events (
 );
 CREATE INDEX IF NOT EXISTS idx_proactive_events_outreach
     ON proactive_outreach_events (outreach_id, sequence);
+
+CREATE TABLE IF NOT EXISTS proactive_policy_settings (
+    subject_id TEXT PRIMARY KEY CHECK (length(trim(subject_id)) BETWEEN 1 AND 120),
+    enabled INTEGER NOT NULL CHECK (enabled IN (0,1)),
+    utc_offset_minutes INTEGER NOT NULL CHECK (utc_offset_minutes BETWEEN -720 AND 840),
+    allowed_weekdays_mask INTEGER NOT NULL CHECK (allowed_weekdays_mask BETWEEN 1 AND 127),
+    allowed_start_minute INTEGER NOT NULL CHECK (allowed_start_minute BETWEEN 0 AND 1439),
+    allowed_end_minute INTEGER NOT NULL CHECK (allowed_end_minute BETWEEN 0 AND 1439),
+    daily_limit INTEGER NOT NULL CHECK (daily_limit BETWEEN 1 AND 20),
+    minimum_interval_seconds INTEGER NOT NULL CHECK (minimum_interval_seconds BETWEEN 0 AND 604800),
+    maximum_lifetime_seconds INTEGER NOT NULL CHECK (maximum_lifetime_seconds BETWEEN 5 AND 1800),
+    quiet_until TEXT,
+    policy_version TEXT NOT NULL CHECK (length(trim(policy_version)) BETWEEN 1 AND 120),
+    revision INTEGER NOT NULL CHECK (revision >= 1),
+    updated_at TEXT NOT NULL,
+    CHECK (allowed_start_minute <> allowed_end_minute)
+);
 
 CREATE TRIGGER IF NOT EXISTS trg_scenario_stale_on_l1_retire
 AFTER UPDATE OF retired_at ON atomic_memories

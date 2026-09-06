@@ -502,6 +502,79 @@ def test_memory_mode_reports_chat_disabled_instead_of_fake_state():
     asyncio.run(run())
 
 
+def test_proactive_policy_http_persists_defaults_and_rejects_stale_page(tmp_path):
+    from longmemory.methods.longmemory_v1.method import LongMemoryV1
+
+    database = tmp_path / "proactive-policy-http.db"
+    LongMemoryV1(database).close()
+
+    async def run():
+        async with console(database) as (client, base, _bridge):
+            headers = await login(client, base)
+            current = await client.get(base + "/api/proactive-policy")
+            defaults = await current.json()
+            assert current.status == 200
+            assert defaults["enabled"] is False and defaults["revision"] == 0
+            body = {
+                "expected_revision": 0,
+                "enabled": True,
+                "utc_offset_minutes": 480,
+                "allowed_weekdays": [0, 1, 2, 3, 4],
+                "allowed_start_minute": 720,
+                "allowed_end_minute": 840,
+                "daily_limit": 1,
+                "minimum_interval_seconds": 21600,
+                "maximum_lifetime_seconds": 300,
+                "quiet_until": "2026-09-07T08:00:00+08:00",
+            }
+            assert (await client.put(base + "/api/proactive-policy", json=body)).status == 403
+            saved_response = await client.put(
+                base + "/api/proactive-policy", headers=headers, json=body,
+            )
+            saved = await saved_response.json()
+            assert saved_response.status == 200
+            assert saved["enabled"] is True and saved["revision"] == 1
+            assert saved["quiet_until"] == "2026-09-07T08:00:00+08:00"
+            stale = await client.put(
+                base + "/api/proactive-policy", headers=headers, json=body,
+            )
+            assert stale.status == 409
+            assert (await stale.json())["error"] == "proactive_settings_conflict"
+
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("change", [
+    {"enabled": 1},
+    {"allowed_weekdays": [0, 0]},
+    {"allowed_start_minute": 720, "allowed_end_minute": 720},
+    {"quiet_until": "2026-09-07T08:00:00"},
+])
+def test_proactive_policy_http_rejects_invalid_complete_settings(tmp_path, change):
+    from longmemory.methods.longmemory_v1.method import LongMemoryV1
+
+    database = tmp_path / "invalid-proactive-policy.db"
+    LongMemoryV1(database).close()
+    body = {
+        "expected_revision": 0, "enabled": False, "utc_offset_minutes": 480,
+        "allowed_weekdays": [0, 1, 2, 3, 4, 5, 6],
+        "allowed_start_minute": 540, "allowed_end_minute": 1260,
+        "daily_limit": 1, "minimum_interval_seconds": 21600,
+        "maximum_lifetime_seconds": 300, "quiet_until": None,
+    } | change
+
+    async def run():
+        async with console(database) as (client, base, _bridge):
+            headers = await login(client, base)
+            response = await client.put(
+                base + "/api/proactive-policy", headers=headers, json=body,
+            )
+            assert response.status == 400
+            assert (await client.get(base + "/api/proactive-policy")).status == 200
+
+    asyncio.run(run())
+
+
 def test_scenario_http_requires_csrf_and_explicit_capability(tmp_path):
     from longmemory.methods.longmemory_v1.method import LongMemoryV1
 

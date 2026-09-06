@@ -1,5 +1,12 @@
 # Changelog
 
+### P4.4 persistent proactive policy settings foundation（2026-09-06）
+
+- SQLite 代码结构升级为 V15，新增每主体一行的主动联系设置；缺少记录表示默认关闭，迁移不插入设置、不创建候选或投递。
+- 新增重开持久化、revision 冲突保护及受同源会话/CSRF 保护的 `GET/PUT /api/proactive-policy`；输入使用严格完整替换契约。
+- 保存设置仍不启动后台、不调用模型或设备；React 页面与账本/投递编排留待后续切片。见 ADR-0061。
+- 个人库由 V14 迁移至 V15；一致性备份为 `data/backups/xiaozhi-demo-v1-pre-v15-20260906-232910.db`，SHA-256 `8E510CB1E96F81CAB817C1E95134A182DFAAE8B282493FD0A8A82CF2048E90A2`；完整性检查通过，新设置表为空，备份不提交 Git。
+
 ### P4.3 deterministic proactive contact policy（2026-09-06）
 
 - 新增默认关闭的纯领域主动联系策略；不访问数据库、记忆、模型或设备，只根据用户明确配置和可信运行状态判断。
