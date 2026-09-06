@@ -1,5 +1,12 @@
 # Changelog
 
+### P4.2 proactive outreach event ledger（2026-09-06）
+
+- SQLite 代码结构升级为 V14，新增不重复消息正文的主动交流当前投影与只追加事件账本；按 `candidate / blocked / queued / transport_sent / device_acknowledged / played / expired / cancelled / failed` 区分真实进度。
+- 新增纯领域单向状态机、相称证据门槛、幂等键、revision 并发保护和 SQLite 原子存储；服务端排队不能冒充传输、设备确认或实际播放。
+- 当前只建立内部账本，不接触发器、模型、后台调度、控制台或圆屏投递，因此升级后两张表均为空。见 ADR-0059。
+- 个人库已由 V13 迁移至 V14；一致性备份为 `data/backups/xiaozhi-demo-v1-pre-v14-20260906-230945.db`，SHA-256 `A652F1D09BE1B5B2A24E3CC38C2297D1D8229FAC947D980B2C12788ED30EDA07`。迁移前后 15 张原有业务表行数一致（101 条 L0、15 条 L1、4 条 L2、1 条 L3，整理账本 0 条），新主动交流投影和事件均为 0；完整性与外键检查通过，备份不提交 Git。
+
 ### P4.1 round-screen proactive delivery probe（2026-09-06）
 
 - 固定小智快照的受限控制桥新增主动短文本技术验证：复用已认证单设备连接的既有 TTS 队列，不改固件、不调用模型、不写聊天历史或 L0–L3。
