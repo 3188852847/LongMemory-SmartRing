@@ -68,7 +68,7 @@ def test_missing_database_is_not_created(tmp_path):
     assert not path.parent.exists()
 
 
-@pytest.mark.parametrize("version", [0, 1, 2, 3, 4, 6])
+@pytest.mark.parametrize("version", [0, 1, 2, 3, 4, 5, 7])
 def test_old_and_unknown_schema_are_not_migrated(tmp_path, version):
     path = tmp_path / "version.db"
     with sqlite3.connect(path) as conn:
@@ -283,3 +283,15 @@ def test_scenario_candidate_and_review_use_separate_capability(recorded):
         backend.review_scenario(
             created["id"], decision="rejected", expected_revision=2,
         )
+
+    ended = backend.end_scenario(created["id"], expected_revision=2)
+    assert ended["status"] == "stale" and ended["revision"] == 3
+    ended_detail = backend.get_scenario(created["id"])
+    assert len(ended_detail["sources"]) == 2
+    assert ended_detail["valid_to"] is not None
+    assert [event["action"] for event in ended_detail["lifecycle_events"]] == [
+        "manual_end"
+    ]
+    assert ended_detail["lifecycle_events"][0]["actor_type"] == "user"
+    with pytest.raises(MemoryAccessError, match="scenario_lifecycle_conflict"):
+        backend.end_scenario(created["id"], expected_revision=3)

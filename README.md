@@ -38,9 +38,9 @@ P1 网页会话恢复已实现：列表、新建、切换、重命名，同一�
 
 当前产品顺序：**P1 日常入口 → P2 个性化体验 → P3 日常记忆 → P4 可控主动交流 → P5 习惯驱动陪伴**。P1 最小启动面板及网页会话恢复已实现；P2 的本地声音启动和状态展示已完成，待用户试听验收后进入 P3。
 
-P3 目标已明确为四层个人记忆：L0 原始证据、L1 原子记忆、L2 场景、L3 用户画像。P3.1–P3.4 已完成共享 Runtime、模型辅助 L1 提取、混合召回、显式纠正/变化和运行期开关。L2 已完成 V5、`/scenarios` 候选/复核、模型辅助预览，以及默认关闭的受控回答召回；只允许已接受、当前有效且与问题有关键词重叠的场景，网页与圆屏共享开关并分别保留 L2 来源轨迹。自动识别变化、自动场景整理、L2 语义召回、撤销、跨层重建及持久策略仍未实现。见 [ADR-0026](docs/adr/0026-layered-memory-and-knowledge-plane.md)至 [ADR-0037](docs/adr/0037-controlled-l2-answer-context.md)。
+P3 目标已明确为四层个人记忆：L0 原始证据、L1 原子记忆、L2 场景、L3 用户画像。P3.1–P3.4 已完成共享 Runtime、模型辅助 L1 提取、混合召回、显式纠正/变化和运行期开关。L2 代码已推进到 V6：`/scenarios` 支持候选/复核、模型辅助预览、现实有效期、可审计手动结束，以及默认关闭的受控回答召回；只允许已接受、当前有效且与问题有关键词重叠的场景，网页与圆屏共享开关并分别保留 L2 来源轨迹。自动识别变化、自动场景整理、L2 语义召回、撤销和跨层重建仍未实现。见 [ADR-0026](docs/adr/0026-layered-memory-and-knowledge-plane.md)至 [ADR-0038](docs/adr/0038-audited-l2-lifecycle.md)。
 
-L2 设计已接受：先生成可追溯、需复核的时间化场景候选，确认前不进入回答；稳定习惯仍属于 L3。个人库已在一致性备份后迁移到 V5，仍为 0 条 L2；本切片未调用模型或改写既有 L0/L1。可按 [L2 生活场景合成测试指南](docs/guides/L2生活场景测试.md)体验，设计与边界见 [ADR-0035](docs/adr/0035-reviewable-l2-scenario-candidates.md)和 [L2 第一版验收](docs/requirements/l2-scenario-memory.md)。
+L2 设计已接受：先生成可追溯、需复核的时间化场景候选，确认前不进入回答；稳定习惯仍属于 L3。个人库已在一致性备份和用户明确授权后迁移到 V6，原有 L0/L1/L2 数量不变，生命周期事件从空表开始。可按 [L2 生活场景合成测试指南](docs/guides/L2生活场景测试.md)体验，设计与边界见 [ADR-0035](docs/adr/0035-reviewable-l2-scenario-candidates.md)、[ADR-0038](docs/adr/0038-audited-l2-lifecycle.md)和 [L2 第一版验收](docs/requirements/l2-scenario-memory.md)。
 
 - [路线图](ROADMAP.md)：先后顺序与历史记录。
 - [产品范围与验收](docs/requirements/companion-product.md)：各阶段做什么、怎样算完成。

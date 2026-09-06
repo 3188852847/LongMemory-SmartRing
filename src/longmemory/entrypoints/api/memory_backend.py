@@ -371,6 +371,12 @@ class MemoryBackend:
                     (source["memory_id"],),
                 ).fetchall()]
             data["sources"] = sources
+            data["lifecycle_events"] = [dict(event) for event in connection.execute(
+                "SELECT id, action, actor_type, occurred_at, previous_status, "
+                "new_status, scenario_revision FROM scenario_lifecycle_events "
+                "WHERE scenario_id=? ORDER BY occurred_at, id",
+                (scenario_id,),
+            ).fetchall()]
             return data
 
     def preview_scenario(self, *, source_memory_ids):
@@ -460,6 +466,24 @@ class MemoryBackend:
                 raise MemoryAccessError(str(error), 409) from None
             connection.commit()
             return {"reviewed": True, "id": scenario_id,
+                    "status": scenario.status.value, "revision": scenario.revision}
+
+    def end_scenario(self, scenario_id, *, expected_revision):
+        """显式结束 active L2；内容与来源不变，新增生命周期事件。"""
+
+        with self._open(write_capability="scenario") as connection:
+            service = ScenarioManagementService(
+                memory_store=SQLiteMemoryStore(connection, commit_changes=False),
+                scenario_store=SQLiteScenarioStore(connection, commit_changes=False),
+            )
+            try:
+                scenario = service.end(
+                    ScenarioId(scenario_id), expected_revision=expected_revision,
+                )
+            except ValueError as error:
+                raise MemoryAccessError(str(error), 409) from None
+            connection.commit()
+            return {"ended": True, "id": scenario_id,
                     "status": scenario.status.value, "revision": scenario.revision}
 
     @staticmethod

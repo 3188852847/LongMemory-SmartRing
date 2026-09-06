@@ -526,5 +526,21 @@ def test_scenario_http_requires_csrf_and_explicit_capability(tmp_path):
                       "confirm_review": True},
             )
             assert reviewed.status == 200 and (await reviewed.json())["status"] == "active"
+            lifecycle_url = base + "/api/scenarios/" + created["id"] + "/lifecycle"
+            lifecycle_body = {
+                "action": "manual_end", "expected_revision": 2, "confirm_action": True,
+            }
+            assert (await client.post(lifecycle_url, json=lifecycle_body)).status == 403
+            ended_response = await client.post(
+                lifecycle_url, headers=headers, json=lifecycle_body,
+            )
+            ended = await ended_response.json()
+            assert ended_response.status == 200
+            assert ended["status"] == "stale" and ended["revision"] == 3
+            ended_detail = await (
+                await client.get(base + "/api/scenarios/" + created["id"])
+            ).json()
+            assert ended_detail["lifecycle_events"][0]["action"] == "manual_end"
+            assert len(ended_detail["sources"]) == 2
 
     asyncio.run(run())

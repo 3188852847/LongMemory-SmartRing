@@ -3,7 +3,12 @@
 from datetime import datetime
 from sqlite3 import Connection, Row
 
-from longmemory.core.common.identifiers import MemoryId, MemorySubjectId, ScenarioId
+from longmemory.core.common.identifiers import (
+    MemoryId,
+    MemorySubjectId,
+    ScenarioId,
+    ScenarioLifecycleEventId,
+)
 from longmemory.core.memory.l2_scenario.models import (
     ScenarioGenerationAudit,
     ScenarioMemory,
@@ -11,6 +16,9 @@ from longmemory.core.memory.l2_scenario.models import (
     ScenarioReviewDecision,
     ScenarioSource,
     ScenarioStatus,
+    ScenarioLifecycleAction,
+    ScenarioLifecycleActor,
+    ScenarioLifecycleEvent,
 )
 
 
@@ -150,6 +158,64 @@ class SQLiteScenarioStore:
         if updated is None:  # 同一事务刚更新成功时只可能表示数据库被破坏。
             raise RuntimeError("scenario_missing_after_review")
         return updated
+
+    def end(self, event: ScenarioLifecycleEvent, *, expected_revision: int) -> ScenarioMemory:
+        """只结束同一 revision 的 active 场景，并在同一事务追加审计事件。"""
+
+        if (event.action != ScenarioLifecycleAction.MANUAL_END
+                or event.actor_type != ScenarioLifecycleActor.USER
+                or event.previous_status != ScenarioStatus.ACTIVE
+                or event.scenario_revision != expected_revision + 1):
+            raise ValueError("scenario_lifecycle_event_invalid")
+        try:
+            cursor = self._connection.execute(
+                "UPDATE scenario_memories SET status='stale', revision=revision+1, "
+                "valid_to=CASE WHEN valid_to IS NULL OR valid_to > ? THEN ? ELSE valid_to END "
+                "WHERE id=? AND status='active' AND revision=?",
+                (
+                    event.occurred_at.isoformat(),
+                    event.occurred_at.isoformat(),
+                    str(event.scenario_id),
+                    expected_revision,
+                ),
+            )
+            if cursor.rowcount != 1:
+                raise ValueError("scenario_lifecycle_conflict")
+            self._connection.execute(
+                "INSERT INTO scenario_lifecycle_events VALUES (?,?,?,?,?,?,?,?)",
+                (
+                    str(event.id), str(event.scenario_id), event.action.value,
+                    event.actor_type.value, event.occurred_at.isoformat(),
+                    event.previous_status.value, event.new_status.value,
+                    event.scenario_revision,
+                ),
+            )
+            if self._commit_changes:
+                self._connection.commit()
+        except BaseException:
+            self._connection.rollback()
+            raise
+        updated = self.get(event.scenario_id)
+        if updated is None:
+            raise RuntimeError("scenario_missing_after_lifecycle_event")
+        return updated
+
+    def list_lifecycle_events(
+        self, scenario_id: ScenarioId,
+    ) -> tuple[ScenarioLifecycleEvent, ...]:
+        rows = self._connection.execute(
+            "SELECT * FROM scenario_lifecycle_events WHERE scenario_id=? "
+            "ORDER BY occurred_at, id",
+            (str(scenario_id),),
+        ).fetchall()
+        return tuple(ScenarioLifecycleEvent(
+            ScenarioLifecycleEventId(row["id"]), ScenarioId(row["scenario_id"]),
+            ScenarioLifecycleAction(row["action"]),
+            ScenarioLifecycleActor(row["actor_type"]),
+            datetime.fromisoformat(row["occurred_at"]),
+            ScenarioStatus(row["previous_status"]),
+            ScenarioStatus(row["new_status"]), row["scenario_revision"],
+        ) for row in rows)
 
     @staticmethod
     def _time(value: datetime | None) -> str | None:

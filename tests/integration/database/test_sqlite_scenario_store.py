@@ -1,4 +1,4 @@
-"""L2 场景事务与来源门槛只使用合成 V5 数据库。"""
+"""L2 场景事务、来源门槛与生命周期只使用合成 V6 数据库。"""
 
 from datetime import UTC, datetime
 import sqlite3
@@ -15,6 +15,7 @@ from longmemory.core.common.identifiers import (
     MessageId,
     ScenarioAuditId,
     ScenarioId,
+    ScenarioLifecycleEventId,
     ScenarioReviewId,
 )
 from longmemory.core.conversation.models import ConversationMessage, MessageRole
@@ -26,6 +27,9 @@ from longmemory.core.memory.l1_atomic.models import (
 )
 from longmemory.core.memory.l2_scenario.models import (
     ScenarioGenerationAudit,
+    ScenarioLifecycleAction,
+    ScenarioLifecycleActor,
+    ScenarioLifecycleEvent,
     ScenarioMemory,
     ScenarioReview,
     ScenarioReviewDecision,
@@ -94,6 +98,43 @@ def test_candidate_sources_audit_and_review_are_persisted_atomically(tmp_path):
             ScenarioReviewId("review-2"), scenario.id,
             ScenarioReviewDecision.REJECTED, NOW, 2,
         ), expected_revision=2)
+    connection.close()
+
+
+def test_active_scenario_can_be_ended_once_with_audited_event(tmp_path):
+    """手动结束保留来源，并把时间、状态、修订和事件作为一个事务保存。"""
+
+    connection = _database(tmp_path)
+    _save_l1(connection, "l1-a", "l0-a", "用户周五要答辩。")
+    _save_l1(connection, "l1-b", "l0-b", "用户正在修改 PPT。")
+    store = SQLiteScenarioStore(connection)
+    scenario, sources, audit = _candidate()
+    store.save_candidate(scenario, sources, audit)
+    store.review(ScenarioReview(
+        ScenarioReviewId("review-1"), scenario.id,
+        ScenarioReviewDecision.ACCEPTED, NOW, 1,
+    ), expected_revision=1)
+    ended_at = datetime(2026, 9, 6, 9, 0, tzinfo=UTC)
+    event = ScenarioLifecycleEvent(
+        ScenarioLifecycleEventId("lifecycle-1"), scenario.id,
+        ScenarioLifecycleAction.MANUAL_END, ScenarioLifecycleActor.USER,
+        ended_at, ScenarioStatus.ACTIVE, ScenarioStatus.STALE, 3,
+    )
+
+    ended = store.end(event, expected_revision=2)
+
+    assert ended.status == ScenarioStatus.STALE
+    assert ended.valid_to == ended_at
+    assert ended.revision == 3
+    assert store.list_sources(scenario.id) == sources
+    assert store.list_lifecycle_events(scenario.id) == (event,)
+    with pytest.raises(ValueError, match="scenario_lifecycle_conflict"):
+        store.end(ScenarioLifecycleEvent(
+            ScenarioLifecycleEventId("lifecycle-2"), scenario.id,
+            ScenarioLifecycleAction.MANUAL_END, ScenarioLifecycleActor.USER,
+            ended_at, ScenarioStatus.ACTIVE, ScenarioStatus.STALE, 4,
+        ), expected_revision=3)
+    assert store.list_lifecycle_events(scenario.id) == (event,)
     connection.close()
 
 

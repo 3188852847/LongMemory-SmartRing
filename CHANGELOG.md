@@ -1,5 +1,13 @@
 # Changelog
 
+### P3 audited L2 lifecycle（2026-09-06）
+
+- SQLite 代码结构升级为 V6，新增 L2 生命周期事件；手动结束记录 `manual_end/user`，L1 退役或删除触发失效分别记录 `source_retired/system` 与 `source_deleted/system`。
+- `/scenarios` 详情新增生命周期记录和二次确认的“结束场景”；结束时原子更新状态、现实结束时间和 revision，同时保留摘要、L1 快照与 L0 来源。
+- V5→V6 迁移不改写已有 L0/L1/L2，也不伪造迁移前事件。经用户明确授权并确认相关服务未监听后，日常库已迁移至 V6；迁移前一致性备份为 `data/backups/xiaozhi-demo-v1-pre-v6-20260906-160507.db`，SHA-256 `749A239DC74513D3219215205FA2CEF9E599C7B845F94785D1D1A847F447C441`，备份不提交 Git。
+- 迁移前后 L0 消息 101、L1 记忆 15、证据 19、L2 场景 3、L2 来源 7、L2 复核 3，数量一致；备份与主库 quick_check 均正常、外键违规为 0，新生命周期事件为 0。
+- 验证：585 个 Python 测试（544 个非启动器 + 41 个启动器）、11 个 React 测试及 TypeScript/Vite 生产构建通过。
+
 ### P3 controlled L2 answer context（2026-09-06）
 
 - 已接受且当前有效的 L2 可通过独立运行期开关参与网页与圆屏回答；开关默认关闭、重启复位，不改变候选复核语义。

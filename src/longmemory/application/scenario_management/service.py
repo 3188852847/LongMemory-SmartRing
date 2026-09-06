@@ -8,6 +8,7 @@ from longmemory.core.common.identifiers import (
     ScenarioAuditId,
     ScenarioId,
     ScenarioReviewId,
+    ScenarioLifecycleEventId,
 )
 from longmemory.core.memory.l1_atomic.contracts import MemoryStore
 from longmemory.core.memory.l2_scenario.contracts import ScenarioStore
@@ -18,6 +19,9 @@ from longmemory.core.memory.l2_scenario.models import (
     ScenarioReviewDecision,
     ScenarioSource,
     ScenarioStatus,
+    ScenarioLifecycleAction,
+    ScenarioLifecycleActor,
+    ScenarioLifecycleEvent,
 )
 
 
@@ -91,3 +95,20 @@ class ScenarioManagementService:
             reviewed_at or datetime.now(UTC), expected_revision,
         )
         return self._scenario_store.review(review, expected_revision=expected_revision)
+
+    def end(
+        self,
+        scenario_id: ScenarioId,
+        *,
+        expected_revision: int,
+        occurred_at: datetime | None = None,
+    ) -> ScenarioMemory:
+        """用户显式结束 active 场景；保留原内容并追加生命周期事件。"""
+
+        event = ScenarioLifecycleEvent(
+            ScenarioLifecycleEventId(str(uuid4())), scenario_id,
+            ScenarioLifecycleAction.MANUAL_END, ScenarioLifecycleActor.USER,
+            occurred_at or datetime.now(UTC), ScenarioStatus.ACTIVE,
+            ScenarioStatus.STALE, expected_revision + 1,
+        )
+        return self._scenario_store.end(event, expected_revision=expected_revision)

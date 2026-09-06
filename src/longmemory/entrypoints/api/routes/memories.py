@@ -220,6 +220,24 @@ def register_memory_routes(app, backend):
         return await invoke(backend.review_scenario, scenario_id,
                             decision=body["decision"], expected_revision=body["expected_revision"])
 
+    async def scenario_lifecycle(request):
+        scenario_id = request.match_info["scenario_id"]
+        if request.content_type != "application/json" or not scenario_id or len(scenario_id) > 128:
+            raise web.HTTPBadRequest()
+        try:
+            body = await request.json()
+        except (ValueError, UnicodeError):
+            raise web.HTTPBadRequest() from None
+        if (not isinstance(body, dict)
+                or set(body) != {"action", "expected_revision", "confirm_action"}
+                or body.get("action") != "manual_end"
+                or type(body.get("expected_revision")) is not int
+                or body["expected_revision"] < 1
+                or body.get("confirm_action") is not True):
+            raise web.HTTPBadRequest()
+        return await invoke(backend.end_scenario, scenario_id,
+                            expected_revision=body["expected_revision"])
+
     app.router.add_get("/api/memory-config", config, allow_head=False)
     app.router.add_get("/api/memories", listing, allow_head=False)
     app.router.add_get("/api/source-messages", source_listing, allow_head=False)
@@ -233,3 +251,4 @@ def register_memory_routes(app, backend):
     app.router.add_post("/api/scenario-proposals", scenario_proposal)
     app.router.add_get("/api/scenarios/{scenario_id}", scenario_detail, allow_head=False)
     app.router.add_post("/api/scenarios/{scenario_id}/reviews", scenario_review)
+    app.router.add_post("/api/scenarios/{scenario_id}/lifecycle", scenario_lifecycle)

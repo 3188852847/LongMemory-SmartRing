@@ -18,13 +18,14 @@ type ScenarioSource = {
   current_content: string | null; retired_at: string | null;
   l0_sources: Array<{source_message_id: string; source_type: string; linked_at: string; role: string | null; content: string | null; created_at: string | null}>;
 };
-type ScenarioDetail = Scenario & {sources: ScenarioSource[]};
+type ScenarioLifecycleEvent = {id:string; action:'manual_end'|'source_retired'|'source_deleted'; actor_type:'user'|'system'; occurred_at:string; previous_status:string; new_status:string; scenario_revision:number};
+type ScenarioDetail = Scenario & {sources: ScenarioSource[]; lifecycle_events: ScenarioLifecycleEvent[]};
 type Page<T> = {items: T[]; total: number; limit: number; offset: number};
 type ScenarioProposal = {title: string; summary: string; source_memory_ids: string[];
   generator_name: string; generator_version: string; model: string | null; persisted: false};
 
 const api = new ChatApi();
-const stateName: Record<ScenarioState, string> = {candidate: '待复核', active: '已接受', rejected: '已拒绝', stale: '来源已变化'};
+const stateName: Record<ScenarioState, string> = {candidate: '待复核', active: '已接受', rejected: '已拒绝', stale: '已失效'};
 const stateColor: Record<ScenarioState, string> = {candidate: 'gold', active: 'green', rejected: 'default', stale: 'red'};
 const displayTime = (value?: string | null) => value ? new Date(value).toLocaleString('zh-CN') : '未记录';
 
@@ -44,6 +45,7 @@ export function ScenarioApp() {
   const [draftOrigin, setDraftOrigin] = useState<'manual' | 'model_assisted'>('manual');
   const [confirmingModel, setConfirmingModel] = useState(false);
   const [reviewDecision, setReviewDecision] = useState<'accepted' | 'rejected'>();
+  const [ending, setEnding] = useState(false);
 
   useEffect(() => {void api.bootstrap().then(() => setReady(true)).catch(error => setNotice(String(error)));}, []);
   const config = useQuery({queryKey: ['memory-config'], enabled: ready,
@@ -95,7 +97,21 @@ export function ScenarioApp() {
     },
     onError: error => setNotice(String(error)),
   });
-  const busy = config.isFetching || scenarios.isFetching || memories.isFetching || detail.isFetching || createCandidate.isPending || previewCandidate.isPending || review.isPending;
+  const endScenario = useMutation({
+    mutationFn: () => api.request(`/api/scenarios/${encodeURIComponent(selectedId!)}/lifecycle`, 'POST', {
+      action: 'manual_end', expected_revision: detail.data!.revision, confirm_action: true,
+    }),
+    onSuccess: async () => {
+      setEnding(false);
+      await Promise.all([
+        queryClient.invalidateQueries({queryKey: ['scenarios']}),
+        queryClient.invalidateQueries({queryKey: ['scenario', selectedId]}),
+      ]);
+      setNotice('场景已结束并保留生命周期记录；后续回答不会再召回它。');
+    },
+    onError: error => {setEnding(false); setNotice(String(error));},
+  });
+  const busy = config.isFetching || scenarios.isFetching || memories.isFetching || detail.isFetching || createCandidate.isPending || previewCandidate.isPending || review.isPending || endScenario.isPending;
   const canManage = config.data?.allow_scenario_management === true;
   const openCreator = () => {setTitle(''); setSummary(''); setSourceIds([]); setValidFrom(''); setValidTo(''); setDraftOrigin('manual'); setCreating(true);};
   const sidebar = <><Button type="primary" block disabled={!canManage} onClick={openCreator}>新建 L2 候选</Button>
@@ -109,7 +125,7 @@ export function ScenarioApp() {
     {!canManage && config.data?.configured && <Alert type="warning" showIcon title="当前进程没有开启 L2 管理权限" description="通过日常启动面板启动时会开启；只读浏览仍可使用。"/>}
     <div className="scenario-toolbar"><Select aria-label="场景状态" value={filter} onChange={value => setFilter(value)} options={[
       {value:'all',label:'全部状态'}, {value:'candidate',label:'待复核'}, {value:'active',label:'已接受'},
-      {value:'rejected',label:'已拒绝'}, {value:'stale',label:'来源已变化'},
+      {value:'rejected',label:'已拒绝'}, {value:'stale',label:'已失效'},
     ]}/></div>
     <List loading={scenarios.isFetching} dataSource={scenarios.data?.items ?? []} locale={{emptyText:<Empty description="尚无 L2 生活场景"/>}}
       renderItem={item => <List.Item className="memory-item" onClick={() => setSelectedId(item.id)} actions={[<Button key="open" type="link">查看来源</Button>]}
@@ -139,8 +155,22 @@ export function ScenarioApp() {
         onClick={() => setReviewDecision('accepted')}>接受</Button>
         <Button danger disabled={!canManage} loading={review.isPending}
           onClick={() => setReviewDecision('rejected')}>拒绝</Button></Space>}
+      {detail.data.status === 'active' && <Button danger disabled={!canManage} onClick={() => setEnding(true)}>结束场景</Button>}
+      <h3>生命周期记录</h3>{detail.data.lifecycle_events.length
+        ? <List size="small" dataSource={detail.data.lifecycle_events} renderItem={event => <List.Item>
+            <span>{event.action === 'manual_end' ? '用户手动结束' : event.action === 'source_retired' ? '来源 L1 退役' : '来源 L1 删除'} · {displayTime(event.occurred_at)} · 修订 {event.scenario_revision}</span>
+          </List.Item>}/>
+        : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="尚无生命周期事件"/>}
     </>}
   </Drawer>
+
+  <Modal title="确认结束这个 L2 场景" open={ending} centered width={560}
+    confirmLoading={endScenario.isPending} okText="确认结束" cancelText="取消"
+    okButtonProps={{danger:true}} onCancel={() => !endScenario.isPending && setEnding(false)}
+    onOk={() => endScenario.mutate()}>
+    <p><strong>{detail.data?.title ?? '当前场景'}</strong></p>
+    <p>结束后状态变为“已失效”，不会再参与网页或圆屏回答。场景内容、L1/L0 来源和本次操作记录都会保留。</p>
+  </Modal>
 
   <Modal title={reviewDecision === 'accepted' ? '确认接受 L2 场景' : '确认拒绝 L2 候选'}
     open={Boolean(reviewDecision)} centered width={560} zIndex={1300}

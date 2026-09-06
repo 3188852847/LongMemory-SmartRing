@@ -154,7 +154,7 @@ def test_v1_database_is_upgraded_without_losing_source(
 
     assert connection.execute(
         "PRAGMA user_version"
-    ).fetchone()[0] == 5
+    ).fetchone()[0] == 6
     assert store.get(MemoryId("memory-v1")) == AtomicMemory(
         id=MemoryId("memory-v1"),
         subject_id=CURRENT_USER_SUBJECT_ID,
@@ -256,7 +256,7 @@ def test_v2_database_preserves_multiple_evidence_during_upgrade(
 
     assert connection.execute(
         "PRAGMA user_version"
-    ).fetchone()[0] == 5
+    ).fetchone()[0] == 6
     assert tuple(
         evidence.source_message_id
         for evidence in store.list_evidence(MemoryId("memory-v2"))
@@ -283,6 +283,7 @@ def test_v3_upgrade_accepts_user_corrected_evidence(tmp_path) -> None:
     connection.executescript("""
         DROP TRIGGER trg_scenario_stale_on_l1_delete;
         DROP TRIGGER trg_scenario_stale_on_l1_retire;
+        DROP TABLE scenario_lifecycle_events;
         DROP TABLE scenario_reviews;
         DROP TABLE scenario_generation_audits;
         DROP TABLE scenario_memory_sources;
@@ -310,7 +311,7 @@ def test_v3_upgrade_accepts_user_corrected_evidence(tmp_path) -> None:
     evidence = MemoryEvidence(memory.id, MessageId("correction-message"),
                               MemorySourceType.USER_CORRECTED, now)
     SQLiteMemoryStore(connection).save(memory, evidence)
-    assert connection.execute("PRAGMA user_version").fetchone()[0] == 5
+    assert connection.execute("PRAGMA user_version").fetchone()[0] == 6
     assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
     assert SQLiteMemoryStore(connection).list_evidence(memory.id) == (evidence,)
     connection.close()
@@ -325,6 +326,7 @@ def test_v4_upgrade_adds_empty_l2_tables_without_changing_l1(tmp_path) -> None:
     connection.executescript("""
         DROP TRIGGER trg_scenario_stale_on_l1_delete;
         DROP TRIGGER trg_scenario_stale_on_l1_retire;
+        DROP TABLE scenario_lifecycle_events;
         DROP TABLE scenario_reviews;
         DROP TABLE scenario_generation_audits;
         DROP TABLE scenario_memory_sources;
@@ -344,9 +346,77 @@ def test_v4_upgrade_adds_empty_l2_tables_without_changing_l1(tmp_path) -> None:
 
     initialize_schema(connection)
 
-    assert connection.execute("PRAGMA user_version").fetchone()[0] == 5
+    assert connection.execute("PRAGMA user_version").fetchone()[0] == 6
     assert SQLiteMemoryStore(connection).get(memory.id) == memory
     assert connection.execute("SELECT count(*) FROM scenario_memories").fetchone()[0] == 0
+    assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
+    connection.close()
+
+
+def test_v5_upgrade_adds_empty_lifecycle_log_and_replaces_triggers(tmp_path) -> None:
+    """V5→V6 不伪造历史事件；迁移后新发生的来源退役才产生审计。"""
+
+    path = tmp_path / "v5.db"
+    connection = open_database(path)
+    initialize_schema(connection)
+    now = datetime(2026, 9, 6, 8, 0, tzinfo=UTC).isoformat()
+    connection.execute(
+        "INSERT INTO atomic_memories "
+        "(id, subject_id, content, recorded_at) VALUES "
+        "('l1-v5', 'user:self', '用户周五答辩。', ?)",
+        (now,),
+    )
+    connection.execute(
+        "INSERT INTO scenario_memories VALUES "
+        "('l2-v5', 'user:self', '准备答辩', '用户周五准备答辩。', ?, NULL, NULL, "
+        "'active', 'synthetic', '1', 2)",
+        (now,),
+    )
+    connection.execute(
+        "INSERT INTO scenario_memory_sources VALUES "
+        "('l2-v5', 'l1-v5', '用户周五答辩。', ?)",
+        (now,),
+    )
+    connection.executescript("""
+        DROP TRIGGER trg_scenario_stale_on_l1_retire;
+        DROP TRIGGER trg_scenario_stale_on_l1_delete;
+        DROP TABLE scenario_lifecycle_events;
+        CREATE TRIGGER trg_scenario_stale_on_l1_retire
+        AFTER UPDATE OF retired_at ON atomic_memories
+        WHEN OLD.retired_at IS NULL AND NEW.retired_at IS NOT NULL
+        BEGIN
+            UPDATE scenario_memories SET status='stale', revision=revision+1
+            WHERE status IN ('candidate', 'active')
+              AND id IN (SELECT scenario_id FROM scenario_memory_sources
+                         WHERE memory_id=NEW.id);
+        END;
+        CREATE TRIGGER trg_scenario_stale_on_l1_delete
+        BEFORE DELETE ON atomic_memories
+        BEGIN
+            UPDATE scenario_memories SET status='stale', revision=revision+1
+            WHERE status IN ('candidate', 'active')
+              AND id IN (SELECT scenario_id FROM scenario_memory_sources
+                         WHERE memory_id=OLD.id);
+        END;
+        PRAGMA user_version=5;
+    """)
+
+    initialize_schema(connection)
+
+    assert connection.execute("PRAGMA user_version").fetchone()[0] == 6
+    assert tuple(connection.execute(
+        "SELECT status, revision FROM scenario_memories WHERE id='l2-v5'"
+    ).fetchone()) == ("active", 2)
+    assert connection.execute(
+        "SELECT count(*) FROM scenario_lifecycle_events"
+    ).fetchone()[0] == 0
+    connection.execute(
+        "UPDATE atomic_memories SET retired_at=? WHERE id='l1-v5'", (now,)
+    )
+    assert tuple(connection.execute(
+        "SELECT action, previous_status, scenario_revision "
+        "FROM scenario_lifecycle_events WHERE scenario_id='l2-v5'"
+    ).fetchone()) == ("source_retired", "active", 3)
     assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
     connection.close()
 
@@ -377,10 +447,19 @@ def test_l1_retire_and_delete_make_linked_scenarios_stale(tmp_path) -> None:
     assert tuple(connection.execute(
         "SELECT status, revision FROM scenario_memories WHERE id='l2-a'"
     ).fetchone()) == ("stale", 2)
+    event = connection.execute(
+        "SELECT action, actor_type, previous_status, new_status, scenario_revision "
+        "FROM scenario_lifecycle_events WHERE scenario_id='l2-a'"
+    ).fetchone()
+    assert tuple(event) == ("source_retired", "system", "active", "stale", 2)
     # 来源采用带内容快照的弱引用；L1 硬删除后，失效原因仍可审计。
     connection.execute("DELETE FROM atomic_memories WHERE id='l1-b'")
     assert connection.execute(
         "SELECT count(*) FROM scenario_memory_sources WHERE scenario_id='l2-a'"
     ).fetchone()[0] == 2
+    # 场景已经失效，删除另一个来源不会重复制造生命周期事件。
+    assert connection.execute(
+        "SELECT count(*) FROM scenario_lifecycle_events WHERE scenario_id='l2-a'"
+    ).fetchone()[0] == 1
     assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
     connection.close()

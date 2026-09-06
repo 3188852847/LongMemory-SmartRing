@@ -26,6 +26,7 @@ def test_migration_creates_backup_and_upgrades_copy(tmp_path):
     connection.executescript("""
         DROP TRIGGER trg_scenario_stale_on_l1_delete;
         DROP TRIGGER trg_scenario_stale_on_l1_retire;
+        DROP TABLE scenario_lifecycle_events;
         DROP TABLE scenario_reviews;
         DROP TABLE scenario_generation_audits;
         DROP TABLE scenario_memory_sources;
@@ -48,6 +49,6 @@ def test_migration_creates_backup_and_upgrades_copy(tmp_path):
     assert result["changed"] is True and len(result["backup_sha256"]) == 64
     assert Path(result["backup"]).is_file()
     with sqlite3.connect(database) as reopened:
-        assert reopened.execute("PRAGMA user_version").fetchone()[0] == 5
+        assert reopened.execute("PRAGMA user_version").fetchone()[0] == 6
     with sqlite3.connect(result["backup"]) as backup:
         assert backup.execute("PRAGMA user_version").fetchone()[0] == 3

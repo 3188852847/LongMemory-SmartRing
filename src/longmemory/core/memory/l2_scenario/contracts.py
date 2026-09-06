@@ -8,6 +8,7 @@ from longmemory.core.memory.l2_scenario.models import (
     ScenarioMemory,
     ScenarioSource,
     ScenarioReview,
+    ScenarioLifecycleEvent,
 )
 
 
@@ -29,3 +30,15 @@ class ScenarioStore(Protocol):
         *,
         expected_revision: int,
     ) -> ScenarioMemory: ...
+
+    def end(
+        self,
+        event: ScenarioLifecycleEvent,
+        *,
+        expected_revision: int,
+    ) -> ScenarioMemory: ...
+
+    def list_lifecycle_events(
+        self,
+        scenario_id: ScenarioId,
+    ) -> tuple[ScenarioLifecycleEvent, ...]: ...

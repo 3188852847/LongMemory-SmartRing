@@ -1,6 +1,6 @@
-"""当前 SQLite V5 的完整结构定义；不包含历史迁移步骤。"""
+"""当前 SQLite V6 的完整结构定义；不包含历史迁移步骤。"""
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 LATEST_SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS conversation_messages (
@@ -80,10 +80,32 @@ CREATE TABLE IF NOT EXISTS scenario_reviews (
     FOREIGN KEY (scenario_id) REFERENCES scenario_memories (id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS scenario_lifecycle_events (
+    id TEXT PRIMARY KEY,
+    scenario_id TEXT NOT NULL,
+    action TEXT NOT NULL CHECK (action IN ('manual_end', 'source_retired', 'source_deleted')),
+    actor_type TEXT NOT NULL CHECK (actor_type IN ('user', 'system')),
+    occurred_at TEXT NOT NULL,
+    previous_status TEXT NOT NULL CHECK (previous_status IN ('candidate', 'active')),
+    new_status TEXT NOT NULL CHECK (new_status = 'stale'),
+    scenario_revision INTEGER NOT NULL CHECK (scenario_revision >= 2),
+    FOREIGN KEY (scenario_id) REFERENCES scenario_memories (id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_scenario_lifecycle_scenario
+    ON scenario_lifecycle_events (scenario_id, occurred_at);
+
 CREATE TRIGGER IF NOT EXISTS trg_scenario_stale_on_l1_retire
 AFTER UPDATE OF retired_at ON atomic_memories
 WHEN OLD.retired_at IS NULL AND NEW.retired_at IS NOT NULL
 BEGIN
+    INSERT INTO scenario_lifecycle_events
+        (id, scenario_id, action, actor_type, occurred_at,
+         previous_status, new_status, scenario_revision)
+    SELECT lower(hex(randomblob(16))), id, 'source_retired', 'system',
+           strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), status, 'stale', revision + 1
+    FROM scenario_memories
+    WHERE status IN ('candidate', 'active')
+      AND id IN (SELECT scenario_id FROM scenario_memory_sources WHERE memory_id = NEW.id);
     UPDATE scenario_memories
     SET status = 'stale', revision = revision + 1
     WHERE status IN ('candidate', 'active')
@@ -93,6 +115,14 @@ END;
 CREATE TRIGGER IF NOT EXISTS trg_scenario_stale_on_l1_delete
 BEFORE DELETE ON atomic_memories
 BEGIN
+    INSERT INTO scenario_lifecycle_events
+        (id, scenario_id, action, actor_type, occurred_at,
+         previous_status, new_status, scenario_revision)
+    SELECT lower(hex(randomblob(16))), id, 'source_deleted', 'system',
+           strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), status, 'stale', revision + 1
+    FROM scenario_memories
+    WHERE status IN ('candidate', 'active')
+      AND id IN (SELECT scenario_id FROM scenario_memory_sources WHERE memory_id = OLD.id);
     UPDATE scenario_memories
     SET status = 'stale', revision = revision + 1
     WHERE status IN ('candidate', 'active')

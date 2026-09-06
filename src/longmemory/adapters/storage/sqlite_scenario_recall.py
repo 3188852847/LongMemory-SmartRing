@@ -1,4 +1,4 @@
-"""从已有 V5 数据库只读召回已接受且当前有效的 L2 场景。"""
+"""从已有 V6 数据库只读召回已接受且当前有效的 L2 场景。"""
 
 from datetime import UTC, datetime
 from pathlib import Path

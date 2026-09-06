@@ -21,7 +21,7 @@ describe('L2 生活场景页', () => {
         {id:'l1-b',content:'用户忙碌时希望得到温和问候。',subject_id:'user:self',state:'active'},
       ],total:2,limit:100,offset:0};
       if (path === '/api/scenarios' && method === 'POST') return {id:'scenario-1'};
-      if (path === '/api/scenarios/scenario-1') return {id:'scenario-1',subject_id:'user:self',title:'午后陪伴',summary:'工作日下午适合温和问候。',generated_at:'2026-09-06T10:00:00Z',valid_from:null,valid_to:null,status:'candidate',generator_name:'manual_console',generator_version:'1',revision:1,sources:[]};
+      if (path === '/api/scenarios/scenario-1') return {id:'scenario-1',subject_id:'user:self',title:'午后陪伴',summary:'工作日下午适合温和问候。',generated_at:'2026-09-06T10:00:00Z',valid_from:null,valid_to:null,status:'candidate',generator_name:'manual_console',generator_version:'1',revision:1,sources:[],lifecycle_events:[]};
       throw new Error(`unexpected ${method ?? 'GET'} ${path}`);
     });
     const client = createConsoleQueryClient();
@@ -57,7 +57,7 @@ describe('L2 生活场景页', () => {
       if (path === '/api/memory-config') return {configured:true,database:'synthetic.db',allow_scenario_management:true,scenario_model_preview_available:false,scenario_model:null};
       if (path.startsWith('/api/scenarios?')) return {items:[scenario],total:1,limit:100,offset:0};
       if (path.startsWith('/api/memories?')) return {items:[],total:0,limit:100,offset:0};
-      if (path === '/api/scenarios/scenario-1' && (method === undefined || method === 'GET')) return {...scenario,sources:[]};
+      if (path === '/api/scenarios/scenario-1' && (method === undefined || method === 'GET')) return {...scenario,sources:[],lifecycle_events:[]};
       if (path === '/api/scenarios/scenario-1/reviews' && method === 'POST') return {reviewed:true,status:'active',revision:2};
       throw new Error(`unexpected ${method ?? 'GET'} ${path}`);
     });
@@ -90,7 +90,7 @@ describe('L2 生活场景页', () => {
       ],total:2,limit:100,offset:0};
       if (path === '/api/scenario-proposals' && method === 'POST') return {title:'准备答辩',summary:'用户周五要答辩并正在修改 PPT。',source_memory_ids:['l1-a','l1-b'],generator_name:'model_assisted_console',generator_version:'l2-scenario-preview-v1',model:'synthetic-model',persisted:false};
       if (path === '/api/scenarios' && method === 'POST') return {id:'scenario-1'};
-      if (path === '/api/scenarios/scenario-1') return {id:'scenario-1',subject_id:'user:self',title:'准备答辩',summary:'用户周五要答辩并正在修改 PPT。',generated_at:'2026-09-06T10:00:00Z',valid_from:null,valid_to:null,status:'candidate',generator_name:'model_assisted_console',generator_version:'l2-scenario-preview-v1',revision:1,sources:[]};
+      if (path === '/api/scenarios/scenario-1') return {id:'scenario-1',subject_id:'user:self',title:'准备答辩',summary:'用户周五要答辩并正在修改 PPT。',generated_at:'2026-09-06T10:00:00Z',valid_from:null,valid_to:null,status:'candidate',generator_name:'model_assisted_console',generator_version:'l2-scenario-preview-v1',revision:1,sources:[],lifecycle_events:[]};
       throw new Error(`unexpected ${method ?? 'GET'} ${path}`);
     });
     const client = createConsoleQueryClient();
@@ -114,6 +114,34 @@ describe('L2 生活场景页', () => {
     await waitFor(() => expect(calls.filter(([path]) => path === '/api/scenarios')).toHaveLength(1));
     const body = calls.find(([path]) => path === '/api/scenarios')?.[2] as {creation_kind:string};
     expect(body.creation_kind).toBe('model_assisted');
+    view.unmount(); client.clear();
+  });
+
+  test('结束已接受场景先确认，随后留下生命周期操作请求', async () => {
+    vi.spyOn(ChatApi.prototype, 'bootstrap').mockResolvedValue(undefined);
+    const calls: Array<[string, string | undefined, unknown]> = [];
+    const scenario = {id:'scenario-1',subject_id:'user:self',title:'准备答辩',summary:'用户本周正在准备答辩。',generated_at:'2026-09-06T10:00:00Z',valid_from:null,valid_to:null,status:'active',generator_name:'manual_console',generator_version:'1',revision:2};
+    vi.spyOn(ChatApi.prototype, 'request').mockImplementation(async (path: string, method?: string, body?: unknown) => {
+      calls.push([path, method, body]);
+      if (path === '/api/memory-config') return {configured:true,database:'synthetic.db',allow_scenario_management:true,scenario_model_preview_available:false,scenario_model:null};
+      if (path.startsWith('/api/scenarios?')) return {items:[scenario],total:1,limit:100,offset:0};
+      if (path.startsWith('/api/memories?')) return {items:[],total:0,limit:100,offset:0};
+      if (path === '/api/scenarios/scenario-1' && (method === undefined || method === 'GET')) return {...scenario,sources:[],lifecycle_events:[]};
+      if (path === '/api/scenarios/scenario-1/lifecycle' && method === 'POST') return {ended:true,status:'stale',revision:3};
+      throw new Error(`unexpected ${method ?? 'GET'} ${path}`);
+    });
+    const client = createConsoleQueryClient();
+    const view = render(<QueryClientProvider client={client}><MemoryRouter><ScenarioApp/></MemoryRouter></QueryClientProvider>);
+
+    fireEvent.click(await screen.findByRole('button',{name:'查看来源'}));
+    await screen.findByText('生命周期记录');
+    fireEvent.click(await screen.findByRole('button',{name:'结束场景'}));
+    expect(await screen.findByText('确认结束这个 L2 场景')).toBeTruthy();
+    expect(calls.filter(([path, method]) => path.endsWith('/lifecycle') && method === 'POST')).toHaveLength(0);
+    fireEvent.click(screen.getByRole('button',{name:/确\s*认\s*结\s*束/}));
+    await waitFor(() => expect(calls.filter(([path, method]) => path.endsWith('/lifecycle') && method === 'POST')).toHaveLength(1));
+    const body = calls.find(([path, method]) => path.endsWith('/lifecycle') && method === 'POST')?.[2];
+    expect(body).toEqual({action:'manual_end',expected_revision:2,confirm_action:true});
     view.unmount(); client.clear();
   });
 });

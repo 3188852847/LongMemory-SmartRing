@@ -10,6 +10,7 @@ from longmemory.core.common.identifiers import (
     ScenarioAuditId,
     ScenarioId,
     ScenarioReviewId,
+    ScenarioLifecycleEventId,
 )
 
 
@@ -23,6 +24,17 @@ class ScenarioStatus(StrEnum):
 class ScenarioReviewDecision(StrEnum):
     ACCEPTED = "accepted"
     REJECTED = "rejected"
+
+
+class ScenarioLifecycleAction(StrEnum):
+    MANUAL_END = "manual_end"
+    SOURCE_RETIRED = "source_retired"
+    SOURCE_DELETED = "source_deleted"
+
+
+class ScenarioLifecycleActor(StrEnum):
+    USER = "user"
+    SYSTEM = "system"
 
 
 def _require_aware(value: datetime, field: str) -> None:
@@ -102,3 +114,22 @@ class ScenarioReview:
         _require_aware(self.reviewed_at, "reviewed_at")
         if self.scenario_revision < 1:
             raise ValueError("scenario_revision_invalid")
+
+
+@dataclass(frozen=True, slots=True)
+class ScenarioLifecycleEvent:
+    id: ScenarioLifecycleEventId
+    scenario_id: ScenarioId
+    action: ScenarioLifecycleAction
+    actor_type: ScenarioLifecycleActor
+    occurred_at: datetime
+    previous_status: ScenarioStatus
+    new_status: ScenarioStatus
+    scenario_revision: int
+
+    def __post_init__(self) -> None:
+        _require_aware(self.occurred_at, "occurred_at")
+        if self.scenario_revision < 2:
+            raise ValueError("scenario_revision_invalid")
+        if self.new_status != ScenarioStatus.STALE:
+            raise ValueError("scenario_lifecycle_target_invalid")
