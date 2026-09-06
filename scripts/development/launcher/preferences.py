@@ -93,4 +93,3 @@ def save_preferences(path: Path, values: dict) -> None:
             temporary.unlink(missing_ok=True)
         except OSError:
             pass
-
