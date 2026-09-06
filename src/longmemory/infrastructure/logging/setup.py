@@ -9,7 +9,10 @@ from pathlib import Path
 
 LOGGER = logging.getLogger("longmemory.audit")
 LOGGER.addHandler(logging.NullHandler())
-FIELDS = {"turn_id", "memory_id", "operation", "memory_ids", "count", "duration_ms", "assistant_id"}
+FIELDS = {
+    "turn_id", "memory_id", "operation", "memory_ids", "count", "duration_ms",
+    "assistant_id", "warning_code",
+}
 
 
 def log_event(event: str, **fields: object) -> None:

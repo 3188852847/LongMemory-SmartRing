@@ -10,9 +10,11 @@ import pytest
 from longmemory.adapters.llm.fake import FakeAnswerGenerator
 from longmemory.adapters.llm.openai_compatible import OpenAICompatibleAnswerGenerator
 from longmemory.application.chat.contracts import AnswerGenerationError
+from longmemory.application.memory_runtime import MemoryRuntime
 from longmemory.entrypoints.api.chat_backend import ChatBackend
 from longmemory.infrastructure.config.settings import ModelSettings
 from longmemory.methods.contracts import MemoryEvent
+from longmemory.methods.daily_llm.method import DailyLLMMemory
 from longmemory.methods.longmemory_v1.method import LongMemoryV1
 from datetime import UTC, datetime
 
@@ -127,5 +129,29 @@ def test_shared_runtime_serializes_two_entry_threads(database):
         with sqlite3.connect(database) as connection:
             assert connection.execute("SELECT count(*) FROM atomic_memories").fetchone()[0] == 1
             assert connection.execute("SELECT count(*) FROM memory_evidence").fetchone()[0] == 2
+    finally:
+        backend.close()
+
+
+def test_daily_llm_failure_is_visible_but_chat_continues_from_archived_l0(database):
+    class BrokenProducer:
+        def propose(self, **_kwargs):
+            raise OSError("private upstream detail")
+
+    method = DailyLLMMemory(database, producer=BrokenProducer(), allow_cross_thread=True)
+    backend = ChatBackend(database, FakeAnswerGenerator(), runtime=MemoryRuntime(database, method=method))
+    try:
+        result = backend.run("我叫小林", ())
+        assert result["status"] == "completed" and result["user_saved"]
+        assert result["method"] == "longmemory_daily_llm_v2"
+        assert result["memory_processing"] == "source_only"
+        assert result["memory_warning"] == "l1_extraction_failed"
+        assert result["writes"] == []
+        assert "private upstream detail" not in json.dumps(result)
+        with sqlite3.connect(database) as connection:
+            assert connection.execute(
+                "SELECT count(*) FROM conversation_messages WHERE role='user'"
+            ).fetchone()[0] == 1
+            assert connection.execute("SELECT count(*) FROM atomic_memories").fetchone()[0] == 0
     finally:
         backend.close()

@@ -56,6 +56,14 @@ class ObservationResult:
     event_id: str
     # None 表示没有内部记录能力；空元组表示有记录但没有记忆操作。
     writes: tuple[WriteTrace, ...] | None = None
+    # source_only 表示 L0 已可靠归档，但派生 L1 没有完成。它与正常的
+    # “判断为不该记（completed + 空 writes）”不同，调用方必须能看见。
+    processing_status: Literal["completed", "source_only"] = "completed"
+    warning_code: str | None = None
+
+    def __post_init__(self) -> None:
+        if (self.processing_status == "source_only") != (self.warning_code is not None):
+            raise ValueError("只有 source_only 结果必须带非空 warning_code。")
 
 
 @dataclass(frozen=True, slots=True)

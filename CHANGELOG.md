@@ -4,6 +4,14 @@
 
 ## Unreleased
 
+### P3.2 daily L0/L1 extraction first slice（2026-09-06）
+
+- 新增可选 `longmemory_daily_llm_v2`：复用严格 JSON、来源摘录和整批候选校验；日常路径先提交 L0，再在事务外提取并原子写入 L1/证据。
+- 模型连接/格式失败与 L1 写入失败分别返回 `source_only / l1_extraction_failed`、`source_only / l1_persistence_failed`；保留 L0，数据库可读时允许使用既有记忆继续回答。正常 NOOP 与故障分开，不自动重试或静默切回规则。
+- 启动面板增加规则/模型辅助选择，默认仍为规则；React 显示实际方法与 source-only 警告。已有数据库不迁移、不批量重跑。
+- 新增 8 条合成日常提取开发样例，覆盖身份、偏好、习惯、计划与三类不该记内容；提示契约允许明确计划但不得改写成已发生事实。
+- 验证：500 项 Python 回归（489 项非 Tk + 11 项 Tk 分组）、2 项 React 单测及 TypeScript+Vite 生产构建通过。未调用校园模型、未写个人数据库；真实提取语义、额外延迟与圆屏体验待用户验收。召回仍是关键词，SUPERSEDE/L2/L3 未实现。
+
 ### P3.1 shared persistent Memory Runtime（2026-09-05）
 
 - 新增进程内常驻 `MemoryRuntime`；网页与统一启动模式下的小智共享同一个 `longmemory_v1` 实例和日常 SQLite，记忆操作串行、模型调用不占数据库锁。

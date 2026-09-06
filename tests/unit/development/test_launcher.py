@@ -42,6 +42,7 @@ def test_command_preserves_paths_and_does_not_enable_deletion_or_jobs(options):
     assert "--allow-memory-delete" not in cmd
     assert "--enable-experiment-runs" not in cmd
     assert "--chat-provider" in cmd
+    assert cmd[cmd.index("--memory-extraction") + 1] == "rules"
     assert "--allow-insecure-http" not in cmd  # 网页仍需 .env 的独立 HTTP 许可。
 
 

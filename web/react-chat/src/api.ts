@@ -23,8 +23,9 @@ export class ChatApi {
 }
 export interface Turn {
   input: string; answer?: string; status: string; writes: {operation: string}[] | null;
-  user_saved: boolean; duration_ms: number; [key: string]: unknown;
+  user_saved: boolean; duration_ms: number; memory_processing?: 'completed' | 'source_only' | null;
+  memory_warning?: string | null; [key: string]: unknown;
 }
 export interface Snapshot {chat_id: string; title: string; pending: boolean; turns: Turn[]}
 export interface Summary {chat_id: string; title: string; turn_count: number}
-export interface Config {enabled: boolean; database: string; model: string; role: string; provider: string}
+export interface Config {enabled: boolean; database: string; model: string; role: string; provider: string; method: string}

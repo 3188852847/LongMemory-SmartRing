@@ -10,6 +10,11 @@ import {VoiceSettings} from './VoiceSettings';
 
 const api = new ChatApi();
 const nonce = document.querySelector<HTMLMetaElement>('meta[name="style-nonce"]')?.content;
+function memoryWarning(turn: Turn) {
+  return turn.memory_warning === 'l1_persistence_failed'
+    ? '本轮 L0 原始对话已保存，但 L1 记忆写入失败。'
+    : '本轮 L0 原始对话已保存，但 L1 记忆提取失败。';
+}
 function App() {
   const [config, setConfig] = useState<Config>();
   const [chats, setChats] = useState<Summary[]>([]);
@@ -81,7 +86,9 @@ function App() {
         const turn = await api.request<Turn>(`/api/chats/${chat.chat_id}/messages`, 'POST', {text: draft, request_id: crypto.randomUUID()});
         setChat({...chat, turns: [...chat.turns, turn]}); setDraft('');
         setChats(rows => rows.map(row => row.chat_id === chat.chat_id ? {...row, turn_count: chat.turns.length + 1} : row));
-        setNotice(turn.status === 'completed' ? '本轮完成，可展开查看记忆证据。' : '本轮未完成；输入可能已保存，请查看过程。');
+        setNotice(turn.memory_processing === 'source_only'
+          ? `回答已完成，但${memoryWarning(turn).replace('本轮 ', '')}不要把它误认为“不该记”。`
+          : turn.status === 'completed' ? '本轮完成，可展开查看记忆证据。' : '本轮未完成；输入可能已保存，请查看过程。');
       } catch (error) {setUnknown(true); setNotice(`${String(error)} 结果未知，请点击查询结果。`);}
     });
   }
@@ -100,11 +107,12 @@ function App() {
     </aside><main><header><h1>聊聊今天</h1><span>{chat?.turns.length ?? 0} / 40 轮 · React 预览</span></header>
       <section className="messages" aria-label="聊天记录">{!chat?.turns.length && <div className="empty"><h2>今天想聊些什么？</h2><p>可以说说今天的事，也可以继续上次的话题。</p></div>}
         {chat?.turns.map((turn, i) => <article key={i}><div className="bubble user"><strong>你</strong><p>{turn.input}</p></div><div className="bubble assistant"><strong>助手</strong><p>{turn.answer ?? '未获得完整回答。'}</p></div>
+          {turn.memory_processing === 'source_only' && <p className="memory-warning">{memoryWarning(turn)} 可继续聊天，之后需要重新整理这条来源。</p>}
           <details><summary>{turnSummary(turn)}</summary><pre>{JSON.stringify(turn, null, 2)}</pre></details></article>)}<div ref={turnsEnd}/></section>
       <form onSubmit={event => {event.preventDefault(); void send();}}><Input.TextArea aria-label="消息" value={draft} maxLength={1000} rows={3} disabled={disabled || (chat?.turns.length ?? 0) >= 40} onChange={event => setDraft(event.target.value)} placeholder="写下想说的话…"/>
-        <div className="send-row"><small>发送会保存原始输入，并按现有规则提取记忆。</small><Button type="primary" htmlType="submit" disabled={disabled || !draft.trim() || (chat?.turns.length ?? 0) >= 40}>发送</Button></div></form>
+        <div className="send-row"><small>发送会先保存原始输入，再按当前提取策略生成长期记忆。</small><Button type="primary" htmlType="submit" disabled={disabled || !draft.trim() || (chat?.turns.length ?? 0) >= 40}>发送</Button></div></form>
       <p role="status">{notice}</p>{unknown && <Button disabled={busy} onClick={() => void action(async () => {if (!chat) return; const result = await load(chat.chat_id); if (!result.pending && result.turns.length > chat.turns.length) setDraft(''); setNotice(result.pending ? '后台仍在处理，没有重发。' : '已查询。服务中断时不能据此保证未写入，请检查过程。');})}>只查询结果，不重发</Button>}
-      <details className="runtime"><summary>运行配置与记忆说明</summary><p>{config?.enabled ? `${config.model} · ${config.role} · ${config.provider}` : '聊天未启用'}</p>{config?.provider === 'fake' && <p>Fake 是离线工程替身，不具备角色和多轮理解能力。</p>}<p>当前仍为规则提取与关键词检索，网页不自动驱动圆屏播放。</p>{config?.enabled && <p>记忆库：{config.database}</p>}</details>
+      <details className="runtime"><summary>运行配置与记忆说明</summary><p>{config?.enabled ? `${config.model} · ${config.role} · ${config.provider}` : '聊天未启用'}</p>{config?.provider === 'fake' && <p>Fake 是离线工程替身，不具备角色和多轮理解能力。</p>}<p>提取：{config?.method === 'longmemory_daily_llm_v2' ? '模型辅助 P3.2（失败保留 L0）' : '规则基线'}；检索：关键词。网页不自动驱动圆屏播放。</p>{config?.enabled && <p>记忆库：{config.database}</p>}</details>
     </main></div>
     <Modal title="重命名聊天" open={rename} onCancel={() => setRename(false)} confirmLoading={busy} okText="保存" cancelText="取消" okButtonProps={{disabled: !title.trim() || busy}}
       onOk={() => void action(async () => {await api.request(`/api/chats/${chat?.chat_id}/title`, 'POST', {title}); await list(); if (chat) setChat({...chat,title}); setRename(false);})}><Input aria-label="聊天名称" maxLength={60} value={title} onChange={event => setTitle(event.target.value)}/></Modal>

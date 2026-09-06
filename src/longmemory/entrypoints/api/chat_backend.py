@@ -33,7 +33,8 @@ class ChatBackend:
 
     def info(self):
         role = self.roles.current()
-        return {"enabled": True, "method": "longmemory_v1", "subject": "user:self",
+        runtime = self.memory_runtime().status()
+        return {"enabled": True, "method": runtime["method"], "subject": "user:self",
                 "provider": self.provider, "model": self.model, "role": role['name'], "role_revision": role['revision'],
                 "database": str(self.database), "history_persistent": True,
                 "speaks_on_device": False}
@@ -46,21 +47,27 @@ class ChatBackend:
         """
         started = monotonic()
         result = {"status": "failed", "input": text, "answer": None,
-                  "started_at": datetime.now(UTC).isoformat(), "method": "longmemory_v1",
+                  "started_at": datetime.now(UTC).isoformat(), "method": None,
                   "model": self.model, "role": self.role, "writes": None, "retrieved": None,
                   "memory_context": None, "user_saved": False, "assistant_saved": False,
-                  "history_messages": len(history)}
+                  "history_messages": len(history), "memory_processing": None,
+                  "memory_warning": None}
         try:
+            runtime = self.memory_runtime()
+            runtime_status = runtime.status()
+            result["method"] = runtime_status["method"]
             # 开始处理时固定本轮角色。保存新版本不改变已经开始的回答。
             role = self.roles.current()
             result.update(role=role['name'], role_revision=role['revision'])
             generator = self.generator
             if role['revision'] and self.provider != 'fake':
                 generator = generator.with_role_prompt(role['prompt'])
-            prepared = self.memory_runtime().prepare_user(text)
+            prepared = runtime.prepare_user(text)
             event, observed, support = prepared.event, prepared.observation, prepared.support
             result.update(user_saved=True, event_id=event.event_id,
-                          writes=[asdict(item) for item in observed.writes])
+                          writes=[asdict(item) for item in observed.writes],
+                          memory_processing=observed.processing_status,
+                          memory_warning=observed.warning_code)
             result.update(call_id=support.call_id, memory_context=support.context,
                           retrieved=[asdict(item) for item in support.retrieved])
             # Fake 只验证工程闭环，页面明确标出它不模拟角色/多轮语义能力。
@@ -71,7 +78,7 @@ class ChatBackend:
             if not isinstance(answer, str) or not answer.strip() or len(answer) > 16000:
                 raise AnswerGenerationError("empty_answer")
             result["answer"] = answer
-            assistant = self.memory_runtime().record_assistant(answer)
+            assistant = runtime.record_assistant(answer)
             result.update(status="completed", assistant_saved=True, assistant_event_id=assistant.event_id)
         except AnswerGenerationError:
             result["error"] = "chat_model_failed"

@@ -30,6 +30,7 @@ class Options:
     database: Path = ROOT / "data/databases/xiaozhi-demo-v1.db"
     port: int = 8767
     role: str = "elysia_v1"
+    memory_extraction: str = "rules"
     voice: bool = False
     tts_backend: str = "edge"
     voice_root: Path = VOICE_ROOT
@@ -68,6 +69,8 @@ def build_commands(options, uv=None):
         raise ValueError("控制台端口需在 1024–65535 且不占用小智端口。")
     if options.role not in {"plain_v1", "elysia_v1"}:
         raise ValueError("未知助手角色。")
+    if options.memory_extraction not in {"rules", "llm"}:
+        raise ValueError("未知记忆提取策略。")
     if options.tts_backend not in {"edge", "voxcpm2"}:
         raise ValueError("未知语音后端。")
     root = options.root.resolve()
@@ -84,6 +87,7 @@ def build_commands(options, uv=None):
                "python", "-m", "longmemory.entrypoints.api", "--port", str(options.port),
                "--database", str(options.database.resolve()), "--enable-chat",
                "--chat-provider", "openai_compatible", "--assistant-role", options.role,
+               "--memory-extraction", options.memory_extraction,
                "--xiaozhi-server", str(options.voice_root.resolve()),
                "--memory-audit-log", str(root / "data/logs/xiaozhi-demo-v1.jsonl")]
     # 实验启动与删除默认关闭；不因日常启动隐式开启高风险管理功能。

@@ -30,11 +30,11 @@ P1 网页会话恢复已实现：列表、新建、切换、重命名，同一�
 
 已修复 Windows 下 uv 的 `.env` 路径导致控制台退出码 2：在明确的项目工作目录中使用相对 `.env`；更新后请重开启动面板。
 
-2026-09-04 用户决定：先做愿意日常使用的可定制陪伴助手，再研究论文。已有文字/语音最小闭环、记忆管理、音量控制与实验中心保留；研究优先顺序已被产品主线取代。当前日常仍是规则提取＋关键词召回，隔离实验中的模型提取/语义检索未自动上线。
+2026-09-04 用户决定：先做愿意日常使用的可定制陪伴助手，再研究论文。已有文字/语音最小闭环、记忆管理、音量控制与实验中心保留；研究优先顺序已被产品主线取代。当前日常默认仍是规则提取＋关键词召回；P3.2 已增加显式可选的模型辅助提取，语义检索尚未上线。
 
 当前产品顺序：**P1 日常入口 → P2 个性化体验 → P3 日常记忆 → P4 可控主动交流 → P5 习惯驱动陪伴**。P1 最小启动面板及网页会话恢复已实现；P2 的本地声音启动和状态展示已完成，待用户试听验收后进入 P3。
 
-P3 目标已明确为四层个人记忆：L0 原始证据、L1 原子记忆、L2 场景、L3 用户画像。P3.1 已实现网页/圆屏共享的常驻 Memory Runtime，保留旧子进程为显式回退；用户已确认真实双入口测试通过。算法仍是规则提取和关键词召回，不能把接线完成误写成记忆质量完成。外部文档进入并列知识平面，不作为 L4，也不自动成为用户事实。见 [ADR-0026](docs/adr/0026-layered-memory-and-knowledge-plane.md) 与 [ADR-0027](docs/adr/0027-shared-persistent-memory-runtime.md)。
+P3 目标已明确为四层个人记忆：L0 原始证据、L1 原子记忆、L2 场景、L3 用户画像。P3.1 已实现并验收网页/圆屏共享的常驻 Memory Runtime。P3.2 第一切片新增 `longmemory_daily_llm_v2`：启动面板可显式选择，先保存 L0，再生成来源绑定的 ADD/NOOP 候选；失败保留 L0 并报告，不静默降级。该策略尚未完成真实模型质量验收，默认仍是规则；召回仍是关键词。见 [ADR-0026](docs/adr/0026-layered-memory-and-knowledge-plane.md)、[ADR-0027](docs/adr/0027-shared-persistent-memory-runtime.md)与 [ADR-0028](docs/adr/0028-daily-llm-l1-extraction.md)。
 
 - [路线图](ROADMAP.md)：先后顺序与历史记录。
 - [产品范围与验收](docs/requirements/companion-product.md)：各阶段做什么、怎样算完成。
@@ -43,6 +43,7 @@ P3 目标已明确为四层个人记忆：L0 原始证据、L1 原子记忆、L2
 - [路线变更决策 ADR-0015](docs/adr/0015-product-first-companion-roadmap.md)：变更原因与边界。
 - [分层记忆与知识边界 ADR-0026](docs/adr/0026-layered-memory-and-knowledge-plane.md)：P3 目标、来源隔离与框架边界。
 - [共享常驻 Runtime ADR-0027](docs/adr/0027-shared-persistent-memory-runtime.md)：网页/圆屏统一实例、回环令牌与失败边界。
+- [日常模型提取 ADR-0028](docs/adr/0028-daily-llm-l1-extraction.md)：L0 优先、显式失败与规则回退。
 
 ## 2026-09-03 研究平台阶段记录（历史）
 
@@ -273,6 +274,8 @@ LongMemory-SmartRing/                              # 项目根目录
 │     │  ├─ factory.py                             # 通用白名单：v1 与原始对话分块；日常仍用 v1
 │     │  ├─ longmemory_v1/                          # 包装现有基线，不复制核心算法
 │     │  │  └─ method.py                           # 方法状态、接收消息、召回和资源释放
+│     │  ├─ daily_llm/                              # P3.2 可选日常模型提取，L0 优先持久化
+│     │  │  └─ method.py                           # 严格候选转 L1、显式 source_only 降级
 │     │  ├─ dialogue_chunks/                       # 原始消息分块批处理对照，保留角色/会话
 │     │  │  └─ method.py                           # 封存历史与关键词召回
 │     │  └─ llm_extract/                           # D1 实验模型提取条件，不自动用于日常库

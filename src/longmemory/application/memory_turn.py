@@ -117,6 +117,40 @@ class MemoryTurnService:
         with self._write_transaction():
             return self._observe(message)
 
+    def archive(self, message: ConversationMessage) -> None:
+        """先单独持久化 L0，供会失败的外部提取器使用。
+
+        规则基线仍使用 observe 的原子事务。只有显式选择的日常模型提取
+        路径调用本方法，从而避免校园模型暂时不可用时丢掉原始对话。
+        """
+        if not message.content.strip():
+            raise EmptyMessageError("聊天消息不能为空。")
+        with self._write_transaction():
+            self._conversation_store.save(message)
+        if message.role == MessageRole.USER:
+            self._audit("user_saved", turn_id=str(message.id))
+
+    def extract(self, message: ConversationMessage) -> tuple[AtomicMemory, ...]:
+        """在数据库写事务外运行可替换提取策略。"""
+        if message.role != MessageRole.USER:
+            return ()
+        return self._memory_extractor.extract(message)
+
+    def report_extraction_failure(self, message: ConversationMessage, *, code: str) -> None:
+        """记录脱敏失败代码；不把用户正文或供应商响应写进审计日志。"""
+        self._audit("extraction_failed", turn_id=str(message.id), warning_code=code)
+
+    def persist_extracted(
+        self,
+        message: ConversationMessage,
+        candidate_memories: tuple[AtomicMemory, ...],
+    ) -> tuple[MemoryWriteOperation, ...]:
+        """把已经校验的 L1 候选原子写入，并绑定到已归档 L0。"""
+        if self._conversation_store.get(message.id) is None:
+            raise ValueError("写入 L1 前必须先归档对应的 L0 消息。")
+        with self._write_transaction():
+            return self._persist_memories(message, candidate_memories)
+
     def _observe(self, message: ConversationMessage) -> tuple[MemoryWriteOperation, ...]:
         self._conversation_store.save(message)
         if message.role != MessageRole.USER:
@@ -125,9 +159,16 @@ class MemoryTurnService:
         self._audit("user_saved", turn_id=turn_id)
 
         # 从当前 L0 消息提取零条或多条 L1 记忆。
-        candidate_memories = self._memory_extractor.extract(
-            message
-        )
+        candidate_memories = self._memory_extractor.extract(message)
+        return self._persist_memories(message, candidate_memories)
+
+    def _persist_memories(
+        self,
+        message: ConversationMessage,
+        candidate_memories: tuple[AtomicMemory, ...],
+    ) -> tuple[MemoryWriteOperation, ...]:
+        """去重并保存候选；调用方负责建立所需的写事务。"""
+        turn_id = str(message.id)
 
         memory_operations = []
 

@@ -31,6 +31,8 @@ def register_memory_runtime_routes(app, backend):
             "turn_id": prepared.event.event_id,
             "added": sum(item.operation == "add" for item in prepared.observation.writes),
             "retrieved": len(prepared.support.retrieved),
+            "memory_processing": prepared.observation.processing_status,
+            "memory_warning": prepared.observation.warning_code,
         })
 
     app.router.add_get("/api/internal/memory/status", status, allow_head=False)

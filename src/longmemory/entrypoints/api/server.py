@@ -139,6 +139,8 @@ def main():
     parser.add_argument("--enable-chat", action="store_true", help="允许网页向指定已有记忆库写入对话和记忆")
     parser.add_argument("--memory-audit-log", type=Path, help="共享记忆 Runtime 的脱敏审计日志")
     parser.add_argument("--chat-provider", choices=("fake", "openai_compatible"), default="fake")
+    parser.add_argument("--memory-extraction", choices=("rules", "llm"), default="rules",
+                        help="日常 L1 提取策略；llm 失败时保留 L0 并显式标记")
     parser.add_argument("--assistant-role", choices=("plain_v1", "elysia_v1"), default="plain_v1")
     parser.add_argument("--xiaozhi-server", type=Path, help="允许用户确认后同步角色到此小智目录；不会自动修改配置或重启")
     parser.add_argument("--enable-experiment-runs", action="store_true", help="允许网页确认后运行冻结检索回答对照；默认只读实验")
@@ -151,6 +153,10 @@ def main():
         parser.error("启用文字聊天前必须用 --database 指定已有数据库")
     if args.memory_audit_log and not args.enable_chat:
         parser.error("记忆审计日志仅在启用文字聊天/共享 Runtime 时有效")
+    if args.memory_extraction == "llm" and not args.enable_chat:
+        parser.error("模型辅助提取仅在启用文字聊天/共享 Runtime 时有效")
+    if args.memory_extraction == "llm" and args.chat_provider != "openai_compatible":
+        parser.error("模型辅助提取需要 openai_compatible 配置；Fake 只用于离线回答测试")
     chat_backend = None
     job_backend = None
     if args.enable_experiment_runs:
@@ -164,8 +170,11 @@ def main():
               ("兼容模型配置可用（未联网验证）。" if experiment_settings else "未配置兼容模型，目前仅能运行 Fake。"))
     if args.enable_chat:
         from longmemory.adapters.llm.fake import FakeAnswerGenerator
+        from longmemory.adapters.llm.candidate_extractor import OpenAICompatibleCandidateProducer
         from longmemory.adapters.llm.openai_compatible import OpenAICompatibleAnswerGenerator
+        from longmemory.application.memory_runtime import MemoryRuntime
         from longmemory.infrastructure.config.settings import load_model_settings
+        from longmemory.methods.daily_llm.method import DailyLLMMemory
         from .chat_backend import ChatBackend
         try:
             # 只读预检；不能为了打开网页而创建或迁移用户的记忆库。
@@ -175,8 +184,18 @@ def main():
             role_prompt = role_prompt.replace("<memory></memory>", "（证据见独立 memory_evidence 消息。）")
             generator = (FakeAnswerGenerator() if settings.provider == "fake" else
                          OpenAICompatibleAnswerGenerator(settings, role_prompt=role_prompt))
+            runtime = None
+            if args.memory_extraction == "llm":
+                method = DailyLLMMemory(
+                    args.database,
+                    producer=OpenAICompatibleCandidateProducer(settings),
+                    existing_only=True,
+                    allow_cross_thread=True,
+                )
+                runtime = MemoryRuntime(args.database, method=method)
             chat_backend = ChatBackend(args.database, generator, provider=settings.provider,
-                                       model=settings.model or "fake", role=args.assistant_role)
+                                       model=settings.model or "fake", role=args.assistant_role,
+                                       runtime=runtime)
         except Exception:
             parser.error("文字聊天配置无效：请检查已有数据库版本、模型环境变量和角色文件。未建库或迁移。")
         if settings.base_url.startswith("http://"):
@@ -190,7 +209,8 @@ def main():
     if args.database:
         print(f"记忆库：{args.database.resolve()}；管理页" + ("允许单条删除（L0 保留）" if args.allow_memory_delete else "只读"))
     if chat_backend:
-        print(f"文字聊天已启用：{args.chat_provider} / {args.assistant_role}；会写入 L0/L1，不驱动圆屏播音。")
+        extraction = "模型辅助（失败保留 L0）" if args.memory_extraction == "llm" else "规则基线"
+        print(f"文字聊天已启用：{args.chat_provider} / {args.assistant_role}；L1 提取={extraction}，不驱动圆屏播音。")
     audit_handler = configure_file_logging(args.memory_audit_log) if args.memory_audit_log else None
     try:
         web.run_app(create_app(port=args.port, database=args.database, allow_memory_delete=args.allow_memory_delete, chat_backend=chat_backend, job_backend=job_backend,

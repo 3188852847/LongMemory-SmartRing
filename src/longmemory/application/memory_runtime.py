@@ -27,12 +27,10 @@ class MemoryRuntime:
     因而慢模型不会阻塞另一入口读取记忆。
     """
 
-    def __init__(self, database: Path) -> None:
+    def __init__(self, database: Path, *, method=None) -> None:
         self.database = database.resolve()
-        self._method = LongMemoryV1(
-            self.database,
-            existing_only=True,
-            allow_cross_thread=True,
+        self._method = method if method is not None else LongMemoryV1(
+            self.database, existing_only=True, allow_cross_thread=True,
         )
         self._lock = RLock()
         self._closed = False

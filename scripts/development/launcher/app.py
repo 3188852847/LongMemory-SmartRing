@@ -37,6 +37,7 @@ def main():
     choice_path = ROOT / 'data/control/launcher.json'
     ip = tk.StringVar(value=load_choice(choice_path))
     role = tk.StringVar(value="elysia_v1")
+    memory_extraction = tk.StringVar(value="规则提取（稳定基线）")
     tts_backend = tk.StringVar(value="EdgeTTS（联网标准音色）")
     ttk.Checkbutton(box, text="同时启动圆屏语音（默认只启动文字聊天）", variable=voice).pack(anchor="w")
     for label, variable in [("日常数据库（已有文件）", database), ("小智目录（仅语音模式）", server)]:
@@ -86,6 +87,13 @@ def main():
     ttk.Label(row, text="网页角色：").pack(side="left")
     ttk.Combobox(row, textvariable=role, values=("elysia_v1", "plain_v1"), state="readonly", width=18).pack(side="left")
     ttk.Label(row, text="  不自动改变小智角色；控制台端口 8767").pack(side="left")
+    memory_row = ttk.Frame(box)
+    memory_row.pack(fill="x", pady=8)
+    ttk.Label(memory_row, text="长期记忆提取：").pack(side="left")
+    ttk.Combobox(memory_row, textvariable=memory_extraction,
+                 values=("规则提取（稳定基线）", "模型辅助（P3.2 试用）"),
+                 state="readonly", width=27).pack(side="left")
+    ttk.Label(memory_row, text="  模型失败仍保留 L0，不静默回退").pack(side="left")
     tts_row = ttk.Frame(box)
     tts_row.pack(fill="x", pady=8)
     ttk.Label(tts_row, text="圆屏声音：").pack(side="left")
@@ -156,7 +164,8 @@ def main():
                     raise ValueError("小智 TTS 配置与所选声音不一致，请先点击“检查并同步”。")
             options = Options(database=Path(database.get()), voice=voice.get(), voice_root=Path(server.get()),
                               lan_ip=ip.get().strip(), role=role.get(), consent=consent.get(),
-                              tts_backend=selected_tts())
+                              tts_backend=selected_tts(),
+                              memory_extraction=("llm" if memory_extraction.get().startswith("模型") else "rules"))
             manager.start(options)
             state.update(started=time.monotonic(), opened=False, failed=False)
             start_button.config(state="disabled")
