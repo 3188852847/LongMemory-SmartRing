@@ -25,3 +25,13 @@ class MemoryDetails:
 
     memory: AtomicMemory
     sources: tuple[MemoryEvidenceDetails, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class MemoryCorrectionResult:
+    """一次人工纠正产生的新旧记忆与审计来源。"""
+
+    old_memory: AtomicMemory
+    new_memory: AtomicMemory
+    source_message: ConversationMessage
+    evidence: MemoryEvidence

@@ -50,7 +50,35 @@ def register_memory_routes(app, backend):
             raise web.HTTPBadRequest()
         return await invoke(backend.delete, memory_id, body["revision"])
 
+    async def correction(request):
+        memory_id = request.match_info["memory_id"]
+        if not memory_id or len(memory_id) > 128 or any(ord(c) < 32 for c in memory_id):
+            raise web.HTTPBadRequest()
+        if request.content_type != "application/json":
+            raise web.HTTPBadRequest()
+        try:
+            body = await request.json()
+        except (ValueError, UnicodeError):
+            raise web.HTTPBadRequest() from None
+        if (not isinstance(body, dict)
+                or set(body) != {"revision", "corrected_content", "correction_kind", "confirm_correction"}
+                or body["correction_kind"] != "error"
+                or body["confirm_correction"] is not True
+                or not isinstance(body["corrected_content"], str)
+                or not body["corrected_content"].strip()
+                or len(body["corrected_content"].strip()) > 1000
+                or not isinstance(body["revision"], str)
+                or not re.fullmatch(r"[0-9a-f]{64}", body["revision"])):
+            raise web.HTTPBadRequest()
+        return await invoke(
+            backend.correct,
+            memory_id,
+            body["corrected_content"].strip(),
+            body["revision"],
+        )
+
     app.router.add_get("/api/memory-config", config, allow_head=False)
     app.router.add_get("/api/memories", listing, allow_head=False)
     app.router.add_get("/api/memories/{memory_id}", detail, allow_head=False)
     app.router.add_delete("/api/memories/{memory_id}", detail)
+    app.router.add_post("/api/memories/{memory_id}/corrections", correction)

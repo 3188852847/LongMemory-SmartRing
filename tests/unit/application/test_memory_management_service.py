@@ -1,6 +1,8 @@
 """验证记忆查看、来源追踪和删除用例。"""
 
 from datetime import UTC, datetime
+from dataclasses import replace
+import pytest
 
 from longmemory.application.memory_management.dto import (
     MemoryDetails,
@@ -126,6 +128,19 @@ class FakeMemoryStore:
 
         return len(self.memories) < original_count
 
+    def find_by_content(self, content, *, subject_id):
+        return next((memory for memory in self.list_active()
+                     if memory.subject_id == subject_id and memory.content == content), None)
+
+    def retire_as_superseded(self, memory_id, *, superseded_by_id, retired_at):
+        for index, memory in enumerate(self.memories):
+            if memory.id == memory_id and memory.retired_at is None:
+                self.memories[index] = replace(
+                    memory, retired_at=retired_at, superseded_by_id=superseded_by_id
+                )
+                return True
+        return False
+
 
 def make_source_message() -> ConversationMessage:
     """创建固定的 L0 来源消息。"""
@@ -231,3 +246,42 @@ def test_deletes_l1_memory_but_preserves_l0_source() -> None:
 
     # 再次删除同一个 ID，应明确表示没有删除任何记录。
     assert service.delete_memory(memory.id) is False
+
+
+def test_correction_adds_user_evidence_and_retires_old_memory() -> None:
+    source_message = make_source_message()
+    memory = make_memory(source_message)
+    memory_store = FakeMemoryStore((memory,), (make_evidence(memory, source_message),))
+    conversation_store = FakeConversationStore((source_message,))
+    service = MemoryManagementService(
+        memory_store=memory_store, conversation_store=conversation_store
+    )
+
+    result = service.correct_memory(
+        memory.id, "用户的猫叫年糕。", occurred_at=FIXED_TIME
+    )
+
+    assert result.new_memory.content == "用户的猫叫年糕。"
+    assert result.evidence.source_type is MemorySourceType.USER_CORRECTED
+    assert result.source_message.content == "用户的猫叫年糕。"
+    assert memory_store.list_active() == (result.new_memory,)
+    retired = memory_store.get(memory.id)
+    assert retired.retired_at == FIXED_TIME
+    assert retired.superseded_by_id == result.new_memory.id
+
+
+def test_correction_rejects_retired_unchanged_and_duplicate() -> None:
+    source_message = make_source_message()
+    memory = make_memory(source_message)
+    duplicate = AtomicMemory(
+        id=MemoryId("memory-duplicate"), subject_id=CURRENT_USER_SUBJECT_ID,
+        content="用户的猫叫年糕。", recorded_at=FIXED_TIME,
+    )
+    service = MemoryManagementService(
+        memory_store=FakeMemoryStore((memory, duplicate)),
+        conversation_store=FakeConversationStore((source_message,)),
+    )
+    with pytest.raises(ValueError, match="memory_correction_unchanged"):
+        service.correct_memory(memory.id, memory.content)
+    with pytest.raises(ValueError, match="memory_correction_duplicate"):
+        service.correct_memory(memory.id, duplicate.content)

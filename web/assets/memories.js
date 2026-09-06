@@ -2,7 +2,7 @@ import {memoryError, displayTime, pageState, metadata} from "./memory-view.mjs";
 
 const el = id => document.getElementById(id);
 const state = {csrf: null, config: null, items: [], total: 0, offset: 0, limit: 25,
-  query: "", filter: "active", loading: false, deleting: false, selected: null, listSeq: 0, detailSeq: 0};
+  query: "", filter: "active", loading: false, writing: false, selected: null, listSeq: 0, detailSeq: 0};
 
 async function api(path, options = {}) {
   const controller = new AbortController(), timeout = setTimeout(() => controller.abort(), 12000);
@@ -23,13 +23,14 @@ function notice(error) {
 }
 function controls() {
   const available = Boolean(state.csrf && state.config?.configured);
-  for (const id of ["memory-refresh", "memory-search-button"]) el(id).disabled = !available || state.loading || state.deleting;
+  for (const id of ["memory-refresh", "memory-search-button"]) el(id).disabled = !available || state.loading || state.writing;
   const pages = pageState(state.total, state.offset, state.limit);
-  el("memory-previous").disabled = !available || state.loading || !pages.previous || state.deleting;
-  el("memory-next").disabled = !available || state.loading || !pages.next || state.deleting;
-  el("memory-delete").disabled = !available || !state.selected || !state.config?.allow_delete || state.deleting;
-  el("memory-query").disabled = !available || state.deleting;
-  el("memory-filter").disabled = !available || state.deleting;
+  el("memory-previous").disabled = !available || state.loading || !pages.previous || state.writing;
+  el("memory-next").disabled = !available || state.loading || !pages.next || state.writing;
+  el("memory-delete").disabled = !available || !state.selected || !state.config?.allow_delete || state.writing;
+  el("memory-correct").disabled = !available || !state.selected || state.selected.state !== "active" || !state.config?.allow_correction || state.writing;
+  el("memory-query").disabled = !available || state.writing;
+  el("memory-filter").disabled = !available || state.writing;
 }
 function clearDetails(message = "选择一条记忆，查看完整内容和原始来源。") {
   state.detailSeq += 1; state.selected = null;
@@ -60,7 +61,7 @@ function renderList() {
   el("memory-page").textContent = pageState(state.total, state.offset, state.limit).label;
 }
 async function loadList() {
-  if (!state.csrf || !state.config?.configured || state.deleting) return;
+  if (!state.csrf || !state.config?.configured || state.writing) return;
   const seq = ++state.listSeq;
   clearDetails(); notice(null); state.loading = true;
   el("memory-list").replaceChildren(); el("memory-list-state").classList.remove("hidden");
@@ -77,7 +78,7 @@ async function loadList() {
   } finally { if (seq === state.listSeq) { state.loading = false; controls(); } }
 }
 async function openMemory(id) {
-  if (state.deleting || !state.csrf) return;
+  if (state.writing || !state.csrf) return;
   clearDetails("正在读取内容与来源…"); notice(null);
   const seq = state.detailSeq;
   try {
@@ -87,7 +88,8 @@ async function openMemory(id) {
     for (const [key, value] of metadata(data)) el("memory-metadata").append(textNode("dt", key), textNode("dd", value));
     for (const [index, source] of data.sources.entries()) {
       const block = document.createElement("details"); block.className = "source-block"; block.open = index === 0;
-      block.append(textNode("summary", `来源 ${index + 1} · ${source.source_type === "user_stated" ? "用户陈述" : source.source_type}`));
+      const sourceLabel = source.source_type === "user_stated" ? "用户陈述" : source.source_type === "user_corrected" ? "用户纠正" : source.source_type;
+      block.append(textNode("summary", `来源 ${index + 1} · ${sourceLabel}`));
       if (source.message) {
         block.append(textNode("p", source.message.content, "source-content"),
           textNode("p", `原始角色：${source.message.role === "user" ? "用户" : source.message.role === "assistant" ? "助手" : source.message.role} · ${displayTime(source.message.created_at)}`, "hint"));
@@ -115,25 +117,59 @@ el("memory-delete").addEventListener("click", () => {
   el("delete-content").textContent = state.selected.content; el("delete-id").textContent = `记忆 ID：${state.selected.id}`;
   el("delete-understood").checked = false; el("delete-confirm").disabled = true; el("delete-dialog").showModal();
 });
+el("memory-correct").addEventListener("click", () => {
+  if (!state.selected || !state.config?.allow_correction || state.selected.state !== "active") return;
+  el("correction-old-content").textContent = state.selected.content;
+  el("correction-content").value = "";
+  el("correction-understood").checked = false;
+  el("correction-confirm").disabled = true;
+  el("correction-dialog").showModal();
+  el("correction-content").focus();
+});
+el("correction-cancel").addEventListener("click", () => el("correction-dialog").close());
+function correctionReady() {
+  el("correction-confirm").disabled = !el("correction-understood").checked || !el("correction-content").value.trim();
+}
+el("correction-understood").addEventListener("change", correctionReady);
+el("correction-content").addEventListener("input", correctionReady);
+el("correction-confirm").addEventListener("click", async () => {
+  if (!state.selected || !el("correction-understood").checked || state.writing) return;
+  const selected = state.selected, correctedContent = el("correction-content").value.trim();
+  if (!correctedContent) return;
+  state.writing = true; el("correction-dialog").close(); controls();
+  try {
+    const result = await api(`/api/memories/${encodeURIComponent(selected.id)}/corrections`, {
+      method: "POST", body: {revision: selected.revision, corrected_content: correctedContent,
+        correction_kind: "error", confirm_correction: true}});
+    if (result.corrected !== true) throw new Error("correction_unknown");
+    state.writing = false; state.offset = 0; await loadList();
+    await openMemory(result.new_memory_id);
+    el("memory-notice").classList.remove("hidden");
+    el("memory-notice").textContent = "纠正已保存：新事实进入当前记忆，旧事实保留为已取代历史。";
+  } catch (error) {
+    clearDetails("纠正结果未确认。请刷新列表核对，不自动重试。"); notice(error);
+  } finally { state.writing = false; controls(); }
+});
 el("delete-cancel").addEventListener("click", () => el("delete-dialog").close());
 el("delete-understood").addEventListener("change", event => { el("delete-confirm").disabled = !event.target.checked; });
 el("delete-confirm").addEventListener("click", async () => {
-  if (!state.selected || !el("delete-understood").checked || state.deleting) return;
-  const selected = state.selected; state.deleting = true; el("delete-dialog").close(); controls();
+  if (!state.selected || !el("delete-understood").checked || state.writing) return;
+  const selected = state.selected; state.writing = true; el("delete-dialog").close(); controls();
   try {
     const result = await api(`/api/memories/${encodeURIComponent(selected.id)}`, {
       method: "DELETE", body: {revision: selected.revision, confirm_delete: true}});
     if (result.deleted !== true) throw new Error("delete_unknown");
-    state.deleting = false; state.offset = 0; await loadList();
+    state.writing = false; state.offset = 0; await loadList();
     clearDetails("已删除该条长期记忆及来源关联，原始对话仍保留。");
   } catch (error) {
     clearDetails("删除结果未确认。请刷新列表核对，不自动重试。"); notice(error);
-  } finally { state.deleting = false; controls(); }
+  } finally { state.writing = false; controls(); }
 });
 try {
   state.csrf = (await api("/api/session", {bootstrap: true})).csrf; state.config = await api("/api/memory-config");
   el("memory-database").textContent = state.config.database || "未指定；未创建新数据库";
-  el("memory-mode").textContent = state.config.allow_delete ? "允许单条删除" : "只读";
+  const modes = [state.config.allow_correction ? "允许纠正" : "", state.config.allow_delete ? "允许删除" : ""].filter(Boolean);
+  el("memory-mode").textContent = modes.join("、") || "只读";
   el("memory-mode").dataset.tone = state.config.allow_delete ? "warning" : "good";
   if (state.config.configured) await loadList();
   else { notice(new Error("memory_not_configured")); el("memory-list-state").textContent = "启动时指定已有记忆库后，这里才会显示记忆。"; }

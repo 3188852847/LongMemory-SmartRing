@@ -17,11 +17,13 @@ CURRENT_USER_SUBJECT_ID = MemorySubjectId("user:self")
 class MemorySourceType(StrEnum):
     """来源证据对一条记忆声明的支持方式。
 
-    V0.1 只允许用户亲自陈述的内容成为用户事实。
+    用户陈述与用户在管理界面作出的人工纠正必须分开记录，
+    这样后续可以评估哪些事实曾被用户明确纠错。
     使用显式枚举可以避免以后把助手生成内容悄悄当成同等可靠的来源。
     """
 
     USER_STATED = "user_stated"
+    USER_CORRECTED = "user_corrected"
 
 
 class MemoryOperationType(StrEnum):
@@ -64,8 +66,8 @@ class AtomicMemory:
 class MemoryWriteOperation:
     """一次候选记忆处理产生的、可审计的写入结果。
 
-    V0.1 实际只产生 ADD 和 NOOP。SUPERSEDE 只是先固定接口语义，
-    在冲突更新版本实现前不得由当前规则策略返回。
+    自动提取策略当前只产生 ADD 和 NOOP；人工纠正用例会显式执行
+    SUPERSEDE。自动冲突更新在另行设计前不得借用这一语义。
     """
 
     operation: MemoryOperationType

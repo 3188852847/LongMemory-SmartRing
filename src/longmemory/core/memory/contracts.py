@@ -1,6 +1,7 @@
 """L1 原子记忆存储、提取和检索所需的抽象契约。"""
 
 from typing import Protocol
+from datetime import datetime
 
 from longmemory.core.common.identifiers import MemoryId, MemorySubjectId
 from longmemory.core.conversation.models import ConversationMessage
@@ -52,6 +53,16 @@ class MemoryStore(Protocol):
 
     def delete(self, memory_id: MemoryId) -> bool:
         """删除指定记忆，返回是否确实删除了一条记录。"""
+        ...
+
+    def retire_as_superseded(
+        self,
+        memory_id: MemoryId,
+        *,
+        superseded_by_id: MemoryId,
+        retired_at: datetime,
+    ) -> bool:
+        """把仍有效的旧记忆标记为由新记忆取代。"""
         ...
 
 

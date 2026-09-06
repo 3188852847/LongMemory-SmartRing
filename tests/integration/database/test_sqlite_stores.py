@@ -92,7 +92,7 @@ def test_message_and_memory_survive_database_reopen(tmp_path) -> None:
 def test_v1_database_is_upgraded_without_losing_source(
     tmp_path,
 ) -> None:
-    """V1 旧库升级到 V3 后，应保留记忆并回填来源证据。"""
+    """V1 旧库升级到 V4 后，应保留记忆并回填来源证据。"""
 
     database_path = tmp_path / "v1-longmemory.db"
     created_at = datetime(2026, 9, 2, 9, 0, tzinfo=UTC)
@@ -154,7 +154,7 @@ def test_v1_database_is_upgraded_without_losing_source(
 
     assert connection.execute(
         "PRAGMA user_version"
-    ).fetchone()[0] == 3
+    ).fetchone()[0] == 4
     assert store.get(MemoryId("memory-v1")) == AtomicMemory(
         id=MemoryId("memory-v1"),
         subject_id=CURRENT_USER_SUBJECT_ID,
@@ -182,7 +182,7 @@ def test_v1_database_is_upgraded_without_losing_source(
 def test_v2_database_preserves_multiple_evidence_during_upgrade(
     tmp_path,
 ) -> None:
-    """V2 升级到 V3 时，不得丢失已经积累的多条来源。"""
+    """V2 升级到 V4 时，不得丢失已经积累的多条来源。"""
 
     database_path = tmp_path / "v2-longmemory.db"
     connection = open_database(database_path)
@@ -256,7 +256,7 @@ def test_v2_database_preserves_multiple_evidence_during_upgrade(
 
     assert connection.execute(
         "PRAGMA user_version"
-    ).fetchone()[0] == 3
+    ).fetchone()[0] == 4
     assert tuple(
         evidence.source_message_id
         for evidence in store.list_evidence(MemoryId("memory-v2"))
@@ -268,4 +268,43 @@ def test_v2_database_preserves_multiple_evidence_during_upgrade(
         "PRAGMA foreign_key_check"
     ).fetchall() == []
 
+    connection.close()
+
+
+def test_v3_upgrade_accepts_user_corrected_evidence(tmp_path) -> None:
+    """V4 扩展来源枚举时保留 V3 数据，并允许记录人工纠正。"""
+
+    path = tmp_path / "v3.db"
+    connection = open_database(path)
+    initialize_schema(connection)
+    connection.execute("PRAGMA user_version = 3")
+    # 模拟 V3 的窄 CHECK：把 V4 表重建为旧约束，再执行真实迁移。
+    connection.execute("PRAGMA foreign_keys = OFF")
+    connection.executescript("""
+        ALTER TABLE memory_evidence RENAME TO memory_evidence_v4_saved;
+        CREATE TABLE memory_evidence (
+            memory_id TEXT NOT NULL, source_message_id TEXT NOT NULL,
+            source_type TEXT NOT NULL CHECK (source_type IN ('user_stated')),
+            linked_at TEXT NOT NULL,
+            PRIMARY KEY (memory_id, source_message_id, source_type),
+            FOREIGN KEY (memory_id) REFERENCES atomic_memories(id) ON DELETE CASCADE,
+            FOREIGN KEY (source_message_id) REFERENCES conversation_messages(id) ON DELETE RESTRICT
+        );
+        DROP TABLE memory_evidence_v4_saved;
+    """)
+    connection.execute("PRAGMA foreign_keys = ON")
+    initialize_schema(connection)
+
+    now = datetime(2026, 9, 6, tzinfo=UTC)
+    SQLiteConversationStore(connection).save(ConversationMessage(
+        MessageId("correction-message"), MessageRole.USER, "用户的猫叫年糕。", now
+    ))
+    memory = AtomicMemory(MemoryId("corrected-memory"), CURRENT_USER_SUBJECT_ID,
+                          "用户的猫叫年糕。", now)
+    evidence = MemoryEvidence(memory.id, MessageId("correction-message"),
+                              MemorySourceType.USER_CORRECTED, now)
+    SQLiteMemoryStore(connection).save(memory, evidence)
+    assert connection.execute("PRAGMA user_version").fetchone()[0] == 4
+    assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
+    assert SQLiteMemoryStore(connection).list_evidence(memory.id) == (evidence,)
     connection.close()

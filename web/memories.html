@@ -40,13 +40,13 @@
           <div class="pagination"><button id="memory-previous" class="button secondary small" type="button" disabled>上一页</button><span id="memory-page">—</span><button id="memory-next" class="button secondary small" type="button" disabled>下一页</button></div>
         </section>
         <section class="panel memory-detail-panel" aria-labelledby="memory-detail-title">
-          <div class="section-heading"><h2 id="memory-detail-title">内容与来源</h2><button id="memory-delete" class="button danger small" type="button" disabled>删除此条</button></div>
+          <div class="section-heading"><h2 id="memory-detail-title">内容与来源</h2><div class="dialog-actions"><button id="memory-correct" class="button secondary small" type="button" disabled>纠正此条</button><button id="memory-delete" class="button danger small" type="button" disabled>删除此条</button></div></div>
           <p id="memory-detail-state" class="empty-state" role="status">选择左侧一条记忆，查看完整内容和原始对话。</p>
           <div id="memory-detail" class="hidden"><p id="memory-content" class="memory-content"></p><dl id="memory-metadata" class="metadata-grid"></dl><h3 class="source-heading">原始来源</h3><div id="memory-sources"></div></div>
           <p class="hint">“记忆内容”是规范化后的陈述，“原始来源”才是当时记录的话。来源缺失会明确显示，不补写猜测。</p>
         </section>
       </div>
-      <section class="help-strip"><h2>删除记忆不等于清除原始对话</h2><p>删除后，该条长期记忆和来源关联会移除，但 L0 原始对话仍保留。当前没有一键恢复或直接编辑事实；事实纠正与完整隐私擦除将单独实现。</p></section>
+      <section class="help-strip"><h2>纠正不是原地改写</h2><p>“纠正”会新建一条由用户明确纠正的记忆，并把旧记忆保留为已取代历史。它只适用于旧记录本来就错了；事实后来发生变化将使用另一套时间语义。删除仍不等于清除 L0 原始对话。</p></section>
       <footer class="page-footer"><span>LongMemory / 记忆管理</span><span>不自动提取、不调用大模型、不修改数据库结构</span></footer>
       <noscript><p class="notice">请启用 JavaScript 以查看记忆。页面不会把数据库直接作为静态文件提供。</p></noscript>
     </main>
@@ -56,6 +56,15 @@
     <p id="delete-impact">将移除这条 L1 记忆、它的来源关联，以及其他记忆指向它的取代链接。原始对话 L0 和备份不会删除。当前没有一键恢复。</p>
     <label class="confirm-line"><input id="delete-understood" type="checkbox">我理解以上影响，确认只删除这一条。</label>
     <div class="dialog-actions"><button id="delete-cancel" class="button secondary" type="button" autofocus>取消</button><button id="delete-confirm" class="button danger" type="button" disabled>确认删除</button></div>
+  </dialog>
+  <dialog id="correction-dialog" aria-labelledby="correction-title" aria-describedby="correction-impact">
+    <h2 id="correction-title">纠正这一条长期记忆</h2>
+    <p class="field-label">当前记录</p><p id="correction-old-content" class="memory-content"></p>
+    <label for="correction-content">纠正后的完整事实</label>
+    <textarea id="correction-content" maxlength="1000" rows="4" placeholder="例如：用户的猫叫年糕。"></textarea>
+    <p id="correction-impact" class="hint">新内容会按原文成为 L1 记忆，不调用模型改写。旧记录与原始来源仍保留，但旧记录不再参与日常召回。</p>
+    <label class="confirm-line"><input id="correction-understood" type="checkbox">我确认旧记录本来就错误；这不是后来发生的情况变化。</label>
+    <div class="dialog-actions"><button id="correction-cancel" class="button secondary" type="button">取消</button><button id="correction-confirm" class="button" type="button" disabled>保存纠正</button></div>
   </dialog>
 </body>
 </html>

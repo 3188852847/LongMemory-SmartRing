@@ -40,6 +40,7 @@ def test_command_preserves_paths_and_does_not_enable_deletion_or_jobs(options):
     assert cmd[cmd.index('--env-file') + 1] == '.env'
     assert "--no-sync" in cmd and "--offline" in cmd
     assert "--allow-memory-delete" not in cmd
+    assert "--allow-memory-correction" in cmd
     assert "--enable-experiment-runs" not in cmd
     assert "--chat-provider" in cmd
     assert cmd[cmd.index("--memory-extraction") + 1] == "rules"

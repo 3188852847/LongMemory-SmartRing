@@ -51,28 +51,33 @@ def revision(data):
 
 
 class MemoryBackend:
-    def __init__(self, database: Path | None, *, allow_delete=False):
+    def __init__(self, database: Path | None, *, allow_delete=False, allow_correction=False):
         # 路径只来自启动参数；任何 HTTP 请求都不能选文件或切换数据库。
         self.database = database.resolve() if database is not None else None
         self.allow_delete = allow_delete
+        self.allow_correction = allow_correction
 
     def info(self):
         return {"configured": self.database is not None,
                 "database": str(self.database) if self.database else None,
-                "allow_delete": self.allow_delete and self.database is not None}
+                "allow_delete": self.allow_delete and self.database is not None,
+                "allow_correction": self.allow_correction and self.database is not None}
 
     @contextmanager
-    def _open(self, *, write=False):
+    def _open(self, *, write_capability=None):
         if self.database is None:
             raise MemoryAccessError("memory_not_configured", 503)
         if not self.database.is_file():
             raise MemoryAccessError("memory_database_missing", 503)
-        if write and not self.allow_delete:
+        if write_capability == "delete" and not self.allow_delete:
             raise MemoryAccessError("memory_read_only", 403)
+        if write_capability == "correction" and not self.allow_correction:
+            raise MemoryAccessError("memory_correction_disabled", 403)
         connection = None
         try:
             # mode=ro/rw 都不创建文件；不用 open_database 或 build_application，
             # 因为它们会初始化/迁移。连接在请求工作线程内创建并关闭。
+            write = write_capability is not None
             mode = "rw" if write else "ro"
             connection = sqlite3.connect(self.database.as_uri() + "?mode=" + mode, uri=True, timeout=2)
             connection.row_factory = sqlite3.Row
@@ -98,9 +103,11 @@ class MemoryBackend:
                 connection.close()
 
     @staticmethod
-    def _service(connection):
-        return MemoryManagementService(memory_store=SQLiteMemoryStore(connection),
-                                       conversation_store=SQLiteConversationStore(connection))
+    def _service(connection, *, commit_changes=True):
+        return MemoryManagementService(
+            memory_store=SQLiteMemoryStore(connection, commit_changes=commit_changes),
+            conversation_store=SQLiteConversationStore(connection, commit_changes=commit_changes),
+        )
 
     def list_page(self, *, query="", state="active", limit=25, offset=0):
         with self._open() as connection:
@@ -122,8 +129,8 @@ class MemoryBackend:
             return {**data, "revision": revision(data)}
 
     def delete(self, memory_id, expected_revision):
-        with self._open(write=True) as connection:
-            service = self._service(connection)
+        with self._open(write_capability="delete") as connection:
+            service = self._service(connection, commit_changes=False)
             details = service.get_memory(MemoryId(memory_id))
             if details is None:
                 raise MemoryAccessError("memory_not_found", 404)
@@ -133,4 +140,41 @@ class MemoryBackend:
             # 外键还会解除其他记忆指向此条的取代链接，不冒充完整隐私擦除。
             if not service.delete_memory(MemoryId(memory_id)):
                 raise MemoryAccessError("memory_not_found", 404)
+            connection.commit()
             return {"deleted": True, "id": memory_id, "l0_preserved": True}
+
+    def correct(self, memory_id, corrected_content, expected_revision):
+        """在一个 SQLite 事务中保存纠正来源、新事实和取代关系。"""
+
+        with self._open(write_capability="correction") as connection:
+            service = self._service(connection, commit_changes=False)
+            old_details = service.get_memory(MemoryId(memory_id))
+            if old_details is None:
+                raise MemoryAccessError("memory_not_found", 404)
+            if not secrets.compare_digest(
+                revision(details_json(old_details)), expected_revision
+            ):
+                raise MemoryAccessError("memory_changed")
+            try:
+                result = service.correct_memory(
+                    MemoryId(memory_id), corrected_content
+                )
+            except LookupError:
+                raise MemoryAccessError("memory_not_found", 404) from None
+            except ValueError as error:
+                code = str(error)
+                status = 400 if code.startswith("corrected_content_") else 409
+                raise MemoryAccessError(code, status) from None
+            except RuntimeError as error:
+                if str(error) == "memory_correction_race":
+                    raise MemoryAccessError("memory_changed") from None
+                raise
+            connection.commit()
+            return {
+                "corrected": True,
+                "old_memory_id": str(result.old_memory.id),
+                "new_memory_id": str(result.new_memory.id),
+                "source_message_id": str(result.source_message.id),
+                "source_type": result.evidence.source_type.value,
+                "old_l0_preserved": True,
+            }

@@ -1,5 +1,12 @@
 # Changelog
 
+### P3.3 auditable manual correction first slice（2026-09-06）
+
+- schema V4 新增 `user_corrected` 证据类型；人工纠正以追加新 L0/L1 并 SUPERSEDE 旧 L1 实现，不原地覆盖历史。
+- 记忆管理页新增纠正入口、旧内容核对、完整事实输入和“旧记录本来就错误”确认；日常启动器默认开放可审计纠正，硬删除仍关闭。
+- 新增显式数据库检查/迁移工具：升级前创建 SQLite 一致性备份并输出 SHA-256；未迁移个人库。
+- 验证：516 项 Python 全量回归、2 项 React API 测试、TypeScript 与 Vite 生产构建通过；记忆页脚本通过 Node 语法检查。第一切片不处理事实后来变化、撤销、自动冲突和 L2/L3 传播；个人库尚未迁移，真实浏览器体验待验收。
+
 本文件只记录已经完成的实际变更；规划中的能力放入 `ROADMAP.md`。
 
 ## Unreleased

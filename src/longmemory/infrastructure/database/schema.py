@@ -3,7 +3,7 @@
 from sqlite3 import Connection
 
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 _LATEST_SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS conversation_messages (
@@ -35,7 +35,7 @@ CREATE INDEX IF NOT EXISTS idx_atomic_memories_active_content
 CREATE TABLE IF NOT EXISTS memory_evidence (
     memory_id TEXT NOT NULL,
     source_message_id TEXT NOT NULL,
-    source_type TEXT NOT NULL CHECK (source_type IN ('user_stated')),
+    source_type TEXT NOT NULL CHECK (source_type IN ('user_stated', 'user_corrected')),
     linked_at TEXT NOT NULL,
 
     PRIMARY KEY (memory_id, source_message_id, source_type),
@@ -169,9 +169,41 @@ CREATE INDEX idx_memory_evidence_source_message
 COMMIT;
 """
 
+_MIGRATE_V3_TO_V4_SQL = """
+BEGIN IMMEDIATE;
+
+CREATE TABLE memory_evidence_v4 (
+    memory_id TEXT NOT NULL,
+    source_message_id TEXT NOT NULL,
+    source_type TEXT NOT NULL CHECK (source_type IN ('user_stated', 'user_corrected')),
+    linked_at TEXT NOT NULL,
+
+    PRIMARY KEY (memory_id, source_message_id, source_type),
+    FOREIGN KEY (memory_id)
+        REFERENCES atomic_memories (id)
+        ON DELETE CASCADE,
+    FOREIGN KEY (source_message_id)
+        REFERENCES conversation_messages (id)
+        ON DELETE RESTRICT
+);
+
+INSERT INTO memory_evidence_v4 (
+    memory_id, source_message_id, source_type, linked_at
+)
+SELECT memory_id, source_message_id, source_type, linked_at
+FROM memory_evidence;
+
+DROP TABLE memory_evidence;
+ALTER TABLE memory_evidence_v4 RENAME TO memory_evidence;
+CREATE INDEX idx_memory_evidence_source_message
+    ON memory_evidence (source_message_id);
+
+COMMIT;
+"""
+
 
 def initialize_schema(connection: Connection) -> None:
-    """创建最新结构，或把 V1/V2 数据非破坏性升级到 V3。"""
+    """创建最新结构，或把 V1–V3 数据非破坏性升级到 V4。"""
 
     current_version = connection.execute(
         "PRAGMA user_version"
@@ -210,6 +242,29 @@ def initialize_schema(connection: Connection) -> None:
                 "PRAGMA foreign_key_check"
             ).fetchall()
 
+            if violations:
+                raise RuntimeError(
+                    "数据库升级后发现外键关系损坏："
+                    f"{violations}"
+                )
+
+            current_version = 3
+
+        if current_version == 3:
+            # V4 只扩展来源枚举；SQLite 的 CHECK 约束必须通过重建表更新。
+            connection.commit()
+            connection.execute("PRAGMA foreign_keys = OFF")
+            try:
+                connection.executescript(_MIGRATE_V3_TO_V4_SQL)
+            except BaseException:
+                connection.rollback()
+                raise
+            finally:
+                connection.execute("PRAGMA foreign_keys = ON")
+
+            violations = connection.execute(
+                "PRAGMA foreign_key_check"
+            ).fetchall()
             if violations:
                 raise RuntimeError(
                     "数据库升级后发现外键关系损坏："

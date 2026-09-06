@@ -1,13 +1,18 @@
 """编排记忆查看、删除和来源追踪。"""
 
+from datetime import UTC, datetime
+from uuid import uuid4
+
 from longmemory.application.memory_management.dto import (
     MemoryDetails,
     MemoryEvidenceDetails,
+    MemoryCorrectionResult,
 )
-from longmemory.core.common.identifiers import MemoryId
+from longmemory.core.common.identifiers import MemoryId, MessageId
 from longmemory.core.conversation.contracts import ConversationStore
 from longmemory.core.memory.contracts import MemoryStore
-from longmemory.core.memory.models import AtomicMemory
+from longmemory.core.conversation.models import ConversationMessage, MessageRole
+from longmemory.core.memory.models import AtomicMemory, MemoryEvidence, MemorySourceType
 
 
 class MemoryManagementService:
@@ -51,6 +56,69 @@ class MemoryManagementService:
         """
 
         return self._memory_store.delete(memory_id)
+
+    def correct_memory(
+        self,
+        memory_id: MemoryId,
+        corrected_content: str,
+        *,
+        occurred_at: datetime | None = None,
+    ) -> MemoryCorrectionResult:
+        """以追加并取代的方式纠正错误事实，不改写旧记录。
+
+        这里明确只表达“旧事实原本就错误”。事实后来发生变化需要单独
+        提供 valid time，不能借用本用例而丢失时间语义。
+        """
+
+        content = corrected_content.strip()
+        if not content:
+            raise ValueError("corrected_content_empty")
+        if len(content) > 1000:
+            raise ValueError("corrected_content_too_long")
+
+        old_memory = self._memory_store.get(memory_id)
+        if old_memory is None:
+            raise LookupError("memory_not_found")
+        if old_memory.retired_at is not None:
+            raise ValueError("memory_not_active")
+        if content == old_memory.content:
+            raise ValueError("memory_correction_unchanged")
+        duplicate = self._memory_store.find_by_content(
+            content,
+            subject_id=old_memory.subject_id,
+        )
+        if duplicate is not None:
+            raise ValueError("memory_correction_duplicate")
+
+        now = occurred_at or datetime.now(UTC)
+        message = ConversationMessage(
+            id=MessageId(str(uuid4())),
+            role=MessageRole.USER,
+            content=content,
+            created_at=now,
+        )
+        new_memory = AtomicMemory(
+            id=MemoryId(str(uuid4())),
+            subject_id=old_memory.subject_id,
+            content=content,
+            recorded_at=now,
+        )
+        evidence = MemoryEvidence(
+            memory_id=new_memory.id,
+            source_message_id=message.id,
+            source_type=MemorySourceType.USER_CORRECTED,
+            linked_at=now,
+        )
+
+        self._conversation_store.save(message)
+        self._memory_store.save(new_memory, evidence)
+        if not self._memory_store.retire_as_superseded(
+            old_memory.id,
+            superseded_by_id=new_memory.id,
+            retired_at=now,
+        ):
+            raise RuntimeError("memory_correction_race")
+        return MemoryCorrectionResult(old_memory, new_memory, message, evidence)
 
     def _build_details(
         self,

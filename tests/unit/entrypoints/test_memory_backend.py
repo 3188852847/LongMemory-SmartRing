@@ -39,7 +39,7 @@ def test_missing_database_is_not_created(tmp_path):
     assert not path.parent.exists()
 
 
-@pytest.mark.parametrize("version", [0, 1, 2, 4])
+@pytest.mark.parametrize("version", [0, 1, 2, 3, 5])
 def test_old_and_unknown_schema_are_not_migrated(tmp_path, version):
     path = tmp_path / "version.db"
     with sqlite3.connect(path) as conn:
@@ -116,3 +116,34 @@ def test_missing_source_is_visible_in_details(recorded):
     with sqlite3.connect(path) as conn:
         conn.execute("DELETE FROM conversation_messages WHERE id=?", (source_id,))
     assert MemoryBackend(path).get(memory_id)["sources"][0]["message"] is None
+
+
+def test_correction_requires_capability_and_preserves_auditable_history(recorded):
+    path, memory_id, source_id = recorded
+    detail = MemoryBackend(path).get(memory_id)
+    with pytest.raises(MemoryAccessError, match="memory_correction_disabled"):
+        MemoryBackend(path).correct(memory_id, "用户的猫叫年糕。", detail["revision"])
+
+    backend = MemoryBackend(path, allow_correction=True)
+    result = backend.correct(memory_id, "用户的猫叫年糕。", detail["revision"])
+    assert result["corrected"] is True
+    old = backend.get(memory_id)
+    new = backend.get(result["new_memory_id"])
+    assert old["state"] == "retired" and old["superseded_by_id"] == new["id"]
+    assert new["state"] == "active" and new["content"] == "用户的猫叫年糕。"
+    assert new["sources"][0]["source_type"] == "user_corrected"
+    assert new["sources"][0]["message"]["content"] == "用户的猫叫年糕。"
+    assert backend.list_page()["items"][0]["id"] == new["id"]
+    with sqlite3.connect(path) as connection:
+        assert connection.execute("SELECT COUNT(*) FROM conversation_messages WHERE id=?", (source_id,)).fetchone()[0] == 1
+
+
+def test_correction_rejects_stale_revision_without_partial_write(recorded):
+    path, memory_id, _ = recorded
+    backend = MemoryBackend(path, allow_correction=True)
+    before = backend.get(memory_id)
+    with pytest.raises(MemoryAccessError, match="memory_changed"):
+        backend.correct(memory_id, "用户的猫叫年糕。", "0" * 64)
+    assert backend.get(memory_id) == before
+    with sqlite3.connect(path) as connection:
+        assert connection.execute("SELECT COUNT(*) FROM atomic_memories").fetchone()[0] == 1

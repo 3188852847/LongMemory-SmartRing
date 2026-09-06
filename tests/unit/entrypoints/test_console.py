@@ -46,6 +46,7 @@ class FakeBridge:
 
 @asynccontextmanager
 async def console(database=None, allow_memory_delete=False, chat_backend=None,
+                  allow_memory_correction=False,
                   xiaozhi_server=None, memory_runtime_token=None):
     # 先占用随机回环端口，再把精确 Host 交给应用，避免探测后抢占端口。
     sock = socket.socket()
@@ -54,6 +55,7 @@ async def console(database=None, allow_memory_delete=False, chat_backend=None,
     bridge = FakeBridge()
     runner = web.AppRunner(create_app(port=port, bridge=bridge, database=database,
                                      allow_memory_delete=allow_memory_delete, chat_backend=chat_backend,
+                                     allow_memory_correction=allow_memory_correction,
                                      xiaozhi_server=xiaozhi_server,
                                      memory_runtime_token=memory_runtime_token), access_log=None)
     await runner.setup()
@@ -205,6 +207,38 @@ def test_memory_http_browse_sources_confirmed_delete_and_persistence(tmp_path):
         assert connection.execute("SELECT content FROM conversation_messages WHERE id=?", (str(result.user_message.id),)).fetchone()[0] == "我养了一只叫豆包的猫。"
 
 
+def test_memory_http_correction_requires_explicit_semantics_and_confirmation(tmp_path):
+    from longmemory.bootstrap import build_application
+    database = tmp_path / "correction.db"
+    app = build_application(database_path=database)
+    result = app.chat("我养了一只叫豆包的猫。")
+    memory_id = str(result.saved_memories[0].id)
+    app.close()
+
+    async def run():
+        async with console(database, allow_memory_correction=True) as (client, base, _bridge):
+            headers = await login(client, base)
+            url = base + "/api/memories/" + memory_id
+            details = await (await client.get(url)).json()
+            body = {"revision": details["revision"], "corrected_content": "用户的猫叫年糕。",
+                    "correction_kind": "error", "confirm_correction": True}
+            assert (await client.post(url + "/corrections", json=body)).status == 403
+            assert (await client.post(url + "/corrections", headers=headers,
+                                      json={**body, "correction_kind": "change"})).status == 400
+            assert (await client.post(url + "/corrections", headers=headers,
+                                      json={**body, "confirm_correction": False})).status == 400
+            response = await client.post(url + "/corrections", headers=headers, json=body)
+            assert response.status == 200
+            written = await response.json()
+            assert written["source_type"] == "user_corrected"
+            old = await (await client.get(url)).json()
+            new = await (await client.get(base + "/api/memories/" + written["new_memory_id"])).json()
+            assert old["state"] == "retired" and old["superseded_by_id"] == new["id"]
+            assert new["content"] == "用户的猫叫年糕。"
+
+    asyncio.run(run())
+
+
 @pytest.mark.parametrize("query", ["limit=0", "limit=101", "offset=-1", "offset=100001", "state=unknown", "database=other.db", "limit=1&limit=2", "limit=no", "q=" + "x" * 201])
 def test_memory_query_validation(query):
     async def run():
@@ -219,7 +253,8 @@ def test_memory_without_config_is_not_a_fake_empty_database():
         async with console() as (client, base, _bridge):
             await login(client, base)
             config = await (await client.get(base + "/api/memory-config")).json()
-            assert config == {"configured": False, "database": None, "allow_delete": False}
+            assert config == {"configured": False, "database": None, "allow_delete": False,
+                              "allow_correction": False}
             response = await client.get(base + "/api/memories")
             assert response.status == 503
             assert (await response.json())["error"] == "memory_not_configured"

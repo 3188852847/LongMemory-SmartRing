@@ -252,8 +252,30 @@ class SQLiteMemoryStore:
             """,
             (str(memory_id),),
         )
-        self._connection.commit()
+        if self._commit_changes:
+            self._connection.commit()
 
+        return cursor.rowcount == 1
+
+    def retire_as_superseded(
+        self,
+        memory_id: MemoryId,
+        *,
+        superseded_by_id: MemoryId,
+        retired_at: datetime,
+    ) -> bool:
+        """只取代当前有效记忆；历史条目不能被重复纠正。"""
+
+        cursor = self._connection.execute(
+            """
+            UPDATE atomic_memories
+            SET retired_at = ?, superseded_by_id = ?
+            WHERE id = ? AND retired_at IS NULL
+            """,
+            (retired_at.isoformat(), str(superseded_by_id), str(memory_id)),
+        )
+        if self._commit_changes:
+            self._connection.commit()
         return cursor.rowcount == 1
 
     def _insert_evidence(self, evidence: MemoryEvidence):

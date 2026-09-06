@@ -49,6 +49,7 @@ STATIC_FILES = {
 
 
 def create_app(*, port=8765, bridge=None, web_root=None, database=None, allow_memory_delete=False,
+               allow_memory_correction=False,
                chat_backend=None, experiment_backend=None, job_backend=None, instance_id=None,
                xiaozhi_server=None, memory_runtime_token=None):
     sessions = Sessions()
@@ -117,7 +118,11 @@ def create_app(*, port=8765, bridge=None, web_root=None, database=None, allow_me
     app.router.add_get("/api/device", device, allow_head=False)
     app.router.add_get("/api/device/volume", volume, allow_head=False)
     app.router.add_post("/api/device/volume", volume)
-    register_memory_routes(app, MemoryBackend(database, allow_delete=allow_memory_delete))
+    register_memory_routes(app, MemoryBackend(
+        database,
+        allow_delete=allow_memory_delete,
+        allow_correction=allow_memory_correction,
+    ))
     register_chat_routes(app, chat_backend)
     if memory_runtime_token:
         register_memory_runtime_routes(app, chat_backend)
@@ -134,8 +139,9 @@ def create_app(*, port=8765, bridge=None, web_root=None, database=None, allow_me
 def main():
     parser = argparse.ArgumentParser(description="LongMemory 本机控制台（不会自动启动小智）")
     parser.add_argument("--port", type=int, default=8765)
-    parser.add_argument("--database", type=Path, help="已有 V3 记忆数据库；不自动建库或迁移")
+    parser.add_argument("--database", type=Path, help="已有 V4 记忆数据库；不自动建库或迁移")
     parser.add_argument("--allow-memory-delete", action="store_true", help="启用网页单条删除；默认只读")
+    parser.add_argument("--allow-memory-correction", action="store_true", help="启用网页人工纠正；旧记忆保留并标记为已取代")
     parser.add_argument("--enable-chat", action="store_true", help="允许网页向指定已有记忆库写入对话和记忆")
     parser.add_argument("--memory-audit-log", type=Path, help="共享记忆 Runtime 的脱敏审计日志")
     parser.add_argument("--chat-provider", choices=("fake", "openai_compatible"), default="fake")
@@ -153,6 +159,8 @@ def main():
         parser.error("port 必须在 1024–65535 之间")
     if args.allow_memory_delete and args.database is None:
         parser.error("启用删除前必须用 --database 指定已有数据库")
+    if args.allow_memory_correction and args.database is None:
+        parser.error("启用纠正前必须用 --database 指定已有数据库")
     if args.enable_chat and args.database is None:
         parser.error("启用文字聊天前必须用 --database 指定已有数据库")
     if args.memory_audit_log and not args.enable_chat:
@@ -229,14 +237,21 @@ def main():
         parser.error("LONGMEMORY_RUNTIME_TOKEN 必须是启动器生成的 64 位小写十六进制值")
     print(f"控制台：http://127.0.0.1:{args.port}；仅本机访问，Ctrl+C 停止。")
     if args.database:
-        print(f"记忆库：{args.database.resolve()}；管理页" + ("允许单条删除（L0 保留）" if args.allow_memory_delete else "只读"))
+        capabilities = []
+        if args.allow_memory_correction:
+            capabilities.append("允许人工纠正（旧记录保留）")
+        if args.allow_memory_delete:
+            capabilities.append("允许单条删除（L0 保留）")
+        print(f"记忆库：{args.database.resolve()}；管理页" + ("、".join(capabilities) if capabilities else "只读"))
     if chat_backend:
         extraction = "模型辅助（失败保留 L0）" if args.memory_extraction == "llm" else "规则基线"
         retrieval = "关键词＋本地 BGE 融合" if args.memory_retrieval == "hybrid" else "关键词基线"
         print(f"文字聊天已启用：{args.chat_provider} / {args.assistant_role}；L1 提取={extraction}，召回={retrieval}，不驱动圆屏播音。")
     audit_handler = configure_file_logging(args.memory_audit_log) if args.memory_audit_log else None
     try:
-        web.run_app(create_app(port=args.port, database=args.database, allow_memory_delete=args.allow_memory_delete, chat_backend=chat_backend, job_backend=job_backend,
+        web.run_app(create_app(port=args.port, database=args.database, allow_memory_delete=args.allow_memory_delete,
+                               allow_memory_correction=args.allow_memory_correction,
+                               chat_backend=chat_backend, job_backend=job_backend,
                                instance_id=os.environ.get("LONGMEMORY_LAUNCHER_INSTANCE"), xiaozhi_server=args.xiaozhi_server,
                                memory_runtime_token=runtime_token),
                     host="127.0.0.1", port=args.port, access_log=None, print=None)
