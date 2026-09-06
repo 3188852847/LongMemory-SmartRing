@@ -10,6 +10,9 @@ EXPECTED = {
     "core/handle/helloHandle.py": "77be3faf5c8201450f1b98c51140a8960155a9bf95f67dfc288768ba14857d51",
     "core/providers/tools/device_mcp/mcp_handler.py": "05e1cb5b7fe1cd2e7219ccc3445cd5f6af5ec5344b532d65f659e32c0394e1dc",
     "core/providers/tools/device_mcp/mcp_client.py": "f0df40319be70ec87bccfcc7a6c758bae9ad712e01682c0c8c8da74809dfa4c5",
+    "core/handle/sendAudioHandle.py": "6b610cc04bf05a75964f5fe668bfda7fd17b087ef8f2a938e1bc8ed9b0c52387",
+    "core/providers/tts/base.py": "8c9c6d9da3774d2f78d05e5d0e7c5081d750752466f36a593733911430bac00f",
+    "core/providers/tts/dto/dto.py": "6ba9742e4778bcd31980f1f9347d20aecbed065f152735ef407516b7b70d756c",
 }
 
 

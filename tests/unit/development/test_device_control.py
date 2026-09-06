@@ -3,6 +3,8 @@
 import asyncio
 import importlib.util
 import json
+import time
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -78,6 +80,25 @@ def rig():
     bridge = control.DeviceControl("aa:bb:cc:dd:ee:ff", timeout=0.02)
     bridge.attach(conn, "AA:BB:CC:DD:EE:FF")
     return bridge, conn, socket
+
+
+def announcement_rig():
+    queued = []
+
+    async def sender(conn, text):
+        queued.append((conn, text))
+
+    bridge, conn, socket = rig()
+    bridge.announcement_sender = sender
+    # 生产代码只要求连接已经登记事件循环；离线测试用非空哨兵即可。
+    conn.loop = object()
+    conn.tts = SimpleNamespace(
+        tts_text_queue=asyncio.Queue(), tts_audio_queue=asyncio.Queue()
+    )
+    conn.client_is_speaking = False
+    conn.client_have_voice = False
+    conn.calling = False
+    return bridge, conn, socket, queued
 
 
 def test_roundtrip_requires_ack_and_readback_and_reserves_handshake_ids():
@@ -190,4 +211,123 @@ def test_tracking_detaches_even_when_original_handler_raises():
         with pytest.raises(ValueError):
             await Connection().handle_connection(ws)
         assert not bridge.connections
+    asyncio.run(run())
+
+
+def test_announcement_is_queued_without_claiming_device_acknowledgement():
+    async def run():
+        bridge, conn, socket, queued = announcement_rig()
+        expires = int(time.time() * 1000) + 30_000
+        result = await bridge.announce("这是一条主动播报通道测试。", expires)
+        assert queued == [(conn, "这是一条主动播报通道测试。")]
+        assert result["state"] == "queued"
+        assert result["playback_acknowledgement"] == "unavailable"
+        assert result["expires_at_ms"] == expires
+        assert len(result["operation_id"]) == 32
+        assert not socket.calls
+    asyncio.run(run())
+
+
+def test_status_reports_announcement_support_and_current_readiness():
+    bridge, conn, _, _ = announcement_rig()
+    assert bridge.status()["announcement_supported"] is True
+    assert bridge.status()["announcement_ready"] is True
+    conn.client_is_speaking = True
+    status = bridge.status()
+    assert status["announcement_supported"] is True
+    assert status["announcement_ready"] is False
+    assert status["announcement_reason"] == "device_busy"
+
+
+@pytest.mark.parametrize("text", ["", " leading", "trailing ", "line\nbreak", "x" * 81])
+def test_announcement_rejects_invalid_text(text):
+    async def run():
+        bridge, _, _, queued = announcement_rig()
+        with pytest.raises(control.ControlError, match="invalid_announcement"):
+            await bridge.announce(text, int(time.time() * 1000) + 30_000)
+        assert not queued
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("offset,code", [(-1, "announcement_expired"), (301_000, "invalid_expiry")])
+def test_announcement_rejects_expired_or_excessive_ttl(offset, code):
+    async def run():
+        bridge, _, _, queued = announcement_rig()
+        with pytest.raises(control.ControlError, match=code):
+            await bridge.announce("测试", int(time.time() * 1000) + offset)
+        assert not queued
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("state", ["speaking", "voice", "calling", "text_queue", "audio_queue"])
+def test_announcement_never_interrupts_busy_device(state):
+    async def run():
+        bridge, conn, _, queued = announcement_rig()
+        if state == "speaking":
+            conn.client_is_speaking = True
+        elif state == "voice":
+            conn.client_have_voice = True
+        elif state == "calling":
+            conn.calling = True
+        elif state == "text_queue":
+            await conn.tts.tts_text_queue.put(object())
+        else:
+            await conn.tts.tts_audio_queue.put(object())
+        with pytest.raises(control.ControlError, match="device_busy"):
+            await bridge.announce("测试", int(time.time() * 1000) + 30_000)
+        assert not queued
+    asyncio.run(run())
+
+
+def test_real_announcement_sender_reuses_tts_lifecycle_without_chat_history(monkeypatch):
+    events = []
+
+    async def send_tts_message(conn, state):
+        events.append(("state", state))
+
+    class ContentType:
+        ACTION = "ACTION"
+        TEXT = "TEXT"
+
+    class SentenceType:
+        FIRST = "FIRST"
+        LAST = "LAST"
+
+    class DTO:
+        def __init__(self, **values):
+            self.__dict__.update(values)
+
+    send_module = SimpleNamespace(send_tts_message=send_tts_message)
+    dto_module = SimpleNamespace(
+        ContentType=ContentType, TTSMessageDTO=DTO, SentenceType=SentenceType
+    )
+    monkeypatch.setitem(sys.modules, "core.handle.sendAudioHandle", send_module)
+    monkeypatch.setitem(sys.modules, "core.providers.tts.dto.dto", dto_module)
+
+    class Queue:
+        def put(self, item):
+            events.append(("queue", item.sentence_type, item.content_type))
+
+    class TTS:
+        tts_text_queue = Queue()
+
+        def store_tts_text(self, sentence_id, text):
+            events.append(("store", sentence_id, text))
+
+        def tts_one_sentence(self, conn, content_type, **values):
+            events.append(("text", content_type, values["content_detail"], values["sentence_id"]))
+
+    async def run():
+        conn = SimpleNamespace(
+            client_abort=True, client_is_speaking=False, sentence_id=None, tts=TTS()
+        )
+        await control.enqueue_announcement(conn, "测试播报")
+        assert conn.client_abort is False and conn.client_is_speaking is True
+        assert isinstance(conn.sentence_id, str) and len(conn.sentence_id) == 32
+        assert events[0] == ("state", "start")
+        assert events[1] == ("store", conn.sentence_id, "测试播报")
+        assert events[2] == ("queue", "FIRST", "ACTION")
+        assert events[3] == ("text", "TEXT", "测试播报", conn.sentence_id)
+        assert events[4] == ("queue", "LAST", "ACTION")
+
     asyncio.run(run())

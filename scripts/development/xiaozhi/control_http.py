@@ -75,10 +75,24 @@ def create_app(control, token, port=PORT):
             raise ControlError("invalid_fields", 400)
         return web.json_response(await control.set_volume(body["volume"]))
 
+    async def announce(request):
+        if request.content_type != "application/json":
+            raise ControlError("json_required", 415)
+        try:
+            body = await request.json()
+        except (ValueError, UnicodeError):
+            raise ControlError("invalid_json", 400) from None
+        if not isinstance(body, dict) or set(body) != {"text", "expires_at_ms"}:
+            raise ControlError("invalid_fields", 400)
+        return web.json_response(
+            await control.announce(body["text"], body["expires_at_ms"])
+        )
+
     app = web.Application(middlewares=[guard], client_max_size=1024)
     app.router.add_get("/api/device", status, allow_head=False)
     app.router.add_get("/api/device/volume", read_volume, allow_head=False)
     app.router.add_post("/api/device/volume", set_volume)
+    app.router.add_post("/api/device/announcement", announce)
     return app
 
 

@@ -6,12 +6,15 @@
 
 import asyncio
 import json
+import time
 from uuid import uuid4
 
 
 STATUS_TOOL = "self.get_device_status"
 VOLUME_TOOL = "self.audio_speaker.set_volume"
 MIN_VOLUME, MAX_VOLUME = 5, 60  # 技术验证阶段限制，非硬件音量范围。
+MAX_ANNOUNCEMENT_CHARS = 80
+MAX_ANNOUNCEMENT_TTL_SECONDS = 300
 
 
 class ControlError(Exception):
@@ -68,9 +71,10 @@ def decode_result(result):
 
 
 class DeviceControl:
-    def __init__(self, allowed_device_id, timeout=5):
+    def __init__(self, allowed_device_id, timeout=5, announcement_sender=None):
         self.allowed_device_id = allowed_device_id.lower()
         self.timeout = timeout
+        self.announcement_sender = announcement_sender or enqueue_announcement
         self.connections = {}
         self.operation_lock = asyncio.Lock()
 
@@ -102,6 +106,7 @@ class DeviceControl:
         """只读缓存的握手状态；此接口不向圆屏发命令，也不返回工具描述全文。"""
         result = {"connection_count": len(self.connections), "ready": False,
                   "read_volume_supported": False, "set_volume_supported": False,
+                  "announcement_supported": False, "announcement_ready": False,
                   "allowed_volume": {"minimum": MIN_VOLUME, "maximum": MAX_VOLUME}}
         try:
             conn = self._connection()
@@ -113,6 +118,19 @@ class DeviceControl:
                     result[field] = True
                 except ControlError:
                     pass
+            tts = getattr(conn, "tts", None)
+            if (tts is not None and getattr(conn, "loop", None) is not None
+                    and hasattr(tts, "tts_text_queue")
+                    and hasattr(tts, "tts_audio_queue")):
+                result["announcement_supported"] = True
+                busy = (getattr(conn, "client_is_speaking", False)
+                        or getattr(conn, "client_have_voice", False)
+                        or getattr(conn, "calling", False)
+                        or not tts.tts_text_queue.empty()
+                        or not tts.tts_audio_queue.empty())
+                result["announcement_ready"] = not busy
+                if busy:
+                    result["announcement_reason"] = "device_busy"
         except ControlError as exc:
             result["reason"] = exc.code
         return result
@@ -195,6 +213,79 @@ class DeviceControl:
                 result["reason"] = exc.code
             result["operation_id"] = uuid4().hex
             return result
+
+    async def announce(self, text, expires_at_ms):
+        """把一条短测试文本放入当前连接的既有 TTS 队列。
+
+        这里的成功只表示服务端已接受并排队；当前协议没有设备播放完成回执，
+        因此绝不返回 acknowledged/played 之类会夸大结果的状态。
+        """
+        if (not isinstance(text, str) or text != text.strip()
+                or not text or len(text) > MAX_ANNOUNCEMENT_CHARS
+                or any(ord(char) < 32 for char in text)):
+            raise ControlError("invalid_announcement", 400)
+        if type(expires_at_ms) is not int:
+            raise ControlError("invalid_expiry", 400)
+        remaining_ms = expires_at_ms - int(time.time() * 1000)
+        if remaining_ms <= 0:
+            raise ControlError("announcement_expired", 409)
+        if remaining_ms > MAX_ANNOUNCEMENT_TTL_SECONDS * 1000:
+            raise ControlError("invalid_expiry", 400)
+        if self.operation_lock.locked():
+            raise ControlError("control_busy")
+        async with self.operation_lock:
+            conn = self._connection()
+            tts = getattr(conn, "tts", None)
+            if (tts is None or getattr(conn, "loop", None) is None
+                    or not hasattr(tts, "tts_text_queue")
+                    or not hasattr(tts, "tts_audio_queue")):
+                raise ControlError("tts_not_ready")
+            # 不打断用户讲话、模型回答或尚未发完的音频；第一版也不排队等待。
+            if (getattr(conn, "client_is_speaking", False)
+                    or getattr(conn, "client_have_voice", False)
+                    or getattr(conn, "calling", False)
+                    or not tts.tts_text_queue.empty()
+                    or not tts.tts_audio_queue.empty()):
+                raise ControlError("device_busy")
+            operation_id = uuid4().hex
+            try:
+                await self.announcement_sender(conn, text)
+            except ControlError:
+                raise
+            except Exception:
+                raise ControlError("announcement_enqueue_failed", 502) from None
+            return {
+                "operation_id": operation_id,
+                "state": "queued",
+                "playback_acknowledgement": "unavailable",
+                "expires_at_ms": expires_at_ms,
+            }
+
+
+async def enqueue_announcement(conn, text):
+    """复用固定小智快照的 TTS 生命周期，不写对话历史、不调用模型。"""
+    from core.handle.sendAudioHandle import send_tts_message
+    from core.providers.tts.dto.dto import ContentType, TTSMessageDTO, SentenceType
+
+    sentence_id = uuid4().hex
+    conn.client_abort = False
+    conn.sentence_id = sentence_id
+    await send_tts_message(conn, "start")
+    conn.client_is_speaking = True
+    conn.tts.store_tts_text(sentence_id, text)
+    conn.tts.tts_text_queue.put(TTSMessageDTO(
+        sentence_id=sentence_id,
+        sentence_type=SentenceType.FIRST,
+        content_type=ContentType.ACTION,
+    ))
+    conn.tts.tts_one_sentence(
+        conn, ContentType.TEXT, content_detail=text, sentence_id=sentence_id
+    )
+    conn.tts.tts_text_queue.put(TTSMessageDTO(
+        sentence_id=sentence_id,
+        sentence_type=SentenceType.LAST,
+        content_type=ContentType.ACTION,
+    ))
 
 
 def install_connection_tracking(connection_class, control):

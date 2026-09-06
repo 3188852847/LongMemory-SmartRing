@@ -96,6 +96,10 @@ async def run_cli(port, token_path, *args):
 
 async def run():
     device = Device()
+    announcements = []
+
+    async def queue_announcement(conn, text):
+        announcements.append((conn, text))
     # 输入来自设备握手工具列表，检验上游原名 -> 净化名转换不影响定向调用。
     await handler_module.handle_mcp_message(device, device.mcp_client, {
         "id": 2, "result": {"tools": [
@@ -103,7 +107,16 @@ async def run():
             {"name": VOLUME_TOOL, "inputSchema": {"type": "object", "properties": {
                 "volume": {"type": "integer", "minimum": 0, "maximum": 100}}, "required": ["volume"]}},
         ]}})
-    bridge = DeviceControl("aa:bb:cc:dd:ee:ff")
+    bridge = DeviceControl(
+        "aa:bb:cc:dd:ee:ff", announcement_sender=queue_announcement
+    )
+    device.loop = asyncio.get_running_loop()
+    device.client_is_speaking = False
+    device.client_have_voice = False
+    device.calling = False
+    device.tts = types.SimpleNamespace(
+        tts_text_queue=asyncio.Queue(), tts_audio_queue=asyncio.Queue()
+    )
     bridge.attach(device, "aa:bb:cc:dd:ee:ff")
     with tempfile.TemporaryDirectory(prefix="control-probe-") as directory:
         token_path = Path(directory) / "control.token"
@@ -158,6 +171,13 @@ async def run():
             assert not device.mcp_client.call_results
             code, result = await run_cli(port, token_path, "read-volume")
             assert code == 0 and result == {"volume": 30}
+            code, result = await run_cli(
+                port, token_path, "announce", "这是一条主动播报通道测试。",
+                "--ttl-seconds", "30"
+            )
+            assert code == 0 and result["state"] == "queued"
+            assert result["playback_acknowledgement"] == "unavailable"
+            assert announcements == [(device, "这是一条主动播报通道测试。")]
         finally:
             await runner.cleanup()
             sock.close()

@@ -1,5 +1,12 @@
 # Changelog
 
+### P4.1 round-screen proactive delivery probe（2026-09-06）
+
+- 固定小智快照的受限控制桥新增主动短文本技术验证：复用已认证单设备连接的既有 TTS 队列，不改固件、不调用模型、不写聊天历史或 L0–L3。
+- 请求限制为 1–80 字符单行文本和 5–300 秒有效期；设备离线、忙碌、TTS 未就绪或过期时立即拒绝，不等待、不打断、不重试。
+- 返回值明确停在 `queued/playback_acknowledgement=unavailable`；当前协议没有播放完成回执，真实圆屏待机试听前不宣称主动播报已通过。
+- 新增 CLI `announce`、状态能力字段、上游 TTS 文件快照校验、43 项单元测试及独立回环传输探针。见 ADR-0058。
+
 ### P3.9 explicit low-frequency consolidation cycle（2026-09-06）
 
 - 新增使用独立 SQLite 连接的真实低频周期：同一后台线程先运行 L1→L2，再重新读取数据库并按跨时间门槛决定是否运行 L2→L3；不存在或版本不符的数据库会拒绝且不创建空库。
