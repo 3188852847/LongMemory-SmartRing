@@ -26,7 +26,7 @@
 | React Router | 多页面路由、共享导航、兼容入口和错误页 | 不引入 SSR，不要求常驻 Node 服务 |
 | TanStack Query | API 查询、缓存、刷新、轮询和 mutation 状态重复 | 危险写操作不自动重试；CSRF 与结果核对不变 |
 | Vitest + React Testing Library | React 组件交互缺少自动验证 | 不替代 Python API/领域测试 |
-| Pydantic | API 和模型结构化输入大量手写校验 | 先做入口试点，不进入 Memory Core；保持既有错误契约 |
+| Pydantic | API 和模型结构化输入大量手写校验 | 聊天消息入口试点已通过；不进入 Memory Core，按风险渐进覆盖并保持既有错误契约 |
 
 依赖安装、锁文件更新和浏览器下载按项目约定由用户执行；代码变更必须在锁定版本下验证。
 
@@ -63,9 +63,9 @@
 1. 已建立 React Router、TanStack Query 的安全默认值和统一 AppShell。
 2. 已加入 Vitest/React Testing Library，验证共享导航、API 安全约束与危险 mutation 默认不重试；页面级错误状态随迁移继续补充。
 3. 已以设备与状态页验证查询、5 秒轮询和受控 mutation，保留旧页回退。
-4. 已聚合角色、声音与浏览器外观；下一步迁移实验中心，逐项清理旧资源。
-5. 选择一个小型 Python API 做 Pydantic 契约试点；验证后渐进覆盖。
-6. React 页面基本统一后加入 Playwright 关键流程。
+4. 已聚合角色、声音与浏览器外观，并完成实验中心运行、档案与复核迁移；原版页面短期保留回退。
+5. 已在聊天消息 POST 完成 Pydantic 2.13.5 严格契约试点，维持原 400 错误、响应和幂等语义；其他接口按写入风险渐进覆盖，不批量改造。
+6. React 页面已经基本统一；下一步加入少量 Playwright 关键流程。
 7. 收束基础设施并回到 P3：事实变化、L2 场景、L3 用户画像和日常召回质量。
 8. P4 先验证主动投递，再选择持久调度技术。
 

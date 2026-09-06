@@ -5,10 +5,12 @@ from dataclasses import asdict, dataclass, field
 import hashlib
 import secrets
 import re
-from uuid import uuid4, UUID
+from uuid import uuid4
 
 from aiohttp import web
+from pydantic import ValidationError
 from ..chat_store import ChatStore
+from ..contracts import ChatMessageRequest
 
 MAX_TURNS = 40
 MAX_CHATS = 32
@@ -139,13 +141,9 @@ def register_chat_routes(app, backend):
         data_request = request.clone(client_max_size=8192)
         try:
             body = await data_request.json()
-            if not isinstance(body, dict) or set(body) != {"text", "request_id"}:
-                raise ValueError
-            text, request_id = body["text"], body["request_id"]
-            if (not isinstance(text, str) or not text.strip() or len(text) > 1000
-                    or not isinstance(request_id, str) or str(UUID(request_id)) != request_id):
-                raise ValueError
-        except (ValueError, TypeError, UnicodeError):
+            message = ChatMessageRequest.model_validate(body)
+            text, request_id = message.text, message.request_id
+        except (ValidationError, ValueError, TypeError, UnicodeError):
             return web.json_response({"error": "invalid_chat_message"}, status=400)
         previous = chat.request_ids.get(request_id)
         if previous is not None:

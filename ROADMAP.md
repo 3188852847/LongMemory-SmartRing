@@ -16,7 +16,7 @@
 
 Web 控制台依据 ADR-0032 渐进统一到 React，不进行一次性重写。聊天、记忆、设备、个性化设置以及实验中心的运行/阅读/复核均已迁移；统一导航进入 `/experiments-react`，原生入口继续作为短期回退。Python Tk 启动面板不属于本轮 Web 迁移。
 
-技术基础按 ADR-0033 分阶段收敛：React Router、共享 AppShell、Vitest/React Testing Library 已建立，TanStack Query 已覆盖设备、设置与实验的查询、轮询和受控 mutation；下一步做 Python API 的 Pydantic 契约试点，继续保留 aiohttp。FastAPI、FTS5、APScheduler、SSE/WebSocket、独立向量库和智能体框架均按明确触发条件评估，不视为已采用。详见[技术策略](docs/architecture/technology-strategy.md)。
+技术基础按 ADR-0033 分阶段收敛：React Router、共享 AppShell、Vitest/React Testing Library 已建立，TanStack Query 已覆盖设备、设置与实验的查询、轮询和受控 mutation；Pydantic 已在聊天消息入口完成严格契约与旧错误兼容试点，aiohttp 继续保留。下一步加入少量 Playwright 日常关键路径，再收束基础设施回到 P3。FastAPI、FTS5、APScheduler、SSE/WebSocket、独立向量库和智能体框架均按明确触发条件评估，不视为已采用。详见[技术策略](docs/architecture/technology-strategy.md)。
 
 阶段范围和完成标准见[产品需求](docs/requirements/companion-product.md)；候选选项见[自定义清单](docs/requirements/自定义功能清单.md)。本机控制台、校园网模型依赖和小智独立进程边界不因路线变化而消失。不承诺持续后台运行、开机自启或公网访问已实现。
 

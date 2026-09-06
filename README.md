@@ -20,6 +20,8 @@ P2 助手角色设置已接入 `/chat-react`：网页编辑、版本化保存；
 
 Web 控制台已渐进统一到 React + TypeScript + Vite + antd：聊天 `/chat-react`、记忆 `/memories`、设备 `/device`、个性化 `/settings` 与实验 `/experiments-react` 共用 React Router、AppShell 和外观状态；TanStack Query 管理服务器状态及不自动重试的写操作。实验页保留预检/确认分离、任务进度与逐题复核；原生入口暂留回退。组件测试使用 Vitest/React Testing Library。见[体验指南](docs/guides/React聊天页.md)、[技术策略](docs/architecture/technology-strategy.md)、[迁移清单](docs/architecture/react-chat-migration.md)与 [ADR-0032](docs/adr/0032-progressive-react-console-migration.md)。
 
+Python HTTP 入口继续使用 aiohttp；Pydantic 2.13.5 已在聊天消息 POST 完成首个严格契约试点，保持原有 400 错误、响应和幂等行为，不进入 Memory Core，也不代表已决定迁移 FastAPI。见 [ADR-0033](docs/adr/0033-staged-technology-adoption.md)。
+
 P2：聊天页支持浅色/深色/跟随系统及字号保存，配置默认折叠。见[外观设置](docs/guides/外观设置.md)。角色编辑、显式圆屏配置同步及音色试听已实现；不改日常记忆算法。
 
 P1 网页会话恢复已实现：列表、新建、切换、重命名，同一浏览器可刷新/重启续聊。采用独立旁库，不迁移原记忆库；旧未分组聊天不自动导入。操作与边界见[聊天会话指南](docs/guides/聊天会话.md)。

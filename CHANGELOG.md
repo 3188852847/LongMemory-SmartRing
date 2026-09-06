@@ -1,5 +1,12 @@
 # Changelog
 
+### Pydantic API contract pilot（2026-09-06）
+
+- `console` 可选依赖锁定 Pydantic 2.13.5；首个试点仅覆盖聊天消息提交，在 aiohttp 与 Memory Core 之间集中约束严格字段、正文长度/空白和规范 UUID。
+- 继续将全部契约失败映射为既有 `400 invalid_chat_message`，不泄漏 Pydantic 验证细节或引入框架默认 422；重复请求、响应、数据库和记忆算法均未改变。
+- 新增契约单测与路由兼容用例，覆盖额外字段、错误类型、超长/空白正文和非规范 UUID。552 项 Python 全量回归通过。
+- 试点证明薄入口契约可行，但不构成一次性迁移全部 API 或改用 FastAPI 的依据；后续按写操作风险渐进覆盖。
+
 ### Progressive React console: experiment job control（2026-09-06）
 
 - `/experiments-react` 完成冻结检索回答作业迁移：选择档案/模型/字符预算、本地预检、风险确认、运行进度、停止后续请求和打开结果均由 React 承载；统一导航改为进入 React 实验中心，原生 `/experiments` 保留回退。

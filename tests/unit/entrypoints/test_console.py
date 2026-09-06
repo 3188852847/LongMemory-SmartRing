@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager
 import pytest
 
 aiohttp = pytest.importorskip("aiohttp", reason="网页测试需要 uv sync --extra console")
+pydantic = pytest.importorskip("pydantic", reason="网页契约测试需要 uv sync --extra console")
 from aiohttp import web
 from longmemory.entrypoints.api.server import create_app
 from longmemory.adapters.device_control.xiaozhi import BridgeError

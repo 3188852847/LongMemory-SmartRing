@@ -60,15 +60,23 @@ def test_chat_replay_reset_and_owner_isolation(backend):
     asyncio.run(run())
 
 
-@pytest.mark.parametrize("text", ["", "  ", 1, "字" * 1001])
-def test_chat_input_validation(backend, text):
+@pytest.mark.parametrize("body", [
+    {"text": "", "request_id": str(uuid4())},
+    {"text": "  ", "request_id": str(uuid4())},
+    {"text": 1, "request_id": str(uuid4())},
+    {"text": "字" * 1001, "request_id": str(uuid4())},
+    {"text": "合成", "request_id": str(uuid4()).upper()},
+    {"text": "合成", "request_id": str(uuid4()), "extra": True},
+])
+def test_chat_input_validation(backend, body):
     async def run():
         async with console(chat_backend=backend) as (client, base, _):
             headers = await login(client, base)
             chat_id = (await (await client.post(base + "/api/chats", headers=headers)).json())["chat_id"]
             response = await client.post(base + f"/api/chats/{chat_id}/messages", headers=headers,
-                                         json={"text": text, "request_id": str(uuid4())})
+                                         json=body)
             assert response.status == 400
+            assert await response.json() == {"error": "invalid_chat_message"}
     asyncio.run(run())
 
 
