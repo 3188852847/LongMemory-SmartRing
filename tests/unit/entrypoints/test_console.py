@@ -360,11 +360,23 @@ def test_internal_runtime_requires_token_and_is_immediately_shared_with_web(tmp_
             assert response.status == 200
             written = await response.json()
             assert written["added"] == 1 and "豆包" in written["context"]
+            assert written["memory_command"] is None
+
+            corrected_response = await client.post(
+                endpoint,
+                headers={"Authorization": "Bearer " + token},
+                json={"version": 1, "query": "不是豆包，是年糕"},
+            )
+            assert corrected_response.status == 200
+            corrected = await corrected_response.json()
+            assert corrected["memory_command"]["kind"] == "correct"
+            assert corrected["memory_command"]["status"] == "applied"
+            assert corrected["memory_command"]["writes"][0]["operation"] == "supersede"
 
             # 网页后端没有另开一套运行时；同一进程立刻读取圆屏刚写入的事实。
             recalled = await asyncio.to_thread(backend.run, "我的猫叫什么", ())
-            assert recalled["status"] == "completed" and "豆包" in recalled["answer"]
-            assert recalled["retrieved"][0]["source_event_ids"] == (written["turn_id"],)
+            assert recalled["status"] == "completed" and "年糕" in recalled["answer"]
+            assert recalled["retrieved"][0]["source_event_ids"] == (corrected["turn_id"],)
 
     asyncio.run(run())
 

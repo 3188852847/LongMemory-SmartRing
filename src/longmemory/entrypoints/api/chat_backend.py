@@ -63,7 +63,7 @@ class ChatBackend:
                   "memory_warning": None, "retrieval_strategy": None,
                   "retrieval_warning": None, "scenario_retrieved": None,
                   "scenario_use_enabled": False, "persona_retrieved": None,
-                  "persona_use_enabled": False}
+                  "persona_use_enabled": False, "memory_command": None}
         try:
             runtime = self.memory_runtime()
             runtime_status = runtime.status()
@@ -86,6 +86,8 @@ class ChatBackend:
             result["scenario_retrieved"] = [asdict(item) for item in prepared.scenarios]
             result["persona_use_enabled"] = prepared.persona_use_enabled
             result["persona_retrieved"] = [asdict(item) for item in prepared.personas]
+            result["memory_command"] = (asdict(prepared.memory_command)
+                                        if prepared.memory_command is not None else None)
             result.update(user_saved=True, event_id=event.event_id,
                           writes=[asdict(item) for item in observed.writes],
                           memory_processing=observed.processing_status,

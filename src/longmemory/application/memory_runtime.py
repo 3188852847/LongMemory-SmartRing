@@ -14,6 +14,7 @@ from longmemory.methods.contracts import (
 )
 from longmemory.application.scenario_recall import ScenarioRecallItem, ScenarioRecallResult
 from longmemory.application.persona_recall import PersonaRecallItem, PersonaRecallResult
+from longmemory.application.natural_memory_commands import NaturalMemoryCommandResult
 
 
 @dataclass(frozen=True, slots=True)
@@ -29,6 +30,7 @@ class PreparedMemoryTurn:
     scenarios: tuple[ScenarioRecallItem, ...]
     persona_use_enabled: bool
     personas: tuple[PersonaRecallItem, ...]
+    memory_command: NaturalMemoryCommandResult | None
 
 
 class MemoryRuntime:
@@ -40,7 +42,7 @@ class MemoryRuntime:
     """
 
     def __init__(self, database: Path, *, method: MemoryMethod, scenario_provider=None,
-                 persona_provider=None) -> None:
+                 persona_provider=None, memory_command_handler=None) -> None:
         self.database = database.resolve()
         # Runtime 只编排统一方法契约。具体使用规则、LLM 提取还是其他方法，
         # 必须由进程入口的装配层决定，不能在应用层偷偷选择实现。
@@ -54,16 +56,20 @@ class MemoryRuntime:
         self._scenario_use_enabled = False
         self._persona_provider = persona_provider
         self._persona_use_enabled = False
+        self._memory_command_handler = memory_command_handler
 
     def prepare_user(self, text: str) -> PreparedMemoryTurn:
         event = MemoryEvent(str(uuid4()), "user", text, datetime.now(UTC))
         with self._lock:
             self._ensure_open()
-            observation = (
-                self._method.observe(event)
-                if self._write_enabled
-                else self._method.archive(event)
-            )
+            command = None
+            if self._write_enabled and self._memory_command_handler is not None:
+                command = self._memory_command_handler.handle(event)
+            if command is not None:
+                observation = ObservationResult(event.event_id, command.writes)
+            else:
+                observation = (self._method.observe(event) if self._write_enabled
+                               else self._method.archive(event))
             support = (
                 self._method.recall(text)
                 if self._use_enabled
@@ -95,6 +101,15 @@ class MemoryRuntime:
                         support.call_id, combined, support.retrieved,
                         strategy, support.warning_code,
                     )
+            if command is not None:
+                operation_context = "[记忆操作结果]\n" + command.notice
+                combined = "\n\n".join(
+                    value for value in (operation_context, support.context) if value
+                )
+                support = MemorySupport(
+                    support.call_id, combined, support.retrieved,
+                    support.retrieval_strategy, support.warning_code,
+                )
             write_enabled = self._write_enabled
             use_enabled = self._use_enabled
             scenario_use_enabled = self._scenario_use_enabled
@@ -102,7 +117,7 @@ class MemoryRuntime:
         return PreparedMemoryTurn(
             event, observation, support, write_enabled, use_enabled,
             scenario_use_enabled, scenario_result.items,
-            persona_use_enabled, persona_result.items,
+            persona_use_enabled, persona_result.items, command,
         )
 
     def record_assistant(self, text: str) -> ObservationResult:
@@ -163,6 +178,8 @@ class MemoryRuntime:
                         self._scenario_provider.close()
                     if self._persona_provider is not None:
                         self._persona_provider.close()
+                    if self._memory_command_handler is not None:
+                        self._memory_command_handler.close()
                     self._closed = True
 
     def _ensure_open(self) -> None:

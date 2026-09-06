@@ -209,6 +209,7 @@ def main():
         from longmemory.application.memory_runtime import MemoryRuntime
         from longmemory.adapters.storage.sqlite_scenario_recall import SQLiteScenarioRecallProvider
         from longmemory.adapters.storage.sqlite_persona_recall import SQLitePersonaRecallProvider
+        from longmemory.adapters.storage.sqlite_natural_memory_commands import SQLiteNaturalMemoryCommandHandler
         from longmemory.core.memory.retrieval.service import HybridMemoryRetriever
         from longmemory.infrastructure.config.settings import load_model_settings
         from longmemory.methods.daily_llm.method import DailyLLMMemory
@@ -238,7 +239,8 @@ def main():
                 )
                 runtime = MemoryRuntime(args.database, method=method,
                                         scenario_provider=SQLiteScenarioRecallProvider(args.database),
-                                        persona_provider=SQLitePersonaRecallProvider(args.database))
+                                        persona_provider=SQLitePersonaRecallProvider(args.database),
+                                        memory_command_handler=SQLiteNaturalMemoryCommandHandler(args.database))
             elif retriever_factory is not None:
                 method = LongMemoryV1(
                     args.database, existing_only=True, allow_cross_thread=True,
@@ -246,7 +248,8 @@ def main():
                 )
                 runtime = MemoryRuntime(args.database, method=method,
                                         scenario_provider=SQLiteScenarioRecallProvider(args.database),
-                                        persona_provider=SQLitePersonaRecallProvider(args.database))
+                                        persona_provider=SQLitePersonaRecallProvider(args.database),
+                                        memory_command_handler=SQLiteNaturalMemoryCommandHandler(args.database))
             else:
                 method = LongMemoryV1(
                     args.database, existing_only=True, allow_cross_thread=True,
@@ -255,6 +258,7 @@ def main():
                     args.database, method=method,
                     scenario_provider=SQLiteScenarioRecallProvider(args.database),
                     persona_provider=SQLitePersonaRecallProvider(args.database),
+                    memory_command_handler=SQLiteNaturalMemoryCommandHandler(args.database),
                 )
             chat_backend = ChatBackend(args.database, generator, provider=settings.provider,
                                        model=settings.model or "fake", role=args.assistant_role,

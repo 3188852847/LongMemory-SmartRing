@@ -64,6 +64,7 @@ class MemoryManagementService:
         corrected_content: str,
         *,
         occurred_at: datetime | None = None,
+        source_message: ConversationMessage | None = None,
     ) -> MemoryCorrectionResult:
         """以追加并取代的方式纠正错误事实，不改写旧记录。
 
@@ -92,12 +93,12 @@ class MemoryManagementService:
             raise ValueError("memory_correction_duplicate")
 
         now = occurred_at or datetime.now(UTC)
-        message = ConversationMessage(
-            id=MessageId(str(uuid4())),
-            role=MessageRole.USER,
-            content=content,
-            created_at=now,
+        message = source_message or ConversationMessage(
+            id=MessageId(str(uuid4())), role=MessageRole.USER,
+            content=content, created_at=now,
         )
+        if message.role != MessageRole.USER:
+            raise ValueError("memory_correction_source_must_be_user")
         new_memory = AtomicMemory(
             id=MemoryId(str(uuid4())),
             subject_id=old_memory.subject_id,
@@ -128,6 +129,7 @@ class MemoryManagementService:
         *,
         effective_at: datetime,
         occurred_at: datetime | None = None,
+        source_message: ConversationMessage | None = None,
     ) -> MemoryChangeResult:
         """记录“旧事实过去成立、后来变成新事实”的时间化取代。
 
@@ -165,12 +167,12 @@ class MemoryManagementService:
         if old_memory.valid_from is not None and effective_at < old_memory.valid_from:
             raise ValueError("effective_at_before_valid_from")
 
-        message = ConversationMessage(
-            id=MessageId(str(uuid4())),
-            role=MessageRole.USER,
-            content=content,
-            created_at=now,
+        message = source_message or ConversationMessage(
+            id=MessageId(str(uuid4())), role=MessageRole.USER,
+            content=content, created_at=now,
         )
+        if message.role != MessageRole.USER:
+            raise ValueError("memory_change_source_must_be_user")
         new_memory = AtomicMemory(
             id=MemoryId(str(uuid4())),
             subject_id=old_memory.subject_id,
