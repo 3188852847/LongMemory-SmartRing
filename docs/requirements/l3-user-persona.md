@@ -41,7 +41,7 @@ L3 用于保存经过来源核对的稳定认识，例如：
 ## 下一阶段产品边界
 
 - 当前人工复核页保留为内部观察、纠正与回滚工具，不作为圆屏最终用户的日常步骤。
-- 确定性的证据/风险决策契约、独立策略审计和个人库迁移已经完成；下一切片把 `AUTO_ACTIVATE` 接入既有原子复核路径。不能简单把现有“接受”按钮改成默认点击。
+- 确定性的证据/风险决策契约、独立策略审计、个人库迁移和应用层自动生效执行器已经完成；执行器从数据库复算证据，只让 `AUTO_ACTIVATE` 接入既有原子复核路径。
 - 敏感、来源归因不清、冲突或高影响候选保持 HOLD/BLOCK；适合澄清的内容通过圆屏自然对话询问，而不是弹出网页确认。
 - 自动 UPDATE 必须继续复用候选式取代、目标 revision 与原子提交；自动路径不包含 DELETE。
 - 助手怎样回应、何时主动交流属于独立陪伴策略，不写入 L3 用户画像。见 [ADR-0047](../adr/0047-round-screen-autonomous-evolution-boundary.md)。
@@ -59,5 +59,6 @@ L3 用于保存经过来源核对的稳定认识，例如：
 9. 统一画像只聚合当前主体的 `active` 断言，每项仍能按原 ID 打开证据详情；读取页面不产生数据库写入。
 10. 创建更新候选不改变旧画像；接受时新旧状态和取代时间原子提交，目标状态或 revision 冲突时全部回滚。
 11. 用户和策略复核身份不可混用；策略接受必须可在 API 与控制台查看版本和原因，V9 人工复核迁移后仍保持用户身份。
+12. 自动执行器不采用模型自报的证据数量；HOLD、ASK、BLOCK 和 NOOP 均不产生 active 画像，UPDATE 继续使用目标 revision 与原子取代。
 
-操作步骤见 [L3 用户画像测试指南](../guides/L3用户画像测试.md)，架构决定见 [ADR-0039](../adr/0039-reviewable-l3-persona-foundation.md)、[ADR-0042](../adr/0042-reviewable-l3-persona-management.md)、[ADR-0043](../adr/0043-explicit-l3-model-preview.md)、[ADR-0044](../adr/0044-unified-persona-profile-projection.md)、[ADR-0045](../adr/0045-audited-l3-replacement.md)与 [ADR-0048](../adr/0048-distinct-policy-review-audit.md)。
+操作步骤见 [L3 用户画像测试指南](../guides/L3用户画像测试.md)，架构决定见 [ADR-0039](../adr/0039-reviewable-l3-persona-foundation.md)、[ADR-0042](../adr/0042-reviewable-l3-persona-management.md)、[ADR-0043](../adr/0043-explicit-l3-model-preview.md)、[ADR-0044](../adr/0044-unified-persona-profile-projection.md)、[ADR-0045](../adr/0045-audited-l3-replacement.md)、[ADR-0048](../adr/0048-distinct-policy-review-audit.md)与 [ADR-0049](../adr/0049-controlled-l3-automatic-activation-executor.md)。

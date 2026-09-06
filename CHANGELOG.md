@@ -1,5 +1,12 @@
 # Changelog
 
+### P3.6 controlled L3 automatic activation executor（2026-09-06）
+
+- 新增应用层 L3 自动生效执行器：从存储重新计算真实证据，再调用 `persona-activation-v1`；不信任模型提供的计数或安全等级。
+- 只有 `AUTO_ACTIVATE` 才创建候选并以 V10 `policy` 身份接受；`HOLD / ASK_NATURALLY / BLOCK / NOOP` 不会成为 active，自动路径不支持 DELETE。
+- ADD/UPDATE 载荷不一致会在写入前拒绝；UPDATE 继续使用目标 revision、候选式取代和外层 SQLite 事务，不新增快捷写库路径。
+- 验证：19 项定向测试与 641 项 Python 全量测试通过。未调用模型、未扫描或改写个人记忆；低频触发与调用预算仍属于 P3.9。
+
 ### P3.5 distinct automatic-review audit（2026-09-06）
 
 - SQLite 代码结构升级为 V10：L3 复核身份区分 `user` 与 `policy`；策略复核只允许接受，并强制记录策略版本与决定原因，自动化不能冒充用户。
