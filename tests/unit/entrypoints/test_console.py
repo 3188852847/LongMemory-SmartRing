@@ -245,6 +245,49 @@ def test_memory_http_correction_requires_explicit_semantics_and_confirmation(tmp
     asyncio.run(run())
 
 
+def test_memory_http_fact_change_requires_explicit_semantics_and_time(tmp_path):
+    from longmemory.bootstrap import build_application
+    database = tmp_path / "fact-change.db"
+    app = build_application(database_path=database)
+    result = app.chat("我养了一只叫豆包的猫。")
+    memory_id = str(result.saved_memories[0].id)
+    app.close()
+
+    async def run():
+        async with console(database, allow_memory_correction=True) as (client, base, _bridge):
+            headers = await login(client, base)
+            url = base + "/api/memories/" + memory_id
+            details = await (await client.get(url)).json()
+            body = {
+                "revision": details["revision"],
+                "new_content": "用户现在养了一只叫年糕的猫。",
+                "effective_at": "2026-09-03T12:00:00+00:00",
+                "change_kind": "fact_changed",
+                "confirm_change": True,
+            }
+            assert (await client.post(url + "/changes", json=body)).status == 403
+            assert (await client.post(
+                url + "/changes", headers=headers,
+                json={**body, "change_kind": "error"},
+            )).status == 400
+            assert (await client.post(
+                url + "/changes", headers=headers,
+                json={**body, "effective_at": "2026-09-03T12:00:00"},
+            )).status == 400
+            response = await client.post(url + "/changes", headers=headers, json=body)
+            assert response.status == 200
+            written = await response.json()
+            old = await (await client.get(url)).json()
+            new = await (await client.get(
+                base + "/api/memories/" + written["new_memory_id"]
+            )).json()
+            assert old["valid_to"] == body["effective_at"]
+            assert new["valid_from"] == body["effective_at"]
+            assert new["sources"][0]["source_type"] == "user_stated"
+
+    asyncio.run(run())
+
+
 @pytest.mark.parametrize("query", ["limit=0", "limit=101", "offset=-1", "offset=100001", "state=unknown", "database=other.db", "limit=1&limit=2", "limit=no", "q=" + "x" * 201])
 def test_memory_query_validation(query):
     async def run():
@@ -272,7 +315,7 @@ def test_memory_without_config_is_not_a_fake_empty_database():
             await login(client, base)
             config = await (await client.get(base + "/api/memory-config")).json()
             assert config == {"configured": False, "database": None, "allow_delete": False,
-                              "allow_correction": False}
+                              "allow_correction": False, "allow_change": False}
             response = await client.get(base + "/api/memories")
             assert response.status == 503
             assert (await response.json())["error"] == "memory_not_configured"

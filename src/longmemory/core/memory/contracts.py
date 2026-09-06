@@ -61,8 +61,13 @@ class MemoryStore(Protocol):
         *,
         superseded_by_id: MemoryId,
         retired_at: datetime,
+        valid_to: datetime | None = None,
     ) -> bool:
-        """把仍有效的旧记忆标记为由新记忆取代。"""
+        """把仍有效的旧记忆标记为由新记忆取代。
+
+        valid_to 只在“事实后来变化”时填写；人工纠错不能借它冒充
+        旧错误事实曾经真实成立。
+        """
         ...
 
 

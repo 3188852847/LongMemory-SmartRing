@@ -103,6 +103,36 @@ def register_memory_routes(app, backend):
             body["revision"],
         )
 
+    async def change(request):
+        memory_id = request.match_info["memory_id"]
+        if not memory_id or len(memory_id) > 128 or any(ord(c) < 32 for c in memory_id):
+            raise web.HTTPBadRequest()
+        if request.content_type != "application/json":
+            raise web.HTTPBadRequest()
+        try:
+            body = await request.json()
+        except (ValueError, UnicodeError):
+            raise web.HTTPBadRequest() from None
+        if (not isinstance(body, dict)
+                or set(body) != {"revision", "new_content", "effective_at", "change_kind", "confirm_change"}
+                or body["change_kind"] != "fact_changed"
+                or body["confirm_change"] is not True
+                or not isinstance(body["new_content"], str)
+                or not body["new_content"].strip()
+                or len(body["new_content"].strip()) > 1000
+                or not isinstance(body["effective_at"], str)
+                or not 1 <= len(body["effective_at"]) <= 64
+                or not isinstance(body["revision"], str)
+                or not re.fullmatch(r"[0-9a-f]{64}", body["revision"])):
+            raise web.HTTPBadRequest()
+        return await invoke(
+            backend.record_change,
+            memory_id,
+            body["new_content"].strip(),
+            body["effective_at"],
+            body["revision"],
+        )
+
     app.router.add_get("/api/memory-config", config, allow_head=False)
     app.router.add_get("/api/memories", listing, allow_head=False)
     app.router.add_get("/api/source-messages", source_listing, allow_head=False)
@@ -110,3 +140,4 @@ def register_memory_routes(app, backend):
     app.router.add_get("/api/memories/{memory_id}", detail, allow_head=False)
     app.router.add_delete("/api/memories/{memory_id}", detail)
     app.router.add_post("/api/memories/{memory_id}/corrections", correction)
+    app.router.add_post("/api/memories/{memory_id}/changes", change)

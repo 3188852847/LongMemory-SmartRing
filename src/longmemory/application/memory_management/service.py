@@ -6,6 +6,7 @@ from uuid import uuid4
 from longmemory.application.memory_management.dto import (
     MemoryDetails,
     MemoryEvidenceDetails,
+    MemoryChangeResult,
     MemoryCorrectionResult,
 )
 from longmemory.core.common.identifiers import MemoryId, MessageId
@@ -119,6 +120,84 @@ class MemoryManagementService:
         ):
             raise RuntimeError("memory_correction_race")
         return MemoryCorrectionResult(old_memory, new_memory, message, evidence)
+
+    def record_memory_change(
+        self,
+        memory_id: MemoryId,
+        new_content: str,
+        *,
+        effective_at: datetime,
+        occurred_at: datetime | None = None,
+    ) -> MemoryChangeResult:
+        """记录“旧事实过去成立、后来变成新事实”的时间化取代。
+
+        effective_at 是现实世界中的变化时间；occurred_at 是用户在系统里
+        记录这次变化的时间。二者不能混为一个字段，否则无法表达补录历史变化。
+        """
+
+        content = new_content.strip()
+        if not content:
+            raise ValueError("changed_content_empty")
+        if len(content) > 1000:
+            raise ValueError("changed_content_too_long")
+        if effective_at.tzinfo is None or effective_at.utcoffset() is None:
+            raise ValueError("effective_at_timezone_required")
+
+        old_memory = self._memory_store.get(memory_id)
+        if old_memory is None:
+            raise LookupError("memory_not_found")
+        if old_memory.retired_at is not None:
+            raise ValueError("memory_not_active")
+        if content == old_memory.content:
+            raise ValueError("memory_change_unchanged")
+        duplicate = self._memory_store.find_by_content(
+            content,
+            subject_id=old_memory.subject_id,
+        )
+        if duplicate is not None:
+            raise ValueError("memory_change_duplicate")
+
+        now = occurred_at or datetime.now(UTC)
+        if now.tzinfo is None or now.utcoffset() is None:
+            raise ValueError("occurred_at_timezone_required")
+        if effective_at > now:
+            raise ValueError("effective_at_in_future")
+        if old_memory.valid_from is not None and effective_at < old_memory.valid_from:
+            raise ValueError("effective_at_before_valid_from")
+
+        message = ConversationMessage(
+            id=MessageId(str(uuid4())),
+            role=MessageRole.USER,
+            content=content,
+            created_at=now,
+        )
+        new_memory = AtomicMemory(
+            id=MemoryId(str(uuid4())),
+            subject_id=old_memory.subject_id,
+            content=content,
+            recorded_at=now,
+            valid_from=effective_at,
+        )
+        # 这里仍属于用户主动陈述；user_corrected 专门保留给“旧事实原本有误”。
+        evidence = MemoryEvidence(
+            memory_id=new_memory.id,
+            source_message_id=message.id,
+            source_type=MemorySourceType.USER_STATED,
+            linked_at=now,
+        )
+
+        self._conversation_store.save(message)
+        self._memory_store.save(new_memory, evidence)
+        if not self._memory_store.retire_as_superseded(
+            old_memory.id,
+            superseded_by_id=new_memory.id,
+            retired_at=now,
+            valid_to=effective_at,
+        ):
+            raise RuntimeError("memory_change_race")
+        return MemoryChangeResult(
+            old_memory, new_memory, message, evidence, effective_at
+        )
 
     def _build_details(
         self,

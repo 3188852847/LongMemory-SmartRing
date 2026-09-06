@@ -132,11 +132,16 @@ class FakeMemoryStore:
         return next((memory for memory in self.list_active()
                      if memory.subject_id == subject_id and memory.content == content), None)
 
-    def retire_as_superseded(self, memory_id, *, superseded_by_id, retired_at):
+    def retire_as_superseded(
+        self, memory_id, *, superseded_by_id, retired_at, valid_to=None
+    ):
         for index, memory in enumerate(self.memories):
             if memory.id == memory_id and memory.retired_at is None:
                 self.memories[index] = replace(
-                    memory, retired_at=retired_at, superseded_by_id=superseded_by_id
+                    memory,
+                    retired_at=retired_at,
+                    superseded_by_id=superseded_by_id,
+                    valid_to=valid_to,
                 )
                 return True
         return False
@@ -268,6 +273,73 @@ def test_correction_adds_user_evidence_and_retires_old_memory() -> None:
     retired = memory_store.get(memory.id)
     assert retired.retired_at == FIXED_TIME
     assert retired.superseded_by_id == result.new_memory.id
+    assert retired.valid_to is None
+
+
+def test_fact_change_records_real_world_validity_without_losing_history() -> None:
+    source_message = make_source_message()
+    effective_at = datetime(2026, 9, 3, 12, 0, tzinfo=UTC)
+    memory = replace(
+        make_memory(source_message),
+        valid_from=datetime(2026, 1, 1, tzinfo=UTC),
+    )
+    memory_store = FakeMemoryStore((memory,), (make_evidence(memory, source_message),))
+    conversation_store = FakeConversationStore((source_message,))
+    service = MemoryManagementService(
+        memory_store=memory_store, conversation_store=conversation_store
+    )
+
+    result = service.record_memory_change(
+        memory.id,
+        "用户现在养了一只叫年糕的猫。",
+        effective_at=effective_at,
+        occurred_at=FIXED_TIME,
+    )
+
+    retired = memory_store.get(memory.id)
+    assert retired is not None
+    assert retired.valid_to == effective_at
+    assert retired.retired_at == FIXED_TIME
+    assert retired.superseded_by_id == result.new_memory.id
+    assert result.new_memory.valid_from == effective_at
+    assert result.new_memory.recorded_at == FIXED_TIME
+    assert result.evidence.source_type is MemorySourceType.USER_STATED
+    assert memory_store.list_active() == (result.new_memory,)
+
+
+@pytest.mark.parametrize(
+    ("effective_at", "error"),
+    [
+        (datetime(2026, 9, 4, tzinfo=UTC), "effective_at_in_future"),
+        (datetime(2025, 12, 31, tzinfo=UTC), "effective_at_before_valid_from"),
+        (datetime(2026, 9, 3, 12, 0), "effective_at_timezone_required"),
+    ],
+)
+def test_fact_change_rejects_invalid_effective_time(
+    effective_at: datetime,
+    error: str,
+) -> None:
+    source_message = make_source_message()
+    memory = replace(
+        make_memory(source_message),
+        valid_from=datetime(2026, 1, 1, tzinfo=UTC),
+    )
+    memory_store = FakeMemoryStore((memory,), (make_evidence(memory, source_message),))
+    conversation_store = FakeConversationStore((source_message,))
+    service = MemoryManagementService(
+        memory_store=memory_store, conversation_store=conversation_store
+    )
+
+    with pytest.raises(ValueError, match=error):
+        service.record_memory_change(
+            memory.id,
+            "用户现在养了一只叫年糕的猫。",
+            effective_at=effective_at,
+            occurred_at=FIXED_TIME,
+        )
+
+    assert memory_store.list_all() == (memory,)
+    assert conversation_store.messages == [source_message]
 
 
 def test_correction_rejects_retired_unchanged_and_duplicate() -> None:

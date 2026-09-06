@@ -176,3 +176,51 @@ def test_correction_rejects_stale_revision_without_partial_write(recorded):
     assert backend.get(memory_id) == before
     with sqlite3.connect(path) as connection:
         assert connection.execute("SELECT COUNT(*) FROM atomic_memories").fetchone()[0] == 1
+
+
+def test_fact_change_sets_validity_interval_and_preserves_audit_source(recorded):
+    path, memory_id, source_id = recorded
+    backend = MemoryBackend(path, allow_correction=True)
+    detail = backend.get(memory_id)
+    effective_at = "2026-09-03T12:00:00+00:00"
+
+    result = backend.record_change(
+        memory_id,
+        "用户现在养了一只叫年糕的猫。",
+        effective_at,
+        detail["revision"],
+    )
+
+    assert result["changed"] is True
+    assert result["effective_at"] == effective_at
+    old = backend.get(memory_id)
+    new = backend.get(result["new_memory_id"])
+    assert old["state"] == "retired"
+    assert old["valid_to"] == effective_at
+    assert old["superseded_by_id"] == new["id"]
+    assert new["state"] == "active"
+    assert new["valid_from"] == effective_at
+    assert new["content"] == "用户现在养了一只叫年糕的猫。"
+    assert new["sources"][0]["source_type"] == "user_stated"
+    with sqlite3.connect(path) as connection:
+        assert connection.execute(
+            "SELECT COUNT(*) FROM conversation_messages WHERE id=?", (source_id,)
+        ).fetchone()[0] == 1
+
+
+def test_fact_change_rejects_bad_time_without_partial_write(recorded):
+    path, memory_id, _ = recorded
+    backend = MemoryBackend(path, allow_correction=True)
+    before = backend.get(memory_id)
+
+    with pytest.raises(MemoryAccessError, match="effective_at_timezone_required"):
+        backend.record_change(
+            memory_id,
+            "用户现在养了一只叫年糕的猫。",
+            "2026-09-03T12:00:00",
+            before["revision"],
+        )
+
+    assert backend.get(memory_id) == before
+    with sqlite3.connect(path) as connection:
+        assert connection.execute("SELECT COUNT(*) FROM atomic_memories").fetchone()[0] == 1

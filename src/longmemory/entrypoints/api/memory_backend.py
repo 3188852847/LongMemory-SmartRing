@@ -5,6 +5,7 @@ import json
 import secrets
 import sqlite3
 from contextlib import contextmanager
+from datetime import datetime
 from pathlib import Path
 
 from longmemory.adapters.storage.sqlite_conversation_store import SQLiteConversationStore
@@ -61,7 +62,10 @@ class MemoryBackend:
         return {"configured": self.database is not None,
                 "database": str(self.database) if self.database else None,
                 "allow_delete": self.allow_delete and self.database is not None,
-                "allow_correction": self.allow_correction and self.database is not None}
+                "allow_correction": self.allow_correction and self.database is not None,
+                # 当前两个操作共用同一个显式启动权限，但对前端公开独立能力名，
+                # 以后拆分权限时不需要再改变页面语义。
+                "allow_change": self.allow_correction and self.database is not None}
 
     @contextmanager
     def _open(self, *, write_capability=None):
@@ -255,5 +259,48 @@ class MemoryBackend:
                 "new_memory_id": str(result.new_memory.id),
                 "source_message_id": str(result.source_message.id),
                 "source_type": result.evidence.source_type.value,
+                "old_l0_preserved": True,
+            }
+
+    def record_change(self, memory_id, new_content, effective_at, expected_revision):
+        """在同一事务中记录事实变化及其双时间语义。"""
+
+        with self._open(write_capability="correction") as connection:
+            service = self._service(connection, commit_changes=False)
+            old_details = service.get_memory(MemoryId(memory_id))
+            if old_details is None:
+                raise MemoryAccessError("memory_not_found", 404)
+            if not secrets.compare_digest(
+                revision(details_json(old_details)), expected_revision
+            ):
+                raise MemoryAccessError("memory_changed")
+            try:
+                result = service.record_memory_change(
+                    MemoryId(memory_id),
+                    new_content,
+                    effective_at=datetime.fromisoformat(effective_at),
+                )
+            except LookupError:
+                raise MemoryAccessError("memory_not_found", 404) from None
+            except ValueError as error:
+                code = str(error)
+                status = 400 if (
+                    code.startswith("changed_content_")
+                    or code.startswith("effective_at_")
+                    or code == "occurred_at_timezone_required"
+                ) else 409
+                raise MemoryAccessError(code, status) from None
+            except RuntimeError as error:
+                if str(error) == "memory_change_race":
+                    raise MemoryAccessError("memory_changed") from None
+                raise
+            connection.commit()
+            return {
+                "changed": True,
+                "old_memory_id": str(result.old_memory.id),
+                "new_memory_id": str(result.new_memory.id),
+                "source_message_id": str(result.source_message.id),
+                "source_type": result.evidence.source_type.value,
+                "effective_at": result.effective_at.isoformat(),
                 "old_l0_preserved": True,
             }

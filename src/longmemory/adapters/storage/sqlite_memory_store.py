@@ -263,17 +263,34 @@ class SQLiteMemoryStore:
         *,
         superseded_by_id: MemoryId,
         retired_at: datetime,
+        valid_to: datetime | None = None,
     ) -> bool:
-        """只取代当前有效记忆；历史条目不能被重复纠正。"""
+        """只取代当前有效记忆，并按需记录现实世界中的失效时间。"""
 
-        cursor = self._connection.execute(
-            """
-            UPDATE atomic_memories
-            SET retired_at = ?, superseded_by_id = ?
-            WHERE id = ? AND retired_at IS NULL
-            """,
-            (retired_at.isoformat(), str(superseded_by_id), str(memory_id)),
-        )
+        if valid_to is None:
+            # 纠错不推断现实失效时间，也不覆盖异常/历史导入已有的时间字段。
+            cursor = self._connection.execute(
+                """
+                UPDATE atomic_memories
+                SET retired_at = ?, superseded_by_id = ?
+                WHERE id = ? AND retired_at IS NULL
+                """,
+                (retired_at.isoformat(), str(superseded_by_id), str(memory_id)),
+            )
+        else:
+            cursor = self._connection.execute(
+                """
+                UPDATE atomic_memories
+                SET retired_at = ?, superseded_by_id = ?, valid_to = ?
+                WHERE id = ? AND retired_at IS NULL
+                """,
+                (
+                    retired_at.isoformat(),
+                    str(superseded_by_id),
+                    valid_to.isoformat(),
+                    str(memory_id),
+                ),
+            )
         if self._commit_changes:
             self._connection.commit()
         return cursor.rowcount == 1

@@ -3,7 +3,7 @@ import {Button, Card, Checkbox, Descriptions, Drawer, Empty, Input, List, Modal,
 import {ChatApi} from './api';
 import {AppShell, ConsoleNav} from './AppShell';
 
-type MemoryConfig = {configured: boolean; database: string | null; allow_delete: boolean; allow_correction: boolean};
+type MemoryConfig = {configured: boolean; database: string | null; allow_delete: boolean; allow_correction: boolean; allow_change: boolean};
 type RuntimeMode = {write_enabled: boolean; use_enabled: boolean; persistent: boolean; l0_archived_when_write_disabled: boolean};
 type L1Summary = {id: string; content: string; truncated: boolean; state: 'active' | 'retired'; recorded_at: string; subject_id: string};
 type Source = {source_message_id: string; source_type: string; linked_at: string; message: null | {role: string; content: string; created_at: string}};
@@ -34,6 +34,9 @@ export function MemoryApp() {
   const [notice, setNotice] = useState('正在连接本机记忆服务…');
   const [correcting, setCorrecting] = useState(false);
   const [correction, setCorrection] = useState('');
+  const [changing, setChanging] = useState(false);
+  const [changedContent, setChangedContent] = useState('');
+  const [effectiveLocal, setEffectiveLocal] = useState('');
   const [deleting, setDeleting] = useState(false);
   const [deleteUnderstood, setDeleteUnderstood] = useState(false);
   const locked = useRef(false);
@@ -111,6 +114,28 @@ export function MemoryApp() {
       setNotice('纠正已保存：新 L1 生效，旧 L1 保留为已取代历史。');
     });
   }
+  function openChange() {
+    const now = new Date();
+    now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+    setEffectiveLocal(now.toISOString().slice(0, 16));
+    setChangedContent('');
+    setChanging(true);
+  }
+  async function saveChange() {
+    if (!selectedL1 || !changedContent.trim() || !effectiveLocal) return;
+    await guarded(async () => {
+      const result = await api.request<{new_memory_id: string}>(`/api/memories/${encodeURIComponent(selectedL1.id)}/changes`, 'POST', {
+        revision: selectedL1.revision,
+        new_content: changedContent.trim(),
+        effective_at: new Date(effectiveLocal).toISOString(),
+        change_kind: 'fact_changed',
+        confirm_change: true,
+      });
+      setChanging(false); setChangedContent(''); setEffectiveLocal(''); await fetchL1(0, query);
+      setSelectedL1(await api.request<L1Detail>(`/api/memories/${encodeURIComponent(result.new_memory_id)}`));
+      setNotice('变化已保存：旧事实保留历史有效期，新事实从指定时间开始生效。');
+    });
+  }
   async function removeMemory() {
     if (!selectedL1) return;
     await guarded(async () => {
@@ -144,8 +169,8 @@ export function MemoryApp() {
       <div className="pagination"><Button disabled={busy || page.offset === 0} onClick={() => void refresh(Math.max(0, page.offset - page.limit))}>上一页</Button><span>{page.total ? `${page.offset + 1}–${Math.min(page.offset + page.limit, page.total)} / ${page.total}` : '0 条'}</span><Button disabled={busy || page.offset + page.limit >= page.total} onClick={() => void refresh(page.offset + page.limit)}>下一页</Button></div>
       <p role="status">{notice}</p>
     </AppShell>
-    <Drawer width={620} title="L1 原子记忆" open={Boolean(selectedL1)} onClose={() => setSelectedL1(undefined)} extra={<Space><Button disabled={!config?.allow_correction || selectedL1?.state !== 'active'} onClick={() => setCorrecting(true)}>纠正</Button><Button danger disabled={!config?.allow_delete} onClick={() => setDeleting(true)}>删除</Button></Space>}>
-      {selectedL1 && <><p className="detail-content">{selectedL1.content}</p><Descriptions column={1} size="small" items={[{key:'state',label:'层级与状态',children:<Space><Tag color="magenta">L1</Tag><Tag>{selectedL1.state === 'active' ? '当前' : '已退役'}</Tag></Space>},{key:'id',label:'记忆 ID',children:selectedL1.id},{key:'time',label:'记录时间',children:displayTime(selectedL1.recorded_at)},{key:'superseded',label:'取代它的记忆',children:selectedL1.superseded_by_id ?? '无'}]}/>
+    <Drawer width={620} title="L1 原子记忆" open={Boolean(selectedL1)} onClose={() => setSelectedL1(undefined)} extra={<Space><Button disabled={!config?.allow_correction || selectedL1?.state !== 'active'} onClick={() => setCorrecting(true)}>纠正错误</Button><Button disabled={!config?.allow_change || selectedL1?.state !== 'active'} onClick={openChange}>记录变化</Button><Button danger disabled={!config?.allow_delete} onClick={() => setDeleting(true)}>删除</Button></Space>}>
+      {selectedL1 && <><p className="detail-content">{selectedL1.content}</p><Descriptions column={1} size="small" items={[{key:'state',label:'层级与状态',children:<Space><Tag color="magenta">L1</Tag><Tag>{selectedL1.state === 'active' ? '当前' : '已退役'}</Tag></Space>},{key:'id',label:'记忆 ID',children:selectedL1.id},{key:'time',label:'系统记录时间',children:displayTime(selectedL1.recorded_at)},{key:'validFrom',label:'事实开始生效',children:displayTime(selectedL1.valid_from)},{key:'validTo',label:'事实结束生效',children:displayTime(selectedL1.valid_to)},{key:'superseded',label:'取代它的记忆',children:selectedL1.superseded_by_id ?? '无'}]}/>
         <h3>L0 原始来源</h3>{selectedL1.sources.length ? selectedL1.sources.map(source => <Card size="small" className="source-card" key={`${source.source_message_id}:${source.source_type}`} title={<Space><Tag color="blue">L0</Tag><span>{sourceName(source.source_type)}</span></Space>}><p>{source.message?.content ?? '原始来源缺失，无法核对原文。'}</p><small>{source.message ? `${source.message.role === 'user' ? '用户' : '助手'} · ${displayTime(source.message.created_at)}` : source.source_message_id}</small></Card>) : <Empty description="这条 L1 没有可用来源，需要核查"/>}</>}
     </Drawer>
     <Drawer width={620} title="L0 原始记录" open={Boolean(selectedL0)} onClose={() => setSelectedL0(undefined)}>
@@ -154,6 +179,12 @@ export function MemoryApp() {
     </Drawer>
     <Modal title="纠正 L1" open={correcting} okText="确认旧事实有误并保存" cancelText="取消" confirmLoading={busy} okButtonProps={{disabled: !correction.trim()}} onCancel={() => {setCorrecting(false); setCorrection('');}} onOk={() => void saveCorrection()}>
       <p>纠正会新建 L1，并保留旧记录为已取代历史。只用于旧事实本来就错了，不用于后来发生的变化。</p><Input.TextArea aria-label="纠正后的完整事实" rows={4} maxLength={1000} value={correction} onChange={e => setCorrection(e.target.value)} placeholder="输入可独立理解的完整事实"/>
+    </Modal>
+    <Modal title="记录事实变化" open={changing} okText="确认事实已经变化" cancelText="取消" confirmLoading={busy} okButtonProps={{disabled: !changedContent.trim() || !effectiveLocal}} onCancel={() => {setChanging(false); setChangedContent(''); setEffectiveLocal('');}} onOk={() => void saveChange()}>
+      <p>用于“旧事实过去成立，但后来发生了变化”。旧事实会保留到生效时间，新事实从该时间开始生效；不要用它纠正从一开始就错误的记录。</p>
+      <Input.TextArea aria-label="变化后的完整事实" rows={4} maxLength={1000} value={changedContent} onChange={e => setChangedContent(e.target.value)} placeholder="输入变化后可独立理解的完整事实"/>
+      <label className="field-label" htmlFor="effective-at">变化生效时间</label>
+      <Input id="effective-at" aria-label="变化生效时间" type="datetime-local" value={effectiveLocal} onChange={e => setEffectiveLocal(e.target.value)}/>
     </Modal>
     <Modal title="删除这条 L1 记忆？" open={deleting} okText="确认删除 L1" cancelText="取消" confirmLoading={busy} okButtonProps={{danger: true, disabled: !deleteUnderstood}} onCancel={() => {setDeleting(false); setDeleteUnderstood(false);}} onOk={() => void removeMemory()}>
       <p>只删除 L1 及来源关联；L0 原始对话和备份仍然保留，目前没有一键恢复。</p><Checkbox checked={deleteUnderstood} onChange={event => setDeleteUnderstood(event.target.checked)}>我理解以上影响，只删除这一条 L1。</Checkbox>

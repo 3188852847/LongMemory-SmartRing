@@ -23,6 +23,16 @@ test('文字聊天可保存并在刷新后恢复，React 页面可统一导航',
   await expect(page.getByRole('heading', {name:'个性化设置'})).toBeVisible();
   await page.getByRole('link', {name:'记忆管理'}).click();
   await expect(page.getByRole('heading', {name:'记忆管理'})).toBeVisible();
+  await page.getByText('用户养了一只叫豆包的猫。', {exact:true}).click();
+  await page.getByRole('button', {name:'记录变化'}).click();
+  await page.getByRole('textbox', {name:'变化后的完整事实'}).fill('用户现在养了一只叫年糕的猫。');
+  await page.getByLabel('变化生效时间').fill('2026-09-03T12:00');
+  await page.getByRole('button', {name:'确认事实已经变化'}).click();
+  await expect(page.getByText('变化已保存：旧事实保留历史有效期，新事实从指定时间开始生效。')).toBeVisible();
+  await expect(page.locator('.detail-content')).toHaveText('用户现在养了一只叫年糕的猫。');
+  await expect(page.locator('.ant-modal-wrap:visible')).toHaveCount(0);
+  await page.locator('.ant-drawer-close:visible').click();
+  await expect(page.locator('.ant-drawer-mask:visible')).toHaveCount(0);
   await page.getByRole('link', {name:'实验中心'}).click();
   await expect(page).toHaveURL(/\/experiments-react$/);
   await expect(page.getByRole('heading', {name:'实验中心'})).toBeVisible();

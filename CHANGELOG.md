@@ -1,5 +1,12 @@
 # Changelog
 
+### P3.3 temporal fact change first slice（2026-09-06）
+
+- 记忆管理新增“记录变化”，与“纠正错误”明确分开：旧事实的 `valid_to` 和新事实的 `valid_from` 使用用户指定的现实生效时间，`recorded_at/retired_at` 继续记录系统操作时间。
+- 新旧 L1、L0 用户陈述、证据和 SUPERSEDE 关系在同一个 SQLite 事务提交；旧事实退出当前召回但保留来源与历史有效区间。无时区、未来、早于已知起点、重复及过期 revision 均拒绝。
+- 复用 V4 已有字段和显式纠正启动权限，不迁移或改写个人数据库；聊天自动判断变化、撤销、时间感知历史问答和 L2/L3 传播仍未实现。
+- 验证：559 项 Python 全量回归、7 项 Vitest 组件测试、TypeScript/Vite 生产构建及 2 项隔离 Chromium 验收通过；浏览器验收已覆盖合成事实变化，真实个人库操作尚待用户体验。
+
 ### Playwright isolated console acceptance（2026-09-06）
 
 - 前端锁定 `@playwright/test` 1.62.1，并增加单独的 Chromium 验收配置；Vitest 只扫描 `src/**/*.test.ts(x)`，两种测试运行器互不误收集。

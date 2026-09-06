@@ -1,6 +1,7 @@
 """记忆查看和删除用例的输入输出结构。"""
 
 from dataclasses import dataclass
+from datetime import datetime
 
 from longmemory.core.conversation.models import ConversationMessage
 from longmemory.core.memory.models import AtomicMemory, MemoryEvidence
@@ -35,3 +36,14 @@ class MemoryCorrectionResult:
     new_memory: AtomicMemory
     source_message: ConversationMessage
     evidence: MemoryEvidence
+
+
+@dataclass(frozen=True, slots=True)
+class MemoryChangeResult:
+    """一次事实变化产生的新旧记忆、现实生效时间与审计来源。"""
+
+    old_memory: AtomicMemory
+    new_memory: AtomicMemory
+    source_message: ConversationMessage
+    evidence: MemoryEvidence
+    effective_at: datetime
