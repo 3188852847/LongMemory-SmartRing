@@ -1,5 +1,11 @@
 # Changelog
 
+### P3 L2 scenario schema V5（2026-09-06）
+
+- 新增 V5 场景、L1 来源快照、生成审计和人工复核结构；候选默认不会参与回答，当前没有生成 L2。
+- V4→V5 迁移只增加空表和触发器，不改写 L0/L1；L1 退役或硬删除会把关联 candidate/active 场景标为 stale，同时来源快照继续保留。
+- 合成 V1→V5、V2→V5、V3→V5、V4→V5、备份哈希、外键和失效触发回归通过；个人库迁移结果另行记录。
+
 ### Memory architecture calibration R1（2026-09-06）
 
 - L1 原子记忆模型和 Store 契约迁入规范 `core/memory/l1_atomic/`；旧导入路径继续转发同一类型，避免一次性破坏已有脚本。

@@ -141,7 +141,7 @@ def create_app(*, port=8765, bridge=None, web_root=None, database=None, allow_me
 def main():
     parser = argparse.ArgumentParser(description="LongMemory 本机控制台（不会自动启动小智）")
     parser.add_argument("--port", type=int, default=8765)
-    parser.add_argument("--database", type=Path, help="已有 V4 记忆数据库；不自动建库或迁移")
+    parser.add_argument("--database", type=Path, help="已有当前版本记忆数据库；不自动建库或迁移")
     parser.add_argument("--allow-memory-delete", action="store_true", help="启用网页单条删除；默认只读")
     parser.add_argument("--allow-memory-correction", action="store_true", help="启用网页人工纠正；旧记忆保留并标记为已取代")
     parser.add_argument("--enable-chat", action="store_true", help="允许网页向指定已有记忆库写入对话和记忆")

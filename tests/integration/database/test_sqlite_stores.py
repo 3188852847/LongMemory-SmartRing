@@ -92,7 +92,7 @@ def test_message_and_memory_survive_database_reopen(tmp_path) -> None:
 def test_v1_database_is_upgraded_without_losing_source(
     tmp_path,
 ) -> None:
-    """V1 旧库升级到 V4 后，应保留记忆并回填来源证据。"""
+    """V1 旧库升级到当前版本后，应保留记忆并回填来源证据。"""
 
     database_path = tmp_path / "v1-longmemory.db"
     created_at = datetime(2026, 9, 2, 9, 0, tzinfo=UTC)
@@ -154,7 +154,7 @@ def test_v1_database_is_upgraded_without_losing_source(
 
     assert connection.execute(
         "PRAGMA user_version"
-    ).fetchone()[0] == 4
+    ).fetchone()[0] == 5
     assert store.get(MemoryId("memory-v1")) == AtomicMemory(
         id=MemoryId("memory-v1"),
         subject_id=CURRENT_USER_SUBJECT_ID,
@@ -182,7 +182,7 @@ def test_v1_database_is_upgraded_without_losing_source(
 def test_v2_database_preserves_multiple_evidence_during_upgrade(
     tmp_path,
 ) -> None:
-    """V2 升级到 V4 时，不得丢失已经积累的多条来源。"""
+    """V2 升级到当前版本时，不得丢失已经积累的多条来源。"""
 
     database_path = tmp_path / "v2-longmemory.db"
     connection = open_database(database_path)
@@ -256,7 +256,7 @@ def test_v2_database_preserves_multiple_evidence_during_upgrade(
 
     assert connection.execute(
         "PRAGMA user_version"
-    ).fetchone()[0] == 4
+    ).fetchone()[0] == 5
     assert tuple(
         evidence.source_message_id
         for evidence in store.list_evidence(MemoryId("memory-v2"))
@@ -281,6 +281,12 @@ def test_v3_upgrade_accepts_user_corrected_evidence(tmp_path) -> None:
     # 模拟 V3 的窄 CHECK：把 V4 表重建为旧约束，再执行真实迁移。
     connection.execute("PRAGMA foreign_keys = OFF")
     connection.executescript("""
+        DROP TRIGGER trg_scenario_stale_on_l1_delete;
+        DROP TRIGGER trg_scenario_stale_on_l1_retire;
+        DROP TABLE scenario_reviews;
+        DROP TABLE scenario_generation_audits;
+        DROP TABLE scenario_memory_sources;
+        DROP TABLE scenario_memories;
         ALTER TABLE memory_evidence RENAME TO memory_evidence_v4_saved;
         CREATE TABLE memory_evidence (
             memory_id TEXT NOT NULL, source_message_id TEXT NOT NULL,
@@ -304,7 +310,77 @@ def test_v3_upgrade_accepts_user_corrected_evidence(tmp_path) -> None:
     evidence = MemoryEvidence(memory.id, MessageId("correction-message"),
                               MemorySourceType.USER_CORRECTED, now)
     SQLiteMemoryStore(connection).save(memory, evidence)
-    assert connection.execute("PRAGMA user_version").fetchone()[0] == 4
+    assert connection.execute("PRAGMA user_version").fetchone()[0] == 5
     assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
     assert SQLiteMemoryStore(connection).list_evidence(memory.id) == (evidence,)
+    connection.close()
+
+
+def test_v4_upgrade_adds_empty_l2_tables_without_changing_l1(tmp_path) -> None:
+    """V4→V5 只增加 L2 结构，不重写既有原话和原子记忆。"""
+
+    path = tmp_path / "v4.db"
+    connection = open_database(path)
+    initialize_schema(connection)
+    connection.executescript("""
+        DROP TRIGGER trg_scenario_stale_on_l1_delete;
+        DROP TRIGGER trg_scenario_stale_on_l1_retire;
+        DROP TABLE scenario_reviews;
+        DROP TABLE scenario_generation_audits;
+        DROP TABLE scenario_memory_sources;
+        DROP TABLE scenario_memories;
+        PRAGMA user_version = 4;
+    """)
+    now = datetime(2026, 9, 6, 8, 0, tzinfo=UTC)
+    SQLiteConversationStore(connection).save(ConversationMessage(
+        MessageId("source-v4"), MessageRole.USER, "我周五要答辩。", now
+    ))
+    memory = AtomicMemory(
+        MemoryId("memory-v4"), CURRENT_USER_SUBJECT_ID, "用户周五要答辩。", now
+    )
+    SQLiteMemoryStore(connection).save(memory, MemoryEvidence(
+        memory.id, MessageId("source-v4"), MemorySourceType.USER_STATED, now
+    ))
+
+    initialize_schema(connection)
+
+    assert connection.execute("PRAGMA user_version").fetchone()[0] == 5
+    assert SQLiteMemoryStore(connection).get(memory.id) == memory
+    assert connection.execute("SELECT count(*) FROM scenario_memories").fetchone()[0] == 0
+    assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
+    connection.close()
+
+
+def test_l1_retire_and_delete_make_linked_scenarios_stale(tmp_path) -> None:
+    """L1 退出当前集合时，L2 不能继续保持候选或已接受状态。"""
+
+    connection = open_database(tmp_path / "stale.db")
+    initialize_schema(connection)
+    now = datetime(2026, 9, 6, 8, 0, tzinfo=UTC).isoformat()
+    connection.executemany(
+        "INSERT INTO atomic_memories "
+        "(id, subject_id, content, recorded_at) VALUES (?, 'user:self', ?, ?)",
+        (("l1-a", "用户周五答辩。", now), ("l1-b", "用户正在修改 PPT。", now)),
+    )
+    connection.execute(
+        "INSERT INTO scenario_memories VALUES "
+        "('l2-a', 'user:self', '准备答辩', '用户本周正在准备答辩。', ?, NULL, NULL, "
+        "'active', 'synthetic', '1', 1)",
+        (now,),
+    )
+    connection.executemany(
+        "INSERT INTO scenario_memory_sources VALUES ('l2-a', ?, ?, ?)",
+        (("l1-a", "用户周五答辩。", now), ("l1-b", "用户正在修改 PPT。", now)),
+    )
+
+    connection.execute("UPDATE atomic_memories SET retired_at=? WHERE id='l1-a'", (now,))
+    assert tuple(connection.execute(
+        "SELECT status, revision FROM scenario_memories WHERE id='l2-a'"
+    ).fetchone()) == ("stale", 2)
+    # 来源采用带内容快照的弱引用；L1 硬删除后，失效原因仍可审计。
+    connection.execute("DELETE FROM atomic_memories WHERE id='l1-b'")
+    assert connection.execute(
+        "SELECT count(*) FROM scenario_memory_sources WHERE scenario_id='l2-a'"
+    ).fetchone()[0] == 2
+    assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
     connection.close()
