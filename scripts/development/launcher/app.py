@@ -8,7 +8,8 @@ import webbrowser
 from pathlib import Path
 
 from runtime import DEFAULT_BGE_MODEL, Manager, Options, ROOT, Singleton, VOICE_ROOT, console_url
-from network import local_addresses, config_action, load_choice, save_choice
+from network import local_addresses, config_action
+from preferences import load_preferences, save_preferences
 from firewall_panel import open_panel
 from tts import config_action as tts_config_action
 
@@ -16,8 +17,14 @@ from tts import config_action as tts_config_action
 def main():
     window = tk.Tk()
     window.title("LongMemory · 日常启动")
-    window.geometry("860x790")
-    window.minsize(780, 740)
+    window.geometry("900x720")
+    window.minsize(820, 680)
+    style = ttk.Style(window)
+    style.configure("Title.TLabel", font=("Microsoft YaHei UI", 20, "bold"))
+    style.configure("Subtitle.TLabel", foreground="#5f6b7a")
+    style.configure("Primary.TButton", font=("Microsoft YaHei UI", 11, "bold"), padding=(18, 10))
+    style.configure("Section.TLabelframe", padding=12)
+    style.configure("Section.TLabelframe.Label", font=("Microsoft YaHei UI", 10, "bold"))
     try:
         lock = Singleton()
     except ValueError as error:
@@ -26,28 +33,76 @@ def main():
         window.destroy()
         return
     manager = Manager()
-    box = ttk.Frame(window, padding=20)
+    box = ttk.Frame(window, padding=(26, 22))
     box.pack(fill="both", expand=True)
-    ttk.Label(box, text="LongMemory 日常启动", font=("Microsoft YaHei UI", 18)).pack(anchor="w")
-    ttk.Label(box, text="复用当前配置，不安装依赖、不改数据库、不设置开机自启。", wraplength=710).pack(anchor="w", pady=8)
-    voice = tk.BooleanVar(value=False)
-    consent = tk.BooleanVar(value=False)
-    database = tk.StringVar(value=str(ROOT / "data/databases/xiaozhi-demo-v1.db"))
-    server = tk.StringVar(value=str(VOICE_ROOT))
     choice_path = ROOT / 'data/control/launcher.json'
-    ip = tk.StringVar(value=load_choice(choice_path))
-    role = tk.StringVar(value="elysia_v1")
-    memory_extraction = tk.StringVar(value="规则提取（稳定基线）")
-    memory_retrieval = tk.StringVar(value="关键词召回（稳定基线）")
+    saved = load_preferences(choice_path)
+    ttk.Label(box, text="LongMemory", style="Title.TLabel").pack(anchor="w")
+    ttk.Label(
+        box,
+        text="一个入口启动文字聊天与智能圆屏；常用设置会保存在本机。",
+        style="Subtitle.TLabel",
+    ).pack(anchor="w", pady=(2, 14))
+    tabs = ttk.Notebook(box)
+    tabs.pack(fill="both", expand=True)
+    daily = ttk.Frame(tabs, padding=18)
+    advanced = ttk.Frame(tabs, padding=18)
+    tabs.add(daily, text="日常启动")
+    tabs.add(advanced, text="高级设置")
+
+    voice = tk.BooleanVar(value=saved["voice"])
+    consent = tk.BooleanVar(value=saved["http_risk_ack"])
+    database = tk.StringVar(value=saved["database"] or str(ROOT / "data/databases/xiaozhi-demo-v1.db"))
+    server = tk.StringVar(value=saved["voice_root"] or str(VOICE_ROOT))
+    ip = tk.StringVar(value=saved["lan_ip"])
+    role = tk.StringVar(value=saved["role"])
+    extraction_labels = {"rules": "规则提取（稳定基线）", "llm": "模型辅助（P3.2 试用）"}
+    retrieval_labels = {"keyword": "关键词召回（稳定基线）", "hybrid": "关键词＋BGE（P3.2 试用）"}
+    tts_labels = {"edge": "EdgeTTS（联网标准音色）", "voxcpm2": "VoxCPM2（本地 plain）"}
+    memory_extraction = tk.StringVar(value=extraction_labels[saved["memory_extraction"]])
+    memory_retrieval = tk.StringVar(value=retrieval_labels[saved["memory_retrieval"]])
     allow_memory_delete = tk.BooleanVar(value=False)
-    embedding_model = tk.StringVar(value=str(DEFAULT_BGE_MODEL))
-    tts_backend = tk.StringVar(value="EdgeTTS（联网标准音色）")
-    ttk.Checkbutton(box, text="同时启动圆屏语音（默认只启动文字聊天）", variable=voice).pack(anchor="w")
+    embedding_model = tk.StringVar(value=saved["embedding_model_dir"] or str(DEFAULT_BGE_MODEL))
+    tts_backend = tk.StringVar(value=tts_labels[saved["tts_backend"]])
+
+    def selected_extraction():
+        return "llm" if memory_extraction.get().startswith("模型") else "rules"
+
+    def selected_retrieval():
+        return "hybrid" if "BGE" in memory_retrieval.get() else "keyword"
+
+    def selected_tts():
+        return "voxcpm2" if tts_backend.get().startswith("VoxCPM2") else "edge"
+
+    def current_preferences():
+        # 删除能力有意不进入此字典：每次打开面板都恢复关闭。
+        return {
+            "voice": voice.get(),
+            "database": database.get().strip(),
+            "voice_root": server.get().strip(),
+            "lan_ip": ip.get().strip(),
+            "role": role.get(),
+            "memory_extraction": selected_extraction(),
+            "memory_retrieval": selected_retrieval(),
+            "embedding_model_dir": embedding_model.get().strip(),
+            "tts_backend": selected_tts(),
+            "http_risk_ack": consent.get(),
+        }
+
+    mode_box = ttk.LabelFrame(daily, text="今天怎么使用", style="Section.TLabelframe")
+    mode_box.pack(fill="x", pady=(0, 12))
+    ttk.Radiobutton(mode_box, text="只用网页文字聊天", variable=voice, value=False).pack(anchor="w", pady=3)
+    ttk.Radiobutton(mode_box, text="网页文字聊天＋SmartRing-Plus 圆屏语音", variable=voice, value=True).pack(anchor="w", pady=3)
+
+    paths_box = ttk.LabelFrame(advanced, text="本机路径", style="Section.TLabelframe")
+    paths_box.pack(fill="x", pady=(0, 10))
     for label, variable in [("日常数据库（已有文件）", database), ("小智目录（仅语音模式）", server)]:
-        ttk.Label(box, text=label).pack(anchor="w", pady=(8, 0))
-        ttk.Entry(box, textvariable=variable).pack(fill="x")
-    ttk.Label(box, text='电脑局域网 IP（多网卡时请选择圆屏能访问的地址）').pack(anchor='w', pady=(8, 0))
-    address_row = ttk.Frame(box)
+        ttk.Label(paths_box, text=label).pack(anchor="w", pady=(5, 0))
+        ttk.Entry(paths_box, textvariable=variable).pack(fill="x")
+    network_box = ttk.LabelFrame(advanced, text="圆屏网络", style="Section.TLabelframe")
+    network_box.pack(fill="x", pady=10)
+    ttk.Label(network_box, text='电脑局域网 IP（多网卡时请选择圆屏能访问的地址）').pack(anchor='w')
+    address_row = ttk.Frame(network_box)
     address_row.pack(fill='x')
     addresses = ttk.Combobox(address_row, textvariable=ip, state='readonly', width=23)
     addresses.pack(side='left')
@@ -75,7 +130,7 @@ def main():
             if messagebox.askyesno('同步小智网络配置？',
                     f"配置地址 {info['old_ip']} → {selected}\n仅修改监听、WebSocket、视觉接口地址，原目录备份。\n请确认外部小智服务已停止。不会修改防火墙或圆屏。"):
                 config_action(Path(server.get()), selected, apply=True)
-                save_choice(choice_path, selected)
+                save_preferences(choice_path, current_preferences())
                 network_status.set(f'已同步。圆屏 OTA：http://{selected}:8003/xiaozhi/ota/；防火墙见指南。')
         except (ValueError, OSError) as error:
             messagebox.showerror('未完成同步', str(error))
@@ -83,48 +138,51 @@ def main():
     ttk.Button(address_row, text='刷新地址', command=refresh).pack(side='left', padx=8)
     ttk.Button(address_row, text='同步小智地址', command=sync_address).pack(side='left')
     ttk.Button(address_row, text='网络与防火墙', command=lambda: open_panel(window, ip.get(), ROOT)).pack(side='left', padx=8)
-    ttk.Label(box, textvariable=network_status, wraplength=710).pack(anchor='w', pady=8)
+    ttk.Label(network_box, textvariable=network_status, wraplength=760).pack(anchor='w', pady=(8, 0))
     refresh()
-    row = ttk.Frame(box)
+    behavior_box = ttk.LabelFrame(advanced, text="助手与长期记忆", style="Section.TLabelframe")
+    behavior_box.pack(fill="x", pady=10)
+    row = ttk.Frame(behavior_box)
     row.pack(fill="x", pady=8)
     ttk.Label(row, text="网页角色：").pack(side="left")
     ttk.Combobox(row, textvariable=role, values=("elysia_v1", "plain_v1"), state="readonly", width=18).pack(side="left")
     ttk.Label(row, text="  不自动改变小智角色；控制台端口 8767").pack(side="left")
-    memory_row = ttk.Frame(box)
+    memory_row = ttk.Frame(behavior_box)
     memory_row.pack(fill="x", pady=8)
     ttk.Label(memory_row, text="长期记忆提取：").pack(side="left")
     ttk.Combobox(memory_row, textvariable=memory_extraction,
                  values=("规则提取（稳定基线）", "模型辅助（P3.2 试用）"),
                  state="readonly", width=27).pack(side="left")
     ttk.Label(memory_row, text="  模型失败仍保留 L0，不静默回退").pack(side="left")
-    retrieval_row = ttk.Frame(box)
+    retrieval_row = ttk.Frame(behavior_box)
     retrieval_row.pack(fill="x", pady=8)
     ttk.Label(retrieval_row, text="长期记忆召回：").pack(side="left")
     ttk.Combobox(retrieval_row, textvariable=memory_retrieval,
                  values=("关键词召回（稳定基线）", "关键词＋BGE（P3.2 试用）"),
                  state="readonly", width=27).pack(side="left")
     ttk.Checkbutton(
-        box,
+        behavior_box,
         text="允许 L1 单条删除（仍保留 L0 原话；网页中还需二次确认）",
         variable=allow_memory_delete,
     ).pack(anchor="w", pady=(0, 4))
-    ttk.Label(box, text="BGE 本地快照（仅混合召回使用）").pack(anchor="w", pady=(4, 0))
-    embedding_row = ttk.Frame(box)
+    ttk.Label(behavior_box, text="BGE 本地快照（仅混合召回使用）").pack(anchor="w", pady=(4, 0))
+    embedding_row = ttk.Frame(behavior_box)
     embedding_row.pack(fill="x")
     ttk.Entry(embedding_row, textvariable=embedding_model).pack(side="left", fill="x", expand=True)
     ttk.Button(embedding_row, text="选择目录", command=lambda: (
         embedding_model.set(path) if (path := filedialog.askdirectory(
             parent=window, initialdir=embedding_model.get() or str(ROOT))) else None
     )).pack(side="left", padx=(8, 0))
-    tts_row = ttk.Frame(box)
-    tts_row.pack(fill="x", pady=8)
+    sound_box = ttk.LabelFrame(advanced, text="圆屏声音", style="Section.TLabelframe")
+    sound_box.pack(fill="x", pady=10)
+    tts_row = ttk.Frame(sound_box)
+    tts_row.pack(fill="x")
     ttk.Label(tts_row, text="圆屏声音：").pack(side="left")
     ttk.Combobox(tts_row, textvariable=tts_backend,
                  values=("EdgeTTS（联网标准音色）", "VoxCPM2（本地 plain）"),
                  state="readonly", width=27).pack(side="left")
 
-    def selected_tts():
-        return "voxcpm2" if tts_backend.get().startswith("VoxCPM2") else "edge"
+    settings_status = tk.StringVar(value="高级设置只在下次启动时生效。")
 
     def sync_tts():
         if manager.services:
@@ -134,25 +192,61 @@ def main():
             backend = selected_tts()
             checked = tts_config_action(Path(server.get()), ROOT, backend)
             if checked["config_matches"]:
-                messagebox.showinfo("无需同步", "小智磁盘配置已经匹配；运行中是否生效仍需重启验证。")
+                settings_status.set("小智声音配置已经匹配；运行中是否生效仍需重启验证。")
                 return
             label = "VoxCPM2 本地声音" if backend == "voxcpm2" else "EdgeTTS"
             if messagebox.askyesno("同步圆屏声音？",
                     f"将小智 TTS 切换为 {label}。\n只修改 TTS 选择与固定接口字段，原配置会备份；不会启动服务。"):
                 tts_config_action(Path(server.get()), ROOT, backend, apply=True,
                                   expected_digest=checked["digest"])
-                messagebox.showinfo("同步完成", "磁盘配置已更新；下次启动小智加载，实机效果仍需试听。")
+                settings_status.set("声音配置已同步；下次启动小智加载，实机效果仍需试听。")
         except (ValueError, OSError, KeyError):
             messagebox.showerror("未完成同步", "TTS 配置检查或同步失败；未显示私有配置内容。")
 
     ttk.Button(tts_row, text="检查并同步", command=sync_tts).pack(side="left", padx=8)
-    tk.Checkbutton(box, variable=consent, anchor="w", justify="left",
-                    text="我了解：聊天会写入记忆；当前 HTTP 会明文发送凭据与内容，仅用非敏感合成体验。",
-                    wraplength=710).pack(anchor="w", pady=8)
+    ttk.Label(advanced, textvariable=settings_status, style="Subtitle.TLabel").pack(anchor="w")
+
+    summary = tk.StringVar()
+
+    def update_summary(*_):
+        mode = "网页＋圆屏语音" if voice.get() else "网页文字聊天"
+        delete = " · 本次允许 L1 删除" if allow_memory_delete.get() else ""
+        summary.set(
+            f"{mode}  ·  {role.get()}  ·  {selected_extraction()} / "
+            f"{selected_retrieval()}  ·  {selected_tts()}{delete}"
+        )
+
+    summary_box = ttk.LabelFrame(daily, text="本次配置", style="Section.TLabelframe")
+    summary_box.pack(fill="x", pady=12)
+    ttk.Label(summary_box, textvariable=summary, wraplength=760).pack(anchor="w")
+    ttk.Label(
+        summary_box,
+        text="详细路径和算法选项在“高级设置”；成功启动后自动记住常用选择。",
+        style="Subtitle.TLabel",
+    ).pack(anchor="w", pady=(4, 0))
+    for variable in (voice, role, memory_extraction, memory_retrieval,
+                     tts_backend, allow_memory_delete):
+        variable.trace_add("write", update_summary)
+    update_summary()
+
+    if saved["http_risk_ack"]:
+        ttk.Label(
+            daily,
+            text="✓ 已记住：校园模型使用 HTTP，凭据与内容会明文传输。",
+            style="Subtitle.TLabel",
+        ).pack(anchor="w", pady=8)
+    else:
+        ttk.Checkbutton(
+            daily,
+            variable=consent,
+            text="我已了解校园模型 HTTP 明文传输风险；以后不再每次询问",
+        ).pack(anchor="w", pady=8)
     status = tk.StringVar(value="尚未启动。学校模型是否可用需你在校园网自行验证。")
-    ttk.Label(box, textvariable=status, wraplength=710).pack(anchor="w", pady=10)
-    buttons = ttk.Frame(box)
-    buttons.pack(fill="x")
+    status_box = ttk.LabelFrame(daily, text="运行状态", style="Section.TLabelframe")
+    status_box.pack(fill="x", pady=12)
+    ttk.Label(status_box, textvariable=status, wraplength=760).pack(anchor="w")
+    buttons = ttk.Frame(daily)
+    buttons.pack(fill="x", pady=(8, 0))
     state = {"opened": False, "started": 0.0, "failed": False}
 
     def open_page():
@@ -187,11 +281,15 @@ def main():
             options = Options(database=Path(database.get()), voice=voice.get(), voice_root=Path(server.get()),
                               lan_ip=ip.get().strip(), role=role.get(), consent=consent.get(),
                               tts_backend=selected_tts(),
-                              memory_extraction=("llm" if memory_extraction.get().startswith("模型") else "rules"),
-                              memory_retrieval=("hybrid" if "BGE" in memory_retrieval.get() else "keyword"),
+                              memory_extraction=selected_extraction(),
+                              memory_retrieval=selected_retrieval(),
                               allow_memory_delete=allow_memory_delete.get(),
                               embedding_model_dir=Path(embedding_model.get()))
             manager.start(options)
+            try:
+                save_preferences(choice_path, current_preferences())
+            except OSError:
+                settings_status.set("服务已启动，但本机首选项未保存；下次仍可手动选择。")
             state.update(started=time.monotonic(), opened=False, failed=False)
             start_button.config(state="disabled")
             status.set("正在启动；首次加载语音模型可能较慢。尚未验证学校模型或圆屏连接。")
@@ -233,10 +331,10 @@ def main():
             lock.close()
             window.destroy()
 
-    start_button = ttk.Button(buttons, text="启动", command=start)
+    start_button = ttk.Button(buttons, text="启动日常服务", command=start, style="Primary.TButton")
     start_button.pack(side="left", padx=(0, 8))
     ttk.Button(buttons, text="打开控制台", command=open_page).pack(side="left", padx=8)
-    ttk.Button(buttons, text="停止服务", command=stop).pack(side="left", padx=8)
+    ttk.Button(buttons, text="停止服务", command=lambda: stop(False)).pack(side="left", padx=8)
     ttk.Button(buttons, text="使用指南", command=lambda: os.startfile(ROOT / "docs/guides/统一启动.md")).pack(side="left", padx=8)
     window.protocol("WM_DELETE_WINDOW", close)
     window.after(500, tick)

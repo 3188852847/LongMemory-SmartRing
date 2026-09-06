@@ -1,0 +1,96 @@
+"""启动面板的非敏感本地首选项；不保存密钥和删除权限。"""
+
+import json
+import os
+from pathlib import Path
+
+
+PREFERENCES_VERSION = 1
+RISK_ACK_VERSION = "campus-http-v1"
+
+DEFAULTS = {
+    "voice": False,
+    "database": "",
+    "voice_root": "",
+    "lan_ip": "",
+    "role": "elysia_v1",
+    "memory_extraction": "rules",
+    "memory_retrieval": "keyword",
+    "embedding_model_dir": "",
+    "tts_backend": "edge",
+    "http_risk_ack": False,
+}
+
+_CHOICES = {
+    "role": {"elysia_v1", "plain_v1"},
+    "memory_extraction": {"rules", "llm"},
+    "memory_retrieval": {"keyword", "hybrid"},
+    "tts_backend": {"edge", "voxcpm2"},
+}
+_PATH_FIELDS = {"database", "voice_root", "embedding_model_dir"}
+
+
+def load_preferences(path: Path) -> dict:
+    """损坏或未知字段只回退默认值，不让启动面板因偏好文件无法打开。"""
+
+    result = dict(DEFAULTS)
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, TypeError):
+        return result
+    if not isinstance(raw, dict):
+        return result
+    if isinstance(raw.get("voice"), bool):
+        result["voice"] = raw["voice"]
+    for field, allowed in _CHOICES.items():
+        if raw.get(field) in allowed:
+            result[field] = raw[field]
+    for field in _PATH_FIELDS:
+        value = raw.get(field)
+        if isinstance(value, str) and len(value) <= 2048:
+            result[field] = value
+    lan_ip = raw.get("lan_ip")
+    if isinstance(lan_ip, str) and len(lan_ip) <= 64:
+        result["lan_ip"] = lan_ip
+    result["http_risk_ack"] = raw.get("http_risk_ack_version") == RISK_ACK_VERSION
+    return result
+
+
+def save_preferences(path: Path, values: dict) -> None:
+    """白名单序列化并原子替换；显式排除 allow_memory_delete。"""
+
+    body = {
+        "version": PREFERENCES_VERSION,
+        "voice": bool(values.get("voice", False)),
+        "database": str(values.get("database", ""))[:2048],
+        "voice_root": str(values.get("voice_root", ""))[:2048],
+        "lan_ip": str(values.get("lan_ip", ""))[:64],
+        "role": values.get("role", DEFAULTS["role"]),
+        "memory_extraction": values.get(
+            "memory_extraction", DEFAULTS["memory_extraction"]
+        ),
+        "memory_retrieval": values.get(
+            "memory_retrieval", DEFAULTS["memory_retrieval"]
+        ),
+        "embedding_model_dir": str(values.get("embedding_model_dir", ""))[:2048],
+        "tts_backend": values.get("tts_backend", DEFAULTS["tts_backend"]),
+        "http_risk_ack_version": (
+            RISK_ACK_VERSION if values.get("http_risk_ack") else None
+        ),
+    }
+    for field, allowed in _CHOICES.items():
+        if body[field] not in allowed:
+            raise ValueError(f"launcher_preference_{field}_invalid")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    try:
+        temporary.write_text(
+            json.dumps(body, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+        temporary.replace(path)
+    finally:
+        try:
+            temporary.unlink(missing_ok=True)
+        except OSError:
+            pass
+
