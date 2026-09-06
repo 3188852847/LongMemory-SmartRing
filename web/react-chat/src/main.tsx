@@ -1,4 +1,4 @@
-import {useEffect, useRef, useState} from 'react';
+import {lazy, Suspense, useEffect, useRef, useState} from 'react';
 import {createRoot} from 'react-dom/client';
 import {Button, ConfigProvider, Input, Modal, Select, theme} from 'antd';
 import {ChatApi, type Config, type Snapshot, type Summary, type Turn} from './api';
@@ -8,6 +8,8 @@ import './style.css';
 import {RoleEditor} from './RoleEditor';
 import {VoiceSettings} from './VoiceSettings';
 
+const MemoryApp = lazy(() => import('./MemoryApp').then(module => ({default: module.MemoryApp})));
+
 const api = new ChatApi();
 const nonce = document.querySelector<HTMLMetaElement>('meta[name="style-nonce"]')?.content;
 function memoryWarning(turn: Turn) {
@@ -15,7 +17,7 @@ function memoryWarning(turn: Turn) {
     ? '本轮 L0 原始对话已保存，但 L1 记忆写入失败。'
     : '本轮 L0 原始对话已保存，但 L1 记忆提取失败。';
 }
-function App() {
+function ChatApp() {
   const [config, setConfig] = useState<Config>();
   const [chats, setChats] = useState<Summary[]>([]);
   const [chat, setChat] = useState<Snapshot>();
@@ -121,4 +123,8 @@ function App() {
       onOk={() => void action(async () => {await api.request(`/api/chats/${chat?.chat_id}/title`, 'POST', {title}); await list(); if (chat) setChat({...chat,title}); setRename(false);})}><Input aria-label="聊天名称" maxLength={60} value={title} onChange={event => setTitle(event.target.value)}/></Modal>
   </ConfigProvider>;
 }
-createRoot(document.getElementById('root')!).render(<App/>);
+createRoot(document.getElementById('root')!).render(
+  location.pathname === '/memories'
+    ? <Suspense fallback={<p className="page-loading">正在加载记忆管理…</p>}><MemoryApp/></Suspense>
+    : <ChatApp/>,
+);

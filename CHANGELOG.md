@@ -1,5 +1,12 @@
 # Changelog
 
+### Progressive React console: memory page（2026-09-06）
+
+- `/memories` 迁移到现有 React + TypeScript + antd 工程；新增 L1 原子记忆与 L0 原始记录页签、层级标签、分页/筛选、双向来源详情、运行期记忆模式、纠正和受限删除。原生页暂留 `/memories-legacy`。
+- 新增只读 L0 API：可按角色、是否关联 L1 和字面内容筛选，并从一条 L0 查看派生 L1；固定参数、已有库和 schema 检查边界不变，不迁移或写入个人库。
+- 记忆页采用动态导入，聊天入口不加载记忆模块；未新增依赖、路由库、CDN、schema 或 Node 常驻服务。设备和实验页面尚未迁移。
+- 验证：540 项 Python 回归（529 项主组＋11 项 Tk 启动面板组）、22 项原生前端逻辑测试、2 项 React API 测试及 TypeScript/Vite 生产构建通过；真实浏览器个人库体验待完成。
+
 ### P3.4 runtime memory mode controls（2026-09-06）
 
 - 记忆管理页新增两个独立的本次运行开关：是否从新用户对话生成 L1、是否在回答时检索并注入已有记忆；网页与统一启动的圆屏共享同一个 `MemoryRuntime` 状态。

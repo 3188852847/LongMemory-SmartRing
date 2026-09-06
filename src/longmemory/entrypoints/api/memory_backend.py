@@ -120,6 +120,85 @@ class MemoryBackend:
                 summaries.append(row)
             return {"items": summaries, "total": total, "limit": limit, "offset": offset}
 
+    def list_sources(self, *, query="", role="all", link_state="all", limit=25, offset=0):
+        """分页读取 L0，并明确它是否已经成为任意 L1 的证据。"""
+
+        with self._open() as connection:
+            clauses, parameters = [], []
+            if query:
+                clauses.append("instr(lower(m.content), lower(?)) > 0")
+                parameters.append(query)
+            if role != "all":
+                clauses.append("m.role = ?")
+                parameters.append(role)
+            linked = "EXISTS (SELECT 1 FROM memory_evidence e WHERE e.source_message_id = m.id)"
+            if link_state == "linked":
+                clauses.append(linked)
+            elif link_state == "unlinked":
+                clauses.append("NOT " + linked)
+            where = " WHERE " + " AND ".join(clauses) if clauses else ""
+            total = connection.execute(
+                "SELECT count(*) FROM conversation_messages m" + where,
+                parameters,
+            ).fetchone()[0]
+            rows = connection.execute(
+                """
+                SELECT m.id, m.role, m.content, m.created_at,
+                       count(DISTINCT e.memory_id) AS linked_memory_count
+                FROM conversation_messages m
+                LEFT JOIN memory_evidence e ON e.source_message_id = m.id
+                """ + where + """
+                GROUP BY m.id, m.role, m.content, m.created_at
+                ORDER BY m.created_at DESC, m.id DESC
+                LIMIT ? OFFSET ?
+                """,
+                [*parameters, limit, offset],
+            ).fetchall()
+            items = [{
+                "id": row["id"],
+                "role": row["role"],
+                "content": row["content"][:240],
+                "truncated": len(row["content"]) > 240,
+                "created_at": row["created_at"],
+                "linked_memory_count": row["linked_memory_count"],
+            } for row in rows]
+            return {"items": items, "total": total, "limit": limit, "offset": offset}
+
+    def get_source(self, source_id):
+        """读取一条 L0 原文及其派生 L1；未关联也必须作为真实状态返回。"""
+
+        with self._open() as connection:
+            source = connection.execute(
+                "SELECT id, role, content, created_at FROM conversation_messages WHERE id = ?",
+                (source_id,),
+            ).fetchone()
+            if source is None:
+                raise MemoryAccessError("source_message_not_found", 404)
+            rows = connection.execute(
+                """
+                SELECT a.*, e.source_type, e.linked_at
+                FROM memory_evidence e
+                JOIN atomic_memories a ON a.id = e.memory_id
+                WHERE e.source_message_id = ?
+                ORDER BY e.linked_at DESC, a.id DESC
+                """,
+                (source_id,),
+            ).fetchall()
+            derived = []
+            for row in rows:
+                item = {
+                    "id": row["id"], "subject_id": row["subject_id"], "content": row["content"],
+                    **{key: row[key] for key in ("recorded_at", "valid_from", "valid_to", "retired_at")},
+                    "superseded_by_id": row["superseded_by_id"],
+                    "state": "retired" if row["retired_at"] else "active",
+                }
+                item.update(source_type=row["source_type"], linked_at=row["linked_at"])
+                derived.append(item)
+            return {
+                "id": source["id"], "role": source["role"], "content": source["content"],
+                "created_at": source["created_at"], "derived_memories": derived,
+            }
+
     def get(self, memory_id):
         with self._open() as connection:
             details = self._service(connection).get_memory(MemoryId(memory_id))

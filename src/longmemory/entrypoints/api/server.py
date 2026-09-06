@@ -28,7 +28,7 @@ from longmemory.infrastructure.logging.setup import configure_file_logging, clos
 ROOT = Path(__file__).resolve().parents[4]
 STATIC_FILES = {
     "/": ("index.html", "text/html"),
-    "/memories": ("memories.html", "text/html"),
+    "/memories-legacy": ("memories.html", "text/html"),
     "/chat": ("chat.html", "text/html"),
     "/experiments": ("experiments.html", "text/html"),
     "/assets/experiments.js": ("assets/experiments.js", "text/javascript"),

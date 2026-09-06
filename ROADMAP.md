@@ -14,6 +14,8 @@
 
 已完成文档归档、统一启动入口与网页会话恢复（ADR-0016、ADR-0019）。P2 已采用 React + TypeScript + Vite + antd，并完成角色、Edge 音色、VoxCPM2 本机适配及声音后端状态显示。用户完成圆屏延迟/听感验收后，P2 收口并进入 P3 日常记忆；不为试听改记忆库。见[迁移清单](docs/architecture/react-chat-migration.md)与 [ADR-0025](docs/adr/0025-local-voxcpm2-tts-adapter.md)。
 
+Web 控制台依据 ADR-0032 渐进统一到 React，不进行一次性重写。记忆页第一切片已实现 L1/L0 分层、双向来源查看并保留 legacy 回退；下一迁移对象是设备与状态，设置聚合和实验中心随后按产品优先级推进。Python Tk 启动面板不属于本轮 Web 迁移。
+
 阶段范围和完成标准见[产品需求](docs/requirements/companion-product.md)；候选选项见[自定义清单](docs/requirements/自定义功能清单.md)。本机控制台、校园网模型依赖和小智独立进程边界不因路线变化而消失。不承诺持续后台运行、开机自启或公网访问已实现。
 
 P3 采用“个人记忆、外部知识、上下文编排”三个平面。个人记忆按 L0 原始证据、L1 原子记忆、L2 场景、L3 用户画像渐进落地；知识库不是 L4，先通过拟议 `KnowledgeProvider` 做轻量文档检索与引用。当前不引入 LangChain、LangGraph、Deep Agents 或 Semantica 作为核心地基；图谱和持久工作流框架按真实需求重新评估。见 [ADR-0026](docs/adr/0026-layered-memory-and-knowledge-plane.md)。

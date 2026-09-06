@@ -19,6 +19,7 @@ def built(tmp_path, monkeypatch):
     (root / 'assets/app.js').write_text('export {};', encoding='utf-8')
     (root / 'index.html').write_text('<meta name="style-nonce" content="__LONGMEMORY_NONCE__">', encoding='utf-8')
     (root / '.vite/manifest.json').write_text(json.dumps({'index.html': {'file': 'assets/app.js'}}), encoding='utf-8')
+    (tmp_path / 'web/memories.html').write_text('<p>legacy memory fallback</p>', encoding='utf-8')
     monkeypatch.setattr(server, 'ROOT', tmp_path)
     return root
 
@@ -27,8 +28,8 @@ def test_react_nonce_and_resource_whitelist(built):
     async def run():
         async with console() as (client, base, _):
             nonces = []
-            for _ in range(2):
-                response = await client.get(base + '/chat-react')
+            for route in ('/chat-react', '/memories'):
+                response = await client.get(base + route)
                 assert response.status == 200
                 content = await response.text()
                 nonce = re.search('content="([a-f0-9]+)"', content).group(1)
@@ -43,6 +44,7 @@ def test_react_nonce_and_resource_whitelist(built):
             for path in ['/react-chat/.vite/manifest.json', '/react-chat/index.html', '/react-chat/src/main.tsx', '/react-chat/assets/no.js']:
                 assert (await client.get(base + path)).status == 404
             assert (await client.get(base + '/chat-react', headers={'Origin': 'https://evil.invalid'})).status == 403
+            assert (await client.get(base + '/memories-legacy')).status == 200
     asyncio.run(run())
 
 

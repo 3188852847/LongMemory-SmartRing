@@ -18,7 +18,7 @@ P2 新增声音设置：四种 Edge TTS 音色、固定文本联网试听和确�
 
 P2 助手角色设置已接入 `/chat-react`：网页编辑、版本化保存；圆屏可检查并明确确认同步到小智配置，之后需重启小智，实机生效待验收。见[助手角色设置](docs/guides/助手角色设置.md)。
 
-P2 React + TypeScript + Vite + antd 聊天页 `/chat-react` 已接入现有会话与聊天 API，并成为统一启动面板默认入口；原版 `/chat` 保留回退，两边可互相切换。见[体验指南](docs/guides/React聊天页.md)与[迁移清单](docs/architecture/react-chat-migration.md)。日常启动方式与记忆系统不变。
+Web 控制台开始渐进统一到 React + TypeScript + Vite + antd：聊天页 `/chat-react` 已是默认入口，记忆页 `/memories` 已提供 L1/L0 分层与双向来源检查；原版 `/chat`、`/memories-legacy` 暂留回退。设备与实验页面尚未迁移。见[体验指南](docs/guides/React聊天页.md)、[迁移清单](docs/architecture/react-chat-migration.md)与 [ADR-0032](docs/adr/0032-progressive-react-console-migration.md)。
 
 P2：聊天页支持浅色/深色/跟随系统及字号保存，配置默认折叠。见[外观设置](docs/guides/外观设置.md)。角色编辑、显式圆屏配置同步及音色试听已实现；不改日常记忆算法。
 
@@ -342,9 +342,10 @@ LongMemory-SmartRing/                              # 项目根目录
 │     │  │  ├─ __main__.py                         # python -m longmemory.entrypoints.api
 │     │  │  ├─ server.py                           # 白名单静态资源与设备接口
 │     │  │  ├─ security.py                         # 同源会话、CSRF、Host 与安全响应头
-│     │  │  ├─ memory_backend.py                   # 已有库装配、只读访问和删除前快照核对
+│     │  │  ├─ memory_backend.py                   # 已有库装配、L1/L0 浏览和写操作前快照核对
 │     │  │  └─ routes/                             # 分功能 API 路由
-│     │  │     ├─ memories.py                     # 记忆列表、详情和单条删除请求
+│     │  │     ├─ memories.py                     # L1/L0 列表、双向来源、纠正和单条删除请求
+│     │  │     ├─ memory_mode.py                  # 网页/圆屏共享的运行期写入与使用开关
 │     │  │     └─ memory_runtime.py               # 仅回环、令牌鉴权的小智 Runtime 接口
 │     │  └─ xiaozhi/                               # 后续 Xiaozhi 入口
 │     │     ├─ adapter.py                          # 协议适配
@@ -371,11 +372,16 @@ LongMemory-SmartRing/                              # 项目根目录
 │  ├─ regression/                                  # 已修复问题回归
 │  ├─ data/                                        # 测试内部小型 fixture
 │  └─ conftest.py                                  # pytest 公共夹具
-├─ web/                                            # 本机控制台，无 CDN、无构建步骤
+├─ web/                                            # 本机控制台；全部资源本地托管，无 CDN
 │  ├─ index.html                                   # 设备与状态页面
-│  ├─ memories.html                                # 记忆列表、来源详情与删除确认页面
+│  ├─ memories.html                                # 原生记忆页回退，由 /memories-legacy 提供
 │  ├─ chat.html                                    # 文字聊天和逐轮记忆轨迹
 │  ├─ experiments.html                             # 实验档案、逐题对照和人工复核
+│  ├─ react-chat/                                  # 渐进统一的 React/TypeScript/antd 控制台工程
+│  │  ├─ src/                                      # 聊天、L1/L0 记忆页、设置组件与 API 封装
+│  │  ├─ dist/                                     # 本机构建产物，不提交 Git、日常无需 Node
+│  │  ├─ package.json                              # 固定脚本和直接依赖
+│  │  └─ pnpm-lock.yaml                            # 可复现的前端依赖锁
 │  ├─ assets/                                      # 当前本地资源，只有白名单文件由后端提供
 │  │  ├─ app.js                                    # 会话、状态轮询、音量操作和纯文本渲染
 │  │  ├─ state.mjs                                 # 可独立测试的状态与结果映射

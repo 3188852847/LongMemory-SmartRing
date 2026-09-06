@@ -49,4 +49,5 @@ def register_react_routes(app, root: Path):
             raise web.HTTPNotFound()
 
     app.router.add_get('/chat-react', page)
+    app.router.add_get('/memories', page)
     app.router.add_get('/react-chat/{path:.*}', asset)

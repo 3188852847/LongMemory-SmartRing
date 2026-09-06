@@ -188,6 +188,11 @@ def test_memory_http_browse_sources_confirmed_delete_and_persistence(tmp_path):
             url = base + "/api/memories/" + memory_id
             details = await (await client.get(url)).json()
             assert details["sources"][0]["message"]["content"] == "我养了一只叫豆包的猫。"
+            source_id = details["sources"][0]["source_message_id"]
+            l0 = await (await client.get(base + "/api/source-messages?link_state=linked")).json()
+            assert l0["total"] >= 1 and any(item["id"] == source_id for item in l0["items"])
+            l0_detail = await (await client.get(base + "/api/source-messages/" + source_id)).json()
+            assert l0_detail["derived_memories"][0]["id"] == memory_id
             body = {"revision": details["revision"], "confirm_delete": True}
             assert (await client.delete(url, json=body)).status == 403
             assert (await client.delete(url, headers={**headers, "Origin": "https://evil.invalid"}, json=body)).status == 403
@@ -245,6 +250,18 @@ def test_memory_query_validation(query):
         async with console() as (client, base, _bridge):
             await login(client, base)
             assert (await client.get(base + "/api/memories?" + query)).status == 400
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("query", [
+    "limit=0", "limit=101", "offset=-1", "role=system", "link_state=unknown",
+    "role=user&role=assistant", "q=" + "x" * 201,
+])
+def test_source_message_query_validation(query):
+    async def run():
+        async with console() as (client, base, _bridge):
+            await login(client, base)
+            assert (await client.get(base + "/api/source-messages?" + query)).status == 400
     asyncio.run(run())
 
 

@@ -32,6 +32,35 @@ def test_read_only_browse_does_not_change_file(recorded):
     assert hashlib.sha256(path.read_bytes()).hexdigest() == digest
 
 
+def test_l0_browse_distinguishes_linked_and_unlinked_sources(recorded):
+    path, memory_id, source_id = recorded
+    with sqlite3.connect(path) as connection:
+        connection.execute(
+            "INSERT INTO conversation_messages VALUES (?,?,?,?)",
+            ("unlinked-user", "user", "这句话只在原始记录中。", "2026-09-06T10:00:00+00:00"),
+        )
+        connection.execute(
+            "INSERT INTO conversation_messages VALUES (?,?,?,?)",
+            ("assistant-source", "assistant", "这是助手原始回答。", "2026-09-06T10:01:00+00:00"),
+        )
+    backend = MemoryBackend(path)
+    assert backend.list_sources(link_state="linked")["items"][0]["id"] == source_id
+    unlinked = backend.list_sources(link_state="unlinked")
+    assert {"unlinked-user", "assistant-source"} <= {item["id"] for item in unlinked["items"]}
+    assert backend.list_sources(role="assistant")["items"][0]["id"] == "assistant-source"
+    assert backend.list_sources(query="只在原始")["items"][0]["id"] == "unlinked-user"
+    linked_detail = backend.get_source(source_id)
+    assert linked_detail["content"] == "我养了一只叫豆包的猫。"
+    assert linked_detail["derived_memories"][0]["id"] == memory_id
+    assert linked_detail["derived_memories"][0]["source_type"] == "user_stated"
+    assert backend.get_source("unlinked-user")["derived_memories"] == []
+
+
+def test_l0_missing_source_is_explicit(recorded):
+    with pytest.raises(MemoryAccessError, match="source_message_not_found"):
+        MemoryBackend(recorded[0]).get_source("missing")
+
+
 def test_missing_database_is_not_created(tmp_path):
     path = tmp_path / "not-created" / "missing.db"
     with pytest.raises(MemoryAccessError, match="memory_database_missing"):
