@@ -36,6 +36,7 @@ export function ScenarioApp() {
   const [title, setTitle] = useState('');
   const [summary, setSummary] = useState('');
   const [sourceIds, setSourceIds] = useState<string[]>([]);
+  const [reviewDecision, setReviewDecision] = useState<'accepted' | 'rejected'>();
 
   useEffect(() => {void api.bootstrap().then(() => setReady(true)).catch(error => setNotice(String(error)));}, []);
   const config = useQuery({queryKey: ['memory-config'], enabled: ready,
@@ -63,6 +64,7 @@ export function ScenarioApp() {
       decision, expected_revision: detail.data!.revision, confirm_review: true,
     }),
     onSuccess: async () => {
+      setReviewDecision(undefined);
       await Promise.all([
         queryClient.invalidateQueries({queryKey: ['scenarios']}),
         queryClient.invalidateQueries({queryKey: ['scenario', selectedId]}),
@@ -109,11 +111,23 @@ export function ScenarioApp() {
         </blockquote>)}</details>
       </Card>)}
       {detail.data.status === 'candidate' && <Space><Button type="primary" disabled={!canManage} loading={review.isPending}
-        onClick={() => Modal.confirm({title:'接受这个 L2 场景？',content:'只改变复核状态，当前不会注入聊天。',okText:'接受',cancelText:'取消',onOk:() => review.mutateAsync('accepted')})}>接受</Button>
+        onClick={() => setReviewDecision('accepted')}>接受</Button>
         <Button danger disabled={!canManage} loading={review.isPending}
-          onClick={() => Modal.confirm({title:'拒绝这个 L2 候选？',content:'候选会保留用于审计，不会物理删除。',okText:'拒绝',okButtonProps:{danger:true},cancelText:'取消',onOk:() => review.mutateAsync('rejected')})}>拒绝</Button></Space>}
+          onClick={() => setReviewDecision('rejected')}>拒绝</Button></Space>}
     </>}
   </Drawer>
+
+  <Modal title={reviewDecision === 'accepted' ? '确认接受 L2 场景' : '确认拒绝 L2 候选'}
+    open={Boolean(reviewDecision)} centered width={560} zIndex={1300}
+    confirmLoading={review.isPending} okText={reviewDecision === 'accepted' ? '确认接受' : '确认拒绝'} cancelText="返回核对"
+    okButtonProps={{danger: reviewDecision === 'rejected'}} onCancel={() => !review.isPending && setReviewDecision(undefined)}
+    onOk={() => reviewDecision && review.mutateAsync(reviewDecision)}>
+    <p><strong>{detail.data?.title ?? '当前场景'}</strong></p>
+    <p>{reviewDecision === 'accepted'
+      ? '接受只改变复核状态，当前不会把这条 L2 自动注入网页或圆屏回答。'
+      : '拒绝后候选会保留用于来源审计，不会物理删除。'}</p>
+    <p>请确认已经核对上方详情中的 L1 内容与 L0 原话。</p>
+  </Modal>
 
   <Modal title="新建 L2 候选" open={creating} confirmLoading={createCandidate.isPending} okText="创建候选" cancelText="取消"
     okButtonProps={{disabled: !title.trim() || !summary.trim() || sourceIds.length < 2}}
