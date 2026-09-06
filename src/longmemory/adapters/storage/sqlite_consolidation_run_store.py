@@ -117,6 +117,33 @@ class SQLiteConsolidationRunStore:
         ).fetchall()
         return tuple(self._row_to_run(row) for row in rows)
 
+    def recover_interrupted(
+        self, *, interrupted_before: datetime, recovered_at: datetime,
+    ) -> int:
+        """收束已不可能仍在执行的陈旧占位，但绝不推进来源游标。"""
+
+        for name, value in (
+            ("interrupted_before", interrupted_before),
+            ("recovered_at", recovered_at),
+        ):
+            if value.tzinfo is None or value.utcoffset() is None:
+                raise ValueError(f"{name}_timezone_required")
+        if recovered_at < interrupted_before:
+            raise ValueError("consolidation_recovery_time_invalid")
+        try:
+            changed = self._connection.execute(
+                "UPDATE memory_consolidation_runs SET status='failed',finished_at=?,"
+                "outcome_code='process_interrupted' "
+                "WHERE status='running' AND started_at<=?",
+                (recovered_at.isoformat(), interrupted_before.isoformat()),
+            ).rowcount
+            if self._commit_changes:
+                self._connection.commit()
+            return changed
+        except BaseException:
+            self._connection.rollback()
+            raise
+
     @staticmethod
     def _row_to_run(row: Row) -> ConsolidationRun:
         cursor = None

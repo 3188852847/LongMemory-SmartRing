@@ -86,6 +86,31 @@ def test_failed_run_is_audited_without_advancing_cursor(tmp_path):
     connection.close()
 
 
+def test_interrupted_running_jobs_are_recovered_without_advancing_cursor(tmp_path):
+    connection = open_database(tmp_path / "interrupted.db")
+    initialize_schema(connection)
+    store = SQLiteConsolidationRunStore(connection)
+    store.start(running("old-run"))
+    store.start(running("other-stage", ConsolidationStage.L2_TO_L3))
+
+    recovered = store.recover_interrupted(
+        interrupted_before=START + timedelta(minutes=30),
+        recovered_at=START + timedelta(hours=1),
+    )
+
+    assert recovered == 2
+    for stage in ConsolidationStage:
+        item = store.list_recent("user:self", stage)[0]
+        assert item.status == ConsolidationRunStatus.FAILED
+        assert item.outcome_code == "process_interrupted"
+        assert item.cursor is None
+    assert store.recover_interrupted(
+        interrupted_before=START + timedelta(hours=2),
+        recovered_at=START + timedelta(hours=2),
+    ) == 0
+    connection.close()
+
+
 def test_v10_upgrade_adds_empty_ledger_without_changing_existing_memory(tmp_path):
     connection = open_database(tmp_path / "v10.db")
     initialize_schema(connection)

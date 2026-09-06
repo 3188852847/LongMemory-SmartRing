@@ -112,6 +112,30 @@ def test_console_serves_only_local_assets_and_protected_device_actions():
     asyncio.run(run())
 
 
+def test_console_exposes_read_only_consolidation_status(tmp_path):
+    from longmemory.bootstrap import build_application
+
+    database = tmp_path / "consolidation-status.db"
+    application = build_application(database_path=database)
+    application.close()
+
+    async def run():
+        async with console(database) as (client, base, _bridge):
+            assert (await client.get(base + "/api/consolidation-status")).status == 401
+            await login(client, base)
+            response = await client.get(base + "/api/consolidation-status")
+            data = await response.json()
+            assert response.status == 200
+            assert data["background_enabled"] is False
+            assert [item["stage"] for item in data["stages"]] == [
+                "l1_to_l2", "l2_to_l3",
+            ]
+            assert all(item["pending_new_source_count"] == 0 for item in data["stages"])
+            assert all(item["trigger_reason"] == "no_pending_evidence" for item in data["stages"])
+
+    asyncio.run(run())
+
+
 @pytest.mark.parametrize("attack", ["no_csrf", "no_origin", "other_origin", "other_host", "cross_site", "same_site", "wrong_cookie"])
 def test_console_rejects_browser_attacks_without_calling_device(attack):
     async def run():

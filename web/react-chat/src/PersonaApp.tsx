@@ -3,6 +3,7 @@ import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {Alert, Button, Card, Descriptions, Drawer, Empty, Input, List, Modal, Select, Space, Tabs, Tag} from 'antd';
 import {ChatApi} from './api';
 import {AppShell, ConsoleNav} from './AppShell';
+import {ConsolidationStatusCard} from './ConsolidationStatusCard';
 
 type PersonaState = 'candidate' | 'active' | 'rejected' | 'stale';
 type PersonaKind = 'preference' | 'habit' | 'interaction_style' | 'behavior_pattern';
@@ -153,6 +154,7 @@ export function PersonaApp() {
       ])}>刷新</Button></header>
     <Alert className="mode-card" type="info" showIcon title="这里是一份持续累积的统一用户画像"
       description="页面按栏目汇总所有已接受的 L3 认识；底层仍保存独立断言和 L1/L2→L0 来源，便于逐项纠正、失效和审计。它不是助手角色，当前也尚未用于回答。"/>
+    <ConsolidationStatusCard stage="l2_to_l3" enabled={ready&&config.data?.configured===true}/>
     {!canManage&&config.data?.configured&&<Alert type="warning" showIcon title="当前进程没有开启 L3 管理权限" description="通过新版日常启动面板启动可开放候选与复核；只读浏览不受影响。"/>}
     <Tabs defaultActiveKey="profile" items={[
       {key:'profile',label:'统一画像',children:profilePane},

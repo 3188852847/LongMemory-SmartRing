@@ -3,6 +3,7 @@ import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {Alert, Button, Card, Checkbox, Descriptions, Drawer, Empty, Input, List, Modal, Select, Space, Tag} from 'antd';
 import {ChatApi} from './api';
 import {AppShell, ConsoleNav} from './AppShell';
+import {ConsolidationStatusCard} from './ConsolidationStatusCard';
 
 type ScenarioState = 'candidate' | 'active' | 'rejected' | 'stale';
 type MemoryConfig = {configured: boolean; database: string | null; allow_scenario_management: boolean;
@@ -143,6 +144,7 @@ export function ScenarioApp() {
       <Button loading={busy} onClick={() => void queryClient.invalidateQueries({queryKey: ['scenarios']})}>刷新</Button></header>
     <Alert className="mode-card" type="info" showIcon title="L2 先复核，再按需用于回答"
       description="L2 把多条 L1 汇总成可带现实有效期的生活场景。接受本身不会自动开启使用；回答开关在记忆管理页，且只召回相关的当前场景。"/>
+    <ConsolidationStatusCard stage="l1_to_l2" enabled={ready&&config.data?.configured===true}/>
     {!canManage && config.data?.configured && <Alert type="warning" showIcon title="当前进程没有开启 L2 管理权限" description="通过日常启动面板启动时会开启；只读浏览仍可使用。"/>}
     <div className="scenario-toolbar"><Select aria-label="场景状态" value={filter} onChange={value => setFilter(value)} options={[
       {value:'all',label:'全部状态'}, {value:'candidate',label:'待复核'}, {value:'active',label:'已接受'},

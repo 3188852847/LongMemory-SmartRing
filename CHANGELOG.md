@@ -1,5 +1,12 @@
 # Changelog
 
+### P3.9 consolidation observability and recovery primitive（2026-09-06）
+
+- 新增只读 `/api/consolidation-status`：分别解释 L1→L2、L2→L3 的待处理数量、门槛、冷却、当天模型预算、成功游标和最近运行结果；查询不会调用模型或写入记忆。
+- React 的生活场景页与用户画像页新增对应阶段状态卡，明确区分“达到门槛”和“后台已经启用”，避免把 ready 误读成已经自动整理。
+- 账本新增中断收束原语：以后调度器取得所有权后，可把超时 `running` 标成 `failed/process_interrupted`，不删除审计记录、不推进游标。当前尚未自动调用该原语。
+- 验证：58 项状态/API/账本定向测试、691 项 Python 全量回归、16 项 React 测试及 TypeScript/Vite 生产构建通过。
+
 ### P3.9 cross-time L2→L3 executor（2026-09-06）
 
 - 新增当前有效 L2 的稳定批次选择，按 `generated_at + id` 无缺口推进，携带 L2→L1→用户 L0 原文及真实 UTC 观察日；候选、拒绝、失效和过期场景排除。

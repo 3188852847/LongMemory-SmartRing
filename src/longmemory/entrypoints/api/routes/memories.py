@@ -52,6 +52,11 @@ def register_memory_routes(app, backend):
             query=query, role=role, link_state=link_state, offset=offset, limit=limit,
         )
 
+    async def consolidation_status(request):
+        if request.query:
+            raise web.HTTPBadRequest()
+        return await invoke(backend.consolidation_status)
+
     async def source_detail(request):
         source_id = request.match_info["source_id"]
         if not source_id or len(source_id) > 128 or any(ord(c) < 32 for c in source_id):
@@ -405,6 +410,7 @@ def register_memory_routes(app, backend):
     app.router.add_get("/api/memory-config", config, allow_head=False)
     app.router.add_get("/api/memories", listing, allow_head=False)
     app.router.add_get("/api/source-messages", source_listing, allow_head=False)
+    app.router.add_get("/api/consolidation-status", consolidation_status, allow_head=False)
     app.router.add_get("/api/source-messages/{source_id}", source_detail, allow_head=False)
     app.router.add_get("/api/memories/{memory_id}", detail, allow_head=False)
     app.router.add_delete("/api/memories/{memory_id}", detail)

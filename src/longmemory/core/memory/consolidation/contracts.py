@@ -26,6 +26,10 @@ class ConsolidationRunStore(Protocol):
         self, subject_id: str, stage: ConsolidationStage, *, limit: int = 20,
     ) -> tuple[ConsolidationRun, ...]: ...
 
+    def recover_interrupted(
+        self, *, interrupted_before: datetime, recovered_at: datetime,
+    ) -> int: ...
+
 
 class L1ConsolidationSourceReader(Protocol):
     def read_batch(

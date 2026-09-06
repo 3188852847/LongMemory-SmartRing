@@ -12,6 +12,17 @@ from longmemory.adapters.storage.sqlite_conversation_store import SQLiteConversa
 from longmemory.adapters.storage.sqlite_memory_store import SQLiteMemoryStore
 from longmemory.adapters.storage.sqlite_scenario_store import SQLiteScenarioStore
 from longmemory.adapters.storage.sqlite_persona_store import SQLitePersonaStore
+from longmemory.adapters.storage.sqlite_consolidation_run_store import (
+    SQLiteConsolidationRunStore,
+)
+from longmemory.adapters.storage.sqlite_l1_consolidation_source_reader import (
+    SQLiteL1ConsolidationSourceReader,
+)
+from longmemory.adapters.storage.sqlite_l2_consolidation_source_reader import (
+    SQLiteL2ConsolidationSourceReader,
+)
+from longmemory.application.consolidation.l2_to_l3_service import L3_TRIGGER_CONFIG
+from longmemory.application.consolidation.status_service import ConsolidationStatusService
 from longmemory.application.memory_management.service import MemoryManagementService
 from longmemory.application.scenario_management.service import ScenarioManagementService
 from longmemory.application.scenario_management.proposal_service import ScenarioProposalService
@@ -42,6 +53,7 @@ from longmemory.core.memory.l3_persona.proposals import (
     PersonaProposalEvidence,
     PersonaProposalInput,
 )
+from longmemory.core.memory.consolidation.trigger_policy import ConsolidationTriggerConfig
 from longmemory.infrastructure.database.schema import SCHEMA_VERSION
 
 
@@ -184,6 +196,61 @@ class MemoryBackend:
                 row["truncated"] = len(item.content) > 240
                 summaries.append(row)
             return {"items": summaries, "total": total, "limit": limit, "offset": offset}
+
+    def consolidation_status(self):
+        """只读呈现自动整理门槛和账本；不会借查询触发模型或迁移。"""
+
+        with self._open() as connection:
+            now = datetime.now(UTC)
+            store = SQLiteConsolidationRunStore(connection, commit_changes=False)
+            statuses = ConsolidationStatusService(
+                run_store=store,
+                l1_reader=SQLiteL1ConsolidationSourceReader(connection),
+                l2_reader=SQLiteL2ConsolidationSourceReader(connection),
+                l1_config=ConsolidationTriggerConfig(),
+                l2_config=L3_TRIGGER_CONFIG,
+            ).inspect(str(CURRENT_USER_SUBJECT_ID), now=now)
+            return {
+                "subject_id": str(CURRENT_USER_SUBJECT_ID),
+                "observed_at": now.isoformat(),
+                "background_enabled": False,
+                "stages": [self._consolidation_status_json(item) for item in statuses],
+            }
+
+    @staticmethod
+    def _consolidation_status_json(item):
+        cursor = item.cursor
+        latest = item.latest_run
+        return {
+            "stage": item.stage.value,
+            "pending_new_source_count": item.pending_new_source_count,
+            "trigger_action": item.trigger_action,
+            "trigger_reason": item.trigger_reason,
+            "minimum_new_sources": item.minimum_new_sources,
+            "maximum_sources_per_run": item.maximum_sources_per_run,
+            "cooldown_seconds": item.cooldown_seconds,
+            "daily_model_call_budget": item.daily_model_call_budget,
+            "model_calls_today": item.model_calls_today,
+            "remaining_model_calls_today": max(
+                0, item.daily_model_call_budget - item.model_calls_today,
+            ),
+            "cursor": None if cursor is None else {
+                "recorded_at": cursor.recorded_at.isoformat(),
+                "source_id": cursor.source_id,
+            },
+            "latest_run": None if latest is None else {
+                "id": latest.id,
+                "trigger": latest.trigger.value,
+                "status": latest.status.value,
+                "started_at": latest.started_at.isoformat(),
+                "finished_at": (
+                    latest.finished_at.isoformat() if latest.finished_at else None
+                ),
+                "outcome_code": latest.outcome_code,
+                "source_count": latest.source_count,
+                "model_call_count": latest.model_call_count,
+            },
+        }
 
     def list_sources(self, *, query="", role="all", link_state="all", limit=25, offset=0):
         """分页读取 L0，并明确它是否已经成为任意 L1 的证据。"""
