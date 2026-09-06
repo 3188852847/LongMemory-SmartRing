@@ -64,7 +64,7 @@ L0 是不可原地改写的证据层；L1/L2/L3 是可重建、可失效、可�
 | `src/longmemory/application/` | 聊天、记忆处理与管理用例 |
 | `src/longmemory/methods/` | 可替换方法契约、白名单工厂和具体方法封装 |
 | `src/longmemory/adapters/` | SQLite、模型与设备桥等外部技术实现 |
-| `src/longmemory/infrastructure/` | 配置、数据库连接、schema 与日志 |
+| `src/longmemory/infrastructure/` | 配置、数据库连接、当前 schema、逐版本 migration 与日志 |
 | `src/longmemory/entrypoints/` | CLI、本机 API 和小智管道入口；API 目前仍承载部分网页编排 |
 | `src/longmemory/evaluation/` | 隔离实验、评分与报告，不是日常回答路径 |
 | `web/` | React/TypeScript/antd 日常聊天页及保留的原生管理页面；生产构建由 Python 静态托管 |
@@ -72,7 +72,7 @@ L0 是不可原地改写的证据层；L1/L2/L3 是可重建、可失效、可�
 | `datasets/` | 可版本化的合成或公开评估输入 |
 | `experiments/` | 实验配置、独立运行状态和结果 |
 
-依赖原则：入口/`bootstrap` 选择并装配具体方法，用例与常驻 Runtime 只调用核心或中立方法契约，适配器实现技术细节。L1 的规范模型和 Store 契约位于 `core/memory/l1_atomic/`，旧路径只作兼容转发。当前不是一次性完成的理想分层，后续随功能增量整理，不为目录美观重写全部模块。见 ADR-0036。
+依赖原则：入口/`bootstrap` 选择并装配具体方法，用例与常驻 Runtime 只调用核心或中立方法契约，适配器实现技术细节。L1 的规范模型和 Store 契约位于 `core/memory/l1_atomic/`，旧路径只作兼容转发。SQLite 当前完整定义位于 `database/definition.py`，历史变化按 `migrations/vN_to_vN+1.py` 独立保存，`schema.py` 只负责连续调度。当前不是一次性完成的理想分层，后续随功能增量整理，不为目录美观重写全部模块。见 ADR-0036。
 
 ## 4. 数据与配置归属
 

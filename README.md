@@ -336,8 +336,9 @@ LongMemory-SmartRing/                              # 项目根目录
 │     │  │  └─ settings.py                         # 类型化设置
 │     │  ├─ database/                              # SQLite 连接和结构
 │     │  │  ├─ connection.py                       # 连接与事务
-│     │  │  ├─ schema.py                           # 初始结构
-│     │  │  └─ migrations/                         # 可追溯迁移
+│     │  │  ├─ definition.py                       # 当前数据库版本与完整结构
+│     │  │  ├─ schema.py                           # 初始化与连续迁移调度
+│     │  │  └─ migrations/                         # V1→V4 各代可追溯迁移
 │     │  └─ logging/                               # 日志配置
 │     │     └─ setup.py                             # 脱敏日志初始化
 │     ├─ entrypoints/                              # 外部入口
