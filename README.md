@@ -40,7 +40,7 @@ P1 网页会话恢复已实现：列表、新建、切换、重命名，同一�
 
 P3 目标已明确为四层个人记忆：L0 原始证据、L1 原子记忆、L2 场景、L3 用户画像。P3.1 已实现并验收网页/圆屏共享的常驻 Memory Runtime。P3.2 的模型辅助提取与关键词＋本地 BGE 混合召回已完成首轮真实组合体验。P3.3 人工错误纠正及个人库 V4 迁移已完成真实验收，并新增“事实后来变化”的显式时间化取代入口。P3.4 第一切片已提供共享运行期开关。L2 已完成 V5、领域服务、受限 API 和 `/scenarios` 复核页面；当前只能由用户显式选择至少两条合格 L1 创建候选，尚未进行模型候选生成，也未接入聊天回答。自动识别变化、撤销、跨层重建及持久策略配置仍未实现。见 [ADR-0026](docs/adr/0026-layered-memory-and-knowledge-plane.md)至 [ADR-0036](docs/adr/0036-incremental-memory-architecture-calibration.md)。
 
-L2 设计已接受：先生成可追溯、需复核的时间化场景候选，确认前不进入回答；稳定习惯仍属于 L3。个人库已在一致性备份后迁移到 V5，仍为 0 条 L2；本切片未调用模型或改写既有 L0/L1，见 [ADR-0035](docs/adr/0035-reviewable-l2-scenario-candidates.md)和 [L2 第一版验收](docs/requirements/l2-scenario-memory.md)。
+L2 设计已接受：先生成可追溯、需复核的时间化场景候选，确认前不进入回答；稳定习惯仍属于 L3。个人库已在一致性备份后迁移到 V5，仍为 0 条 L2；本切片未调用模型或改写既有 L0/L1。可按 [L2 生活场景合成测试指南](docs/guides/L2生活场景测试.md)体验，设计与边界见 [ADR-0035](docs/adr/0035-reviewable-l2-scenario-candidates.md)和 [L2 第一版验收](docs/requirements/l2-scenario-memory.md)。
 
 - [路线图](ROADMAP.md)：先后顺序与历史记录。
 - [产品范围与验收](docs/requirements/companion-product.md)：各阶段做什么、怎样算完成。
