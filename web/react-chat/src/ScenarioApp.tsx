@@ -28,7 +28,7 @@ const stateName: Record<ScenarioState, string> = {candidate: '待复核', active
 const stateColor: Record<ScenarioState, string> = {candidate: 'gold', active: 'green', rejected: 'default', stale: 'red'};
 const displayTime = (value?: string | null) => value ? new Date(value).toLocaleString('zh-CN') : '未记录';
 
-/** L2 是多条 L1 汇总出的生活场景；页面只管理候选，不改变聊天注入策略。 */
+/** L2 是多条 L1 汇总出的生活场景；候选可带现实有效期，回答使用由独立开关控制。 */
 export function ScenarioApp() {
   const queryClient = useQueryClient();
   const [ready, setReady] = useState(false);
@@ -39,6 +39,8 @@ export function ScenarioApp() {
   const [title, setTitle] = useState('');
   const [summary, setSummary] = useState('');
   const [sourceIds, setSourceIds] = useState<string[]>([]);
+  const [validFrom, setValidFrom] = useState('');
+  const [validTo, setValidTo] = useState('');
   const [draftOrigin, setDraftOrigin] = useState<'manual' | 'model_assisted'>('manual');
   const [confirmingModel, setConfirmingModel] = useState(false);
   const [reviewDecision, setReviewDecision] = useState<'accepted' | 'rejected'>();
@@ -57,9 +59,11 @@ export function ScenarioApp() {
     mutationFn: () => api.request<{id: string}>('/api/scenarios', 'POST', {
       title: title.trim(), summary: summary.trim(), source_memory_ids: sourceIds,
       creation_kind: draftOrigin, confirm_candidate: true,
+      valid_from: validFrom ? new Date(validFrom).toISOString() : null,
+      valid_to: validTo ? new Date(validTo).toISOString() : null,
     }),
     onSuccess: async result => {
-      setCreating(false); setTitle(''); setSummary(''); setSourceIds([]); setDraftOrigin('manual'); setSelectedId(result.id);
+      setCreating(false); setTitle(''); setSummary(''); setSourceIds([]); setValidFrom(''); setValidTo(''); setDraftOrigin('manual'); setSelectedId(result.id);
       await queryClient.invalidateQueries({queryKey: ['scenarios']});
       setNotice('L2 候选已创建，尚未进入已接受状态。');
     },
@@ -87,21 +91,21 @@ export function ScenarioApp() {
         queryClient.invalidateQueries({queryKey: ['scenarios']}),
         queryClient.invalidateQueries({queryKey: ['scenario', selectedId]}),
       ]);
-      setNotice('复核结果已保存；本阶段仍不会把 L2 自动注入回答。');
+      setNotice('复核结果已保存；只有另行开启 L2 使用且问题相关时才会参与回答。');
     },
     onError: error => setNotice(String(error)),
   });
   const busy = config.isFetching || scenarios.isFetching || memories.isFetching || detail.isFetching || createCandidate.isPending || previewCandidate.isPending || review.isPending;
   const canManage = config.data?.allow_scenario_management === true;
-  const openCreator = () => {setTitle(''); setSummary(''); setSourceIds([]); setDraftOrigin('manual'); setCreating(true);};
+  const openCreator = () => {setTitle(''); setSummary(''); setSourceIds([]); setValidFrom(''); setValidTo(''); setDraftOrigin('manual'); setCreating(true);};
   const sidebar = <><Button type="primary" block disabled={!canManage} onClick={openCreator}>新建 L2 候选</Button>
     <ConsoleNav active="scenarios" legacyPath="/memories"/></>;
 
   return <><AppShell subtitle="可复核的生活场景" className="scenario-shell" sidebar={sidebar}>
     <header><div><h1>生活场景（L2）</h1><small>{config.data?.database ?? '未指定记忆库'}</small></div>
       <Button loading={busy} onClick={() => void queryClient.invalidateQueries({queryKey: ['scenarios']})}>刷新</Button></header>
-    <Alert className="mode-card" type="info" showIcon title="当前是可复核 L2 候选阶段"
-      description="L2 把多条 L1 原子记忆汇总成生活场景。可以人工填写，也可以把明确选中的 L1 交给模型生成不落库草稿；创建、接受后仍不参与聊天检索或回答。"/>
+    <Alert className="mode-card" type="info" showIcon title="L2 先复核，再按需用于回答"
+      description="L2 把多条 L1 汇总成可带现实有效期的生活场景。接受本身不会自动开启使用；回答开关在记忆管理页，且只召回相关的当前场景。"/>
     {!canManage && config.data?.configured && <Alert type="warning" showIcon title="当前进程没有开启 L2 管理权限" description="通过日常启动面板启动时会开启；只读浏览仍可使用。"/>}
     <div className="scenario-toolbar"><Select aria-label="场景状态" value={filter} onChange={value => setFilter(value)} options={[
       {value:'all',label:'全部状态'}, {value:'candidate',label:'待复核'}, {value:'active',label:'已接受'},
@@ -120,6 +124,8 @@ export function ScenarioApp() {
       <Descriptions column={1} size="small" bordered items={[
         {key:'subject',label:'主体',children:detail.data.subject_id}, {key:'generated',label:'生成时间',children:displayTime(detail.data.generated_at)},
         {key:'generator',label:'生成方式',children:`${detail.data.generator_name} ${detail.data.generator_version}`},
+        {key:'validFrom',label:'现实开始时间',children:displayTime(detail.data.valid_from)},
+        {key:'validTo',label:'现实结束时间',children:displayTime(detail.data.valid_to)},
         {key:'revision',label:'修订号',children:String(detail.data.revision)},
       ]}/>
       <h3>构成此场景的 L1 来源</h3>{detail.data.sources.map(source => <Card className="source-card" key={source.memory_id} size="small" title={source.memory_id}
@@ -143,7 +149,7 @@ export function ScenarioApp() {
     onOk={() => reviewDecision && review.mutateAsync(reviewDecision)}>
     <p><strong>{detail.data?.title ?? '当前场景'}</strong></p>
     <p>{reviewDecision === 'accepted'
-      ? '接受只改变复核状态，当前不会把这条 L2 自动注入网页或圆屏回答。'
+      ? '接受只改变复核状态。只有另行打开 L2 使用开关，并且问题相关、当前处于有效期时，它才可能参与网页或圆屏回答。'
       : '拒绝后候选会保留用于来源审计，不会物理删除。'}</p>
     <p>请确认已经核对上方详情中的 L1 内容与 L0 原话。</p>
   </Modal>
@@ -158,11 +164,14 @@ export function ScenarioApp() {
   </Modal>
 
   <Modal title="新建 L2 候选" open={creating} confirmLoading={createCandidate.isPending} okText="创建待复核候选" cancelText="取消"
-    okButtonProps={{disabled: !title.trim() || !summary.trim() || sourceIds.length < 2}}
+    okButtonProps={{disabled: !title.trim() || !summary.trim() || sourceIds.length < 2 || Boolean(validFrom && validTo && new Date(validTo) < new Date(validFrom))}}
     onCancel={() => setCreating(false)} onOk={() => createCandidate.mutate()}>
     <p>至少选择两条同一主体、来源可追溯的活跃 L1。模型只能生成草稿，不会自动保存或接受。</p>
     <label htmlFor="scenario-title">场景标题</label><Input id="scenario-title" value={title} maxLength={120} onChange={event => setTitle(event.target.value)}/>
     <label htmlFor="scenario-summary">场景总结</label><Input.TextArea id="scenario-summary" value={summary} maxLength={2000} rows={5} onChange={event => setSummary(event.target.value)}/>
+    <label htmlFor="scenario-valid-from">现实开始时间（可选）</label><Input id="scenario-valid-from" type="datetime-local" value={validFrom} onChange={event => setValidFrom(event.target.value)}/>
+    <label htmlFor="scenario-valid-to">现实结束时间（可选）</label><Input id="scenario-valid-to" type="datetime-local" value={validTo} onChange={event => setValidTo(event.target.value)}/>
+    {validFrom && validTo && new Date(validTo) < new Date(validFrom) && <Alert type="error" showIcon title="结束时间不能早于开始时间"/>}
     <label htmlFor="scenario-sources">L1 来源（至少两条）</label><Select id="scenario-sources" aria-label="L1 来源" mode="multiple" className="wide" value={sourceIds} onChange={setSourceIds}
       optionFilterProp="label" options={(memories.data?.items ?? []).map(item => ({value:item.id,label:item.content}))}/>
     <Space direction="vertical" className="wide">

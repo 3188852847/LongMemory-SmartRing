@@ -504,7 +504,9 @@ def test_scenario_http_requires_csrf_and_explicit_capability(tmp_path):
             assert (await (await client.get(base + "/api/scenarios?state=all")).json())["total"] == 0
             body = {"title": "准备答辩", "summary": "用户最近正在准备答辩。",
                     "source_memory_ids": ["l1-a", "l1-b"], "creation_kind": "manual",
-                    "confirm_candidate": True}
+                    "confirm_candidate": True,
+                    "valid_from": "2026-09-06T08:00:00+00:00",
+                    "valid_to": "2026-09-13T08:00:00+00:00"}
             assert (await client.post(base + "/api/scenarios", json=body)).status == 403
             created_response = await client.post(base + "/api/scenarios", headers=headers, json=body)
             assert created_response.status == 200
@@ -512,6 +514,8 @@ def test_scenario_http_requires_csrf_and_explicit_capability(tmp_path):
             listed = await (await client.get(base + "/api/scenarios?state=candidate")).json()
             assert listed["total"] == 1
             detail = await (await client.get(base + "/api/scenarios/" + created["id"])).json()
+            assert detail["valid_from"] == "2026-09-06T08:00:00+00:00"
+            assert detail["valid_to"] == "2026-09-13T08:00:00+00:00"
             assert {source["l0_sources"][0]["content"] for source in detail["sources"]} == {
                 "用户周五答辩。", "用户正在修改 PPT。",
             }

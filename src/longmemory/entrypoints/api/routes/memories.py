@@ -156,8 +156,10 @@ def register_memory_routes(app, backend):
         except (ValueError, UnicodeError):
             raise web.HTTPBadRequest() from None
         ids = body.get("source_memory_ids") if isinstance(body, dict) else None
+        old_fields = {"title", "summary", "source_memory_ids", "creation_kind", "confirm_candidate"}
+        new_fields = old_fields | {"valid_from", "valid_to"}
         if (not isinstance(body, dict)
-                or set(body) != {"title", "summary", "source_memory_ids", "creation_kind", "confirm_candidate"}
+                or set(body) not in (old_fields, new_fields)
                 or body.get("confirm_candidate") is not True
                 or body.get("creation_kind") not in {"manual", "model_assisted"}
                 or not isinstance(body.get("title"), str)
@@ -168,9 +170,14 @@ def register_memory_routes(app, backend):
                 or any(not isinstance(value, str) or not value or len(value) > 128 for value in ids)
                 or len(set(ids)) != len(ids)):
             raise web.HTTPBadRequest()
+        for field in ("valid_from", "valid_to"):
+            value = body.get(field)
+            if value is not None and (not isinstance(value, str) or not 1 <= len(value) <= 64):
+                raise web.HTTPBadRequest()
         return await invoke(backend.create_scenario, title=body["title"].strip(),
                             summary=body["summary"].strip(), source_memory_ids=ids,
-                            creation_kind=body["creation_kind"])
+                            creation_kind=body["creation_kind"],
+                            valid_from=body.get("valid_from"), valid_to=body.get("valid_to"))
 
     async def scenario_proposal(request):
         if request.content_type != "application/json":

@@ -409,13 +409,19 @@ class MemoryBackend:
             "persisted": False,
         }
 
-    def create_scenario(self, *, title, summary, source_memory_ids, creation_kind="manual"):
+    def create_scenario(self, *, title, summary, source_memory_ids, creation_kind="manual",
+                        valid_from=None, valid_to=None):
         with self._open(write_capability="scenario") as connection:
             service = ScenarioManagementService(
                 memory_store=SQLiteMemoryStore(connection, commit_changes=False),
                 scenario_store=SQLiteScenarioStore(connection, commit_changes=False),
             )
             try:
+                try:
+                    parsed_valid_from = datetime.fromisoformat(valid_from) if valid_from else None
+                    parsed_valid_to = datetime.fromisoformat(valid_to) if valid_to else None
+                except ValueError:
+                    raise MemoryAccessError("scenario_valid_time_invalid", 400) from None
                 if creation_kind == "model_assisted" and self.scenario_producer is None:
                     raise MemoryAccessError("scenario_model_preview_unavailable", 503)
                 generator_name = (
@@ -431,6 +437,8 @@ class MemoryBackend:
                     source_memory_ids=tuple(MemoryId(value) for value in source_memory_ids),
                     generator_name=generator_name,
                     generator_version=generator_version,
+                    valid_from=parsed_valid_from,
+                    valid_to=parsed_valid_to,
                 )
             except (ValueError, LookupError) as error:
                 raise MemoryAccessError(str(error), 400) from None

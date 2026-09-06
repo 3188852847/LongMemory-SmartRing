@@ -252,16 +252,28 @@ def test_scenario_candidate_and_review_use_separate_capability(recorded):
     created = backend.create_scenario(
         title="准备答辩", summary="用户最近正在准备答辩。",
         source_memory_ids=[first_id, "l1-second"],
+        valid_from="2026-09-06T08:00:00+00:00",
+        valid_to="2026-09-13T08:00:00+00:00",
     )
     assert created["status"] == "candidate"
     assert backend.list_scenarios(state="candidate")["total"] == 1
     detail = backend.get_scenario(created["id"])
     assert detail["generator_name"] == "manual_console"
+    assert detail["valid_from"] == "2026-09-06T08:00:00+00:00"
+    assert detail["valid_to"] == "2026-09-13T08:00:00+00:00"
     assert len(detail["sources"]) == 2
     assert {source["l0_sources"][0]["role"] for source in detail["sources"]} == {"user"}
     assert {source["l0_sources"][0]["source_message_id"] for source in detail["sources"]} == {
         first_source_id, "l0-second",
     }
+
+    with pytest.raises(MemoryAccessError, match="valid_from_timezone_required"):
+        backend.create_scenario(
+            title="无效时间", summary="这条候选不应留下。",
+            source_memory_ids=[first_id, "l1-second"],
+            valid_from="2026-09-06T08:00:00",
+        )
+    assert backend.list_scenarios(state="candidate")["total"] == 1
 
     reviewed = backend.review_scenario(
         created["id"], decision="accepted", expected_revision=1,

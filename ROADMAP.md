@@ -24,7 +24,7 @@ P3 采用“个人记忆、外部知识、上下文编排”三个平面。个�
 
 P3.1 已将网页和统一启动模式下的小智改为共享一个常驻 `MemoryRuntime`；用户已于 2026-09-06 确认网页↔圆屏双向记忆测试通过。P3.2 的模型辅助提取与关键词＋本地 BGE 混合召回已完成首轮组合体验。P3.3 已区分两类显式更新：旧记录本来就错时使用 `user_corrected`；旧事实后来变化时保留旧 L1 的 `valid_to`，并给新 L1 写入 `valid_from`。两者都保留 L0 与 SUPERSEDE 历史，当前召回只使用新事实。日常库已在生成 V3 一致性备份后迁移到 V4，完整性与外键校验通过，用户已完成真实纠正验收；事实变化第一切片尚待真实页面体验。P3.4 第一切片增加本次运行的两个独立开关：暂停生成新 L1、暂停使用已有记忆；网页与圆屏共享，服务重启恢复开启，L0 审计归档不随 L1 开关关闭。见 [ADR-0027](docs/adr/0027-shared-persistent-memory-runtime.md)至 [ADR-0031](docs/adr/0031-runtime-memory-mode-controls.md)，以及 [ADR-0034](docs/adr/0034-temporal-fact-change.md)。
 
-L2 第一版“可复核的时间化场景候选”已完成候选、来源、模型预览与人工复核。已接受且当前有效的 L2 现在可通过独立、默认关闭的运行期开关参与网页与圆屏回答；第一版只做标题/摘要关键词重叠，最多 3 条，并单独记录 L2→L1→L0 来源。尚未实现自动低频扫描、语义 L2 召回、时间编辑或持久策略。见 [ADR-0035](docs/adr/0035-reviewable-l2-scenario-candidates.md)、[ADR-0037](docs/adr/0037-controlled-l2-answer-context.md)与 [L2 验收需求](docs/requirements/l2-scenario-memory.md)。
+L2 第一版“可复核的时间化场景候选”已完成候选、来源、模型预览、人工复核和创建时的现实有效期输入。已接受且当前有效的 L2 可通过独立、默认关闭的运行期开关参与网页与圆屏回答；第一版只做标题/摘要关键词重叠，最多 3 条，并单独记录 L2→L1→L0 来源。尚未实现自动低频扫描、语义 L2 召回、已保存场景的审计式生命周期修改或持久策略。见 [ADR-0035](docs/adr/0035-reviewable-l2-scenario-candidates.md)、[ADR-0037](docs/adr/0037-controlled-l2-answer-context.md)与 [L2 验收需求](docs/requirements/l2-scenario-memory.md)。
 
 ## 历史执行顺序：研究平台迁移（2026-09-03，执行优先级由 ADR-0015 替代）
 
