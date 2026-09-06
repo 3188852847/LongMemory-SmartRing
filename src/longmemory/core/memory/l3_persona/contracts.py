@@ -2,7 +2,7 @@
 
 from typing import Protocol
 
-from longmemory.core.common.identifiers import PersonaId
+from longmemory.core.common.identifiers import MemorySubjectId, PersonaId
 from .models import (
     PersonaGenerationAudit,
     PersonaLifecycleEvent,
@@ -27,6 +27,8 @@ class PersonaStore(Protocol):
     ) -> None: ...
 
     def get(self, persona_id: PersonaId) -> PersonaMemory | None: ...
+
+    def list_active(self, subject_id: MemorySubjectId) -> tuple[PersonaMemory, ...]: ...
 
     def list_sources(self, persona_id: PersonaId) -> tuple[PersonaSource, ...]: ...
 

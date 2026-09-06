@@ -1,6 +1,6 @@
 import {useEffect, useState} from 'react';
 import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
-import {Alert, Button, Card, Descriptions, Drawer, Empty, Input, List, Modal, Select, Space, Tag} from 'antd';
+import {Alert, Button, Card, Descriptions, Drawer, Empty, Input, List, Modal, Select, Space, Tabs, Tag} from 'antd';
 import {ChatApi} from './api';
 import {AppShell, ConsoleNav} from './AppShell';
 
@@ -19,6 +19,9 @@ type SourceOption = {layer:'l1'|'l2';id:string;subject_id:string;content:string;
 type SourceOptions = {l1:SourceOption[];l2:SourceOption[];selection_is_semantic:false};
 type PersonaProposal = {kind:PersonaKind;basis:PersonaBasis;label:string;statement:string;
   sources:Array<{layer:'l1'|'l2';id:string}>;generator_name:string;generator_version:string;model:string|null;persisted:false};
+type PersonaProfile = {subject_id:string;representation:'aggregated_active_assertions_v1';updated_at:string|null;
+  active_assertion_count:number;status_counts:Record<PersonaState,number>;
+  sections:Array<{kind:PersonaKind;items:Persona[]}>};
 type Page<T> = {items:T[];total:number;limit:number;offset:number};
 
 const api = new ChatApi();
@@ -53,6 +56,8 @@ export function PersonaApp() {
   const config = useQuery({queryKey:['memory-config'],enabled:ready,queryFn:() => api.request<MemoryConfig>('/api/memory-config')});
   const personas = useQuery({queryKey:['personas',filter],enabled:ready&&config.data?.configured===true,
     queryFn:() => api.request<Page<Persona>>(`/api/personas?state=${filter}&offset=0&limit=100`)});
+  const profile = useQuery({queryKey:['persona-profile'],enabled:ready&&config.data?.configured===true,
+    queryFn:() => api.request<PersonaProfile>('/api/persona-profile')});
   const sourceOptions = useQuery({queryKey:['persona-source-options'],enabled:ready&&config.data?.configured===true,
     queryFn:() => api.request<SourceOptions>('/api/persona-source-options')});
   const detail = useQuery({queryKey:['persona',selectedId],enabled:ready&&Boolean(selectedId),
@@ -87,6 +92,7 @@ export function PersonaApp() {
     }),
     onSuccess:async() => {setReviewDecision(undefined);await Promise.all([
       queryClient.invalidateQueries({queryKey:['personas']}),queryClient.invalidateQueries({queryKey:['persona',selectedId]}),
+      queryClient.invalidateQueries({queryKey:['persona-profile']}),
     ]);setNotice('画像复核结果已保存；当前版本仍不会把 L3 注入聊天回答。');},
     onError:error => setNotice(String(error)),
   });
@@ -97,22 +103,40 @@ export function PersonaApp() {
   const validRange = !(validFrom&&validTo&&new Date(validTo)<new Date(validFrom));
   const openCreator = () => {setKind('preference');setBasis('user_declared');setLabel('');setStatement('');setSources([]);setValidFrom('');setValidTo('');setDraftOrigin('manual');setCreating(true);};
   const sidebar = <><Button type="primary" block disabled={!canManage} onClick={openCreator}>新建 L3 候选</Button><ConsoleNav active="personas" legacyPath="/memories"/></>;
-
-  return <><AppShell subtitle="可复核的用户画像" className="persona-shell" sidebar={sidebar}>
-    <header><div><h1>用户画像（L3）</h1><small>{config.data?.database??'未指定记忆库'}</small></div>
-      <Button loading={personas.isFetching} onClick={() => void queryClient.invalidateQueries({queryKey:['personas']})}>刷新</Button></header>
-    <Alert className="mode-card" type="info" showIcon title="L3 是关于用户的稳定认识，不是助手角色"
-      description="用户声明与系统推断分开标记；所有内容先成为候选并检查 L1/L2→L0 来源。当前版本尚不把 L3 用于回答。"/>
-    {!canManage&&config.data?.configured&&<Alert type="warning" showIcon title="当前进程没有开启 L3 管理权限" description="通过新版日常启动面板启动可开放候选与复核；只读浏览不受影响。"/>}
+  const profilePane = <Card title="我的统一画像" extra={<Space><Tag color="green">{profile.data?.active_assertion_count??0} 项已接受认识</Tag><small>更新：{displayTime(profile.data?.updated_at)}</small></Space>}>
+    {profile.isFetching?<p>正在整理当前画像…</p>:profile.data?.sections.length?<Space orientation="vertical" size="middle" className="wide">
+      {profile.data.sections.map(section=><Card key={section.kind} type="inner" title={kindName[section.kind]}>
+        <List dataSource={section.items} renderItem={item=><List.Item actions={[<Button key="evidence" type="link" onClick={()=>setSelectedId(item.id)}>查看依据</Button>]}>
+          <List.Item.Meta title={<Space wrap><span>{item.label}</span><Tag color={item.basis==='user_declared'?'blue':'purple'}>{basisName[item.basis]}</Tag></Space>}
+            description={<><p className="scenario-summary">{item.statement}</p>{(item.valid_from||item.valid_to)&&<small>现实时间：{displayTime(item.valid_from)} — {displayTime(item.valid_to)}</small>}</>}/>
+        </List.Item>}/>
+      </Card>)}
+    </Space>:<Empty description="尚无已接受的画像认识；候选需在“画像依据与候选”中复核后才会进入这里"/>}
+  </Card>;
+  const evidencePane = <>
     <div className="scenario-toolbar"><Select aria-label="画像状态" value={filter} onChange={setFilter} options={[
       {value:'all',label:'全部状态'},{value:'candidate',label:'待复核'},{value:'active',label:'已接受'},
       {value:'rejected',label:'已拒绝'},{value:'stale',label:'已失效'},
     ]}/></div>
-    <List loading={personas.isFetching} dataSource={personas.data?.items??[]} locale={{emptyText:<Empty description="尚无 L3 用户画像"/>}}
+    <List loading={personas.isFetching} dataSource={personas.data?.items??[]} locale={{emptyText:<Empty description="尚无 L3 画像依据或候选"/>}}
       renderItem={item=><List.Item className="memory-item" onClick={() => setSelectedId(item.id)} actions={[<Button key="open" type="link">查看证据</Button>]}>
         <List.Item.Meta title={<Space wrap><span>{item.label}</span><Tag>{kindName[item.kind]}</Tag><Tag color={item.basis==='user_declared'?'blue':'purple'}>{basisName[item.basis]}</Tag><Tag color={stateColor[item.status]}>{stateName[item.status]}</Tag></Space>}
           description={<><p className="scenario-summary">{item.statement}</p><small>{displayTime(item.generated_at)} · 修订 {item.revision}</small></>}/></List.Item>}/>
-    <p role="status">{config.error?String(config.error):personas.error?String(personas.error):notice}</p>
+  </>;
+
+  return <><AppShell subtitle="可复核的用户画像" className="persona-shell" sidebar={sidebar}>
+    <header><div><h1>用户画像（L3）</h1><small>{config.data?.database??'未指定记忆库'}</small></div>
+      <Button loading={personas.isFetching||profile.isFetching} onClick={() => void Promise.all([
+        queryClient.invalidateQueries({queryKey:['personas']}),queryClient.invalidateQueries({queryKey:['persona-profile']}),
+      ])}>刷新</Button></header>
+    <Alert className="mode-card" type="info" showIcon title="这里是一份持续累积的统一用户画像"
+      description="页面按栏目汇总所有已接受的 L3 认识；底层仍保存独立断言和 L1/L2→L0 来源，便于逐项纠正、失效和审计。它不是助手角色，当前也尚未用于回答。"/>
+    {!canManage&&config.data?.configured&&<Alert type="warning" showIcon title="当前进程没有开启 L3 管理权限" description="通过新版日常启动面板启动可开放候选与复核；只读浏览不受影响。"/>}
+    <Tabs defaultActiveKey="profile" items={[
+      {key:'profile',label:'统一画像',children:profilePane},
+      {key:'evidence',label:`画像依据与候选（${personas.data?.total??0}）`,children:evidencePane},
+    ]}/>
+    <p role="status">{config.error?String(config.error):profile.error?String(profile.error):personas.error?String(personas.error):notice}</p>
   </AppShell>
 
   <Drawer title="L3 画像详情" size="large" open={Boolean(selectedId)} onClose={() => setSelectedId(undefined)} loading={detail.isFetching}>

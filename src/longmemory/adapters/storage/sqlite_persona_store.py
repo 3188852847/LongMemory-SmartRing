@@ -155,6 +155,17 @@ class SQLitePersonaStore:
         ).fetchone()
         return None if row is None else self._row_to_persona(row)
 
+    def list_active(self, subject_id: MemorySubjectId) -> tuple[PersonaMemory, ...]:
+        """返回构成当前统一画像的已接受断言，不包含候选和失效历史。"""
+
+        rows = self._connection.execute(
+            "SELECT * FROM persona_memories "
+            "WHERE subject_id=? AND status='active' "
+            "ORDER BY generated_at DESC, id DESC",
+            (str(subject_id),),
+        ).fetchall()
+        return tuple(self._row_to_persona(row) for row in rows)
+
     def list_sources(self, persona_id: PersonaId) -> tuple[PersonaSource, ...]:
         rows = self._connection.execute(
             "SELECT * FROM persona_sources WHERE persona_id=? "

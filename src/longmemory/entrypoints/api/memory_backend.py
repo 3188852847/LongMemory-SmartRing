@@ -17,7 +17,9 @@ from longmemory.application.scenario_management.service import ScenarioManagemen
 from longmemory.application.scenario_management.proposal_service import ScenarioProposalService
 from longmemory.application.persona_management.service import PersonaManagementService
 from longmemory.application.persona_management.proposal_service import PersonaProposalService
+from longmemory.application.persona_management.profile import build_persona_profile
 from longmemory.core.common.identifiers import MemoryId, PersonaId, ScenarioId
+from longmemory.core.memory.l1_atomic.models import CURRENT_USER_SUBJECT_ID
 from longmemory.core.memory.l2_scenario.models import ScenarioReviewDecision
 from longmemory.core.memory.l2_scenario.proposals import (
     ScenarioProposalError,
@@ -554,6 +556,34 @@ class MemoryBackend:
             ).fetchall()
             return {"items": [self._persona_json(row) for row in rows],
                     "total": total, "limit": limit, "offset": offset}
+
+    def get_persona_profile(self):
+        """构造一份用户可见画像；底层原子断言和来源链保持不变。"""
+
+        with self._open() as connection:
+            store = SQLitePersonaStore(connection)
+            profile = build_persona_profile(
+                CURRENT_USER_SUBJECT_ID,
+                store.list_active(CURRENT_USER_SUBJECT_ID),
+            )
+            counts = {status: 0 for status in ("candidate", "active", "rejected", "stale")}
+            for row in connection.execute(
+                "SELECT status, count(*) AS amount FROM persona_memories "
+                "WHERE subject_id=? GROUP BY status",
+                (str(CURRENT_USER_SUBJECT_ID),),
+            ).fetchall():
+                counts[row["status"]] = row["amount"]
+            return {
+                "subject_id": str(profile.subject_id),
+                "representation": "aggregated_active_assertions_v1",
+                "updated_at": profile.updated_at.isoformat() if profile.updated_at else None,
+                "active_assertion_count": profile.assertion_count,
+                "status_counts": counts,
+                "sections": [{
+                    "kind": section.kind.value,
+                    "items": [self._persona_model_json(item) for item in section.assertions],
+                } for section in profile.sections],
+            }
 
     def list_persona_source_options(self):
         """只返回当前有效的 L1 和已接受 L2；不自动判断适合哪个画像。"""

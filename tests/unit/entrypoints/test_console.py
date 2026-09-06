@@ -679,4 +679,13 @@ def test_persona_http_requires_csrf_and_explicit_capability(tmp_path):
             assert reviewed.status == 200
             assert (await reviewed.json())["status"] == "active"
 
+            profile_response = await client.get(base + "/api/persona-profile")
+            profile = await profile_response.json()
+            assert profile_response.status == 200
+            assert profile["representation"] == "aggregated_active_assertions_v1"
+            assert profile["active_assertion_count"] == 1
+            assert profile["status_counts"]["active"] == 1
+            assert profile["sections"][0]["kind"] == "preference"
+            assert profile["sections"][0]["items"][0]["id"] == created["id"]
+
     asyncio.run(run())

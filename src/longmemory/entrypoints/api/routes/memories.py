@@ -258,6 +258,11 @@ def register_memory_routes(app, backend):
             raise web.HTTPBadRequest()
         return await invoke(backend.list_personas, state=state, offset=offset, limit=limit)
 
+    async def persona_profile(request):
+        if request.query:
+            raise web.HTTPBadRequest()
+        return await invoke(backend.get_persona_profile)
+
     async def persona_source_options(request):
         if request.query:
             raise web.HTTPBadRequest()
@@ -376,6 +381,7 @@ def register_memory_routes(app, backend):
     app.router.add_post("/api/scenarios/{scenario_id}/reviews", scenario_review)
     app.router.add_post("/api/scenarios/{scenario_id}/lifecycle", scenario_lifecycle)
     app.router.add_get("/api/personas", persona_listing, allow_head=False)
+    app.router.add_get("/api/persona-profile", persona_profile, allow_head=False)
     app.router.add_get("/api/persona-source-options", persona_source_options, allow_head=False)
     app.router.add_post("/api/personas", persona_collection)
     app.router.add_post("/api/persona-proposals", persona_proposal)

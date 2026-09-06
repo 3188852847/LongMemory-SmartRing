@@ -15,6 +15,7 @@ describe('L3 用户画像页', () => {
     vi.spyOn(ChatApi.prototype,'request').mockImplementation(async(path:string,method?:string,body?:unknown) => {
       calls.push([path,method,body]);
       if(path==='/api/memory-config') return {configured:true,database:'synthetic.db',allow_persona_management:true,persona_model_preview_available:false,persona_model:null};
+      if(path==='/api/persona-profile') return {subject_id:'user:self',representation:'aggregated_active_assertions_v1',updated_at:null,active_assertion_count:0,status_counts:{candidate:0,active:0,rejected:0,stale:0},sections:[]};
       if(path.startsWith('/api/personas?')) return {items:[],total:0,limit:100,offset:0};
       if(path==='/api/persona-source-options') return {l1:[{layer:'l1',id:'l1-a',subject_id:'user:self',content:'用户明确希望先被倾听。',recorded_at:'2026-09-06T10:00:00Z'}],l2:[],selection_is_semantic:false};
       if(path==='/api/personas'&&method==='POST') return {id:'persona-1'};
@@ -46,6 +47,7 @@ describe('L3 用户画像页', () => {
     vi.spyOn(ChatApi.prototype,'request').mockImplementation(async(path:string,method?:string,body?:unknown) => {
       calls.push([path,method,body]);
       if(path==='/api/memory-config') return {configured:true,database:'synthetic.db',allow_persona_management:true,persona_model_preview_available:true,persona_model:'synthetic-model'};
+      if(path==='/api/persona-profile') return {subject_id:'user:self',representation:'aggregated_active_assertions_v1',updated_at:null,active_assertion_count:0,status_counts:{candidate:0,active:0,rejected:0,stale:0},sections:[]};
       if(path.startsWith('/api/personas?')) return {items:[],total:0,limit:100,offset:0};
       if(path==='/api/persona-source-options') return {l1:[{layer:'l1',id:'l1-a',subject_id:'user:self',content:'用户明确希望先被倾听。',recorded_at:'2026-09-06T10:00:00Z'}],l2:[],selection_is_semantic:false};
       if(path==='/api/persona-proposals'&&method==='POST') return {kind:'interaction_style',basis:'user_declared',label:'建议前先倾听',statement:'用户希望助手先倾听，再询问是否需要建议。',sources:[{layer:'l1',id:'l1-a'}],generator_name:'model_assisted_console',generator_version:'l3-persona-preview-v1',model:'synthetic-model',persisted:false};
@@ -64,6 +66,24 @@ describe('L3 用户画像页', () => {
     await waitFor(()=>expect(calls.filter(([path])=>path==='/api/persona-proposals')).toHaveLength(1));
     expect((screen.getByLabelText('简短标签') as HTMLInputElement).value).toBe('建议前先倾听');
     expect(calls.filter(([path])=>path==='/api/personas')).toHaveLength(0);
+    view.unmount();client.clear();
+  });
+
+  test('统一画像只在主视图汇总已接受断言并保留查看依据入口', async () => {
+    vi.spyOn(ChatApi.prototype,'bootstrap').mockResolvedValue(undefined);
+    vi.spyOn(ChatApi.prototype,'request').mockImplementation(async(path:string) => {
+      if(path==='/api/memory-config') return {configured:true,database:'synthetic.db',allow_persona_management:true,persona_model_preview_available:false,persona_model:null};
+      if(path==='/api/persona-profile') return {subject_id:'user:self',representation:'aggregated_active_assertions_v1',updated_at:'2026-09-06T10:00:00Z',active_assertion_count:1,status_counts:{candidate:1,active:1,rejected:0,stale:0},sections:[{kind:'preference',items:[{id:'active-1',subject_id:'user:self',kind:'preference',basis:'user_declared',label:'饮品偏好',statement:'用户喜欢喝乌龙茶。',generated_at:'2026-09-06T10:00:00Z',valid_from:null,valid_to:null,status:'active',generator_name:'manual_console',generator_version:'1',revision:2}]}]};
+      if(path.startsWith('/api/personas?')) return {items:[],total:1,limit:100,offset:0};
+      if(path==='/api/persona-source-options') return {l1:[],l2:[],selection_is_semantic:false};
+      if(path==='/api/personas/active-1') return {id:'active-1',subject_id:'user:self',kind:'preference',basis:'user_declared',label:'饮品偏好',statement:'用户喜欢喝乌龙茶。',generated_at:'2026-09-06T10:00:00Z',valid_from:null,valid_to:null,status:'active',generator_name:'manual_console',generator_version:'1',revision:2,audit:null,sources:[],lifecycle_events:[]};
+      throw new Error(`unexpected GET ${path}`);
+    });
+    const client=createConsoleQueryClient();
+    const view=render(<QueryClientProvider client={client}><MemoryRouter><PersonaApp/></MemoryRouter></QueryClientProvider>);
+    expect(await screen.findByText('用户喜欢喝乌龙茶。')).toBeTruthy();
+    expect(screen.getByText('1 项已接受认识')).toBeTruthy();
+    expect(screen.getByText('查看依据')).toBeTruthy();
     view.unmount();client.clear();
   });
 });

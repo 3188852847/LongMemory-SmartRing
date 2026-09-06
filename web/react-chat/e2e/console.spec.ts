@@ -33,6 +33,11 @@ test('文字聊天可保存并在刷新后恢复，React 页面可统一导航',
   await expect(page.locator('.ant-modal-wrap:visible')).toHaveCount(0);
   await page.locator('.ant-drawer-close:visible').click();
   await expect(page.locator('.ant-drawer-mask:visible')).toHaveCount(0);
+  await page.getByRole('link', {name:'用户画像'}).click();
+  await expect(page).toHaveURL(/\/personas$/);
+  await expect(page.getByRole('heading', {name:'用户画像（L3）'})).toBeVisible();
+  await expect(page.getByText('我的统一画像')).toBeVisible();
+  await expect(page.getByText(/尚无已接受的画像认识/)).toBeVisible();
   await page.getByRole('link', {name:'实验中心'}).click();
   await expect(page).toHaveURL(/\/experiments-react$/);
   await expect(page.getByRole('heading', {name:'实验中心'})).toBeVisible();

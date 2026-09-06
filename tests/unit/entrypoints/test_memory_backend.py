@@ -47,7 +47,9 @@ def test_l0_browse_distinguishes_linked_and_unlinked_sources(recorded):
     assert backend.list_sources(link_state="linked")["items"][0]["id"] == source_id
     unlinked = backend.list_sources(link_state="unlinked")
     assert {"unlinked-user", "assistant-source"} <= {item["id"] for item in unlinked["items"]}
-    assert backend.list_sources(role="assistant")["items"][0]["id"] == "assistant-source"
+    assistant_items = backend.list_sources(role="assistant")["items"]
+    assert "assistant-source" in {item["id"] for item in assistant_items}
+    assert all(item["role"] == "assistant" for item in assistant_items)
     assert backend.list_sources(query="只在原始")["items"][0]["id"] == "unlinked-user"
     linked_detail = backend.get_source(source_id)
     assert linked_detail["content"] == "我养了一只叫豆包的猫。"
