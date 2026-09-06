@@ -34,7 +34,7 @@ P1 网页会话恢复已实现：列表、新建、切换、重命名，同一�
 
 当前产品顺序：**P1 日常入口 → P2 个性化体验 → P3 日常记忆 → P4 可控主动交流 → P5 习惯驱动陪伴**。P1 最小启动面板及网页会话恢复已实现；P2 的本地声音启动和状态展示已完成，待用户试听验收后进入 P3。
 
-P3 目标已明确为四层个人记忆：L0 原始证据、L1 原子记忆、L2 场景、L3 用户画像。P3.1 已离线实现网页/圆屏共享的常驻 Memory Runtime，保留旧子进程为显式回退；真实圆屏双入口待验收，算法仍是规则提取和关键词召回。外部文档进入并列知识平面，不作为 L4，也不自动成为用户事实。见 [ADR-0026](docs/adr/0026-layered-memory-and-knowledge-plane.md) 与 [ADR-0027](docs/adr/0027-shared-persistent-memory-runtime.md)。
+P3 目标已明确为四层个人记忆：L0 原始证据、L1 原子记忆、L2 场景、L3 用户画像。P3.1 已实现网页/圆屏共享的常驻 Memory Runtime，保留旧子进程为显式回退；用户已确认真实双入口测试通过。算法仍是规则提取和关键词召回，不能把接线完成误写成记忆质量完成。外部文档进入并列知识平面，不作为 L4，也不自动成为用户事实。见 [ADR-0026](docs/adr/0026-layered-memory-and-knowledge-plane.md) 与 [ADR-0027](docs/adr/0027-shared-persistent-memory-runtime.md)。
 
 - [路线图](ROADMAP.md)：先后顺序与历史记录。
 - [产品范围与验收](docs/requirements/companion-product.md)：各阶段做什么、怎样算完成。
