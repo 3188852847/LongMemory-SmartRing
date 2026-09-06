@@ -150,6 +150,26 @@ class PersonaReview:
 
 
 @dataclass(frozen=True, slots=True)
+class PersonaReplacement:
+    """候选拟取代的旧画像；接受候选前仅是可审计意图。"""
+
+    candidate_persona_id: PersonaId
+    replaced_persona_id: PersonaId
+    target_revision: int
+    linked_at: datetime
+    applied_at: datetime | None = None
+
+    def __post_init__(self) -> None:
+        if self.candidate_persona_id == self.replaced_persona_id:
+            raise ValueError("persona_replacement_self_reference")
+        if self.target_revision < 1:
+            raise ValueError("persona_revision_invalid")
+        _require_aware(self.linked_at, "linked_at")
+        if self.applied_at is not None:
+            _require_aware(self.applied_at, "applied_at")
+
+
+@dataclass(frozen=True, slots=True)
 class PersonaResolvedSource:
     """已向下解析到用户 L0 的来源；只用于创建前资格核对。"""
 

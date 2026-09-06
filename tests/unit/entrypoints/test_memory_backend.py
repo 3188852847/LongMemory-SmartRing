@@ -70,7 +70,7 @@ def test_missing_database_is_not_created(tmp_path):
     assert not path.parent.exists()
 
 
-@pytest.mark.parametrize("version", [0, 1, 2, 3, 4, 5, 6, 7, 9])
+@pytest.mark.parametrize("version", [0, 1, 2, 3, 4, 5, 6, 7, 10])
 def test_old_and_unknown_schema_are_not_migrated(tmp_path, version):
     path = tmp_path / "version.db"
     with sqlite3.connect(path) as conn:

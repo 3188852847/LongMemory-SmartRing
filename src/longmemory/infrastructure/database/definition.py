@@ -1,6 +1,6 @@
-"""当前 SQLite V8 的完整结构定义；不包含历史迁移步骤。"""
+"""当前 SQLite V9 的完整结构定义；不包含历史迁移步骤。"""
 
-SCHEMA_VERSION = 8
+SCHEMA_VERSION = 9
 
 LATEST_SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS conversation_messages (
@@ -146,6 +146,20 @@ CREATE TABLE IF NOT EXISTS persona_reviews (
     persona_revision INTEGER NOT NULL CHECK (persona_revision >= 1),
     FOREIGN KEY (persona_id) REFERENCES persona_memories (id) ON DELETE CASCADE
 );
+
+CREATE TABLE IF NOT EXISTS persona_replacements (
+    candidate_persona_id TEXT NOT NULL,
+    replaced_persona_id TEXT NOT NULL,
+    target_revision INTEGER NOT NULL CHECK (target_revision >= 1),
+    linked_at TEXT NOT NULL,
+    applied_at TEXT,
+    PRIMARY KEY (candidate_persona_id, replaced_persona_id),
+    CHECK (candidate_persona_id <> replaced_persona_id),
+    FOREIGN KEY (candidate_persona_id) REFERENCES persona_memories (id) ON DELETE RESTRICT,
+    FOREIGN KEY (replaced_persona_id) REFERENCES persona_memories (id) ON DELETE RESTRICT
+);
+CREATE INDEX IF NOT EXISTS idx_persona_replacements_target
+    ON persona_replacements (replaced_persona_id, applied_at);
 
 CREATE TABLE IF NOT EXISTS persona_lifecycle_events (
     id TEXT PRIMARY KEY,

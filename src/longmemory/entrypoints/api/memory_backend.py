@@ -648,6 +648,12 @@ class MemoryBackend:
                     "l0_sources": messages,
                 })
             data["sources"] = sources
+            data["replaces"] = [self._persona_replacement_json(
+                replacement, store.get(replacement.replaced_persona_id),
+            ) for replacement in store.list_replacements(PersonaId(persona_id))]
+            data["replaced_by"] = [self._persona_replacement_json(
+                replacement, store.get(replacement.candidate_persona_id),
+            ) for replacement in store.list_replaced_by(PersonaId(persona_id))]
             data["lifecycle_events"] = [{
                 "id": str(event.id), "action": event.action.value,
                 "source_layer": event.source_layer.value, "source_id": event.source_id,
@@ -659,7 +665,8 @@ class MemoryBackend:
             return data
 
     def create_persona(self, *, kind, basis, label, statement, sources,
-                       valid_from=None, valid_to=None, creation_kind="manual"):
+                       valid_from=None, valid_to=None, creation_kind="manual",
+                       replaces=()):
         with self._open(write_capability="persona") as connection:
             store = SQLitePersonaStore(connection, commit_changes=False)
             service = PersonaManagementService(persona_store=store)
@@ -684,6 +691,7 @@ class MemoryBackend:
                         PERSONA_PROMPT_VERSION if creation_kind == "model_assisted" else "1"
                     ),
                     valid_from=parsed_valid_from, valid_to=parsed_valid_to,
+                    replaces=tuple(PersonaId(item) for item in replaces),
                 )
             except (ValueError, LookupError) as error:
                 raise MemoryAccessError(str(error), 400) from None
@@ -793,4 +801,15 @@ class MemoryBackend:
             "valid_to": persona.valid_to.isoformat() if persona.valid_to else None,
             "status": persona.status.value, "generator_name": persona.generator_name,
             "generator_version": persona.generator_version, "revision": persona.revision,
+        }
+
+    @staticmethod
+    def _persona_replacement_json(replacement, related):
+        return {
+            "candidate_persona_id": str(replacement.candidate_persona_id),
+            "replaced_persona_id": str(replacement.replaced_persona_id),
+            "target_revision": replacement.target_revision,
+            "linked_at": replacement.linked_at.isoformat(),
+            "applied_at": replacement.applied_at.isoformat() if replacement.applied_at else None,
+            "related": None if related is None else MemoryBackend._persona_model_json(related),
         }

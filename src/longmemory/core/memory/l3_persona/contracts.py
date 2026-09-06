@@ -7,6 +7,7 @@ from .models import (
     PersonaGenerationAudit,
     PersonaLifecycleEvent,
     PersonaMemory,
+    PersonaReplacement,
     PersonaResolvedSource,
     PersonaReview,
     PersonaSource,
@@ -24,6 +25,7 @@ class PersonaStore(Protocol):
         persona: PersonaMemory,
         sources: tuple[PersonaSource, ...],
         audit: PersonaGenerationAudit,
+        replacements: tuple[PersonaReplacement, ...] = (),
     ) -> None: ...
 
     def get(self, persona_id: PersonaId) -> PersonaMemory | None: ...
@@ -31,6 +33,10 @@ class PersonaStore(Protocol):
     def list_active(self, subject_id: MemorySubjectId) -> tuple[PersonaMemory, ...]: ...
 
     def list_sources(self, persona_id: PersonaId) -> tuple[PersonaSource, ...]: ...
+
+    def list_replacements(self, persona_id: PersonaId) -> tuple[PersonaReplacement, ...]: ...
+
+    def list_replaced_by(self, persona_id: PersonaId) -> tuple[PersonaReplacement, ...]: ...
 
     def review(
         self, review: PersonaReview, *, expected_revision: int,

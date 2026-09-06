@@ -276,10 +276,12 @@ def register_memory_routes(app, backend):
         except (ValueError, UnicodeError):
             raise web.HTTPBadRequest() from None
         sources = body.get("sources") if isinstance(body, dict) else None
-        fields = {"kind", "basis", "label", "statement", "sources",
-                  "valid_from", "valid_to", "confirm_candidate"}
-        extended_fields = fields | {"creation_kind"}
-        if (not isinstance(body, dict) or set(body) not in (fields, extended_fields)
+        required_fields = {"kind", "basis", "label", "statement", "sources",
+                           "valid_from", "valid_to", "confirm_candidate"}
+        allowed_fields = required_fields | {"creation_kind", "replaces"}
+        replaces = body.get("replaces", []) if isinstance(body, dict) else None
+        if (not isinstance(body, dict)
+                or not required_fields <= set(body) <= allowed_fields
                 or body.get("confirm_candidate") is not True
                 or body.get("creation_kind", "manual") not in {"manual", "model_assisted"}
                 or body.get("kind") not in {"preference", "habit", "interaction_style", "behavior_pattern"}
@@ -288,7 +290,11 @@ def register_memory_routes(app, backend):
                 or not 1 <= len(body["label"].strip()) <= 120
                 or not isinstance(body.get("statement"), str)
                 or not 1 <= len(body["statement"].strip()) <= 1000
-                or not isinstance(sources, list) or not 1 <= len(sources) <= 20):
+                or not isinstance(sources, list) or not 1 <= len(sources) <= 20
+                or not isinstance(replaces, list) or len(replaces) > 20
+                or any(not isinstance(item, str) or not 1 <= len(item) <= 128
+                       for item in replaces)
+                or len(set(replaces)) != len(replaces)):
             raise web.HTTPBadRequest()
         source_keys = []
         for item in sources:
@@ -309,6 +315,7 @@ def register_memory_routes(app, backend):
             label=body["label"].strip(), statement=body["statement"].strip(),
             sources=sources, valid_from=body["valid_from"], valid_to=body["valid_to"],
             creation_kind=body.get("creation_kind", "manual"),
+            replaces=replaces,
         )
 
     async def persona_proposal(request):

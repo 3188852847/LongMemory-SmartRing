@@ -78,3 +78,95 @@ def test_l1_source_retirement_stales_persona_with_audit_event(tmp_path):
     assert tuple(row) == ("stale",2)
     assert tuple(event) == ("source_retired","l1","l1-a")
     connection.close()
+
+
+def test_accepting_replacement_activates_new_and_stales_old_atomically(tmp_path):
+    connection = prepared(tmp_path)
+    store = SQLitePersonaStore(connection)
+    service = PersonaManagementService(persona_store=store)
+    old = service.create_candidate(
+        kind=PersonaKind.PREFERENCE, basis=PersonaBasis.USER_DECLARED,
+        label="下午聊天", statement="用户偏好下午聊天。",
+        source_refs=((PersonaSourceLayer.L1,"l1-a"),),
+    )
+    old = service.review(old.id, PersonaReviewDecision.ACCEPTED, expected_revision=1)
+    replacement = service.create_candidate(
+        kind=PersonaKind.PREFERENCE, basis=PersonaBasis.USER_DECLARED,
+        label="傍晚聊天", statement="用户现在更偏好傍晚聊天。",
+        source_refs=((PersonaSourceLayer.L1,"l1-b"),), replaces=(old.id,),
+    )
+
+    assert store.get(old.id).status.value == "active"
+    assert store.list_replacements(replacement.id)[0].applied_at is None
+    replacement = service.review(
+        replacement.id, PersonaReviewDecision.ACCEPTED, expected_revision=1,
+    )
+
+    assert replacement.status.value == "active"
+    assert store.get(old.id).status.value == "stale"
+    assert store.get(old.id).revision == 3
+    assert store.list_replacements(replacement.id)[0].applied_at is not None
+    assert store.list_replaced_by(old.id)[0].candidate_persona_id == replacement.id
+    assert tuple(item.id for item in store.list_active(old.subject_id)) == (replacement.id,)
+    assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
+    connection.close()
+
+
+def test_rejected_replacement_does_not_change_old_persona(tmp_path):
+    connection = prepared(tmp_path)
+    store = SQLitePersonaStore(connection)
+    service = PersonaManagementService(persona_store=store)
+    old = service.create_candidate(
+        kind=PersonaKind.PREFERENCE, basis=PersonaBasis.USER_DECLARED,
+        label="下午聊天", statement="用户偏好下午聊天。",
+        source_refs=((PersonaSourceLayer.L1,"l1-a"),),
+    )
+    old = service.review(old.id, PersonaReviewDecision.ACCEPTED, expected_revision=1)
+    replacement = service.create_candidate(
+        kind=PersonaKind.PREFERENCE, basis=PersonaBasis.USER_DECLARED,
+        label="候选变化", statement="这条变化不应被接受。",
+        source_refs=((PersonaSourceLayer.L1,"l1-b"),), replaces=(old.id,),
+    )
+    service.review(replacement.id, PersonaReviewDecision.REJECTED, expected_revision=1)
+
+    assert store.get(old.id).status.value == "active"
+    assert store.list_replacements(replacement.id)[0].applied_at is None
+    assert store.list_replaced_by(old.id) == ()
+    connection.close()
+
+
+def test_accepting_replacement_rolls_back_when_target_changed(tmp_path):
+    connection = prepared(tmp_path)
+    store = SQLitePersonaStore(connection)
+    service = PersonaManagementService(persona_store=store)
+    old = service.create_candidate(
+        kind=PersonaKind.PREFERENCE, basis=PersonaBasis.USER_DECLARED,
+        label="下午聊天", statement="用户偏好下午聊天。",
+        source_refs=((PersonaSourceLayer.L1,"l1-a"),),
+    )
+    old = service.review(old.id, PersonaReviewDecision.ACCEPTED, expected_revision=1)
+    replacement = service.create_candidate(
+        kind=PersonaKind.PREFERENCE, basis=PersonaBasis.USER_DECLARED,
+        label="傍晚聊天", statement="用户现在更偏好傍晚聊天。",
+        source_refs=((PersonaSourceLayer.L1,"l1-b"),), replaces=(old.id,),
+    )
+
+    # 模拟候选创建后，另一个入口先改变了旧画像。接受时必须检测到
+    # revision 不再匹配，并让“新画像激活 + 旧画像失效”整笔事务回滚。
+    connection.execute(
+        "UPDATE persona_memories SET revision=revision+1 WHERE id=?", (str(old.id),),
+    )
+    connection.commit()
+
+    with pytest.raises(ValueError, match="persona_replacement_conflict"):
+        service.review(
+            replacement.id, PersonaReviewDecision.ACCEPTED, expected_revision=1,
+        )
+
+    assert store.get(replacement.id).status.value == "candidate"
+    assert store.get(replacement.id).revision == 1
+    assert store.get(old.id).status.value == "active"
+    assert store.get(old.id).revision == 3
+    assert store.list_replacements(replacement.id)[0].applied_at is None
+    assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
+    connection.close()

@@ -688,4 +688,36 @@ def test_persona_http_requires_csrf_and_explicit_capability(tmp_path):
             assert profile["sections"][0]["kind"] == "preference"
             assert profile["sections"][0]["items"][0]["id"] == created["id"]
 
+            replacement_response = await client.post(
+                base + "/api/personas", headers=headers,
+                json=body | {
+                    "label": "更新后的饮品偏好",
+                    "statement": "用户现在偏好清淡乌龙茶。",
+                    "replaces": [created["id"]],
+                },
+            )
+            replacement = await replacement_response.json()
+            assert replacement_response.status == 200
+            replacement_detail = await (
+                await client.get(base + "/api/personas/" + replacement["id"])
+            ).json()
+            assert replacement_detail["replaces"][0]["replaced_persona_id"] == created["id"]
+            assert replacement_detail["replaces"][0]["applied_at"] is None
+
+            accepted_replacement = await client.post(
+                base + f"/api/personas/{replacement['id']}/reviews", headers=headers,
+                json={"decision": "accepted", "expected_revision": 1, "confirm_review": True},
+            )
+            assert accepted_replacement.status == 200
+            old_detail = await (
+                await client.get(base + "/api/personas/" + created["id"])
+            ).json()
+            assert old_detail["status"] == "stale"
+            assert old_detail["replaced_by"][0]["candidate_persona_id"] == replacement["id"]
+            updated_profile = await (
+                await client.get(base + "/api/persona-profile")
+            ).json()
+            assert updated_profile["active_assertion_count"] == 1
+            assert updated_profile["sections"][0]["items"][0]["id"] == replacement["id"]
+
     asyncio.run(run())

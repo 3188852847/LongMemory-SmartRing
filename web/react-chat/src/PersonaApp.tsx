@@ -13,8 +13,11 @@ type Persona = {id:string;subject_id:string;kind:PersonaKind;basis:PersonaBasis;
   generated_at:string;valid_from:string|null;valid_to:string|null;status:PersonaState;generator_name:string;generator_version:string;revision:number};
 type PersonaSource = {source_layer:'l1'|'l2';source_id:string;source_content_snapshot:string;linked_at:string;
   current_content:string|null;active:boolean;l0_sources:Array<{id:string;content:string;created_at:string;source_type:string}>};
+type PersonaReplacement = {candidate_persona_id:string;replaced_persona_id:string;target_revision:number;
+  linked_at:string;applied_at:string|null;related:Persona|null};
 type PersonaDetail = Persona & {audit:{source_count:number;source_message_count:number;observation_day_count:number}|null;
-  sources:PersonaSource[];lifecycle_events:Array<{id:string;action:string;source_layer:string;source_id:string;occurred_at:string;persona_revision:number}>};
+  sources:PersonaSource[];replaces?:PersonaReplacement[];replaced_by?:PersonaReplacement[];
+  lifecycle_events:Array<{id:string;action:string;source_layer:string;source_id:string;occurred_at:string;persona_revision:number}>};
 type SourceOption = {layer:'l1'|'l2';id:string;subject_id:string;content:string;recorded_at:string};
 type SourceOptions = {l1:SourceOption[];l2:SourceOption[];selection_is_semantic:false};
 type PersonaProposal = {kind:PersonaKind;basis:PersonaBasis;label:string;statement:string;
@@ -51,6 +54,7 @@ export function PersonaApp() {
   const [sources,setSources] = useState<string[]>([]);
   const [validFrom,setValidFrom] = useState('');
   const [validTo,setValidTo] = useState('');
+  const [replacementIds,setReplacementIds] = useState<string[]>([]);
 
   useEffect(() => {void api.bootstrap().then(() => setReady(true)).catch(error => setNotice(String(error)));},[]);
   const config = useQuery({queryKey:['memory-config'],enabled:ready,queryFn:() => api.request<MemoryConfig>('/api/memory-config')});
@@ -68,9 +72,9 @@ export function PersonaApp() {
       kind,basis,label:label.trim(),statement:statement.trim(),sources:sources.map(parseSource),
       valid_from:validFrom?new Date(validFrom).toISOString():null,
       valid_to:validTo?new Date(validTo).toISOString():null,
-      creation_kind:draftOrigin,confirm_candidate:true,
+      creation_kind:draftOrigin,replaces:replacementIds,confirm_candidate:true,
     }),
-    onSuccess:async result => {setCreating(false);setSelectedId(result.id);setLabel('');setStatement('');setSources([]);setValidFrom('');setValidTo('');
+    onSuccess:async result => {setCreating(false);setSelectedId(result.id);setLabel('');setStatement('');setSources([]);setValidFrom('');setValidTo('');setReplacementIds([]);
       await queryClient.invalidateQueries({queryKey:['personas']});setNotice('L3 画像候选已创建，尚未成为有效画像。');},
     onError:error => setNotice(String(error)),
   });
@@ -101,7 +105,15 @@ export function PersonaApp() {
     value:sourceKey(item),label:`${item.layer.toUpperCase()} · ${item.content}`,
   }));
   const validRange = !(validFrom&&validTo&&new Date(validTo)<new Date(validFrom));
-  const openCreator = () => {setKind('preference');setBasis('user_declared');setLabel('');setStatement('');setSources([]);setValidFrom('');setValidTo('');setDraftOrigin('manual');setCreating(true);};
+  const openCreator = () => {setKind('preference');setBasis('user_declared');setLabel('');setStatement('');setSources([]);setValidFrom('');setValidTo('');setReplacementIds([]);setDraftOrigin('manual');setCreating(true);};
+  const openReplacement = () => {
+    if(!detail.data) return;
+    setKind(detail.data.kind);setBasis(detail.data.basis);setLabel(detail.data.label);setStatement(detail.data.statement);
+    setSources(detail.data.sources.filter(source=>source.active).map(source=>sourceKey({layer:source.source_layer,id:source.source_id})));
+    // 现实时间由用户重新确认，不能把旧值或 UTC 字符串静默冒充本地输入。
+    setValidFrom('');setValidTo('');
+    setReplacementIds([detail.data.id]);setDraftOrigin('manual');setCreating(true);
+  };
   const sidebar = <><Button type="primary" block disabled={!canManage} onClick={openCreator}>新建 L3 候选</Button><ConsoleNav active="personas" legacyPath="/memories"/></>;
   const profilePane = <Card title="我的统一画像" extra={<Space><Tag color="green">{profile.data?.active_assertion_count??0} 项已接受认识</Tag><small>更新：{displayTime(profile.data?.updated_at)}</small></Space>}>
     {profile.isFetching?<p>正在整理当前画像…</p>:profile.data?.sections.length?<Space orientation="vertical" size="middle" className="wide">
@@ -152,23 +164,27 @@ export function PersonaApp() {
         <p>{source.source_content_snapshot}</p>{source.current_content!==source.source_content_snapshot&&<p className="memory-warning">当前内容与创建时快照不同：{source.current_content??'来源已不存在或失效'}</p>}
         <details><summary>查看用户 L0 原话（{source.l0_sources.length}）</summary>{source.l0_sources.map(item=><blockquote key={item.id}><p>{item.content}</p><small>{item.source_type} · {displayTime(item.created_at)}</small></blockquote>)}</details>
       </Card>)}
+      {(detail.data.replaces??[]).length>0&&<><h3>准备取代的旧画像</h3><List size="small" dataSource={detail.data.replaces} renderItem={item=><List.Item>{item.related?.statement??item.replaced_persona_id} · {item.applied_at?'已随本画像接受而取代':'等待本候选复核'}</List.Item>}/></>}
+      {(detail.data.replaced_by??[]).length>0&&<><h3>已由新画像取代</h3><List size="small" dataSource={detail.data.replaced_by} renderItem={item=><List.Item>{item.related?.statement??item.candidate_persona_id} · {displayTime(item.applied_at)}</List.Item>}/></>}
       {detail.data.status==='candidate'&&<Space><Button type="primary" disabled={!canManage} onClick={() => setReviewDecision('accepted')}>接受</Button><Button danger disabled={!canManage} onClick={() => setReviewDecision('rejected')}>拒绝</Button></Space>}
+      {detail.data.status==='active'&&<Button disabled={!canManage} onClick={openReplacement}>更新这项画像</Button>}
       <h3>来源失效记录</h3>{detail.data.lifecycle_events.length?<List size="small" dataSource={detail.data.lifecycle_events} renderItem={event=><List.Item>{event.source_layer.toUpperCase()} {event.source_id} · {event.action} · {displayTime(event.occurred_at)}</List.Item>}/>:<Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="尚无来源失效事件"/>}
     </>}
   </Drawer>
 
-  <Modal title="新建 L3 用户画像候选" open={creating} okText="创建待复核候选" cancelText="取消" confirmLoading={createCandidate.isPending}
+  <Modal title={replacementIds.length?'创建画像更新候选':'新建 L3 用户画像候选'} open={creating} okText="创建待复核候选" cancelText="取消" confirmLoading={createCandidate.isPending}
     okButtonProps={{disabled:!label.trim()||!statement.trim()||sources.length<1||!validRange}} onCancel={() => setCreating(false)} onOk={() => createCandidate.mutate()}>
     <Alert type={basis==='system_inferred'?'warning':'info'} showIcon title={basis==='system_inferred'?'系统推断需要跨记录证据':'用户声明必须能回到用户原话'}
       description={basis==='system_inferred'?'服务端强制要求至少 2 个来源、3 条不同用户 L0、2 个观察日；达到门槛也不等于推断必然正确。':'至少选择一个能直接支持这条声明的 L1 或已接受 L2，创建后仍需复核。'}/>
-    <label htmlFor="persona-kind">画像类型</label><Select id="persona-kind" className="wide" value={kind} onChange={setKind} options={Object.entries(kindName).map(([value,label])=>({value,label}))}/>
+    {replacementIds.length>0&&<Alert type="warning" showIcon title="这是追加＋取代，不是原地覆盖" description="新内容先作为候选保存；只有接受后，旧画像才会失效并保留取代关系。拒绝候选不会改变旧画像。"/>}
+    <label htmlFor="persona-kind">画像类型</label><Select id="persona-kind" className="wide" disabled={replacementIds.length>0} value={kind} onChange={setKind} options={Object.entries(kindName).map(([value,label])=>({value,label}))}/>
     <label htmlFor="persona-basis">依据性质</label><Select id="persona-basis" className="wide" value={basis} onChange={value=>{setBasis(value);setDraftOrigin('manual');}} options={Object.entries(basisName).map(([value,label])=>({value,label}))}/>
     <label htmlFor="persona-label">简短标签</label><Input id="persona-label" value={label} maxLength={120} onChange={event=>setLabel(event.target.value)} placeholder="例如：建议前先倾听"/>
     <label htmlFor="persona-statement">画像断言</label><Input.TextArea id="persona-statement" value={statement} maxLength={1000} rows={4} onChange={event=>setStatement(event.target.value)} placeholder="一次只写一条可独立核对的认识"/>
     <label htmlFor="persona-sources">证据来源</label><Select id="persona-sources" aria-label="画像证据来源" mode="multiple" className="wide" value={sources} onChange={setSources} optionFilterProp="label" options={options}/>
     <Space direction="vertical" className="wide">
-      <Button disabled={!config.data?.persona_model_preview_available||sources.length<1} onClick={()=>setConfirmingModel(true)}>让模型生成不落库草稿</Button>
-      <small>{config.data?.persona_model_preview_available
+      <Button disabled={replacementIds.length>0||!config.data?.persona_model_preview_available||sources.length<1} onClick={()=>setConfirmingModel(true)}>让模型生成不落库草稿</Button>
+      <small>{replacementIds.length>0?'画像更新第一版需要人工编辑，暂不让模型决定如何改写。':config.data?.persona_model_preview_available
         ? `调用前会再次确认；当前模型：${config.data.persona_model??'未标记'}`
         : '当前启动方式没有可用的 L3 草稿模型，仍可手工填写。'}</small>
       {draftOrigin==='model_assisted'&&<Tag color="purple">当前内容来自模型草稿，已允许人工修改</Tag>}
@@ -191,7 +207,7 @@ export function PersonaApp() {
     okText={reviewDecision==='accepted'?'确认接受':'确认拒绝'} cancelText="返回核对" confirmLoading={review.isPending}
     okButtonProps={{danger:reviewDecision==='rejected'}} onCancel={() => !review.isPending&&setReviewDecision(undefined)} onOk={() => reviewDecision&&review.mutate(reviewDecision)}>
     <p><strong>{detail.data?.label}</strong></p><p>{detail.data?.statement}</p>
-    <p>{reviewDecision==='accepted'?'接受后成为有效画像，但当前切片仍不会自动参与回答。':'拒绝后保留候选和证据用于审计，不会物理删除。'}</p>
+    <p>{reviewDecision==='accepted'?(detail.data?.replaces?.length?'接受后新画像生效，所列旧画像在同一事务中失效；当前仍不会自动参与回答。':'接受后成为有效画像，但当前切片仍不会自动参与回答。'):'拒绝后保留候选和证据用于审计，不会物理删除，也不会改变拟取代的旧画像。'}</p>
     <p>请确认已经核对 L1/L2 内容、底层 L0 原话和“用户声明/系统推断”标记。</p>
   </Modal></>;
 }

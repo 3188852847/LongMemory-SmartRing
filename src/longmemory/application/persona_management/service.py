@@ -10,6 +10,7 @@ from longmemory.core.memory.l3_persona.models import (
     PersonaGenerationAudit,
     PersonaKind,
     PersonaMemory,
+    PersonaReplacement,
     PersonaReview,
     PersonaReviewDecision,
     PersonaSource,
@@ -28,6 +29,7 @@ class PersonaManagementService:
         generator_name: str = "manual_console", generator_version: str = "1",
         valid_from: datetime | None = None, valid_to: datetime | None = None,
         generated_at: datetime | None = None,
+        replaces: tuple[PersonaId, ...] = (),
     ) -> PersonaMemory:
         keys = set(source_refs)
         if not source_refs or len(keys) != len(source_refs):
@@ -55,6 +57,20 @@ class PersonaManagementService:
             PersonaStatus.CANDIDATE, generator_name, generator_version,
             valid_from, valid_to,
         )
+        if len(set(replaces)) != len(replaces):
+            raise ValueError("persona_replacements_invalid")
+        replacement_targets = []
+        for replaced_id in replaces:
+            target = self._persona_store.get(replaced_id)
+            if target is None or target.status != PersonaStatus.ACTIVE:
+                raise ValueError("persona_replacement_target_not_active")
+            if target.subject_id != persona.subject_id:
+                raise ValueError("persona_replacement_subject_mismatch")
+            if target.kind != persona.kind:
+                raise ValueError("persona_replacement_kind_mismatch")
+            replacement_targets.append(PersonaReplacement(
+                persona_id, target.id, target.revision, when,
+            ))
         sources = tuple(PersonaSource(
             persona_id, source.source_layer, source.source_id,
             source.content_snapshot, when,
@@ -64,7 +80,9 @@ class PersonaManagementService:
             generator_name, generator_version, when,
             len(resolved), len(messages), len(days),
         )
-        self._persona_store.save_candidate(persona, sources, audit)
+        self._persona_store.save_candidate(
+            persona, sources, audit, tuple(replacement_targets),
+        )
         return persona
 
     def review(

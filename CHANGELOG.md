@@ -1,5 +1,14 @@
 # Changelog
 
+### P3 audited L3 replacement（2026-09-06）
+
+- 当前有效画像可显式创建“更新候选”；候选记录拟取代目标与目标 revision，创建或拒绝均不改变旧画像。
+- 接受更新候选时，新画像激活、旧画像 stale、修订递增和取代生效时间在同一事务完成；目标状态或 revision 变化会整体拒绝，双方详情保留关系。
+- SQLite 代码结构升级为 V9，V8→V9 只新增空 `persona_replacements` 表与索引，不扫描或改写现有记忆。
+- 第一版只支持用户从单条 active 画像发起人工更新；不自动发现冲突、不让模型决定改写、不自动接受，也不将 L3 注入回答。
+- 验证：614 项无桌面 Python 回归、15 项 React 组件测试、TypeScript/Vite 生产构建及 2 项隔离 Chromium 验收通过；包含旧画像 revision 变化时整笔回滚的冲突用例。
+- 经用户明确授权且确认相关服务未监听，个人库已由 V8 迁移至 V9；一致性备份为 `data/backups/xiaozhi-demo-v1-pre-v9-20260906-185428.db`，SHA-256 `3B8B9AA6951A72F6B1A9C0E90DBF7769002932EC96B1CD99AFAC4323672A1705`。迁移前后 L0–L3 数量一致，V9 取代关系表为空，完整性与外键检查通过；备份不提交 Git。
+
 ### P3 unified L3 persona profile projection（2026-09-06）
 
 - 用户画像主视图改为每个主体一份统一画像，按偏好、习惯、互动方式和行为模式汇总当前已接受断言；每项仍可打开原有 L1/L2→L0 证据详情。

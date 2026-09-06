@@ -446,6 +446,8 @@ def test_v6_upgrade_adds_empty_l3_tables_without_synthesizing_persona(tmp_path) 
         DROP TRIGGER trg_persona_stale_on_l2_stale;
         DROP INDEX idx_persona_lifecycle_persona;
         DROP TABLE persona_lifecycle_events;
+        DROP INDEX idx_persona_replacements_target;
+        DROP TABLE persona_replacements;
         DROP TABLE persona_reviews;
         DROP TABLE persona_generation_audits;
         DROP INDEX idx_persona_sources_source;
@@ -476,12 +478,41 @@ def test_v7_upgrade_adds_persona_lifecycle_without_generating_persona(tmp_path) 
         DROP TRIGGER trg_persona_stale_on_l2_stale;
         DROP INDEX idx_persona_lifecycle_persona;
         DROP TABLE persona_lifecycle_events;
+        DROP INDEX idx_persona_replacements_target;
+        DROP TABLE persona_replacements;
         PRAGMA user_version=7;
     """)
     initialize_schema(connection)
     assert connection.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION
     assert connection.execute("SELECT count(*) FROM persona_memories").fetchone()[0] == 0
     assert connection.execute("SELECT count(*) FROM persona_lifecycle_events").fetchone()[0] == 0
+    assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
+    connection.close()
+
+
+def test_v8_upgrade_adds_empty_persona_replacements_without_changing_personas(tmp_path) -> None:
+    connection = open_database(tmp_path / "v8.db")
+    initialize_schema(connection)
+    now = datetime(2026, 9, 6, 18, 0, tzinfo=UTC).isoformat()
+    connection.execute(
+        "INSERT INTO persona_memories VALUES "
+        "('l3-v8','user:self','preference','user_declared','饮品偏好',"
+        "'用户喜欢乌龙茶。',?,NULL,NULL,'active','synthetic','1',2)",
+        (now,),
+    )
+    connection.executescript("""
+        DROP INDEX idx_persona_replacements_target;
+        DROP TABLE persona_replacements;
+        PRAGMA user_version=8;
+    """)
+
+    initialize_schema(connection)
+
+    assert connection.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION
+    assert tuple(connection.execute(
+        "SELECT statement,status,revision FROM persona_memories WHERE id='l3-v8'"
+    ).fetchone()) == ("用户喜欢乌龙茶。", "active", 2)
+    assert connection.execute("SELECT count(*) FROM persona_replacements").fetchone()[0] == 0
     assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
     connection.close()
 

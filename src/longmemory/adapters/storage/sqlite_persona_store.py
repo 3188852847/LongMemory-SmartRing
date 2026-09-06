@@ -15,6 +15,7 @@ from longmemory.core.memory.l3_persona.models import (
     PersonaLifecycleAction,
     PersonaLifecycleEvent,
     PersonaMemory,
+    PersonaReplacement,
     PersonaResolvedSource,
     PersonaReview,
     PersonaReviewDecision,
@@ -77,6 +78,7 @@ class SQLitePersonaStore:
         persona: PersonaMemory,
         sources: tuple[PersonaSource, ...],
         audit: PersonaGenerationAudit,
+        replacements: tuple[PersonaReplacement, ...] = (),
     ) -> None:
         """原子保存画像、来源快照与审计统计。"""
 
@@ -93,6 +95,20 @@ class SQLitePersonaStore:
                 or audit.generated_at != persona.generated_at
                 or audit.source_count != len(sources)):
             raise ValueError("persona_audit_mismatch")
+        if any(item.candidate_persona_id != persona.id for item in replacements):
+            raise ValueError("persona_replacement_candidate_mismatch")
+        if len({item.replaced_persona_id for item in replacements}) != len(replacements):
+            raise ValueError("persona_replacements_invalid")
+        for item in replacements:
+            target = self.get(item.replaced_persona_id)
+            if target is None or target.status != PersonaStatus.ACTIVE:
+                raise ValueError("persona_replacement_target_not_active")
+            if target.subject_id != persona.subject_id:
+                raise ValueError("persona_replacement_subject_mismatch")
+            if target.kind != persona.kind:
+                raise ValueError("persona_replacement_kind_mismatch")
+            if target.revision != item.target_revision:
+                raise ValueError("persona_replacement_revision_mismatch")
         resolved = tuple(
             self.resolve_source(source.source_layer, source.source_id)
             for source in sources
@@ -143,6 +159,13 @@ class SQLitePersonaStore:
                     audit.source_message_count, audit.observation_day_count,
                 ),
             )
+            self._connection.executemany(
+                "INSERT INTO persona_replacements "
+                "(candidate_persona_id,replaced_persona_id,target_revision,linked_at,applied_at) "
+                "VALUES (?,?,?,?,NULL)",
+                tuple((str(item.candidate_persona_id), str(item.replaced_persona_id),
+                       item.target_revision, item.linked_at.isoformat()) for item in replacements),
+            )
             if self._commit_changes:
                 self._connection.commit()
         except BaseException:
@@ -177,11 +200,38 @@ class SQLitePersonaStore:
             datetime.fromisoformat(row["linked_at"]),
         ) for row in rows)
 
+    def list_replacements(self, persona_id: PersonaId) -> tuple[PersonaReplacement, ...]:
+        rows = self._connection.execute(
+            "SELECT * FROM persona_replacements WHERE candidate_persona_id=? "
+            "ORDER BY linked_at,replaced_persona_id", (str(persona_id),),
+        ).fetchall()
+        return tuple(self._row_to_replacement(row) for row in rows)
+
+    def list_replaced_by(self, persona_id: PersonaId) -> tuple[PersonaReplacement, ...]:
+        rows = self._connection.execute(
+            "SELECT * FROM persona_replacements "
+            "WHERE replaced_persona_id=? AND applied_at IS NOT NULL "
+            "ORDER BY applied_at,candidate_persona_id", (str(persona_id),),
+        ).fetchall()
+        return tuple(self._row_to_replacement(row) for row in rows)
+
     def review(self, review: PersonaReview, *, expected_revision: int) -> PersonaMemory:
         if review.persona_revision != expected_revision:
             raise ValueError("persona_review_revision_mismatch")
         status = PersonaStatus.ACTIVE if review.decision == PersonaReviewDecision.ACCEPTED else PersonaStatus.REJECTED
         try:
+            replacements = self.list_replacements(review.persona_id)
+            persona = self.get(review.persona_id)
+            if persona is None:
+                raise ValueError("persona_review_conflict")
+            if review.decision == PersonaReviewDecision.ACCEPTED:
+                for replacement in replacements:
+                    target = self.get(replacement.replaced_persona_id)
+                    if (target is None or target.status != PersonaStatus.ACTIVE
+                            or target.revision != replacement.target_revision
+                            or target.subject_id != persona.subject_id
+                            or target.kind != persona.kind):
+                        raise ValueError("persona_replacement_conflict")
             cursor = self._connection.execute(
                 "UPDATE persona_memories SET status=?, revision=revision+1 "
                 "WHERE id=? AND status='candidate' AND revision=?",
@@ -196,6 +246,20 @@ class SQLitePersonaStore:
                 (str(review.id), str(review.persona_id), review.decision.value,
                  review.reviewed_at.isoformat(), review.persona_revision),
             )
+            if review.decision == PersonaReviewDecision.ACCEPTED:
+                for replacement in replacements:
+                    cursor = self._connection.execute(
+                        "UPDATE persona_memories SET status='stale',revision=revision+1 "
+                        "WHERE id=? AND status='active' AND revision=?",
+                        (str(replacement.replaced_persona_id), replacement.target_revision),
+                    )
+                    if cursor.rowcount != 1:
+                        raise ValueError("persona_replacement_conflict")
+                self._connection.execute(
+                    "UPDATE persona_replacements SET applied_at=? "
+                    "WHERE candidate_persona_id=?",
+                    (review.reviewed_at.isoformat(), str(review.persona_id)),
+                )
             if self._commit_changes:
                 self._connection.commit()
         except BaseException:
@@ -233,4 +297,12 @@ class SQLitePersonaStore:
             datetime.fromisoformat(row["valid_from"]) if row["valid_from"] else None,
             datetime.fromisoformat(row["valid_to"]) if row["valid_to"] else None,
             row["revision"],
+        )
+
+    @staticmethod
+    def _row_to_replacement(row: Row) -> PersonaReplacement:
+        return PersonaReplacement(
+            PersonaId(row["candidate_persona_id"]), PersonaId(row["replaced_persona_id"]),
+            row["target_revision"], datetime.fromisoformat(row["linked_at"]),
+            datetime.fromisoformat(row["applied_at"]) if row["applied_at"] else None,
         )
