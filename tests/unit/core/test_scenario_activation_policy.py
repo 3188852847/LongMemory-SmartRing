@@ -11,7 +11,8 @@ from longmemory.core.memory.l2_scenario.activation_policy import (
 
 def test_three_memories_and_messages_can_auto_activate():
     decision = decide_scenario_activation(
-        evidence=ScenarioEvidenceSummary(3, 3), risk=ScenarioRiskAssessment(),
+        evidence=ScenarioEvidenceSummary(3, 3),
+        risk=ScenarioRiskAssessment(assessment_complete=True),
     )
     assert (decision.action, decision.reason) == (
         ScenarioActivationAction.AUTO_ACTIVATE,
@@ -21,7 +22,8 @@ def test_three_memories_and_messages_can_auto_activate():
 
 def test_minimum_candidate_evidence_is_held_for_more_observations():
     decision = decide_scenario_activation(
-        evidence=ScenarioEvidenceSummary(2, 2), risk=ScenarioRiskAssessment(),
+        evidence=ScenarioEvidenceSummary(2, 2),
+        risk=ScenarioRiskAssessment(assessment_complete=True),
     )
     assert (decision.action, decision.reason) == (
         ScenarioActivationAction.HOLD,
@@ -32,11 +34,13 @@ def test_minimum_candidate_evidence_is_held_for_more_observations():
 def test_sensitive_and_ambiguous_sources_are_blocked():
     sensitive = decide_scenario_activation(
         evidence=ScenarioEvidenceSummary(4, 4),
-        risk=ScenarioRiskAssessment(sensitive=True),
+        risk=ScenarioRiskAssessment(assessment_complete=True, sensitive=True),
     )
     ambiguous = decide_scenario_activation(
         evidence=ScenarioEvidenceSummary(4, 4),
-        risk=ScenarioRiskAssessment(source_role_ambiguous=True),
+        risk=ScenarioRiskAssessment(
+            assessment_complete=True, source_role_ambiguous=True,
+        ),
     )
     assert sensitive.reason == ScenarioActivationReason.SENSITIVE_CONTENT
     assert ambiguous.reason == ScenarioActivationReason.SOURCE_ROLE_AMBIGUOUS
@@ -46,9 +50,22 @@ def test_sensitive_and_ambiguous_sources_are_blocked():
 def test_unresolved_conflict_is_held_not_silently_accepted():
     decision = decide_scenario_activation(
         evidence=ScenarioEvidenceSummary(4, 4),
-        risk=ScenarioRiskAssessment(unresolved_conflict=True),
+        risk=ScenarioRiskAssessment(
+            assessment_complete=True, unresolved_conflict=True,
+        ),
     )
     assert (decision.action, decision.reason) == (
         ScenarioActivationAction.HOLD,
         ScenarioActivationReason.UNRESOLVED_CONFLICT,
+    )
+
+
+def test_incomplete_risk_assessment_never_auto_activates():
+    decision = decide_scenario_activation(
+        evidence=ScenarioEvidenceSummary(4, 4),
+        risk=ScenarioRiskAssessment(assessment_complete=False),
+    )
+    assert (decision.action, decision.reason) == (
+        ScenarioActivationAction.HOLD,
+        ScenarioActivationReason.RISK_ASSESSMENT_INCOMPLETE,
     )

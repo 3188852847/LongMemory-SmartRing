@@ -70,7 +70,7 @@ def prepared(tmp_path, producer):
     return connection, ledger, service
 
 
-def run(service, risk=ScenarioRiskAssessment()):
+def run(service, risk=ScenarioRiskAssessment(assessment_complete=True)):
     return service.run_once(
         subject_id="user:self",
         trigger=ConsolidationTrigger.NEW_EVIDENCE,
@@ -131,7 +131,9 @@ def test_policy_block_is_completed_but_never_persists_scenario(tmp_path):
         '"source_memory_ids":["l1-1","l1-2","l1-3"]}}'
     )
     connection, _ledger, service = prepared(tmp_path, producer)
-    result = run(service, ScenarioRiskAssessment(sensitive=True))
+    result = run(service, ScenarioRiskAssessment(
+        assessment_complete=True, sensitive=True,
+    ))
     assert result.run.outcome_code == "scenario_sensitive_content"
     assert result.scenario is None
     assert connection.execute("SELECT count(*) FROM scenario_memories").fetchone()[0] == 0

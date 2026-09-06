@@ -16,6 +16,7 @@ class ScenarioActivationReason(StrEnum):
     SENSITIVE_CONTENT = "sensitive_content"
     SOURCE_ROLE_AMBIGUOUS = "source_role_ambiguous"
     UNRESOLVED_CONFLICT = "unresolved_conflict"
+    RISK_ASSESSMENT_INCOMPLETE = "risk_assessment_incomplete"
 
 
 @dataclass(frozen=True, slots=True)
@@ -30,6 +31,7 @@ class ScenarioEvidenceSummary:
 
 @dataclass(frozen=True, slots=True)
 class ScenarioRiskAssessment:
+    assessment_complete: bool
     sensitive: bool = False
     source_role_ambiguous: bool = False
     unresolved_conflict: bool = False
@@ -63,6 +65,11 @@ def decide_scenario_activation(
         return ScenarioActivationDecision(
             ScenarioActivationAction.HOLD,
             ScenarioActivationReason.UNRESOLVED_CONFLICT,
+        )
+    if not risk.assessment_complete:
+        return ScenarioActivationDecision(
+            ScenarioActivationAction.HOLD,
+            ScenarioActivationReason.RISK_ASSESSMENT_INCOMPLETE,
         )
     if evidence.source_memory_count >= 3 and evidence.user_message_count >= 3:
         return ScenarioActivationDecision(

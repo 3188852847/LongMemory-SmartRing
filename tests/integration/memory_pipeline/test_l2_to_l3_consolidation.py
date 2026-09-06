@@ -81,7 +81,7 @@ def run(service):
     return service.run_once(
         subject_id="user:self",
         trigger=ConsolidationTrigger.NEW_EVIDENCE,
-        risk=PersonaRiskAssessment(),
+        risk=PersonaRiskAssessment(assessment_complete=True),
         budget_window_start=NOW.replace(hour=0),
         generator_name="model_consolidation_runtime",
         generator_version="l3-persona-consolidation-v1",

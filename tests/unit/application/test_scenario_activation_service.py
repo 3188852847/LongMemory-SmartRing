@@ -64,7 +64,7 @@ def test_strong_low_risk_scenario_is_activated_with_policy_audit(tmp_path):
             tuple(item.memory_id for item in inputs[:3]),
         ),
         inputs=inputs,
-        risk=ScenarioRiskAssessment(),
+        risk=ScenarioRiskAssessment(assessment_complete=True),
         generator_name="model_consolidation_runtime",
         generator_version="l2-scenario-preview-v2",
         generated_at=NOW,
@@ -92,7 +92,7 @@ def test_insufficient_or_sensitive_proposal_does_not_persist(tmp_path):
             tuple(item.memory_id for item in inputs[:2]),
         ),
         inputs=inputs,
-        risk=ScenarioRiskAssessment(),
+        risk=ScenarioRiskAssessment(assessment_complete=True),
         generator_name="synthetic", generator_version="1",
     )
     blocked = service.apply(
@@ -101,7 +101,7 @@ def test_insufficient_or_sensitive_proposal_does_not_persist(tmp_path):
             tuple(item.memory_id for item in inputs[:3]),
         ),
         inputs=inputs,
-        risk=ScenarioRiskAssessment(sensitive=True),
+        risk=ScenarioRiskAssessment(assessment_complete=True, sensitive=True),
         generator_name="synthetic", generator_version="1",
     )
     assert held.decision.action == ScenarioActivationAction.HOLD

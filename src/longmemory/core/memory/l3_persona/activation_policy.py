@@ -33,6 +33,7 @@ class PersonaActivationReason(StrEnum):
     DECLARED_EVIDENCE_INSUFFICIENT = "declared_evidence_insufficient"
     INFERENCE_EVIDENCE_INSUFFICIENT = "inference_evidence_insufficient"
     INFERENCE_STRONG_EVIDENCE = "inference_strong_evidence"
+    RISK_ASSESSMENT_INCOMPLETE = "risk_assessment_incomplete"
 
 
 @dataclass(frozen=True, slots=True)
@@ -52,6 +53,7 @@ class PersonaEvidenceSummary:
 class PersonaRiskAssessment:
     """由模型之外的受信任边界提供的风险事实。"""
 
+    assessment_complete: bool
     sensitive: bool = False
     source_role_ambiguous: bool = False
     unresolved_conflict: bool = False
@@ -115,6 +117,11 @@ def decide_persona_activation(
         return PersonaActivationDecision(
             PersonaActivationAction.HOLD,
             PersonaActivationReason.UNRESOLVED_CONFLICT,
+        )
+    if not risk.assessment_complete:
+        return PersonaActivationDecision(
+            PersonaActivationAction.HOLD,
+            PersonaActivationReason.RISK_ASSESSMENT_INCOMPLETE,
         )
 
     if suggestion.candidate.basis == PersonaBasis.USER_DECLARED:

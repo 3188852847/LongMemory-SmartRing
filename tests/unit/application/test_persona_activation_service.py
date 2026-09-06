@@ -72,7 +72,7 @@ def test_declared_low_risk_is_activated_with_policy_audit(tmp_path):
     store = SQLitePersonaStore(connection, commit_changes=False)
     result = PersonaActivationService(persona_store=store).apply(
         suggestion(),
-        risk=PersonaRiskAssessment(),
+        risk=PersonaRiskAssessment(assessment_complete=True),
         generator_name="model_consolidation_runtime",
         generator_version="l3-persona-consolidation-v1",
         generated_at=datetime(2026, 9, 6, 20, 0, tzinfo=UTC),
@@ -97,7 +97,7 @@ def test_sensitive_or_insufficient_suggestion_never_persists(tmp_path):
     )
     blocked = service.apply(
         suggestion(),
-        risk=PersonaRiskAssessment(sensitive=True),
+        risk=PersonaRiskAssessment(assessment_complete=True, sensitive=True),
         generator_name="synthetic",
         generator_version="1",
     )
@@ -106,7 +106,7 @@ def test_sensitive_or_insufficient_suggestion_never_persists(tmp_path):
             basis=PersonaBasis.SYSTEM_INFERRED,
             sources=((PersonaSourceLayer.L1, "l1-a"), (PersonaSourceLayer.L1, "l1-b")),
         ),
-        risk=PersonaRiskAssessment(),
+        risk=PersonaRiskAssessment(assessment_complete=True),
         generator_name="synthetic",
         generator_version="1",
     )
@@ -133,7 +133,7 @@ def test_executor_rejects_operation_payload_mismatch_before_writing(tmp_path):
     with pytest.raises(ValueError, match="persona_activation_operation_invalid"):
         service.apply(
             malformed,
-            risk=PersonaRiskAssessment(),
+            risk=PersonaRiskAssessment(assessment_complete=True),
             generator_name="synthetic",
             generator_version="1",
         )
@@ -148,7 +148,7 @@ def test_automatic_update_uses_existing_atomic_replacement_path(tmp_path):
     activator = PersonaActivationService(persona_store=store)
     old = activator.apply(
         suggestion(),
-        risk=PersonaRiskAssessment(),
+        risk=PersonaRiskAssessment(assessment_complete=True),
         generator_name="synthetic",
         generator_version="1",
     ).persona
@@ -162,7 +162,9 @@ def test_automatic_update_uses_existing_atomic_replacement_path(tmp_path):
     )
     current = activator.apply(
         update,
-        risk=PersonaRiskAssessment(update_target_is_current=True),
+        risk=PersonaRiskAssessment(
+            assessment_complete=True, update_target_is_current=True,
+        ),
         generator_name="synthetic",
         generator_version="2",
     ).persona
