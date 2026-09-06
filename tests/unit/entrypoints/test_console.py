@@ -379,12 +379,15 @@ def test_memory_mode_http_controls_the_shared_web_and_voice_runtime(tmp_path):
             assert await current.json() == {
                 "write_enabled": True,
                 "use_enabled": True,
+                "scenario_use_enabled": False,
+                "scenario_available": True,
                 "persistent": False,
                 "l0_archived_when_write_disabled": True,
             }
 
             # 修改状态属于受保护操作，必须来自本机已建立的控制台会话。
-            body = {"write_enabled": False, "use_enabled": False}
+            body = {"write_enabled": False, "use_enabled": False,
+                    "scenario_use_enabled": True}
             assert (await client.put(base + "/api/memory-mode", headers={"Origin": base}, json=body)).status == 403
             changed = await client.put(base + "/api/memory-mode", headers=headers, json=body)
             assert changed.status == 200
@@ -400,6 +403,8 @@ def test_memory_mode_http_controls_the_shared_web_and_voice_runtime(tmp_path):
             payload = await voice.json()
             assert payload["memory_write_enabled"] is False
             assert payload["memory_use_enabled"] is False
+            assert payload["scenario_use_enabled"] is True
+            assert payload["scenario_retrieved"] == []
             assert payload["added"] == 0 and payload["retrieved"] == 0
             assert payload["context"] == ""
             assert payload["retrieval_strategy"] == "disabled_by_user"

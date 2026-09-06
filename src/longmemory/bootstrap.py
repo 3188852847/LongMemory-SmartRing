@@ -13,6 +13,7 @@ from longmemory.application.memory_management.service import (
     MemoryManagementService,
 )
 from longmemory.application.memory_runtime import MemoryRuntime
+from longmemory.adapters.storage.sqlite_scenario_recall import SQLiteScenarioRecallProvider
 from longmemory.core.common.identifiers import MemoryId
 from longmemory.infrastructure.logging.setup import log_event
 from longmemory.methods.factory import create_method
@@ -45,7 +46,8 @@ def build_memory_runtime(database_path: Path) -> MemoryRuntime:
         existing_only=True,
         allow_cross_thread=True,
     )
-    return MemoryRuntime(database_path, method=method)
+    return MemoryRuntime(database_path, method=method,
+                         scenario_provider=SQLiteScenarioRecallProvider(database_path))
 
 
 @contextmanager

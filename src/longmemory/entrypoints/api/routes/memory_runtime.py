@@ -1,6 +1,7 @@
 """只供同机小智进程使用的记忆 Runtime 接口。"""
 
 import asyncio
+from dataclasses import asdict
 
 from aiohttp import web
 
@@ -37,6 +38,8 @@ def register_memory_runtime_routes(app, backend):
             "retrieval_warning": prepared.support.warning_code,
             "memory_write_enabled": prepared.write_enabled,
             "memory_use_enabled": prepared.use_enabled,
+            "scenario_use_enabled": prepared.scenario_use_enabled,
+            "scenario_retrieved": [asdict(item) for item in prepared.scenarios],
         })
 
     app.router.add_get("/api/internal/memory/status", status, allow_head=False)

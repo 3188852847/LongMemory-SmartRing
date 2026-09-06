@@ -30,6 +30,12 @@ def _extract_terms(text: str) -> frozenset[str]:
     )
 
 
+def keyword_overlap_score(query: str, content: str) -> int:
+    """供不同个人记忆层复用的可解释词项重合分；0 表示不应命中。"""
+
+    return len(_extract_terms(query) & _extract_terms(content))
+
+
 class KeywordMemoryRetriever:
     """使用词项重合数量进行排序的基础检索器。
 
@@ -61,8 +67,7 @@ class KeywordMemoryRetriever:
         # 已被未来冲突更新流程退役的历史记忆仍可供审计，
         # 但不能继续参与当前回答。
         for memory in self._memory_store.list_active():
-            memory_terms = _extract_terms(memory.content)
-            overlap_count = len(query_terms & memory_terms)
+            overlap_count = keyword_overlap_score(query, memory.content)
 
             # 没有任何有效词项重合时，不返回该记忆。
             if overlap_count == 0:

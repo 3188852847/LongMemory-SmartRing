@@ -12,6 +12,7 @@ from longmemory.methods.contracts import (
     MemorySupport,
     ObservationResult,
 )
+from longmemory.application.scenario_recall import ScenarioRecallItem, ScenarioRecallResult
 
 
 @dataclass(frozen=True, slots=True)
@@ -23,6 +24,8 @@ class PreparedMemoryTurn:
     support: MemorySupport
     write_enabled: bool
     use_enabled: bool
+    scenario_use_enabled: bool
+    scenarios: tuple[ScenarioRecallItem, ...]
 
 
 class MemoryRuntime:
@@ -33,7 +36,7 @@ class MemoryRuntime:
     因而慢模型不会阻塞另一入口读取记忆。
     """
 
-    def __init__(self, database: Path, *, method: MemoryMethod) -> None:
+    def __init__(self, database: Path, *, method: MemoryMethod, scenario_provider=None) -> None:
         self.database = database.resolve()
         # Runtime 只编排统一方法契约。具体使用规则、LLM 提取还是其他方法，
         # 必须由进程入口的装配层决定，不能在应用层偷偷选择实现。
@@ -42,6 +45,9 @@ class MemoryRuntime:
         self._closed = False
         self._write_enabled = True
         self._use_enabled = True
+        self._scenario_provider = scenario_provider
+        # L2 刚进入真实回答链，默认关闭，避免升级后无提示改变既有行为。
+        self._scenario_use_enabled = False
 
     def prepare_user(self, text: str) -> PreparedMemoryTurn:
         event = MemoryEvent(str(uuid4()), "user", text, datetime.now(UTC))
@@ -57,9 +63,25 @@ class MemoryRuntime:
                 if self._use_enabled
                 else MemorySupport(str(uuid4()), "", (), "disabled_by_user", None)
             )
+            scenario_result = ScenarioRecallResult("", ())
+            if self._use_enabled and self._scenario_use_enabled and self._scenario_provider:
+                scenario_result = self._scenario_provider.recall(text)
+                if scenario_result.context:
+                    combined = "\n\n".join(value for value in (support.context, scenario_result.context) if value)
+                    strategy = "+".join(value for value in (
+                        support.retrieval_strategy, scenario_result.strategy
+                    ) if value)
+                    support = MemorySupport(
+                        support.call_id, combined, support.retrieved,
+                        strategy, support.warning_code,
+                    )
             write_enabled = self._write_enabled
             use_enabled = self._use_enabled
-        return PreparedMemoryTurn(event, observation, support, write_enabled, use_enabled)
+            scenario_use_enabled = self._scenario_use_enabled
+        return PreparedMemoryTurn(
+            event, observation, support, write_enabled, use_enabled,
+            scenario_use_enabled, scenario_result.items,
+        )
 
     def record_assistant(self, text: str) -> ObservationResult:
         event = MemoryEvent(str(uuid4()), "assistant", text, datetime.now(UTC))
@@ -79,25 +101,37 @@ class MemoryRuntime:
                 "database": str(self.database),
                 "write_enabled": self._write_enabled,
                 "use_enabled": self._use_enabled,
+                "scenario_use_enabled": self._scenario_use_enabled,
+                "scenario_available": self._scenario_provider is not None,
                 "settings_persistent": False,
             }
 
-    def configure(self, *, write_enabled: bool, use_enabled: bool) -> dict:
+    def configure(self, *, write_enabled: bool, use_enabled: bool,
+                  scenario_use_enabled: bool | None = None) -> dict:
         """原子更新运行期模式；重启恢复默认开启，不写数据库或配置文件。"""
 
-        if type(write_enabled) is not bool or type(use_enabled) is not bool:
+        if (type(write_enabled) is not bool or type(use_enabled) is not bool
+                or (scenario_use_enabled is not None and type(scenario_use_enabled) is not bool)):
             raise ValueError("memory_mode_invalid")
         with self._lock:
             self._ensure_open()
+            if scenario_use_enabled and self._scenario_provider is None:
+                raise ValueError("scenario_memory_unavailable")
             self._write_enabled = write_enabled
             self._use_enabled = use_enabled
+            if scenario_use_enabled is not None:
+                self._scenario_use_enabled = scenario_use_enabled
             return self.status()
 
     def close(self) -> None:
         with self._lock:
             if not self._closed:
-                self._method.close()
-                self._closed = True
+                try:
+                    self._method.close()
+                finally:
+                    if self._scenario_provider is not None:
+                        self._scenario_provider.close()
+                    self._closed = True
 
     def _ensure_open(self) -> None:
         if self._closed:

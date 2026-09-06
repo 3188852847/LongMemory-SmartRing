@@ -8,6 +8,7 @@ import pytest
 from longmemory.adapters.storage.sqlite_conversation_store import SQLiteConversationStore
 from longmemory.adapters.storage.sqlite_memory_store import SQLiteMemoryStore
 from longmemory.adapters.storage.sqlite_scenario_store import SQLiteScenarioStore
+from longmemory.adapters.storage.sqlite_scenario_recall import SQLiteScenarioRecallProvider
 from longmemory.application.scenario_management.service import ScenarioManagementService
 from longmemory.core.common.identifiers import (
     MemoryId,
@@ -93,6 +94,44 @@ def test_candidate_sources_audit_and_review_are_persisted_atomically(tmp_path):
             ScenarioReviewId("review-2"), scenario.id,
             ScenarioReviewDecision.REJECTED, NOW, 2,
         ), expected_revision=2)
+    connection.close()
+
+
+def test_only_relevant_accepted_scenario_is_recalled_with_full_provenance(tmp_path):
+    connection = _database(tmp_path)
+    _save_l1(connection, "l1-a", "l0-a", "用户周五要答辩。")
+    _save_l1(connection, "l1-b", "l0-b", "用户正在修改 PPT。")
+    store = SQLiteScenarioStore(connection)
+    scenario, sources, audit = _candidate()
+    store.save_candidate(scenario, sources, audit)
+
+    # candidate 尚未被用户接受，即使关键词相关也不能参与回答。
+    provider = SQLiteScenarioRecallProvider(tmp_path / "l2.db")
+    assert provider.recall("答辩准备得怎么样").items == ()
+
+    store.review(ScenarioReview(
+        ScenarioReviewId("review-1"), scenario.id,
+        ScenarioReviewDecision.ACCEPTED, NOW, 1,
+    ), expected_revision=1)
+    result = provider.recall("答辩准备得怎么样")
+    assert len(result.items) == 1
+    assert result.items[0].scenario_id == "scenario-1"
+    assert result.items[0].source_memory_ids == ("l1-a", "l1-b")
+    assert result.items[0].source_message_ids == ("l0-a", "l0-b")
+    assert "已经用户复核" in result.context
+    assert provider.recall("我的猫叫什么").items == ()
+    connection.execute(
+        "UPDATE scenario_memories SET valid_to=? WHERE id=?",
+        (datetime(2020, 1, 1, tzinfo=UTC).isoformat(), "scenario-1"),
+    )
+    connection.commit()
+    assert provider.recall("答辩准备得怎么样").items == ()
+    connection.execute(
+        "UPDATE scenario_memories SET valid_to=NULL, status='stale' WHERE id=?",
+        ("scenario-1",),
+    )
+    connection.commit()
+    assert provider.recall("答辩准备得怎么样").items == ()
     connection.close()
 
 

@@ -11,6 +11,7 @@ from longmemory.adapters.llm.fake import FakeAnswerGenerator
 from longmemory.adapters.llm.openai_compatible import OpenAICompatibleAnswerGenerator
 from longmemory.application.chat.contracts import AnswerGenerationError
 from longmemory.application.memory_runtime import MemoryRuntime
+from longmemory.application.scenario_recall import ScenarioRecallItem, ScenarioRecallResult
 from longmemory.bootstrap import build_memory_runtime
 from longmemory.core.memory.retrieval.service import HybridMemoryRetriever
 from longmemory.entrypoints.api.chat_backend import ChatBackend
@@ -256,6 +257,47 @@ def test_runtime_memory_modes_reset_for_a_new_process_runtime(database):
         assert second.status()["settings_persistent"] is False
     finally:
         second.close()
+
+
+def test_runtime_l2_use_is_opt_in_shared_and_separately_traced(database):
+    class ScenarioProvider:
+        def recall(self, query, *, limit=3):
+            assert query == "答辩准备得怎么样"
+            return ScenarioRecallResult(
+                "以下是与当前问题相关、已经用户复核的生活场景（L2）：\n- 准备答辩：用户周五答辩并在修改 PPT。",
+                (ScenarioRecallItem("l2-a", "准备答辩", "用户周五答辩并在修改 PPT。",
+                                    ("l1-a", "l1-b"), ("l0-a", "l0-b")),),
+            )
+
+        def close(self):
+            pass
+
+    runtime = MemoryRuntime(database, method=LongMemoryV1(database, existing_only=True),
+                            scenario_provider=ScenarioProvider())
+    backend = ChatBackend(database, FakeAnswerGenerator(), runtime=runtime)
+    try:
+        assert backend.run("答辩准备得怎么样", ())["scenario_retrieved"] == []
+        runtime.configure(write_enabled=True, use_enabled=True, scenario_use_enabled=True)
+        result = backend.run("答辩准备得怎么样", ())
+        assert result["status"] == "completed"
+        assert result["scenario_use_enabled"] is True
+        assert result["scenario_retrieved"][0]["scenario_id"] == "l2-a"
+        assert result["scenario_retrieved"][0]["source_memory_ids"] == ("l1-a", "l1-b")
+        assert "用户复核" in result["memory_context"]
+    finally:
+        backend.close()
+
+
+def test_runtime_rejects_unavailable_l2_without_partial_mode_change(database):
+    runtime = MemoryRuntime(database, method=LongMemoryV1(database, existing_only=True))
+    try:
+        with pytest.raises(ValueError, match="scenario_memory_unavailable"):
+            runtime.configure(write_enabled=False, use_enabled=False, scenario_use_enabled=True)
+        assert runtime.status()["write_enabled"] is True
+        assert runtime.status()["use_enabled"] is True
+        assert runtime.status()["scenario_use_enabled"] is False
+    finally:
+        runtime.close()
 
 
 def test_paused_write_skips_daily_llm_extraction_but_archives_source(database):

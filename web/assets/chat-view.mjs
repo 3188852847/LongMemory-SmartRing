@@ -22,7 +22,10 @@ export function renderTurn(document, turn) {
     event_id: turn.event_id, call_id: turn.call_id, started_at: turn.started_at,
     method: turn.method, model: turn.model, role: turn.role,
     assistant_saved: turn.assistant_saved, history_messages: turn.history_messages,
-    writes: turn.writes, retrieved: turn.retrieved, memory_context: turn.memory_context}, null, 2);
+    writes: turn.writes, retrieved: turn.retrieved,
+    scenario_use_enabled: turn.scenario_use_enabled,
+    scenario_retrieved: turn.scenario_retrieved,
+    memory_context: turn.memory_context}, null, 2);
   details.append(summary, trace);
   article.append(details);
   return article;

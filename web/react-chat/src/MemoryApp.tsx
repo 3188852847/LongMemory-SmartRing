@@ -4,7 +4,7 @@ import {ChatApi} from './api';
 import {AppShell, ConsoleNav} from './AppShell';
 
 type MemoryConfig = {configured: boolean; database: string | null; allow_delete: boolean; allow_correction: boolean; allow_change: boolean};
-type RuntimeMode = {write_enabled: boolean; use_enabled: boolean; persistent: boolean; l0_archived_when_write_disabled: boolean};
+type RuntimeMode = {write_enabled: boolean; use_enabled: boolean; scenario_use_enabled: boolean; scenario_available: boolean; persistent: boolean; l0_archived_when_write_disabled: boolean};
 type L1Summary = {id: string; content: string; truncated: boolean; state: 'active' | 'retired'; recorded_at: string; subject_id: string};
 type Source = {source_message_id: string; source_type: string; linked_at: string; message: null | {role: string; content: string; created_at: string}};
 type L1Detail = L1Summary & {content: string; revision: string; valid_from: string | null; valid_to: string | null; retired_at: string | null; superseded_by_id: string | null; sources: Source[]};
@@ -20,7 +20,7 @@ const sourceName = (value: string) => value === 'user_stated' ? '用户陈述' :
 export function MemoryApp() {
   const [config, setConfig] = useState<MemoryConfig>();
   const [mode, setMode] = useState<RuntimeMode>();
-  const [modeDraft, setModeDraft] = useState({write_enabled: true, use_enabled: true});
+  const [modeDraft, setModeDraft] = useState({write_enabled: true, use_enabled: true, scenario_use_enabled: false});
   const [tab, setTab] = useState<'l1' | 'l0'>('l1');
   const [l1, setL1] = useState<Page<L1Summary>>({items: [], total: 0, limit: 25, offset: 0});
   const [l0, setL0] = useState<Page<L0Summary>>({items: [], total: 0, limit: 25, offset: 0});
@@ -68,7 +68,7 @@ export function MemoryApp() {
         if (!current.configured) {setNotice('启动时没有指定记忆库；页面不会自动创建数据库。'); return;}
         try {
           const runtime = await api.request<RuntimeMode>('/api/memory-mode');
-          setMode(runtime); setModeDraft({write_enabled: runtime.write_enabled, use_enabled: runtime.use_enabled});
+          setMode(runtime); setModeDraft({write_enabled: runtime.write_enabled, use_enabled: runtime.use_enabled, scenario_use_enabled: runtime.scenario_use_enabled});
         } catch {setNotice('记忆库可浏览，但聊天 Runtime 未启用，运行期开关不可用。');}
         const params = new URLSearchParams({q: '', state: 'active', offset: '0', limit: '25'});
         setL1(await api.request<Page<L1Summary>>(`/api/memories?${params}`));
@@ -100,7 +100,7 @@ export function MemoryApp() {
   async function saveMode() {
     await guarded(async () => {
       const saved = await api.request<RuntimeMode>('/api/memory-mode', 'PUT', modeDraft);
-      setMode(saved); setNotice(`已应用到网页与圆屏：L1 写入${saved.write_enabled ? '开启' : '暂停'}，记忆使用${saved.use_enabled ? '开启' : '暂停'}。`);
+      setMode(saved); setNotice(`已应用到网页与圆屏：L1 写入${saved.write_enabled ? '开启' : '暂停'}，L1 使用${saved.use_enabled ? '开启' : '暂停'}，L2 场景${saved.scenario_use_enabled ? '参与回答' : '不参与回答'}。`);
     });
   }
   async function saveCorrection() {
@@ -154,8 +154,9 @@ export function MemoryApp() {
       {mode && <Card className="mode-card" title="本次运行的记忆模式"><Space wrap size="large">
         <Space><Switch checked={modeDraft.write_enabled} disabled={busy} onChange={value => setModeDraft({...modeDraft, write_enabled: value})}/><span>从新对话生成 L1</span></Space>
         <Space><Switch checked={modeDraft.use_enabled} disabled={busy} onChange={value => setModeDraft({...modeDraft, use_enabled: value})}/><span>回答时使用已有记忆</span></Space>
-        <Button type="primary" disabled={busy || (mode.write_enabled === modeDraft.write_enabled && mode.use_enabled === modeDraft.use_enabled)} onClick={() => void saveMode()}>应用到网页与圆屏</Button>
-      </Space><p className="subtle">关闭 L1 写入仍保留 L0。两个开关彼此独立，重启服务后恢复开启。</p></Card>}
+        <Space><Switch checked={modeDraft.scenario_use_enabled} disabled={busy || !mode.scenario_available} onChange={value => setModeDraft({...modeDraft, scenario_use_enabled: value})}/><span>回答时使用已接受 L2</span></Space>
+        <Button type="primary" disabled={busy || (mode.write_enabled === modeDraft.write_enabled && mode.use_enabled === modeDraft.use_enabled && mode.scenario_use_enabled === modeDraft.scenario_use_enabled)} onClick={() => void saveMode()}>应用到网页与圆屏</Button>
+      </Space><p className="subtle">关闭 L1 写入仍保留 L0。L2 默认关闭；开启后只使用当前有效、与问题有关键词重叠的已接受场景，最多 3 条。设置在服务重启后恢复默认。</p></Card>}
       <Tabs activeKey={tab} onChange={switchTab} items={[{key: 'l1', label: 'L1 原子记忆'}, {key: 'l0', label: 'L0 原始记录'}]}/>
       <div className="memory-toolbar"><Input.Search aria-label="搜索当前层级" value={query} maxLength={200} allowClear disabled={busy || !config?.configured} placeholder="搜索当前层级的文字" onChange={e => setQuery(e.target.value)} onSearch={value => void refresh(0, value.trim())}/>
         {tab === 'l1' ? <Select aria-label="L1 状态" value={l1State} disabled={busy || !config?.configured} onChange={value => {setL1State(value); void guarded(async () => {await fetchL1(0, query, value); setNotice('L1 状态筛选已应用。');});}} options={[{value:'active',label:'当前记忆'},{value:'retired',label:'已退役'},{value:'all',label:'全部 L1'}]}/>

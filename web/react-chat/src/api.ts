@@ -32,7 +32,9 @@ export interface Turn {
   input: string; answer?: string; status: string; writes: {operation: string}[] | null;
   user_saved: boolean; duration_ms: number; memory_processing?: 'completed' | 'source_only' | null;
   memory_warning?: string | null; retrieval_strategy?: string | null;
-  retrieval_warning?: string | null; [key: string]: unknown;
+  retrieval_warning?: string | null; scenario_use_enabled?: boolean;
+  scenario_retrieved?: {scenario_id:string; title:string; summary:string; source_memory_ids:string[]; source_message_ids:string[]}[] | null;
+  [key: string]: unknown;
 }
 export interface Snapshot {chat_id: string; title: string; pending: boolean; turns: Turn[]}
 export interface Summary {chat_id: string; title: string; turn_count: number}
