@@ -49,6 +49,14 @@ def test_command_preserves_paths_and_does_not_enable_deletion_or_jobs(options):
     assert "--allow-insecure-http" not in cmd  # 网页仍需 .env 的独立 HTTP 许可。
 
 
+def test_explicit_launcher_choice_enables_l1_delete_capability(options):
+    cmd = runtime.build_commands(
+        replace(options, allow_memory_delete=True), uv="synthetic-uv"
+    )[0][1]
+
+    assert cmd.count("--allow-memory-delete") == 1
+
+
 def test_hybrid_retrieval_requires_and_passes_existing_snapshot(options):
     model = options.root / "synthetic-bge"
     model.mkdir()

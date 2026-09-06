@@ -39,6 +39,7 @@ def main():
     role = tk.StringVar(value="elysia_v1")
     memory_extraction = tk.StringVar(value="规则提取（稳定基线）")
     memory_retrieval = tk.StringVar(value="关键词召回（稳定基线）")
+    allow_memory_delete = tk.BooleanVar(value=False)
     embedding_model = tk.StringVar(value=str(DEFAULT_BGE_MODEL))
     tts_backend = tk.StringVar(value="EdgeTTS（联网标准音色）")
     ttk.Checkbutton(box, text="同时启动圆屏语音（默认只启动文字聊天）", variable=voice).pack(anchor="w")
@@ -102,6 +103,11 @@ def main():
     ttk.Combobox(retrieval_row, textvariable=memory_retrieval,
                  values=("关键词召回（稳定基线）", "关键词＋BGE（P3.2 试用）"),
                  state="readonly", width=27).pack(side="left")
+    ttk.Checkbutton(
+        box,
+        text="允许 L1 单条删除（仍保留 L0 原话；网页中还需二次确认）",
+        variable=allow_memory_delete,
+    ).pack(anchor="w", pady=(0, 4))
     ttk.Label(box, text="BGE 本地快照（仅混合召回使用）").pack(anchor="w", pady=(4, 0))
     embedding_row = ttk.Frame(box)
     embedding_row.pack(fill="x")
@@ -183,6 +189,7 @@ def main():
                               tts_backend=selected_tts(),
                               memory_extraction=("llm" if memory_extraction.get().startswith("模型") else "rules"),
                               memory_retrieval=("hybrid" if "BGE" in memory_retrieval.get() else "keyword"),
+                              allow_memory_delete=allow_memory_delete.get(),
                               embedding_model_dir=Path(embedding_model.get()))
             manager.start(options)
             state.update(started=time.monotonic(), opened=False, failed=False)

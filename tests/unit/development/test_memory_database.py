@@ -3,6 +3,7 @@
 import sqlite3
 from pathlib import Path
 
+from longmemory.infrastructure.database.definition import SCHEMA_VERSION
 from longmemory.infrastructure.database.schema import initialize_schema
 
 
@@ -49,6 +50,6 @@ def test_migration_creates_backup_and_upgrades_copy(tmp_path):
     assert result["changed"] is True and len(result["backup_sha256"]) == 64
     assert Path(result["backup"]).is_file()
     with sqlite3.connect(database) as reopened:
-        assert reopened.execute("PRAGMA user_version").fetchone()[0] == 6
+        assert reopened.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION
     with sqlite3.connect(result["backup"]) as backup:
         assert backup.execute("PRAGMA user_version").fetchone()[0] == 3

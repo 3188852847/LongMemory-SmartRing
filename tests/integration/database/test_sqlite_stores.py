@@ -18,6 +18,7 @@ from longmemory.core.memory.models import (
     MemorySourceType,
 )
 from longmemory.infrastructure.database.connection import open_database
+from longmemory.infrastructure.database.definition import SCHEMA_VERSION
 from longmemory.infrastructure.database.schema import initialize_schema
 
 
@@ -154,7 +155,7 @@ def test_v1_database_is_upgraded_without_losing_source(
 
     assert connection.execute(
         "PRAGMA user_version"
-    ).fetchone()[0] == 6
+    ).fetchone()[0] == SCHEMA_VERSION
     assert store.get(MemoryId("memory-v1")) == AtomicMemory(
         id=MemoryId("memory-v1"),
         subject_id=CURRENT_USER_SUBJECT_ID,
@@ -256,7 +257,7 @@ def test_v2_database_preserves_multiple_evidence_during_upgrade(
 
     assert connection.execute(
         "PRAGMA user_version"
-    ).fetchone()[0] == 6
+    ).fetchone()[0] == SCHEMA_VERSION
     assert tuple(
         evidence.source_message_id
         for evidence in store.list_evidence(MemoryId("memory-v2"))
@@ -311,7 +312,7 @@ def test_v3_upgrade_accepts_user_corrected_evidence(tmp_path) -> None:
     evidence = MemoryEvidence(memory.id, MessageId("correction-message"),
                               MemorySourceType.USER_CORRECTED, now)
     SQLiteMemoryStore(connection).save(memory, evidence)
-    assert connection.execute("PRAGMA user_version").fetchone()[0] == 6
+    assert connection.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION
     assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
     assert SQLiteMemoryStore(connection).list_evidence(memory.id) == (evidence,)
     connection.close()
@@ -346,7 +347,7 @@ def test_v4_upgrade_adds_empty_l2_tables_without_changing_l1(tmp_path) -> None:
 
     initialize_schema(connection)
 
-    assert connection.execute("PRAGMA user_version").fetchone()[0] == 6
+    assert connection.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION
     assert SQLiteMemoryStore(connection).get(memory.id) == memory
     assert connection.execute("SELECT count(*) FROM scenario_memories").fetchone()[0] == 0
     assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
@@ -403,7 +404,7 @@ def test_v5_upgrade_adds_empty_lifecycle_log_and_replaces_triggers(tmp_path) -> 
 
     initialize_schema(connection)
 
-    assert connection.execute("PRAGMA user_version").fetchone()[0] == 6
+    assert connection.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION
     assert tuple(connection.execute(
         "SELECT status, revision FROM scenario_memories WHERE id='l2-v5'"
     ).fetchone()) == ("active", 2)
@@ -417,6 +418,46 @@ def test_v5_upgrade_adds_empty_lifecycle_log_and_replaces_triggers(tmp_path) -> 
         "SELECT action, previous_status, scenario_revision "
         "FROM scenario_lifecycle_events WHERE scenario_id='l2-v5'"
     ).fetchone()) == ("source_retired", "active", 3)
+    assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
+    connection.close()
+
+
+def test_v6_upgrade_adds_empty_l3_tables_without_synthesizing_persona(tmp_path) -> None:
+    """V6→V7 只增加画像候选结构，不扫描现有 L1/L2 生成结论。"""
+
+    connection = open_database(tmp_path / "v6.db")
+    initialize_schema(connection)
+    now = datetime(2026, 9, 6, 16, 30, tzinfo=UTC).isoformat()
+    connection.execute(
+        "INSERT INTO atomic_memories "
+        "(id, subject_id, content, recorded_at) VALUES "
+        "('l1-v6', 'user:self', '用户喜欢茉莉花茶。', ?)",
+        (now,),
+    )
+    connection.execute(
+        "INSERT INTO scenario_memories VALUES "
+        "('l2-v6', 'user:self', '近期饮品选择', '用户近期选择茉莉花茶。', "
+        "?, NULL, NULL, 'active', 'synthetic', '1', 2)",
+        (now,),
+    )
+    connection.executescript("""
+        DROP TABLE persona_reviews;
+        DROP TABLE persona_generation_audits;
+        DROP INDEX idx_persona_sources_source;
+        DROP TABLE persona_sources;
+        DROP TABLE persona_memories;
+        PRAGMA user_version=6;
+    """)
+
+    initialize_schema(connection)
+
+    assert connection.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION
+    assert connection.execute("SELECT count(*) FROM atomic_memories").fetchone()[0] == 1
+    assert connection.execute("SELECT count(*) FROM scenario_memories").fetchone()[0] == 1
+    assert connection.execute("SELECT count(*) FROM persona_memories").fetchone()[0] == 0
+    assert connection.execute("SELECT count(*) FROM persona_sources").fetchone()[0] == 0
+    assert connection.execute("SELECT count(*) FROM persona_generation_audits").fetchone()[0] == 0
+    assert connection.execute("SELECT count(*) FROM persona_reviews").fetchone()[0] == 0
     assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
     connection.close()
 

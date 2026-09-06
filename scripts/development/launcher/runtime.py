@@ -33,6 +33,7 @@ class Options:
     role: str = "elysia_v1"
     memory_extraction: str = "rules"
     memory_retrieval: str = "keyword"
+    allow_memory_delete: bool = False
     embedding_model_dir: Path = DEFAULT_BGE_MODEL
     voice: bool = False
     tts_backend: str = "edge"
@@ -100,11 +101,15 @@ def build_commands(options, uv=None):
     # 可追溯写入能力。不可恢复的硬删除仍保持关闭。
     console.append("--allow-memory-correction")
     console.append("--allow-scenario-management")
+    if options.allow_memory_delete:
+        # 这里只授予服务端能力；浏览器仍需打开具体 L1 并二次确认。
+        # 当前删除保留 L0 原话，因此不能显示成“彻底遗忘”。
+        console.append("--allow-memory-delete")
     if options.memory_retrieval == "hybrid":
         if not options.embedding_model_dir.is_dir():
             raise ValueError("混合召回需要已有的本地 BGE 快照目录。")
         console.extend(["--embedding-model-dir", str(options.embedding_model_dir.resolve())])
-    # 实验启动与硬删除默认关闭；不因日常启动隐式开启高风险管理功能。
+    # 实验启动默认关闭；L1 删除只能由面板显式勾选，不能隐式开启。
     commands = [("console", console, root)]
     if options.voice:
         import ipaddress
