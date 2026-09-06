@@ -39,6 +39,7 @@ class DailyLLMMemory:
         producer,
         existing_only: bool = True,
         allow_cross_thread: bool = False,
+        retriever_factory=None,
     ) -> None:
         if producer is None:
             raise ValueError("日常模型提取必须显式提供候选生成器。")
@@ -46,8 +47,10 @@ class DailyLLMMemory:
             database_path,
             existing_only=existing_only,
             allow_cross_thread=allow_cross_thread,
+            retriever_factory=retriever_factory,
         )
         self._extractor = CandidateExtractionService(producer)
+        self.retrieval_name = self._base.retrieval_name
 
     def observe(self, event: MemoryEvent) -> ObservationResult:
         self._base._ensure_open()

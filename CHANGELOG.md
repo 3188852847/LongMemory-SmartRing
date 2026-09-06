@@ -4,6 +4,14 @@
 
 ## Unreleased
 
+### P3.2 optional daily hybrid retrieval（2026-09-06）
+
+- 新增可选 `keyword_dense_rrf_v1`：将现有关键词排名与固定本地 BGE 稠密排名融合；默认仍为关键词，不设置未经日常数据校准的余弦阈值。
+- 内存索引对纯追加 L1 增量编码，对删除、退役或正文变化完整重建；不新增个人向量磁盘副本、不迁移数据库。
+- BGE 编码/检索失败时显式返回 `keyword_fallback / dense_retrieval_failed`，React 展示实际策略和警告；存储错误不伪装成模型降级。
+- 启动面板新增召回策略与本地快照目录选择；网页和圆屏通过共享 Runtime 使用同一策略。真实日常召回质量、未知问题噪声和延迟待用户体验验收。
+- 验证：508 项 Python 回归（497 项主组＋11 项 Windows 防火墙面板组）、2 项 React 单测及 TypeScript+Vite 构建通过；固定本地快照离线编码把“我的名字是什么”首位召回到合成姓名事实。未调用校园模型或写个人数据库。
+
 ### P3.2 daily L0/L1 extraction first slice（2026-09-06）
 
 - 新增可选 `longmemory_daily_llm_v2`：复用严格 JSON、来源摘录和整批候选校验；日常路径先提交 L0，再在事务外提取并原子写入 L1/证据。

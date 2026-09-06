@@ -3,11 +3,11 @@
 import os
 import time
 import tkinter as tk
-from tkinter import messagebox, ttk
+from tkinter import filedialog, messagebox, ttk
 import webbrowser
 from pathlib import Path
 
-from runtime import Manager, Options, ROOT, Singleton, VOICE_ROOT, console_url
+from runtime import DEFAULT_BGE_MODEL, Manager, Options, ROOT, Singleton, VOICE_ROOT, console_url
 from network import local_addresses, config_action, load_choice, save_choice
 from firewall_panel import open_panel
 from tts import config_action as tts_config_action
@@ -16,8 +16,8 @@ from tts import config_action as tts_config_action
 def main():
     window = tk.Tk()
     window.title("LongMemory · 日常启动")
-    window.geometry("820x730")
-    window.minsize(760, 700)
+    window.geometry("860x790")
+    window.minsize(780, 740)
     try:
         lock = Singleton()
     except ValueError as error:
@@ -38,6 +38,8 @@ def main():
     ip = tk.StringVar(value=load_choice(choice_path))
     role = tk.StringVar(value="elysia_v1")
     memory_extraction = tk.StringVar(value="规则提取（稳定基线）")
+    memory_retrieval = tk.StringVar(value="关键词召回（稳定基线）")
+    embedding_model = tk.StringVar(value=str(DEFAULT_BGE_MODEL))
     tts_backend = tk.StringVar(value="EdgeTTS（联网标准音色）")
     ttk.Checkbutton(box, text="同时启动圆屏语音（默认只启动文字聊天）", variable=voice).pack(anchor="w")
     for label, variable in [("日常数据库（已有文件）", database), ("小智目录（仅语音模式）", server)]:
@@ -94,6 +96,20 @@ def main():
                  values=("规则提取（稳定基线）", "模型辅助（P3.2 试用）"),
                  state="readonly", width=27).pack(side="left")
     ttk.Label(memory_row, text="  模型失败仍保留 L0，不静默回退").pack(side="left")
+    retrieval_row = ttk.Frame(box)
+    retrieval_row.pack(fill="x", pady=8)
+    ttk.Label(retrieval_row, text="长期记忆召回：").pack(side="left")
+    ttk.Combobox(retrieval_row, textvariable=memory_retrieval,
+                 values=("关键词召回（稳定基线）", "关键词＋BGE（P3.2 试用）"),
+                 state="readonly", width=27).pack(side="left")
+    ttk.Label(box, text="BGE 本地快照（仅混合召回使用）").pack(anchor="w", pady=(4, 0))
+    embedding_row = ttk.Frame(box)
+    embedding_row.pack(fill="x")
+    ttk.Entry(embedding_row, textvariable=embedding_model).pack(side="left", fill="x", expand=True)
+    ttk.Button(embedding_row, text="选择目录", command=lambda: (
+        embedding_model.set(path) if (path := filedialog.askdirectory(
+            parent=window, initialdir=embedding_model.get() or str(ROOT))) else None
+    )).pack(side="left", padx=(8, 0))
     tts_row = ttk.Frame(box)
     tts_row.pack(fill="x", pady=8)
     ttk.Label(tts_row, text="圆屏声音：").pack(side="left")
@@ -165,7 +181,9 @@ def main():
             options = Options(database=Path(database.get()), voice=voice.get(), voice_root=Path(server.get()),
                               lan_ip=ip.get().strip(), role=role.get(), consent=consent.get(),
                               tts_backend=selected_tts(),
-                              memory_extraction=("llm" if memory_extraction.get().startswith("模型") else "rules"))
+                              memory_extraction=("llm" if memory_extraction.get().startswith("模型") else "rules"),
+                              memory_retrieval=("hybrid" if "BGE" in memory_retrieval.get() else "keyword"),
+                              embedding_model_dir=Path(embedding_model.get()))
             manager.start(options)
             state.update(started=time.monotonic(), opened=False, failed=False)
             start_button.config(state="disabled")

@@ -43,11 +43,30 @@ def test_command_preserves_paths_and_does_not_enable_deletion_or_jobs(options):
     assert "--enable-experiment-runs" not in cmd
     assert "--chat-provider" in cmd
     assert cmd[cmd.index("--memory-extraction") + 1] == "rules"
+    assert cmd[cmd.index("--memory-retrieval") + 1] == "keyword"
+    assert "--embedding-model-dir" not in cmd
     assert "--allow-insecure-http" not in cmd  # 网页仍需 .env 的独立 HTTP 许可。
 
 
+def test_hybrid_retrieval_requires_and_passes_existing_snapshot(options):
+    model = options.root / "synthetic-bge"
+    model.mkdir()
+    cmd = runtime.build_commands(
+        replace(options, memory_retrieval="hybrid", embedding_model_dir=model),
+        uv="synthetic-uv",
+    )[0][1]
+    assert cmd[cmd.index("--memory-retrieval") + 1] == "hybrid"
+    assert cmd[cmd.index("--embedding-model-dir") + 1] == str(model.resolve())
+    with pytest.raises(ValueError):
+        runtime.build_commands(
+            replace(options, memory_retrieval="hybrid", embedding_model_dir=model / "missing"),
+            uv="synthetic-uv",
+        )
+
+
 @pytest.mark.parametrize("change", [dict(consent=False), dict(port=8000), dict(port=80),
-                                    dict(role="bad"), dict(voice=True, lan_ip="0.0.0.0"),
+                                    dict(role="bad"), dict(memory_retrieval="bad"),
+                                    dict(voice=True, lan_ip="0.0.0.0"),
                                     dict(voice=True, lan_ip="8.8.8.8")])
 def test_invalid_options_rejected(options, change):
     with pytest.raises(ValueError):

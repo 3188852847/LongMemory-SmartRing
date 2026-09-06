@@ -57,6 +57,7 @@ class MemoryRuntime:
                 "ready": True,
                 "method": self._method.name,
                 "implementation_version": self._method.implementation_version,
+                "retrieval": getattr(self._method, "retrieval_name", "unknown"),
                 "database": str(self.database),
             }
 

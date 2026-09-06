@@ -79,6 +79,8 @@ class MemorySupport:
     context: str
     # 不要求每种方法暴露条目，不强迫摘要/图结构伪装成原子事实。
     retrieved: tuple[RetrievedTrace, ...] | None = None
+    retrieval_strategy: str | None = None
+    warning_code: str | None = None
 
 
 class MemoryMethod(Protocol):

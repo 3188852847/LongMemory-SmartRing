@@ -11,6 +11,7 @@ from longmemory.adapters.llm.fake import FakeAnswerGenerator
 from longmemory.adapters.llm.openai_compatible import OpenAICompatibleAnswerGenerator
 from longmemory.application.chat.contracts import AnswerGenerationError
 from longmemory.application.memory_runtime import MemoryRuntime
+from longmemory.core.memory.retrieval.service import HybridMemoryRetriever
 from longmemory.entrypoints.api.chat_backend import ChatBackend
 from longmemory.infrastructure.config.settings import ModelSettings
 from longmemory.methods.contracts import MemoryEvent
@@ -153,5 +154,31 @@ def test_daily_llm_failure_is_visible_but_chat_continues_from_archived_l0(databa
                 "SELECT count(*) FROM conversation_messages WHERE role='user'"
             ).fetchone()[0] == 1
             assert connection.execute("SELECT count(*) FROM atomic_memories").fetchone()[0] == 0
+    finally:
+        backend.close()
+
+
+def test_chat_reports_hybrid_retrieval_without_hiding_dense_fallback(database):
+    class Encoder:
+        identity = "synthetic-chat-encoder"
+
+        def encode_documents(self, texts):
+            return [[1.0, 0.0] for _ in texts]
+
+        def encode_query(self, _text):
+            return [1.0, 0.0]
+
+    method = LongMemoryV1(
+        database,
+        existing_only=True,
+        allow_cross_thread=True,
+        retriever_factory=lambda store: HybridMemoryRetriever(store, Encoder()),
+    )
+    backend = ChatBackend(database, FakeAnswerGenerator(), runtime=MemoryRuntime(database, method=method))
+    try:
+        assert backend.info()["retrieval"] == "keyword_dense_rrf_v1"
+        result = backend.run("我喜欢乌龙茶", ())
+        assert result["retrieval_strategy"] == "keyword_dense_rrf_v1"
+        assert result["retrieval_warning"] is None
     finally:
         backend.close()

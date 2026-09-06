@@ -27,7 +27,8 @@ class LongMemoryV1:
     capabilities = MethodCapabilities(source_trace=True)
 
     def __init__(self, database_path: Path, *, existing_only: bool = False,
-                 read_only: bool = False, allow_cross_thread: bool = False) -> None:
+                 read_only: bool = False, allow_cross_thread: bool = False,
+                 retriever_factory=None) -> None:
         # 沿用原实时装配的建库/版本检查行为；不能据此声称是只读实验入口。
         # 每个实例自己拥有连接，不缓存全局数据库，也不跨线程共享。
         if read_only and not existing_only:
@@ -60,7 +61,9 @@ class LongMemoryV1:
             self.conversation_store = SQLiteConversationStore(self.connection)
             self.memory_store = SQLiteMemoryStore(self.connection)
             self.extractor = MemoryExtractionService()
-            self.retriever = KeywordMemoryRetriever(self.memory_store)
+            self.retriever = (retriever_factory(self.memory_store) if retriever_factory
+                              else KeywordMemoryRetriever(self.memory_store))
+            self.retrieval_name = getattr(self.retriever, "name", "keyword_v1")
             # 下列对象仅用于旧 CLI/小智 DTO 的兼容装配，不属于公共方法契约。
             self.turn_service = MemoryTurnService(
                 conversation_store=SQLiteConversationStore(self.connection, commit_changes=False),
@@ -109,13 +112,16 @@ class LongMemoryV1:
         self.connection.execute("BEGIN")
         try:
             memories, context = self.turn_service.recall(query, turn_id=call_id)
+            diagnostics = (self.retriever.consume_diagnostics()
+                           if hasattr(self.retriever, "consume_diagnostics")
+                           else {"strategy": "keyword_v1", "warning_code": None})
             return MemorySupport(call_id, context, tuple(
                 RetrievedTrace(str(memory.id), memory.content, tuple(
                     str(evidence.source_message_id)
                     for evidence in self.memory_store.list_evidence(memory.id)
                 ))
                 for memory in memories
-            ))
+            ), diagnostics["strategy"], diagnostics["warning_code"])
         finally:
             self.connection.rollback()  # 结束只读快照，不撤销先前已提交的 observe。
 

@@ -34,7 +34,8 @@ class ChatBackend:
     def info(self):
         role = self.roles.current()
         runtime = self.memory_runtime().status()
-        return {"enabled": True, "method": runtime["method"], "subject": "user:self",
+        return {"enabled": True, "method": runtime["method"], "retrieval": runtime["retrieval"],
+                "subject": "user:self",
                 "provider": self.provider, "model": self.model, "role": role['name'], "role_revision": role['revision'],
                 "database": str(self.database), "history_persistent": True,
                 "speaks_on_device": False}
@@ -51,7 +52,8 @@ class ChatBackend:
                   "model": self.model, "role": self.role, "writes": None, "retrieved": None,
                   "memory_context": None, "user_saved": False, "assistant_saved": False,
                   "history_messages": len(history), "memory_processing": None,
-                  "memory_warning": None}
+                  "memory_warning": None, "retrieval_strategy": None,
+                  "retrieval_warning": None}
         try:
             runtime = self.memory_runtime()
             runtime_status = runtime.status()
@@ -69,7 +71,9 @@ class ChatBackend:
                           memory_processing=observed.processing_status,
                           memory_warning=observed.warning_code)
             result.update(call_id=support.call_id, memory_context=support.context,
-                          retrieved=[asdict(item) for item in support.retrieved])
+                          retrieved=[asdict(item) for item in support.retrieved],
+                          retrieval_strategy=support.retrieval_strategy,
+                          retrieval_warning=support.warning_code)
             # Fake 只验证工程闭环，页面明确标出它不模拟角色/多轮语义能力。
             if self.provider == "fake":
                 answer = generator.generate(query=text, memory_context=support.context)

@@ -17,6 +17,7 @@ ROOT = Path(__file__).resolve().parents[3]
 VOICE_ROOT = Path(r"D:\ESP32-Workspace\xiaozhi-esp32-server\main\xiaozhi-server")
 VOXCPM_PORT = 18768
 DEFAULT_CHAT_PATH = "/chat-react"
+DEFAULT_BGE_MODEL = ROOT / "data/models/bge-small-zh-v1.5/7999e1d3359715c523056ef9478215996d62a620"
 
 
 def console_url(port: int) -> str:
@@ -31,6 +32,8 @@ class Options:
     port: int = 8767
     role: str = "elysia_v1"
     memory_extraction: str = "rules"
+    memory_retrieval: str = "keyword"
+    embedding_model_dir: Path = DEFAULT_BGE_MODEL
     voice: bool = False
     tts_backend: str = "edge"
     voice_root: Path = VOICE_ROOT
@@ -71,6 +74,8 @@ def build_commands(options, uv=None):
         raise ValueError("未知助手角色。")
     if options.memory_extraction not in {"rules", "llm"}:
         raise ValueError("未知记忆提取策略。")
+    if options.memory_retrieval not in {"keyword", "hybrid"}:
+        raise ValueError("未知记忆召回策略。")
     if options.tts_backend not in {"edge", "voxcpm2"}:
         raise ValueError("未知语音后端。")
     root = options.root.resolve()
@@ -88,8 +93,13 @@ def build_commands(options, uv=None):
                "--database", str(options.database.resolve()), "--enable-chat",
                "--chat-provider", "openai_compatible", "--assistant-role", options.role,
                "--memory-extraction", options.memory_extraction,
+               "--memory-retrieval", options.memory_retrieval,
                "--xiaozhi-server", str(options.voice_root.resolve()),
                "--memory-audit-log", str(root / "data/logs/xiaozhi-demo-v1.jsonl")]
+    if options.memory_retrieval == "hybrid":
+        if not options.embedding_model_dir.is_dir():
+            raise ValueError("混合召回需要已有的本地 BGE 快照目录。")
+        console.extend(["--embedding-model-dir", str(options.embedding_model_dir.resolve())])
     # 实验启动与删除默认关闭；不因日常启动隐式开启高风险管理功能。
     commands = [("console", console, root)]
     if options.voice:
