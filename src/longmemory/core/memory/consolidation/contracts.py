@@ -4,6 +4,7 @@ from datetime import datetime
 from typing import Protocol
 
 from .models import ConsolidationCursor, ConsolidationRun, ConsolidationStage
+from .sources import L1ConsolidationBatch
 
 
 class ConsolidationRunStore(Protocol):
@@ -24,3 +25,13 @@ class ConsolidationRunStore(Protocol):
     def list_recent(
         self, subject_id: str, stage: ConsolidationStage, *, limit: int = 20,
     ) -> tuple[ConsolidationRun, ...]: ...
+
+
+class L1ConsolidationSourceReader(Protocol):
+    def read_batch(
+        self,
+        subject_id: str,
+        *,
+        after: ConsolidationCursor | None,
+        limit: int,
+    ) -> L1ConsolidationBatch: ...

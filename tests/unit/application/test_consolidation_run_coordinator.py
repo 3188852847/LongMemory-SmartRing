@@ -40,12 +40,13 @@ class FakeStore:
         self.started.append(run)
 
 
-def start(store, pending=4):
+def start(store, pending=4, selected=None):
     return ConsolidationRunCoordinator(store).try_start(
         subject_id="user:self",
         stage=ConsolidationStage.L1_TO_L2,
         trigger=ConsolidationTrigger.NEW_EVIDENCE,
         pending_source_count=pending,
+        selected_source_count=selected,
         now=NOW,
         budget_window_start=NOW.replace(hour=0),
     )
@@ -58,6 +59,11 @@ def test_allowed_run_is_reserved_in_ledger():
     assert result.run is store.started[0]
     assert result.run.status == ConsolidationRunStatus.RUNNING
     assert result.run.source_count == 9
+
+
+def test_actual_batch_count_includes_old_context_but_stays_within_limit():
+    result = start(FakeStore(), pending=4, selected=11)
+    assert result.run.source_count == 11
 
 
 def test_held_decision_does_not_write_run():

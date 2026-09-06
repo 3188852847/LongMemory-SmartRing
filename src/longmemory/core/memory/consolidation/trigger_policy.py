@@ -93,7 +93,9 @@ def decide_consolidation_trigger(
             ConsolidationTriggerAction.BLOCK,
             ConsolidationTriggerReason.DAILY_BUDGET_EXHAUSTED,
         )
-    source_limit = min(state.pending_source_count, config.maximum_sources_per_run)
+    # 返回整批容量而不是仅返回“新来源数”；调用方可在余量中带入游标前
+    # 仍未归组的旧来源，让它们有机会与新证据形成场景。
+    source_limit = config.maximum_sources_per_run
     if trigger == ConsolidationTrigger.MANUAL:
         return ConsolidationTriggerDecision(
             ConsolidationTriggerAction.RUN,

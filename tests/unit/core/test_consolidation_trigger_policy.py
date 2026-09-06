@@ -80,7 +80,7 @@ def test_manual_trigger_bypasses_threshold_and_cooldown_but_not_budget():
     assert (ready.action, ready.reason, ready.source_limit) == (
         ConsolidationTriggerAction.RUN,
         ConsolidationTriggerReason.MANUAL_READY,
-        1,
+        20,
     )
     assert blocked.reason == ConsolidationTriggerReason.DAILY_BUDGET_EXHAUSTED
 

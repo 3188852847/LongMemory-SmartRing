@@ -46,6 +46,7 @@ class ConsolidationRunCoordinator:
         stage: ConsolidationStage,
         trigger: ConsolidationTrigger,
         pending_source_count: int,
+        selected_source_count: int | None = None,
         now: datetime,
         budget_window_start: datetime,
     ) -> ConsolidationStartResult:
@@ -74,6 +75,14 @@ class ConsolidationRunCoordinator:
         if decision.action != ConsolidationTriggerAction.RUN:
             return ConsolidationStartResult(decision, None)
 
+        selected_count = (
+            min(pending_source_count, decision.source_limit)
+            if selected_source_count is None
+            else selected_source_count
+        )
+        if not 1 <= selected_count <= decision.source_limit:
+            raise ValueError("consolidation_selected_source_count_invalid")
+
         run = ConsolidationRun(
             id=str(uuid4()),
             subject_id=subject_id,
@@ -81,7 +90,7 @@ class ConsolidationRunCoordinator:
             trigger=trigger,
             status=ConsolidationRunStatus.RUNNING,
             started_at=now,
-            source_count=decision.source_limit,
+            source_count=selected_count,
         )
         try:
             self._store.start(run)
