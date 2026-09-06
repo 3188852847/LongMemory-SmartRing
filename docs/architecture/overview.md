@@ -18,6 +18,8 @@ P2 声音设置有两条边界：React → 本机认证/CSRF API → 固定小�
 
 React 控制台在 `web/react-chat/` 渐进扩展，开发时构建，日常由现有 Python 进程提供 `/chat-react` 与 `/memories`；不增加常驻前端服务。记忆页按路径动态加载，旧页面暂留 `/memories-legacy`。后端只公开构建清单中的 JS/CSS，HTML 使用每响应随机样式 nonce，认证与 API 边界不变。见 ADR-0032。
 
+下一前端基础切片依据 ADR-0033 引入 React Router、TanStack Query 与组件测试，建立统一 AppShell 后再迁移设备、设置和实验页。LongMemory API 继续使用 aiohttp，并通过入口层 Pydantic 契约与框架无关用例降低耦合；FastAPI 当前只是条件触发候选，不是已实施迁移。完整技术雷达见[技术策略](technology-strategy.md)。
+
 P2 聊天外观使用独立 appearance 模块和局部 CSS；浏览器仅保存枚举主题/字号，设置即时生效，不写服务端或记忆库。React 网页角色使用版本化旁库，圆屏仍使用小智配置，角色可显式同步；声音窗口支持 Edge 音色编辑，并只读显示 VoxCPM2 配置与服务状态。见 ADR-0021 至 ADR-0025。
 
 防火墙面板是启动器的显式管理入口：只读查询无需主动提权；添加/撤销经用户确认，通过 UAC 单独运行原项目规则脚本。普通启动与 IP 同步不改变系统规则，后台等待不阻塞服务状态轮询。

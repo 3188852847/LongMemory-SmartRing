@@ -39,6 +39,7 @@ P3 目标已明确为四层个人记忆：L0 原始证据、L1 原子记忆、L2
 - [路线图](ROADMAP.md)：先后顺序与历史记录。
 - [产品范围与验收](docs/requirements/companion-product.md)：各阶段做什么、怎样算完成。
 - [系统架构](docs/architecture/overview.md)：模块、进程与数据归属。
+- [技术策略与技术雷达](docs/architecture/technology-strategy.md)：当前技术栈、近期采用项、触发式候选与暂不采用项。
 - [运行流程](docs/architecture/workflows.md)：当前步骤、失败行为和未来流程。
 - [路线变更决策 ADR-0015](docs/adr/0015-product-first-companion-roadmap.md)：变更原因与边界。
 - [分层记忆与知识边界 ADR-0026](docs/adr/0026-layered-memory-and-knowledge-plane.md)：P3 目标、来源隔离与框架边界。

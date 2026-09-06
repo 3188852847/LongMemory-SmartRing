@@ -16,6 +16,8 @@
 
 Web 控制台依据 ADR-0032 渐进统一到 React，不进行一次性重写。记忆页第一切片已实现 L1/L0 分层、双向来源查看并保留 legacy 回退；下一迁移对象是设备与状态，设置聚合和实验中心随后按产品优先级推进。Python Tk 启动面板不属于本轮 Web 迁移。
 
+技术基础按 ADR-0033 分阶段收敛：当前在迁移下一页面前建立 React Router、TanStack Query、Vitest/React Testing Library 与共享 AppShell；Python API 先做 Pydantic 契约试点，继续保留 aiohttp。FastAPI、FTS5、APScheduler、SSE/WebSocket、独立向量库和智能体框架均按明确触发条件评估，不视为已采用。详见[技术策略](docs/architecture/technology-strategy.md)。
+
 阶段范围和完成标准见[产品需求](docs/requirements/companion-product.md)；候选选项见[自定义清单](docs/requirements/自定义功能清单.md)。本机控制台、校园网模型依赖和小智独立进程边界不因路线变化而消失。不承诺持续后台运行、开机自启或公网访问已实现。
 
 P3 采用“个人记忆、外部知识、上下文编排”三个平面。个人记忆按 L0 原始证据、L1 原子记忆、L2 场景、L3 用户画像渐进落地；知识库不是 L4，先通过拟议 `KnowledgeProvider` 做轻量文档检索与引用。当前不引入 LangChain、LangGraph、Deep Agents 或 Semantica 作为核心地基；图谱和持久工作流框架按真实需求重新评估。见 [ADR-0026](docs/adr/0026-layered-memory-and-knowledge-plane.md)。
