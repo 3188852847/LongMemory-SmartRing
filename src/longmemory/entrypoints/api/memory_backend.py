@@ -5,7 +5,7 @@ import json
 import secrets
 import sqlite3
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 from longmemory.adapters.storage.sqlite_conversation_store import SQLiteConversationStore
@@ -16,6 +16,7 @@ from longmemory.application.memory_management.service import MemoryManagementSer
 from longmemory.application.scenario_management.service import ScenarioManagementService
 from longmemory.application.scenario_management.proposal_service import ScenarioProposalService
 from longmemory.application.persona_management.service import PersonaManagementService
+from longmemory.application.persona_management.proposal_service import PersonaProposalService
 from longmemory.core.common.identifiers import MemoryId, PersonaId, ScenarioId
 from longmemory.core.memory.l2_scenario.models import ScenarioReviewDecision
 from longmemory.core.memory.l2_scenario.proposals import (
@@ -23,11 +24,17 @@ from longmemory.core.memory.l2_scenario.proposals import (
     ScenarioProposalInput,
 )
 from longmemory.adapters.llm.scenario_candidate import SCENARIO_PROMPT_VERSION
+from longmemory.adapters.llm.persona_candidate import PERSONA_PROMPT_VERSION
 from longmemory.core.memory.l3_persona.models import (
     PersonaBasis,
     PersonaKind,
     PersonaReviewDecision,
     PersonaSourceLayer,
+)
+from longmemory.core.memory.l3_persona.proposals import (
+    PersonaProposalError,
+    PersonaProposalEvidence,
+    PersonaProposalInput,
 )
 from longmemory.infrastructure.database.schema import SCHEMA_VERSION
 
@@ -72,7 +79,7 @@ class MemoryBackend:
     def __init__(self, database: Path | None, *, allow_delete=False, allow_correction=False,
                  allow_scenario_management=False, allow_persona_management=False,
                  scenario_producer=None,
-                 scenario_model=None):
+                 scenario_model=None, persona_producer=None, persona_model=None):
         # 路径只来自启动参数；任何 HTTP 请求都不能选文件或切换数据库。
         self.database = database.resolve() if database is not None else None
         self.allow_delete = allow_delete
@@ -81,6 +88,8 @@ class MemoryBackend:
         self.allow_persona_management = allow_persona_management
         self.scenario_producer = scenario_producer
         self.scenario_model = scenario_model
+        self.persona_producer = persona_producer
+        self.persona_model = persona_model
 
     def info(self):
         return {"configured": self.database is not None,
@@ -101,7 +110,13 @@ class MemoryBackend:
                     and self.database is not None
                     and self.scenario_producer is not None
                 ),
-                "scenario_model": self.scenario_model if self.scenario_producer else None}
+                "scenario_model": self.scenario_model if self.scenario_producer else None,
+                "persona_model_preview_available": (
+                    self.allow_persona_management
+                    and self.database is not None
+                    and self.persona_producer is not None
+                ),
+                "persona_model": self.persona_model if self.persona_producer else None}
 
     @contextmanager
     def _open(self, *, write_capability=None):
@@ -614,7 +629,7 @@ class MemoryBackend:
             return data
 
     def create_persona(self, *, kind, basis, label, statement, sources,
-                       valid_from=None, valid_to=None):
+                       valid_from=None, valid_to=None, creation_kind="manual"):
         with self._open(write_capability="persona") as connection:
             store = SQLitePersonaStore(connection, commit_changes=False)
             service = PersonaManagementService(persona_store=store)
@@ -624,17 +639,87 @@ class MemoryBackend:
                     parsed_valid_to = datetime.fromisoformat(valid_to) if valid_to else None
                 except ValueError:
                     raise MemoryAccessError("persona_valid_time_invalid", 400) from None
+                if creation_kind == "model_assisted" and self.persona_producer is None:
+                    raise MemoryAccessError("persona_model_preview_unavailable", 503)
                 persona = service.create_candidate(
                     kind=PersonaKind(kind), basis=PersonaBasis(basis), label=label,
                     statement=statement,
                     source_refs=tuple((PersonaSourceLayer(item["layer"]), item["id"])
                                       for item in sources),
+                    generator_name=(
+                        "model_assisted_console" if creation_kind == "model_assisted"
+                        else "manual_console"
+                    ),
+                    generator_version=(
+                        PERSONA_PROMPT_VERSION if creation_kind == "model_assisted" else "1"
+                    ),
                     valid_from=parsed_valid_from, valid_to=parsed_valid_to,
                 )
             except (ValueError, LookupError) as error:
                 raise MemoryAccessError(str(error), 400) from None
             connection.commit()
             return {"created": True, "id": str(persona.id), "status": persona.status.value}
+
+    def preview_persona(self, *, basis, sources):
+        """读取白名单来源和用户 L0 后关闭数据库，再发起一次模型预览。"""
+
+        if not self.allow_persona_management:
+            raise MemoryAccessError("persona_management_disabled", 403)
+        if self.persona_producer is None:
+            raise MemoryAccessError("persona_model_preview_unavailable", 503)
+        try:
+            parsed_basis = PersonaBasis(basis)
+        except ValueError:
+            raise MemoryAccessError("persona_basis_invalid", 400) from None
+        inputs = []
+        with self._open() as connection:
+            store = SQLitePersonaStore(connection)
+            for item in sources:
+                layer = PersonaSourceLayer(item["layer"])
+                resolved = store.resolve_source(layer, item["id"])
+                if resolved is None:
+                    raise MemoryAccessError("persona_source_missing_or_inactive", 400)
+                if layer == PersonaSourceLayer.L1:
+                    rows = connection.execute(
+                        "SELECT m.id, m.content, m.created_at FROM memory_evidence e "
+                        "JOIN conversation_messages m ON m.id=e.source_message_id "
+                        "WHERE e.memory_id=? AND m.role='user' ORDER BY m.created_at,m.id",
+                        (item["id"],),
+                    ).fetchall()
+                else:
+                    rows = connection.execute(
+                        "SELECT DISTINCT m.id,m.content,m.created_at FROM scenario_memory_sources s "
+                        "JOIN memory_evidence e ON e.memory_id=s.memory_id "
+                        "JOIN conversation_messages m ON m.id=e.source_message_id "
+                        "WHERE s.scenario_id=? AND m.role='user' ORDER BY m.created_at,m.id",
+                        (item["id"],),
+                    ).fetchall()
+                evidence = tuple(PersonaProposalEvidence(
+                    row["id"], row["content"],
+                    datetime.fromisoformat(row["created_at"]).astimezone(UTC).date().isoformat(),
+                ) for row in rows)
+                inputs.append(PersonaProposalInput(
+                    layer, item["id"], resolved.subject_id,
+                    resolved.content_snapshot, evidence,
+                ))
+        try:
+            proposal = PersonaProposalService(self.persona_producer).preview(
+                basis=parsed_basis, sources=tuple(inputs),
+            )
+        except PersonaProposalError as error:
+            raise MemoryAccessError(str(error), 400) from None
+        return {
+            "kind": proposal.kind.value,
+            "basis": proposal.basis.value,
+            "label": proposal.label,
+            "statement": proposal.statement,
+            "sources": [{"layer": layer.value, "id": source_id}
+                        for layer, source_id in proposal.source_refs],
+            "generator_name": "model_assisted_console",
+            "generator_version": PERSONA_PROMPT_VERSION,
+            "model": self.persona_model,
+            "persisted": False,
+        }
 
     def review_persona(self, persona_id, *, decision, expected_revision):
         with self._open(write_capability="persona") as connection:

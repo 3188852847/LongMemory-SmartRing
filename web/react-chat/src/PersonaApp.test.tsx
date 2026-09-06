@@ -14,7 +14,7 @@ describe('L3 用户画像页', () => {
     const calls:Array<[string,string|undefined,unknown]> = [];
     vi.spyOn(ChatApi.prototype,'request').mockImplementation(async(path:string,method?:string,body?:unknown) => {
       calls.push([path,method,body]);
-      if(path==='/api/memory-config') return {configured:true,database:'synthetic.db',allow_persona_management:true};
+      if(path==='/api/memory-config') return {configured:true,database:'synthetic.db',allow_persona_management:true,persona_model_preview_available:false,persona_model:null};
       if(path.startsWith('/api/personas?')) return {items:[],total:0,limit:100,offset:0};
       if(path==='/api/persona-source-options') return {l1:[{layer:'l1',id:'l1-a',subject_id:'user:self',content:'用户明确希望先被倾听。',recorded_at:'2026-09-06T10:00:00Z'}],l2:[],selection_is_semantic:false};
       if(path==='/api/personas'&&method==='POST') return {id:'persona-1'};
@@ -33,9 +33,37 @@ describe('L3 用户画像页', () => {
     fireEvent.click(await screen.findByText(/L1 · 用户明确希望先被倾听/));
     fireEvent.click(screen.getByRole('button',{name:'创建待复核候选'}));
     await waitFor(() => expect(calls.filter(([path,method])=>path==='/api/personas'&&method==='POST')).toHaveLength(1));
-    const body=calls.find(([path,method])=>path==='/api/personas'&&method==='POST')?.[2] as {basis:string;sources:Array<{layer:string;id:string}>};
+    const body=calls.find(([path,method])=>path==='/api/personas'&&method==='POST')?.[2] as {basis:string;creation_kind:string;sources:Array<{layer:string;id:string}>};
     expect(body.basis).toBe('user_declared');
+    expect(body.creation_kind).toBe('manual');
     expect(body.sources).toEqual([{layer:'l1',id:'l1-a'}]);
+    view.unmount();client.clear();
+  });
+
+  test('模型调用必须二次确认，返回内容只填入草稿而不自动保存', async () => {
+    vi.spyOn(ChatApi.prototype,'bootstrap').mockResolvedValue(undefined);
+    const calls:Array<[string,string|undefined,unknown]> = [];
+    vi.spyOn(ChatApi.prototype,'request').mockImplementation(async(path:string,method?:string,body?:unknown) => {
+      calls.push([path,method,body]);
+      if(path==='/api/memory-config') return {configured:true,database:'synthetic.db',allow_persona_management:true,persona_model_preview_available:true,persona_model:'synthetic-model'};
+      if(path.startsWith('/api/personas?')) return {items:[],total:0,limit:100,offset:0};
+      if(path==='/api/persona-source-options') return {l1:[{layer:'l1',id:'l1-a',subject_id:'user:self',content:'用户明确希望先被倾听。',recorded_at:'2026-09-06T10:00:00Z'}],l2:[],selection_is_semantic:false};
+      if(path==='/api/persona-proposals'&&method==='POST') return {kind:'interaction_style',basis:'user_declared',label:'建议前先倾听',statement:'用户希望助手先倾听，再询问是否需要建议。',sources:[{layer:'l1',id:'l1-a'}],generator_name:'model_assisted_console',generator_version:'l3-persona-preview-v1',model:'synthetic-model',persisted:false};
+      throw new Error(`unexpected ${method??'GET'} ${path}`);
+    });
+    const client=createConsoleQueryClient();
+    const view=render(<QueryClientProvider client={client}><MemoryRouter><PersonaApp/></MemoryRouter></QueryClientProvider>);
+    const create=await screen.findByRole('button',{name:'新建 L3 候选'});
+    await waitFor(()=>expect(create.hasAttribute('disabled')).toBe(false));
+    fireEvent.click(create);
+    fireEvent.mouseDown(screen.getByLabelText('画像证据来源'));
+    fireEvent.click(await screen.findByText(/L1 · 用户明确希望先被倾听/));
+    fireEvent.click(screen.getByRole('button',{name:'让模型生成不落库草稿'}));
+    expect(calls.filter(([path])=>path==='/api/persona-proposals')).toHaveLength(0);
+    fireEvent.click(screen.getByRole('button',{name:'生成不落库草稿'}));
+    await waitFor(()=>expect(calls.filter(([path])=>path==='/api/persona-proposals')).toHaveLength(1));
+    expect((screen.getByLabelText('简短标签') as HTMLInputElement).value).toBe('建议前先倾听');
+    expect(calls.filter(([path])=>path==='/api/personas')).toHaveLength(0);
     view.unmount();client.clear();
   });
 });

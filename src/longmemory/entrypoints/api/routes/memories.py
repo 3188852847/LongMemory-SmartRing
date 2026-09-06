@@ -273,8 +273,10 @@ def register_memory_routes(app, backend):
         sources = body.get("sources") if isinstance(body, dict) else None
         fields = {"kind", "basis", "label", "statement", "sources",
                   "valid_from", "valid_to", "confirm_candidate"}
-        if (not isinstance(body, dict) or set(body) != fields
+        extended_fields = fields | {"creation_kind"}
+        if (not isinstance(body, dict) or set(body) not in (fields, extended_fields)
                 or body.get("confirm_candidate") is not True
+                or body.get("creation_kind", "manual") not in {"manual", "model_assisted"}
                 or body.get("kind") not in {"preference", "habit", "interaction_style", "behavior_pattern"}
                 or body.get("basis") not in {"user_declared", "system_inferred"}
                 or not isinstance(body.get("label"), str)
@@ -301,6 +303,35 @@ def register_memory_routes(app, backend):
             backend.create_persona, kind=body["kind"], basis=body["basis"],
             label=body["label"].strip(), statement=body["statement"].strip(),
             sources=sources, valid_from=body["valid_from"], valid_to=body["valid_to"],
+            creation_kind=body.get("creation_kind", "manual"),
+        )
+
+    async def persona_proposal(request):
+        if request.content_type != "application/json":
+            raise web.HTTPBadRequest()
+        try:
+            body = await request.json()
+        except (ValueError, UnicodeError):
+            raise web.HTTPBadRequest() from None
+        sources = body.get("sources") if isinstance(body, dict) else None
+        if (not isinstance(body, dict)
+                or set(body) != {"basis", "sources", "confirm_model_call"}
+                or body.get("basis") not in {"user_declared", "system_inferred"}
+                or body.get("confirm_model_call") is not True
+                or not isinstance(sources, list) or not 1 <= len(sources) <= 20):
+            raise web.HTTPBadRequest()
+        keys = []
+        for item in sources:
+            if (not isinstance(item, dict) or set(item) != {"layer", "id"}
+                    or item.get("layer") not in {"l1", "l2"}
+                    or not isinstance(item.get("id"), str)
+                    or not 1 <= len(item["id"]) <= 128):
+                raise web.HTTPBadRequest()
+            keys.append((item["layer"], item["id"]))
+        if len(set(keys)) != len(keys):
+            raise web.HTTPBadRequest()
+        return await invoke(
+            backend.preview_persona, basis=body["basis"], sources=sources,
         )
 
     async def persona_detail(request):
@@ -347,5 +378,6 @@ def register_memory_routes(app, backend):
     app.router.add_get("/api/personas", persona_listing, allow_head=False)
     app.router.add_get("/api/persona-source-options", persona_source_options, allow_head=False)
     app.router.add_post("/api/personas", persona_collection)
+    app.router.add_post("/api/persona-proposals", persona_proposal)
     app.router.add_get("/api/personas/{persona_id}", persona_detail, allow_head=False)
     app.router.add_post("/api/personas/{persona_id}/reviews", persona_review)

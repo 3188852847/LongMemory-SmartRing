@@ -7,7 +7,8 @@ import {AppShell, ConsoleNav} from './AppShell';
 type PersonaState = 'candidate' | 'active' | 'rejected' | 'stale';
 type PersonaKind = 'preference' | 'habit' | 'interaction_style' | 'behavior_pattern';
 type PersonaBasis = 'user_declared' | 'system_inferred';
-type MemoryConfig = {configured:boolean;database:string|null;allow_persona_management:boolean};
+type MemoryConfig = {configured:boolean;database:string|null;allow_persona_management:boolean;
+  persona_model_preview_available:boolean;persona_model:string|null};
 type Persona = {id:string;subject_id:string;kind:PersonaKind;basis:PersonaBasis;label:string;statement:string;
   generated_at:string;valid_from:string|null;valid_to:string|null;status:PersonaState;generator_name:string;generator_version:string;revision:number};
 type PersonaSource = {source_layer:'l1'|'l2';source_id:string;source_content_snapshot:string;linked_at:string;
@@ -16,6 +17,8 @@ type PersonaDetail = Persona & {audit:{source_count:number;source_message_count:
   sources:PersonaSource[];lifecycle_events:Array<{id:string;action:string;source_layer:string;source_id:string;occurred_at:string;persona_revision:number}>};
 type SourceOption = {layer:'l1'|'l2';id:string;subject_id:string;content:string;recorded_at:string};
 type SourceOptions = {l1:SourceOption[];l2:SourceOption[];selection_is_semantic:false};
+type PersonaProposal = {kind:PersonaKind;basis:PersonaBasis;label:string;statement:string;
+  sources:Array<{layer:'l1'|'l2';id:string}>;generator_name:string;generator_version:string;model:string|null;persisted:false};
 type Page<T> = {items:T[];total:number;limit:number;offset:number};
 
 const api = new ChatApi();
@@ -35,6 +38,8 @@ export function PersonaApp() {
   const [filter,setFilter] = useState<'all'|PersonaState>('all');
   const [selectedId,setSelectedId] = useState<string>();
   const [creating,setCreating] = useState(false);
+  const [confirmingModel,setConfirmingModel] = useState(false);
+  const [draftOrigin,setDraftOrigin] = useState<'manual'|'model_assisted'>('manual');
   const [reviewDecision,setReviewDecision] = useState<'accepted'|'rejected'>();
   const [kind,setKind] = useState<PersonaKind>('preference');
   const [basis,setBasis] = useState<PersonaBasis>('user_declared');
@@ -57,11 +62,24 @@ export function PersonaApp() {
     mutationFn:() => api.request<{id:string}>('/api/personas','POST',{
       kind,basis,label:label.trim(),statement:statement.trim(),sources:sources.map(parseSource),
       valid_from:validFrom?new Date(validFrom).toISOString():null,
-      valid_to:validTo?new Date(validTo).toISOString():null,confirm_candidate:true,
+      valid_to:validTo?new Date(validTo).toISOString():null,
+      creation_kind:draftOrigin,confirm_candidate:true,
     }),
     onSuccess:async result => {setCreating(false);setSelectedId(result.id);setLabel('');setStatement('');setSources([]);setValidFrom('');setValidTo('');
       await queryClient.invalidateQueries({queryKey:['personas']});setNotice('L3 画像候选已创建，尚未成为有效画像。');},
     onError:error => setNotice(String(error)),
+  });
+  const previewCandidate = useMutation({
+    mutationFn:() => api.request<PersonaProposal>('/api/persona-proposals','POST',{
+      basis,sources:sources.map(parseSource),confirm_model_call:true,
+    }),
+    onSuccess:proposal => {
+      setConfirmingModel(false);setKind(proposal.kind);setBasis(proposal.basis);
+      setLabel(proposal.label);setStatement(proposal.statement);
+      setSources(proposal.sources.map(sourceKey));setDraftOrigin('model_assisted');
+      setNotice(`模型草稿已返回（${proposal.model??'未标记模型'}），尚未写入数据库；请核对 L0 原话、修改草稿后再创建候选。`);
+    },
+    onError:error => {setConfirmingModel(false);setNotice(String(error));},
   });
   const review = useMutation({
     mutationFn:(decision:'accepted'|'rejected') => api.request(`/api/personas/${encodeURIComponent(selectedId!)}/reviews`,'POST',{
@@ -77,7 +95,7 @@ export function PersonaApp() {
     value:sourceKey(item),label:`${item.layer.toUpperCase()} · ${item.content}`,
   }));
   const validRange = !(validFrom&&validTo&&new Date(validTo)<new Date(validFrom));
-  const openCreator = () => {setKind('preference');setBasis('user_declared');setLabel('');setStatement('');setSources([]);setValidFrom('');setValidTo('');setCreating(true);};
+  const openCreator = () => {setKind('preference');setBasis('user_declared');setLabel('');setStatement('');setSources([]);setValidFrom('');setValidTo('');setDraftOrigin('manual');setCreating(true);};
   const sidebar = <><Button type="primary" block disabled={!canManage} onClick={openCreator}>新建 L3 候选</Button><ConsoleNav active="personas" legacyPath="/memories"/></>;
 
   return <><AppShell subtitle="可复核的用户画像" className="persona-shell" sidebar={sidebar}>
@@ -120,13 +138,29 @@ export function PersonaApp() {
     <Alert type={basis==='system_inferred'?'warning':'info'} showIcon title={basis==='system_inferred'?'系统推断需要跨记录证据':'用户声明必须能回到用户原话'}
       description={basis==='system_inferred'?'服务端强制要求至少 2 个来源、3 条不同用户 L0、2 个观察日；达到门槛也不等于推断必然正确。':'至少选择一个能直接支持这条声明的 L1 或已接受 L2，创建后仍需复核。'}/>
     <label htmlFor="persona-kind">画像类型</label><Select id="persona-kind" className="wide" value={kind} onChange={setKind} options={Object.entries(kindName).map(([value,label])=>({value,label}))}/>
-    <label htmlFor="persona-basis">依据性质</label><Select id="persona-basis" className="wide" value={basis} onChange={setBasis} options={Object.entries(basisName).map(([value,label])=>({value,label}))}/>
+    <label htmlFor="persona-basis">依据性质</label><Select id="persona-basis" className="wide" value={basis} onChange={value=>{setBasis(value);setDraftOrigin('manual');}} options={Object.entries(basisName).map(([value,label])=>({value,label}))}/>
     <label htmlFor="persona-label">简短标签</label><Input id="persona-label" value={label} maxLength={120} onChange={event=>setLabel(event.target.value)} placeholder="例如：建议前先倾听"/>
     <label htmlFor="persona-statement">画像断言</label><Input.TextArea id="persona-statement" value={statement} maxLength={1000} rows={4} onChange={event=>setStatement(event.target.value)} placeholder="一次只写一条可独立核对的认识"/>
     <label htmlFor="persona-sources">证据来源</label><Select id="persona-sources" aria-label="画像证据来源" mode="multiple" className="wide" value={sources} onChange={setSources} optionFilterProp="label" options={options}/>
+    <Space direction="vertical" className="wide">
+      <Button disabled={!config.data?.persona_model_preview_available||sources.length<1} onClick={()=>setConfirmingModel(true)}>让模型生成不落库草稿</Button>
+      <small>{config.data?.persona_model_preview_available
+        ? `调用前会再次确认；当前模型：${config.data.persona_model??'未标记'}`
+        : '当前启动方式没有可用的 L3 草稿模型，仍可手工填写。'}</small>
+      {draftOrigin==='model_assisted'&&<Tag color="purple">当前内容来自模型草稿，已允许人工修改</Tag>}
+    </Space>
     <label htmlFor="persona-valid-from">现实开始时间（可选）</label><Input id="persona-valid-from" type="datetime-local" value={validFrom} onChange={event=>setValidFrom(event.target.value)}/>
     <label htmlFor="persona-valid-to">现实结束时间（可选）</label><Input id="persona-valid-to" type="datetime-local" value={validTo} onChange={event=>setValidTo(event.target.value)}/>
     {!validRange&&<Alert type="error" showIcon title="结束时间不能早于开始时间"/>}
+  </Modal>
+
+  <Modal title="确认发送所选记忆给模型" open={confirmingModel} centered width={620} zIndex={1400}
+    confirmLoading={previewCandidate.isPending} okText="生成不落库草稿" cancelText="取消"
+    onCancel={()=>!previewCandidate.isPending&&setConfirmingModel(false)}
+    onOk={()=>previewCandidate.mutate()}>
+    <p>将发送 {sources.length} 个已选 L1/L2 的内容，以及它们向下追溯到的用户 L0 原话和 UTC 观察日期。</p>
+    <p>模型只返回可编辑草稿，不会自动创建、接受或用于回答；调用失败不会重试。</p>
+    <Alert type="warning" showIcon title="个人记忆将发送给当前配置的模型服务" description="只选择支持本画像的必要来源。来源中的文本按不可信数据处理，不能指挥模型或管理接口。"/>
   </Modal>
 
   <Modal title={reviewDecision==='accepted'?'确认接受 L3 画像':'确认拒绝 L3 候选'} open={Boolean(reviewDecision)} centered width={580} zIndex={1300}

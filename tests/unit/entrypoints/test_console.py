@@ -51,7 +51,8 @@ async def console(database=None, allow_memory_delete=False, chat_backend=None,
                   allow_memory_correction=False, allow_scenario_management=False,
                   allow_persona_management=False,
                   xiaozhi_server=None, memory_runtime_token=None,
-                  scenario_producer=None, scenario_model=None):
+                  scenario_producer=None, scenario_model=None,
+                  persona_producer=None, persona_model=None):
     # 先占用随机回环端口，再把精确 Host 交给应用，避免探测后抢占端口。
     sock = socket.socket()
     sock.bind(("127.0.0.1", 0))
@@ -65,7 +66,9 @@ async def console(database=None, allow_memory_delete=False, chat_backend=None,
                                      xiaozhi_server=xiaozhi_server,
                                      memory_runtime_token=memory_runtime_token,
                                      scenario_producer=scenario_producer,
-                                     scenario_model=scenario_model), access_log=None)
+                                     scenario_model=scenario_model,
+                                     persona_producer=persona_producer,
+                                     persona_model=persona_model), access_log=None)
     await runner.setup()
     await web.SockSite(runner, sock).start()
     try:
@@ -326,7 +329,9 @@ def test_memory_without_config_is_not_a_fake_empty_database():
                               "allow_scenario_management": False,
                               "allow_persona_management": False,
                               "scenario_model_preview_available": False,
-                              "scenario_model": None}
+                              "scenario_model": None,
+                              "persona_model_preview_available": False,
+                              "persona_model": None}
             response = await client.get(base + "/api/memories")
             assert response.status == 503
             assert (await response.json())["error"] == "memory_not_configured"
@@ -589,6 +594,17 @@ def test_persona_http_requires_csrf_and_explicit_capability(tmp_path):
         "confirm_candidate": True,
     }
 
+    class ProposalProducer:
+        calls = 0
+
+        def propose(self, *, basis, sources):
+            self.calls += 1
+            return ('{"schema_version":1,"candidate":{"kind":"preference",'
+                    '"label":"饮品偏好","statement":"用户平时喜欢喝乌龙茶。",'
+                    '"sources":[{"layer":"l1","id":"l1-tea"}]}}')
+
+    producer = ProposalProducer()
+
     async def run():
         # 未开放 L3 管理时，即使请求合法也只能读取，不能落库。
         async with console(database) as (client, base, _bridge):
@@ -596,15 +612,39 @@ def test_persona_http_requires_csrf_and_explicit_capability(tmp_path):
             denied = await client.post(base + "/api/personas", headers=headers, json=body)
             assert denied.status == 403
 
-        async with console(database, allow_persona_management=True) as (client, base, _bridge):
+        async with console(
+            database, allow_persona_management=True,
+            persona_producer=producer, persona_model="synthetic-model",
+        ) as (client, base, _bridge):
             headers = await login(client, base)
+            config = await (await client.get(base + "/api/memory-config")).json()
+            assert config["persona_model_preview_available"] is True
+            assert config["persona_model"] == "synthetic-model"
             options = await (await client.get(base + "/api/persona-source-options")).json()
             assert options["l1"][0]["id"] == "l1-tea"
             assert options["selection_is_semantic"] is False
 
+            proposal_body = {
+                "basis": "user_declared",
+                "sources": [{"layer": "l1", "id": "l1-tea"}],
+                "confirm_model_call": True,
+            }
+            assert (
+                await client.post(base + "/api/persona-proposals", json=proposal_body)
+            ).status == 403
+            proposal_response = await client.post(
+                base + "/api/persona-proposals", headers=headers, json=proposal_body,
+            )
+            proposal = await proposal_response.json()
+            assert proposal_response.status == 200
+            assert proposal["persisted"] is False
+            assert proposal["sources"] == [{"layer": "l1", "id": "l1-tea"}]
+            assert producer.calls == 1
+
             assert (await client.post(base + "/api/personas", json=body)).status == 403
             created_response = await client.post(
-                base + "/api/personas", headers=headers, json=body,
+                base + "/api/personas", headers=headers,
+                json=body | {"creation_kind": "model_assisted"},
             )
             created = await created_response.json()
             assert created_response.status == 200 and created["status"] == "candidate"
@@ -613,6 +653,7 @@ def test_persona_http_requires_csrf_and_explicit_capability(tmp_path):
                 await client.get(base + "/api/personas/" + created["id"])
             ).json()
             assert detail["basis"] == "user_declared"
+            assert detail["generator_name"] == "model_assisted_console"
             assert detail["audit"] == {
                 "source_count": 1,
                 "source_message_count": 1,
