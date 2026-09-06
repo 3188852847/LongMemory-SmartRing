@@ -20,6 +20,13 @@ from longmemory.core.memory.consolidation.models import (
     ConsolidationStage,
     ConsolidationTrigger,
 )
+from longmemory.core.memory.consolidation.risk_review import (
+    ConsolidationRiskEvidence,
+    ConsolidationRiskReview,
+    ConsolidationRiskReviewError,
+    ConsolidationRiskReviewInput,
+    ConsolidationRiskReviewer,
+)
 from longmemory.core.memory.consolidation.trigger_policy import (
     ConsolidationTriggerAction,
     ConsolidationTriggerConfig,
@@ -53,7 +60,8 @@ L3_TRIGGER_CONFIG = ConsolidationTriggerConfig(
     minimum_new_sources=2,
     maximum_sources_per_run=12,
     cooldown=timedelta(hours=24),
-    daily_model_call_budget=1,
+    daily_model_call_budget=2,
+    model_calls_per_run=2,
 )
 
 
@@ -63,6 +71,7 @@ class L2ToL3ConsolidationResult:
     run: ConsolidationRun | None
     activation_decision: PersonaActivationDecision | None = None
     persona: PersonaMemory | None = None
+    risk_review: ConsolidationRiskReview | None = None
 
 
 class L2ToL3ConsolidationService:
@@ -72,6 +81,7 @@ class L2ToL3ConsolidationService:
         run_store: ConsolidationRunStore,
         source_reader: L2ConsolidationSourceReader,
         consolidation_producer: PersonaConsolidationProducer,
+        risk_reviewer: ConsolidationRiskReviewer,
         persona_store: PersonaStore,
         config: ConsolidationTriggerConfig = L3_TRIGGER_CONFIG,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
@@ -79,6 +89,7 @@ class L2ToL3ConsolidationService:
         self._run_store = run_store
         self._source_reader = source_reader
         self._consolidation = PersonaConsolidationService(consolidation_producer)
+        self._risk_reviewer = risk_reviewer
         self._activation = PersonaActivationService(persona_store=persona_store)
         self._persona_store = persona_store
         self._config = config
@@ -89,12 +100,11 @@ class L2ToL3ConsolidationService:
         *,
         subject_id: str,
         trigger: ConsolidationTrigger,
-        risk: PersonaRiskAssessment,
         budget_window_start: datetime,
         generator_name: str,
         generator_version: str,
     ) -> L2ToL3ConsolidationResult:
-        if not risk.assessment_complete:
+        if not self._risk_reviewer.ready:
             return L2ToL3ConsolidationResult(
                 ConsolidationTriggerDecision(
                     ConsolidationTriggerAction.HOLD,
@@ -166,12 +176,54 @@ class L2ToL3ConsolidationService:
             self._run_store.finish(terminal)
             return L2ToL3ConsolidationResult(start.decision, terminal)
 
+        candidate = suggestion.candidate
+        if candidate is None:
+            raise RuntimeError("persona_consolidation_candidate_missing")
+        selected = {
+            (item.source_layer, item.source_id): item for item in inputs
+            if (item.source_layer, item.source_id) in candidate.source_refs
+        }
+        try:
+            review = self._risk_reviewer.review(ConsolidationRiskReviewInput(
+                stage=ConsolidationStage.L2_TO_L3,
+                operation=suggestion.operation.value,
+                candidate=(
+                    f"{candidate.kind.value}/{candidate.basis.value}/"
+                    f"{candidate.label}：{candidate.statement}"
+                ),
+                evidence=tuple(
+                    ConsolidationRiskEvidence(
+                        f"{layer.value}:{source_id}", selected[(layer, source_id)].content,
+                    )
+                    for layer, source_id in candidate.source_refs
+                ),
+                current_memories=tuple(
+                    ConsolidationRiskEvidence(str(item.id), item.statement)
+                    for item in active
+                ),
+            ))
+        except (ConsolidationRiskReviewError, ValueError):
+            terminal = self._terminal(
+                running, ConsolidationRunStatus.FAILED,
+                "risk_review_failed", None, model_calls=2,
+            )
+            self._run_store.finish(terminal)
+            return L2ToL3ConsolidationResult(start.decision, terminal)
+
+        risk = PersonaRiskAssessment(
+            assessment_complete=review.assessment_complete,
+            sensitive=review.sensitive,
+            source_role_ambiguous=False,
+            unresolved_conflict=review.unresolved_conflict,
+            clarification_allowed=review.clarification_allowed,
+            update_target_is_current=True,
+        )
         try:
             activated = self._activation.apply(
                 suggestion,
                 risk=risk,
                 generator_name=generator_name,
-                generator_version=generator_version,
+                generator_version=f"{generator_version}+{review.reviewer_version}",
                 generated_at=started_at,
             )
             terminal = self._terminal(
@@ -183,18 +235,18 @@ class L2ToL3ConsolidationService:
                     else "persona_" + activated.decision.reason.value
                 ),
                 batch.next_cursor,
-                model_calls=1,
+                model_calls=2,
             )
             self._run_store.finish(terminal)
         except Exception:
             terminal = self._terminal(
                 running, ConsolidationRunStatus.FAILED,
-                "persona_activation_failed", None, model_calls=1,
+                "persona_activation_failed", None, model_calls=2,
             )
             self._run_store.finish(terminal)
             return L2ToL3ConsolidationResult(start.decision, terminal)
         return L2ToL3ConsolidationResult(
-            start.decision, terminal, activated.decision, activated.persona,
+            start.decision, terminal, activated.decision, activated.persona, review,
         )
 
     def _terminal(self, running, status, outcome, cursor, *, model_calls):

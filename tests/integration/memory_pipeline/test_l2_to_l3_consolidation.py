@@ -11,7 +11,10 @@ from longmemory.core.memory.consolidation.models import (
     ConsolidationStage,
     ConsolidationTrigger,
 )
-from longmemory.core.memory.l3_persona.activation_policy import PersonaRiskAssessment
+from longmemory.core.memory.consolidation.risk_review import (
+    ConsolidationRiskReview,
+    ConsolidationRiskReviewError,
+)
 from longmemory.infrastructure.database.connection import open_database
 from longmemory.infrastructure.database.schema import initialize_schema
 
@@ -26,6 +29,29 @@ class Producer:
     def propose_consolidation(self, *, basis, sources, active_personas):
         self.calls += 1
         return self.result
+
+
+class Reviewer:
+    version = "synthetic-risk-v1"
+
+    def __init__(self, *, ready=True, sensitive=False, conflict=False, error=False):
+        self.ready = ready
+        self.sensitive = sensitive
+        self.conflict = conflict
+        self.error = error
+        self.calls = 0
+
+    def review(self, value):
+        self.calls += 1
+        if self.error:
+            raise ConsolidationRiskReviewError("synthetic_risk_failure")
+        return ConsolidationRiskReview(
+            sensitive=self.sensitive,
+            unresolved_conflict=self.conflict,
+            clarification_allowed=True,
+            reason_codes=(),
+            reviewer_version=self.version,
+        )
 
 
 def add_active_l2(connection, number):
@@ -59,7 +85,7 @@ def add_active_l2(connection, number):
     )
 
 
-def prepared(tmp_path, producer, count=3):
+def prepared(tmp_path, producer, count=3, reviewer=None):
     connection = open_database(tmp_path / "automatic-l3.db")
     initialize_schema(connection)
     for number in range(1, count + 1):
@@ -71,17 +97,17 @@ def prepared(tmp_path, producer, count=3):
         run_store=ledger,
         source_reader=SQLiteL2ConsolidationSourceReader(connection),
         consolidation_producer=producer,
+        risk_reviewer=reviewer or Reviewer(),
         persona_store=store,
         clock=lambda: NOW,
     )
     return connection, ledger, store, service
 
 
-def run(service, risk=PersonaRiskAssessment(assessment_complete=True)):
+def run(service):
     return service.run_once(
         subject_id="user:self",
         trigger=ConsolidationTrigger.NEW_EVIDENCE,
-        risk=risk,
         budget_window_start=NOW.replace(hour=0),
         generator_name="model_consolidation_runtime",
         generator_version="l3-persona-consolidation-v1",
@@ -101,6 +127,8 @@ def test_cross_day_l2_can_create_policy_audited_persona(tmp_path):
     assert producer.calls == 1
     assert result.run.status == ConsolidationRunStatus.COMPLETED
     assert result.run.outcome_code == "persona_activated"
+    assert result.run.model_call_count == 2
+    assert result.risk_review.reviewer_version == "synthetic-risk-v1"
     assert result.persona is not None and result.persona.status.value == "active"
     review = store.get_review(result.persona.id)
     assert review.reviewer_type.value == "policy"
@@ -124,10 +152,36 @@ def test_incomplete_risk_check_does_not_call_model_or_advance_cursor(tmp_path):
     producer = Producer(
         '{"schema_version":1,"operation":"NOOP","candidate":null,"replaces":[]}'
     )
-    connection, ledger, _store, service = prepared(tmp_path, producer)
-    result = run(service, PersonaRiskAssessment(assessment_complete=False))
+    reviewer = Reviewer(ready=False)
+    connection, ledger, _store, service = prepared(
+        tmp_path, producer, reviewer=reviewer,
+    )
+    result = run(service)
     assert result.run is None
     assert result.trigger_decision.reason.value == "risk_assessment_incomplete"
     assert producer.calls == 0
+    assert reviewer.calls == 0
     assert ledger.latest_cursor("user:self", ConsolidationStage.L2_TO_L3) is None
+    connection.close()
+
+
+def test_l3_risk_review_failure_never_creates_persona_or_advances(tmp_path):
+    producer = Producer(
+        '{"schema_version":1,"operation":"ADD","candidate":{'
+        '"kind":"habit","label":"午后交流习惯",'
+        '"statement":"用户经常在下午一点进行交流。","sources":['
+        '{"layer":"l2","id":"l2-1"},{"layer":"l2","id":"l2-2"},'
+        '{"layer":"l2","id":"l2-3"}]},"replaces":[]}'
+    )
+    reviewer = Reviewer(error=True)
+    connection, ledger, store, service = prepared(
+        tmp_path, producer, reviewer=reviewer,
+    )
+    result = run(service)
+    assert (producer.calls, reviewer.calls) == (1, 1)
+    assert result.run.status == ConsolidationRunStatus.FAILED
+    assert result.run.outcome_code == "risk_review_failed"
+    assert result.run.model_call_count == 2
+    assert ledger.latest_cursor("user:self", ConsolidationStage.L2_TO_L3) is None
+    assert store.list_active("user:self") == ()
     connection.close()

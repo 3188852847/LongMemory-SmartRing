@@ -50,7 +50,8 @@ def service(runs=()):
             minimum_new_sources=2,
             maximum_sources_per_run=12,
             cooldown=timedelta(hours=24),
-            daily_model_call_budget=1,
+            daily_model_call_budget=2,
+            model_calls_per_run=2,
         ),
     )
 
@@ -62,7 +63,7 @@ def test_status_explains_threshold_and_ready_stage():
     )
     assert l1.pending_new_source_count == 3
     assert (l2.trigger_action, l2.trigger_reason) == ("run", "ready")
-    assert l2.daily_model_call_budget == 1
+    assert l2.daily_model_call_budget == 2
 
 
 def test_running_stage_is_exposed_as_blocked():

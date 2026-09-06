@@ -20,6 +20,13 @@ from longmemory.core.memory.consolidation.models import (
     ConsolidationStage,
     ConsolidationTrigger,
 )
+from longmemory.core.memory.consolidation.risk_review import (
+    ConsolidationRiskEvidence,
+    ConsolidationRiskReview,
+    ConsolidationRiskReviewError,
+    ConsolidationRiskReviewInput,
+    ConsolidationRiskReviewer,
+)
 from longmemory.core.memory.consolidation.trigger_policy import (
     ConsolidationTriggerAction,
     ConsolidationTriggerConfig,
@@ -48,6 +55,7 @@ class L1ToL2ConsolidationResult:
     run: ConsolidationRun | None
     activation_decision: ScenarioActivationDecision | None = None
     scenario: ScenarioMemory | None = None
+    risk_review: ConsolidationRiskReview | None = None
 
 
 class L1ToL2ConsolidationService:
@@ -59,6 +67,7 @@ class L1ToL2ConsolidationService:
         run_store: ConsolidationRunStore,
         source_reader: L1ConsolidationSourceReader,
         proposal_producer: ScenarioProposalProducer,
+        risk_reviewer: ConsolidationRiskReviewer,
         memory_store: MemoryStore,
         scenario_store: ScenarioStore,
         config: ConsolidationTriggerConfig = ConsolidationTriggerConfig(),
@@ -67,6 +76,7 @@ class L1ToL2ConsolidationService:
         self._run_store = run_store
         self._source_reader = source_reader
         self._proposal = ScenarioProposalService(proposal_producer)
+        self._risk_reviewer = risk_reviewer
         self._activation = ScenarioActivationService(
             memory_store=memory_store, scenario_store=scenario_store,
         )
@@ -78,16 +88,14 @@ class L1ToL2ConsolidationService:
         *,
         subject_id: str,
         trigger: ConsolidationTrigger,
-        risk: ScenarioRiskAssessment,
         budget_window_start: datetime,
         generator_name: str,
         generator_version: str,
     ) -> L1ToL2ConsolidationResult:
         """执行一次且不重试；失败保留账本，只有完成结果推进来源游标。"""
 
-        # 未完成风险检查不是“低风险”。在读取正文和调用外部模型之前停止，
-        # 也不创建账本或推进游标，使后续评估器就绪后仍能处理同一批来源。
-        if not risk.assessment_complete:
+        # 没有装配独立复核器时，在读取正文和调用候选模型之前停止。
+        if not self._risk_reviewer.ready:
             return L1ToL2ConsolidationResult(
                 ConsolidationTriggerDecision(
                     ConsolidationTriggerAction.HOLD,
@@ -144,13 +152,41 @@ class L1ToL2ConsolidationService:
             self._run_store.finish(terminal)
             return L1ToL2ConsolidationResult(start.decision, terminal)
 
+        selected = {
+            item.memory_id: item for item in inputs
+            if item.memory_id in proposal.source_memory_ids
+        }
+        try:
+            review = self._risk_reviewer.review(ConsolidationRiskReviewInput(
+                stage=ConsolidationStage.L1_TO_L2,
+                operation="ADD",
+                candidate=f"{proposal.title}：{proposal.summary}",
+                evidence=tuple(
+                    ConsolidationRiskEvidence(str(memory_id), selected[memory_id].content)
+                    for memory_id in proposal.source_memory_ids
+                ),
+            ))
+        except (ConsolidationRiskReviewError, ValueError):
+            terminal = self._terminal(
+                running, ConsolidationRunStatus.FAILED,
+                "risk_review_failed", None, model_calls=2,
+            )
+            self._run_store.finish(terminal)
+            return L1ToL2ConsolidationResult(start.decision, terminal)
+
+        risk = ScenarioRiskAssessment(
+            assessment_complete=review.assessment_complete,
+            sensitive=review.sensitive,
+            source_role_ambiguous=False,
+            unresolved_conflict=review.unresolved_conflict,
+        )
         try:
             activated = self._activation.apply(
                 proposal,
                 inputs=inputs,
                 risk=risk,
                 generator_name=generator_name,
-                generator_version=generator_version,
+                generator_version=f"{generator_version}+{review.reviewer_version}",
                 generated_at=started_at,
             )
             terminal = self._terminal(
@@ -162,6 +198,7 @@ class L1ToL2ConsolidationService:
                     else "scenario_" + activated.decision.reason.value
                 ),
                 batch.next_cursor,
+                model_calls=2,
             )
             self._run_store.finish(terminal)
         except Exception:
@@ -170,14 +207,15 @@ class L1ToL2ConsolidationService:
                 ConsolidationRunStatus.FAILED,
                 "scenario_activation_failed",
                 None,
+                model_calls=2,
             )
             self._run_store.finish(terminal)
             return L1ToL2ConsolidationResult(start.decision, terminal)
         return L1ToL2ConsolidationResult(
-            start.decision, terminal, activated.decision, activated.scenario,
+            start.decision, terminal, activated.decision, activated.scenario, review,
         )
 
-    def _terminal(self, running, status, outcome, cursor):
+    def _terminal(self, running, status, outcome, cursor, *, model_calls=1):
         return ConsolidationRun(
             id=running.id,
             subject_id=running.subject_id,
@@ -186,7 +224,7 @@ class L1ToL2ConsolidationService:
             status=status,
             started_at=running.started_at,
             source_count=running.source_count,
-            model_call_count=1,
+            model_call_count=model_calls,
             finished_at=self._clock(),
             outcome_code=outcome,
             cursor=cursor,

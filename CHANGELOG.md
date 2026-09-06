@@ -1,5 +1,13 @@
 # Changelog
 
+### P3.9 independent consolidation risk review（2026-09-06）
+
+- L1→L2 与 L2→L3 一次性执行器不再接受调用方传入的风险布尔对象；必须构造时装配独立 `ConsolidationRiskReviewer`，未就绪会在读取正文和候选调用前停止。
+- 新增 OpenAI-compatible 风险复核适配器及严格封闭 JSON 契约。候选、证据与当前画像作为不可信数据单独复核；网络、截断、重复/额外/缺失字段均失败关闭，不激活、不推进游标、不重试。
+- 每次非 NOOP 整理在启动前为候选生成和独立复核预留两次模型调用预算；实际调用数写入既有账本。自动激活项的生成版本附带复核器版本。
+- 该复核步骤可与候选生成使用同一模型供应商，不等于独立模型家族或安全证明；后台仍保持关闭，未调用真实模型、未迁移或扫描个人数据库。见 ADR-0056。
+- 验证：33 项风险契约、适配器、预算和两阶段执行器定向测试通过；703 项非 Tk Python 回归及 2 项独立 Tk 窗口测试通过。
+
 ### P3.9 explicit risk-completeness gate（2026-09-06）
 
 - L2/L3 自动生效风险对象新增必填 `assessment_complete`；未完成评估以稳定原因 `risk_assessment_incomplete` 进入 HOLD，证据数量不能覆盖这一门槛。

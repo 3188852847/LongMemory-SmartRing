@@ -32,6 +32,9 @@ class ConsolidationTriggerConfig:
     maximum_sources_per_run: int = 20
     cooldown: timedelta = timedelta(hours=6)
     daily_model_call_budget: int = 2
+    # 一次非 NOOP 整理包含“生成候选 + 独立风险复核”两次调用。触发前按
+    # 最坏情况预留，避免先生成后才发现当天已没有复核预算。
+    model_calls_per_run: int = 2
 
     def __post_init__(self) -> None:
         if (
@@ -39,6 +42,7 @@ class ConsolidationTriggerConfig:
             or self.maximum_sources_per_run < self.minimum_new_sources
             or self.cooldown < timedelta(0)
             or self.daily_model_call_budget < 1
+            or not 1 <= self.model_calls_per_run <= self.daily_model_call_budget
         ):
             raise ValueError("consolidation_trigger_config_invalid")
 
@@ -89,7 +93,10 @@ def decide_consolidation_trigger(
             ConsolidationTriggerAction.HOLD,
             ConsolidationTriggerReason.NO_PENDING_EVIDENCE,
         )
-    if state.model_calls_today >= config.daily_model_call_budget:
+    if (
+        state.model_calls_today + config.model_calls_per_run
+        > config.daily_model_call_budget
+    ):
         return ConsolidationTriggerDecision(
             ConsolidationTriggerAction.BLOCK,
             ConsolidationTriggerReason.DAILY_BUDGET_EXHAUSTED,

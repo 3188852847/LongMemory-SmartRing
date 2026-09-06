@@ -18,8 +18,9 @@ from longmemory.core.memory.consolidation.models import (
     ConsolidationStage,
     ConsolidationTrigger,
 )
-from longmemory.core.memory.l2_scenario.activation_policy import (
-    ScenarioRiskAssessment,
+from longmemory.core.memory.consolidation.risk_review import (
+    ConsolidationRiskReview,
+    ConsolidationRiskReviewError,
 )
 from longmemory.infrastructure.database.connection import open_database
 from longmemory.infrastructure.database.schema import initialize_schema
@@ -39,7 +40,30 @@ class Producer:
         return self.result
 
 
-def prepared(tmp_path, producer):
+class Reviewer:
+    version = "synthetic-risk-v1"
+
+    def __init__(self, *, ready=True, sensitive=False, conflict=False, error=False):
+        self.ready = ready
+        self.sensitive = sensitive
+        self.conflict = conflict
+        self.error = error
+        self.calls = 0
+
+    def review(self, value):
+        self.calls += 1
+        if self.error:
+            raise ConsolidationRiskReviewError("synthetic_risk_failure")
+        return ConsolidationRiskReview(
+            sensitive=self.sensitive,
+            unresolved_conflict=self.conflict,
+            clarification_allowed=True,
+            reason_codes=(),
+            reviewer_version=self.version,
+        )
+
+
+def prepared(tmp_path, producer, reviewer=None):
     connection = open_database(tmp_path / "automatic-l2.db")
     initialize_schema(connection)
     for number in range(1, 5):
@@ -63,6 +87,7 @@ def prepared(tmp_path, producer):
         run_store=ledger,
         source_reader=SQLiteL1ConsolidationSourceReader(connection),
         proposal_producer=producer,
+        risk_reviewer=reviewer or Reviewer(),
         memory_store=SQLiteMemoryStore(connection, commit_changes=False),
         scenario_store=SQLiteScenarioStore(connection, commit_changes=False),
         clock=lambda: NOW,
@@ -70,11 +95,10 @@ def prepared(tmp_path, producer):
     return connection, ledger, service
 
 
-def run(service, risk=ScenarioRiskAssessment(assessment_complete=True)):
+def run(service):
     return service.run_once(
         subject_id="user:self",
         trigger=ConsolidationTrigger.NEW_EVIDENCE,
-        risk=risk,
         budget_window_start=NOW.replace(hour=0),
         generator_name="model_consolidation_runtime",
         generator_version="l2-scenario-preview-v2",
@@ -92,6 +116,8 @@ def test_model_candidate_can_be_policy_activated_and_advance_cursor(tmp_path):
     assert producer.calls == 1
     assert result.run.status == ConsolidationRunStatus.COMPLETED
     assert result.run.outcome_code == "scenario_activated"
+    assert result.run.model_call_count == 2
+    assert result.risk_review.reviewer_version == "synthetic-risk-v1"
     assert result.scenario is not None and result.scenario.status.value == "active"
     assert ledger.latest_cursor("user:self", ConsolidationStage.L1_TO_L2).source_id == "l1-4"
     review = connection.execute(
@@ -130,10 +156,10 @@ def test_policy_block_is_completed_but_never_persists_scenario(tmp_path):
         '"summary":"不应自动生效。",'
         '"source_memory_ids":["l1-1","l1-2","l1-3"]}}'
     )
-    connection, _ledger, service = prepared(tmp_path, producer)
-    result = run(service, ScenarioRiskAssessment(
-        assessment_complete=True, sensitive=True,
-    ))
+    connection, _ledger, service = prepared(
+        tmp_path, producer, Reviewer(sensitive=True),
+    )
+    result = run(service)
     assert result.run.outcome_code == "scenario_sensitive_content"
     assert result.scenario is None
     assert connection.execute("SELECT count(*) FROM scenario_memories").fetchone()[0] == 0
@@ -145,10 +171,30 @@ def test_incomplete_risk_check_does_not_call_model_or_advance_cursor(tmp_path):
         '{"schema_version":2,"candidate":{"title":"不应调用",'
         '"summary":"不应调用。","source_memory_ids":["l1-1","l1-2","l1-3"]}}'
     )
-    connection, ledger, service = prepared(tmp_path, producer)
-    result = run(service, ScenarioRiskAssessment(assessment_complete=False))
+    reviewer = Reviewer(ready=False)
+    connection, ledger, service = prepared(tmp_path, producer, reviewer)
+    result = run(service)
     assert result.run is None
     assert result.trigger_decision.reason.value == "risk_assessment_incomplete"
     assert producer.calls == 0
+    assert reviewer.calls == 0
     assert ledger.latest_cursor("user:self", ConsolidationStage.L1_TO_L2) is None
+    connection.close()
+
+
+def test_risk_review_failure_is_recorded_without_activation_or_cursor(tmp_path):
+    producer = Producer(
+        '{"schema_version":2,"candidate":{"title":"准备答辩",'
+        '"summary":"用户最近持续准备答辩。",'
+        '"source_memory_ids":["l1-1","l1-2","l1-3"]}}'
+    )
+    reviewer = Reviewer(error=True)
+    connection, ledger, service = prepared(tmp_path, producer, reviewer)
+    result = run(service)
+    assert (producer.calls, reviewer.calls) == (1, 1)
+    assert result.run.status == ConsolidationRunStatus.FAILED
+    assert result.run.outcome_code == "risk_review_failed"
+    assert result.run.model_call_count == 2
+    assert ledger.latest_cursor("user:self", ConsolidationStage.L1_TO_L2) is None
+    assert connection.execute("SELECT count(*) FROM scenario_memories").fetchone()[0] == 0
     connection.close()

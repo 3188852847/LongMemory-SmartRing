@@ -85,9 +85,18 @@ def test_manual_trigger_bypasses_threshold_and_cooldown_but_not_budget():
     assert blocked.reason == ConsolidationTriggerReason.DAILY_BUDGET_EXHAUSTED
 
 
+def test_trigger_reserves_generation_and_independent_review_budget():
+    decision = decide(ConsolidationTriggerState(4, 1))
+    assert decision.reason == ConsolidationTriggerReason.DAILY_BUDGET_EXHAUSTED
+
+
 def test_invalid_config_and_naive_time_are_rejected():
     with pytest.raises(ValueError, match="consolidation_trigger_config_invalid"):
         ConsolidationTriggerConfig(minimum_new_sources=0)
+    with pytest.raises(ValueError, match="consolidation_trigger_config_invalid"):
+        ConsolidationTriggerConfig(
+            daily_model_call_budget=1, model_calls_per_run=2,
+        )
     with pytest.raises(ValueError, match="now_timezone_required"):
         decide_consolidation_trigger(
             trigger=ConsolidationTrigger.NEW_EVIDENCE,
