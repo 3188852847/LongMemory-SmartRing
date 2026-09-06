@@ -24,7 +24,7 @@ P3 采用“个人记忆、外部知识、上下文编排”三个平面。个�
 
 P3.1 已将网页和统一启动模式下的小智改为共享一个常驻 `MemoryRuntime`；用户已于 2026-09-06 确认网页↔圆屏双向记忆测试通过。P3.2 的模型辅助提取与关键词＋本地 BGE 混合召回已完成首轮组合体验。P3.3 已区分两类显式更新：旧记录本来就错时使用 `user_corrected`；旧事实后来变化时保留旧 L1 的 `valid_to`，并给新 L1 写入 `valid_from`。两者都保留 L0 与 SUPERSEDE 历史，当前召回只使用新事实。日常库已在生成 V3 一致性备份后迁移到 V4，完整性与外键校验通过，用户已完成真实纠正验收；事实变化第一切片尚待真实页面体验。P3.4 第一切片增加本次运行的两个独立开关：暂停生成新 L1、暂停使用已有记忆；网页与圆屏共享，服务重启恢复开启，L0 审计归档不随 L1 开关关闭。见 [ADR-0027](docs/adr/0027-shared-persistent-memory-runtime.md)至 [ADR-0031](docs/adr/0031-runtime-memory-mode-controls.md)，以及 [ADR-0034](docs/adr/0034-temporal-fact-change.md)。
 
-L2 第一版“可复核的时间化场景候选”设计已由用户接受，不等同于自由摘要或 L3 稳定画像；自动候选至少追溯到两条 L1 和两个不同用户 L0，确认前不参与回答，来源变化后转为 stale。架构校准已完成；V5 结构及 V4→V5 迁移通过合成测试，获授权的日常库也已在一致性备份后迁移并通过完整性核对。L1 退役/删除会使关联场景失效，但当前尚未生成任何 L2，也未接入回答。下一步实现 L2 领域模型、事务存储与确定性候选用例。见 [ADR-0035](docs/adr/0035-reviewable-l2-scenario-candidates.md)、[ADR-0036](docs/adr/0036-incremental-memory-architecture-calibration.md)与 [L2 验收需求](docs/requirements/l2-scenario-memory.md)。
+L2 第一版“可复核的时间化场景候选”设计已由用户接受，不等同于自由摘要或 L3 稳定画像；自动候选至少追溯到两条 L1 和两个不同用户 L0，确认前不参与回答，来源变化后转为 stale。架构校准、V5、个人库备份迁移、L2 领域模型、事务存储和技术中立应用用例已完成；合成测试覆盖独立 L0 门槛、失败回滚、复核冲突和来源失效。当前尚未生成任何真实 L2，也未接入回答。下一步提供只读列表和显式“合成候选”开发入口，再接控制台复核页面；模型生成后置。见 [ADR-0035](docs/adr/0035-reviewable-l2-scenario-candidates.md)、[ADR-0036](docs/adr/0036-incremental-memory-architecture-calibration.md)与 [L2 验收需求](docs/requirements/l2-scenario-memory.md)。
 
 ## 历史执行顺序：研究平台迁移（2026-09-03，执行优先级由 ADR-0015 替代）
 

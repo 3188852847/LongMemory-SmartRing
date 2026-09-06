@@ -308,7 +308,7 @@ LongMemory-SmartRing/                              # 项目根目录
 │     │     │  └─ context_builder.py               # 受控上下文
 │     │     ├─ l0_conversation/                    # L0 后续扩展位置
 │     │     ├─ l1_atomic/                          # L1 规范模型与存储契约；旧路径兼容转发
-│     │     ├─ l2_scenario/                        # L2 预留，V0.1 不实现
+│     │     ├─ l2_scenario/                        # L2 场景、来源、审计与复核契约
 │     │     ├─ l3_persona/                         # L3 预留，V0.1 不实现
 │     │     ├─ conflict_resolution/                # 冲突处理预留
 │     │     ├─ forgetting/                         # 遗忘机制预留
@@ -319,15 +319,17 @@ LongMemory-SmartRing/                              # 项目根目录
 │     │  │  ├─ contracts.py                        # 回答生成器契约
 │     │  │  ├─ dto.py                              # 聊天输入输出
 │     │  │  └─ service.py                          # 聊天用例
-│     │  └─ memory_management/                     # 查看和 L1 删除；撤销能力预留
+│     │  ├─ memory_management/                     # 查看和 L1 删除；撤销能力预留
 │     │     ├─ dto.py                              # 管理输入输出
 │     │     └─ service.py                          # 管理用例
+│     │  └─ scenario_management/                   # L2 候选创建与人工复核用例
 │     ├─ adapters/                                 # 外部技术适配器
 │     │  ├─ device_control/                        # 本机小智控制桥客户端，不进入记忆核心
 │     │  │  └─ xiaozhi.py                          # 保管令牌、限制字段、处理未知执行结果
 │     │  ├─ storage/                               # SQLite 存储实现
 │     │  │  ├─ sqlite_conversation_store.py        # L0 SQLite 实现
-│     │  │  └─ sqlite_memory_store.py              # L1 SQLite 实现
+│     │  │  ├─ sqlite_memory_store.py              # L1 SQLite 实现
+│     │  │  └─ sqlite_scenario_store.py            # L2 事务、证据门槛与复核实现
 │     │  └─ llm/                                   # LLM 实现
 │     │     ├─ fake.py                              # 可预测测试模型
 │     │     └─ openai_compatible.py                 # 后续真实模型适配

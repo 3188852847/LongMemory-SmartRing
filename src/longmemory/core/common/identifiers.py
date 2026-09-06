@@ -8,3 +8,6 @@ from typing import NewType
 MessageId = NewType("MessageId", str)
 MemoryId = NewType("MemoryId", str)
 MemorySubjectId = NewType("MemorySubjectId", str)
+ScenarioId = NewType("ScenarioId", str)
+ScenarioAuditId = NewType("ScenarioAuditId", str)
+ScenarioReviewId = NewType("ScenarioReviewId", str)
