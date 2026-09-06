@@ -46,6 +46,13 @@ class PersonaReviewDecision(StrEnum):
     REJECTED = "rejected"
 
 
+class PersonaReviewerType(StrEnum):
+    """区分人的判断和确定性策略判断，禁止自动化冒充用户。"""
+
+    USER = "user"
+    POLICY = "policy"
+
+
 class PersonaLifecycleAction(StrEnum):
     SOURCE_RETIRED = "source_retired"
     SOURCE_DELETED = "source_deleted"
@@ -142,11 +149,27 @@ class PersonaReview:
     decision: PersonaReviewDecision
     reviewed_at: datetime
     persona_revision: int
+    reviewer_type: PersonaReviewerType = PersonaReviewerType.USER
+    policy_version: str | None = None
+    decision_reason: str | None = None
 
     def __post_init__(self) -> None:
         _require_aware(self.reviewed_at, "reviewed_at")
         if self.persona_revision < 1:
             raise ValueError("persona_revision_invalid")
+        if self.reviewer_type == PersonaReviewerType.USER:
+            if self.policy_version is not None or self.decision_reason is not None:
+                raise ValueError("persona_user_review_policy_metadata_forbidden")
+            return
+        if self.decision != PersonaReviewDecision.ACCEPTED:
+            raise ValueError("persona_policy_review_must_accept")
+        if (
+            self.policy_version is None
+            or self.decision_reason is None
+            or not 1 <= len(self.policy_version.strip()) <= 120
+            or not 1 <= len(self.decision_reason.strip()) <= 120
+        ):
+            raise ValueError("persona_policy_review_metadata_required")
 
 
 @dataclass(frozen=True, slots=True)

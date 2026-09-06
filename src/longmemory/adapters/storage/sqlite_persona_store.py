@@ -7,6 +7,7 @@ from longmemory.core.common.identifiers import (
     MemorySubjectId,
     PersonaId,
     PersonaLifecycleEventId,
+    PersonaReviewId,
 )
 from longmemory.core.memory.l3_persona.models import (
     PersonaBasis,
@@ -19,6 +20,7 @@ from longmemory.core.memory.l3_persona.models import (
     PersonaResolvedSource,
     PersonaReview,
     PersonaReviewDecision,
+    PersonaReviewerType,
     PersonaSource,
     PersonaSourceLayer,
     PersonaStatus,
@@ -215,6 +217,19 @@ class SQLitePersonaStore:
         ).fetchall()
         return tuple(self._row_to_replacement(row) for row in rows)
 
+    def get_review(self, persona_id: PersonaId) -> PersonaReview | None:
+        row = self._connection.execute(
+            "SELECT * FROM persona_reviews WHERE persona_id=?", (str(persona_id),),
+        ).fetchone()
+        if row is None:
+            return None
+        return PersonaReview(
+            PersonaReviewId(row["id"]), PersonaId(row["persona_id"]),
+            PersonaReviewDecision(row["decision"]), datetime.fromisoformat(row["reviewed_at"]),
+            row["persona_revision"], PersonaReviewerType(row["reviewer_type"]),
+            row["policy_version"], row["decision_reason"],
+        )
+
     def review(self, review: PersonaReview, *, expected_revision: int) -> PersonaMemory:
         if review.persona_revision != expected_revision:
             raise ValueError("persona_review_revision_mismatch")
@@ -241,10 +256,11 @@ class SQLitePersonaStore:
                 raise ValueError("persona_review_conflict")
             self._connection.execute(
                 "INSERT INTO persona_reviews "
-                "(id,persona_id,decision,reviewer_type,reviewed_at,persona_revision) "
-                "VALUES (?, ?, ?, 'user', ?, ?)",
+                "(id,persona_id,decision,reviewer_type,reviewed_at,persona_revision,"
+                "policy_version,decision_reason) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 (str(review.id), str(review.persona_id), review.decision.value,
-                 review.reviewed_at.isoformat(), review.persona_revision),
+                 review.reviewer_type.value, review.reviewed_at.isoformat(),
+                 review.persona_revision, review.policy_version, review.decision_reason),
             )
             if review.decision == PersonaReviewDecision.ACCEPTED:
                 for replacement in replacements:

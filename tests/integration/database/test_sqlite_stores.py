@@ -517,6 +517,50 @@ def test_v8_upgrade_adds_empty_persona_replacements_without_changing_personas(tm
     connection.close()
 
 
+def test_v9_upgrade_preserves_user_review_and_adds_policy_audit_fields(tmp_path) -> None:
+    connection = open_database(tmp_path / "v9.db")
+    initialize_schema(connection)
+    now = datetime(2026, 9, 6, 19, 0, tzinfo=UTC).isoformat()
+    connection.execute(
+        "INSERT INTO persona_memories VALUES "
+        "('l3-v9','user:self','preference','user_declared','饮品偏好',"
+        "'用户喜欢乌龙茶。',?,NULL,NULL,'active','synthetic','1',2)",
+        (now,),
+    )
+    # 构造真实 V9 复核表，验证迁移不会把旧人工记录伪装成策略判断。
+    connection.executescript("""
+        DROP TABLE persona_reviews;
+        CREATE TABLE persona_reviews (
+            id TEXT PRIMARY KEY,
+            persona_id TEXT NOT NULL UNIQUE,
+            decision TEXT NOT NULL CHECK (decision IN ('accepted', 'rejected')),
+            reviewer_type TEXT NOT NULL CHECK (reviewer_type = 'user'),
+            reviewed_at TEXT NOT NULL,
+            persona_revision INTEGER NOT NULL CHECK (persona_revision >= 1),
+            FOREIGN KEY (persona_id) REFERENCES persona_memories (id) ON DELETE CASCADE
+        );
+        PRAGMA user_version=9;
+    """)
+    connection.execute(
+        "INSERT INTO persona_reviews VALUES "
+        "('review-v9','l3-v9','accepted','user',?,1)", (now,),
+    )
+    connection.commit()
+
+    initialize_schema(connection)
+
+    assert connection.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION
+    row = connection.execute(
+        "SELECT decision,reviewer_type,policy_version,decision_reason "
+        "FROM persona_reviews WHERE id='review-v9'"
+    ).fetchone()
+    assert tuple(row) == ("accepted", "user", None, None)
+    columns = {row["name"] for row in connection.execute("PRAGMA table_info(persona_reviews)")}
+    assert {"policy_version", "decision_reason"} <= columns
+    assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
+    connection.close()
+
+
 def test_l1_retire_and_delete_make_linked_scenarios_stale(tmp_path) -> None:
     """L1 退出当前集合时，L2 不能继续保持候选或已接受状态。"""
 

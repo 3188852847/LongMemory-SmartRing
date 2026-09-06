@@ -8,12 +8,16 @@ from longmemory.core.common.identifiers import (
     MemorySubjectId,
     PersonaAuditId,
     PersonaId,
+    PersonaReviewId,
 )
 from longmemory.core.memory.l3_persona import (
     PersonaBasis,
     PersonaGenerationAudit,
     PersonaKind,
     PersonaMemory,
+    PersonaReview,
+    PersonaReviewDecision,
+    PersonaReviewerType,
     PersonaStatus,
 )
 
@@ -89,3 +93,25 @@ def test_system_inferred_pattern_accepts_minimum_conservative_evidence() -> None
     )
 
     assert audit.observation_day_count == 2
+
+
+def test_policy_review_requires_auditable_acceptance_metadata() -> None:
+    review = PersonaReview(
+        PersonaReviewId("review-policy"), PersonaId("persona-tea"),
+        PersonaReviewDecision.ACCEPTED, NOW, 1, PersonaReviewerType.POLICY,
+        "persona-activation-v1", "declared_low_risk",
+    )
+    assert review.reviewer_type == PersonaReviewerType.POLICY
+
+    with pytest.raises(ValueError, match="persona_policy_review_must_accept"):
+        PersonaReview(
+            PersonaReviewId("review-reject"), PersonaId("persona-tea"),
+            PersonaReviewDecision.REJECTED, NOW, 1, PersonaReviewerType.POLICY,
+            "persona-activation-v1", "sensitive_content",
+        )
+    with pytest.raises(ValueError, match="persona_user_review_policy_metadata_forbidden"):
+        PersonaReview(
+            PersonaReviewId("review-user"), PersonaId("persona-tea"),
+            PersonaReviewDecision.ACCEPTED, NOW, 1, PersonaReviewerType.USER,
+            "persona-activation-v1", "declared_low_risk",
+        )

@@ -10,6 +10,7 @@ from longmemory.core.memory.l3_persona.models import (
     PersonaBasis,
     PersonaKind,
     PersonaReviewDecision,
+    PersonaReviewerType,
     PersonaSourceLayer,
 )
 from longmemory.infrastructure.database.connection import open_database
@@ -168,5 +169,33 @@ def test_accepting_replacement_rolls_back_when_target_changed(tmp_path):
     assert store.get(old.id).status.value == "active"
     assert store.get(old.id).revision == 3
     assert store.list_replacements(replacement.id)[0].applied_at is None
+    assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
+    connection.close()
+
+
+def test_policy_acceptance_is_not_recorded_as_user_review(tmp_path):
+    connection = prepared(tmp_path)
+    store = SQLitePersonaStore(connection)
+    service = PersonaManagementService(persona_store=store)
+    persona = service.create_candidate(
+        kind=PersonaKind.PREFERENCE, basis=PersonaBasis.USER_DECLARED,
+        label="饮品偏好", statement="用户明确表示喜欢茉莉花茶。",
+        source_refs=((PersonaSourceLayer.L1, "l1-a"),),
+        generator_name="model_assisted_runtime", generator_version="1",
+    )
+
+    active = service.review(
+        persona.id, PersonaReviewDecision.ACCEPTED, expected_revision=1,
+        reviewer_type=PersonaReviewerType.POLICY,
+        policy_version="persona-activation-v1",
+        decision_reason="declared_low_risk",
+    )
+    review = store.get_review(persona.id)
+
+    assert active.status.value == "active"
+    assert review is not None
+    assert review.reviewer_type == PersonaReviewerType.POLICY
+    assert review.policy_version == "persona-activation-v1"
+    assert review.decision_reason == "declared_low_risk"
     assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
     connection.close()

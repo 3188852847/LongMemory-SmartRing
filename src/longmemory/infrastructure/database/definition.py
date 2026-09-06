@@ -1,6 +1,6 @@
-"""当前 SQLite V9 的完整结构定义；不包含历史迁移步骤。"""
+"""当前 SQLite V10 的完整结构定义；不包含历史迁移步骤。"""
 
-SCHEMA_VERSION = 9
+SCHEMA_VERSION = 10
 
 LATEST_SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS conversation_messages (
@@ -141,9 +141,18 @@ CREATE TABLE IF NOT EXISTS persona_reviews (
     id TEXT PRIMARY KEY,
     persona_id TEXT NOT NULL UNIQUE,
     decision TEXT NOT NULL CHECK (decision IN ('accepted', 'rejected')),
-    reviewer_type TEXT NOT NULL CHECK (reviewer_type = 'user'),
+    reviewer_type TEXT NOT NULL CHECK (reviewer_type IN ('user', 'policy')),
     reviewed_at TEXT NOT NULL,
     persona_revision INTEGER NOT NULL CHECK (persona_revision >= 1),
+    policy_version TEXT,
+    decision_reason TEXT,
+    CHECK (
+        (reviewer_type = 'user' AND policy_version IS NULL AND decision_reason IS NULL)
+        OR
+        (reviewer_type = 'policy' AND decision = 'accepted'
+            AND length(trim(policy_version)) BETWEEN 1 AND 120
+            AND length(trim(decision_reason)) BETWEEN 1 AND 120)
+    ),
     FOREIGN KEY (persona_id) REFERENCES persona_memories (id) ON DELETE CASCADE
 );
 

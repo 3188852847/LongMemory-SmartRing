@@ -13,6 +13,7 @@ from longmemory.core.memory.l3_persona.models import (
     PersonaReplacement,
     PersonaReview,
     PersonaReviewDecision,
+    PersonaReviewerType,
     PersonaSource,
     PersonaSourceLayer,
     PersonaStatus,
@@ -88,9 +89,13 @@ class PersonaManagementService:
     def review(
         self, persona_id: PersonaId, decision: PersonaReviewDecision, *,
         expected_revision: int, reviewed_at: datetime | None = None,
+        reviewer_type: PersonaReviewerType = PersonaReviewerType.USER,
+        policy_version: str | None = None,
+        decision_reason: str | None = None,
     ) -> PersonaMemory:
         review = PersonaReview(
             PersonaReviewId(str(uuid4())), persona_id, decision,
             reviewed_at or datetime.now(UTC), expected_revision,
+            reviewer_type, policy_version, decision_reason,
         )
         return self._persona_store.review(review, expected_revision=expected_revision)

@@ -17,6 +17,8 @@ type PersonaReplacement = {candidate_persona_id:string;replaced_persona_id:strin
   linked_at:string;applied_at:string|null;related:Persona|null};
 type PersonaDetail = Persona & {audit:{source_count:number;source_message_count:number;observation_day_count:number}|null;
   sources:PersonaSource[];replaces?:PersonaReplacement[];replaced_by?:PersonaReplacement[];
+  review?:{decision:'accepted'|'rejected';reviewer_type:'user'|'policy';reviewed_at:string;
+    persona_revision:number;policy_version:string|null;decision_reason:string|null}|null;
   lifecycle_events:Array<{id:string;action:string;source_layer:string;source_id:string;occurred_at:string;persona_revision:number}>};
 type SourceOption = {layer:'l1'|'l2';id:string;subject_id:string;content:string;recorded_at:string};
 type SourceOptions = {l1:SourceOption[];l2:SourceOption[];selection_is_semantic:false};
@@ -166,6 +168,10 @@ export function PersonaApp() {
         {key:'subject',label:'主体',children:detail.data.subject_id},{key:'generated',label:'生成时间',children:displayTime(detail.data.generated_at)},
         {key:'validFrom',label:'现实开始时间',children:displayTime(detail.data.valid_from)},{key:'validTo',label:'现实结束时间',children:displayTime(detail.data.valid_to)},
         {key:'sourceCount',label:'证据覆盖',children:detail.data.audit?`${detail.data.audit.source_count} 个来源 · ${detail.data.audit.source_message_count} 条用户原话 · ${detail.data.audit.observation_day_count} 个观察日`:'审计缺失'},
+        {key:'review',label:'复核来源',children:detail.data.review
+          ? `${detail.data.review.reviewer_type==='policy'?'自动策略':'用户确认'} · ${displayTime(detail.data.review.reviewed_at)}`
+          : '尚未复核'},
+        ...(detail.data.review?.reviewer_type==='policy'?[{key:'policy',label:'自动策略依据',children:`${detail.data.review.policy_version} · ${detail.data.review.decision_reason}`}]:[]),
         {key:'revision',label:'修订号',children:String(detail.data.revision)},
       ]}/>
       <h3>L1/L2 来源与 L0 原话</h3>{detail.data.sources.map(source=><Card className="source-card" key={`${source.source_layer}:${source.source_id}`} size="small" title={`${source.source_layer.toUpperCase()} · ${source.source_id}`} extra={<Tag color={source.active?'green':'red'}>{source.active?'仍有效':'已失效'}</Tag>}>

@@ -70,7 +70,7 @@ def test_missing_database_is_not_created(tmp_path):
     assert not path.parent.exists()
 
 
-@pytest.mark.parametrize("version", [0, 1, 2, 3, 4, 5, 6, 7, 10])
+@pytest.mark.parametrize("version", [0, 1, 2, 3, 4, 5, 6, 7, 11])
 def test_old_and_unknown_schema_are_not_migrated(tmp_path, version):
     path = tmp_path / "version.db"
     with sqlite3.connect(path) as conn:
@@ -327,5 +327,9 @@ def test_persona_candidate_and_review_use_separate_capability(recorded):
     assert detail["sources"][0]["l0_sources"][0]["content"] == "我养了一只叫豆包的猫。"
     reviewed = backend.review_persona(created["id"], decision="accepted", expected_revision=1)
     assert reviewed["status"] == "active" and reviewed["revision"] == 2
+    review = backend.get_persona(created["id"])["review"]
+    assert review["reviewer_type"] == "user"
+    assert review["policy_version"] is None
+    assert review["decision_reason"] is None
     with pytest.raises(MemoryAccessError, match="persona_review_conflict"):
         backend.review_persona(created["id"], decision="rejected", expected_revision=2)

@@ -658,6 +658,15 @@ class MemoryBackend:
             data["replaced_by"] = [self._persona_replacement_json(
                 replacement, store.get(replacement.candidate_persona_id),
             ) for replacement in store.list_replaced_by(PersonaId(persona_id))]
+            review = store.get_review(PersonaId(persona_id))
+            data["review"] = None if review is None else {
+                "decision": review.decision.value,
+                "reviewer_type": review.reviewer_type.value,
+                "reviewed_at": review.reviewed_at.isoformat(),
+                "persona_revision": review.persona_revision,
+                "policy_version": review.policy_version,
+                "decision_reason": review.decision_reason,
+            }
             data["lifecycle_events"] = [{
                 "id": str(event.id), "action": event.action.value,
                 "source_layer": event.source_layer.value, "source_id": event.source_id,
