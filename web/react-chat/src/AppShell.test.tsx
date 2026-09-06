@@ -12,6 +12,7 @@ describe('控制台共享导航', () => {
     expect(screen.getByRole('link', {name: 'LongMemory'}).getAttribute('href')).toBe('/chat-react');
     expect(screen.getByRole('link', {name: '记忆管理'}).getAttribute('href')).toBe('/memories');
     expect(screen.getByRole('link', {name: '设备与状态'}).getAttribute('href')).toBe('/device');
+    expect(screen.getByRole('link', {name: '用户画像'}).getAttribute('href')).toBe('/personas');
     expect(screen.getByRole('link', {name: '个性化设置'}).getAttribute('href')).toBe('/settings');
     expect(screen.getByRole('link', {name: '返回原版页面'}).getAttribute('href')).toBe('/chat');
     expect(screen.getByRole('heading', {name: '页面内容'})).toBeTruthy();

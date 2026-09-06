@@ -51,6 +51,7 @@ STATIC_FILES = {
 
 def create_app(*, port=8765, bridge=None, web_root=None, database=None, allow_memory_delete=False,
                allow_memory_correction=False, allow_scenario_management=False,
+               allow_persona_management=False,
                chat_backend=None, experiment_backend=None, job_backend=None, instance_id=None,
                xiaozhi_server=None, memory_runtime_token=None, scenario_producer=None,
                scenario_model=None):
@@ -125,6 +126,7 @@ def create_app(*, port=8765, bridge=None, web_root=None, database=None, allow_me
         allow_delete=allow_memory_delete,
         allow_correction=allow_memory_correction,
         allow_scenario_management=allow_scenario_management,
+        allow_persona_management=allow_persona_management,
         scenario_producer=scenario_producer,
         scenario_model=scenario_model,
     ))
@@ -149,6 +151,7 @@ def main():
     parser.add_argument("--allow-memory-delete", action="store_true", help="启用网页单条删除；默认只读")
     parser.add_argument("--allow-memory-correction", action="store_true", help="启用网页人工纠正；旧记忆保留并标记为已取代")
     parser.add_argument("--allow-scenario-management", action="store_true", help="启用显式 L2 候选创建与复核；默认只读")
+    parser.add_argument("--allow-persona-management", action="store_true", help="启用显式 L3 候选创建与复核；默认只读")
     parser.add_argument("--enable-chat", action="store_true", help="允许网页向指定已有记忆库写入对话和记忆")
     parser.add_argument("--memory-audit-log", type=Path, help="共享记忆 Runtime 的脱敏审计日志")
     parser.add_argument("--chat-provider", choices=("fake", "openai_compatible"), default="fake")
@@ -168,6 +171,8 @@ def main():
         parser.error("启用删除前必须用 --database 指定已有数据库")
     if args.allow_memory_correction and args.database is None:
         parser.error("启用纠正前必须用 --database 指定已有数据库")
+    if args.allow_persona_management and args.database is None:
+        parser.error("启用 L3 画像管理前必须用 --database 指定已有数据库")
     if args.enable_chat and args.database is None:
         parser.error("启用文字聊天前必须用 --database 指定已有数据库")
     if args.memory_audit_log and not args.enable_chat:
@@ -258,6 +263,8 @@ def main():
             capabilities.append("允许人工纠正（旧记录保留）")
         if args.allow_memory_delete:
             capabilities.append("允许单条删除（L0 保留）")
+        if args.allow_persona_management:
+            capabilities.append("允许 L3 候选与复核")
         print(f"记忆库：{args.database.resolve()}；管理页" + ("、".join(capabilities) if capabilities else "只读"))
     if chat_backend:
         extraction = "模型辅助（失败保留 L0）" if args.memory_extraction == "llm" else "规则基线"
@@ -268,6 +275,7 @@ def main():
         web.run_app(create_app(port=args.port, database=args.database, allow_memory_delete=args.allow_memory_delete,
                                allow_memory_correction=args.allow_memory_correction,
                                allow_scenario_management=args.allow_scenario_management,
+                               allow_persona_management=args.allow_persona_management,
                                chat_backend=chat_backend, job_backend=job_backend,
                                instance_id=os.environ.get("LONGMEMORY_LAUNCHER_INSTANCE"), xiaozhi_server=args.xiaozhi_server,
                                memory_runtime_token=runtime_token,

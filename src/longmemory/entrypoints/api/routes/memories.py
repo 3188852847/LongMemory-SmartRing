@@ -243,6 +243,92 @@ def register_memory_routes(app, backend):
         return await invoke(backend.end_scenario, scenario_id,
                             expected_revision=body["expected_revision"])
 
+    async def persona_listing(request):
+        values = request.query
+        if (set(values) - {"state", "offset", "limit"}
+                or any(len(values.getall(key)) != 1 for key in values)):
+            raise web.HTTPBadRequest()
+        try:
+            offset, limit = int(values.get("offset", "0")), int(values.get("limit", "25"))
+        except ValueError:
+            raise web.HTTPBadRequest() from None
+        state = values.get("state", "all")
+        if (state not in {"all", "candidate", "active", "rejected", "stale"}
+                or not 0 <= offset <= 100000 or not 1 <= limit <= 100):
+            raise web.HTTPBadRequest()
+        return await invoke(backend.list_personas, state=state, offset=offset, limit=limit)
+
+    async def persona_source_options(request):
+        if request.query:
+            raise web.HTTPBadRequest()
+        return await invoke(backend.list_persona_source_options)
+
+    async def persona_collection(request):
+        if request.content_type != "application/json":
+            raise web.HTTPBadRequest()
+        try:
+            body = await request.json()
+        except (ValueError, UnicodeError):
+            raise web.HTTPBadRequest() from None
+        sources = body.get("sources") if isinstance(body, dict) else None
+        fields = {"kind", "basis", "label", "statement", "sources",
+                  "valid_from", "valid_to", "confirm_candidate"}
+        if (not isinstance(body, dict) or set(body) != fields
+                or body.get("confirm_candidate") is not True
+                or body.get("kind") not in {"preference", "habit", "interaction_style", "behavior_pattern"}
+                or body.get("basis") not in {"user_declared", "system_inferred"}
+                or not isinstance(body.get("label"), str)
+                or not 1 <= len(body["label"].strip()) <= 120
+                or not isinstance(body.get("statement"), str)
+                or not 1 <= len(body["statement"].strip()) <= 1000
+                or not isinstance(sources, list) or not 1 <= len(sources) <= 20):
+            raise web.HTTPBadRequest()
+        source_keys = []
+        for item in sources:
+            if (not isinstance(item, dict) or set(item) != {"layer", "id"}
+                    or item.get("layer") not in {"l1", "l2"}
+                    or not isinstance(item.get("id"), str)
+                    or not 1 <= len(item["id"]) <= 128):
+                raise web.HTTPBadRequest()
+            source_keys.append((item["layer"], item["id"]))
+        if len(set(source_keys)) != len(source_keys):
+            raise web.HTTPBadRequest()
+        for field in ("valid_from", "valid_to"):
+            value = body[field]
+            if value is not None and (not isinstance(value, str) or not 1 <= len(value) <= 64):
+                raise web.HTTPBadRequest()
+        return await invoke(
+            backend.create_persona, kind=body["kind"], basis=body["basis"],
+            label=body["label"].strip(), statement=body["statement"].strip(),
+            sources=sources, valid_from=body["valid_from"], valid_to=body["valid_to"],
+        )
+
+    async def persona_detail(request):
+        persona_id = request.match_info["persona_id"]
+        if not persona_id or len(persona_id) > 128 or any(ord(c) < 32 for c in persona_id):
+            raise web.HTTPBadRequest()
+        return await invoke(backend.get_persona, persona_id)
+
+    async def persona_review(request):
+        persona_id = request.match_info["persona_id"]
+        if request.content_type != "application/json" or not persona_id or len(persona_id) > 128:
+            raise web.HTTPBadRequest()
+        try:
+            body = await request.json()
+        except (ValueError, UnicodeError):
+            raise web.HTTPBadRequest() from None
+        if (not isinstance(body, dict)
+                or set(body) != {"decision", "expected_revision", "confirm_review"}
+                or body.get("decision") not in {"accepted", "rejected"}
+                or type(body.get("expected_revision")) is not int
+                or body["expected_revision"] < 1
+                or body.get("confirm_review") is not True):
+            raise web.HTTPBadRequest()
+        return await invoke(
+            backend.review_persona, persona_id, decision=body["decision"],
+            expected_revision=body["expected_revision"],
+        )
+
     app.router.add_get("/api/memory-config", config, allow_head=False)
     app.router.add_get("/api/memories", listing, allow_head=False)
     app.router.add_get("/api/source-messages", source_listing, allow_head=False)
@@ -258,3 +344,8 @@ def register_memory_routes(app, backend):
     app.router.add_get("/api/scenarios/{scenario_id}", scenario_detail, allow_head=False)
     app.router.add_post("/api/scenarios/{scenario_id}/reviews", scenario_review)
     app.router.add_post("/api/scenarios/{scenario_id}/lifecycle", scenario_lifecycle)
+    app.router.add_get("/api/personas", persona_listing, allow_head=False)
+    app.router.add_get("/api/persona-source-options", persona_source_options, allow_head=False)
+    app.router.add_post("/api/personas", persona_collection)
+    app.router.add_get("/api/personas/{persona_id}", persona_detail, allow_head=False)
+    app.router.add_post("/api/personas/{persona_id}/reviews", persona_review)

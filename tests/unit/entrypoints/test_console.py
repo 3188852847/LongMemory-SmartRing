@@ -49,6 +49,7 @@ class FakeBridge:
 @asynccontextmanager
 async def console(database=None, allow_memory_delete=False, chat_backend=None,
                   allow_memory_correction=False, allow_scenario_management=False,
+                  allow_persona_management=False,
                   xiaozhi_server=None, memory_runtime_token=None,
                   scenario_producer=None, scenario_model=None):
     # 先占用随机回环端口，再把精确 Host 交给应用，避免探测后抢占端口。
@@ -60,6 +61,7 @@ async def console(database=None, allow_memory_delete=False, chat_backend=None,
                                      allow_memory_delete=allow_memory_delete, chat_backend=chat_backend,
                                      allow_memory_correction=allow_memory_correction,
                                      allow_scenario_management=allow_scenario_management,
+                                     allow_persona_management=allow_persona_management,
                                      xiaozhi_server=xiaozhi_server,
                                      memory_runtime_token=memory_runtime_token,
                                      scenario_producer=scenario_producer,
@@ -322,6 +324,7 @@ def test_memory_without_config_is_not_a_fake_empty_database():
             assert config == {"configured": False, "database": None, "allow_delete": False,
                               "allow_correction": False, "allow_change": False,
                               "allow_scenario_management": False,
+                              "allow_persona_management": False,
                               "scenario_model_preview_available": False,
                               "scenario_model": None}
             response = await client.get(base + "/api/memories")
@@ -550,5 +553,89 @@ def test_scenario_http_requires_csrf_and_explicit_capability(tmp_path):
             ).json()
             assert ended_detail["lifecycle_events"][0]["action"] == "manual_end"
             assert len(ended_detail["sources"]) == 2
+
+    asyncio.run(run())
+
+
+def test_persona_http_requires_csrf_and_explicit_capability(tmp_path):
+    """L3 网页写入必须同时经过显式能力开关、同源会话和人工确认。"""
+
+    from longmemory.methods.longmemory_v1.method import LongMemoryV1
+
+    database = tmp_path / "persona-http.db"
+    LongMemoryV1(database).close()
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            "INSERT INTO conversation_messages VALUES (?,?,?,?)",
+            ("l0-tea", "user", "我平时喜欢喝乌龙茶。", "2026-09-06T10:00:00+00:00"),
+        )
+        connection.execute(
+            "INSERT INTO atomic_memories VALUES (?,?,?,?,NULL,NULL,NULL,NULL)",
+            ("l1-tea", "user:self", "此人平时喜欢喝乌龙茶。", "2026-09-06T10:00:01+00:00"),
+        )
+        connection.execute(
+            "INSERT INTO memory_evidence VALUES (?,?,?,?)",
+            ("l1-tea", "l0-tea", "user_stated", "2026-09-06T10:00:01+00:00"),
+        )
+
+    body = {
+        "kind": "preference",
+        "basis": "user_declared",
+        "label": "饮品偏好",
+        "statement": "用户平时喜欢喝乌龙茶。",
+        "sources": [{"layer": "l1", "id": "l1-tea"}],
+        "valid_from": None,
+        "valid_to": None,
+        "confirm_candidate": True,
+    }
+
+    async def run():
+        # 未开放 L3 管理时，即使请求合法也只能读取，不能落库。
+        async with console(database) as (client, base, _bridge):
+            headers = await login(client, base)
+            denied = await client.post(base + "/api/personas", headers=headers, json=body)
+            assert denied.status == 403
+
+        async with console(database, allow_persona_management=True) as (client, base, _bridge):
+            headers = await login(client, base)
+            options = await (await client.get(base + "/api/persona-source-options")).json()
+            assert options["l1"][0]["id"] == "l1-tea"
+            assert options["selection_is_semantic"] is False
+
+            assert (await client.post(base + "/api/personas", json=body)).status == 403
+            created_response = await client.post(
+                base + "/api/personas", headers=headers, json=body,
+            )
+            created = await created_response.json()
+            assert created_response.status == 200 and created["status"] == "candidate"
+
+            detail = await (
+                await client.get(base + "/api/personas/" + created["id"])
+            ).json()
+            assert detail["basis"] == "user_declared"
+            assert detail["audit"] == {
+                "source_count": 1,
+                "source_message_count": 1,
+                "observation_day_count": 1,
+            }
+            assert detail["sources"][0]["l0_sources"][0]["content"] == "我平时喜欢喝乌龙茶。"
+
+            review_body = {
+                "decision": "accepted",
+                "expected_revision": detail["revision"],
+                "confirm_review": True,
+            }
+            assert (
+                await client.post(
+                    base + f"/api/personas/{created['id']}/reviews", json=review_body,
+                )
+            ).status == 403
+            reviewed = await client.post(
+                base + f"/api/personas/{created['id']}/reviews",
+                headers=headers,
+                json=review_body,
+            )
+            assert reviewed.status == 200
+            assert (await reviewed.json())["status"] == "active"
 
     asyncio.run(run())

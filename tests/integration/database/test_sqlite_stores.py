@@ -441,6 +441,11 @@ def test_v6_upgrade_adds_empty_l3_tables_without_synthesizing_persona(tmp_path) 
         (now,),
     )
     connection.executescript("""
+        DROP TRIGGER trg_persona_stale_on_l1_retire;
+        DROP TRIGGER trg_persona_stale_on_l1_delete;
+        DROP TRIGGER trg_persona_stale_on_l2_stale;
+        DROP INDEX idx_persona_lifecycle_persona;
+        DROP TABLE persona_lifecycle_events;
         DROP TABLE persona_reviews;
         DROP TABLE persona_generation_audits;
         DROP INDEX idx_persona_sources_source;
@@ -458,6 +463,25 @@ def test_v6_upgrade_adds_empty_l3_tables_without_synthesizing_persona(tmp_path) 
     assert connection.execute("SELECT count(*) FROM persona_sources").fetchone()[0] == 0
     assert connection.execute("SELECT count(*) FROM persona_generation_audits").fetchone()[0] == 0
     assert connection.execute("SELECT count(*) FROM persona_reviews").fetchone()[0] == 0
+    assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
+    connection.close()
+
+
+def test_v7_upgrade_adds_persona_lifecycle_without_generating_persona(tmp_path) -> None:
+    connection = open_database(tmp_path / "v7.db")
+    initialize_schema(connection)
+    connection.executescript("""
+        DROP TRIGGER trg_persona_stale_on_l1_retire;
+        DROP TRIGGER trg_persona_stale_on_l1_delete;
+        DROP TRIGGER trg_persona_stale_on_l2_stale;
+        DROP INDEX idx_persona_lifecycle_persona;
+        DROP TABLE persona_lifecycle_events;
+        PRAGMA user_version=7;
+    """)
+    initialize_schema(connection)
+    assert connection.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION
+    assert connection.execute("SELECT count(*) FROM persona_memories").fetchone()[0] == 0
+    assert connection.execute("SELECT count(*) FROM persona_lifecycle_events").fetchone()[0] == 0
     assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
     connection.close()
 

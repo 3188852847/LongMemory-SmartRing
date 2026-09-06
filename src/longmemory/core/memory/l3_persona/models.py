@@ -8,6 +8,7 @@ from longmemory.core.common.identifiers import (
     MemorySubjectId,
     PersonaAuditId,
     PersonaId,
+    PersonaLifecycleEventId,
     PersonaReviewId,
 )
 
@@ -43,6 +44,12 @@ class PersonaSourceLayer(StrEnum):
 class PersonaReviewDecision(StrEnum):
     ACCEPTED = "accepted"
     REJECTED = "rejected"
+
+
+class PersonaLifecycleAction(StrEnum):
+    SOURCE_RETIRED = "source_retired"
+    SOURCE_DELETED = "source_deleted"
+    SOURCE_STALE = "source_stale"
 
 
 def _require_aware(value: datetime, field: str) -> None:
@@ -140,3 +147,37 @@ class PersonaReview:
         _require_aware(self.reviewed_at, "reviewed_at")
         if self.persona_revision < 1:
             raise ValueError("persona_revision_invalid")
+
+
+@dataclass(frozen=True, slots=True)
+class PersonaResolvedSource:
+    """已向下解析到用户 L0 的来源；只用于创建前资格核对。"""
+
+    source_layer: PersonaSourceLayer
+    source_id: str
+    subject_id: MemorySubjectId
+    content_snapshot: str
+    user_message_ids: tuple[str, ...]
+    observation_days: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class PersonaLifecycleEvent:
+    id: PersonaLifecycleEventId
+    persona_id: PersonaId
+    action: PersonaLifecycleAction
+    source_layer: PersonaSourceLayer
+    source_id: str
+    occurred_at: datetime
+    previous_status: PersonaStatus
+    new_status: PersonaStatus
+    persona_revision: int
+
+    def __post_init__(self) -> None:
+        if not self.source_id.strip():
+            raise ValueError("persona_source_invalid")
+        _require_aware(self.occurred_at, "occurred_at")
+        if self.previous_status not in {PersonaStatus.CANDIDATE, PersonaStatus.ACTIVE}:
+            raise ValueError("persona_lifecycle_previous_status_invalid")
+        if self.new_status != PersonaStatus.STALE or self.persona_revision < 2:
+            raise ValueError("persona_lifecycle_target_invalid")

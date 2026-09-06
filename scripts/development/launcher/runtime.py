@@ -101,6 +101,8 @@ def build_commands(options, uv=None):
     # 可追溯写入能力。不可恢复的硬删除仍保持关闭。
     console.append("--allow-memory-correction")
     console.append("--allow-scenario-management")
+    # L3 只能由本机页面显式创建候选并复核；尚不参与回答。
+    console.append("--allow-persona-management")
     if options.allow_memory_delete:
         # 这里只授予服务端能力；浏览器仍需打开具体 L1 并二次确认。
         # 当前删除保留 L0 原话，因此不能显示成“彻底遗忘”。

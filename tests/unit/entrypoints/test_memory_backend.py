@@ -68,7 +68,7 @@ def test_missing_database_is_not_created(tmp_path):
     assert not path.parent.exists()
 
 
-@pytest.mark.parametrize("version", [0, 1, 2, 3, 4, 5, 6, 8])
+@pytest.mark.parametrize("version", [0, 1, 2, 3, 4, 5, 6, 7, 9])
 def test_old_and_unknown_schema_are_not_migrated(tmp_path, version):
     path = tmp_path / "version.db"
     with sqlite3.connect(path) as conn:
@@ -299,3 +299,31 @@ def test_scenario_candidate_and_review_use_separate_capability(recorded):
     assert ended_detail["lifecycle_events"][0]["actor_type"] == "user"
     with pytest.raises(MemoryAccessError, match="scenario_lifecycle_conflict"):
         backend.end_scenario(created["id"], expected_revision=3)
+
+
+def test_persona_candidate_and_review_use_separate_capability(recorded):
+    path, memory_id, _ = recorded
+    with pytest.raises(MemoryAccessError, match="persona_management_disabled"):
+        MemoryBackend(path).create_persona(
+            kind="preference", basis="user_declared", label="宠物陪伴",
+            statement="用户喜欢和叫豆包的猫相处。",
+            sources=[{"layer":"l1","id":memory_id}],
+        )
+
+    backend = MemoryBackend(path, allow_persona_management=True)
+    created = backend.create_persona(
+        kind="preference", basis="user_declared", label="宠物陪伴",
+        statement="用户喜欢和叫豆包的猫相处。",
+        sources=[{"layer":"l1","id":memory_id}],
+    )
+    assert created["status"] == "candidate"
+    assert backend.list_personas(state="candidate")["total"] == 1
+    detail = backend.get_persona(created["id"])
+    assert detail["basis"] == "user_declared"
+    assert detail["audit"] == {"source_count":1,"source_message_count":1,"observation_day_count":1}
+    assert detail["sources"][0]["source_layer"] == "l1"
+    assert detail["sources"][0]["l0_sources"][0]["content"] == "我养了一只叫豆包的猫。"
+    reviewed = backend.review_persona(created["id"], decision="accepted", expected_revision=1)
+    assert reviewed["status"] == "active" and reviewed["revision"] == 2
+    with pytest.raises(MemoryAccessError, match="persona_review_conflict"):
+        backend.review_persona(created["id"], decision="rejected", expected_revision=2)
