@@ -1,10 +1,17 @@
 # Changelog
 
+### Progressive React console: experiment job control（2026-09-06）
+
+- `/experiments-react` 完成冻结检索回答作业迁移：选择档案/模型/字符预算、本地预检、风险确认、运行进度、停止后续请求和打开结果均由 React 承载；统一导航改为进入 React 实验中心，原生 `/experiments` 保留回退。
+- 预检和启动继续是两次独立请求；预检不调用模型。真实请求必须按报价确认网络与明文 HTTP 风险，TanStack Query 不自动重试写操作，启动响应未知时先按同一 request ID 刷新核对。
+- 活动作业才每 2 秒轮询只读台账；关闭页面不会取消任务。迁移不增加任意脚本执行、提取、编码、留出集或个人记忆写入能力。
+- 验证：7 项前端测试（包含“预检不启动、勾选后只启动一次”）、TypeScript/Vite 生产构建及 14 项实验任务/React 资源 Python 回归通过；未调用校园模型、未生成真实实验报告。
+
 ### Progressive React console: human experiment review（2026-09-06）
 
 - `/experiments-react` 新增逐题人工复核：支持自报署名、待判断/通过/失败/不可评分、理由校验，并展示已有人工与助手复核。
 - 保存继续携带报告 SHA、复核 revision 和随机 request ID；TanStack mutation 不自动重试。响应丢失时锁定重复保存并提供“只刷新核对”，原报告和自动初筛保持只读。
-- 切换题目或署名前检测未保存编辑并确认。预算预检、模型作业启动/停止仍保留在原生 `/experiments`，尚未切换默认导航。
+- 切换题目或署名前检测未保存编辑并确认。当时模型作业仍保留在原生页面，已由后续切片迁移。
 - 验证：6 项前端测试（包含复核 POST 请求契约）、TypeScript/Vite 构建及 20 项实验复核/React 资源 Python 回归通过；未写真实复核或运行模型。
 
 ### Progressive React console: experiment read-only slice（2026-09-06）

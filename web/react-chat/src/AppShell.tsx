@@ -16,14 +16,14 @@ export function AppShell({subtitle, className = '', sidebar, children}: {
   </div>;
 }
 
-/** React 内部页面使用客户端路由；尚未迁移的页面继续由 Python 完整加载。 */
+/** React 内部页面使用客户端路由；原版入口只保留为迁移期回退。 */
 export function ConsoleNav({active, legacyPath}: {active: Page; legacyPath: string}) {
   return <nav aria-label="控制台导航">
     {active === 'device' ? <strong>设备与状态</strong> : <Link to="/device">设备与状态</Link>}
     {active === 'chat' ? <strong>文字聊天</strong> : <Link to="/chat-react">文字聊天</Link>}
     {active === 'memories' ? <strong>记忆管理</strong> : <Link to="/memories">记忆管理</Link>}
     {active === 'settings' ? <strong>个性化设置</strong> : <Link to="/settings">个性化设置</Link>}
-    {active === 'experiments' ? <strong>实验中心</strong> : <a href="/experiments">实验中心</a>}
+    {active === 'experiments' ? <strong>实验中心</strong> : <Link to="/experiments-react">实验中心</Link>}
     <a href={legacyPath}>返回原版页面</a>
   </nav>;
 }

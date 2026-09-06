@@ -3,6 +3,7 @@ import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {Alert, Button, Card, Empty, Input, Select, Space, Table, Tag} from 'antd';
 import {ChatApi} from './api';
 import {AppShell, ConsoleNav} from './AppShell';
+import {ExperimentJobs} from './ExperimentJobs';
 import {evidenceLabel, filterRuns, groupLabel, statusLabel, verdictLabel} from '../../assets/experiment-view.mjs';
 
 type Run = {id:string; kind:string; provider?:string; model?:string; dataset:string; split:string; status:string; completed:number; total:number; started_at:string};
@@ -50,7 +51,7 @@ function ReviewForm({runId, questionId, row, detail, reviewer, onDirty}: {runId:
     {unknown && <Button onClick={() => {setUnknown(false); void client.invalidateQueries({queryKey:['experiment',runId]});}}>只刷新核对，不重发</Button>}<p className="subtle" role="status">{notice}</p></div>;
 }
 
-/** 档案与人工复核已迁移；模型作业在预算确认契约迁移完成前继续使用原版。 */
+/** 实验运行、档案阅读和人工复核共用后端契约；运行与阅读状态彼此隔离。 */
 export function ExperimentApp() {
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState('all');
@@ -70,11 +71,13 @@ export function ExperimentApp() {
   const detail = useQuery({queryKey:['experiment', selected], queryFn:() => api.request<Detail>(`/api/experiments/${selected}`), enabled:Boolean(selected) && session.isSuccess});
   useEffect(() => {setQuestionId(detail.data?.questions[0]?.id ?? '');}, [detail.data?.report_sha256]);
   const question = useQuery({queryKey:['experiment-question', selected, questionId], queryFn:() => api.request<QuestionDetail>(`/api/experiments/${selected}/question?id=${encodeURIComponent(questionId)}`), enabled:Boolean(selected && questionId)});
-  const sidebar = <><ConsoleNav active="experiments" legacyPath="/experiments"/><Card size="small" title="迁移状态"><p>档案查看和人工复核已迁移。预算预检、启动与停止作业暂在原版。</p><Button href="/experiments">打开作业原版</Button></Card></>;
+  async function openResult(reportId:string) {setSelected(reportId); await runs.refetch();}
+  const sidebar = <><ConsoleNav active="experiments" legacyPath="/experiments"/><Card size="small" title="页面说明"><p>运行、档案、证据和人工复核均已迁移。原版仅作为迁移期回退入口。</p></Card></>;
 
   return <AppShell subtitle="冻结档案与逐题证据" className="experiment-shell" sidebar={sidebar}>
     <header><div><h1>实验中心</h1><p className="subtle">查看不会调用模型；动态回答和记忆按文本渲染。</p></div><Button loading={runs.isFetching} disabled={!session.isSuccess} onClick={() => void runs.refetch()}>刷新档案</Button></header>
     {(session.isError || runs.isError) && <Alert type="error" showIcon title="实验档案读取失败" description="请确认本机控制台仍在运行；没有自动启动或重试任何模型实验。"/>}
+    <ExperimentJobs api={api} ready={session.isSuccess} onOpen={reportId => void openResult(reportId)}/>
     <div className="experiment-layout">
       <Card title="实验档案">
         <Input.Search aria-label="搜索实验" allowClear value={query} onChange={event => {setQuery(event.target.value); setPage(0);}} placeholder="模型、数据集或编号"/>
