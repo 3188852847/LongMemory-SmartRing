@@ -33,7 +33,7 @@ export function ConsolidationStatusCard({stage,enabled}:{stage:StageName;enabled
       {key:'pending',label:'新来源',children:`${item.pending_new_source_count} / 门槛 ${item.minimum_new_sources}`},
       {key:'budget',label:'今日模型预算',children:`剩余 ${item.remaining_model_calls_today} / ${item.daily_model_call_budget}`},
       {key:'latest',label:'最近结果',children:item.latest_run?.outcome_code??'尚无运行记录'},
-    ]}/>} 
+    ]}/>}
     {!query.data?.background_enabled&&<small>达到门槛只表示“可以评估是否运行”；当前不会自动调用模型或改写记忆。</small>}
   </Card>;
 }
