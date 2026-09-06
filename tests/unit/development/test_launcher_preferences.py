@@ -41,6 +41,11 @@ def test_preferences_roundtrip_and_never_persist_delete_permission(tmp_path):
     assert "must-not-be-written" not in raw
 
 
+def test_local_launcher_delete_default_is_explicit_but_not_persisted():
+    assert preferences.DEFAULT_SESSION_ALLOW_MEMORY_DELETE is True
+    assert "allow_memory_delete" not in preferences.DEFAULTS
+
+
 def test_legacy_ip_only_file_and_broken_file_are_safe(tmp_path):
     path = tmp_path / "launcher.json"
     path.write_text('{"lan_ip":"192.168.1.9"}', encoding="utf-8")

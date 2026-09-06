@@ -7,6 +7,8 @@ from pathlib import Path
 
 PREFERENCES_VERSION = 1
 RISK_ACK_VERSION = "campus-http-v1"
+# 只影响当前本机启动面板，不写入偏好文件，也不改变服务端安全默认。
+DEFAULT_SESSION_ALLOW_MEMORY_DELETE = True
 
 DEFAULTS = {
     "voice": False,

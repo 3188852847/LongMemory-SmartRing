@@ -9,7 +9,11 @@ from pathlib import Path
 
 from runtime import DEFAULT_BGE_MODEL, Manager, Options, ROOT, Singleton, VOICE_ROOT, console_url
 from network import local_addresses, config_action
-from preferences import load_preferences, save_preferences
+from preferences import (
+    DEFAULT_SESSION_ALLOW_MEMORY_DELETE,
+    load_preferences,
+    save_preferences,
+)
 from firewall_panel import open_panel
 from tts import config_action as tts_config_action
 
@@ -56,12 +60,12 @@ def main():
     server = tk.StringVar(value=saved["voice_root"] or str(VOICE_ROOT))
     ip = tk.StringVar(value=saved["lan_ip"])
     role = tk.StringVar(value=saved["role"])
-    extraction_labels = {"rules": "规则提取（稳定基线）", "llm": "模型辅助（P3.2 试用）"}
-    retrieval_labels = {"keyword": "关键词召回（稳定基线）", "hybrid": "关键词＋BGE（P3.2 试用）"}
+    extraction_labels = {"rules": "规则提取（基础/对照）", "llm": "模型辅助提取（日常推荐）"}
+    retrieval_labels = {"keyword": "关键词召回（基础/对照）", "hybrid": "关键词＋BGE 混合召回（日常推荐）"}
     tts_labels = {"edge": "EdgeTTS（联网标准音色）", "voxcpm2": "VoxCPM2（本地 plain）"}
     memory_extraction = tk.StringVar(value=extraction_labels[saved["memory_extraction"]])
     memory_retrieval = tk.StringVar(value=retrieval_labels[saved["memory_retrieval"]])
-    allow_memory_delete = tk.BooleanVar(value=False)
+    allow_memory_delete = tk.BooleanVar(value=DEFAULT_SESSION_ALLOW_MEMORY_DELETE)
     embedding_model = tk.StringVar(value=saved["embedding_model_dir"] or str(DEFAULT_BGE_MODEL))
     tts_backend = tk.StringVar(value=tts_labels[saved["tts_backend"]])
 
@@ -151,18 +155,18 @@ def main():
     memory_row.pack(fill="x", pady=8)
     ttk.Label(memory_row, text="长期记忆提取：").pack(side="left")
     ttk.Combobox(memory_row, textvariable=memory_extraction,
-                 values=("规则提取（稳定基线）", "模型辅助（P3.2 试用）"),
-                 state="readonly", width=27).pack(side="left")
+                 values=("规则提取（基础/对照）", "模型辅助提取（日常推荐）"),
+                 state="readonly", width=36).pack(side="left")
     ttk.Label(memory_row, text="  模型失败仍保留 L0，不静默回退").pack(side="left")
     retrieval_row = ttk.Frame(behavior_box)
     retrieval_row.pack(fill="x", pady=8)
     ttk.Label(retrieval_row, text="长期记忆召回：").pack(side="left")
     ttk.Combobox(retrieval_row, textvariable=memory_retrieval,
-                 values=("关键词召回（稳定基线）", "关键词＋BGE（P3.2 试用）"),
-                 state="readonly", width=27).pack(side="left")
+                 values=("关键词召回（基础/对照）", "关键词＋BGE 混合召回（日常推荐）"),
+                 state="readonly", width=36).pack(side="left")
     ttk.Checkbutton(
         behavior_box,
-        text="允许 L1 单条删除（仍保留 L0 原话；网页中还需二次确认）",
+        text="允许 L1 单条删除（本机日常默认开启；仍保留 L0 原话）",
         variable=allow_memory_delete,
     ).pack(anchor="w", pady=(0, 4))
     ttk.Label(behavior_box, text="BGE 本地快照（仅混合召回使用）").pack(anchor="w", pady=(4, 0))
