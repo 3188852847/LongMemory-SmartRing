@@ -1,10 +1,17 @@
 # Changelog
 
+### Progressive React console: human experiment review（2026-09-06）
+
+- `/experiments-react` 新增逐题人工复核：支持自报署名、待判断/通过/失败/不可评分、理由校验，并展示已有人工与助手复核。
+- 保存继续携带报告 SHA、复核 revision 和随机 request ID；TanStack mutation 不自动重试。响应丢失时锁定重复保存并提供“只刷新核对”，原报告和自动初筛保持只读。
+- 切换题目或署名前检测未保存编辑并确认。预算预检、模型作业启动/停止仍保留在原生 `/experiments`，尚未切换默认导航。
+- 验证：6 项前端测试（包含复核 POST 请求契约）、TypeScript/Vite 构建及 20 项实验复核/React 资源 Python 回归通过；未写真实复核或运行模型。
+
 ### Progressive React console: experiment read-only slice（2026-09-06）
 
 - 新增 `/experiments-react` 只读预览，支持档案搜索、类型筛选、分页、分组摘要、逐题回答、注入上下文、检索上下文、召回来源、原始来源、评分参照和已有复核查看。
 - 模型回答与记忆通过 React 文本节点渲染；组件测试验证 HTML 注入片段不会被解释为脚本。查看只调用既有 GET API，不运行模型、不写复核、不改变报告。
-- 预算预检、作业启动/停止和人工复核暂留完整原生 `/experiments`；统一导航在这些写操作完成迁移前仍进入原版，React 预览明确提供原版入口，不宣称实验中心已完整替换。
+- 当时预算预检、作业启动/停止和人工复核暂留完整原生 `/experiments`；人工复核已由后续切片迁移，模型作业仍在原版。统一导航在作业写操作完成迁移前仍进入原版。
 - 验证：6 项前端测试、TypeScript 检查、Vite 构建及 28 项实验/作业/React 资源 Python 回归通过。真实历史档案的浏览器可读性待用户体验。
 
 ### Progressive React console: personalized settings（2026-09-06）

@@ -21,3 +21,11 @@ Object.defineProperty(window, 'matchMedia', {
 // antd 的表格会查询伪元素样式；jsdom 尚未实现第二参数，测试中忽略它即可。
 const computedStyle = window.getComputedStyle.bind(window);
 window.getComputedStyle = (element: Element) => computedStyle(element);
+
+class TestResizeObserver implements ResizeObserver {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
+Object.defineProperty(window, 'ResizeObserver', {writable:true, value:TestResizeObserver});
+Object.defineProperty(globalThis, 'ResizeObserver', {writable:true, value:TestResizeObserver});
