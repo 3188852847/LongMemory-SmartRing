@@ -18,11 +18,39 @@ from firewall_panel import open_panel
 from tts import config_action as tts_config_action
 
 
+def _scrollable_tab(parent):
+    """创建可随窗口缩放并支持纵向滚动的页签内容区。
+
+    启动选项会随产品迭代增加；把滚动能力放在页签容器层，可以保证小屏幕
+    和 Windows 高缩放比例下仍能访问底部操作，而不要求每个设置分组自行处理。
+    """
+    shell = ttk.Frame(parent)
+    canvas = tk.Canvas(shell, highlightthickness=0, borderwidth=0)
+    scrollbar = ttk.Scrollbar(shell, orient="vertical", command=canvas.yview)
+    content = ttk.Frame(canvas, padding=18)
+    content_window = canvas.create_window((0, 0), window=content, anchor="nw")
+    canvas.configure(yscrollcommand=scrollbar.set)
+
+    canvas.pack(side="left", fill="both", expand=True)
+    scrollbar.pack(side="right", fill="y")
+
+    def update_scroll_region(_event=None):
+        canvas.configure(scrollregion=canvas.bbox("all"))
+
+    def match_content_width(event):
+        # 纵向滚动时内容仍跟随可视宽度，避免额外出现横向滚动或右侧留白。
+        canvas.itemconfigure(content_window, width=event.width)
+
+    content.bind("<Configure>", update_scroll_region)
+    canvas.bind("<Configure>", match_content_width)
+    return shell, content, canvas
+
+
 def main():
     window = tk.Tk()
     window.title("LongMemory · 日常启动")
     window.geometry("900x720")
-    window.minsize(820, 680)
+    window.minsize(720, 500)
     style = ttk.Style(window)
     style.configure("Title.TLabel", font=("Microsoft YaHei UI", 20, "bold"))
     style.configure("Subtitle.TLabel", foreground="#5f6b7a")
@@ -49,10 +77,20 @@ def main():
     ).pack(anchor="w", pady=(2, 14))
     tabs = ttk.Notebook(box)
     tabs.pack(fill="both", expand=True)
-    daily = ttk.Frame(tabs, padding=18)
-    advanced = ttk.Frame(tabs, padding=18)
-    tabs.add(daily, text="日常启动")
-    tabs.add(advanced, text="高级设置")
+    daily_tab, daily, daily_canvas = _scrollable_tab(tabs)
+    advanced_tab, advanced, advanced_canvas = _scrollable_tab(tabs)
+    tabs.add(daily_tab, text="日常启动")
+    tabs.add(advanced_tab, text="高级设置")
+
+    def scroll_current_tab(event):
+        """鼠标位于面板任意控件上时，滚动当前可见页签。"""
+        canvas = daily_canvas if tabs.index("current") == 0 else advanced_canvas
+        if not event.delta:
+            return
+        units = -int(event.delta / 120)
+        canvas.yview_scroll(units if units else (-1 if event.delta > 0 else 1), "units")
+
+    window.bind_all("<MouseWheel>", scroll_current_tab, add="+")
 
     voice = tk.BooleanVar(value=saved["voice"])
     consent = tk.BooleanVar(value=saved["http_risk_ack"])
