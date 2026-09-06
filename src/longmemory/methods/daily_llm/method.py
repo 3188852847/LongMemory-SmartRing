@@ -11,7 +11,7 @@ from longmemory.core.memory.extraction.candidates import (
     CandidateExtractionError,
     CandidateExtractionService,
 )
-from longmemory.core.memory.models import AtomicMemory, CURRENT_USER_SUBJECT_ID
+from longmemory.core.memory.l1_atomic.models import AtomicMemory, CURRENT_USER_SUBJECT_ID
 from longmemory.methods.contracts import (
     MemoryEvent,
     ObservationResult,

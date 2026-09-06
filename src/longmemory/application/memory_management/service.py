@@ -11,9 +11,9 @@ from longmemory.application.memory_management.dto import (
 )
 from longmemory.core.common.identifiers import MemoryId, MessageId
 from longmemory.core.conversation.contracts import ConversationStore
-from longmemory.core.memory.contracts import MemoryStore
+from longmemory.core.memory.l1_atomic.contracts import MemoryStore
 from longmemory.core.conversation.models import ConversationMessage, MessageRole
-from longmemory.core.memory.models import AtomicMemory, MemoryEvidence, MemorySourceType
+from longmemory.core.memory.l1_atomic.models import AtomicMemory, MemoryEvidence, MemorySourceType
 
 
 class MemoryManagementService:

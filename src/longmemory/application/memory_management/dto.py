@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from longmemory.core.conversation.models import ConversationMessage
-from longmemory.core.memory.models import AtomicMemory, MemoryEvidence
+from longmemory.core.memory.l1_atomic.models import AtomicMemory, MemoryEvidence
 
 
 @dataclass(frozen=True, slots=True)

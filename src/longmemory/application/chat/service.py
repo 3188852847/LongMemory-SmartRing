@@ -18,8 +18,8 @@ from longmemory.core.conversation.models import (
 from longmemory.core.memory.contracts import (
     MemoryExtractor,
     MemoryRetriever,
-    MemoryStore,
 )
+from longmemory.core.memory.l1_atomic.contracts import MemoryStore
 
 
 def _new_message_id() -> MessageId:

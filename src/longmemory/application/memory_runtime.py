@@ -6,8 +6,12 @@ from pathlib import Path
 from threading import RLock
 from uuid import uuid4
 
-from longmemory.methods.contracts import MemoryEvent, MemorySupport, ObservationResult
-from longmemory.methods.longmemory_v1.method import LongMemoryV1
+from longmemory.methods.contracts import (
+    MemoryEvent,
+    MemoryMethod,
+    MemorySupport,
+    ObservationResult,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -29,11 +33,11 @@ class MemoryRuntime:
     因而慢模型不会阻塞另一入口读取记忆。
     """
 
-    def __init__(self, database: Path, *, method=None) -> None:
+    def __init__(self, database: Path, *, method: MemoryMethod) -> None:
         self.database = database.resolve()
-        self._method = method if method is not None else LongMemoryV1(
-            self.database, existing_only=True, allow_cross_thread=True,
-        )
+        # Runtime 只编排统一方法契约。具体使用规则、LLM 提取还是其他方法，
+        # 必须由进程入口的装配层决定，不能在应用层偷偷选择实现。
+        self._method = method
         self._lock = RLock()
         self._closed = False
         self._write_enabled = True

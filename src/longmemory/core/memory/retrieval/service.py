@@ -2,8 +2,8 @@
 
 import re
 
-from longmemory.core.memory.contracts import MemoryStore
-from longmemory.core.memory.models import AtomicMemory
+from longmemory.core.memory.l1_atomic.contracts import MemoryStore
+from longmemory.core.memory.l1_atomic.models import AtomicMemory
 from longmemory.core.memory.retrieval.vector import ExactVectorIndex, VectorDocument
 
 

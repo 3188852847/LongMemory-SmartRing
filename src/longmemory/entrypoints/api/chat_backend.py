@@ -9,6 +9,7 @@ import sqlite3
 
 from longmemory.application.chat.contracts import AnswerGenerationError
 from longmemory.application.memory_runtime import MemoryRuntime
+from longmemory.bootstrap import build_memory_runtime
 from .role_settings import RoleSettings
 
 
@@ -28,7 +29,7 @@ class ChatBackend:
         if self._runtime is None:
             with self._runtime_creation_lock:
                 if self._runtime is None:
-                    self._runtime = MemoryRuntime(self.database)
+                    self._runtime = build_memory_runtime(self.database)
         return self._runtime
 
     def info(self):

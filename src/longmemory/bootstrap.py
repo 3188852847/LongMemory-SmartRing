@@ -12,6 +12,7 @@ from longmemory.application.memory_management.dto import MemoryDetails
 from longmemory.application.memory_management.service import (
     MemoryManagementService,
 )
+from longmemory.application.memory_runtime import MemoryRuntime
 from longmemory.core.common.identifiers import MemoryId
 from longmemory.infrastructure.logging.setup import log_event
 from longmemory.methods.factory import create_method
@@ -30,6 +31,21 @@ def _legacy_method(database_path: Path, method_name: str) -> LongMemoryV1:
         method.close()
         raise TypeError("旧入口的方法适配类型不匹配。")
     return method
+
+
+def build_memory_runtime(database_path: Path) -> MemoryRuntime:
+    """装配日常入口的默认记忆运行时，但不创建或迁移数据库。
+
+    ``existing_only`` 保留此前网页入口的安全边界；跨网页/圆屏线程使用
+    同一个常驻方法实例。具体实现选择位于装配层，而不泄漏进 Runtime。
+    """
+
+    method = LongMemoryV1(
+        database_path,
+        existing_only=True,
+        allow_cross_thread=True,
+    )
+    return MemoryRuntime(database_path, method=method)
 
 
 @contextmanager

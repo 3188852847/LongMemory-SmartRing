@@ -8,7 +8,7 @@ from longmemory.core.common.identifiers import (
     MemorySubjectId,
     MessageId,
 )
-from longmemory.core.memory.models import (
+from longmemory.core.memory.l1_atomic.models import (
     AtomicMemory,
     MemoryEvidence,
     MemorySourceType,

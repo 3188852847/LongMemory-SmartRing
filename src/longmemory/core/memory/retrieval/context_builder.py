@@ -2,7 +2,7 @@
 
 from collections.abc import Sequence
 
-from longmemory.core.memory.models import AtomicMemory
+from longmemory.core.memory.l1_atomic.models import AtomicMemory
 
 
 def build_memory_context(

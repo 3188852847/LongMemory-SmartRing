@@ -11,6 +11,7 @@ from longmemory.adapters.llm.fake import FakeAnswerGenerator
 from longmemory.adapters.llm.openai_compatible import OpenAICompatibleAnswerGenerator
 from longmemory.application.chat.contracts import AnswerGenerationError
 from longmemory.application.memory_runtime import MemoryRuntime
+from longmemory.bootstrap import build_memory_runtime
 from longmemory.core.memory.retrieval.service import HybridMemoryRetriever
 from longmemory.entrypoints.api.chat_backend import ChatBackend
 from longmemory.infrastructure.config.settings import ModelSettings
@@ -232,7 +233,7 @@ def test_runtime_memory_modes_are_independent_and_keep_l0(database):
     [(1, True), (True, 0), ("true", True), (True, None)],
 )
 def test_runtime_rejects_non_boolean_memory_modes(database, write_enabled, use_enabled):
-    runtime = MemoryRuntime(database)
+    runtime = build_memory_runtime(database)
     try:
         with pytest.raises(ValueError, match="memory_mode_invalid"):
             runtime.configure(write_enabled=write_enabled, use_enabled=use_enabled)
@@ -244,11 +245,11 @@ def test_runtime_rejects_non_boolean_memory_modes(database, write_enabled, use_e
 
 
 def test_runtime_memory_modes_reset_for_a_new_process_runtime(database):
-    first = MemoryRuntime(database)
+    first = build_memory_runtime(database)
     first.configure(write_enabled=False, use_enabled=False)
     first.close()
 
-    second = MemoryRuntime(database)
+    second = build_memory_runtime(database)
     try:
         assert second.status()["write_enabled"] is True
         assert second.status()["use_enabled"] is True

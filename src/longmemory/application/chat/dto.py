@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 
 from longmemory.core.conversation.models import ConversationMessage
-from longmemory.core.memory.models import (
+from longmemory.core.memory.l1_atomic.models import (
     AtomicMemory,
     MemoryOperationType,
     MemoryWriteOperation,

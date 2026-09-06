@@ -307,7 +307,7 @@ LongMemory-SmartRing/                              # 项目根目录
 │     │     │  ├─ service.py                       # 检索服务
 │     │     │  └─ context_builder.py               # 受控上下文
 │     │     ├─ l0_conversation/                    # L0 后续扩展位置
-│     │     ├─ l1_atomic/                          # L1 后续扩展位置
+│     │     ├─ l1_atomic/                          # L1 规范模型与存储契约；旧路径兼容转发
 │     │     ├─ l2_scenario/                        # L2 预留，V0.1 不实现
 │     │     ├─ l3_persona/                         # L3 预留，V0.1 不实现
 │     │     ├─ conflict_resolution/                # 冲突处理预留

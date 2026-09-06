@@ -7,7 +7,7 @@ from uuid import uuid4
 
 
 from dataclasses import dataclass
-from longmemory.core.memory.models import AtomicMemory
+from longmemory.core.memory.l1_atomic.models import AtomicMemory
 from longmemory.core.common.exceptions import EmptyMessageError
 from longmemory.core.common.identifiers import MessageId
 from longmemory.core.conversation.contracts import ConversationStore
@@ -18,12 +18,12 @@ from longmemory.core.conversation.models import (
 from longmemory.core.memory.contracts import (
     MemoryExtractor,
     MemoryRetriever,
-    MemoryStore,
 )
+from longmemory.core.memory.l1_atomic.contracts import MemoryStore
 from longmemory.core.memory.retrieval.context_builder import (
     build_memory_context,
 )
-from longmemory.core.memory.models import (
+from longmemory.core.memory.l1_atomic.models import (
     MemoryEvidence,
     MemoryOperationType,
     MemorySourceType,

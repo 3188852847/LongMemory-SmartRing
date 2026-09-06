@@ -13,7 +13,7 @@ from longmemory.application.memory_turn import MemoryTurnService
 from longmemory.core.common.identifiers import MemoryId, MessageId
 from longmemory.core.conversation.models import ConversationMessage, MessageRole
 from longmemory.core.memory.extraction.candidates import CandidateExtractionService
-from longmemory.core.memory.models import AtomicMemory, CURRENT_USER_SUBJECT_ID
+from longmemory.core.memory.l1_atomic.models import AtomicMemory, CURRENT_USER_SUBJECT_ID
 from longmemory.methods.contracts import ObservationResult, UnsupportedCapabilityError, WriteTrace
 from longmemory.methods.longmemory_v1.method import LongMemoryV1
 

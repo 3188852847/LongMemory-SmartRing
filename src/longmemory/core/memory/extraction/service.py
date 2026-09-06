@@ -10,7 +10,7 @@ from longmemory.core.conversation.models import (
     MessageRole,
 )
 from longmemory.core.memory.extraction.policy import RuleBasedMemoryPolicy
-from longmemory.core.memory.models import (
+from longmemory.core.memory.l1_atomic.models import (
     CURRENT_USER_SUBJECT_ID,
     AtomicMemory,
 )

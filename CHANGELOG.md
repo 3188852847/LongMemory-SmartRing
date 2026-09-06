@@ -1,5 +1,11 @@
 # Changelog
 
+### Memory architecture calibration R1（2026-09-06）
+
+- L1 原子记忆模型和 Store 契约迁入规范 `core/memory/l1_atomic/`；旧导入路径继续转发同一类型，避免一次性破坏已有脚本。
+- `MemoryRuntime` 改为必须注入中立 `MemoryMethod`，日常 `LongMemoryV1` 的默认选择移到 bootstrap 装配层；网页和圆屏行为不变。
+- 新增依赖边界回归测试，防止应用层重新绑定具体方法或生产代码退回旧 L1 路径；未修改 V4 schema、个人库、记忆算法或页面。
+
 ### L2 reviewable scenario design（2026-09-06）
 
 - 形成 L2 第一版提案：有时间范围的生活场景候选，不把自由摘要或短期偶然行为当作 L3 稳定画像。
