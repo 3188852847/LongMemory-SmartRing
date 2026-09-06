@@ -1,5 +1,12 @@
 # Changelog
 
+### P4.3 deterministic proactive contact policy（2026-09-06）
+
+- 新增默认关闭的纯领域主动联系策略；不访问数据库、记忆、模型或设备，只根据用户明确配置和可信运行状态判断。
+- 覆盖计划/过期、最大有效期、临时勿扰、星期/普通及跨午夜时段、当前会话、上一条未回应、每日次数和最短间隔；决定携带稳定原因码与策略版本。
+- 只有未到计划时间返回 `WAIT`；其他不满足条件的候选不顺延补播。第一版显式使用固定 UTC 偏移，默认 `+08:00`，不自动猜测旅行或夏令时。
+- 当前未持久化策略设置、未连接账本/调度/设备，也未创建主动消息。见 ADR-0060。
+
 ### P4.2 proactive outreach event ledger（2026-09-06）
 
 - SQLite 代码结构升级为 V14，新增不重复消息正文的主动交流当前投影与只追加事件账本；按 `candidate / blocked / queued / transport_sent / device_acknowledged / played / expired / cancelled / failed` 区分真实进度。
