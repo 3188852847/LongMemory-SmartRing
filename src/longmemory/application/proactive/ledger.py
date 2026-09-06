@@ -48,6 +48,16 @@ class ProactiveOutreachLedger:
         self._clock = clock
         self._id_factory = id_factory
 
+    def get(self, outreach_id: str) -> ProactiveOutreach | None:
+        """读取当前投影，供编排器在产生外部副作用前核对状态。"""
+
+        return self._store.get(outreach_id)
+
+    def list_events(self, outreach_id: str) -> tuple[OutreachEvent, ...]:
+        """读取只追加历史，避免应用测试依赖账本的私有存储字段。"""
+
+        return self._store.list_events(outreach_id)
+
     def create_candidate(
         self,
         *,
