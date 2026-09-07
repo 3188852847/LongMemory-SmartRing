@@ -3,6 +3,7 @@ import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {Alert, Button, Card, Descriptions, InputNumber, Slider, Space, Tag} from 'antd';
 import {ApiError, ChatApi} from './api';
 import {AppShell, ConsoleNav} from './AppShell';
+import {PageHeader} from './PageHeader';
 import {errorMessage, resultView, statusView, validTarget} from '../../assets/state.mjs';
 
 type DeviceStatus = {
@@ -69,8 +70,9 @@ export function DeviceApp() {
   const sidebar = <><ConsoleNav active="device" legacyPath="/"/><Card size="small" title="控制边界"><p>当前只开放扬声器音量。电量、亮度、屏幕 UI 和重启尚无已验证控制接口。</p></Card></>;
 
   return <AppShell subtitle="智能圆屏终端管理" className="device-shell" sidebar={sidebar}>
-    <header><div><h1>设备与状态</h1><p className="subtle">查看活动连接，读取并调整 SmartRing-Plus 圆屏终端的扬声器音量。</p></div>
-      <Button loading={status.isFetching} disabled={!session.isSuccess || busy} onClick={() => void status.refetch()}>刷新状态</Button></header>
+    <PageHeader eyebrow="日常使用" title="设备与状态" description="查看 SmartRing-Plus 圆屏终端是否在线，并读取或调整已验证的扬声器音量。"
+      meta="连接状态每 5 秒自动检查；设备音量只在你点击读取时更新。"
+      action={<Button loading={status.isFetching} disabled={!session.isSuccess || busy} onClick={() => void status.refetch()}>刷新状态</Button>}/>
     {session.isError && <Alert type="error" showIcon title="无法建立控制台会话" description="请确认本机网页服务仍在运行，再刷新页面。没有自动重发设备指令。"/>}
     <Card className="device-summary-card" title="SmartRing-Plus B V2" extra={<Tag color={view.tone === 'good' ? 'green' : view.tone === 'warning' ? 'gold' : 'red'}>{view.badge}</Tag>}>
       <Descriptions column={{xs:1, sm:3}} items={[

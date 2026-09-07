@@ -3,6 +3,7 @@ import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {Alert, Button, Card, Checkbox, Descriptions, Drawer, Empty, Input, List, Modal, Select, Space, Tag} from 'antd';
 import {ChatApi} from './api';
 import {AppShell, ConsoleNav} from './AppShell';
+import {PageHeader} from './PageHeader';
 import {ConsolidationStatusCard} from './ConsolidationStatusCard';
 
 type ScenarioState = 'candidate' | 'active' | 'rejected' | 'stale';
@@ -140,8 +141,7 @@ export function ScenarioApp() {
     <ConsoleNav active="scenarios" legacyPath="/memories"/></>;
 
   return <><AppShell subtitle="可复核的生活场景" className="scenario-shell" sidebar={sidebar}>
-    <header><div><h1>生活场景（L2）</h1><small>{config.data?.database ?? '未指定记忆库'}</small></div>
-      <Button loading={busy} onClick={() => void queryClient.invalidateQueries({queryKey: ['scenarios']})}>刷新</Button></header>
+    <PageHeader eyebrow="长期记忆" title="生活场景（L2）" description="把多条相关的原子记忆整理成可复核的生活场景；候选不会自动生效。" meta={config.data?.database ?? '未指定记忆库'} action={<Button loading={busy} onClick={() => void queryClient.invalidateQueries({queryKey: ['scenarios']})}>刷新</Button>}/>
     <Alert className="mode-card" type="info" showIcon title="L2 先复核，再按需用于回答"
       description="L2 把多条 L1 汇总成可带现实有效期的生活场景。接受本身不会自动开启使用；回答开关在记忆管理页，且只召回相关的当前场景。"/>
     <ConsolidationStatusCard stage="l1_to_l2" enabled={ready&&config.data?.configured===true}/>

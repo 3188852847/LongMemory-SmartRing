@@ -1,6 +1,6 @@
 # Web 界面
 
-选型更新：`react-chat/` 已承载 React + TypeScript + Vite + antd 的文字聊天、L0/L1 记忆、L2 场景、L3 用户画像、设备状态、设置中心与实验中心，由 Python 统一提供 React 路由和构建资源。统一启动默认进入 `/chat-react`；原生入口只作为迁移期回退。React Router、共享 AppShell、TanStack Query 和 Vitest/React Testing Library 已建立，导航按“日常使用 / 长期记忆 / 控制与观察”分组，并覆盖窄屏与低高度窗口。见[体验及构建指南](../docs/guides/React聊天页.md)。以下描述主要记录保留的历史原生实现。
+选型更新：`react-chat/` 已承载 React + TypeScript + Vite + antd 的文字聊天、L0/L1 记忆、L2 场景、L3 用户画像、设备状态、设置中心与实验中心，由 Python 统一提供 React 路由和构建资源。统一启动默认进入 `/chat-react`；原生入口只作为迁移期回退。React Router、共享 AppShell/PageHeader、TanStack Query 和 Vitest/React Testing Library 已建立，导航按“日常使用 / 长期记忆 / 控制与观察”分组，设置按四个标签页组织，并覆盖窄屏与低高度窗口。见[体验及构建指南](../docs/guides/React聊天页.md)。以下描述主要记录保留的历史原生实现。
 
 P2 已新增聊天页 `appearance.mjs`（校验/存取/应用显示偏好）、`appearance.js`（控件绑定）与 `chat-appearance.css`（局部主题）。沿用原生前端，见 ADR-0020。本浏览器持久缓存仅用于外观枚举和最后选中会话 ID，不保存聊天正文。
 

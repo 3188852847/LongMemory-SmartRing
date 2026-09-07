@@ -21,8 +21,11 @@ test('文字聊天可保存并在刷新后恢复，React 页面可统一导航',
   await expect(page.getByRole('heading', {name:'设备与状态'})).toBeVisible();
   await page.getByRole('link', {name:'设置中心'}).click();
   await expect(page.getByRole('heading', {name:'设置中心'})).toBeVisible();
+  await expect(page.getByRole('tab', {name:'助手角色'})).toHaveAttribute('aria-selected', 'true');
+  await page.getByRole('tab', {name:'外观与阅读'}).click();
+  await expect(page.getByRole('combobox', {name:'主题'})).toBeVisible();
   await page.getByRole('link', {name:'原始与原子记忆'}).click();
-  await expect(page.getByRole('heading', {name:'记忆管理'})).toBeVisible();
+  await expect(page.getByRole('heading', {name:'原始与原子记忆'})).toBeVisible();
   await page.getByText('用户养了一只叫豆包的猫。', {exact:true}).click();
   await page.getByRole('button', {name:'记录变化'}).click();
   await page.getByRole('textbox', {name:'变化后的完整事实'}).fill('用户现在养了一只叫年糕的猫。');

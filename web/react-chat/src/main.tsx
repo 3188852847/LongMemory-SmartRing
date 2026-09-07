@@ -8,6 +8,7 @@ import {turnSummary} from '../../assets/chat-view.mjs';
 import './style.css';
 import {AppearanceProvider} from './AppearanceProvider';
 import {AppShell, ConsoleNav} from './AppShell';
+import {PageHeader} from './PageHeader';
 import {createConsoleQueryClient} from './queryClient';
 
 const DeviceApp = lazy(() => import('./DeviceApp').then(module => ({default: module.DeviceApp})));
@@ -96,7 +97,7 @@ function ChatApp() {
       <Button disabled={disabled} onClick={() => {setTitle(chat?.title ?? ''); setRename(true);}}>重命名</Button>
       <ConsoleNav active="chat" legacyPath="/chat"/>
     </>;
-  return <><AppShell subtitle="你的日常聊天空间" sidebar={sidebar}><header><div><p className="page-kicker">日常对话</p><h1>聊聊今天</h1></div><span>{chat?.turns.length ?? 0} / 40 轮</span></header>
+  return <><AppShell subtitle="你的日常聊天空间" sidebar={sidebar}><PageHeader eyebrow="日常使用" title="聊聊今天" description="在这里用文字继续日常对话；新事实是否进入长期记忆，可以在每轮回答下方核对。" action={<span>{chat?.turns.length ?? 0} / 40 轮</span>}/>
       <section className="messages" aria-label="聊天记录">{!chat?.turns.length && <div className="empty"><h2>今天想聊些什么？</h2><p>可以说说今天的事，也可以继续上次的话题。</p></div>}
         {chat?.turns.map((turn, i) => <article key={i}><div className="bubble user"><strong>你</strong><p>{turn.input}</p></div><div className="bubble assistant"><strong>助手</strong><p>{turn.answer ?? '未获得完整回答。'}</p></div>
           {turn.memory_processing === 'source_only' && <p className="memory-warning">{memoryWarning(turn)} 可继续聊天，之后需要重新整理这条来源。</p>}

@@ -3,6 +3,7 @@ import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {Alert, Button, Card, Descriptions, Drawer, Empty, Input, List, Modal, Select, Space, Tabs, Tag} from 'antd';
 import {ChatApi} from './api';
 import {AppShell, ConsoleNav} from './AppShell';
+import {PageHeader} from './PageHeader';
 import {ConsolidationStatusCard} from './ConsolidationStatusCard';
 
 type PersonaState = 'candidate' | 'active' | 'rejected' | 'stale';
@@ -148,10 +149,9 @@ export function PersonaApp() {
   </>;
 
   return <><AppShell subtitle="可复核的用户画像" className="persona-shell" sidebar={sidebar}>
-    <header><div><h1>用户画像（L3）</h1><small>{config.data?.database??'未指定记忆库'}</small></div>
-      <Button loading={personas.isFetching||profile.isFetching} onClick={() => void Promise.all([
+    <PageHeader eyebrow="长期记忆" title="用户画像（L3）" description="在一份持续累积的画像中归纳稳定偏好、习惯与规划，并保留每项认识的证据。" meta={config.data?.database??'未指定记忆库'} action={<Button loading={personas.isFetching||profile.isFetching} onClick={() => void Promise.all([
         queryClient.invalidateQueries({queryKey:['personas']}),queryClient.invalidateQueries({queryKey:['persona-profile']}),
-      ])}>刷新</Button></header>
+      ])}>刷新</Button>}/>
     <Alert className="mode-card" type="info" showIcon title="这里是一份持续累积的统一用户画像"
       description="页面按栏目汇总所有已接受的 L3 认识；底层仍保存独立断言和 L1/L2→L0 来源，便于逐项纠正、失效和审计。它不是助手角色，当前也尚未用于回答。"/>
     <ConsolidationStatusCard stage="l2_to_l3" enabled={ready&&config.data?.configured===true}/>

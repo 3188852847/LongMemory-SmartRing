@@ -3,6 +3,7 @@ import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {Alert, Button, Card, Empty, Input, Select, Space, Table, Tag} from 'antd';
 import {ChatApi} from './api';
 import {AppShell, ConsoleNav} from './AppShell';
+import {PageHeader} from './PageHeader';
 import {ExperimentJobs} from './ExperimentJobs';
 import {evidenceLabel, filterRuns, groupLabel, statusLabel, verdictLabel} from '../../assets/experiment-view.mjs';
 
@@ -75,7 +76,7 @@ export function ExperimentApp() {
   const sidebar = <><ConsoleNav active="experiments" legacyPath="/experiments"/><Card size="small" title="页面说明"><p>运行、档案、证据和人工复核均已迁移。原版仅作为迁移期回退入口。</p></Card></>;
 
   return <AppShell subtitle="冻结档案与逐题证据" className="experiment-shell" sidebar={sidebar}>
-    <header><div><h1>实验中心</h1><p className="subtle">查看不会调用模型；动态回答和记忆按文本渲染。</p></div><Button loading={runs.isFetching} disabled={!session.isSuccess} onClick={() => void runs.refetch()}>刷新档案</Button></header>
+    <PageHeader eyebrow="控制与观察" title="实验中心" description="运行可控的对照实验，查看冻结结果并逐题核对回答与证据。" meta="浏览已有档案不会调用模型；启动新实验前会单独展示预算与网络风险。" action={<Button loading={runs.isFetching} disabled={!session.isSuccess} onClick={() => void runs.refetch()}>刷新档案</Button>}/>
     {(session.isError || runs.isError) && <Alert type="error" showIcon title="实验档案读取失败" description="请确认本机控制台仍在运行；没有自动启动或重试任何模型实验。"/>}
     <ExperimentJobs api={api} ready={session.isSuccess} onOpen={reportId => void openResult(reportId)}/>
     <div className="experiment-layout">
