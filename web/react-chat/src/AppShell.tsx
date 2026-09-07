@@ -8,7 +8,7 @@ const NAV_GROUPS: Array<{label: string; items: Array<{
 }>}> = [
   {label: '日常使用', items: [
     {page: 'chat', label: '文字聊天', description: '对话与记忆过程', to: '/chat-react'},
-    {page: 'device', label: '设备状态', description: '圆屏连接与音量', to: '/device'},
+    {page: 'device', label: '设备状态', description: '连接、快照与基础控制', to: '/device'},
     {page: 'display', label: '圆屏预览', description: '状态、情绪与异常', to: '/display-preview'},
   ]},
   {label: '长期记忆', items: [

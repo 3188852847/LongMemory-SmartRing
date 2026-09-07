@@ -64,7 +64,7 @@
 | P5.2 结果证据补全 | 区分投递未成立、不同投递证据、等待与已观察；记录用户明确否定 | 离线/失败与未回应分开；否定必须来自明确输入 | **完成第一轮**：复用 P4 账本推导状态；圆屏明确拒绝可停用最近话题并审计 |
 | P5.3 习惯与陪伴策略演化 | 从允许记录的多次结果形成经验模式和原子策略候选 | 候选经离线回放、安全/质量门控后版本化激活且可回滚；与 L3 用户画像分开 | **第八切片完成**：运行、门控结果和策略来源均可追溯；真实长期效果与后续策略评价仍待日常数据 |
 
-当前连续开发主线已完成 P5.3 第八切片，进入真实日常结果积累期；不继续盲目增加触发规则，也不因一次没回应推断情绪。等待数据期间推进体验专项：U1 圆屏状态协议、U2 浏览器模拟器和 U3 旧源码能力审计已完成第一阶段；U6 网页朗读/打断与 U7 控制台功能入口持续补全，记忆管理页已增加明确补录入口。U4 设备端最小状态 UI、U5 可替换角色皮肤和 U8 真实圆屏链路验收需取得厂家所述 B V2 准确源码后继续，不能修改旧源码冒充当前固件。每一步都先验证状态事实，再增加表现层。见 [ADR-0074](docs/adr/0074-auditable-contact-time-strategy-candidates.md)至 [ADR-0081](docs/adr/0081-structured-proactive-strategy-provenance.md)，以及 [ADR-0084](docs/adr/0084-round-display-state-protocol-and-simulator.md)与 [ADR-0088](docs/adr/0088-owner-explicit-memory-form.md)。
+当前连续开发主线已完成 P5.3 第八切片，进入真实日常结果积累期；不继续盲目增加触发规则，也不因一次没回应推断情绪。等待数据期间的第一轮体验专项已收束：U1 圆屏状态协议、U2 浏览器模拟器、U3 旧源码能力审计、U6 网页朗读/停止/本地说话打断和 U7 首批控制台功能入口均已实现并通过隔离回归；记忆管理页也已有所有者明确补录。网页说话打断仍待真人体验。U4 设备端最小状态 UI、U5 可替换角色皮肤和 U8 圆屏打断/状态链路验收需要厂家所述 B V2 准确源码与实机，不能修改旧源码或用浏览器模拟器冒充完成。其他自定义项仍是候选，需以后按真实使用反馈选定。见 [ADR-0074](docs/adr/0074-auditable-contact-time-strategy-candidates.md)至 [ADR-0081](docs/adr/0081-structured-proactive-strategy-provenance.md)，以及 [ADR-0083](docs/adr/0083-local-voice-profile-web-playback-and-device-surface.md)、[ADR-0084](docs/adr/0084-round-display-state-protocol-and-simulator.md)与 [ADR-0088](docs/adr/0088-owner-explicit-memory-form.md)。
 
 ### 基础设施与体验工作的安排
 
