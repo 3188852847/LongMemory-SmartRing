@@ -55,6 +55,21 @@ def test_timeout_has_no_remote_exception_text():
     with pytest.raises(AnswerGenerationError) as error:
         OpenAICompatibleAnswerGenerator(settings(), transport=fail).generate(query="x", memory_context="")
     assert "synthetic-secret" not in str(error.value)
+    assert error.value.code == "model_request_timeout"
+
+
+@pytest.mark.parametrize("status,code", [
+    (401, "model_authentication_failed"), (403, "model_authentication_failed"),
+    (404, "model_deployment_not_found"), (429, "model_rate_limited"),
+    (500, "model_service_unavailable"), (503, "model_service_unavailable"),
+    (400, "model_request_rejected"),
+])
+def test_http_failure_has_safe_actionable_code(status, code):
+    generator = OpenAICompatibleAnswerGenerator(settings(), transport=lambda *_: (status, b"private"))
+    with pytest.raises(AnswerGenerationError) as error:
+        generator.generate(query="private-input", memory_context="private-memory")
+    assert error.value.code == code
+    assert "private" not in str(error.value)
 
 
 @pytest.mark.parametrize("overrides", [

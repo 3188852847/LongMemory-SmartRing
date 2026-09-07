@@ -59,6 +59,24 @@ def test_model_failure_preserves_actual_write_trace_but_not_assistant_fact(datab
     assert "secret-should-not-leak" not in json.dumps(result)
 
 
+def test_model_health_records_safe_failure_and_explicit_probe_does_not_write_memory(database):
+    class Broken:
+        def with_role_prompt(self, _prompt):
+            return self
+        def generate(self, **_kwargs):
+            raise AnswerGenerationError("private upstream body", code="model_authentication_failed")
+        generate_turn = generate
+    backend = ChatBackend(database, Broken(), provider="openai_compatible", model="synthetic")
+    assert backend.info()["model_health"]["state"] == "unchecked"
+    health = backend.check_model()
+    assert health["state"] == "unavailable" and health["code"] == "model_authentication_failed"
+    with sqlite3.connect(database) as connection:
+        assert connection.execute("SELECT count(*) FROM conversation_messages").fetchone()[0] == 0
+    result = backend.run("我叫小林", ())
+    assert result["error"] == "model_authentication_failed"
+    assert "private upstream body" not in json.dumps(result)
+
+
 def test_missing_and_old_database_not_created_or_migrated(tmp_path):
     missing = tmp_path / "missing.db"
     result = ChatBackend(missing, FakeAnswerGenerator()).run("你好", ())

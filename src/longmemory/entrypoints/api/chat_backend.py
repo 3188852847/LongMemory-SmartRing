@@ -24,6 +24,32 @@ class ChatBackend:
         # 内部语音接口随后复用同一个实例，不再每轮重新装配记忆引擎。
         self._runtime = runtime
         self._runtime_creation_lock = Lock()
+        self._model_health_lock = Lock()
+        self._model_health = {"state": "not_applicable" if provider == "fake" else "unchecked",
+                              "code": None, "checked_at": None}
+
+    def _record_model_health(self, state, code=None):
+        with self._model_health_lock:
+            self._model_health = {"state": state, "code": code,
+                                  "checked_at": datetime.now(UTC).isoformat()}
+
+    def model_health(self):
+        with self._model_health_lock:
+            return dict(self._model_health)
+
+    def check_model(self):
+        """显式最小连通性检查：不读取或写入记忆，不发送个人对话，也不自动重试。"""
+        if self.provider == "fake":
+            return self.model_health()
+        try:
+            answer = self.generator.generate(query="请只回复：连接正常", memory_context="")
+            if not isinstance(answer, str) or not answer.strip():
+                raise AnswerGenerationError("模型未返回有效文本。", code="model_response_invalid")
+        except AnswerGenerationError as error:
+            self._record_model_health("unavailable", error.code)
+        else:
+            self._record_model_health("available")
+        return self.model_health()
 
     def memory_runtime(self):
         if self._runtime is None:
@@ -46,6 +72,7 @@ class ChatBackend:
                 "persona_use_enabled": runtime["persona_use_enabled"],
                 "persona_available": runtime["persona_available"],
                 "memory_mode_persistent": runtime["settings_persistent"],
+                "model_health": self.model_health(),
                 "speaks_on_device": False}
 
     def run(self, text, history):
@@ -102,12 +129,14 @@ class ChatBackend:
             else:
                 answer = generator.generate_turn(query=text, memory_context=support.context, history=history)
             if not isinstance(answer, str) or not answer.strip() or len(answer) > 16000:
-                raise AnswerGenerationError("empty_answer")
+                raise AnswerGenerationError("empty_answer", code="model_response_invalid")
+            self._record_model_health("available")
             result["answer"] = answer
             assistant = runtime.record_assistant(answer)
             result.update(status="completed", assistant_saved=True, assistant_event_id=assistant.event_id)
-        except AnswerGenerationError:
-            result["error"] = "chat_model_failed"
+        except AnswerGenerationError as error:
+            result["error"] = error.code
+            self._record_model_health("unavailable", error.code)
         except sqlite3.Error as error:
             code = getattr(error, "sqlite_errorcode", 0) & 0xFF
             result["error"] = "memory_busy" if code in {sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED} else "chat_database_unavailable"

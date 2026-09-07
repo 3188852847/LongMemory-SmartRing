@@ -405,7 +405,7 @@ def main():
                 settings_status.set("服务已启动，但本机首选项未保存；下次仍可手动选择。")
             state.update(started=time.monotonic(), opened=False, failed=False)
             start_button.config(state="disabled")
-            set_status("正在启动；首次加载语音模型可能较慢。尚未验证学校模型或圆屏连接。", "busy")
+            set_status("正在启动；首次加载语音模型可能较慢。学校模型尚未验证，可在聊天页显式检测。", "busy")
         except ValueError as error:
             messagebox.showerror("无法启动", str(error))
         except Exception:
@@ -431,7 +431,7 @@ def main():
                               else "；VoxCPM2 正在加载，圆屏语音尚未就绪")
                 else:
                     suffix = "；语音进程运行中，设备连接请在网页查看" if manager.options.voice else ""
-                set_status("控制台已就绪" + suffix + "。学校模型未探测。保留此面板，关闭网页不会停止服务。", "good")
+                set_status("控制台已就绪" + suffix + "。请在聊天页查看或检测模型状态；关闭网页不会停止服务。", "good")
             elif time.monotonic() - state["started"] > 90:
                 stopped = stop(False)
                 state["failed"] = True

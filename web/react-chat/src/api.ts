@@ -45,7 +45,8 @@ export interface Turn {
 }
 export interface Snapshot {chat_id: string; title: string; pending: boolean; turns: Turn[]}
 export interface Summary {chat_id: string; title: string; turn_count: number}
-export interface Config {enabled: boolean; database: string; model: string; role: string; provider: string; method: string; retrieval: string}
+export interface ModelHealth {state:'unchecked'|'available'|'unavailable'|'not_applicable'; code:string|null; checked_at:string|null}
+export interface Config {enabled: boolean; database: string; model: string; role: string; provider: string; method: string; retrieval: string; model_health?:ModelHealth}
 export interface ProactivePolicy {
   subject_id: string; enabled: boolean; utc_offset_minutes: number;
   allowed_weekdays: number[]; allowed_start_minute: number; allowed_end_minute: number;

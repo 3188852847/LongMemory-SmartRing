@@ -60,6 +60,27 @@ def test_chat_replay_reset_and_owner_isolation(backend):
     asyncio.run(run())
 
 
+def test_explicit_model_check_uses_synthetic_text_without_memory_write(backend):
+    calls = []
+    class Healthy:
+        def generate(self, **kwargs):
+            calls.append(kwargs)
+            return "连接正常"
+    backend.provider, backend.model, backend.generator = "openai_compatible", "synthetic", Healthy()
+    backend._model_health = {"state": "unchecked", "code": None, "checked_at": None}
+    async def run():
+        async with console(chat_backend=backend) as (client, base, _):
+            headers = await login(client, base)
+            response = await client.post(base + "/api/chat-model/check", json={}, headers=headers)
+            body = await response.json()
+            assert response.status == 200 and body["state"] == "available"
+            assert calls == [{"query": "请只回复：连接正常", "memory_context": ""}]
+            import sqlite3
+            with sqlite3.connect(backend.database) as connection:
+                assert connection.execute("SELECT count(*) FROM conversation_messages").fetchone()[0] == 0
+    asyncio.run(run())
+
+
 @pytest.mark.parametrize("body", [
     {"text": "", "request_id": str(uuid4())},
     {"text": "  ", "request_id": str(uuid4())},

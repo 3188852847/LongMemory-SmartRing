@@ -1,6 +1,6 @@
 import {lazy, Suspense, useEffect, useRef, useState} from 'react';
 import {createRoot} from 'react-dom/client';
-import {Button, Input, Modal, Select} from 'antd';
+import {Alert, Button, Input, Modal, Select} from 'antd';
 import {QueryClientProvider} from '@tanstack/react-query';
 import {BrowserRouter, Navigate, Route, Routes} from 'react-router-dom';
 import {ChatApi, type Config, type Snapshot, type Summary, type Turn} from './api';
@@ -11,6 +11,7 @@ import {AppShell, ConsoleNav} from './AppShell';
 import {PageHeader} from './PageHeader';
 import {SpeechPlayer} from './SpeechPlayer';
 import {createConsoleQueryClient} from './queryClient';
+import {modelFailure} from './modelHealth';
 
 const DeviceApp = lazy(() => import('./DeviceApp').then(module => ({default: module.DeviceApp})));
 const MemoryApp = lazy(() => import('./MemoryApp').then(module => ({default: module.MemoryApp})));
@@ -35,6 +36,7 @@ function ChatApp() {
   const [unknown, setUnknown] = useState(false);
   const [notice, setNotice] = useState('正在连接本机服务…');
   const [rename, setRename] = useState(false);
+  const [checkingModel, setCheckingModel] = useState(false);
   const [title, setTitle] = useState('');
   // ref 在同一事件循环内立即锁定，避免 React 尚未重绘时的双击重复写入。
   const locked = useRef(false);
@@ -82,7 +84,11 @@ function ChatApp() {
         const turn = await api.request<Turn>(`/api/chats/${chat.chat_id}/messages`, 'POST', {text: draft, request_id: crypto.randomUUID()});
         setChat({...chat, turns: [...chat.turns, turn]}); setDraft('');
         setChats(rows => rows.map(row => row.chat_id === chat.chat_id ? {...row, turn_count: chat.turns.length + 1} : row));
-        setNotice(turn.memory_processing === 'source_only'
+        const modelProblem=modelFailure(turn.error);
+        if(modelProblem)setConfig(current=>current?{...current,model_health:{state:'unavailable',code:String(turn.error),checked_at:new Date().toISOString()}}:current);
+        setNotice(modelProblem
+          ? `${modelProblem} 本轮用户输入可能已经保存，但没有伪造助手回答。`
+          : turn.memory_processing === 'source_only'
           ? `回答已完成，但${memoryWarning(turn).replace('本轮 ', '')}不要把它误认为“不该记”。`
           : turn.retrieval_warning === 'dense_retrieval_failed'
             ? '回答已完成，但本地 BGE 检索失败，本轮已明确降级为关键词检索。'
@@ -90,6 +96,10 @@ function ChatApp() {
       } catch (error) {setUnknown(true); setNotice(`${String(error)} 结果未知，请点击查询结果。`);}
     });
   }
+  async function checkModel(){if(checkingModel||config?.provider!=='openai_compatible')return;setCheckingModel(true);
+    try{const health=await api.request<NonNullable<Config['model_health']>>('/api/chat-model/check','POST',{});setConfig(current=>current?{...current,model_health:health}:current);
+      setNotice(health.state==='available'?'模型连接验证通过；这不代表回答质量或圆屏链路已经验收。':modelFailure(health.code)??'模型连接验证失败。');
+    }catch(error){setNotice(String(error));}finally{setCheckingModel(false);}}
   const disabled = busy || unknown || !chat;
   const sidebar = <>
       <Button block disabled={disabled} onClick={() => changeChat()}>新聊天</Button>
@@ -99,7 +109,11 @@ function ChatApp() {
       <ConsoleNav active="chat" legacyPath="/chat"/>
     </>;
   return <><AppShell subtitle="你的日常聊天空间" sidebar={sidebar}><PageHeader eyebrow="日常使用" title="聊聊今天" description="在这里用文字继续日常对话；新事实是否进入长期记忆，可以在每轮回答下方核对。" action={<span>{chat?.turns.length ?? 0} / 40 轮</span>}/>
-      <section className="messages" aria-label="聊天记录">{!chat?.turns.length && <div className="empty"><h2>今天想聊些什么？</h2><p>可以说说今天的事，也可以继续上次的话题。</p></div>}
+      {config?.provider==='openai_compatible'&&<Alert showIcon type={config.model_health?.state==='available'?'success':config.model_health?.state==='unavailable'?'error':'info'}
+        title={config.model_health?.state==='available'?'模型服务最近验证可用':config.model_health?.state==='unavailable'?'模型服务最近验证失败':'模型服务尚未验证'}
+        description={config.model_health?.state==='unavailable'?(modelFailure(config.model_health.code)??'模型调用失败。'):'检测只发送固定合成短句，不读取或写入个人记忆，也不自动重试。'}
+        action={<Button loading={checkingModel} disabled={busy||unknown}
+          onClick={()=>void checkModel()}>检测模型连接</Button>}/>}<section className="messages" aria-label="聊天记录">{!chat?.turns.length && <div className="empty"><h2>今天想聊些什么？</h2><p>可以说说今天的事，也可以继续上次的话题。</p></div>}
         {chat?.turns.map((turn, i) => <article key={i}><div className="bubble user"><strong>你</strong><p>{turn.input}</p></div><div className="bubble assistant"><strong>助手</strong><p>{turn.answer ?? '未获得完整回答。'}</p>{turn.answer&&<SpeechPlayer api={api} text={turn.answer}/>}</div>
           {turn.memory_processing === 'source_only' && <p className="memory-warning">{memoryWarning(turn)} 可继续聊天，之后需要重新整理这条来源。</p>}
           {turn.retrieval_warning === 'dense_retrieval_failed' && <p className="memory-warning">本轮本地 BGE 检索失败，已使用关键词结果继续回答；展开过程可查看实际策略。</p>}

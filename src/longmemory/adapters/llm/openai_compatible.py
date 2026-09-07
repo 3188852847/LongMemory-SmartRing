@@ -41,7 +41,7 @@ def send_request(settings: ModelSettings, body: bytes) -> tuple[int, bytes]:
         response = connection.getresponse()
         payload = response.read(MAX_RESPONSE_BYTES + 1)
         if len(payload) > MAX_RESPONSE_BYTES:
-            raise AnswerGenerationError("模型响应超过大小限制。")
+            raise AnswerGenerationError("模型响应超过大小限制。", code="model_response_too_large")
         return response.status, payload
     finally:
         connection.close()
@@ -91,19 +91,30 @@ class OpenAICompatibleAnswerGenerator:
             status, payload = self._transport(self._settings, body)
         except AnswerGenerationError:
             raise
+        except (TimeoutError,):
+            raise AnswerGenerationError("模型请求超时。", code="model_request_timeout") from None
         except (OSError, http.client.HTTPException):
-            raise AnswerGenerationError("模型网络连接失败或超时，请在校园网检查连接。") from None
+            raise AnswerGenerationError("模型网络连接失败。", code="model_unreachable") from None
         if status != 200:
             # 不转发供应商正文，正文可能含 Key、代理信息或完整输入。
-            raise AnswerGenerationError(f"模型请求失败（HTTP {status}）。请检查路径、鉴权和模型配置。")
+            code = (
+                "model_authentication_failed" if status in {401, 403}
+                else "model_deployment_not_found" if status == 404
+                else "model_rate_limited" if status == 429
+                else "model_request_timeout" if status in {408, 504}
+                else "model_service_unavailable" if 500 <= status <= 599
+                else "model_request_rejected"
+            )
+            raise AnswerGenerationError(f"模型请求失败（HTTP {status}）。", code=code)
         try:
             data = json.loads(payload)
             choice = data["choices"][0]
             content = choice["message"]["content"]
             if choice.get("finish_reason") == "length":
-                raise AnswerGenerationError("模型输出达到长度上限，未作为完整回答保存。")
+                raise AnswerGenerationError("模型输出达到长度上限，未作为完整回答保存。",
+                                            code="model_response_truncated")
             if not isinstance(content, str) or not content.strip():
                 raise ValueError
         except (ValueError, KeyError, IndexError, TypeError):
-            raise AnswerGenerationError("模型未返回有效的 choices[0].message.content 文本。") from None
+            raise AnswerGenerationError("模型未返回有效文本。", code="model_response_invalid") from None
         return content.strip()

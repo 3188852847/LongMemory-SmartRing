@@ -65,6 +65,12 @@ def register_chat_routes(app, backend):
     async def config(request):
         return web.json_response(backend.info() if backend else {"enabled": False})
 
+    async def check_model(request):
+        if backend is None:
+            return web.json_response({"error": "chat_disabled"}, status=403)
+        # 外部调用可能等待到配置超时，因此放在线程中；请求仅由用户显式点击触发。
+        return web.json_response(await asyncio.to_thread(backend.check_model))
+
     async def create(request):
         if backend is None:
             return web.json_response({"error": "chat_disabled"}, status=403)
@@ -187,6 +193,7 @@ def register_chat_routes(app, backend):
             store.close()
 
     app.router.add_get("/api/chat-config", config, allow_head=False)
+    app.router.add_post("/api/chat-model/check", check_model)
     app.router.add_post("/api/chats", create)
     app.router.add_get('/api/chats', listing, allow_head=False)
     app.router.add_post('/api/chats/{chat_id}/title', rename)
