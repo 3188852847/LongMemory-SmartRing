@@ -1,6 +1,6 @@
-"""当前 SQLite V15 的完整结构定义；不包含历史迁移步骤。"""
+"""当前 SQLite V16 的完整结构定义；不包含历史迁移步骤。"""
 
-SCHEMA_VERSION = 15
+SCHEMA_VERSION = 16
 
 LATEST_SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS conversation_messages (
@@ -308,6 +308,10 @@ CREATE TABLE IF NOT EXISTS proactive_policy_settings (
     policy_version TEXT NOT NULL CHECK (length(trim(policy_version)) BETWEEN 1 AND 120),
     revision INTEGER NOT NULL CHECK (revision >= 1),
     updated_at TEXT NOT NULL,
+    automatic_enabled INTEGER NOT NULL DEFAULT 0 CHECK (automatic_enabled IN (0,1)),
+    scheduled_minute INTEGER NOT NULL DEFAULT 780 CHECK (scheduled_minute BETWEEN 0 AND 1439),
+    greeting_text TEXT NOT NULL DEFAULT '下午好，今天过得怎么样？'
+        CHECK (length(trim(greeting_text)) BETWEEN 1 AND 80),
     CHECK (allowed_start_minute <> allowed_end_minute)
 );
 

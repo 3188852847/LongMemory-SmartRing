@@ -539,6 +539,9 @@ def test_proactive_policy_http_persists_defaults_and_rejects_stale_page(tmp_path
                 "minimum_interval_seconds": 21600,
                 "maximum_lifetime_seconds": 300,
                 "quiet_until": "2026-09-07T08:00:00+08:00",
+                "automatic_enabled": True,
+                "scheduled_minute": 780,
+                "greeting_text": "下午好，今天过得怎么样？",
             }
             assert (await client.put(base + "/api/proactive-policy", json=body)).status == 403
             saved_response = await client.put(
@@ -562,6 +565,8 @@ def test_proactive_policy_http_persists_defaults_and_rejects_stale_page(tmp_path
     {"allowed_weekdays": [0, 0]},
     {"allowed_start_minute": 720, "allowed_end_minute": 720},
     {"quiet_until": "2026-09-07T08:00:00"},
+    {"greeting_text": " 前后空格"},
+    {"automatic_enabled": True, "scheduled_minute": 60},
 ])
 def test_proactive_policy_http_rejects_invalid_complete_settings(tmp_path, change):
     from longmemory.methods.longmemory_v1.method import LongMemoryV1
@@ -574,6 +579,8 @@ def test_proactive_policy_http_rejects_invalid_complete_settings(tmp_path, chang
         "allowed_start_minute": 540, "allowed_end_minute": 1260,
         "daily_limit": 1, "minimum_interval_seconds": 21600,
         "maximum_lifetime_seconds": 300, "quiet_until": None,
+        "automatic_enabled": False, "scheduled_minute": 780,
+        "greeting_text": "下午好，今天过得怎么样？",
     } | change
 
     async def run():
@@ -600,6 +607,8 @@ def test_manual_proactive_test_is_csrf_protected_and_idempotent(tmp_path):
         "allowed_start_minute": 540, "allowed_end_minute": 1260,
         "daily_limit": 1, "minimum_interval_seconds": 21600,
         "maximum_lifetime_seconds": 300, "quiet_until": None,
+        "automatic_enabled": False, "scheduled_minute": 780,
+        "greeting_text": "下午好，今天过得怎么样？",
     }
     body = {
         "text": "这是一条合成主动问候。",
@@ -720,6 +729,8 @@ def test_manual_proactive_test_records_stable_delivery_failure(tmp_path):
                 "allowed_start_minute": 540, "allowed_end_minute": 1260,
                 "daily_limit": 1, "minimum_interval_seconds": 21600,
                 "maximum_lifetime_seconds": 300, "quiet_until": None,
+                "automatic_enabled": False, "scheduled_minute": 780,
+                "greeting_text": "下午好，今天过得怎么样？",
             }
             assert (await client.put(
                 base + "/api/proactive-policy", headers=headers, json=policy,

@@ -14,16 +14,27 @@ describe('主动交流设置', () => {
       allowed_weekdays:[0,1,2,3,4,5,6], allowed_start_minute:540, allowed_end_minute:1260,
       daily_limit:1, minimum_interval_seconds:21600, maximum_lifetime_seconds:300,
       quiet_until:null, policy_version:'proactive-contact-policy-v1', revision:0, updated_at:null,
+      automatic_enabled:false, scheduled_minute:780, greeting_text:'下午好，今天过得怎么样？',
     });
     const client = createConsoleQueryClient();
     const api = new ChatApi();
     const view = render(<QueryClientProvider client={client}><ProactiveSettings api={api} ready={true}/></QueryClientProvider>);
     expect(await screen.findByText('主动交流当前关闭')).toBeTruthy();
-    expect(screen.getByText(/打开开关只保存许可边界/)).toBeTruthy();
+    expect(screen.getByText(/当天已经聊过/)).toBeTruthy();
     const toggle = screen.getByRole('switch', {name:'允许主动联系'});
     fireEvent.click(toggle);
+    const automatic = screen.getByRole('switch', {name:'后台定时问候'});
+    await waitFor(() => expect(automatic.hasAttribute('disabled')).toBe(false));
+    fireEvent.click(automatic);
     await waitFor(() => expect(screen.getByRole('button', {name:'保存主动交流设置'}).hasAttribute('disabled')).toBe(false));
+    fireEvent.click(screen.getByRole('button', {name:'保存主动交流设置'}));
     expect(request).toHaveBeenCalledWith('/api/proactive-policy');
+    await waitFor(() => expect(request).toHaveBeenCalledWith(
+      '/api/proactive-policy', 'PUT', expect.objectContaining({
+        expected_revision:0, enabled:true, automatic_enabled:true,
+        scheduled_minute:780, greeting_text:'下午好，今天过得怎么样？',
+      }),
+    ));
     view.unmount(); client.clear();
   });
 
@@ -33,6 +44,7 @@ describe('主动交流设置', () => {
         allowed_weekdays:[0,1,2,3,4,5,6], allowed_start_minute:540, allowed_end_minute:1260,
         daily_limit:1, minimum_interval_seconds:21600, maximum_lifetime_seconds:300,
         quiet_until:null, policy_version:'proactive-contact-policy-v1', revision:3, updated_at:null,
+        automatic_enabled:false, scheduled_minute:780, greeting_text:'下午好，今天过得怎么样？',
       };
     const request = vi.spyOn(ChatApi.prototype, 'request').mockImplementation(async path => {
       if (path === '/api/proactive-policy') return policy;
@@ -68,6 +80,7 @@ describe('主动交流设置', () => {
       allowed_weekdays:[0,1,2,3,4,5,6], allowed_start_minute:540, allowed_end_minute:1260,
       daily_limit:1, minimum_interval_seconds:21600, maximum_lifetime_seconds:300,
       quiet_until:null, policy_version:'proactive-contact-policy-v1', revision:3, updated_at:null,
+      automatic_enabled:false, scheduled_minute:780, greeting_text:'下午好，今天过得怎么样？',
     };
     const queued = {
       outreach_id:'a'.repeat(32), trigger:'manual_test', content:'合成问候',

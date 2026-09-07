@@ -45,6 +45,7 @@ export interface ProactivePolicy {
   allowed_weekdays: number[]; allowed_start_minute: number; allowed_end_minute: number;
   daily_limit: number; minimum_interval_seconds: number; maximum_lifetime_seconds: number;
   quiet_until: string | null; policy_version: string; revision: number; updated_at: string | null;
+  automatic_enabled: boolean; scheduled_minute: number; greeting_text: string;
 }
 export interface ProactiveTestResult {
   outreach_id: string; state: string; revision: number; replayed: boolean;

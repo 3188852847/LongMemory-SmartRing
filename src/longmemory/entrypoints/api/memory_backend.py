@@ -5,7 +5,7 @@ import json
 import secrets
 import sqlite3
 from contextlib import contextmanager
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 
 from longmemory.adapters.storage.sqlite_conversation_store import SQLiteConversationStore
@@ -33,6 +33,8 @@ from longmemory.core.proactive import (
     OutreachState,
     OutreachTrigger,
     ProactivePolicySettings,
+    ScheduledTriggerAction,
+    decide_scheduled_trigger,
 )
 from longmemory.adapters.storage.sqlite_l1_consolidation_source_reader import (
     SQLiteL1ConsolidationSourceReader,
@@ -175,6 +177,9 @@ class MemoryBackend:
             "policy_version": config.policy_version,
             "revision": settings.revision,
             "updated_at": settings.updated_at.isoformat() if settings.updated_at else None,
+            "automatic_enabled": settings.automatic_enabled,
+            "scheduled_minute": settings.scheduled_minute,
+            "greeting_text": settings.greeting_text,
         }
 
     def proactive_policy(self):
@@ -196,6 +201,16 @@ class MemoryBackend:
                 minimum_interval=timedelta(seconds=request.minimum_interval_seconds),
                 maximum_lifetime=timedelta(seconds=request.maximum_lifetime_seconds),
             )
+            # 自动开关与定时点的组合约束也必须在打开写事务前验证，
+            # 否则非法网页输入会被数据库边界误报成“数据库不可用”。
+            ProactivePolicySettings(
+                "user:self",
+                config,
+                request.quiet_until,
+                automatic_enabled=request.automatic_enabled,
+                scheduled_minute=request.scheduled_minute,
+                greeting_text=request.greeting_text,
+            )
         except ValueError:
             raise MemoryAccessError("invalid_proactive_policy", 400) from None
         with self._open(write_capability="proactive") as connection:
@@ -206,6 +221,8 @@ class MemoryBackend:
             updated = ProactivePolicySettings(
                 "user:self", config, request.quiet_until,
                 current.revision + 1, datetime.now(UTC),
+                request.automatic_enabled, request.scheduled_minute,
+                request.greeting_text,
             )
             return self._proactive_json(
                 store.save(updated, expected_revision=current.revision)
@@ -287,6 +304,103 @@ class MemoryBackend:
                 )
             except ValueError:
                 raise MemoryAccessError("proactive_dispatch_conflict", 409) from None
+            return self._outreach_result(
+                result.outreach,
+                replayed=False,
+                decision=result.decision,
+                delivery=result.delivery,
+                device=device,
+            )
+
+    async def proactive_scheduled_tick(self, client):
+        """评估当前当地分钟一次；不补发、不调用模型、不自动重试投递。"""
+
+        subject_id = "user:self"
+        now = self.clock()
+        with self._open() as connection:
+            settings = SQLiteProactivePolicyStore(connection).get(subject_id)
+            history = SQLiteProactiveHistoryReader(connection)
+            offset = timezone(timedelta(minutes=settings.config.utc_offset_minutes))
+            local_day = now.astimezone(offset).date()
+            idempotency_key = f"explicit-schedule:{local_day.isoformat()}"
+            ledger = ProactiveOutreachLedger(
+                SQLiteProactiveOutreachStore(connection, commit_changes=False),
+                clock=lambda: now,
+            )
+            decision = decide_scheduled_trigger(
+                settings,
+                now=now,
+                user_chatted_today=history.user_chatted_on_local_date(
+                    now=now,
+                    utc_offset_minutes=settings.config.utc_offset_minutes,
+                ),
+                already_evaluated_today=(
+                    ledger.get_by_idempotency(subject_id, idempotency_key) is not None
+                ),
+            )
+        if decision.action != ScheduledTriggerAction.CREATE:
+            return {"action": decision.action.value, "reason": decision.reason.value}
+
+        device = await XiaozhiRuntimeStateProbe(client).probe()
+        # 网络探测可能跨过配置分钟；重新读钟后再次决策，不能用旧时刻补发。
+        now = self.clock()
+        with self._open(write_capability="proactive") as connection:
+            settings = SQLiteProactivePolicyStore(connection).get(subject_id)
+            history = SQLiteProactiveHistoryReader(connection)
+            ledger = ProactiveOutreachLedger(
+                SQLiteProactiveOutreachStore(connection), clock=lambda: now,
+            )
+            decision = decide_scheduled_trigger(
+                settings,
+                now=now,
+                user_chatted_today=history.user_chatted_on_local_date(
+                    now=now,
+                    utc_offset_minutes=settings.config.utc_offset_minutes,
+                ),
+                already_evaluated_today=(
+                    ledger.get_by_idempotency(subject_id, decision.idempotency_key) is not None
+                ),
+            )
+            if decision.action != ScheduledTriggerAction.CREATE:
+                return {"action": decision.action.value, "reason": decision.reason.value}
+            outreach = ledger.create_candidate(
+                subject_id=subject_id,
+                trigger=OutreachTrigger.EXPLICIT_SCHEDULE,
+                trigger_reason_code="explicit_daily_schedule",
+                content=settings.greeting_text,
+                # 调度器在精确分钟内才创建；账本不允许“创建时间晚于计划时间”，
+                # 因而当前评估时刻就是本候选的实际计划时刻。
+                scheduled_for=now,
+                expires_at=decision.scheduled_for + settings.config.maximum_lifetime,
+                idempotency_key=decision.idempotency_key,
+                policy_version=settings.config.policy_version,
+            )
+            if not device.ready:
+                blocked = ledger.record_transition(
+                    outreach.id,
+                    expected_revision=outreach.revision,
+                    new_state=OutreachState.BLOCKED,
+                    reason_code=device.reason_code or "device_offline",
+                    evidence=OutreachEvidence.POLICY_DECISION,
+                )
+                return self._outreach_result(blocked, replayed=False, device=device)
+            runtime = history.read(subject_id, now=now)
+            runtime = OutreachPolicyState(
+                attempted_at=runtime.attempted_at,
+                awaiting_user_response=runtime.awaiting_user_response,
+                user_session_active=device.user_session_active,
+                quiet_until=settings.quiet_until,
+            )
+            result = await ProactiveOutreachDispatcher(
+                ledger,
+                delivery_queue=XiaozhiProactiveDelivery(client).queue,
+                clock=lambda: now,
+            ).dispatch(
+                outreach.id,
+                expected_revision=outreach.revision,
+                settings=settings,
+                runtime_state=runtime,
+            )
             return self._outreach_result(
                 result.outreach,
                 replayed=False,

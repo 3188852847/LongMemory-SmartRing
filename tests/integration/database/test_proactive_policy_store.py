@@ -49,3 +49,35 @@ def test_revision_prevents_stale_overwrite(tmp_path):
         store.save(settings, expected_revision=0)
     assert store.get("user:self") == settings
     connection.close()
+
+
+def test_v15_upgrade_preserves_contact_permission_but_keeps_automatic_off(tmp_path):
+    connection = open_database(tmp_path / "v15.db")
+    initialize_schema(connection)
+    connection.execute(
+        "INSERT INTO proactive_policy_settings "
+        "(subject_id,enabled,utc_offset_minutes,allowed_weekdays_mask,"
+        "allowed_start_minute,allowed_end_minute,daily_limit,"
+        "minimum_interval_seconds,maximum_lifetime_seconds,quiet_until,"
+        "policy_version,revision,updated_at) "
+        "VALUES ('user:self',1,480,127,600,1260,1,21600,300,NULL,"
+        "'proactive-contact-policy-v1',4,?)",
+        (NOW.isoformat(),),
+    )
+    connection.executescript("""
+        ALTER TABLE proactive_policy_settings DROP COLUMN automatic_enabled;
+        ALTER TABLE proactive_policy_settings DROP COLUMN scheduled_minute;
+        ALTER TABLE proactive_policy_settings DROP COLUMN greeting_text;
+        PRAGMA user_version=15;
+    """)
+
+    initialize_schema(connection)
+
+    restored = SQLiteProactivePolicyStore(connection).get("user:self")
+    assert restored.config.enabled is True
+    assert restored.config.policy_version == "proactive-contact-policy-v2"
+    assert restored.revision == 4
+    assert restored.automatic_enabled is False
+    assert restored.scheduled_minute == 600
+    assert restored.greeting_text == "下午好，今天过得怎么样？"
+    connection.close()

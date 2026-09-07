@@ -13,6 +13,9 @@ class ProactivePolicySettings:
     quiet_until: datetime | None = None
     revision: int = 0
     updated_at: datetime | None = None
+    automatic_enabled: bool = False
+    scheduled_minute: int = 13 * 60
+    greeting_text: str = "下午好，今天过得怎么样？"
 
     def __post_init__(self) -> None:
         if self.subject_id != self.subject_id.strip() or not 1 <= len(self.subject_id) <= 120:
@@ -27,3 +30,22 @@ class ProactivePolicySettings:
             self.updated_at.tzinfo is None or self.updated_at.utcoffset() is None
         ):
             raise ValueError("proactive_settings_updated_at_timezone_required")
+        if not 0 <= self.scheduled_minute < 24 * 60:
+            raise ValueError("proactive_settings_scheduled_minute_invalid")
+        if (
+            self.greeting_text != self.greeting_text.strip()
+            or not 1 <= len(self.greeting_text) <= 80
+            or any(ord(character) < 32 for character in self.greeting_text)
+        ):
+            raise ValueError("proactive_settings_greeting_invalid")
+        start = self.config.allowed_start_minute
+        end = self.config.allowed_end_minute
+        inside_window = (
+            start <= self.scheduled_minute < end
+            if start < end
+            else self.scheduled_minute >= start or self.scheduled_minute < end
+        )
+        if self.automatic_enabled and (
+            not self.config.enabled or not inside_window
+        ):
+            raise ValueError("proactive_settings_automatic_boundary_invalid")

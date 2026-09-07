@@ -50,6 +50,9 @@ class ProactivePolicyRequest(BaseModel):
     minimum_interval_seconds: int = Field(ge=0, le=604800)
     maximum_lifetime_seconds: int = Field(ge=5, le=1800)
     quiet_until: datetime | None
+    automatic_enabled: bool
+    scheduled_minute: int = Field(ge=0, le=1439)
+    greeting_text: str = Field(min_length=1, max_length=80)
 
     @field_validator("allowed_weekdays")
     @classmethod
@@ -65,6 +68,17 @@ class ProactivePolicyRequest(BaseModel):
             value = datetime.fromisoformat(value)
         if value is not None and (value.tzinfo is None or value.utcoffset() is None):
             raise ValueError("timezone required")
+        return value
+
+    @field_validator("greeting_text")
+    @classmethod
+    def greeting_is_single_line(cls, value: str) -> str:
+        if (
+            value != value.strip()
+            or not value
+            or any(ord(character) < 32 for character in value)
+        ):
+            raise ValueError("invalid greeting")
         return value
 
 

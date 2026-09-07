@@ -33,6 +33,9 @@ class SQLiteProactivePolicyStore:
             datetime.fromisoformat(row["quiet_until"]) if row["quiet_until"] else None,
             row["revision"],
             datetime.fromisoformat(row["updated_at"]),
+            bool(row["automatic_enabled"]),
+            row["scheduled_minute"],
+            row["greeting_text"],
         )
 
     def save(
@@ -49,6 +52,8 @@ class SQLiteProactivePolicyStore:
             int(config.maximum_lifetime.total_seconds()),
             settings.quiet_until.isoformat() if settings.quiet_until else None,
             config.policy_version, settings.revision, settings.updated_at.isoformat(),
+            int(settings.automatic_enabled), settings.scheduled_minute,
+            settings.greeting_text,
         )
         try:
             if expected_revision == 0:
@@ -57,7 +62,8 @@ class SQLiteProactivePolicyStore:
                     "(subject_id,enabled,utc_offset_minutes,allowed_weekdays_mask,"
                     "allowed_start_minute,allowed_end_minute,daily_limit,"
                     "minimum_interval_seconds,maximum_lifetime_seconds,quiet_until,"
-                    "policy_version,revision,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    "policy_version,revision,updated_at,automatic_enabled,scheduled_minute,"
+                    "greeting_text) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                     (settings.subject_id, *values),
                 ).rowcount
             else:
@@ -65,7 +71,8 @@ class SQLiteProactivePolicyStore:
                     "UPDATE proactive_policy_settings SET enabled=?,utc_offset_minutes=?,"
                     "allowed_weekdays_mask=?,allowed_start_minute=?,allowed_end_minute=?,"
                     "daily_limit=?,minimum_interval_seconds=?,maximum_lifetime_seconds=?,"
-                    "quiet_until=?,policy_version=?,revision=?,updated_at=? "
+                    "quiet_until=?,policy_version=?,revision=?,updated_at=?,"
+                    "automatic_enabled=?,scheduled_minute=?,greeting_text=? "
                     "WHERE subject_id=? AND revision=?",
                     (*values, settings.subject_id, expected_revision),
                 ).rowcount

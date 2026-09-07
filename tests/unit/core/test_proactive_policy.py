@@ -62,7 +62,7 @@ def test_disabled_by_default_and_enabled_candidate_is_ready():
     assert (ready.action, ready.reason, ready.policy_version) == (
         OutreachPolicyAction.ALLOW,
         OutreachPolicyReason.READY,
-        "proactive-contact-policy-v1",
+        "proactive-contact-policy-v2",
     )
 
 

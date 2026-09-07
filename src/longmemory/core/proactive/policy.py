@@ -45,7 +45,7 @@ class OutreachPolicyConfig:
     daily_limit: int = 1
     minimum_interval: timedelta = timedelta(hours=6)
     maximum_lifetime: timedelta = timedelta(minutes=5)
-    policy_version: str = "proactive-contact-policy-v1"
+    policy_version: str = "proactive-contact-policy-v2"
 
     def __post_init__(self) -> None:
         if (

@@ -25,8 +25,10 @@ export function ProactiveSettings({api, ready}:{api:ChatApi; ready:boolean}) {
       allowed_end_minute:value.allowed_end_minute, daily_limit:value.daily_limit,
       minimum_interval_seconds:value.minimum_interval_seconds,
       maximum_lifetime_seconds:value.maximum_lifetime_seconds, quiet_until:value.quiet_until,
+      automatic_enabled:value.automatic_enabled, scheduled_minute:value.scheduled_minute,
+      greeting_text:value.greeting_text,
     }),
-    onSuccess:value => {client.setQueryData(['proactive-policy'], value); setDraft({...value, allowed_weekdays:[...value.allowed_weekdays]}); setNotice('设置已保存；后台主动联系仍未接入。');},
+    onSuccess:value => {client.setQueryData(['proactive-policy'], value); setDraft({...value, allowed_weekdays:[...value.allowed_weekdays]}); setNotice(value.automatic_enabled ? '设置已保存；后台只会在指定分钟检查一次。' : '设置已保存；后台定时问候保持关闭。');},
     onError:error => {setNotice(error instanceof ApiError && error.code === 'proactive_settings_conflict' ? '设置已被另一个页面修改，请重新读取后再保存。' : '保存失败，未自动重试。'); void client.invalidateQueries({queryKey:['proactive-policy']});},
   });
   const testMutation = useMutation({
@@ -69,11 +71,15 @@ export function ProactiveSettings({api, ready}:{api:ChatApi; ready:boolean}) {
   if (query.isError) return <Alert type="error" showIcon title="主动交流设置不可用" description="请确认已选择当前版本的个人数据库。"/>;
   if (query.isLoading || !draft) return <Alert type="info" showIcon title="正在读取主动交流设置…"/>;
   const quietActive = draft.quiet_until && new Date(draft.quiet_until).getTime() > Date.now();
+  const scheduleInsideWindow = draft.allowed_start_minute < draft.allowed_end_minute
+    ? draft.scheduled_minute >= draft.allowed_start_minute && draft.scheduled_minute < draft.allowed_end_minute
+    : draft.scheduled_minute >= draft.allowed_start_minute || draft.scheduled_minute < draft.allowed_end_minute;
   return <Space orientation="vertical" style={{width:'100%'}}>
-    <Alert type={draft.enabled ? 'warning' : 'success'} showIcon
-      title={draft.enabled ? '许可总开关已打开；后台定时触发尚未接入' : '主动交流当前关闭'}
-      description="打开开关只保存许可边界，不会自动联系。页面底部可以由你明确点击，向当前圆屏连接发送一次短问候测试。"/>
-    <div className="setting-line"><span>允许主动联系</span><Switch aria-label="允许主动联系" checked={draft.enabled} onChange={enabled => change({enabled})}/></div>
+    <Alert type={draft.automatic_enabled ? 'warning' : 'success'} showIcon
+      title={draft.automatic_enabled ? '后台定时问候已开启' : (draft.enabled ? '主动联系许可已打开，定时问候仍关闭' : '主动交流当前关闭')}
+      description="定时问候只在所选星期的指定分钟检查：当天已经聊过、设备离线或忙碌、处于勿扰或错过时刻都会跳过，之后不补发。"/>
+    <div className="setting-line"><span>允许主动联系</span><Switch aria-label="允许主动联系" checked={draft.enabled} onChange={enabled => change({enabled, ...(!enabled ? {automatic_enabled:false} : {})})}/></div>
+    <div className="setting-line"><span>后台定时问候</span><Switch aria-label="后台定时问候" disabled={!draft.enabled} checked={draft.automatic_enabled} onChange={automatic_enabled => change({automatic_enabled})}/></div>
     <label>允许星期</label>
     <Checkbox.Group aria-label="允许星期" options={DAYS} value={draft.allowed_weekdays} onChange={values => change({allowed_weekdays:values.map(Number).sort()})}/>
     <div className="proactive-fields">
@@ -81,10 +87,14 @@ export function ProactiveSettings({api, ready}:{api:ChatApi; ready:boolean}) {
       <div><label htmlFor="proactive-end">结束时间</label><Input id="proactive-end" type="time" value={minuteText(draft.allowed_end_minute)} onChange={event => change({allowed_end_minute:parseMinute(event.target.value)})}/></div>
       <div><label htmlFor="proactive-daily">每天最多次数</label><InputNumber id="proactive-daily" min={1} max={20} value={draft.daily_limit} onChange={value => value && change({daily_limit:value})}/></div>
       <div><label htmlFor="proactive-gap">最短间隔（小时）</label><InputNumber id="proactive-gap" min={0} max={168} value={draft.minimum_interval_seconds / 3600} onChange={value => value !== null && change({minimum_interval_seconds:Math.round(value * 3600)})}/></div>
+      <div><label htmlFor="proactive-schedule">定时问候时刻</label><Input id="proactive-schedule" type="time" value={minuteText(draft.scheduled_minute)} onChange={event => change({scheduled_minute:parseMinute(event.target.value)})}/></div>
     </div>
+    <label htmlFor="proactive-greeting">固定问候内容</label>
+    <Input id="proactive-greeting" maxLength={80} showCount value={draft.greeting_text} onChange={event => change({greeting_text:event.target.value})}/>
+    {draft.automatic_enabled && !scheduleInsideWindow && <Alert type="error" showIcon title="定时问候时刻必须位于允许时段内"/>}
     <p className="subtle">时区：UTC{draft.utc_offset_minutes >= 0 ? '+' : ''}{draft.utc_offset_minutes / 60}（第一版固定偏移）；消息超过 {draft.maximum_lifetime_seconds / 60} 分钟就不再投递。</p>
     <div className="setting-line"><span>{quietActive ? `临时勿扰至 ${new Date(draft.quiet_until!).toLocaleString()}` : '临时勿扰未开启'}</span><Space><Button onClick={() => change({quiet_until:new Date(Date.now() + 60 * 60 * 1000).toISOString()})}>勿扰 1 小时</Button><Button disabled={!draft.quiet_until} onClick={() => change({quiet_until:null})}>解除勿扰</Button></Space></div>
-    <Space><Button type="primary" loading={mutation.isPending} disabled={!dirty || draft.allowed_weekdays.length === 0 || draft.allowed_start_minute === draft.allowed_end_minute} onClick={() => mutation.mutate(draft)}>保存主动交流设置</Button><Button disabled={!dirty || mutation.isPending} onClick={() => {setDraft({...query.data!, allowed_weekdays:[...query.data!.allowed_weekdays]}); setNotice('已放弃未保存修改。');}}>放弃修改</Button></Space>
+    <Space><Button type="primary" loading={mutation.isPending} disabled={!dirty || draft.allowed_weekdays.length === 0 || draft.allowed_start_minute === draft.allowed_end_minute || (draft.automatic_enabled && !scheduleInsideWindow) || !draft.greeting_text.trim() || draft.greeting_text !== draft.greeting_text.trim()} onClick={() => mutation.mutate(draft)}>保存主动交流设置</Button><Button disabled={!dirty || mutation.isPending} onClick={() => {setDraft({...query.data!, allowed_weekdays:[...query.data!.allowed_weekdays]}); setNotice('已放弃未保存修改。');}}>放弃修改</Button></Space>
     {notice && <p role="status">{notice}</p>}
     <section className="settings-section">
       <h3>手动验证圆屏问候</h3>

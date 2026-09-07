@@ -24,6 +24,7 @@ from .routes.memory_mode import register_memory_mode_routes
 from .routes.proactive_policy import register_proactive_policy_routes
 from .device_role import DeviceRole
 from .voice_settings import VoiceSettings, register_voice_routes
+from .proactive_scheduler import ProactiveScheduleLoop
 from longmemory.infrastructure.logging.setup import configure_file_logging, close_file_logging
 
 ROOT = Path(__file__).resolve().parents[4]
@@ -136,6 +137,26 @@ def create_app(*, port=8765, bridge=None, web_root=None, database=None, allow_me
         consolidation_background_enabled=consolidation_background_enabled,
         clock=proactive_clock,
     )
+
+    async def scheduled_tick():
+        if operation_lock.locked():
+            return
+        async with operation_lock:
+            await memory_backend.proactive_scheduled_tick(client)
+
+    proactive_schedule = (
+        ProactiveScheduleLoop(scheduled_tick) if database is not None else None
+    )
+
+    async def start_proactive_schedule(_app):
+        proactive_schedule.start()
+
+    async def stop_proactive_schedule(_app):
+        await proactive_schedule.close()
+
+    if proactive_schedule is not None:
+        app.on_startup.append(start_proactive_schedule)
+        app.on_cleanup.append(stop_proactive_schedule)
     register_memory_routes(app, memory_backend)
     register_proactive_policy_routes(app, memory_backend, client, operation_lock)
     register_chat_routes(app, chat_backend)

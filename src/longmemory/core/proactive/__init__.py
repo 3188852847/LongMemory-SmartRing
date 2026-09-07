@@ -18,6 +18,12 @@ from .policy import (
     decide_outreach,
 )
 from .settings import ProactivePolicySettings
+from .schedule import (
+    ScheduledTriggerAction,
+    ScheduledTriggerDecision,
+    ScheduledTriggerReason,
+    decide_scheduled_trigger,
+)
 
 __all__ = [
     "OutreachEvent",
@@ -27,11 +33,15 @@ __all__ = [
     "ProactiveOutreach",
     "ProactiveOutreachStore",
     "ProactivePolicySettings",
+    "ScheduledTriggerAction",
+    "ScheduledTriggerDecision",
+    "ScheduledTriggerReason",
     "OutreachPolicyAction",
     "OutreachPolicyConfig",
     "OutreachPolicyDecision",
     "OutreachPolicyReason",
     "OutreachPolicyState",
     "decide_outreach",
+    "decide_scheduled_trigger",
     "transition_outreach",
 ]
