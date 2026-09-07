@@ -121,6 +121,41 @@ describe('主动交流设置', () => {
     view.unmount(); client.clear();
   });
 
+  test('正式问候只把后续消息展示为时间证据', async () => {
+    const policy = {
+      subject_id:'user:self', enabled:true, utc_offset_minutes:480,
+      allowed_weekdays:[0,1,2,3,4,5,6], allowed_start_minute:540, allowed_end_minute:1260,
+      daily_limit:1, minimum_interval_seconds:21600, maximum_lifetime_seconds:300,
+      quiet_until:null, policy_version:'proactive-contact-policy-v1', revision:3, updated_at:null,
+      automatic_enabled:true, scheduled_minute:780, greeting_text:'下午好，今天过得怎么样？',
+      topic_enabled:false,
+    };
+    const request = vi.spyOn(ChatApi.prototype, 'request').mockImplementation(async path => {
+      if (path === '/api/proactive-policy') return policy;
+      if (path === '/api/proactive-schedule-status') return scheduleStatus;
+      if (path.startsWith('/api/proactive-outreach?')) return {items:[{
+        outreach_id:'formal-1', trigger:'explicit_schedule', content:'下午好',
+        created_at:'2026-09-07T04:00:00+00:00', expires_at:'2026-09-07T04:05:00+00:00',
+        state:'played', revision:3, reason:'user_confirmed_playback', event_count:3,
+        failure_reason:null, topic_seed_id:null, topic_seed_revision:null,
+        outcome_tracking_eligible:true,
+        subsequent_user_message:{
+          occurred_at:'2026-09-07T04:03:00+00:00', latency_seconds:180,
+          evidence:'temporal_order',
+        },
+      }]};
+      if (path.startsWith('/api/scenarios?')) return {items:[]};
+      if (path === '/api/proactive-topic-seeds') return {items:[]};
+      throw new Error(`unexpected path: ${path}`);
+    });
+    const client = createConsoleQueryClient();
+    const view = render(<QueryClientProvider client={client}><ProactiveSettings api={new ChatApi()} ready={true}/></QueryClientProvider>);
+
+    expect(await screen.findByText(/已观察（3 分钟后；仅表示时间先后）/)).toBeTruthy();
+
+    view.unmount(); client.clear();
+  });
+
   test('话题素材必须由用户写明可播短句且保存本身不会投递', async () => {
     const policy = {
       subject_id:'user:self', enabled:false, utc_offset_minutes:480,

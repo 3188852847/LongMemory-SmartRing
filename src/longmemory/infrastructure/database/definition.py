@@ -1,6 +1,6 @@
-"""当前 SQLite V19 的完整结构定义；不包含历史迁移步骤。"""
+"""当前 SQLite V20 的完整结构定义；不包含历史迁移步骤。"""
 
-SCHEMA_VERSION = 19
+SCHEMA_VERSION = 20
 
 LATEST_SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS conversation_messages (
@@ -299,6 +299,30 @@ CREATE TABLE IF NOT EXISTS proactive_outreach_events (
 );
 CREATE INDEX IF NOT EXISTS idx_proactive_events_outreach
     ON proactive_outreach_events (outreach_id, sequence);
+
+CREATE TABLE IF NOT EXISTS companion_interaction_events (
+    id TEXT PRIMARY KEY,
+    subject_id TEXT NOT NULL CHECK (length(trim(subject_id)) BETWEEN 1 AND 120),
+    event_kind TEXT NOT NULL CHECK (
+        event_kind = 'subsequent_user_message_observed'
+    ),
+    outreach_id TEXT NOT NULL,
+    source_message_id TEXT NOT NULL,
+    occurred_at TEXT NOT NULL,
+    latency_seconds INTEGER NOT NULL CHECK (latency_seconds >= 0),
+    evidence_kind TEXT NOT NULL CHECK (evidence_kind = 'temporal_order'),
+    recorder_version TEXT NOT NULL CHECK (
+        length(trim(recorder_version)) BETWEEN 1 AND 120
+    ),
+    UNIQUE (outreach_id, event_kind),
+    FOREIGN KEY (outreach_id) REFERENCES proactive_outreach (id) ON DELETE RESTRICT,
+    FOREIGN KEY (source_message_id) REFERENCES conversation_messages (id)
+        ON DELETE RESTRICT
+);
+CREATE INDEX IF NOT EXISTS idx_companion_interaction_subject_recent
+    ON companion_interaction_events (subject_id, occurred_at DESC, id DESC);
+CREATE INDEX IF NOT EXISTS idx_companion_interaction_source_message
+    ON companion_interaction_events (source_message_id);
 
 CREATE TABLE IF NOT EXISTS proactive_policy_settings (
     subject_id TEXT PRIMARY KEY CHECK (length(trim(subject_id)) BETWEEN 1 AND 120),

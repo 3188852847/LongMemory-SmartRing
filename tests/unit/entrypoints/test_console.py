@@ -766,10 +766,12 @@ def test_manual_proactive_test_is_csrf_protected_and_idempotent(tmp_path):
                 "revision": 2,
                 "reason": "ready",
                 "event_count": 2,
-                    "failure_reason": None,
-                    "topic_seed_id": None,
-                    "topic_seed_revision": None,
-                }]
+                "failure_reason": None,
+                "topic_seed_id": None,
+                "topic_seed_revision": None,
+                "outcome_tracking_eligible": False,
+                "subsequent_user_message": None,
+            }]
             assert (await client.get(
                 base + "/api/proactive-outreach?limit=01"
             )).status == 400

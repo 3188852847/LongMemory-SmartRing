@@ -9,6 +9,7 @@ from uuid import uuid4
 from dataclasses import dataclass
 from longmemory.core.memory.l1_atomic.models import AtomicMemory
 from longmemory.core.common.exceptions import EmptyMessageError
+from longmemory.core.companion.contracts import InteractionOutcomeObserver
 from longmemory.core.common.identifiers import MessageId
 from longmemory.core.conversation.contracts import ConversationStore
 from longmemory.core.conversation.models import (
@@ -71,6 +72,7 @@ class MemoryTurnService:
         clock: Callable[[], datetime] = _utc_now,
         audit_sink: Callable[..., None] = _ignore_event,
         write_transaction: Callable = nullcontext,
+        interaction_outcome_observer: InteractionOutcomeObserver | None = None,
     ) -> None:
         self._conversation_store = conversation_store
         self._memory_store = memory_store
@@ -80,6 +82,7 @@ class MemoryTurnService:
         self._clock = clock
         self._audit = audit_sink
         self._write_transaction = write_transaction
+        self._interaction_outcome_observer = interaction_outcome_observer
 
     def prepare(self, text: str) -> MemoryTurn:
         """处理一条用户输入并返回可检查的完整结果。"""
@@ -127,6 +130,11 @@ class MemoryTurnService:
             raise EmptyMessageError("聊天消息不能为空。")
         with self._write_transaction():
             self._conversation_store.save(message)
+            if (
+                message.role == MessageRole.USER
+                and self._interaction_outcome_observer is not None
+            ):
+                self._interaction_outcome_observer.record_user_message(message)
         if message.role == MessageRole.USER:
             self._audit("user_saved", turn_id=str(message.id))
 
@@ -155,6 +163,8 @@ class MemoryTurnService:
         self._conversation_store.save(message)
         if message.role != MessageRole.USER:
             return ()
+        if self._interaction_outcome_observer is not None:
+            self._interaction_outcome_observer.record_user_message(message)
         turn_id = str(message.id)
         self._audit("user_saved", turn_id=turn_id)
 

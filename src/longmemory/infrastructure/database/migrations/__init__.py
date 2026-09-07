@@ -21,6 +21,7 @@ from longmemory.infrastructure.database.migrations.v15_to_v16 import migrate as 
 from longmemory.infrastructure.database.migrations.v16_to_v17 import migrate as v16_to_v17
 from longmemory.infrastructure.database.migrations.v17_to_v18 import migrate as v17_to_v18
 from longmemory.infrastructure.database.migrations.v18_to_v19 import migrate as v18_to_v19
+from longmemory.infrastructure.database.migrations.v19_to_v20 import migrate as v19_to_v20
 
 Migration = Callable[[Connection], None]
 MIGRATIONS: dict[int, Migration] = {
@@ -42,6 +43,7 @@ MIGRATIONS: dict[int, Migration] = {
     16: v16_to_v17,
     17: v17_to_v18,
     18: v18_to_v19,
+    19: v19_to_v20,
 }
 
 __all__ = ["MIGRATIONS", "Migration"]

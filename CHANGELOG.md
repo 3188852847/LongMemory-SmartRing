@@ -1,5 +1,13 @@
 # Changelog
 
+### P5.1 observed companion interaction outcome（2026-09-07）
+
+- SQLite 代码结构升级为 V20，新增独立于 L0–L3 的陪伴互动结果事件；旧库迁移只建空表，不回填或推断历史结果。
+- 网页与圆屏共用的用户 L0 归档入口会把正式自动问候与其后首条用户消息建立 ID、时间和延迟关联；事件不复制消息正文。
+- 手动测试和 `development_*` 问候被排除；`temporal_order` 只证明时间先后，不冒充语义回应、满意度或因果效果。
+- React 主动交流记录展示“已观察/尚未观察”和延迟；当前不自动生成习惯、评分或修改陪伴策略。见 ADR-0072。
+- 个人库在相关服务端口均未监听时由 V19 迁移至 V20；一致性备份为 `data/backups/xiaozhi-demo-v1-pre-v20-20260907-135620.db`，SHA-256 `03FF3E2EA458C184F1BD3C631023B9022CB93C179D5C0FEF69F6705126E7C2B3`。20 张既有表行数前后一致，完整性与外键检查通过；新事件表为空，备份不提交 Git。
+
 ### P4 memory-topic round-screen acceptance（2026-09-07）
 
 - 一次性开发定时授权实机验收通过：后台在目标时刻创建 `development_approved_memory_topic`，保留话题素材 ID 与 revision，SmartRing-Plus 圆屏终端实际发声。

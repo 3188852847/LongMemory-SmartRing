@@ -7,6 +7,9 @@ from uuid import uuid4
 
 from longmemory.adapters.storage.sqlite_conversation_store import SQLiteConversationStore
 from longmemory.adapters.storage.sqlite_memory_store import SQLiteMemoryStore
+from longmemory.adapters.storage.sqlite_interaction_outcome_store import (
+    SQLiteInteractionOutcomeStore,
+)
 from longmemory.application.memory_turn import MemoryTurnService
 from longmemory.core.common.identifiers import MessageId
 from longmemory.core.conversation.models import ConversationMessage, MessageRole
@@ -72,6 +75,9 @@ class LongMemoryV1:
                 memory_retriever=self.retriever,
                 audit_sink=log_event,
                 write_transaction=self._write_transaction,
+                interaction_outcome_observer=SQLiteInteractionOutcomeStore(
+                    self.connection, commit_changes=False,
+                ),
             )
         except BaseException:
             self.close()

@@ -17,6 +17,9 @@ from longmemory.adapters.storage.sqlite_consolidation_run_store import (
 )
 from longmemory.adapters.storage.sqlite_proactive_policy_store import SQLiteProactivePolicyStore
 from longmemory.adapters.storage.sqlite_proactive_outreach_store import SQLiteProactiveOutreachStore
+from longmemory.adapters.storage.sqlite_interaction_outcome_store import (
+    SQLiteInteractionOutcomeStore,
+)
 from longmemory.adapters.storage.sqlite_proactive_runtime_state import SQLiteProactiveHistoryReader
 from longmemory.adapters.storage.sqlite_proactive_topic_store import SQLiteProactiveTopicStore
 from longmemory.adapters.storage.sqlite_proactive_schedule_override_store import (
@@ -707,10 +710,18 @@ class MemoryBackend:
                 SQLiteProactiveOutreachStore(connection, commit_changes=False),
                 clock=self.clock,
             )
+            outcomes = SQLiteInteractionOutcomeStore(
+                connection, commit_changes=False,
+            )
             items = []
             for outreach in ledger.list_recent(subject_id, limit=limit):
                 events = ledger.list_events(outreach.id)
                 latest = events[-1]
+                outcome = outcomes.get_for_outreach(outreach.id)
+                outcome_tracking_eligible = (
+                    outreach.trigger.value != "manual_test"
+                    and not outreach.trigger_reason_code.startswith("development_")
+                )
                 items.append({
                     "outreach_id": outreach.id,
                     "trigger": outreach.trigger.value,
@@ -724,6 +735,12 @@ class MemoryBackend:
                     "failure_reason": outreach.failure_reason,
                     "topic_seed_id": outreach.topic_seed_id,
                     "topic_seed_revision": outreach.topic_seed_revision,
+                    "outcome_tracking_eligible": outcome_tracking_eligible,
+                    "subsequent_user_message": None if outcome is None else {
+                        "occurred_at": outcome.occurred_at.isoformat(),
+                        "latency_seconds": outcome.latency_seconds,
+                        "evidence": outcome.evidence.value,
+                    },
                 })
             return {"items": items}
 

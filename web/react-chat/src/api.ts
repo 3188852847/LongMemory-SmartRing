@@ -70,6 +70,10 @@ export interface ProactiveOutreachSummary {
   outreach_id:string; trigger:string; content:string; created_at:string; expires_at:string;
   state:string; revision:number; reason:string; event_count:number; failure_reason:string | null;
   topic_seed_id:string | null; topic_seed_revision:number | null;
+  outcome_tracking_eligible:boolean;
+  subsequent_user_message:null | {
+    occurred_at:string; latency_seconds:number; evidence:'temporal_order';
+  };
 }
 export interface ProactiveTopicSeed {
   id:string; subject_id:string; scenario_id:string; prompt_text:string;
