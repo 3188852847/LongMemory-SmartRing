@@ -19,6 +19,7 @@ const ScenarioApp = lazy(() => import('./ScenarioApp').then(module => ({default:
 const PersonaApp = lazy(() => import('./PersonaApp').then(module => ({default: module.PersonaApp})));
 const SettingsApp = lazy(() => import('./SettingsApp').then(module => ({default: module.SettingsApp})));
 const ExperimentApp = lazy(() => import('./ExperimentApp').then(module => ({default: module.ExperimentApp})));
+const RoundDisplayApp = lazy(() => import('./RoundDisplayApp').then(module => ({default: module.RoundDisplayApp})));
 
 const api = new ChatApi();
 const queryClient = createConsoleQueryClient();
@@ -133,6 +134,7 @@ function ChatApp() {
 function ConsoleApp() {
   return <QueryClientProvider client={queryClient}><AppearanceProvider><BrowserRouter><Routes>
     <Route path="/device" element={<Suspense fallback={<p className="page-loading">正在加载设备控制…</p>}><DeviceApp/></Suspense>}/>
+    <Route path="/display-preview" element={<Suspense fallback={<p className="page-loading">正在加载圆屏预览…</p>}><RoundDisplayApp/></Suspense>}/>
     <Route path="/chat-react" element={<ChatApp/>}/>
     <Route path="/memories" element={<Suspense fallback={<p className="page-loading">正在加载记忆管理…</p>}><MemoryApp/></Suspense>}/>
     <Route path="/scenarios" element={<Suspense fallback={<p className="page-loading">正在加载生活场景…</p>}><ScenarioApp/></Suspense>}/>

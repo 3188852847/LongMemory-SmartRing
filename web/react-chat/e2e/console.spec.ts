@@ -19,6 +19,9 @@ test('文字聊天可保存并在刷新后恢复，React 页面可统一导航',
 
   await page.getByRole('link', {name:'设备状态'}).click();
   await expect(page.getByRole('heading', {name:'设备与状态'})).toBeVisible();
+  await page.getByRole('link', {name:'圆屏预览'}).click();
+  await expect(page.getByRole('heading', {name:'圆屏状态预览'})).toBeVisible();
+  await expect(page.getByRole('region', {name:'圆屏模拟画布'})).toBeVisible();
   await page.getByRole('link', {name:'设置中心'}).click();
   await expect(page.getByRole('heading', {name:'设置中心'})).toBeVisible();
   await expect(page.getByRole('tab', {name:'助手角色'})).toHaveAttribute('aria-selected', 'true');
@@ -60,6 +63,7 @@ test('窄窗口保留全部主导航且页面不产生横向溢出', async ({pag
   await page.goto('/chat-react');
   await expect(page.getByRole('heading', {name:'聊聊今天'})).toBeVisible();
   await expect(page.getByRole('link', {name:'设备状态'})).toBeVisible();
+  await expect(page.getByRole('link', {name:'圆屏预览'})).toBeVisible();
   await expect(page.getByRole('link', {name:'实验中心'})).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 

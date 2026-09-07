@@ -1,7 +1,7 @@
 import type {ReactNode} from 'react';
 import {Link} from 'react-router-dom';
 
-type Page = 'device' | 'chat' | 'memories' | 'scenarios' | 'personas' | 'settings' | 'experiments';
+type Page = 'device' | 'display' | 'chat' | 'memories' | 'scenarios' | 'personas' | 'settings' | 'experiments';
 
 const NAV_GROUPS: Array<{label: string; items: Array<{
   page: Page; label: string; description: string; to: string;
@@ -9,6 +9,7 @@ const NAV_GROUPS: Array<{label: string; items: Array<{
   {label: '日常使用', items: [
     {page: 'chat', label: '文字聊天', description: '对话与记忆过程', to: '/chat-react'},
     {page: 'device', label: '设备状态', description: '圆屏连接与音量', to: '/device'},
+    {page: 'display', label: '圆屏预览', description: '状态、情绪与异常', to: '/display-preview'},
   ]},
   {label: '长期记忆', items: [
     {page: 'memories', label: '原始与原子记忆', description: 'L0 来源与 L1 事实', to: '/memories'},

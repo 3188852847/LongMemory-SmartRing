@@ -22,6 +22,8 @@ P2 助手角色设置已接入 `/chat-react`：网页编辑、版本化保存；
 
 Web 控制台已渐进统一到 React + TypeScript + Vite + antd：聊天 `/chat-react`、L0/L1 记忆 `/memories`、L2 生活场景 `/scenarios`、设备 `/device`、个性化 `/settings` 与实验 `/experiments-react` 共用 React Router、AppShell 和外观状态；TanStack Query 管理服务器状态及不自动重试的写操作。实验页保留预检/确认分离、任务进度与逐题复核；原生入口暂留回退。组件测试使用 Vitest/React Testing Library。见[体验指南](docs/guides/React聊天页.md)、[技术策略](docs/architecture/technology-strategy.md)、[迁移清单](docs/architecture/react-chat-migration.md)与 [ADR-0032](docs/adr/0032-progressive-react-console-migration.md)。
 
+圆屏 UI 专项已建立第一阶段状态协议和浏览器模拟器：`/display-preview` 可预览 466×466 圆屏的交互阶段、情绪表达、系统覆盖与中央安全区。它不连接真实设备，也不代表 B V2 固件已经实现；真实接入前仍需核对准确固件源码和事件证据。见[圆屏状态协议](docs/architecture/round-display-state-protocol.md)与 [ADR-0084](docs/adr/0084-round-display-state-protocol-and-simulator.md)。
+
 Python HTTP 入口继续使用 aiohttp；Pydantic 2.13.5 已在聊天消息 POST 完成首个严格契约试点，保持原有 400 错误、响应和幂等行为，不进入 Memory Core，也不代表已决定迁移 FastAPI。见 [ADR-0033](docs/adr/0033-staged-technology-adoption.md)。
 
 首批 Playwright 浏览器验收已接入：用临时 Fake 控制台验证聊天刷新恢复、React 页面导航、无第三方请求和只读实验禁止启动，不读取个人库或调用模型/圆屏。运行命令与失败 trace 位置见[React 控制台指南](docs/guides/React聊天页.md)。

@@ -28,7 +28,7 @@ def test_react_nonce_and_resource_whitelist(built):
     async def run():
         async with console() as (client, base, _):
             nonces = []
-            for route in ('/chat-react', '/device', '/memories', '/scenarios', '/personas', '/settings', '/experiments-react'):
+            for route in ('/chat-react', '/device', '/display-preview', '/memories', '/scenarios', '/personas', '/settings', '/experiments-react'):
                 response = await client.get(base + route)
                 assert response.status == 200
                 content = await response.text()
