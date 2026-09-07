@@ -36,6 +36,7 @@ export class ChatApi {
 }
 export interface Turn {
   input: string; answer?: string; status: string; writes: {operation: string}[] | null;
+  answer_source?: 'model' | 'application_command' | null;
   user_saved: boolean; duration_ms: number; memory_processing?: 'completed' | 'source_only' | null;
   memory_warning?: string | null; retrieval_strategy?: string | null;
   retrieval_warning?: string | null; scenario_use_enabled?: boolean; persona_use_enabled?: boolean;

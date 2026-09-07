@@ -44,6 +44,10 @@ def register_memory_runtime_routes(app, backend):
             "persona_retrieved": [asdict(item) for item in prepared.personas],
             "memory_command": (asdict(prepared.memory_command)
                                if prepared.memory_command is not None else None),
+            # 小智当前 Memory 插槽不能直接短路回答；把应用层固定回执作为
+            # 独立字段交给薄适配器，以便和普通记忆证据使用不同提示契约。
+            "command_reply": (prepared.memory_command.notice
+                              if prepared.memory_command is not None else None),
         })
 
     app.router.add_get("/api/internal/memory/status", status, allow_head=False)

@@ -503,6 +503,7 @@ def test_internal_runtime_requires_token_and_is_immediately_shared_with_web(tmp_
             written = await response.json()
             assert written["added"] == 1 and "豆包" in written["context"]
             assert written["memory_command"] is None
+            assert written["command_reply"] is None
 
             corrected_response = await client.post(
                 endpoint,
@@ -514,6 +515,7 @@ def test_internal_runtime_requires_token_and_is_immediately_shared_with_web(tmp_
             assert corrected["memory_command"]["kind"] == "correct"
             assert corrected["memory_command"]["status"] == "applied"
             assert corrected["memory_command"]["writes"][0]["operation"] == "supersede"
+            assert corrected["command_reply"] == corrected["memory_command"]["notice"]
 
             # 网页后端没有另开一套运行时；同一进程立刻读取圆屏刚写入的事实。
             recalled = await asyncio.to_thread(backend.run, "我的猫叫什么", ())

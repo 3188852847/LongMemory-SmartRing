@@ -192,6 +192,39 @@ def test_provider_uses_runtime_transport_without_starting_subprocess(provider_cl
     assert timeout == 20
 
 
+def test_provider_marks_application_command_as_operation_result(provider_class, config, monkeypatch):
+    provider = provider_class(config)
+    provider.init_memory(config["allowed_device_id"], None)
+
+    class Response:
+        status = 200
+        def __enter__(self): return self
+        def __exit__(self, *_args): return None
+        def read(self, _limit):
+            return json.dumps({
+                "version": 1,
+                "context": "[记忆操作结果] 不应按普通事实包装。",
+                "turn_id": "turn-command",
+                "added": 0,
+                "retrieved": 0,
+                "command_reply": "本轮没有生成 L1 长期事实。",
+            }).encode()
+
+    monkeypatch.setenv("LONGMEMORY_MEMORY_TRANSPORT", "runtime")
+    monkeypatch.setenv(
+        "LONGMEMORY_RUNTIME_URL",
+        "http://127.0.0.1:8767/api/internal/memory/prepare",
+    )
+    monkeypatch.setenv("LONGMEMORY_RUNTIME_TOKEN", "c" * 64)
+    monkeypatch.setattr("urllib.request.urlopen", lambda *_a, **_k: Response())
+
+    rendered = asyncio.run(provider.query_memory("不要记住：合成内容"))
+    assert "本机应用层执行" in rendered
+    assert "不得声称相反结果" in rendered
+    assert "本轮没有生成 L1 长期事实" in rendered
+    assert "用户曾陈述的记忆证据" not in rendered
+
+
 def test_runtime_failure_does_not_fall_back_and_duplicate_write(provider_class, config, monkeypatch):
     provider = provider_class(config)
     provider.init_memory(config["allowed_device_id"], None)

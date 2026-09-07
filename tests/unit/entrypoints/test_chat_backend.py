@@ -59,6 +59,23 @@ def test_model_failure_preserves_actual_write_trace_but_not_assistant_fact(datab
     assert "secret-should-not-leak" not in json.dumps(result)
 
 
+def test_application_command_reply_does_not_depend_on_model_wording(database):
+    class MustNotRun:
+        def generate(self, **_kwargs):
+            raise AssertionError("高精度操作回执不应交给模型改写")
+
+    backend = ChatBackend(database, MustNotRun())
+    try:
+        result = backend.run("不要记住：我今天想喝茉莉花茶", ())
+        assert result["status"] == "completed"
+        assert result["answer_source"] == "application_command"
+        assert result["answer"] == result["memory_command"]["notice"]
+        assert result["writes"] == []
+        assert result["assistant_saved"] is True
+    finally:
+        backend.close()
+
+
 def test_model_health_records_safe_failure_and_explicit_probe_does_not_write_memory(database):
     class Broken:
         def with_role_prompt(self, _prompt):

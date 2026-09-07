@@ -9,6 +9,8 @@ import sqlite3
 
 from longmemory.application.chat.contracts import AnswerGenerationError
 from longmemory.application.memory_runtime import MemoryRuntime
+from longmemory.application.natural_companion_commands import NaturalCompanionCommandResult
+from longmemory.application.natural_memory_commands import NaturalMemoryCommandResult
 from longmemory.bootstrap import build_memory_runtime
 from .role_settings import RoleSettings
 
@@ -88,6 +90,7 @@ class ChatBackend:
         """
         started = monotonic()
         result = {"status": "failed", "input": text, "answer": None,
+                  "answer_source": None,
                   "started_at": datetime.now(UTC).isoformat(), "method": None,
                   "model": self.model, "role": self.role, "writes": None, "retrieved": None,
                   "memory_context": None, "user_saved": False, "assistant_saved": False,
@@ -128,11 +131,21 @@ class ChatBackend:
                           retrieved=[asdict(item) for item in support.retrieved],
                           retrieval_strategy=support.retrieval_strategy,
                           retrieval_warning=support.warning_code)
+            # 高精度控制命令已经由应用层完成并生成真实回执。此处不再让
+            # 模型改写成功/失败事实，避免网页用户被模型的口头承诺误导。
+            # 圆屏的上游接口只能注入系统上下文，仍由独立适配器加强约束。
+            if isinstance(prepared.memory_command, (
+                NaturalMemoryCommandResult, NaturalCompanionCommandResult,
+            )):
+                answer = prepared.memory_command.notice
+                result["answer_source"] = "application_command"
             # Fake 只验证工程闭环，页面明确标出它不模拟角色/多轮语义能力。
-            if self.provider == "fake":
+            elif self.provider == "fake":
                 answer = generator.generate(query=text, memory_context=support.context)
+                result["answer_source"] = "model"
             else:
                 answer = generator.generate_turn(query=text, memory_context=support.context, history=history)
+                result["answer_source"] = "model"
             if not isinstance(answer, str) or not answer.strip() or len(answer) > 16000:
                 raise AnswerGenerationError("empty_answer", code="model_response_invalid")
             self._record_model_health("available")
