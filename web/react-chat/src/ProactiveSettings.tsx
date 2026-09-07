@@ -1,7 +1,7 @@
 import {useEffect, useMemo, useState} from 'react';
 import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
-import {Alert, Button, Checkbox, Input, InputNumber, Space, Switch, Tag} from 'antd';
-import {ApiError, ChatApi, type ProactiveOutreachSummary, type ProactivePolicy, type ProactiveTestResult} from './api';
+import {Alert, Button, Card, Checkbox, Input, InputNumber, Select, Space, Switch, Tag} from 'antd';
+import {ApiError, ChatApi, type ProactiveOutreachSummary, type ProactivePolicy, type ProactiveTestResult, type ProactiveTopicSeed} from './api';
 
 const DAYS = ['周一','周二','周三','周四','周五','周六','周日'].map((label, value) => ({label, value}));
 const minuteText = (value:number) => `${String(Math.floor(value / 60)).padStart(2,'0')}:${String(value % 60).padStart(2,'0')}`;
@@ -12,10 +12,15 @@ export function ProactiveSettings({api, ready}:{api:ChatApi; ready:boolean}) {
   const client = useQueryClient();
   const query = useQuery({queryKey:['proactive-policy'], queryFn:() => api.request<ProactivePolicy>('/api/proactive-policy'), enabled:ready});
   const history = useQuery({queryKey:['proactive-outreach'], queryFn:() => api.request<{items:ProactiveOutreachSummary[]}>('/api/proactive-outreach?limit=10'), enabled:ready});
+  const scenarios = useQuery({queryKey:['proactive-topic-scenarios'], queryFn:() => api.request<{items:Array<{id:string;title:string;summary:string;revision:number}>}>('/api/scenarios?state=active&offset=0&limit=100'), enabled:ready});
+  const topicSeeds = useQuery({queryKey:['proactive-topic-seeds'], queryFn:() => api.request<{items:ProactiveTopicSeed[]}>('/api/proactive-topic-seeds'), enabled:ready});
   const [draft, setDraft] = useState<ProactivePolicy>();
   const [notice, setNotice] = useState('');
   const [testText, setTestText] = useState('今天也要照顾好自己呀。');
   const [testNotice, setTestNotice] = useState('');
+  const [topicScenarioId, setTopicScenarioId] = useState<string>();
+  const [topicText, setTopicText] = useState('');
+  const [topicNotice, setTopicNotice] = useState('');
   useEffect(() => {if (query.data) setDraft({...query.data, allowed_weekdays:[...query.data.allowed_weekdays]});}, [query.data]);
   const dirty = useMemo(() => Boolean(draft && query.data && JSON.stringify(draft) !== JSON.stringify(query.data)), [draft, query.data]);
   const mutation = useMutation({
@@ -67,6 +72,40 @@ export function ProactiveSettings({api, ready}:{api:ChatApi; ready:boolean}) {
       void client.invalidateQueries({queryKey:['proactive-outreach']});
     },
   });
+  const createTopic = useMutation({
+    mutationFn:() => {
+      const scenario = scenarios.data!.items.find(item => item.id === topicScenarioId)!;
+      return api.request<ProactiveTopicSeed>('/api/proactive-topic-seeds', 'POST', {
+        scenario_id:scenario.id, expected_scenario_revision:scenario.revision,
+        prompt_text:topicText, request_id:crypto.randomUUID(),
+      });
+    },
+    onSuccess:() => {
+      setTopicScenarioId(undefined); setTopicText('');
+      setTopicNotice('安全话题素材已保存；当前只供预览，不会自动播报。');
+      void client.invalidateQueries({queryKey:['proactive-topic-seeds']});
+    },
+    onError:error => {
+      setTopicNotice(error instanceof ApiError && error.code === 'topic_seed_scenario_conflict'
+        ? '来源场景已经变化，请刷新后重新核对。'
+        : '话题素材没有保存，请核对来源场景和短句。');
+      void client.invalidateQueries({queryKey:['proactive-topic-scenarios']});
+    },
+  });
+  const disableTopic = useMutation({
+    mutationFn:(seed:ProactiveTopicSeed) => api.request(
+      `/api/proactive-topic-seeds/${seed.id}/disable`, 'POST',
+      {expected_revision:seed.revision},
+    ),
+    onSuccess:() => {
+      setTopicNotice('话题素材已停用并保留审计记录。');
+      void client.invalidateQueries({queryKey:['proactive-topic-seeds']});
+    },
+    onError:() => {
+      setTopicNotice('停用失败，页面将重新读取最新状态。');
+      void client.invalidateQueries({queryKey:['proactive-topic-seeds']});
+    },
+  });
   const change = (patch:Partial<ProactivePolicy>) => draft && setDraft({...draft, ...patch});
   if (query.isError) return <Alert type="error" showIcon title="主动交流设置不可用" description="请确认已选择当前版本的个人数据库。"/>;
   if (query.isLoading || !draft) return <Alert type="info" showIcon title="正在读取主动交流设置…"/>;
@@ -104,6 +143,34 @@ export function ProactiveSettings({api, ready}:{api:ChatApi; ready:boolean}) {
       {!draft.enabled && <p className="subtle">请先打开并保存“允许主动联系”，再进行测试。</p>}
       {dirty && <p className="subtle">当前设置尚未保存，请保存或放弃修改后再测试。</p>}
       {testNotice && <p role="status">{testNotice}</p>}
+    </section>
+    <section className="settings-section">
+      <h3>记忆驱动话题素材（预览阶段）</h3>
+      <Alert type="warning" showIcon title="这里只保存你允许圆屏公开念出的短句"
+        description="来源限定为当前有效且已接受的 L2 场景。保存后不会自动投递；后续接入定时器前仍会经过勿扰、频率和设备状态门控。请不要填写不适合被旁人听见的信息。"/>
+      <label htmlFor="topic-source">来源 L2 场景</label>
+      <Select id="topic-source" aria-label="来源 L2 场景" className="wide" value={topicScenarioId}
+        placeholder="选择一个已接受的生活场景" onChange={setTopicScenarioId}
+        options={(scenarios.data?.items ?? []).map(item => ({value:item.id,label:item.title}))}/>
+      <label htmlFor="topic-text">允许播出的安全话题</label>
+      <Input id="topic-text" maxLength={120} showCount value={topicText}
+        placeholder="例如：毕业设计汇报准备得怎么样了？"
+        onChange={event => setTopicText(event.target.value)}/>
+      <Button loading={createTopic.isPending}
+        disabled={!topicScenarioId || !topicText.trim() || topicText !== topicText.trim() || createTopic.isPending}
+        onClick={() => createTopic.mutate()}>保存为话题素材</Button>
+      {scenarios.isSuccess && (scenarios.data?.items?.length ?? 0) === 0 && <p className="subtle">还没有当前有效且已接受的 L2 场景；请先在“生活场景”页建立并接受场景。</p>}
+      {topicNotice && <p role="status">{topicNotice}</p>}
+      <div className="proactive-history">{topicSeeds.data?.items?.map(seed => <Card size="small" key={seed.id}
+        title={<Space wrap><Tag color={seed.usable ? 'green' : 'default'}>{seed.usable ? '可用' : '不可用'}</Tag><span>{seed.prompt_text}</span></Space>}
+        extra={seed.status === 'active' && <Button size="small" danger disabled={disableTopic.isPending}
+          loading={disableTopic.isPending && disableTopic.variables?.id === seed.id}
+          onClick={() => disableTopic.mutate(seed)}>停用</Button>}>
+        <p className="subtle">来源 L2：{seed.source.title} · {seed.source.status} · 修订 {seed.revision}</p>
+        <p>{seed.source.summary}</p>
+        <small>素材 ID：{seed.id} · 来源 ID：{seed.scenario_id}</small>
+      </Card>)}</div>
+      {topicSeeds.isSuccess && (topicSeeds.data?.items?.length ?? 0) === 0 && <p className="subtle">尚无话题素材。</p>}
     </section>
     <section className="settings-section">
       <h3>最近运行记录</h3>

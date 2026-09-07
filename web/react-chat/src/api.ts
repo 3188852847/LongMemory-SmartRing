@@ -56,3 +56,9 @@ export interface ProactiveOutreachSummary {
   outreach_id:string; trigger:string; content:string; created_at:string; expires_at:string;
   state:string; revision:number; reason:string; event_count:number; failure_reason:string | null;
 }
+export interface ProactiveTopicSeed {
+  id:string; subject_id:string; scenario_id:string; prompt_text:string;
+  status:'active'|'disabled'; created_at:string; updated_at:string;
+  revision:number; usable:boolean;
+  source:{layer:'l2'; title:string; summary:string; status:string};
+}

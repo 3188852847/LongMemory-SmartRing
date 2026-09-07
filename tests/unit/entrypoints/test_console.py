@@ -560,6 +560,52 @@ def test_proactive_policy_http_persists_defaults_and_rejects_stale_page(tmp_path
     asyncio.run(run())
 
 
+def test_proactive_topic_seed_http_is_traceable_preview_only_and_disableable(tmp_path):
+    from longmemory.methods.longmemory_v1.method import LongMemoryV1
+
+    database = tmp_path / "topic-seed-http.db"
+    LongMemoryV1(database).close()
+    now = datetime(2026, 9, 7, 6, 0, tzinfo=UTC)
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            "INSERT INTO scenario_memories "
+            "(id,subject_id,title,summary,generated_at,valid_from,valid_to,status,"
+            "generator_name,generator_version,revision) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            ("scenario-1", "user:self", "毕业设计", "用户正在准备毕业设计汇报。",
+             now.isoformat(), None, None, "active", "test", "1", 2),
+        )
+
+    body = {
+        "scenario_id": "scenario-1", "expected_scenario_revision": 2,
+        "prompt_text": "毕业设计准备得怎么样了？",
+        "request_id": "6a4db801-6779-40fc-90b4-aab77f580c82",
+    }
+
+    async def run():
+        async with console(database, proactive_clock=lambda: now) as (client, base, bridge):
+            headers = await login(client, base)
+            assert (await client.post(base + "/api/proactive-topic-seeds", json=body)).status == 403
+            response = await client.post(
+                base + "/api/proactive-topic-seeds", headers=headers, json=body,
+            )
+            created = await response.json()
+            assert response.status == 200
+            assert created["usable"] is True
+            assert created["source"]["title"] == "毕业设计"
+            assert bridge.calls == []
+            listed = await (await client.get(base + "/api/proactive-topic-seeds")).json()
+            assert listed["items"][0]["prompt_text"] == body["prompt_text"]
+            disabled = await client.post(
+                base + f"/api/proactive-topic-seeds/{created['id']}/disable",
+                headers=headers, json={"expected_revision": 1},
+            )
+            assert disabled.status == 200
+            assert (await disabled.json())["status"] == "disabled"
+            assert bridge.calls == []
+
+    asyncio.run(run())
+
+
 @pytest.mark.parametrize("change", [
     {"enabled": 1},
     {"allowed_weekdays": [0, 0]},

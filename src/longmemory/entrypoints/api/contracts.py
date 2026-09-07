@@ -113,3 +113,36 @@ class ProactivePlaybackConfirmationRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
 
     expected_revision: int = Field(ge=1)
+
+
+class ProactiveTopicSeedRequest(BaseModel):
+    """把明确核对过的安全短句绑定到一个当前 L2 场景。"""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    scenario_id: str = Field(min_length=1, max_length=128)
+    expected_scenario_revision: int = Field(ge=1)
+    prompt_text: str = Field(min_length=1, max_length=120)
+    request_id: str
+
+    @field_validator("scenario_id", "prompt_text")
+    @classmethod
+    def clean_single_line(cls, value: str) -> str:
+        if value != value.strip() or any(ord(character) < 32 for character in value):
+            raise ValueError("invalid text")
+        return value
+
+    @field_validator("request_id")
+    @classmethod
+    def canonical_topic_request_id(cls, value: str) -> str:
+        if str(UUID(value)) != value:
+            raise ValueError("non-canonical UUID")
+        return value
+
+
+class ProactiveTopicDisableRequest(BaseModel):
+    """停用话题素材；revision 防止旧页面覆盖新状态。"""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    expected_revision: int = Field(ge=1)

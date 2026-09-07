@@ -18,6 +18,7 @@ from longmemory.adapters.storage.sqlite_consolidation_run_store import (
 from longmemory.adapters.storage.sqlite_proactive_policy_store import SQLiteProactivePolicyStore
 from longmemory.adapters.storage.sqlite_proactive_outreach_store import SQLiteProactiveOutreachStore
 from longmemory.adapters.storage.sqlite_proactive_runtime_state import SQLiteProactiveHistoryReader
+from longmemory.adapters.storage.sqlite_proactive_topic_store import SQLiteProactiveTopicStore
 from longmemory.adapters.device_control import (
     XiaozhiProactiveDelivery,
     XiaozhiRuntimeStateProbe,
@@ -33,7 +34,9 @@ from longmemory.core.proactive import (
     OutreachState,
     OutreachTrigger,
     ProactivePolicySettings,
+    ProactiveTopicSeed,
     ScheduledTriggerAction,
+    TopicSeedStatus,
     decide_scheduled_trigger,
 )
 from longmemory.adapters.storage.sqlite_l1_consolidation_source_reader import (
@@ -187,6 +190,87 @@ class MemoryBackend:
             return self._proactive_json(
                 SQLiteProactivePolicyStore(connection).get("user:self")
             )
+
+    @staticmethod
+    def _topic_seed_json(row, *, now):
+        valid_from = (
+            datetime.fromisoformat(row["scenario_valid_from"])
+            if row["scenario_valid_from"] else None
+        )
+        valid_to = (
+            datetime.fromisoformat(row["scenario_valid_to"])
+            if row["scenario_valid_to"] else None
+        )
+        return {
+            "id": row["id"], "subject_id": row["subject_id"],
+            "scenario_id": row["scenario_id"], "prompt_text": row["prompt_text"],
+            "status": row["status"], "created_at": row["created_at"],
+            "updated_at": row["updated_at"], "revision": row["revision"],
+            "source": {
+                "layer": "l2", "title": row["scenario_title"],
+                "summary": row["scenario_summary"],
+                "status": row["scenario_status"],
+            },
+            "usable": (
+                row["status"] == "active" and row["scenario_status"] == "active"
+                and (valid_from is None or valid_from <= now)
+                and (valid_to is None or valid_to > now)
+            ),
+        }
+
+    def list_proactive_topic_seeds(self):
+        now = self.clock()
+        with self._open() as connection:
+            rows = SQLiteProactiveTopicStore(connection).list("user:self")
+            return {"items": [self._topic_seed_json(row, now=now) for row in rows]}
+
+    def create_proactive_topic_seed(self, request):
+        now = self.clock()
+        seed = ProactiveTopicSeed(
+            id=request.request_id.replace("-", ""), subject_id="user:self",
+            scenario_id=request.scenario_id, prompt_text=request.prompt_text,
+            status=TopicSeedStatus.ACTIVE, created_at=now, updated_at=now,
+        )
+        with self._open(write_capability="proactive") as connection:
+            store = SQLiteProactiveTopicStore(connection)
+            try:
+                store.create(
+                    seed,
+                    expected_scenario_revision=request.expected_scenario_revision,
+                )
+            except sqlite3.IntegrityError:
+                existing = connection.execute(
+                    "SELECT id FROM proactive_topic_seeds WHERE id=?", (seed.id,),
+                ).fetchone()
+                code = "topic_seed_request_replayed" if existing else "topic_seed_conflict"
+                raise MemoryAccessError(code, 409) from None
+            except ValueError as error:
+                code = str(error)
+                status = 404 if code == "topic_seed_scenario_not_found" else 409
+                raise MemoryAccessError(code, status) from None
+            row = next(item for item in store.list("user:self") if item["id"] == seed.id)
+            return self._topic_seed_json(row, now=now)
+
+    def disable_proactive_topic_seed(self, seed_id, *, expected_revision):
+        now = self.clock()
+        with self._open(write_capability="proactive") as connection:
+            row = connection.execute(
+                "SELECT subject_id,status,revision FROM proactive_topic_seeds WHERE id=?",
+                (seed_id,),
+            ).fetchone()
+            if row is None or row["subject_id"] != "user:self":
+                raise MemoryAccessError("topic_seed_not_found", 404)
+            if row["status"] == "disabled":
+                if row["revision"] == expected_revision + 1:
+                    return {"id": seed_id, "status": "disabled",
+                            "revision": row["revision"], "replayed": True}
+                raise MemoryAccessError("topic_seed_conflict", 409)
+            if not SQLiteProactiveTopicStore(connection).disable(
+                seed_id, expected_revision=expected_revision, now=now,
+            ):
+                raise MemoryAccessError("topic_seed_conflict", 409)
+            return {"id": seed_id, "status": "disabled",
+                    "revision": expected_revision + 1, "replayed": False}
 
     def update_proactive_policy(self, request):
         # 在取得写锁前完成纯配置验证；非法输入不能被误报成数据库损坏。

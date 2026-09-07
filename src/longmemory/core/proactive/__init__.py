@@ -18,6 +18,7 @@ from .policy import (
     decide_outreach,
 )
 from .settings import ProactivePolicySettings
+from .topic_seed import ProactiveTopicSeed, TopicSeedStatus
 from .schedule import (
     ScheduledTriggerAction,
     ScheduledTriggerDecision,
@@ -33,6 +34,8 @@ __all__ = [
     "ProactiveOutreach",
     "ProactiveOutreachStore",
     "ProactivePolicySettings",
+    "ProactiveTopicSeed",
+    "TopicSeedStatus",
     "ScheduledTriggerAction",
     "ScheduledTriggerDecision",
     "ScheduledTriggerReason",

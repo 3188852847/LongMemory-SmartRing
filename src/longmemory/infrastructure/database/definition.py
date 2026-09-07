@@ -1,6 +1,6 @@
-"""当前 SQLite V16 的完整结构定义；不包含历史迁移步骤。"""
+"""当前 SQLite V17 的完整结构定义；不包含历史迁移步骤。"""
 
-SCHEMA_VERSION = 16
+SCHEMA_VERSION = 17
 
 LATEST_SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS conversation_messages (
@@ -314,6 +314,20 @@ CREATE TABLE IF NOT EXISTS proactive_policy_settings (
         CHECK (length(trim(greeting_text)) BETWEEN 1 AND 80),
     CHECK (allowed_start_minute <> allowed_end_minute)
 );
+
+CREATE TABLE IF NOT EXISTS proactive_topic_seeds (
+    id TEXT PRIMARY KEY,
+    subject_id TEXT NOT NULL CHECK (length(trim(subject_id)) BETWEEN 1 AND 120),
+    scenario_id TEXT NOT NULL,
+    prompt_text TEXT NOT NULL CHECK (length(trim(prompt_text)) BETWEEN 1 AND 120),
+    status TEXT NOT NULL CHECK (status IN ('active', 'disabled')),
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    revision INTEGER NOT NULL DEFAULT 1 CHECK (revision >= 1),
+    FOREIGN KEY (scenario_id) REFERENCES scenario_memories (id) ON DELETE RESTRICT
+);
+CREATE INDEX IF NOT EXISTS idx_proactive_topic_seeds_subject
+    ON proactive_topic_seeds (subject_id, status, created_at DESC);
 
 CREATE TRIGGER IF NOT EXISTS trg_scenario_stale_on_l1_retire
 AFTER UPDATE OF retired_at ON atomic_memories
