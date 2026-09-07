@@ -142,7 +142,7 @@ def create_app(*, port=8765, bridge=None, web_root=None, database=None, allow_me
         if operation_lock.locked():
             return
         async with operation_lock:
-            await memory_backend.proactive_scheduled_tick(client)
+            await memory_backend.proactive_background_tick(client)
 
     proactive_schedule = (
         ProactiveScheduleLoop(scheduled_tick) if database is not None else None

@@ -247,7 +247,7 @@ export function ProactiveSettings({api, ready}:{api:ChatApi; ready:boolean}) {
       {version_id:version.id, expected_revision:absenceVersions.data!.selection.revision},
     ),
     onSuccess:() => {
-      setAbsenceVersionNotice('当前策略指针已更新并写入审计事件；后台调度尚未接线，不会因此自动联系。');
+      setAbsenceVersionNotice('当前策略已激活并写入审计事件；到达缺席检查分钟后仍会经过主动交流总开关和全部安全门控。');
       void client.invalidateQueries({queryKey:['companion-absence-strategy-versions']});
     },
     onError:() => {
@@ -420,7 +420,7 @@ export function ProactiveSettings({api, ready}:{api:ChatApi; ready:boolean}) {
       {absenceVersionNotice && <p role="status">{absenceVersionNotice}</p>}
       {absenceVersions.isError && <Alert type="error" showIcon title="离线验证草案读取失败"/>}
       <h4>缺席联系策略版本</h4>
-      <p className="subtle">激活只切换可审计的当前版本指针；后台调度尚未读取该指针，因此本阶段不会新增自动问候。</p>
+      <p className="subtle">当前版本会在常见时段加上宽限后的唯一分钟参与后台检查；错过不补发，并继续遵守主动交流总开关、勿扰、频率、待回应、会话和设备门控。</p>
       <div className="proactive-history">{absenceVersions.data?.items?.map(version => <Card size="small" key={version.id}
         title={<Space wrap><Tag color={version.replay_gate_passed ? 'green' : 'red'}>{version.replay_gate_passed ? '离线门控通过' : '离线门控未通过'}</Tag><strong>{minuteText(version.expected_minute)} 后宽限 {version.grace_minutes} 分钟</strong><Tag color={version.active ? 'blue' : 'default'}>{version.active ? '当前版本' : '非当前版本'}</Tag></Space>}
         extra={version.active ? <Button size="small" danger loading={deactivateAbsenceVersion.isPending}

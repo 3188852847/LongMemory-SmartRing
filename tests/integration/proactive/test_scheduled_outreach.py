@@ -13,7 +13,14 @@ from longmemory.adapters.storage.sqlite_proactive_outreach_store import (
 from longmemory.adapters.storage.sqlite_proactive_schedule_override_store import (
     SQLiteProactiveScheduleOverrideStore,
 )
+from longmemory.adapters.storage.sqlite_companion_absence_strategy_store import (
+    SQLiteCompanionAbsenceStrategyVersionStore,
+)
+from longmemory.application.companion_absence_strategy import (
+    CompanionAbsenceStrategyVersionService,
+)
 from longmemory.application.proactive import ProactiveOutreachLedger
+from longmemory.core.companion import CompanionStrategyReplayEvidence
 from longmemory.core.proactive import (
     OutreachEvidence,
     OutreachPolicyConfig,
@@ -48,6 +55,13 @@ class ReadyBridge:
     async def announce(self, text, expires_at):
         self.announcements.append((text, expires_at))
         return {"state": "queued"}
+
+
+class OfflineBridge(ReadyBridge):
+    async def status(self):
+        value = await super().status()
+        return {**value, "connection_count": 0, "ready": False,
+                "announcement_ready": False, "reason": "device_offline"}
 
 
 def prepare(path, *, user_chatted=False, topic_enabled=False, development_budget=False):
@@ -100,6 +114,36 @@ def add_topic_seed(path):
     connection.close()
 
 
+def activate_absence(path, *, expected_minute=12 * 60):
+    connection = open_database(path)
+    connection.execute(
+        "INSERT INTO companion_routine_candidates VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        ("routine-candidate", "user:self", "candidate", expected_minute, 480, 30,
+         3, 3, "a" * 64, "repeated_user_initiated_activity_near_time",
+         "test-generator", NOW.isoformat(), NOW.isoformat(), 1),
+    )
+    connection.commit()
+    service = CompanionAbsenceStrategyVersionService(
+        SQLiteCompanionAbsenceStrategyVersionStore(connection),
+        clock=lambda: NOW,
+        id_factory=iter(("absence-version", "absence-activation")).__next__,
+    )
+    service.create_from_candidate(
+        "routine-candidate", subject_id="user:self",
+        expected_candidate_revision=1, allowed_weekdays=(0,),
+        replay=CompanionStrategyReplayEvidence(
+            protocol="companion-absence-offline-replay-v1",
+            dataset_name="companion_absence_replay", dataset_version="1.0.0",
+            dataset_sha256="b" * 64, case_count=16, matched_count=16,
+            unsafe_allow_count=0, gate_passed=True, replayed_at=NOW,
+        ),
+    )
+    service.select_version(
+        "absence-version", subject_id="user:self", expected_revision=0,
+    )
+    connection.close()
+
+
 def test_exact_minute_dispatches_at_most_once_across_repeated_ticks(tmp_path):
     path = tmp_path / "scheduled.db"
     prepare(path)
@@ -116,6 +160,101 @@ def test_exact_minute_dispatches_at_most_once_across_repeated_ticks(tmp_path):
         assert connection.execute(
             "SELECT trigger_kind,state FROM proactive_outreach"
         ).fetchone() == ("explicit_schedule", "queued")
+
+
+def test_active_absence_version_dispatches_once_through_existing_ledger(tmp_path):
+    path = tmp_path / "absence-scheduled.db"
+    prepare(path)
+    activate_absence(path)
+    bridge = ReadyBridge()
+    backend = MemoryBackend(path, clock=lambda: NOW)
+
+    first = asyncio.run(backend.proactive_absence_tick(bridge))
+    second = asyncio.run(backend.proactive_absence_tick(bridge))
+
+    assert first["state"] == "queued"
+    assert second == {"action": "skip", "reason": "already_evaluated_today"}
+    assert [item[0] for item in bridge.announcements] == ["固定合成问候。"]
+    with sqlite3.connect(path) as connection:
+        assert connection.execute(
+            "SELECT trigger_kind,trigger_reason_code,state,policy_version "
+            "FROM proactive_outreach"
+        ).fetchone() == (
+            "habit_candidate", "routine_absence_fixed_greeting", "queued",
+            "proactive-contact-policy-v2+routine-absence-trigger-v1+selection-r1",
+        )
+
+
+def test_explicit_schedule_wins_when_both_sources_share_the_same_minute(tmp_path):
+    path = tmp_path / "two-sources-one-minute.db"
+    prepare(path)
+    activate_absence(path)
+    bridge = ReadyBridge()
+
+    result = asyncio.run(
+        MemoryBackend(path, clock=lambda: NOW).proactive_background_tick(bridge)
+    )
+
+    assert result["source"] == "explicit_schedule"
+    assert result["result"]["state"] == "queued"
+    assert [item[0] for item in bridge.announcements] == ["固定合成问候。"]
+    with sqlite3.connect(path) as connection:
+        assert connection.execute("SELECT count(*) FROM proactive_outreach").fetchone()[0] == 1
+        assert connection.execute(
+            "SELECT trigger_kind FROM proactive_outreach"
+        ).fetchone()[0] == "explicit_schedule"
+
+
+def test_absence_without_current_version_does_not_probe_or_create(tmp_path):
+    path = tmp_path / "absence-inactive.db"
+    prepare(path)
+    bridge = ReadyBridge()
+
+    result = asyncio.run(MemoryBackend(path, clock=lambda: NOW).proactive_absence_tick(bridge))
+
+    assert result == {"action": "skip", "reason": "absence_strategy_inactive"}
+    assert bridge.announcements == []
+
+
+def test_routine_observed_today_prevents_absence_outreach(tmp_path):
+    path = tmp_path / "absence-observed.db"
+    prepare(path)
+    activate_absence(path)
+    connection = open_database(path)
+    connection.execute(
+        "INSERT INTO conversation_messages VALUES (?,?,?,?)",
+        ("observed-message", "user", "合成消息", (NOW - timedelta(hours=4)).isoformat()),
+    )
+    connection.execute(
+        "INSERT INTO companion_user_initiated_interactions VALUES (?,?,?,?,?,?,?,?)",
+        ("observed-event", "user:self", "observed-message",
+         (NOW - timedelta(hours=4)).isoformat(), None, None,
+         "silence_gap_without_recent_outreach", "user-initiated-interaction-v1"),
+    )
+    connection.commit()
+    connection.close()
+    bridge = ReadyBridge()
+
+    result = asyncio.run(MemoryBackend(path, clock=lambda: NOW).proactive_absence_tick(bridge))
+
+    assert result == {"action": "skip", "reason": "routine_observed_today"}
+    assert bridge.announcements == []
+
+
+def test_offline_device_records_blocked_absence_without_delivery(tmp_path):
+    path = tmp_path / "absence-offline.db"
+    prepare(path)
+    activate_absence(path)
+    bridge = OfflineBridge()
+
+    result = asyncio.run(MemoryBackend(path, clock=lambda: NOW).proactive_absence_tick(bridge))
+
+    assert result["state"] == "blocked"
+    assert bridge.announcements == []
+    with sqlite3.connect(path) as connection:
+        assert connection.execute(
+            "SELECT trigger_kind,state FROM proactive_outreach"
+        ).fetchone() == ("habit_candidate", "blocked")
 
 
 def test_real_user_chat_that_day_skips_without_creating_outreach(tmp_path):

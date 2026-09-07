@@ -1,7 +1,7 @@
 """记录长静默后由用户主动开启的交流；不保存消息正文。"""
 
 from collections.abc import Callable
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from sqlite3 import Connection
 from uuid import uuid4
 
@@ -89,3 +89,25 @@ class SQLiteUserInitiatedInteractionStore:
             "WHERE subject_id=? ORDER BY occurred_at DESC,id DESC LIMIT ?",
             (subject_id, limit),
         ).fetchall())
+
+    def observed_on_local_date(
+        self, subject_id: str, *, now: datetime, utc_offset_minutes: int,
+    ) -> bool:
+        """判断指定固定偏移自然日内是否已有主动出现证据，不读取正文。"""
+
+        if now.tzinfo is None or now.utcoffset() is None:
+            raise ValueError("user_initiated_observation_now_timezone_required")
+        if not -720 <= utc_offset_minutes <= 840:
+            raise ValueError("user_initiated_observation_offset_invalid")
+        zone = timezone(timedelta(minutes=utc_offset_minutes))
+        local_now = now.astimezone(zone)
+        local_start = local_now.replace(hour=0, minute=0, second=0, microsecond=0)
+        local_end = local_start + timedelta(days=1)
+        row = self._connection.execute(
+            "SELECT EXISTS(SELECT 1 FROM companion_user_initiated_interactions "
+            "WHERE subject_id=? AND julianday(occurred_at)>=julianday(?) "
+            "AND julianday(occurred_at)<julianday(?))",
+            (subject_id, local_start.astimezone(timezone.utc).isoformat(),
+             local_end.astimezone(timezone.utc).isoformat()),
+        ).fetchone()
+        return bool(row[0])

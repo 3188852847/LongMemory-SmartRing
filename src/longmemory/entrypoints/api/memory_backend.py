@@ -61,7 +61,13 @@ from longmemory.evaluation.companion.absence_replay import (
     load_replay_dataset,
     run_replay,
 )
-from longmemory.core.companion import CompanionStrategyReplayEvidence
+from longmemory.core.companion import (
+    AbsenceRoutineDraft,
+    AbsenceRoutineState,
+    AbsenceTriggerAction,
+    CompanionStrategyReplayEvidence,
+    decide_routine_absence,
+)
 from longmemory.core.proactive import (
     OutreachEvidence,
     OutreachPolicyConfig,
@@ -728,6 +734,150 @@ class MemoryBackend:
                 device=device,
             )
 
+    def _current_absence_decision(self, connection, *, subject_id, now):
+        """从唯一当前版本复算缺席决策；版本行从不被运行期修改。"""
+
+        version_store = SQLiteCompanionAbsenceStrategyVersionStore(connection)
+        selection = version_store.get_selection(subject_id)
+        if selection is None or selection.version_id is None:
+            return None
+        version = version_store.get_version(selection.version_id, subject_id=subject_id)
+        if version is None or not version.replay_gate_passed:
+            return None
+        draft = AbsenceRoutineDraft(
+            candidate_id=version.source_candidate_id,
+            expected_minute=version.expected_minute,
+            grace_minutes=version.grace_minutes,
+            utc_offset_minutes=version.utc_offset_minutes,
+            allowed_weekdays=version.allowed_weekdays,
+            enabled=True,
+            policy_version=version.trigger_policy_version,
+        )
+        history = SQLiteProactiveHistoryReader(connection)
+        observations = SQLiteUserInitiatedInteractionStore(
+            connection, commit_changes=False,
+        )
+        state = AbsenceRoutineState(
+            routine_observed_today=observations.observed_on_local_date(
+                subject_id, now=now,
+                utc_offset_minutes=version.utc_offset_minutes,
+            ),
+            user_chatted_today=history.user_chatted_on_local_date(
+                now=now, utc_offset_minutes=version.utc_offset_minutes,
+            ),
+            already_evaluated_today=False,
+        )
+        decision = decide_routine_absence(draft, now=now, state=state)
+        if (
+            decision.action == AbsenceTriggerAction.CREATE
+            and ProactiveOutreachLedger(
+                SQLiteProactiveOutreachStore(connection, commit_changes=False),
+                clock=lambda: now,
+            ).get_by_idempotency(subject_id, decision.idempotency_key) is not None
+        ):
+            decision = decide_routine_absence(
+                draft, now=now,
+                state=AbsenceRoutineState(
+                    routine_observed_today=state.routine_observed_today,
+                    user_chatted_today=state.user_chatted_today,
+                    already_evaluated_today=True,
+                ),
+            )
+        return version, selection, decision
+
+    async def proactive_absence_tick(self, client):
+        """评估当前激活的缺席策略一次；不补发、不调用模型。"""
+
+        subject_id = "user:self"
+        now = self.clock()
+        with self._open() as connection:
+            current = self._current_absence_decision(
+                connection, subject_id=subject_id, now=now,
+            )
+        if current is None:
+            return {"action": "skip", "reason": "absence_strategy_inactive"}
+        _, _, decision = current
+        if decision.action != AbsenceTriggerAction.CREATE:
+            return {"action": decision.action.value, "reason": decision.reason.value}
+
+        device = await XiaozhiRuntimeStateProbe(client).probe()
+        now = self.clock()
+        with self._open(write_capability="proactive") as connection:
+            current = self._current_absence_decision(
+                connection, subject_id=subject_id, now=now,
+            )
+            if current is None:
+                return {"action": "skip", "reason": "absence_strategy_changed"}
+            version, selection, decision = current
+            if decision.action != AbsenceTriggerAction.CREATE:
+                return {"action": decision.action.value, "reason": decision.reason.value}
+            settings = SQLiteProactivePolicyStore(connection).get(subject_id)
+            topic_seed = (
+                SQLiteProactiveTopicStore(connection).choose_for_schedule(
+                    subject_id, now=now,
+                ) if settings.topic_enabled else None
+            )
+            ledger = ProactiveOutreachLedger(
+                SQLiteProactiveOutreachStore(connection), clock=lambda: now,
+            )
+            outreach = ledger.create_candidate(
+                subject_id=subject_id,
+                trigger=OutreachTrigger.HABIT_CANDIDATE,
+                trigger_reason_code=(
+                    "routine_absence_approved_memory_topic"
+                    if topic_seed is not None else "routine_absence_fixed_greeting"
+                ),
+                content=(topic_seed["prompt_text"] if topic_seed is not None
+                         else settings.greeting_text),
+                scheduled_for=now,
+                expires_at=decision.check_at + settings.config.maximum_lifetime,
+                idempotency_key=decision.idempotency_key,
+                policy_version=(
+                    f"{settings.config.policy_version}+{version.trigger_policy_version}"
+                    f"+selection-r{selection.revision}"
+                ),
+                topic_seed_id=topic_seed["id"] if topic_seed is not None else None,
+                topic_seed_revision=topic_seed["revision"] if topic_seed is not None else None,
+            )
+            if not device.ready:
+                blocked = ledger.record_transition(
+                    outreach.id, expected_revision=outreach.revision,
+                    new_state=OutreachState.BLOCKED,
+                    reason_code=device.reason_code or "device_offline",
+                    evidence=OutreachEvidence.POLICY_DECISION,
+                )
+                return self._outreach_result(
+                    blocked, replayed=False, device=device,
+                )
+            history = SQLiteProactiveHistoryReader(connection).read(subject_id, now=now)
+            runtime = OutreachPolicyState(
+                attempted_at=history.attempted_at,
+                awaiting_user_response=history.awaiting_user_response,
+                user_session_active=device.user_session_active,
+                quiet_until=settings.quiet_until,
+            )
+            result = await ProactiveOutreachDispatcher(
+                ledger,
+                delivery_queue=XiaozhiProactiveDelivery(client).queue,
+                clock=lambda: now,
+            ).dispatch(
+                outreach.id, expected_revision=outreach.revision,
+                settings=settings, runtime_state=runtime,
+            )
+            return self._outreach_result(
+                result.outreach, replayed=False, decision=result.decision,
+                delivery=result.delivery, device=device,
+            )
+
+    async def proactive_background_tick(self, client):
+        """组合两类定时来源；显式定时在同一分钟拥有唯一优先权。"""
+
+        explicit = await self.proactive_scheduled_tick(client)
+        if "outreach_id" in explicit:
+            return {"source": "explicit_schedule", "result": explicit}
+        absence = await self.proactive_absence_tick(client)
+        return {"source": "routine_absence", "result": absence}
+
     def proactive_history(self, *, limit=20):
         """只读最近投影和最后事件原因，不暴露幂等键或内部连接数据。"""
 
@@ -1005,7 +1155,7 @@ class MemoryBackend:
                 raise MemoryAccessError(code, status) from None
             return {"selection": self._absence_selection_json(selection),
                     "event": self._absence_switch_event_json(event),
-                    "runtime_connected": False}
+                    "runtime_connected": True}
 
     def deactivate_companion_absence_strategy(self, request):
         with self._open(write_capability="proactive") as connection:
@@ -1020,7 +1170,7 @@ class MemoryBackend:
                 raise MemoryAccessError(str(error), 409) from None
             return {"selection": self._absence_selection_json(selection),
                     "event": self._absence_switch_event_json(event),
-                    "runtime_connected": False}
+                    "runtime_connected": True}
 
     def create_companion_absence_strategy_version(self, request):
         """保存回放绑定草案；当前没有激活指针或调度接线。"""
