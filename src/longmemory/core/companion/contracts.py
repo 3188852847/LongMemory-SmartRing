@@ -6,6 +6,7 @@ from typing import Protocol
 from longmemory.core.conversation.models import ConversationMessage
 
 from .models import (
+    CompanionAbsenceStrategyVersion,
     CompanionFeedbackEvent,
     CompanionRoutineCandidate,
     CompanionStrategyCandidate,
@@ -14,6 +15,24 @@ from .models import (
     ProactiveTopicFeedbackTarget,
     UserInitiatedInteractionEvent,
 )
+
+
+class CompanionAbsenceStrategyVersionStore(Protocol):
+    """不可变策略版本的存储边界；本协议不提供激活操作。"""
+
+    def get_source_candidate(
+        self, candidate_id: str, *, subject_id: str,
+    ) -> CompanionRoutineCandidate | None: ...
+
+    def get_by_parameter_fingerprint(
+        self, subject_id: str, parameter_fingerprint: str,
+    ) -> CompanionAbsenceStrategyVersion | None: ...
+
+    def create(
+        self, version: CompanionAbsenceStrategyVersion,
+    ) -> CompanionAbsenceStrategyVersion: ...
+
+    def list(self, subject_id: str) -> tuple[CompanionAbsenceStrategyVersion, ...]: ...
 
 
 class InteractionOutcomeObserver(Protocol):

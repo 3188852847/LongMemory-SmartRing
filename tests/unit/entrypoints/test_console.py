@@ -188,6 +188,29 @@ def test_companion_strategy_analysis_is_csrf_protected_and_never_activates(tmp_p
             )
             assert routine_list.status == 200
             assert await routine_list.json() == {"items": []}
+            versions = await client.get(
+                base + "/api/companion-absence-strategy-versions",
+            )
+            assert versions.status == 200
+            assert await versions.json() == {"items": []}
+            no_csrf = await client.post(
+                base + "/api/companion-absence-strategy-versions/draft",
+                json={"candidate_id": "a" * 32, "expected_candidate_revision": 1},
+            )
+            assert no_csrf.status == 403
+            invalid = await client.post(
+                base + "/api/companion-absence-strategy-versions/draft",
+                headers=headers,
+                json={"candidate_id": "../personal.db", "expected_candidate_revision": 1},
+            )
+            assert invalid.status == 400
+            missing = await client.post(
+                base + "/api/companion-absence-strategy-versions/draft",
+                headers=headers,
+                json={"candidate_id": "a" * 32, "expected_candidate_revision": 1},
+            )
+            assert missing.status == 409
+            assert (await missing.json())["error"] == "companion_routine_candidate_conflict"
 
     asyncio.run(run())
 

@@ -29,6 +29,9 @@ from longmemory.adapters.storage.sqlite_companion_strategy_store import (
 from longmemory.adapters.storage.sqlite_companion_routine_store import (
     SQLiteCompanionRoutineCandidateStore,
 )
+from longmemory.adapters.storage.sqlite_companion_absence_strategy_store import (
+    SQLiteCompanionAbsenceStrategyVersionStore,
+)
 from longmemory.adapters.storage.sqlite_user_initiated_interaction_store import (
     SQLiteUserInitiatedInteractionStore,
 )
@@ -51,6 +54,14 @@ from longmemory.application.companion_strategy import (
 from longmemory.application.companion_routine import (
     CompanionRoutineCandidateService,
 )
+from longmemory.application.companion_absence_strategy import (
+    CompanionAbsenceStrategyVersionService,
+)
+from longmemory.evaluation.companion.absence_replay import (
+    load_replay_dataset,
+    run_replay,
+)
+from longmemory.core.companion import CompanionStrategyReplayEvidence
 from longmemory.core.proactive import (
     OutreachEvidence,
     OutreachPolicyConfig,
@@ -918,6 +929,83 @@ class MemoryBackend:
             if candidate is None:
                 raise MemoryAccessError("companion_routine_candidate_conflict", 409)
             return self._routine_candidate_json(candidate, store)
+
+    @staticmethod
+    def _absence_strategy_version_json(version):
+        return {
+            "id": version.id,
+            "subject_id": version.subject_id,
+            "source_candidate_id": version.source_candidate_id,
+            "source_candidate_revision": version.source_candidate_revision,
+            "expected_minute": version.expected_minute,
+            "grace_minutes": version.grace_minutes,
+            "utc_offset_minutes": version.utc_offset_minutes,
+            "allowed_weekdays": list(version.allowed_weekdays),
+            "trigger_policy_version": version.trigger_policy_version,
+            "replay_protocol": version.replay_protocol,
+            "replay_dataset_name": version.replay_dataset_name,
+            "replay_dataset_version": version.replay_dataset_version,
+            "replay_dataset_sha256": version.replay_dataset_sha256,
+            "parameter_fingerprint": version.parameter_fingerprint,
+            "replay_case_count": version.replay_case_count,
+            "replay_matched_count": version.replay_matched_count,
+            "replay_unsafe_allow_count": version.replay_unsafe_allow_count,
+            "replay_gate_passed": version.replay_gate_passed,
+            "replayed_at": version.replayed_at.isoformat(),
+            "created_at": version.created_at.isoformat(),
+            "active": False,
+        }
+
+    def list_companion_absence_strategy_versions(self):
+        with self._open() as connection:
+            versions = SQLiteCompanionAbsenceStrategyVersionStore(
+                connection
+            ).list("user:self")
+            return {"items": [
+                self._absence_strategy_version_json(version)
+                for version in versions
+            ]}
+
+    def create_companion_absence_strategy_version(self, request):
+        """保存回放绑定草案；当前没有激活指针或调度接线。"""
+
+        with self._open(write_capability="proactive") as connection:
+            policy = SQLiteProactivePolicyStore(connection).get("user:self")
+            store = SQLiteCompanionAbsenceStrategyVersionStore(connection)
+            try:
+                replayed_at = self.clock()
+                report = run_replay(load_replay_dataset())
+                summary = report["summary"]
+                replay = CompanionStrategyReplayEvidence(
+                    protocol=report["protocol"],
+                    dataset_name=report["dataset"]["name"],
+                    dataset_version=report["dataset"]["version"],
+                    dataset_sha256=report["dataset"]["sha256"],
+                    case_count=summary["total"],
+                    matched_count=summary["matched"],
+                    unsafe_allow_count=summary["unsafe_allow_count"],
+                    gate_passed=summary["gate_passed"],
+                    replayed_at=replayed_at,
+                )
+                result = CompanionAbsenceStrategyVersionService(
+                    store, clock=self.clock,
+                ).create_from_candidate(
+                    request.candidate_id,
+                    subject_id="user:self",
+                    expected_candidate_revision=request.expected_candidate_revision,
+                    allowed_weekdays=policy.config.allowed_weekdays,
+                    replay=replay,
+                )
+            except ValueError as error:
+                if str(error) == "companion_routine_candidate_conflict":
+                    raise MemoryAccessError(str(error), 409) from None
+                if str(error) == "absence_routine_draft_invalid":
+                    raise MemoryAccessError("companion_absence_strategy_unsupported", 409) from None
+                raise
+            return {
+                "outcome": result.outcome,
+                "version": self._absence_strategy_version_json(result.version),
+            }
 
     def generate_companion_strategy_candidate(self):
         """只生成未生效候选；不读取消息正文、不修改 P4 设置。"""

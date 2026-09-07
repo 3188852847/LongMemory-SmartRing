@@ -1,7 +1,7 @@
 import {useEffect, useMemo, useState} from 'react';
 import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {Alert, Button, Card, Checkbox, Input, InputNumber, Select, Space, Switch, Tag} from 'antd';
-import {ApiError, ChatApi, type CompanionRoutineCandidate, type CompanionStrategyCandidate, type ProactiveOutreachSummary, type ProactivePolicy, type ProactiveScheduleStatus, type ProactiveTestResult, type ProactiveTopicSeed, type UserInitiatedInteraction} from './api';
+import {ApiError, ChatApi, type CompanionAbsenceStrategyVersion, type CompanionRoutineCandidate, type CompanionStrategyCandidate, type ProactiveOutreachSummary, type ProactivePolicy, type ProactiveScheduleStatus, type ProactiveTestResult, type ProactiveTopicSeed, type UserInitiatedInteraction} from './api';
 
 const DAYS = ['周一','周二','周三','周四','周五','周六','周日'].map((label, value) => ({label, value}));
 const minuteText = (value:number) => `${String(Math.floor(value / 60)).padStart(2,'0')}:${String(value % 60).padStart(2,'0')}`;
@@ -30,6 +30,7 @@ export function ProactiveSettings({api, ready}:{api:ChatApi; ready:boolean}) {
   const strategyCandidates = useQuery({queryKey:['companion-strategy-candidates'], queryFn:() => api.request<{items:CompanionStrategyCandidate[]}>('/api/companion-strategy-candidates'), enabled:ready});
   const userInitiated = useQuery({queryKey:['companion-user-initiated-interactions'], queryFn:() => api.request<{items:UserInitiatedInteraction[]}>('/api/companion-user-initiated-interactions?limit=10'), enabled:ready});
   const routineCandidates = useQuery({queryKey:['companion-routine-candidates'], queryFn:() => api.request<{items:CompanionRoutineCandidate[]}>('/api/companion-routine-candidates'), enabled:ready});
+  const absenceVersions = useQuery({queryKey:['companion-absence-strategy-versions'], queryFn:() => api.request<{items:CompanionAbsenceStrategyVersion[]}>('/api/companion-absence-strategy-versions'), enabled:ready});
   const [draft, setDraft] = useState<ProactivePolicy>();
   const [notice, setNotice] = useState('');
   const [testText, setTestText] = useState('今天也要照顾好自己呀。');
@@ -39,6 +40,7 @@ export function ProactiveSettings({api, ready}:{api:ChatApi; ready:boolean}) {
   const [topicNotice, setTopicNotice] = useState('');
   const [strategyNotice, setStrategyNotice] = useState('');
   const [routineNotice, setRoutineNotice] = useState('');
+  const [absenceVersionNotice, setAbsenceVersionNotice] = useState('');
   useEffect(() => {if (query.data) setDraft({...query.data, allowed_weekdays:[...query.data.allowed_weekdays]});}, [query.data]);
   const dirty = useMemo(() => Boolean(draft && query.data && JSON.stringify(draft) !== JSON.stringify(query.data)), [draft, query.data]);
   const mutation = useMutation({
@@ -220,6 +222,25 @@ export function ProactiveSettings({api, ready}:{api:ChatApi; ready:boolean}) {
       void client.invalidateQueries({queryKey:['companion-routine-candidates']});
     },
   });
+  const createAbsenceVersion = useMutation({
+    mutationFn:(candidate:CompanionRoutineCandidate) => api.request<{
+      outcome:'version_created'|'version_exists'; version:CompanionAbsenceStrategyVersion;
+    }>('/api/companion-absence-strategy-versions/draft', 'POST', {
+      candidate_id:candidate.id, expected_candidate_revision:candidate.revision,
+    }),
+    onSuccess:value => {
+      setAbsenceVersionNotice(value.outcome === 'version_created'
+        ? '离线验证草案已保存；它尚未激活，也不会参与后台问候。'
+        : '同一候选和回放数据已经有版本，本次没有重复创建。');
+      void client.invalidateQueries({queryKey:['companion-absence-strategy-versions']});
+    },
+    onError:error => {
+      setAbsenceVersionNotice(error instanceof ApiError && error.code === 'companion_absence_strategy_unsupported'
+        ? '该时段加上宽限会跨越午夜，第一版不会猜测应归属哪一天。'
+        : '草案没有保存；候选可能已经被忽略或发生变化。');
+      void client.invalidateQueries({queryKey:['companion-routine-candidates']});
+    },
+  });
   const change = (patch:Partial<ProactivePolicy>) => draft && setDraft({...draft, ...patch});
   if (query.isError) return <Alert type="error" showIcon title="主动交流设置不可用" description="请确认已选择当前版本的个人数据库。"/>;
   if (query.isLoading || !draft) return <Alert type="info" showIcon title="正在读取主动交流设置…"/>;
@@ -354,10 +375,13 @@ export function ProactiveSettings({api, ready}:{api:ChatApi; ready:boolean}) {
       {routineCandidates.isError && <Alert type="error" showIcon title="主动出现时段候选读取失败"/>}
       <div className="proactive-history">{routineCandidates.data?.items?.map(candidate => <Card size="small" key={candidate.id}
         title={<Space wrap><Tag color={candidate.status === 'candidate' ? 'gold' : 'default'}>{candidate.status === 'candidate' ? '待观察' : '已忽略'}</Tag><strong>常在 {minuteText(candidate.expected_minute)} 左右主动出现</strong><Tag>未生效</Tag></Space>}
-        extra={candidate.status === 'candidate' && <Button size="small" danger
-          loading={dismissRoutine.isPending && dismissRoutine.variables?.id === candidate.id}
-          disabled={dismissRoutine.isPending}
-          onClick={() => dismissRoutine.mutate(candidate)}>忽略候选</Button>}>
+        extra={candidate.status === 'candidate' && <Space><Button size="small"
+          loading={createAbsenceVersion.isPending && createAbsenceVersion.variables?.id === candidate.id}
+          disabled={createAbsenceVersion.isPending}
+          onClick={() => createAbsenceVersion.mutate(candidate)}>生成离线验证草案</Button><Button size="small" danger
+            loading={dismissRoutine.isPending && dismissRoutine.variables?.id === candidate.id}
+            disabled={dismissRoutine.isPending}
+            onClick={() => dismissRoutine.mutate(candidate)}>忽略候选</Button></Space>}>
         <p>来自 {candidate.distinct_local_dates} 个不同日期的 {candidate.evidence_count} 条主动出现观察。</p>
         <p className="subtle">这不是主动联系规则，也没有定义“缺席后多久问候”。</p>
         {candidate.sources.map(source => <p className="subtle" key={source.user_initiated_event_id}>
@@ -366,6 +390,17 @@ export function ProactiveSettings({api, ready}:{api:ChatApi; ready:boolean}) {
         <small>生成器：{candidate.generator_version} · 候选 ID：{candidate.id}</small>
       </Card>)}</div>
       {routineCandidates.isSuccess && (routineCandidates.data?.items?.length ?? 0) === 0 && <p className="subtle">尚无主动出现时段候选。</p>}
+      {absenceVersionNotice && <p role="status">{absenceVersionNotice}</p>}
+      {absenceVersions.isError && <Alert type="error" showIcon title="离线验证草案读取失败"/>}
+      <h4>缺席联系策略版本草案</h4>
+      <p className="subtle">这里只保存候选参数与固定合成回放指纹。即使门控通过，也没有激活入口，不会参与后台调度。</p>
+      <div className="proactive-history">{absenceVersions.data?.items?.map(version => <Card size="small" key={version.id}
+        title={<Space wrap><Tag color={version.replay_gate_passed ? 'green' : 'red'}>{version.replay_gate_passed ? '离线门控通过' : '离线门控未通过'}</Tag><strong>{minuteText(version.expected_minute)} 后宽限 {version.grace_minutes} 分钟</strong><Tag>未激活</Tag></Space>}>
+        <p>回放匹配 {version.replay_matched_count}/{version.replay_case_count}；不安全放行 {version.replay_unsafe_allow_count}。</p>
+        <p className="subtle">数据集：{version.replay_dataset_name} {version.replay_dataset_version} · 协议 {version.replay_protocol}</p>
+        <small>SHA-256：{version.replay_dataset_sha256} · 来源候选：{version.source_candidate_id} 修订 {version.source_candidate_revision}</small>
+      </Card>)}</div>
+      {absenceVersions.isSuccess && (absenceVersions.data?.items?.length ?? 0) === 0 && <p className="subtle">尚无离线验证草案。</p>}
     </section>
     <section className="settings-section">
       <h3>最近运行记录</h3>

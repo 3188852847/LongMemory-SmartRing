@@ -122,3 +122,15 @@ export interface CompanionRoutineCandidate {
     local_date:string; local_minute:number;
   }>;
 }
+export interface CompanionAbsenceStrategyVersion {
+  id:string; subject_id:string; source_candidate_id:string;
+  source_candidate_revision:number; expected_minute:number; grace_minutes:number;
+  utc_offset_minutes:number; allowed_weekdays:number[];
+  trigger_policy_version:'routine-absence-trigger-v1';
+  replay_protocol:'companion-absence-offline-replay-v1';
+  replay_dataset_name:string; replay_dataset_version:string;
+  replay_dataset_sha256:string; replay_case_count:number;
+  parameter_fingerprint:string;
+  replay_matched_count:number; replay_unsafe_allow_count:number;
+  replay_gate_passed:boolean; replayed_at:string; created_at:string; active:false;
+}

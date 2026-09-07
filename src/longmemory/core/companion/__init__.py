@@ -5,6 +5,7 @@
 """
 
 from .contracts import (
+    CompanionAbsenceStrategyVersionStore,
     CompanionFeedbackStore,
     CompanionRoutineCandidateStore,
     CompanionStrategyCandidateStore,
@@ -12,8 +13,10 @@ from .contracts import (
     UserInitiatedInteractionObserver,
 )
 from .models import (
+    CompanionAbsenceStrategyVersion,
     CompanionFeedbackEvent,
     CompanionRoutineCandidate,
+    CompanionStrategyReplayEvidence,
     CompanionStrategyCandidate,
     CompanionStrategyCandidateStatus,
     CompanionStrategyObservation,
@@ -38,10 +41,13 @@ __all__ = [
     "AbsenceTriggerAction",
     "AbsenceTriggerDecision",
     "AbsenceTriggerReason",
+    "CompanionAbsenceStrategyVersion",
+    "CompanionAbsenceStrategyVersionStore",
     "CompanionFeedbackEvent",
     "CompanionFeedbackStore",
     "CompanionRoutineCandidate",
     "CompanionRoutineCandidateStore",
+    "CompanionStrategyReplayEvidence",
     "CompanionStrategyCandidate",
     "CompanionStrategyCandidateStatus",
     "CompanionStrategyCandidateStore",

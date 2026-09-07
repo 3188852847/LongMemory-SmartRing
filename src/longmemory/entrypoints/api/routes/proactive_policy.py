@@ -6,6 +6,7 @@ from aiohttp import web
 from pydantic import ValidationError
 
 from ..contracts import (
+    CompanionAbsenceVersionDraftRequest,
     CompanionStrategyDismissRequest,
     ProactivePlaybackConfirmationRequest,
     ProactivePolicyRequest,
@@ -299,6 +300,38 @@ def register_proactive_policy_routes(app, backend, client, operation_lock):
     app.router.add_post(
         r"/api/companion-routine-candidates/{candidate_id:[0-9a-f]{32}}/dismiss",
         dismiss_routine_candidate,
+    )
+
+    async def absence_strategy_versions(request):
+        try:
+            if request.method == "GET":
+                result = await asyncio.to_thread(
+                    backend.list_companion_absence_strategy_versions,
+                )
+            else:
+                if request.content_type != "application/json":
+                    raise web.HTTPBadRequest()
+                try:
+                    body = CompanionAbsenceVersionDraftRequest.model_validate(
+                        await request.json()
+                    )
+                except (ValidationError, ValueError, UnicodeError):
+                    raise web.HTTPBadRequest() from None
+                result = await asyncio.to_thread(
+                    backend.create_companion_absence_strategy_version, body,
+                )
+            return web.json_response(result)
+        except MemoryAccessError as error:
+            return web.json_response({"error": error.code}, status=error.status)
+
+    app.router.add_get(
+        "/api/companion-absence-strategy-versions",
+        absence_strategy_versions,
+        allow_head=False,
+    )
+    app.router.add_post(
+        "/api/companion-absence-strategy-versions/draft",
+        absence_strategy_versions,
     )
 
     async def dismiss_strategy_candidate(request):

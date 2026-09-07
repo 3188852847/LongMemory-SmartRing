@@ -179,3 +179,12 @@ class CompanionStrategyDismissRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
 
     expected_revision: int = Field(ge=1)
+
+
+class CompanionAbsenceVersionDraftRequest(BaseModel):
+    """从仍有效的日常时段候选生成不可变离线验证草案。"""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    candidate_id: str = Field(pattern=r"^[0-9a-f]{32}$")
+    expected_candidate_revision: int = Field(ge=1)

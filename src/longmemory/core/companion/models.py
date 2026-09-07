@@ -5,6 +5,120 @@ from datetime import datetime
 from enum import StrEnum
 
 
+@dataclass(frozen=True, slots=True)
+class CompanionAbsenceStrategyVersion:
+    """不可变的缺席策略草案版本；是否启用由后续独立指针决定。"""
+
+    id: str
+    subject_id: str
+    source_candidate_id: str
+    source_candidate_revision: int
+    expected_minute: int
+    grace_minutes: int
+    utc_offset_minutes: int
+    allowed_weekdays: tuple[int, ...]
+    trigger_policy_version: str
+    replay_protocol: str
+    replay_dataset_name: str
+    replay_dataset_version: str
+    replay_dataset_sha256: str
+    parameter_fingerprint: str
+    replay_case_count: int
+    replay_matched_count: int
+    replay_unsafe_allow_count: int
+    replay_gate_passed: bool
+    replayed_at: datetime
+    created_at: datetime
+
+    def __post_init__(self) -> None:
+        texts = (
+            self.id, self.subject_id, self.source_candidate_id,
+            self.trigger_policy_version, self.replay_protocol,
+            self.replay_dataset_name, self.replay_dataset_version,
+        )
+        if any(not value.strip() or len(value) > 120 for value in texts):
+            raise ValueError("companion_absence_version_identity_invalid")
+        if (
+            self.source_candidate_revision < 1
+            or not 0 <= self.expected_minute < 24 * 60
+            or not 15 <= self.grace_minutes <= 6 * 60
+            or self.expected_minute + self.grace_minutes >= 24 * 60
+            or not -720 <= self.utc_offset_minutes <= 840
+            or not self.allowed_weekdays
+            or len(set(self.allowed_weekdays)) != len(self.allowed_weekdays)
+            or any(day not in range(7) for day in self.allowed_weekdays)
+        ):
+            raise ValueError("companion_absence_version_parameters_invalid")
+        try:
+            hashes = (self.replay_dataset_sha256, self.parameter_fingerprint)
+            valid_hash = all(
+                len(value) == 64 and value == value.lower()
+                and len(bytes.fromhex(value)) == 32
+                for value in hashes
+            )
+        except ValueError:
+            valid_hash = False
+        if not valid_hash:
+            raise ValueError("companion_absence_version_replay_hash_invalid")
+        gate_should_pass = (
+            self.replay_case_count > 0
+            and self.replay_matched_count == self.replay_case_count
+            and self.replay_unsafe_allow_count == 0
+        )
+        if (
+            not 0 <= self.replay_matched_count <= self.replay_case_count
+            or self.replay_unsafe_allow_count < 0
+            or self.replay_gate_passed != gate_should_pass
+        ):
+            raise ValueError("companion_absence_version_replay_result_invalid")
+        if any(value.tzinfo is None or value.utcoffset() is None
+               for value in (self.replayed_at, self.created_at)):
+            raise ValueError("companion_absence_version_time_invalid")
+
+
+@dataclass(frozen=True, slots=True)
+class CompanionStrategyReplayEvidence:
+    """回放工具交给应用层的中立证据，不携带具体测试实现。"""
+
+    protocol: str
+    dataset_name: str
+    dataset_version: str
+    dataset_sha256: str
+    case_count: int
+    matched_count: int
+    unsafe_allow_count: int
+    gate_passed: bool
+    replayed_at: datetime
+
+    def __post_init__(self) -> None:
+        if any(not value.strip() or len(value) > 120 for value in (
+            self.protocol, self.dataset_name, self.dataset_version,
+        )):
+            raise ValueError("companion_replay_evidence_identity_invalid")
+        try:
+            valid_hash = (
+                len(self.dataset_sha256) == 64
+                and self.dataset_sha256 == self.dataset_sha256.lower()
+                and len(bytes.fromhex(self.dataset_sha256)) == 32
+            )
+        except ValueError:
+            valid_hash = False
+        expected_gate = (
+            self.case_count > 0
+            and self.matched_count == self.case_count
+            and self.unsafe_allow_count == 0
+        )
+        if (
+            not valid_hash
+            or not 0 <= self.matched_count <= self.case_count
+            or self.unsafe_allow_count < 0
+            or self.gate_passed != expected_gate
+        ):
+            raise ValueError("companion_replay_evidence_result_invalid")
+        if self.replayed_at.tzinfo is None or self.replayed_at.utcoffset() is None:
+            raise ValueError("companion_replay_evidence_time_invalid")
+
+
 class InteractionOutcomeKind(StrEnum):
     """只表达能被记录证明的事件，不表达“效果好”。"""
 
