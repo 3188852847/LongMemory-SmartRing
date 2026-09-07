@@ -653,7 +653,7 @@ def test_manual_proactive_test_is_csrf_protected_and_idempotent(tmp_path):
         "expected_revision": 0, "enabled": True, "utc_offset_minutes": 480,
         "allowed_weekdays": [0, 1, 2, 3, 4, 5, 6],
         "allowed_start_minute": 540, "allowed_end_minute": 1260,
-        "daily_limit": 1, "minimum_interval_seconds": 21600,
+        "daily_limit": 3, "minimum_interval_seconds": 0,
         "maximum_lifetime_seconds": 300, "quiet_until": None,
         "automatic_enabled": False, "scheduled_minute": 780,
         "greeting_text": "下午好，今天过得怎么样？",
@@ -742,6 +742,21 @@ def test_manual_proactive_test_is_csrf_protected_and_idempotent(tmp_path):
             assert (await replayed_confirmation.json())["replayed"] is True
             assert len(bridge.calls) == 1
 
+            schedule_status = await (
+                await client.get(base + "/api/proactive-schedule-status")
+            ).json()
+            assert schedule_status["awaiting_user_response"] is True
+            assert schedule_status["user_chatted_today"] is False
+
+            # 显式诊断不是后台追问：上一条仍在等待用户回应时也可再次验证，
+            # 但仍会占用每日次数并保留完整账本。
+            second = await client.post(
+                base + "/api/proactive-outreach/test", headers=headers,
+                json={**body, "request_id": "540780a2-48f3-4634-86c5-d62828e493f4"},
+            )
+            assert (await second.json())["state"] == "queued"
+            assert len(bridge.calls) == 2
+
             stale = await client.post(
                 base + "/api/proactive-outreach/test", headers=headers,
                 json={**body, "request_id": "ac1da8a5-2ff6-4136-80ff-c52b0c98ab2f",
@@ -751,15 +766,19 @@ def test_manual_proactive_test_is_csrf_protected_and_idempotent(tmp_path):
             assert (await stale.json())["error"] == "proactive_settings_conflict"
 
         with sqlite3.connect(database) as connection:
-            assert connection.execute("SELECT count(*) FROM proactive_outreach").fetchone()[0] == 1
+            assert connection.execute("SELECT count(*) FROM proactive_outreach").fetchone()[0] == 2
             assert connection.execute(
                 "SELECT count(*) FROM proactive_outreach_events"
-            ).fetchone()[0] == 3
-            event = connection.execute(
-                "SELECT new_state,reason_code,evidence_kind "
-                "FROM proactive_outreach_events ORDER BY sequence DESC LIMIT 1"
-            ).fetchone()
-            assert event == ("played", "user_confirmed_playback", "user_observed")
+            ).fetchone()[0] == 5
+            assert connection.execute(
+                "SELECT count(*) FROM proactive_outreach_events "
+                "WHERE new_state='queued' AND reason_code='ready' "
+                "AND evidence_kind='server_queue'"
+            ).fetchone()[0] == 2
+            assert connection.execute(
+                "SELECT count(*) FROM proactive_outreach_events "
+                "WHERE new_state='played' AND evidence_kind='user_observed'"
+            ).fetchone()[0] == 1
 
     asyncio.run(run())
 

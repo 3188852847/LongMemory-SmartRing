@@ -290,13 +290,14 @@ IP 变化时：刷新本机地址 → 选择圆屏可达网卡 → 显式确认�
 1. 用户在 React 设置页打开并保存主动交流许可，输入不超过 80 个字符的短问候，再明确点击一次测试按钮。
 2. 浏览器以同源会话、CSRF、设置 revision 和新的 UUID 请求 ID提交；未保存设置时按钮禁用。
 3. 后端先按请求 ID 查账本。重复请求直接返回第一次结果，不再次调用小智。
-4. 新请求读取可信历史和实时设备状态，创建手动候选并执行完整许可策略；被规则拦截时写入原因且不调用设备。
+4. 新请求读取可信历史和实时设备状态，创建手动候选并执行许可策略；因为它是所有者显式诊断，所以不受“上一条仍待回应”限制，但总许可、时段、勿扰、频率和设备会话仍可拦截。
 5. 允许时通过小智适配器排队。页面只显示“服务端已接收并排队”，圆屏是否播放由实机验收，失败不自动重试。
 6. 该入口不调用模型、不读取 L0–L3、不生成话题，也不启动任何后台定时器。
 7. 设置页从只读历史接口加载最近投影，显示当前状态、最后原因和事件数量；一次测试结束只刷新该查询，不自动重发。
 8. 圆屏实际发声后，所有者可显式“确认已听到”；后端以 revision 保护追加 `USER_OBSERVED` 事件并进入 `played`。没有点击或没有设备回执时继续保持 `queued`。
+9. 设置页另读当天定时状态，显示当天是否已经聊过、是否仍等待上一条回应和当前调度决定；该查询不读取正文、不创建候选。
 
-具体约束见 [ADR-0064](../adr/0064-manual-proactive-delivery-test.md)、[ADR-0065](../adr/0065-proactive-outreach-owner-history.md)和 [ADR-0066](../adr/0066-user-observed-proactive-playback.md)。
+具体约束见 [ADR-0064](../adr/0064-manual-proactive-delivery-test.md)、[ADR-0065](../adr/0065-proactive-outreach-owner-history.md)、[ADR-0066](../adr/0066-user-observed-proactive-playback.md)和 [ADR-0070](../adr/0070-proactive-diagnostics-and-schedule-visibility.md)。
 
 ## 16. 当前实现：显式定时问候（P4.5）
 

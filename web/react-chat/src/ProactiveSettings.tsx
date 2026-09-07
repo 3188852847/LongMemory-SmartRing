@@ -1,7 +1,7 @@
 import {useEffect, useMemo, useState} from 'react';
 import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {Alert, Button, Card, Checkbox, Input, InputNumber, Select, Space, Switch, Tag} from 'antd';
-import {ApiError, ChatApi, type ProactiveOutreachSummary, type ProactivePolicy, type ProactiveTestResult, type ProactiveTopicSeed} from './api';
+import {ApiError, ChatApi, type ProactiveOutreachSummary, type ProactivePolicy, type ProactiveScheduleStatus, type ProactiveTestResult, type ProactiveTopicSeed} from './api';
 
 const DAYS = ['周一','周二','周三','周四','周五','周六','周日'].map((label, value) => ({label, value}));
 const minuteText = (value:number) => `${String(Math.floor(value / 60)).padStart(2,'0')}:${String(value % 60).padStart(2,'0')}`;
@@ -11,6 +11,11 @@ const parseMinute = (value:string) => {const [hour, minute] = value.split(':').m
 export function ProactiveSettings({api, ready}:{api:ChatApi; ready:boolean}) {
   const client = useQueryClient();
   const query = useQuery({queryKey:['proactive-policy'], queryFn:() => api.request<ProactivePolicy>('/api/proactive-policy'), enabled:ready});
+  const scheduleStatus = useQuery({
+    queryKey:['proactive-schedule-status'],
+    queryFn:() => api.request<ProactiveScheduleStatus>('/api/proactive-schedule-status'),
+    enabled:ready, refetchInterval:30000,
+  });
   const history = useQuery({queryKey:['proactive-outreach'], queryFn:() => api.request<{items:ProactiveOutreachSummary[]}>('/api/proactive-outreach?limit=10'), enabled:ready});
   const scenarios = useQuery({queryKey:['proactive-topic-scenarios'], queryFn:() => api.request<{items:Array<{id:string;title:string;summary:string;revision:number}>}>('/api/scenarios?state=active&offset=0&limit=100'), enabled:ready});
   const topicSeeds = useQuery({queryKey:['proactive-topic-seeds'], queryFn:() => api.request<{items:ProactiveTopicSeed[]}>('/api/proactive-topic-seeds'), enabled:ready});
@@ -82,7 +87,7 @@ export function ProactiveSettings({api, ready}:{api:ChatApi; ready:boolean}) {
     },
     onSuccess:() => {
       setTopicScenarioId(undefined); setTopicText('');
-      setTopicNotice('安全话题素材已保存；当前只供预览，不会自动播报。');
+      setTopicNotice('安全话题素材已保存；只有打开并保存记忆话题开关后，定时任务才可能使用它。');
       void client.invalidateQueries({queryKey:['proactive-topic-seeds']});
     },
     onError:error => {
@@ -117,6 +122,13 @@ export function ProactiveSettings({api, ready}:{api:ChatApi; ready:boolean}) {
     <Alert type={draft.automatic_enabled ? 'warning' : 'success'} showIcon
       title={draft.automatic_enabled ? '后台定时问候已开启' : (draft.enabled ? '主动联系许可已打开，定时问候仍关闭' : '主动交流当前关闭')}
       description="定时问候只在所选星期的指定分钟检查：当天已经聊过、设备离线或忙碌、处于勿扰或错过时刻都会跳过，之后不补发。"/>
+    {scheduleStatus.data?.user_chatted_today && <Alert type="info" showIcon
+      title="今天已经聊过，今天的定时问候会跳过"
+      description="这是避免刚聊完又主动打扰的既定规则；修改定时时刻不会绕过它。手动验证仍可使用。"/>}
+    {scheduleStatus.data?.awaiting_user_response && <Alert type="warning" showIcon
+      title="上一条主动问候之后还没有收到新的用户消息"
+      description="自动定时会继续停止追问；真正说出并保存一条新消息后会解除。所有者手动验证不受这一项限制。"/>}
+    {scheduleStatus.isError && <Alert type="error" showIcon title="暂时无法读取今天的定时状态"/>}
     <div className="setting-line"><span>允许主动联系</span><Switch aria-label="允许主动联系" checked={draft.enabled} onChange={enabled => change({enabled, ...(!enabled ? {automatic_enabled:false, topic_enabled:false} : {})})}/></div>
     <div className="setting-line"><span>后台定时问候</span><Switch aria-label="后台定时问候" disabled={!draft.enabled} checked={draft.automatic_enabled} onChange={automatic_enabled => change({automatic_enabled, ...(!automatic_enabled ? {topic_enabled:false} : {})})}/></div>
     <label>允许星期</label>
@@ -137,7 +149,7 @@ export function ProactiveSettings({api, ready}:{api:ChatApi; ready:boolean}) {
     {notice && <p role="status">{notice}</p>}
     <section className="settings-section">
       <h3>手动验证圆屏问候</h3>
-      <p className="subtle">每次点击只尝试一次，仍遵守总开关、时间段、勿扰、频率和设备忙碌限制；失败不会自动重试。</p>
+      <p className="subtle">每次点击只尝试一次。它由你明确触发，因此不受“等待用户回应”限制；仍遵守总开关、时间段、勿扰、频率和设备忙碌限制，失败不会自动重试。</p>
       <Input aria-label="测试问候内容" maxLength={80} showCount value={testText} onChange={event => setTestText(event.target.value)}/>
       <Button loading={testMutation.isPending} disabled={!draft.enabled || dirty || testMutation.isPending || !testText.trim() || testText !== testText.trim()} onClick={() => testMutation.mutate()}>发送一次测试问候</Button>
       {!draft.enabled && <p className="subtle">请先打开并保存“允许主动联系”，再进行测试。</p>}

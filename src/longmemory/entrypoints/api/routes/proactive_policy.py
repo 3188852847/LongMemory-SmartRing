@@ -35,6 +35,17 @@ def register_proactive_policy_routes(app, backend, client, operation_lock):
     app.router.add_get("/api/proactive-policy", policy, allow_head=False)
     app.router.add_put("/api/proactive-policy", policy)
 
+    async def schedule_status(_request):
+        try:
+            result = await asyncio.to_thread(backend.proactive_schedule_status)
+            return web.json_response(result)
+        except MemoryAccessError as error:
+            return web.json_response({"error": error.code}, status=error.status)
+
+    app.router.add_get(
+        "/api/proactive-schedule-status", schedule_status, allow_head=False,
+    )
+
     async def test_once(request):
         if operation_lock.locked():
             return web.json_response({"error": "operation_busy"}, status=409)

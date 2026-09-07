@@ -1,5 +1,11 @@
 # Changelog
 
+### P4 proactive schedule visibility and manual diagnostics（2026-09-07）
+
+- 定位实机定时无动作并非计时故障：当天已有真实用户消息时，自动问候按既定规则提前跳过；较早主动问候之后没有新用户消息时，自动链继续停止追问。
+- 新增只读当天定时状态，React 设置页直接提示“今天聊过会跳过”和“上一条仍待回应”，不再让用户从无记录的沉默猜测原因。
+- 所有者显式手动验证不再受 `awaiting_user_response` 限制；它仍受总许可、时段、勿扰、频率和设备忙碌限制，并继续写入真实账本。见 ADR-0070。
+
 ### P4.6 deterministic approved topic scheduling（2026-09-07）
 
 - SQLite 代码结构升级为 V18：新增默认关闭的“优先使用记忆话题”设置，并在每条来源于素材的主动消息上保存素材 ID 与 revision。

@@ -8,6 +8,11 @@ import {createConsoleQueryClient} from './queryClient';
 afterEach(() => vi.restoreAllMocks());
 
 describe('主动交流设置', () => {
+  const scheduleStatus = {
+    action:'wait', reason:'before_schedule', local_date:'2026-09-07',
+    scheduled_for:null, user_chatted_today:false,
+    awaiting_user_response:false, already_evaluated_today:false,
+  };
   test('默认关闭并明确保存不等于后台投递', async () => {
     const request = vi.spyOn(ChatApi.prototype, 'request').mockResolvedValue({
       subject_id:'user:self', enabled:false, utc_offset_minutes:480,
@@ -51,6 +56,7 @@ describe('主动交流设置', () => {
       };
     const request = vi.spyOn(ChatApi.prototype, 'request').mockImplementation(async path => {
       if (path === '/api/proactive-policy') return policy;
+      if (path === '/api/proactive-schedule-status') return scheduleStatus;
       if (path.startsWith('/api/proactive-outreach?')) return {items:[]};
       if (path === '/api/proactive-outreach/test') return {
         outreach_id:'outreach-1', state:'queued', revision:2, replayed:false,
@@ -93,6 +99,7 @@ describe('主动交流设置', () => {
     };
     const request = vi.spyOn(ChatApi.prototype, 'request').mockImplementation(async path => {
       if (path === '/api/proactive-policy') return policy;
+      if (path === '/api/proactive-schedule-status') return scheduleStatus;
       if (path.startsWith('/api/proactive-outreach?')) return {items:[queued]};
       if (path.endsWith('/confirm-played')) return {
         outreach_id:queued.outreach_id, state:'played', revision:3, replayed:false,
@@ -124,6 +131,7 @@ describe('主动交流设置', () => {
     const scenario = {id:'scenario-1',title:'毕业设计',summary:'用户正在准备毕业设计汇报。',revision:2};
     const request = vi.spyOn(ChatApi.prototype, 'request').mockImplementation(async (path, method) => {
       if (path === '/api/proactive-policy') return policy;
+      if (path === '/api/proactive-schedule-status') return scheduleStatus;
       if (path.startsWith('/api/proactive-outreach?')) return {items:[]};
       if (path.startsWith('/api/scenarios?')) return {items:[scenario]};
       if (path === '/api/proactive-topic-seeds' && method === 'POST') return {
@@ -142,13 +150,39 @@ describe('主动交流设置', () => {
     fireEvent.click(await screen.findByText('毕业设计'));
     fireEvent.change(screen.getByLabelText('允许播出的安全话题'), {target:{value:'毕业设计准备得怎么样了？'}});
     fireEvent.click(screen.getByRole('button', {name:'保存为话题素材'}));
-    expect(await screen.findByText(/当前只供预览，不会自动播报/)).toBeTruthy();
+    expect(await screen.findByText(/只有打开并保存记忆话题开关/)).toBeTruthy();
     expect(request).toHaveBeenCalledWith('/api/proactive-topic-seeds', 'POST', {
       scenario_id:'scenario-1', expected_scenario_revision:2,
       prompt_text:'毕业设计准备得怎么样了？',
       request_id:'6a4db801-6779-40fc-90b4-aab77f580c82',
     });
     expect(request.mock.calls.some(([path]) => path === '/api/proactive-outreach/test')).toBe(false);
+    view.unmount(); client.clear();
+  });
+
+  test('直接解释今天聊过和上一条仍待回应的定时拦截条件', async () => {
+    const policy = {
+      subject_id:'user:self', enabled:true, utc_offset_minutes:480,
+      allowed_weekdays:[0,1,2,3,4,5,6], allowed_start_minute:540, allowed_end_minute:1260,
+      daily_limit:3, minimum_interval_seconds:0, maximum_lifetime_seconds:300,
+      quiet_until:null, policy_version:'proactive-contact-policy-v2', revision:3, updated_at:null,
+      automatic_enabled:true, scheduled_minute:782, greeting_text:'下午好。', topic_enabled:true,
+    };
+    vi.spyOn(ChatApi.prototype, 'request').mockImplementation(async path => {
+      if (path === '/api/proactive-policy') return policy;
+      if (path === '/api/proactive-schedule-status') return {
+        ...scheduleStatus, action:'skip', reason:'user_already_chatted_today',
+        user_chatted_today:true, awaiting_user_response:true,
+      };
+      if (path.startsWith('/api/proactive-outreach?')) return {items:[]};
+      if (path.startsWith('/api/scenarios?')) return {items:[]};
+      if (path === '/api/proactive-topic-seeds') return {items:[]};
+      throw new Error(`unexpected path: ${path}`);
+    });
+    const client = createConsoleQueryClient();
+    const view = render(<QueryClientProvider client={client}><ProactiveSettings api={new ChatApi()} ready={true}/></QueryClientProvider>);
+    expect(await screen.findByText('今天已经聊过，今天的定时问候会跳过')).toBeTruthy();
+    expect(screen.getByText('上一条主动问候之后还没有收到新的用户消息')).toBeTruthy();
     view.unmount(); client.clear();
   });
 });

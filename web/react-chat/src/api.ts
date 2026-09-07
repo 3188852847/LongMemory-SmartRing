@@ -53,6 +53,11 @@ export interface ProactiveTestResult {
   policy_action: string | null; policy_reason: string | null; delivery_reason: string | null;
   device: {ready:boolean; user_session_active:boolean; reason:string | null} | null;
 }
+export interface ProactiveScheduleStatus {
+  action:'create'|'skip'|'wait'; reason:string; local_date:string;
+  scheduled_for:string | null; user_chatted_today:boolean;
+  awaiting_user_response:boolean; already_evaluated_today:boolean;
+}
 export interface ProactiveOutreachSummary {
   outreach_id:string; trigger:string; content:string; created_at:string; expires_at:string;
   state:string; revision:number; reason:string; event_count:number; failure_reason:string | null;

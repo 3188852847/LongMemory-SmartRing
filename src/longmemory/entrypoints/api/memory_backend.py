@@ -192,6 +192,48 @@ class MemoryBackend:
                 SQLiteProactivePolicyStore(connection).get("user:self")
             )
 
+    def proactive_schedule_status(self):
+        """解释今天的定时触发条件；只读时间与状态，不读取对话正文。"""
+
+        subject_id = "user:self"
+        now = self.clock()
+        with self._open() as connection:
+            settings = SQLiteProactivePolicyStore(connection).get(subject_id)
+            history = SQLiteProactiveHistoryReader(connection)
+            runtime = history.read(subject_id, now=now)
+            offset = timezone(timedelta(minutes=settings.config.utc_offset_minutes))
+            local_day = now.astimezone(offset).date()
+            idempotency_key = f"explicit-schedule:{local_day.isoformat()}"
+            ledger = ProactiveOutreachLedger(
+                SQLiteProactiveOutreachStore(connection, commit_changes=False),
+                clock=lambda: now,
+            )
+            user_chatted_today = history.user_chatted_on_local_date(
+                now=now,
+                utc_offset_minutes=settings.config.utc_offset_minutes,
+            )
+            already_evaluated_today = (
+                ledger.get_by_idempotency(subject_id, idempotency_key) is not None
+            )
+            decision = decide_scheduled_trigger(
+                settings,
+                now=now,
+                user_chatted_today=user_chatted_today,
+                already_evaluated_today=already_evaluated_today,
+            )
+            return {
+                "action": decision.action.value,
+                "reason": decision.reason.value,
+                "local_date": decision.local_date.isoformat(),
+                "scheduled_for": (
+                    decision.scheduled_for.isoformat()
+                    if decision.scheduled_for is not None else None
+                ),
+                "user_chatted_today": user_chatted_today,
+                "awaiting_user_response": runtime.awaiting_user_response,
+                "already_evaluated_today": already_evaluated_today,
+            }
+
     @staticmethod
     def _topic_seed_json(row, *, now):
         valid_from = (
@@ -363,7 +405,9 @@ class MemoryBackend:
             runtime = SQLiteProactiveHistoryReader(connection).read(subject_id, now=now)
             runtime = OutreachPolicyState(
                 attempted_at=runtime.attempted_at,
-                awaiting_user_response=runtime.awaiting_user_response,
+                # 所有者显式点击属于诊断动作，不是系统自主追问；其余许可、
+                # 时段、频率、勿扰和设备会话门控仍保持。
+                awaiting_user_response=False,
                 user_session_active=device.user_session_active,
                 quiet_until=settings.quiet_until,
             )
