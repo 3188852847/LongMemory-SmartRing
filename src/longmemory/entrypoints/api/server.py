@@ -56,7 +56,7 @@ def create_app(*, port=8765, bridge=None, web_root=None, database=None, allow_me
                chat_backend=None, experiment_backend=None, job_backend=None, instance_id=None,
                xiaozhi_server=None, memory_runtime_token=None, scenario_producer=None,
                scenario_model=None, persona_producer=None, persona_model=None,
-               consolidation_background_enabled=False):
+               consolidation_background_enabled=False, proactive_clock=None):
     sessions = Sessions()
     assets = web_root or ROOT / "web"
     client = bridge if bridge is not None else XiaozhiControlClient(ROOT / "data/control/device-control.token")
@@ -134,9 +134,10 @@ def create_app(*, port=8765, bridge=None, web_root=None, database=None, allow_me
         persona_producer=persona_producer,
         persona_model=persona_model,
         consolidation_background_enabled=consolidation_background_enabled,
+        clock=proactive_clock,
     )
     register_memory_routes(app, memory_backend)
-    register_proactive_policy_routes(app, memory_backend)
+    register_proactive_policy_routes(app, memory_backend, client, operation_lock)
     register_chat_routes(app, chat_backend)
     register_memory_mode_routes(app, chat_backend)
     if memory_runtime_token:

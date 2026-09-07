@@ -46,3 +46,8 @@ export interface ProactivePolicy {
   daily_limit: number; minimum_interval_seconds: number; maximum_lifetime_seconds: number;
   quiet_until: string | null; policy_version: string; revision: number; updated_at: string | null;
 }
+export interface ProactiveTestResult {
+  outreach_id: string; state: string; revision: number; replayed: boolean;
+  policy_action: string | null; policy_reason: string | null; delivery_reason: string | null;
+  device: {ready:boolean; user_session_active:boolean; reason:string | null} | null;
+}

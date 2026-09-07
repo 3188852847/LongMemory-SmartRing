@@ -84,6 +84,16 @@ class SQLiteProactiveOutreachStore:
         ).fetchone()
         return self._row_to_outreach(row) if row is not None else None
 
+    def get_by_idempotency(
+        self, subject_id: str, idempotency_key: str,
+    ) -> ProactiveOutreach | None:
+        row = self._connection.execute(
+            "SELECT * FROM proactive_outreach "
+            "WHERE subject_id=? AND idempotency_key=?",
+            (subject_id, idempotency_key),
+        ).fetchone()
+        return self._row_to_outreach(row) if row is not None else None
+
     def list_events(self, outreach_id: str) -> tuple[OutreachEvent, ...]:
         rows = self._connection.execute(
             "SELECT * FROM proactive_outreach_events WHERE outreach_id=? "

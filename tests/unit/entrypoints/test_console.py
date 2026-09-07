@@ -4,6 +4,7 @@ import asyncio
 import socket
 import sqlite3
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 
 import pytest
 
@@ -25,7 +26,9 @@ class FakeBridge:
         if self.error:
             raise self.error
         return {"connection_count": 1, "ready": True, "read_volume_supported": True,
-                "set_volume_supported": True, "allowed_volume": {"minimum": 5, "maximum": 60}}
+                "set_volume_supported": True, "announcement_supported": True,
+                "announcement_ready": True, "user_session_active": False,
+                "allowed_volume": {"minimum": 5, "maximum": 60}}
 
     async def read_volume(self):
         self.calls.append("read")
@@ -42,6 +45,14 @@ class FakeBridge:
         return {"requested_volume": volume, "previous_volume": 25,
                 "acknowledged": True, "readback_volume": volume, "verified": True}
 
+    async def announce(self, text, expires_at):
+        self.calls.append(("announce", text, expires_at))
+        if self.error:
+            raise self.error
+        return {"operation_id": "a" * 32, "state": "queued",
+                "playback_acknowledgement": "unavailable",
+                "expires_at_ms": int(expires_at.timestamp() * 1000)}
+
     async def close(self):
         self.closed = True
 
@@ -52,7 +63,8 @@ async def console(database=None, allow_memory_delete=False, chat_backend=None,
                   allow_persona_management=False,
                   xiaozhi_server=None, memory_runtime_token=None,
                   scenario_producer=None, scenario_model=None,
-                  persona_producer=None, persona_model=None):
+                  persona_producer=None, persona_model=None,
+                  proactive_clock=None):
     # 先占用随机回环端口，再把精确 Host 交给应用，避免探测后抢占端口。
     sock = socket.socket()
     sock.bind(("127.0.0.1", 0))
@@ -68,7 +80,8 @@ async def console(database=None, allow_memory_delete=False, chat_backend=None,
                                      scenario_producer=scenario_producer,
                                      scenario_model=scenario_model,
                                      persona_producer=persona_producer,
-                                     persona_model=persona_model), access_log=None)
+                                     persona_model=persona_model,
+                                     proactive_clock=proactive_clock), access_log=None)
     await runner.setup()
     await web.SockSite(runner, sock).start()
     try:
@@ -571,6 +584,113 @@ def test_proactive_policy_http_rejects_invalid_complete_settings(tmp_path, chang
             )
             assert response.status == 400
             assert (await client.get(base + "/api/proactive-policy")).status == 200
+
+    asyncio.run(run())
+
+
+def test_manual_proactive_test_is_csrf_protected_and_idempotent(tmp_path):
+    from longmemory.methods.longmemory_v1.method import LongMemoryV1
+
+    database = tmp_path / "manual-proactive-test.db"
+    LongMemoryV1(database).close()
+    now = datetime(2026, 9, 7, 4, 0, tzinfo=UTC)  # 北京时间周一 12:00。
+    policy = {
+        "expected_revision": 0, "enabled": True, "utc_offset_minutes": 480,
+        "allowed_weekdays": [0, 1, 2, 3, 4, 5, 6],
+        "allowed_start_minute": 540, "allowed_end_minute": 1260,
+        "daily_limit": 1, "minimum_interval_seconds": 21600,
+        "maximum_lifetime_seconds": 300, "quiet_until": None,
+    }
+    body = {
+        "text": "这是一条合成主动问候。",
+        "request_id": "6a4db801-6779-40fc-90b4-aab77f580c82",
+        "expected_policy_revision": 1,
+    }
+
+    async def run():
+        async with console(database, proactive_clock=lambda: now) as (client, base, bridge):
+            headers = await login(client, base)
+            assert (await client.put(
+                base + "/api/proactive-policy", headers=headers, json=policy,
+            )).status == 200
+
+            rejected = await client.post(base + "/api/proactive-outreach/test", json=body)
+            assert rejected.status == 403 and bridge.calls == []
+            invalid = await client.post(
+                base + "/api/proactive-outreach/test", headers=headers,
+                json={**body, "text": " 前后空格不会被静默修改"},
+            )
+            assert invalid.status == 400 and bridge.calls == []
+
+            first = await client.post(
+                base + "/api/proactive-outreach/test", headers=headers, json=body,
+            )
+            first_data = await first.json()
+            assert first.status == 200
+            assert first_data["state"] == "queued"
+            assert first_data["replayed"] is False
+            assert first_data["policy_reason"] == "ready"
+            assert first_data["delivery_reason"] == "xiaozhi_queue_accepted"
+            assert len(bridge.calls) == 1 and bridge.calls[0][0] == "announce"
+
+            repeated = await client.post(
+                base + "/api/proactive-outreach/test", headers=headers, json=body,
+            )
+            repeated_data = await repeated.json()
+            assert repeated.status == 200
+            assert repeated_data["outreach_id"] == first_data["outreach_id"]
+            assert repeated_data["replayed"] is True
+            assert len(bridge.calls) == 1
+
+            stale = await client.post(
+                base + "/api/proactive-outreach/test", headers=headers,
+                json={**body, "request_id": "ac1da8a5-2ff6-4136-80ff-c52b0c98ab2f",
+                      "expected_policy_revision": 0},
+            )
+            assert stale.status == 409
+            assert (await stale.json())["error"] == "proactive_settings_conflict"
+
+        with sqlite3.connect(database) as connection:
+            assert connection.execute("SELECT count(*) FROM proactive_outreach").fetchone()[0] == 1
+            assert connection.execute(
+                "SELECT count(*) FROM proactive_outreach_events"
+            ).fetchone()[0] == 2
+
+    asyncio.run(run())
+
+
+def test_manual_proactive_test_records_stable_delivery_failure(tmp_path):
+    from longmemory.methods.longmemory_v1.method import LongMemoryV1
+
+    database = tmp_path / "manual-proactive-failure.db"
+    LongMemoryV1(database).close()
+    now = datetime(2026, 9, 7, 4, 0, tzinfo=UTC)
+
+    async def run():
+        async with console(database, proactive_clock=lambda: now) as (client, base, bridge):
+            headers = await login(client, base)
+            policy = {
+                "expected_revision": 0, "enabled": True, "utc_offset_minutes": 480,
+                "allowed_weekdays": [0, 1, 2, 3, 4, 5, 6],
+                "allowed_start_minute": 540, "allowed_end_minute": 1260,
+                "daily_limit": 1, "minimum_interval_seconds": 21600,
+                "maximum_lifetime_seconds": 300, "quiet_until": None,
+            }
+            assert (await client.put(
+                base + "/api/proactive-policy", headers=headers, json=policy,
+            )).status == 200
+            bridge.error = BridgeError("announcement_enqueue_failed")
+            response = await client.post(
+                base + "/api/proactive-outreach/test", headers=headers,
+                json={"text": "这是一条失败路径测试。",
+                      "request_id": "60536c47-ad24-401f-9b89-d72349cc0aa8",
+                      "expected_policy_revision": 1},
+            )
+            result = await response.json()
+            assert response.status == 200
+            assert result["state"] == "failed"
+            assert result["delivery_reason"] == "announcement_enqueue_failed"
+            assert result["device"]["ready"] is False
 
     asyncio.run(run())
 

@@ -58,6 +58,13 @@ class ProactiveOutreachLedger:
 
         return self._store.list_events(outreach_id)
 
+    def get_by_idempotency(
+        self, subject_id: str, idempotency_key: str,
+    ) -> ProactiveOutreach | None:
+        """重复外部请求只读取第一次结果，不再次产生副作用。"""
+
+        return self._store.get_by_idempotency(subject_id, idempotency_key)
+
     def create_candidate(
         self,
         *,

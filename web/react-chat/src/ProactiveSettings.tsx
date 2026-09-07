@@ -1,7 +1,7 @@
 import {useEffect, useMemo, useState} from 'react';
 import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {Alert, Button, Checkbox, Input, InputNumber, Space, Switch} from 'antd';
-import {ApiError, ChatApi, type ProactivePolicy} from './api';
+import {ApiError, ChatApi, type ProactivePolicy, type ProactiveTestResult} from './api';
 
 const DAYS = ['周一','周二','周三','周四','周五','周六','周日'].map((label, value) => ({label, value}));
 const minuteText = (value:number) => `${String(Math.floor(value / 60)).padStart(2,'0')}:${String(value % 60).padStart(2,'0')}`;
@@ -13,6 +13,8 @@ export function ProactiveSettings({api, ready}:{api:ChatApi; ready:boolean}) {
   const query = useQuery({queryKey:['proactive-policy'], queryFn:() => api.request<ProactivePolicy>('/api/proactive-policy'), enabled:ready});
   const [draft, setDraft] = useState<ProactivePolicy>();
   const [notice, setNotice] = useState('');
+  const [testText, setTestText] = useState('今天也要照顾好自己呀。');
+  const [testNotice, setTestNotice] = useState('');
   useEffect(() => {if (query.data) setDraft({...query.data, allowed_weekdays:[...query.data.allowed_weekdays]});}, [query.data]);
   const dirty = useMemo(() => Boolean(draft && query.data && JSON.stringify(draft) !== JSON.stringify(query.data)), [draft, query.data]);
   const mutation = useMutation({
@@ -26,14 +28,33 @@ export function ProactiveSettings({api, ready}:{api:ChatApi; ready:boolean}) {
     onSuccess:value => {client.setQueryData(['proactive-policy'], value); setDraft({...value, allowed_weekdays:[...value.allowed_weekdays]}); setNotice('设置已保存；后台主动联系仍未接入。');},
     onError:error => {setNotice(error instanceof ApiError && error.code === 'proactive_settings_conflict' ? '设置已被另一个页面修改，请重新读取后再保存。' : '保存失败，未自动重试。'); void client.invalidateQueries({queryKey:['proactive-policy']});},
   });
+  const testMutation = useMutation({
+    mutationFn:() => api.request<ProactiveTestResult>('/api/proactive-outreach/test', 'POST', {
+      text:testText, request_id:crypto.randomUUID(), expected_policy_revision:draft!.revision,
+    }),
+    onSuccess:value => {
+      if (value.state === 'queued') {
+        setTestNotice('小智服务已接收并排队；当前协议不能确认圆屏已经播放，请以实机声音为准。');
+      } else if (value.state === 'blocked') {
+        setTestNotice(`策略已拦截，本次没有发送（原因：${value.policy_reason ?? '未知'}）。`);
+      } else {
+        setTestNotice(`本次未排队（状态：${value.state}；原因：${value.delivery_reason ?? value.policy_reason ?? '未知'}）。`);
+      }
+    },
+    onError:error => setTestNotice(
+      error instanceof ApiError && error.code === 'proactive_settings_conflict'
+        ? '设置已在别处变化，请刷新设置后再测试。'
+        : '测试请求失败且没有自动重试；请检查小智服务和圆屏连接。'
+    ),
+  });
   const change = (patch:Partial<ProactivePolicy>) => draft && setDraft({...draft, ...patch});
   if (query.isError) return <Alert type="error" showIcon title="主动交流设置不可用" description="请确认已选择当前版本的个人数据库。"/>;
   if (query.isLoading || !draft) return <Alert type="info" showIcon title="正在读取主动交流设置…"/>;
   const quietActive = draft.quiet_until && new Date(draft.quiet_until).getTime() > Date.now();
   return <Space orientation="vertical" style={{width:'100%'}}>
     <Alert type={draft.enabled ? 'warning' : 'success'} showIcon
-      title={draft.enabled ? '许可总开关已打开，但执行编排尚未接入' : '主动交流当前关闭'}
-      description="本页只保存许可边界。现阶段不会因为打开开关就自动联系，也不代表圆屏投递已经实机验收。"/>
+      title={draft.enabled ? '许可总开关已打开；后台定时触发尚未接入' : '主动交流当前关闭'}
+      description="打开开关只保存许可边界，不会自动联系。页面底部可以由你明确点击，向当前圆屏连接发送一次短问候测试。"/>
     <div className="setting-line"><span>允许主动联系</span><Switch aria-label="允许主动联系" checked={draft.enabled} onChange={enabled => change({enabled})}/></div>
     <label>允许星期</label>
     <Checkbox.Group aria-label="允许星期" options={DAYS} value={draft.allowed_weekdays} onChange={values => change({allowed_weekdays:values.map(Number).sort()})}/>
@@ -47,5 +68,14 @@ export function ProactiveSettings({api, ready}:{api:ChatApi; ready:boolean}) {
     <div className="setting-line"><span>{quietActive ? `临时勿扰至 ${new Date(draft.quiet_until!).toLocaleString()}` : '临时勿扰未开启'}</span><Space><Button onClick={() => change({quiet_until:new Date(Date.now() + 60 * 60 * 1000).toISOString()})}>勿扰 1 小时</Button><Button disabled={!draft.quiet_until} onClick={() => change({quiet_until:null})}>解除勿扰</Button></Space></div>
     <Space><Button type="primary" loading={mutation.isPending} disabled={!dirty || draft.allowed_weekdays.length === 0 || draft.allowed_start_minute === draft.allowed_end_minute} onClick={() => mutation.mutate(draft)}>保存主动交流设置</Button><Button disabled={!dirty || mutation.isPending} onClick={() => {setDraft({...query.data!, allowed_weekdays:[...query.data!.allowed_weekdays]}); setNotice('已放弃未保存修改。');}}>放弃修改</Button></Space>
     {notice && <p role="status">{notice}</p>}
+    <section className="settings-section">
+      <h3>手动验证圆屏问候</h3>
+      <p className="subtle">每次点击只尝试一次，仍遵守总开关、时间段、勿扰、频率和设备忙碌限制；失败不会自动重试。</p>
+      <Input aria-label="测试问候内容" maxLength={80} showCount value={testText} onChange={event => setTestText(event.target.value)}/>
+      <Button loading={testMutation.isPending} disabled={!draft.enabled || dirty || testMutation.isPending || !testText.trim() || testText !== testText.trim()} onClick={() => testMutation.mutate()}>发送一次测试问候</Button>
+      {!draft.enabled && <p className="subtle">请先打开并保存“允许主动联系”，再进行测试。</p>}
+      {dirty && <p className="subtle">当前设置尚未保存，请保存或放弃修改后再测试。</p>}
+      {testNotice && <p role="status">{testNotice}</p>}
+    </section>
   </Space>;
 }

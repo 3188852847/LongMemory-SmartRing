@@ -66,3 +66,28 @@ class ProactivePolicyRequest(BaseModel):
         if value is not None and (value.tzinfo is None or value.utcoffset() is None):
             raise ValueError("timezone required")
         return value
+
+
+class ProactiveTestRequest(BaseModel):
+    """用户显式点击的一次短文本验证；request_id 防止重复播报。"""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    text: str = Field(min_length=1, max_length=80)
+    request_id: str
+    expected_policy_revision: int = Field(ge=0)
+
+    @field_validator("text")
+    @classmethod
+    def single_line_text(cls, value: str) -> str:
+        if (value != value.strip() or not value
+                or any(ord(character) < 32 for character in value)):
+            raise ValueError("invalid announcement")
+        return value
+
+    @field_validator("request_id")
+    @classmethod
+    def canonical_request_id(cls, value: str) -> str:
+        if str(UUID(value)) != value:
+            raise ValueError("non-canonical UUID")
+        return value

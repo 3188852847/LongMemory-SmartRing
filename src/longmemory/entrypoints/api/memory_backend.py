@@ -16,7 +16,22 @@ from longmemory.adapters.storage.sqlite_consolidation_run_store import (
     SQLiteConsolidationRunStore,
 )
 from longmemory.adapters.storage.sqlite_proactive_policy_store import SQLiteProactivePolicyStore
-from longmemory.core.proactive import OutreachPolicyConfig, ProactivePolicySettings
+from longmemory.adapters.storage.sqlite_proactive_outreach_store import SQLiteProactiveOutreachStore
+from longmemory.adapters.storage.sqlite_proactive_runtime_state import SQLiteProactiveHistoryReader
+from longmemory.adapters.device_control import (
+    XiaozhiProactiveDelivery,
+    XiaozhiRuntimeStateProbe,
+)
+from longmemory.application.proactive import (
+    ProactiveOutreachDispatcher,
+    ProactiveOutreachLedger,
+)
+from longmemory.core.proactive import (
+    OutreachPolicyConfig,
+    OutreachPolicyState,
+    OutreachTrigger,
+    ProactivePolicySettings,
+)
 from longmemory.adapters.storage.sqlite_l1_consolidation_source_reader import (
     SQLiteL1ConsolidationSourceReader,
 )
@@ -100,7 +115,7 @@ class MemoryBackend:
                  allow_scenario_management=False, allow_persona_management=False,
                  scenario_producer=None,
                  scenario_model=None, persona_producer=None, persona_model=None,
-                 consolidation_background_enabled=False):
+                 consolidation_background_enabled=False, clock=None):
         # 路径只来自启动参数；任何 HTTP 请求都不能选文件或切换数据库。
         self.database = database.resolve() if database is not None else None
         self.allow_delete = allow_delete
@@ -112,6 +127,7 @@ class MemoryBackend:
         self.persona_producer = persona_producer
         self.persona_model = persona_model
         self.consolidation_background_enabled = consolidation_background_enabled
+        self.clock = clock or (lambda: datetime.now(UTC))
 
     def info(self):
         return {"configured": self.database is not None,
@@ -191,6 +207,90 @@ class MemoryBackend:
             )
             return self._proactive_json(
                 store.save(updated, expected_revision=current.revision)
+            )
+
+    @staticmethod
+    def _outreach_result(outreach, *, replayed, decision=None, delivery=None, device=None):
+        return {
+            "outreach_id": outreach.id,
+            "state": outreach.state.value,
+            "revision": outreach.revision,
+            "replayed": replayed,
+            "policy_action": decision.action.value if decision else None,
+            "policy_reason": decision.reason.value if decision else None,
+            "delivery_reason": delivery.reason_code if delivery else None,
+            "device": None if device is None else {
+                "ready": device.ready,
+                "user_session_active": device.user_session_active,
+                "reason": device.reason_code,
+            },
+        }
+
+    async def proactive_test(self, request, client):
+        """执行一次用户明确发起的短文本测试；同 request_id 绝不重播。"""
+
+        subject_id = "user:self"
+        idempotency_key = "manual-console:" + request.request_id
+        with self._open() as connection:
+            ledger = ProactiveOutreachLedger(
+                SQLiteProactiveOutreachStore(connection, commit_changes=False),
+                clock=self.clock,
+            )
+            existing = ledger.get_by_idempotency(subject_id, idempotency_key)
+            if existing is not None:
+                return self._outreach_result(existing, replayed=True)
+            settings = SQLiteProactivePolicyStore(connection).get(subject_id)
+            if settings.revision != request.expected_policy_revision:
+                raise MemoryAccessError("proactive_settings_conflict", 409)
+
+        device = await XiaozhiRuntimeStateProbe(client).probe()
+        now = self.clock()
+        with self._open(write_capability="proactive") as connection:
+            ledger = ProactiveOutreachLedger(
+                SQLiteProactiveOutreachStore(connection), clock=lambda: now,
+            )
+            existing = ledger.get_by_idempotency(subject_id, idempotency_key)
+            if existing is not None:
+                return self._outreach_result(existing, replayed=True, device=device)
+            settings = SQLiteProactivePolicyStore(connection).get(subject_id)
+            if settings.revision != request.expected_policy_revision:
+                raise MemoryAccessError("proactive_settings_conflict", 409)
+            runtime = SQLiteProactiveHistoryReader(connection).read(subject_id, now=now)
+            runtime = OutreachPolicyState(
+                attempted_at=runtime.attempted_at,
+                awaiting_user_response=runtime.awaiting_user_response,
+                user_session_active=device.user_session_active,
+                quiet_until=settings.quiet_until,
+            )
+            try:
+                outreach = ledger.create_candidate(
+                    subject_id=subject_id,
+                    trigger=OutreachTrigger.MANUAL_TEST,
+                    trigger_reason_code="manual_console_test",
+                    content=request.text,
+                    scheduled_for=now,
+                    expires_at=now + settings.config.maximum_lifetime,
+                    idempotency_key=idempotency_key,
+                    policy_version=settings.config.policy_version,
+                )
+                result = await ProactiveOutreachDispatcher(
+                    ledger,
+                    delivery_queue=XiaozhiProactiveDelivery(client).queue,
+                    clock=lambda: now,
+                ).dispatch(
+                    outreach.id,
+                    expected_revision=outreach.revision,
+                    settings=settings,
+                    runtime_state=runtime,
+                )
+            except ValueError:
+                raise MemoryAccessError("proactive_dispatch_conflict", 409) from None
+            return self._outreach_result(
+                result.outreach,
+                replayed=False,
+                decision=result.decision,
+                delivery=result.delivery,
+                device=device,
             )
 
     @contextmanager
