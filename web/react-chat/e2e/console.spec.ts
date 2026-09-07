@@ -22,6 +22,13 @@ test('文字聊天可保存并在刷新后恢复，React 页面可统一导航',
   await page.getByRole('link', {name:'设置中心'}).click();
   await expect(page.getByRole('heading', {name:'设置中心'})).toBeVisible();
   await expect(page.getByRole('tab', {name:'助手角色'})).toHaveAttribute('aria-selected', 'true');
+  await page.getByRole('button', {name:'助手角色设置'}).click();
+  await expect(page.getByRole('dialog', {name:'助手角色设置'})).toBeVisible();
+  await page.getByRole('switch', {name:'启用结构化表达偏好'}).click();
+  await page.getByRole('textbox', {name:'希望助手怎么称呼你（可留空）'}).fill('小林');
+  await page.getByRole('button', {name:'保存并用于网页下一轮'}).click();
+  await expect(page.getByText(/已保存版本 1/)).toBeVisible();
+  await page.locator('.ant-modal-close').click();
   await page.getByRole('tab', {name:'外观与阅读'}).click();
   await expect(page.getByRole('combobox', {name:'主题'})).toBeVisible();
   await page.getByRole('link', {name:'原始与原子记忆'}).click();
