@@ -63,11 +63,11 @@ export function RoundDisplayApp() {
   const blocked = Boolean(systemCopy[system]);
   const powerLabel = system === 'charging' ? '充电中' : system === 'low_battery' ? '电量低' : '';
   const sidebar = <><ConsoleNav active="display" legacyPath="/"/><Card size="small" title="预览边界">
-    <p>这里只模拟 466×466 圆屏的信息层级，不连接设备、不发送指令，也不代表固件已经实现。</p>
+    <p>这里只模拟板级配置记录的 360×360 圆屏信息层级，不连接设备、不发送指令，也不代表 B V2 固件已经实现。</p>
   </Card></>;
 
   return <AppShell subtitle="智能圆屏交互实验台" className="display-preview-shell" sidebar={sidebar}>
-    <PageHeader eyebrow="体验设计" title="圆屏状态预览" description="先验证待机、聆听、思考、回应和异常是否一眼可辨，再把稳定协议接入真实固件。" meta="画布：466 × 466 px · 中央安全区：约 329 × 329 px"/>
+    <PageHeader eyebrow="体验设计" title="圆屏状态预览" description="先验证待机、聆听、思考、回应和异常是否一眼可辨，再把稳定协议接入真实固件。" meta="画布：360 × 360 px · 中央安全区：约 255 × 255 px"/>
     <Alert type="info" showIcon title="这是设计模拟器，不是真实设备控制器" description="交互状态决定主体动画，情绪只改变表达风格；网络、模型、服务、配网和更新会按优先级覆盖普通对话状态。"/>
     <div className="display-preview-layout">
       <section className="display-stage" aria-label="圆屏模拟画布">
@@ -93,7 +93,7 @@ export function RoundDisplayApp() {
         </Card>
         <Card title="3. 系统覆盖"><p className="subtle">阻塞性故障会盖过“聆听/思考/说话”；充电和低电量只显示边缘提示。</p>
           <Select className="wide" aria-label="系统状态" value={system} options={systemOptions} onChange={setSystem}/>
-          <Checkbox checked={showSafeArea} onChange={event => setShowSafeArea(event.target.checked)}>显示 329×329 中央安全区</Checkbox>
+          <Checkbox checked={showSafeArea} onChange={event => setShowSafeArea(event.target.checked)}>显示约 255×255 中央安全区</Checkbox>
         </Card>
         <Card size="small" title="当前解析结果">
           <p><Tag>{interaction}</Tag><Tag color="magenta">{emotion}</Tag><Tag color={blocked ? 'red' : 'default'}>{system}</Tag></p>

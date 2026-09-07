@@ -17,6 +17,7 @@ describe('圆屏状态协议与模拟器', () => {
   test('默认页面明确模拟边界并提供三层控制', () => {
     render(<MemoryRouter><RoundDisplayApp/></MemoryRouter>);
     expect(screen.getByRole('heading', {name: '圆屏状态预览'})).toBeTruthy();
+    expect(screen.getByText(/画布：360 × 360 px/)).toBeTruthy();
     expect(screen.getByText('这是设计模拟器，不是真实设备控制器')).toBeTruthy();
     expect(screen.getByRole('region', {name: '圆屏模拟画布'})).toBeTruthy();
     expect(screen.getByText('1. 交互阶段')).toBeTruthy();
