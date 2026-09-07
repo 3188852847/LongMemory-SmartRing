@@ -28,3 +28,4 @@
 - 合成链覆盖“当天聊过且仍待回应”时的一次性话题发送、消费后不复用和错过即失效。
 - HTTP 覆盖 CSRF、明确确认、设置 revision、重复授权冲突、状态读取和撤销。
 - React 覆盖显式授权后展示目标日期与时刻。
+- 2026-09-07 实机验收通过：授权到点后账本记为 `development_approved_memory_topic`，保留素材 ID/revision，用户确认圆屏实际发声并以 `USER_OBSERVED` 证据记为 `played`。

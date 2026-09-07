@@ -1,5 +1,11 @@
 # Changelog
 
+### P4 memory-topic round-screen acceptance（2026-09-07）
+
+- 一次性开发定时授权实机验收通过：后台在目标时刻创建 `development_approved_memory_topic`，保留话题素材 ID 与 revision，SmartRing-Plus 圆屏终端实际发声。
+- 播放仍按现有证据边界记录：服务端只能自动确认 `queued`，实际播放由用户观察以 `USER_OBSERVED` 推进为 `played`，不伪造设备回执。
+- P4 可控主动交流的基础闭环至此收束；下一主线转入 P5 的最小互动结果事件，先积累可解释数据，再推导习惯与陪伴策略。
+
 ### P4 one-shot development schedule override（2026-09-07）
 
 - SQLite 代码结构升级为 V19，新增一次性开发定时授权；迁移只建空表，不自动授权或投递。
