@@ -16,9 +16,9 @@
 
 VoxCPM2 本机 TTS 适配层已实现：固定权重在独立 CUDA 环境常驻，经环回 HTTP 接收小智 `CustomTTS` 文本并返回 WAV；真实本机请求得到 48 kHz、单声道、16 位有效音频。React 声音窗口可选择受控参考 WAV、表达指令、CFG 和质量档；声音方案由网页与圆屏下一次合成共享。聊天回答支持电脑朗读、停止和浏览器本地说话打断测试。圆屏实际声线、延迟与打断仍由用户实机验收。见 [VoxCPM2 指南](docs/guides/VoxCPM2独立试听.md)、[ADR-0025](docs/adr/0025-local-voxcpm2-tts-adapter.md)与 [ADR-0083](docs/adr/0083-local-voice-profile-web-playback-and-device-surface.md)。
 
-P2 新增声音设置：四种 Edge TTS 音色、固定文本联网试听和确认保存。入口 `/chat-react`，保存后需重启小智；实机听感待验收。见[声音设置](docs/guides/声音设置.md)。
+P2 新增声音设置：四种 Edge TTS 音色、固定文本联网试听和确认保存。入口为“设置中心 → 声音”，保存 Edge 音色后需重启小智；实机听感待验收。见[声音设置](docs/guides/声音设置.md)。
 
-P2 助手角色设置已接入 `/chat-react`：网页编辑、版本化保存；圆屏可检查并明确确认同步到小智配置，之后需重启小智，实机生效待验收。见[助手角色设置](docs/guides/助手角色设置.md)。
+P2 助手角色设置已接入“设置中心 → 助手角色”：网页编辑、版本化保存；圆屏可检查并明确确认同步到小智配置，之后需重启小智，实机生效待验收。见[助手角色设置](docs/guides/助手角色设置.md)。
 
 Web 控制台已渐进统一到 React + TypeScript + Vite + antd：聊天 `/chat-react`、L0/L1 记忆 `/memories`、L2 生活场景 `/scenarios`、设备 `/device`、个性化 `/settings` 与实验 `/experiments-react` 共用 React Router、AppShell 和外观状态；TanStack Query 管理服务器状态及不自动重试的写操作。实验页保留预检/确认分离、任务进度与逐题复核；原生入口暂留回退。组件测试使用 Vitest/React Testing Library。见[体验指南](docs/guides/React聊天页.md)、[技术策略](docs/architecture/technology-strategy.md)、[迁移清单](docs/architecture/react-chat-migration.md)与 [ADR-0032](docs/adr/0032-progressive-react-console-migration.md)。
 
