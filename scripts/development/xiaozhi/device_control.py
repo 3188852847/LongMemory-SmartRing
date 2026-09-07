@@ -107,6 +107,7 @@ class DeviceControl:
         result = {"connection_count": len(self.connections), "ready": False,
                   "read_volume_supported": False, "set_volume_supported": False,
                   "announcement_supported": False, "announcement_ready": False,
+                  "user_session_active": False,
                   "allowed_volume": {"minimum": MIN_VOLUME, "maximum": MAX_VOLUME}}
         try:
             conn = self._connection()
@@ -123,9 +124,11 @@ class DeviceControl:
                     and hasattr(tts, "tts_text_queue")
                     and hasattr(tts, "tts_audio_queue")):
                 result["announcement_supported"] = True
-                busy = (getattr(conn, "client_is_speaking", False)
-                        or getattr(conn, "client_have_voice", False)
-                        or getattr(conn, "calling", False)
+                active = (getattr(conn, "client_is_speaking", False)
+                          or getattr(conn, "client_have_voice", False)
+                          or getattr(conn, "calling", False))
+                result["user_session_active"] = active
+                busy = (active
                         or not tts.tts_text_queue.empty()
                         or not tts.tts_audio_queue.empty())
                 result["announcement_ready"] = not busy

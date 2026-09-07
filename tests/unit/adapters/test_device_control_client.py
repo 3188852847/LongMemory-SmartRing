@@ -81,6 +81,21 @@ def test_missing_token_does_not_create_or_contact_bridge(tmp_path):
     assert client._session is None
 
 
+def test_status_projects_only_runtime_flags(tmp_path):
+    client = client_for(tmp_path, {
+        "connection_count": 1, "ready": True,
+        "read_volume_supported": True, "set_volume_supported": True,
+        "announcement_supported": True, "announcement_ready": False,
+        "user_session_active": True, "announcement_reason": "device_busy",
+        "private_network": "must-not-escape",
+    })
+    value = asyncio.run(client.status())
+    assert value["user_session_active"] is True
+    assert value["announcement_ready"] is False
+    assert value["announcement_reason"] == "device_busy"
+    assert "private_network" not in value
+
+
 def test_oversized_response_rejected(tmp_path):
     client = client_for(tmp_path, {"volume": 25, "extra": "x" * 20000})
     with pytest.raises(BridgeError, match="bridge_invalid_response"): asyncio.run(client.read_volume())

@@ -8,6 +8,13 @@ from .dispatcher import (
     ProactiveOutreachDispatcher,
 )
 from .ledger import ProactiveOutreachLedger
+from .runtime_state import (
+    DeviceRuntimeProbe,
+    DeviceRuntimeState,
+    ProactiveHistoryReader,
+    ProactiveRuntimeSnapshot,
+    ProactiveRuntimeStateService,
+)
 
 __all__ = [
     "DeliveryQueue",
@@ -16,4 +23,9 @@ __all__ = [
     "OutreachDispatchResult",
     "ProactiveOutreachDispatcher",
     "ProactiveOutreachLedger",
+    "DeviceRuntimeProbe",
+    "DeviceRuntimeState",
+    "ProactiveHistoryReader",
+    "ProactiveRuntimeSnapshot",
+    "ProactiveRuntimeStateService",
 ]

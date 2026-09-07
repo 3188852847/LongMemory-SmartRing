@@ -232,10 +232,12 @@ def test_status_reports_announcement_support_and_current_readiness():
     bridge, conn, _, _ = announcement_rig()
     assert bridge.status()["announcement_supported"] is True
     assert bridge.status()["announcement_ready"] is True
+    assert bridge.status()["user_session_active"] is False
     conn.client_is_speaking = True
     status = bridge.status()
     assert status["announcement_supported"] is True
     assert status["announcement_ready"] is False
+    assert status["user_session_active"] is True
     assert status["announcement_reason"] == "device_busy"
 
 

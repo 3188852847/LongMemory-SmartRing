@@ -94,7 +94,10 @@ class XiaozhiControlClient:
     async def status(self) -> dict:
         data = await self._request("GET", "/api/device")
         count = data.get("connection_count")
-        flags = ("ready", "read_volume_supported", "set_volume_supported")
+        flags = (
+            "ready", "read_volume_supported", "set_volume_supported",
+            "announcement_supported", "announcement_ready", "user_session_active",
+        )
         if type(count) is not int or count < 0 or any(type(data.get(k)) is not bool for k in flags):
             raise BridgeError("bridge_invalid_response", 502)
         if data["ready"] and count != 1:
@@ -103,6 +106,8 @@ class XiaozhiControlClient:
         result["allowed_volume"] = {"minimum": 5, "maximum": 60}
         if "reason" in data:
             result["reason"] = safe_reason(data["reason"])
+        if "announcement_reason" in data:
+            result["announcement_reason"] = safe_reason(data["announcement_reason"])
         return result
 
     async def read_volume(self) -> dict:
