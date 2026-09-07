@@ -772,6 +772,7 @@ def test_manual_proactive_test_is_csrf_protected_and_idempotent(tmp_path):
                 "outcome_observation_state": "not_applicable",
                 "delivery_evidence_level": "server_queued",
                 "subsequent_user_message": None,
+                "explicit_feedback": None,
             }]
             assert (await client.get(
                 base + "/api/proactive-outreach?limit=01"

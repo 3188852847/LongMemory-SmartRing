@@ -75,6 +75,11 @@ export interface ProactiveOutreachSummary {
   subsequent_user_message:null | {
     occurred_at:string; latency_seconds:number; evidence:'temporal_order';
   };
+  explicit_feedback:null | {
+    topic_seed_id:string; occurred_at:string; feedback_kind:'reject_topic';
+    action_kind:'topic_seed_disabled'; evidence_kind:'user_explicit';
+    interpreter_version:string;
+  };
 }
 export interface ProactiveTopicSeed {
   id:string; subject_id:string; scenario_id:string; prompt_text:string;

@@ -144,6 +144,11 @@ describe('主动交流设置', () => {
           occurred_at:'2026-09-07T04:03:00+00:00', latency_seconds:180,
           evidence:'temporal_order',
         },
+        explicit_feedback:{
+          topic_seed_id:'topic-1', occurred_at:'2026-09-07T04:03:00+00:00',
+          feedback_kind:'reject_topic', action_kind:'topic_seed_disabled',
+          evidence_kind:'user_explicit', interpreter_version:'explicit-topic-rejection-v1',
+        },
       }]};
       if (path.startsWith('/api/scenarios?')) return {items:[]};
       if (path === '/api/proactive-topic-seeds') return {items:[]};
@@ -153,6 +158,7 @@ describe('主动交流设置', () => {
     const view = render(<QueryClientProvider client={client}><ProactiveSettings api={new ChatApi()} ready={true}/></QueryClientProvider>);
 
     expect(await screen.findByText(/已观察（3 分钟后；仅表示时间先后）/)).toBeTruthy();
+    expect(screen.getByText(/用户拒绝继续使用该话题/)).toBeTruthy();
 
     view.unmount(); client.clear();
   });

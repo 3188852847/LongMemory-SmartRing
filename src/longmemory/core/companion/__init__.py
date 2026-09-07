@@ -4,16 +4,21 @@
 用户事实，也不是对用户情绪或意图的推断。
 """
 
-from .contracts import InteractionOutcomeObserver
+from .contracts import CompanionFeedbackStore, InteractionOutcomeObserver
 from .models import (
+    CompanionFeedbackEvent,
     InteractionOutcomeEvent,
     InteractionOutcomeEvidence,
     InteractionOutcomeKind,
+    ProactiveTopicFeedbackTarget,
 )
 
 __all__ = [
+    "CompanionFeedbackEvent",
+    "CompanionFeedbackStore",
     "InteractionOutcomeEvent",
     "InteractionOutcomeEvidence",
     "InteractionOutcomeKind",
     "InteractionOutcomeObserver",
+    "ProactiveTopicFeedbackTarget",
 ]

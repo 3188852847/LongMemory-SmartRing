@@ -15,6 +15,7 @@ from longmemory.methods.contracts import (
 from longmemory.application.scenario_recall import ScenarioRecallItem, ScenarioRecallResult
 from longmemory.application.persona_recall import PersonaRecallItem, PersonaRecallResult
 from longmemory.application.natural_memory_commands import NaturalMemoryCommandResult
+from longmemory.application.natural_companion_commands import NaturalCompanionCommandResult
 from longmemory.application.consolidation.scheduler import (
     LowFrequencyConsolidationScheduler,
 )
@@ -33,7 +34,8 @@ class PreparedMemoryTurn:
     scenarios: tuple[ScenarioRecallItem, ...]
     persona_use_enabled: bool
     personas: tuple[PersonaRecallItem, ...]
-    memory_command: NaturalMemoryCommandResult | None
+    # 字段名为兼容既有 API 保留；它现在也可承载明确的陪伴控制命令。
+    memory_command: NaturalMemoryCommandResult | NaturalCompanionCommandResult | None
 
 
 class MemoryRuntime:
@@ -68,8 +70,18 @@ class MemoryRuntime:
         with self._lock:
             self._ensure_open()
             command = None
-            if self._write_enabled and self._memory_command_handler is not None:
-                command = self._memory_command_handler.handle(event)
+            if self._memory_command_handler is not None:
+                companion_handler = getattr(
+                    self._memory_command_handler, "handle_companion", None,
+                )
+                if companion_handler is not None:
+                    command = companion_handler(event)
+                if command is None and self._write_enabled:
+                    memory_handler = getattr(
+                        self._memory_command_handler, "handle_memory",
+                        self._memory_command_handler.handle,
+                    )
+                    command = memory_handler(event)
             if command is not None:
                 observation = ObservationResult(event.event_id, command.writes)
             else:
@@ -107,7 +119,12 @@ class MemoryRuntime:
                         strategy, support.warning_code,
                     )
             if command is not None:
-                operation_context = "[记忆操作结果]\n" + command.notice
+                label = (
+                    "[陪伴设置结果]"
+                    if isinstance(command, NaturalCompanionCommandResult)
+                    else "[记忆操作结果]"
+                )
+                operation_context = label + "\n" + command.notice
                 combined = "\n\n".join(
                     value for value in (operation_context, support.context) if value
                 )

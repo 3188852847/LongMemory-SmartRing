@@ -7,6 +7,12 @@ from longmemory.adapters.storage.sqlite_conversation_store import SQLiteConversa
 from longmemory.adapters.storage.sqlite_interaction_outcome_store import (
     SQLiteInteractionOutcomeStore,
 )
+from longmemory.adapters.storage.sqlite_companion_feedback_store import (
+    SQLiteCompanionFeedbackStore,
+)
+from longmemory.application.natural_companion_commands import (
+    NaturalCompanionCommandService,
+)
 from longmemory.adapters.storage.sqlite_memory_store import SQLiteMemoryStore
 from longmemory.application.natural_memory_commands import NaturalMemoryCommandService
 from longmemory.core.common.identifiers import MessageId
@@ -35,13 +41,41 @@ class SQLiteNaturalMemoryCommandHandler:
         self._outcome_observer = SQLiteInteractionOutcomeStore(
             self._connection, commit_changes=False,
         )
+        self._companion_service = NaturalCompanionCommandService(
+            conversation_store=SQLiteConversationStore(
+                self._connection, commit_changes=False,
+            ),
+            feedback_store=SQLiteCompanionFeedbackStore(self._connection),
+        )
 
     def handle(self, event):
+        companion_command = self._companion_service.recognizes(event)
+        memory_command = (
+            False if companion_command else self._service.recognizes(event)
+        )
+        if not companion_command and not memory_command:
+            return None
+        return self._execute(event, companion_command=companion_command)
+
+    def handle_companion(self, event):
+        """安全控制不依赖 L1 写入开关。"""
+
+        if not self._companion_service.recognizes(event):
+            return None
+        return self._execute(event, companion_command=True)
+
+    def handle_memory(self, event):
         if not self._service.recognizes(event):
             return None
+        return self._execute(event, companion_command=False)
+
+    def _execute(self, event, *, companion_command: bool):
         self._connection.execute("BEGIN IMMEDIATE")
         try:
-            result = self._service.handle(event)
+            result = (
+                self._companion_service.handle(event)
+                if companion_command else self._service.handle(event)
+            )
             if result is not None:
                 # 自然纠错、来源询问和删除等命令会在上面的服务中保存同一条
                 # 用户 L0；这里在同一事务补记陪伴结果，避免命令路径漏样本。

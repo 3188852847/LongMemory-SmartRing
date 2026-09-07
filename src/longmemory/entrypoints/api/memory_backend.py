@@ -20,6 +20,9 @@ from longmemory.adapters.storage.sqlite_proactive_outreach_store import SQLitePr
 from longmemory.adapters.storage.sqlite_interaction_outcome_store import (
     SQLiteInteractionOutcomeStore,
 )
+from longmemory.adapters.storage.sqlite_companion_feedback_store import (
+    SQLiteCompanionFeedbackStore,
+)
 from longmemory.adapters.storage.sqlite_proactive_runtime_state import SQLiteProactiveHistoryReader
 from longmemory.adapters.storage.sqlite_proactive_topic_store import SQLiteProactiveTopicStore
 from longmemory.adapters.storage.sqlite_proactive_schedule_override_store import (
@@ -713,11 +716,13 @@ class MemoryBackend:
             outcomes = SQLiteInteractionOutcomeStore(
                 connection, commit_changes=False,
             )
+            feedbacks = SQLiteCompanionFeedbackStore(connection)
             items = []
             for outreach in ledger.list_recent(subject_id, limit=limit):
                 events = ledger.list_events(outreach.id)
                 latest = events[-1]
                 outcome = outcomes.get_for_outreach(outreach.id)
+                feedback = feedbacks.get_for_outreach(outreach.id)
                 formal_trigger = (
                     outreach.trigger.value != "manual_test"
                     and not outreach.trigger_reason_code.startswith("development_")
@@ -757,6 +762,7 @@ class MemoryBackend:
                         "latency_seconds": outcome.latency_seconds,
                         "evidence": outcome.evidence.value,
                     },
+                    "explicit_feedback": feedback,
                 })
             return {"items": items}
 

@@ -265,6 +265,9 @@ export function ProactiveSettings({api, ready}:{api:ChatApi; ready:boolean}) {
         {item.outcome_observation_state === 'delivery_not_established' && <p className="subtle">
           互动观察：投递未成立，不能解释为用户未回应
         </p>}
+        {item.explicit_feedback && <p className="subtle">
+          明确反馈：用户拒绝继续使用该话题，素材已停用（用户明确陈述）
+        </p>}
       </article>)}</div>
     </section>
   </Space>;
