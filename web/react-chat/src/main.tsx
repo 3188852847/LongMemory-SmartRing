@@ -96,7 +96,7 @@ function ChatApp() {
       <Button disabled={disabled} onClick={() => {setTitle(chat?.title ?? ''); setRename(true);}}>重命名</Button>
       <ConsoleNav active="chat" legacyPath="/chat"/>
     </>;
-  return <><AppShell subtitle="你的日常聊天空间" sidebar={sidebar}><header><h1>聊聊今天</h1><span>{chat?.turns.length ?? 0} / 40 轮 · React 预览</span></header>
+  return <><AppShell subtitle="你的日常聊天空间" sidebar={sidebar}><header><div><p className="page-kicker">日常对话</p><h1>聊聊今天</h1></div><span>{chat?.turns.length ?? 0} / 40 轮</span></header>
       <section className="messages" aria-label="聊天记录">{!chat?.turns.length && <div className="empty"><h2>今天想聊些什么？</h2><p>可以说说今天的事，也可以继续上次的话题。</p></div>}
         {chat?.turns.map((turn, i) => <article key={i}><div className="bubble user"><strong>你</strong><p>{turn.input}</p></div><div className="bubble assistant"><strong>助手</strong><p>{turn.answer ?? '未获得完整回答。'}</p></div>
           {turn.memory_processing === 'source_only' && <p className="memory-warning">{memoryWarning(turn)} 可继续聊天，之后需要重新整理这条来源。</p>}

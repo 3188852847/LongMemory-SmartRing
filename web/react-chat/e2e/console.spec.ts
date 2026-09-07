@@ -17,11 +17,11 @@ test('文字聊天可保存并在刷新后恢复，React 页面可统一导航',
   await expect(page.locator('.bubble.user').getByText('我养了一只叫豆包的猫', {exact:true})).toBeVisible();
   await expect(page.locator('.bubble.assistant').getByText('好的，我记住了。', {exact:true})).toBeVisible();
 
-  await page.getByRole('link', {name:'设备与状态'}).click();
+  await page.getByRole('link', {name:'设备状态'}).click();
   await expect(page.getByRole('heading', {name:'设备与状态'})).toBeVisible();
-  await page.getByRole('link', {name:'个性化设置'}).click();
-  await expect(page.getByRole('heading', {name:'个性化设置'})).toBeVisible();
-  await page.getByRole('link', {name:'记忆管理'}).click();
+  await page.getByRole('link', {name:'设置中心'}).click();
+  await expect(page.getByRole('heading', {name:'设置中心'})).toBeVisible();
+  await page.getByRole('link', {name:'原始与原子记忆'}).click();
   await expect(page.getByRole('heading', {name:'记忆管理'})).toBeVisible();
   await page.getByText('用户养了一只叫豆包的猫。', {exact:true}).click();
   await page.getByRole('button', {name:'记录变化'}).click();
@@ -43,6 +43,19 @@ test('文字聊天可保存并在刷新后恢复，React 页面可统一导航',
   await expect(page.getByRole('heading', {name:'实验中心'})).toBeVisible();
 
   expect(external).toEqual([]);
+});
+
+test('窄窗口保留全部主导航且页面不产生横向溢出', async ({page}) => {
+  await page.setViewportSize({width:390, height:844});
+  await page.goto('/chat-react');
+  await expect(page.getByRole('heading', {name:'聊聊今天'})).toBeVisible();
+  await expect(page.getByRole('link', {name:'设备状态'})).toBeVisible();
+  await expect(page.getByRole('link', {name:'实验中心'})).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+
+  await page.getByRole('link', {name:'设置中心'}).click();
+  await expect(page.getByRole('heading', {name:'设置中心'})).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });
 
 test('只读实验服务不能误启动模型作业', async ({page}) => {

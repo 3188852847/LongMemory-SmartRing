@@ -19,7 +19,7 @@ export function SettingsApp() {
   const sidebar = <ConsoleNav active="settings" legacyPath="/chat"/>;
 
   return <AppShell subtitle="角色、声音与阅读体验" className="settings-shell" sidebar={sidebar}>
-    <header><div><h1>个性化设置</h1><p className="subtle">这里设置助手如何表达和播放，不等于 L3 用户画像，也不会修改你的事实记忆。</p></div></header>
+    <header><div><p className="page-kicker">控制与观察</p><h1>设置中心</h1><p className="subtle">这里设置助手如何表达和播放，不等于 L3 用户画像，也不会修改你的事实记忆。</p></div></header>
     {(session.isError || config.isError) && <Alert type="error" showIcon title="设置服务当前不可用" description="请确认统一启动的文字服务仍在运行，再刷新本页。"/>}
     <div className="settings-grid">
       <Card title="助手角色" extra={<span className="setting-scope">网页＋可选圆屏同步</span>}>
@@ -39,7 +39,7 @@ export function SettingsApp() {
         </Space>
       </Card>
       <Card title="主动交流" extra={<span className="setting-scope">持久许可边界</span>}>
-        <p>设置系统什么时候可以联系你，并查看手动端到端验证记录；后台定时触发尚未接入。</p>
+        <p>设置系统什么时候可以联系你，管理显式定时和习惯策略，并查看每次运行为什么发送或被拦截。</p>
         <ProactiveSettings api={api} ready={session.isSuccess}/>
       </Card>
     </div>
