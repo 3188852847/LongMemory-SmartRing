@@ -9,6 +9,8 @@ from longmemory.core.companion import (
     AbsenceRoutineDraft,
     CompanionAbsenceStrategyVersion,
     CompanionAbsenceStrategyVersionStore,
+    CompanionAbsenceStrategySelection,
+    CompanionAbsenceStrategySwitchAction,
     CompanionStrategyReplayEvidence,
     CompanionStrategyCandidateStatus,
 )
@@ -94,3 +96,38 @@ class CompanionAbsenceStrategyVersionService:
         return AbsenceStrategyVersionResult(
             "version_created", self._store.create(version),
         )
+
+    def get_selection(self, subject_id: str) -> CompanionAbsenceStrategySelection | None:
+        return self._store.get_selection(subject_id)
+
+    def list_switch_events(self, subject_id: str):
+        return self._store.list_switch_events(subject_id)
+
+    def select_version(self, version_id: str, *, subject_id: str,
+                       expected_revision: int, rollback: bool = False):
+        version = self._store.get_version(version_id, subject_id=subject_id)
+        if version is None:
+            raise ValueError("companion_absence_version_missing")
+        if not version.replay_gate_passed:
+            raise ValueError("companion_absence_version_gate_failed")
+        action = (CompanionAbsenceStrategySwitchAction.ROLLBACK if rollback
+                  else CompanionAbsenceStrategySwitchAction.ACTIVATE)
+        result = self._store.switch_selection(
+            subject_id=subject_id, selected_version_id=version.id,
+            expected_revision=expected_revision, action=action,
+            event_id=self._id_factory(), now=self._clock(),
+        )
+        if result is None:
+            raise ValueError("companion_absence_selection_conflict")
+        return result
+
+    def deactivate(self, *, subject_id: str, expected_revision: int):
+        result = self._store.switch_selection(
+            subject_id=subject_id, selected_version_id=None,
+            expected_revision=expected_revision,
+            action=CompanionAbsenceStrategySwitchAction.DEACTIVATE,
+            event_id=self._id_factory(), now=self._clock(),
+        )
+        if result is None:
+            raise ValueError("companion_absence_selection_conflict")
+        return result

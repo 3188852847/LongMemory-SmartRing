@@ -6,6 +6,8 @@ from longmemory.application.companion_absence_strategy import (
     CompanionAbsenceStrategyVersionService,
 )
 from longmemory.core.companion import (
+    CompanionAbsenceStrategySelection,
+    CompanionAbsenceStrategySwitchEvent,
     CompanionRoutineCandidate,
     CompanionStrategyReplayEvidence,
     CompanionStrategyCandidateStatus,
@@ -42,6 +44,8 @@ class Store:
     def __init__(self, source):
         self.source = source
         self.versions = []
+        self.selection = None
+        self.events = []
 
     def get_source_candidate(self, candidate_id, *, subject_id):
         if self.source.id == candidate_id and self.source.subject_id == subject_id:
@@ -56,6 +60,32 @@ class Store:
     def create(self, version):
         self.versions.append(version)
         return version
+
+    def get_version(self, version_id, *, subject_id):
+        return next((item for item in self.versions
+                     if item.id == version_id and item.subject_id == subject_id), None)
+
+    def get_selection(self, subject_id):
+        return self.selection if self.selection and self.selection.subject_id == subject_id else None
+
+    def list_switch_events(self, subject_id):
+        return tuple(event for event in self.events if event.subject_id == subject_id)
+
+    def switch_selection(self, *, subject_id, selected_version_id,
+                         expected_revision, action, event_id, now):
+        revision = self.selection.revision if self.selection else 0
+        if revision != expected_revision:
+            return None
+        previous = self.selection.version_id if self.selection else None
+        self.selection = CompanionAbsenceStrategySelection(
+            subject_id, selected_version_id, revision + 1, now,
+        )
+        event = CompanionAbsenceStrategySwitchEvent(
+            event_id, subject_id, previous, selected_version_id,
+            action, revision + 1, now,
+        )
+        self.events.append(event)
+        return self.selection, event
 
 
 def test_freezes_candidate_parameters_and_replay_identity_once():
@@ -121,4 +151,45 @@ def test_late_candidate_that_would_cross_midnight_is_not_silently_shifted():
             "candidate-1", subject_id="user:self",
             expected_candidate_revision=1, allowed_weekdays=(0,),
             replay=replay(),
+        )
+
+
+def test_selection_requires_gate_and_expected_pointer_revision():
+    store = Store(candidate())
+    service = CompanionAbsenceStrategyVersionService(
+        store, clock=lambda: NOW,
+        id_factory=iter(("version-1", "event-1", "unused-stale-event")).__next__,
+    )
+    service.create_from_candidate(
+        "candidate-1", subject_id="user:self", expected_candidate_revision=1,
+        allowed_weekdays=(0,), replay=replay(),
+    )
+    selection, event = service.select_version(
+        "version-1", subject_id="user:self", expected_revision=0,
+    )
+    assert selection.version_id == "version-1" and selection.revision == 1
+    assert event.action.value == "activate"
+
+    with pytest.raises(ValueError, match="selection_conflict"):
+        service.deactivate(subject_id="user:self", expected_revision=0)
+
+
+def test_failed_replay_version_cannot_be_selected():
+    store = Store(candidate())
+    failed = CompanionStrategyReplayEvidence(
+        protocol="companion-absence-offline-replay-v1",
+        dataset_name="companion_absence_replay", dataset_version="1.0.0",
+        dataset_sha256="c" * 64, case_count=16, matched_count=15,
+        unsafe_allow_count=0, gate_passed=False, replayed_at=NOW,
+    )
+    service = CompanionAbsenceStrategyVersionService(
+        store, clock=lambda: NOW, id_factory=lambda: "version-failed",
+    )
+    service.create_from_candidate(
+        "candidate-1", subject_id="user:self", expected_candidate_revision=1,
+        allowed_weekdays=(0,), replay=failed,
+    )
+    with pytest.raises(ValueError, match="gate_failed"):
+        service.select_version(
+            "version-failed", subject_id="user:self", expected_revision=0,
         )

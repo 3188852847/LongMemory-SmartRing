@@ -188,3 +188,20 @@ class CompanionAbsenceVersionDraftRequest(BaseModel):
 
     candidate_id: str = Field(pattern=r"^[0-9a-f]{32}$")
     expected_candidate_revision: int = Field(ge=1)
+
+
+class CompanionAbsenceSelectionRequest(BaseModel):
+    """显式激活或回滚到一个已通过离线门控的版本。"""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    version_id: str = Field(pattern=r"^[0-9a-f]{32}$")
+    expected_revision: int = Field(ge=0)
+
+
+class CompanionAbsenceDeactivateRequest(BaseModel):
+    """显式停用当前缺席策略，同时保留指针修订历史。"""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    expected_revision: int = Field(ge=1)

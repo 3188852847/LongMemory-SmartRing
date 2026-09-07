@@ -1,7 +1,7 @@
 import {useEffect, useMemo, useState} from 'react';
 import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {Alert, Button, Card, Checkbox, Input, InputNumber, Select, Space, Switch, Tag} from 'antd';
-import {ApiError, ChatApi, type CompanionAbsenceStrategyVersion, type CompanionRoutineCandidate, type CompanionStrategyCandidate, type ProactiveOutreachSummary, type ProactivePolicy, type ProactiveScheduleStatus, type ProactiveTestResult, type ProactiveTopicSeed, type UserInitiatedInteraction} from './api';
+import {ApiError, ChatApi, type CompanionAbsenceStrategyVersion, type CompanionAbsenceStrategyVersionList, type CompanionRoutineCandidate, type CompanionStrategyCandidate, type ProactiveOutreachSummary, type ProactivePolicy, type ProactiveScheduleStatus, type ProactiveTestResult, type ProactiveTopicSeed, type UserInitiatedInteraction} from './api';
 
 const DAYS = ['周一','周二','周三','周四','周五','周六','周日'].map((label, value) => ({label, value}));
 const minuteText = (value:number) => `${String(Math.floor(value / 60)).padStart(2,'0')}:${String(value % 60).padStart(2,'0')}`;
@@ -30,7 +30,7 @@ export function ProactiveSettings({api, ready}:{api:ChatApi; ready:boolean}) {
   const strategyCandidates = useQuery({queryKey:['companion-strategy-candidates'], queryFn:() => api.request<{items:CompanionStrategyCandidate[]}>('/api/companion-strategy-candidates'), enabled:ready});
   const userInitiated = useQuery({queryKey:['companion-user-initiated-interactions'], queryFn:() => api.request<{items:UserInitiatedInteraction[]}>('/api/companion-user-initiated-interactions?limit=10'), enabled:ready});
   const routineCandidates = useQuery({queryKey:['companion-routine-candidates'], queryFn:() => api.request<{items:CompanionRoutineCandidate[]}>('/api/companion-routine-candidates'), enabled:ready});
-  const absenceVersions = useQuery({queryKey:['companion-absence-strategy-versions'], queryFn:() => api.request<{items:CompanionAbsenceStrategyVersion[]}>('/api/companion-absence-strategy-versions'), enabled:ready});
+  const absenceVersions = useQuery({queryKey:['companion-absence-strategy-versions'], queryFn:() => api.request<CompanionAbsenceStrategyVersionList>('/api/companion-absence-strategy-versions'), enabled:ready});
   const [draft, setDraft] = useState<ProactivePolicy>();
   const [notice, setNotice] = useState('');
   const [testText, setTestText] = useState('今天也要照顾好自己呀。');
@@ -241,6 +241,33 @@ export function ProactiveSettings({api, ready}:{api:ChatApi; ready:boolean}) {
       void client.invalidateQueries({queryKey:['companion-routine-candidates']});
     },
   });
+  const switchAbsenceVersion = useMutation({
+    mutationFn:({version, rollback}:{version:CompanionAbsenceStrategyVersion;rollback:boolean}) => api.request(
+      `/api/companion-absence-strategy-versions/${rollback ? 'rollback' : 'activate'}`, 'POST',
+      {version_id:version.id, expected_revision:absenceVersions.data!.selection.revision},
+    ),
+    onSuccess:() => {
+      setAbsenceVersionNotice('当前策略指针已更新并写入审计事件；后台调度尚未接线，不会因此自动联系。');
+      void client.invalidateQueries({queryKey:['companion-absence-strategy-versions']});
+    },
+    onError:() => {
+      setAbsenceVersionNotice('版本未切换；可能是页面修订已过期或离线门控未通过。');
+      void client.invalidateQueries({queryKey:['companion-absence-strategy-versions']});
+    },
+  });
+  const deactivateAbsenceVersion = useMutation({
+    mutationFn:() => api.request('/api/companion-absence-strategy-versions/deactivate', 'POST', {
+      expected_revision:absenceVersions.data!.selection.revision,
+    }),
+    onSuccess:() => {
+      setAbsenceVersionNotice('当前策略已停用，旧版本和切换审计仍完整保留。');
+      void client.invalidateQueries({queryKey:['companion-absence-strategy-versions']});
+    },
+    onError:() => {
+      setAbsenceVersionNotice('停用没有生效；页面将读取最新修订。');
+      void client.invalidateQueries({queryKey:['companion-absence-strategy-versions']});
+    },
+  });
   const change = (patch:Partial<ProactivePolicy>) => draft && setDraft({...draft, ...patch});
   if (query.isError) return <Alert type="error" showIcon title="主动交流设置不可用" description="请确认已选择当前版本的个人数据库。"/>;
   if (query.isLoading || !draft) return <Alert type="info" showIcon title="正在读取主动交流设置…"/>;
@@ -392,15 +419,28 @@ export function ProactiveSettings({api, ready}:{api:ChatApi; ready:boolean}) {
       {routineCandidates.isSuccess && (routineCandidates.data?.items?.length ?? 0) === 0 && <p className="subtle">尚无主动出现时段候选。</p>}
       {absenceVersionNotice && <p role="status">{absenceVersionNotice}</p>}
       {absenceVersions.isError && <Alert type="error" showIcon title="离线验证草案读取失败"/>}
-      <h4>缺席联系策略版本草案</h4>
-      <p className="subtle">这里只保存候选参数与固定合成回放指纹。即使门控通过，也没有激活入口，不会参与后台调度。</p>
+      <h4>缺席联系策略版本</h4>
+      <p className="subtle">激活只切换可审计的当前版本指针；后台调度尚未读取该指针，因此本阶段不会新增自动问候。</p>
       <div className="proactive-history">{absenceVersions.data?.items?.map(version => <Card size="small" key={version.id}
-        title={<Space wrap><Tag color={version.replay_gate_passed ? 'green' : 'red'}>{version.replay_gate_passed ? '离线门控通过' : '离线门控未通过'}</Tag><strong>{minuteText(version.expected_minute)} 后宽限 {version.grace_minutes} 分钟</strong><Tag>未激活</Tag></Space>}>
+        title={<Space wrap><Tag color={version.replay_gate_passed ? 'green' : 'red'}>{version.replay_gate_passed ? '离线门控通过' : '离线门控未通过'}</Tag><strong>{minuteText(version.expected_minute)} 后宽限 {version.grace_minutes} 分钟</strong><Tag color={version.active ? 'blue' : 'default'}>{version.active ? '当前版本' : '非当前版本'}</Tag></Space>}
+        extra={version.active ? <Button size="small" danger loading={deactivateAbsenceVersion.isPending}
+          onClick={() => deactivateAbsenceVersion.mutate()}>停用</Button> : <Button size="small" type="primary"
+          disabled={!version.replay_gate_passed || switchAbsenceVersion.isPending}
+          loading={switchAbsenceVersion.isPending && switchAbsenceVersion.variables?.version.id === version.id}
+          onClick={() => switchAbsenceVersion.mutate({version, rollback:Boolean(absenceVersions.data?.events?.some(event => event.selected_version_id === version.id))})}>
+          {absenceVersions.data?.events?.some(event => event.selected_version_id === version.id) ? '回滚到此版本' : '设为当前版本'}
+        </Button>}>
         <p>回放匹配 {version.replay_matched_count}/{version.replay_case_count}；不安全放行 {version.replay_unsafe_allow_count}。</p>
         <p className="subtle">数据集：{version.replay_dataset_name} {version.replay_dataset_version} · 协议 {version.replay_protocol}</p>
         <small>SHA-256：{version.replay_dataset_sha256} · 来源候选：{version.source_candidate_id} 修订 {version.source_candidate_revision}</small>
       </Card>)}</div>
       {absenceVersions.isSuccess && (absenceVersions.data?.items?.length ?? 0) === 0 && <p className="subtle">尚无离线验证草案。</p>}
+      {(absenceVersions.data?.events?.length ?? 0) > 0 && <>
+        <h4>版本切换记录</h4>
+        {absenceVersions.data!.events!.map(event => <p className="subtle" key={event.id}>
+          修订 {event.pointer_revision} · {event.action} · {new Date(event.created_at).toLocaleString()} · {event.previous_version_id ?? '无'} → {event.selected_version_id ?? '停用'}
+        </p>)}
+      </>}
     </section>
     <section className="settings-section">
       <h3>最近运行记录</h3>

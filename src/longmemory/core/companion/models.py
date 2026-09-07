@@ -5,6 +5,54 @@ from datetime import datetime
 from enum import StrEnum
 
 
+class CompanionAbsenceStrategySwitchAction(StrEnum):
+    """当前策略指针的显式变更类型。"""
+
+    ACTIVATE = "activate"
+    DEACTIVATE = "deactivate"
+    ROLLBACK = "rollback"
+
+
+@dataclass(frozen=True, slots=True)
+class CompanionAbsenceStrategySelection:
+    """每个主体唯一的策略指针；空版本表示已停用但保留修订历史。"""
+
+    subject_id: str
+    version_id: str | None
+    revision: int
+    updated_at: datetime
+
+    def __post_init__(self) -> None:
+        if not self.subject_id.strip() or self.revision < 1:
+            raise ValueError("companion_absence_selection_invalid")
+        if self.updated_at.tzinfo is None or self.updated_at.utcoffset() is None:
+            raise ValueError("companion_absence_selection_time_invalid")
+
+
+@dataclass(frozen=True, slots=True)
+class CompanionAbsenceStrategySwitchEvent:
+    """只追加的策略切换审计；与当前指针在同一事务提交。"""
+
+    id: str
+    subject_id: str
+    previous_version_id: str | None
+    selected_version_id: str | None
+    action: CompanionAbsenceStrategySwitchAction
+    pointer_revision: int
+    created_at: datetime
+
+    def __post_init__(self) -> None:
+        if not self.id.strip() or not self.subject_id.strip() or self.pointer_revision < 1:
+            raise ValueError("companion_absence_switch_event_invalid")
+        if self.action == CompanionAbsenceStrategySwitchAction.DEACTIVATE:
+            if self.selected_version_id is not None:
+                raise ValueError("companion_absence_switch_event_target_invalid")
+        elif self.selected_version_id is None:
+            raise ValueError("companion_absence_switch_event_target_invalid")
+        if self.created_at.tzinfo is None or self.created_at.utcoffset() is None:
+            raise ValueError("companion_absence_switch_event_time_invalid")
+
+
 @dataclass(frozen=True, slots=True)
 class CompanionAbsenceStrategyVersion:
     """不可变的缺席策略草案版本；是否启用由后续独立指针决定。"""

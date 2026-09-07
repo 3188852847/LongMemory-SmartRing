@@ -1,6 +1,6 @@
-"""当前 SQLite V25 的完整结构定义；不包含历史迁移步骤。"""
+"""当前 SQLite V26 的完整结构定义；不包含历史迁移步骤。"""
 
-SCHEMA_VERSION = 25
+SCHEMA_VERSION = 26
 
 LATEST_SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS conversation_messages (
@@ -440,6 +440,34 @@ CREATE TABLE IF NOT EXISTS companion_absence_strategy_versions (
 );
 CREATE INDEX IF NOT EXISTS idx_companion_absence_versions_subject
     ON companion_absence_strategy_versions (subject_id, created_at DESC, id DESC);
+
+CREATE TABLE IF NOT EXISTS companion_absence_strategy_selections (
+    subject_id TEXT PRIMARY KEY,
+    current_version_id TEXT,
+    revision INTEGER NOT NULL CHECK (revision >= 1),
+    updated_at TEXT NOT NULL,
+    FOREIGN KEY (current_version_id) REFERENCES companion_absence_strategy_versions (id)
+        ON DELETE RESTRICT
+);
+
+CREATE TABLE IF NOT EXISTS companion_absence_strategy_switch_events (
+    id TEXT PRIMARY KEY,
+    subject_id TEXT NOT NULL,
+    previous_version_id TEXT,
+    selected_version_id TEXT,
+    action TEXT NOT NULL CHECK (action IN ('activate','deactivate','rollback')),
+    pointer_revision INTEGER NOT NULL CHECK (pointer_revision >= 1),
+    created_at TEXT NOT NULL,
+    CHECK ((action = 'deactivate' AND selected_version_id IS NULL)
+        OR (action IN ('activate','rollback') AND selected_version_id IS NOT NULL)),
+    UNIQUE (subject_id, pointer_revision),
+    FOREIGN KEY (previous_version_id) REFERENCES companion_absence_strategy_versions (id)
+        ON DELETE RESTRICT,
+    FOREIGN KEY (selected_version_id) REFERENCES companion_absence_strategy_versions (id)
+        ON DELETE RESTRICT
+);
+CREATE INDEX IF NOT EXISTS idx_companion_absence_switch_subject
+    ON companion_absence_strategy_switch_events (subject_id, pointer_revision DESC);
 
 CREATE TABLE IF NOT EXISTS companion_strategy_candidates (
     id TEXT PRIMARY KEY,

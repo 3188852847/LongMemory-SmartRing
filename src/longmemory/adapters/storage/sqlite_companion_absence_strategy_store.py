@@ -4,6 +4,9 @@ from datetime import datetime
 from sqlite3 import Connection
 
 from longmemory.core.companion import (
+    CompanionAbsenceStrategySelection,
+    CompanionAbsenceStrategySwitchAction,
+    CompanionAbsenceStrategySwitchEvent,
     CompanionAbsenceStrategyVersion,
     CompanionRoutineCandidate,
     CompanionStrategyCandidateStatus,
@@ -65,6 +68,90 @@ class SQLiteCompanionAbsenceStrategyVersionStore:
             "SELECT * FROM companion_absence_strategy_versions WHERE subject_id=? "
             "ORDER BY created_at DESC,id DESC", (subject_id,),
         ).fetchall())
+
+    def get_version(self, version_id, *, subject_id):
+        row = self._connection.execute(
+            "SELECT * FROM companion_absence_strategy_versions WHERE id=? AND subject_id=?",
+            (version_id, subject_id),
+        ).fetchone()
+        return self._version(row) if row else None
+
+    def get_selection(self, subject_id):
+        row = self._connection.execute(
+            "SELECT * FROM companion_absence_strategy_selections WHERE subject_id=?",
+            (subject_id,),
+        ).fetchone()
+        return self._selection(row) if row else None
+
+    def switch_selection(self, *, subject_id, selected_version_id,
+                         expected_revision, action, event_id, now):
+        """用立即事务串行化指针检查、更新和审计，失败时不留下半条记录。"""
+        try:
+            self._connection.execute("BEGIN IMMEDIATE")
+            row = self._connection.execute(
+                "SELECT * FROM companion_absence_strategy_selections WHERE subject_id=?",
+                (subject_id,),
+            ).fetchone()
+            current_revision = row["revision"] if row else 0
+            if current_revision != expected_revision:
+                self._connection.rollback()
+                return None
+            previous_version_id = row["current_version_id"] if row else None
+            next_revision = current_revision + 1
+            self._connection.execute(
+                "INSERT INTO companion_absence_strategy_selections "
+                "(subject_id,current_version_id,revision,updated_at) VALUES (?,?,?,?) "
+                "ON CONFLICT(subject_id) DO UPDATE SET current_version_id=excluded.current_version_id,"
+                "revision=excluded.revision,updated_at=excluded.updated_at",
+                (subject_id, selected_version_id, next_revision, now.isoformat()),
+            )
+            self._connection.execute(
+                "INSERT INTO companion_absence_strategy_switch_events "
+                "(id,subject_id,previous_version_id,selected_version_id,action,"
+                "pointer_revision,created_at) VALUES (?,?,?,?,?,?,?)",
+                (event_id, subject_id, previous_version_id, selected_version_id,
+                 action.value, next_revision, now.isoformat()),
+            )
+            self._connection.commit()
+        except Exception:
+            self._connection.rollback()
+            raise
+        selection = CompanionAbsenceStrategySelection(
+            subject_id=subject_id, version_id=selected_version_id,
+            revision=next_revision, updated_at=now,
+        )
+        event = CompanionAbsenceStrategySwitchEvent(
+            id=event_id, subject_id=subject_id,
+            previous_version_id=previous_version_id,
+            selected_version_id=selected_version_id, action=action,
+            pointer_revision=next_revision, created_at=now,
+        )
+        return selection, event
+
+    def list_switch_events(self, subject_id):
+        rows = self._connection.execute(
+            "SELECT * FROM companion_absence_strategy_switch_events WHERE subject_id=? "
+            "ORDER BY pointer_revision DESC,id DESC", (subject_id,),
+        ).fetchall()
+        return tuple(self._switch_event(row) for row in rows)
+
+    @staticmethod
+    def _selection(row):
+        return CompanionAbsenceStrategySelection(
+            subject_id=row["subject_id"], version_id=row["current_version_id"],
+            revision=row["revision"], updated_at=datetime.fromisoformat(row["updated_at"]),
+        )
+
+    @staticmethod
+    def _switch_event(row):
+        return CompanionAbsenceStrategySwitchEvent(
+            id=row["id"], subject_id=row["subject_id"],
+            previous_version_id=row["previous_version_id"],
+            selected_version_id=row["selected_version_id"],
+            action=CompanionAbsenceStrategySwitchAction(row["action"]),
+            pointer_revision=row["pointer_revision"],
+            created_at=datetime.fromisoformat(row["created_at"]),
+        )
 
     @staticmethod
     def _candidate(row):

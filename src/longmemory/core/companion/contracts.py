@@ -7,6 +7,9 @@ from longmemory.core.conversation.models import ConversationMessage
 
 from .models import (
     CompanionAbsenceStrategyVersion,
+    CompanionAbsenceStrategySelection,
+    CompanionAbsenceStrategySwitchAction,
+    CompanionAbsenceStrategySwitchEvent,
     CompanionFeedbackEvent,
     CompanionRoutineCandidate,
     CompanionStrategyCandidate,
@@ -33,6 +36,24 @@ class CompanionAbsenceStrategyVersionStore(Protocol):
     ) -> CompanionAbsenceStrategyVersion: ...
 
     def list(self, subject_id: str) -> tuple[CompanionAbsenceStrategyVersion, ...]: ...
+
+    def get_version(
+        self, version_id: str, *, subject_id: str,
+    ) -> CompanionAbsenceStrategyVersion | None: ...
+
+    def get_selection(
+        self, subject_id: str,
+    ) -> CompanionAbsenceStrategySelection | None: ...
+
+    def switch_selection(
+        self, *, subject_id: str, selected_version_id: str | None,
+        expected_revision: int, action: CompanionAbsenceStrategySwitchAction,
+        event_id: str, now: datetime,
+    ) -> tuple[CompanionAbsenceStrategySelection, CompanionAbsenceStrategySwitchEvent] | None: ...
+
+    def list_switch_events(
+        self, subject_id: str,
+    ) -> tuple[CompanionAbsenceStrategySwitchEvent, ...]: ...
 
 
 class InteractionOutcomeObserver(Protocol):

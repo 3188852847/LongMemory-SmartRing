@@ -931,7 +931,7 @@ class MemoryBackend:
             return self._routine_candidate_json(candidate, store)
 
     @staticmethod
-    def _absence_strategy_version_json(version):
+    def _absence_strategy_version_json(version, *, active=False):
         return {
             "id": version.id,
             "subject_id": version.subject_id,
@@ -953,18 +953,74 @@ class MemoryBackend:
             "replay_gate_passed": version.replay_gate_passed,
             "replayed_at": version.replayed_at.isoformat(),
             "created_at": version.created_at.isoformat(),
-            "active": False,
+            "active": active,
+        }
+
+    @staticmethod
+    def _absence_selection_json(selection):
+        if selection is None:
+            return {"current_version_id": None, "revision": 0, "updated_at": None}
+        return {
+            "current_version_id": selection.version_id,
+            "revision": selection.revision,
+            "updated_at": selection.updated_at.isoformat(),
+        }
+
+    @staticmethod
+    def _absence_switch_event_json(event):
+        return {
+            "id": event.id, "previous_version_id": event.previous_version_id,
+            "selected_version_id": event.selected_version_id,
+            "action": event.action.value, "pointer_revision": event.pointer_revision,
+            "created_at": event.created_at.isoformat(),
         }
 
     def list_companion_absence_strategy_versions(self):
         with self._open() as connection:
-            versions = SQLiteCompanionAbsenceStrategyVersionStore(
-                connection
-            ).list("user:self")
+            store = SQLiteCompanionAbsenceStrategyVersionStore(connection)
+            versions = store.list("user:self")
+            selection = store.get_selection("user:self")
             return {"items": [
-                self._absence_strategy_version_json(version)
+                self._absence_strategy_version_json(
+                    version, active=selection is not None and selection.version_id == version.id,
+                )
                 for version in versions
-            ]}
+            ], "selection": self._absence_selection_json(selection),
+                "events": [self._absence_switch_event_json(event)
+                           for event in store.list_switch_events("user:self")]}
+
+    def select_companion_absence_strategy_version(self, request, *, rollback=False):
+        with self._open(write_capability="proactive") as connection:
+            service = CompanionAbsenceStrategyVersionService(
+                SQLiteCompanionAbsenceStrategyVersionStore(connection), clock=self.clock,
+            )
+            try:
+                selection, event = service.select_version(
+                    request.version_id, subject_id="user:self",
+                    expected_revision=request.expected_revision, rollback=rollback,
+                )
+            except ValueError as error:
+                code = str(error)
+                status = 404 if code == "companion_absence_version_missing" else 409
+                raise MemoryAccessError(code, status) from None
+            return {"selection": self._absence_selection_json(selection),
+                    "event": self._absence_switch_event_json(event),
+                    "runtime_connected": False}
+
+    def deactivate_companion_absence_strategy(self, request):
+        with self._open(write_capability="proactive") as connection:
+            service = CompanionAbsenceStrategyVersionService(
+                SQLiteCompanionAbsenceStrategyVersionStore(connection), clock=self.clock,
+            )
+            try:
+                selection, event = service.deactivate(
+                    subject_id="user:self", expected_revision=request.expected_revision,
+                )
+            except ValueError as error:
+                raise MemoryAccessError(str(error), 409) from None
+            return {"selection": self._absence_selection_json(selection),
+                    "event": self._absence_switch_event_json(event),
+                    "runtime_connected": False}
 
     def create_companion_absence_strategy_version(self, request):
         """保存回放绑定草案；当前没有激活指针或调度接线。"""

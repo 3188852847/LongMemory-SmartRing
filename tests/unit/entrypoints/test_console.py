@@ -192,7 +192,22 @@ def test_companion_strategy_analysis_is_csrf_protected_and_never_activates(tmp_p
                 base + "/api/companion-absence-strategy-versions",
             )
             assert versions.status == 200
-            assert await versions.json() == {"items": []}
+            assert await versions.json() == {
+                "items": [], "events": [],
+                "selection": {"current_version_id": None, "revision": 0, "updated_at": None},
+            }
+            switch_without_csrf = await client.post(
+                base + "/api/companion-absence-strategy-versions/activate",
+                json={"version_id": "a" * 32, "expected_revision": 0},
+            )
+            assert switch_without_csrf.status == 403
+            missing_version = await client.post(
+                base + "/api/companion-absence-strategy-versions/activate",
+                headers=headers,
+                json={"version_id": "a" * 32, "expected_revision": 0},
+            )
+            assert missing_version.status == 404
+            assert (await missing_version.json())["error"] == "companion_absence_version_missing"
             no_csrf = await client.post(
                 base + "/api/companion-absence-strategy-versions/draft",
                 json={"candidate_id": "a" * 32, "expected_candidate_revision": 1},

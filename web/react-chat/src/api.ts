@@ -132,5 +132,17 @@ export interface CompanionAbsenceStrategyVersion {
   replay_dataset_sha256:string; replay_case_count:number;
   parameter_fingerprint:string;
   replay_matched_count:number; replay_unsafe_allow_count:number;
-  replay_gate_passed:boolean; replayed_at:string; created_at:string; active:false;
+  replay_gate_passed:boolean; replayed_at:string; created_at:string; active:boolean;
+}
+export interface CompanionAbsenceStrategySelection {
+  current_version_id:string|null; revision:number; updated_at:string|null;
+}
+export interface CompanionAbsenceStrategySwitchEvent {
+  id:string; previous_version_id:string|null; selected_version_id:string|null;
+  action:'activate'|'deactivate'|'rollback'; pointer_revision:number; created_at:string;
+}
+export interface CompanionAbsenceStrategyVersionList {
+  items:CompanionAbsenceStrategyVersion[];
+  selection:CompanionAbsenceStrategySelection;
+  events:CompanionAbsenceStrategySwitchEvent[];
 }

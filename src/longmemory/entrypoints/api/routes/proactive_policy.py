@@ -7,6 +7,8 @@ from pydantic import ValidationError
 
 from ..contracts import (
     CompanionAbsenceVersionDraftRequest,
+    CompanionAbsenceSelectionRequest,
+    CompanionAbsenceDeactivateRequest,
     CompanionStrategyDismissRequest,
     ProactivePlaybackConfirmationRequest,
     ProactivePolicyRequest,
@@ -332,6 +334,35 @@ def register_proactive_policy_routes(app, backend, client, operation_lock):
     app.router.add_post(
         "/api/companion-absence-strategy-versions/draft",
         absence_strategy_versions,
+    )
+
+    async def switch_absence_strategy(request):
+        try:
+            if request.content_type != "application/json":
+                raise web.HTTPBadRequest()
+            contract = (CompanionAbsenceDeactivateRequest if request.match_info["action"] == "deactivate"
+                        else CompanionAbsenceSelectionRequest)
+            try:
+                body = contract.model_validate(await request.json())
+            except (ValidationError, ValueError, UnicodeError):
+                raise web.HTTPBadRequest() from None
+            action = request.match_info["action"]
+            if action == "deactivate":
+                result = await asyncio.to_thread(
+                    backend.deactivate_companion_absence_strategy, body,
+                )
+            else:
+                result = await asyncio.to_thread(
+                    backend.select_companion_absence_strategy_version, body,
+                    rollback=action == "rollback",
+                )
+            return web.json_response(result)
+        except MemoryAccessError as error:
+            return web.json_response({"error": error.code}, status=error.status)
+
+    app.router.add_post(
+        "/api/companion-absence-strategy-versions/{action:activate|rollback|deactivate}",
+        switch_absence_strategy,
     )
 
     async def dismiss_strategy_candidate(request):

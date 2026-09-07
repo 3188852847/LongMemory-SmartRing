@@ -14,6 +14,9 @@ from .contracts import (
 )
 from .models import (
     CompanionAbsenceStrategyVersion,
+    CompanionAbsenceStrategySelection,
+    CompanionAbsenceStrategySwitchAction,
+    CompanionAbsenceStrategySwitchEvent,
     CompanionFeedbackEvent,
     CompanionRoutineCandidate,
     CompanionStrategyReplayEvidence,
@@ -42,6 +45,9 @@ __all__ = [
     "AbsenceTriggerDecision",
     "AbsenceTriggerReason",
     "CompanionAbsenceStrategyVersion",
+    "CompanionAbsenceStrategySelection",
+    "CompanionAbsenceStrategySwitchAction",
+    "CompanionAbsenceStrategySwitchEvent",
     "CompanionAbsenceStrategyVersionStore",
     "CompanionFeedbackEvent",
     "CompanionFeedbackStore",
