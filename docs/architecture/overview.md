@@ -1,6 +1,6 @@
 # 系统架构总览
 
-P2 声音设置有两条边界：React → 本机认证/CSRF API → 固定小智 Python，用于 Edge TTS 固定文本试听或音色字段保存；启动面板 → 独立 VoxCPM2 Python 3.11 常驻环回服务 → Xiaozhi `CustomTTS` → WAV 转 Opus → 圆屏，用于本地 `plain` 声音。音频不入库；后端切换采用私有配置摘要、备份和明确重启，不改 Memory Core。见 ADR-0024、ADR-0025。
+P2 声音设置有两条边界：React → 本机认证/CSRF API → 当前 TTS，用于网页朗读、停止和浏览器本地说话打断；启动面板 → 独立 VoxCPM2 Python 3.11 常驻环回服务 → Xiaozhi `CustomTTS` → WAV 转 Opus → 圆屏。VoxCPM2 动态读取本机声音方案，受控参考 WAV 决定音色，表达指令/CFG/推理步数分别承担风格、遵循强度和质量成本。音频不入库；后端切换仍采用私有配置摘要、备份和明确重启，不改 Memory Core。见 ADR-0024、ADR-0025、ADR-0083。
 
 更新：2026-09-06。本文描述模块、边界和数据归属；具体执行步骤见[运行流程](workflows.md)，先后顺序见[路线图](../../ROADMAP.md)。采用文字与表格，不维护图形副本。
 

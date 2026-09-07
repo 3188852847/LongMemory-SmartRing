@@ -78,3 +78,12 @@ def test_rejects_browser_origin_and_non_loopback_binding(local_service):
     assert status == 403
     with pytest.raises(argparse.ArgumentTypeError):
         service.loopback_address("192.168.1.2")
+
+
+def test_invalid_profile_falls_back_without_exposing_arbitrary_path(tmp_path, monkeypatch):
+    path = tmp_path / "settings.json"
+    path.write_text(json.dumps({"version":1,"reference":"../../secret.wav","style":"",
+                                "cfg_value":2.0,"quality":"balanced"}), encoding="utf-8")
+    monkeypatch.setattr(service, "PROFILE_PATH", path)
+    assert service.current_profile() == {"version":1,"reference":None,"style":"",
+                                         "cfg_value":2.0,"quality":"balanced"}

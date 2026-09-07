@@ -14,6 +14,12 @@ export class ChatApi {
     if (!response.ok) throw new Error('试听失败，请检查网络与小智环境；未自动重试。');
     return response.blob();
   }
+  async speech(text: string): Promise<Blob> {
+    const response = await fetch('/api/speech', {method:'POST', credentials:'same-origin', cache:'no-store',
+      headers:{'Content-Type':'application/json','X-Console-CSRF':this.csrf}, body:JSON.stringify({text})});
+    if (!response.ok) throw new Error('朗读生成失败。请检查当前 TTS 服务，未自动重试。');
+    return response.blob();
+  }
   async bootstrap() {
     const response = await fetch('/api/session', {headers: {'X-Console-Bootstrap': '1'}, cache: 'no-store'});
     if (!response.ok) throw new Error('无法建立本机会话，请刷新页面。');

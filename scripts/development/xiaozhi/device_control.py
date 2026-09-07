@@ -12,7 +12,10 @@ from uuid import uuid4
 
 STATUS_TOOL = "self.get_device_status"
 VOLUME_TOOL = "self.audio_speaker.set_volume"
+BRIGHTNESS_TOOL = "self.screen.set_brightness"
+THEME_TOOL = "self.screen.set_theme"
 MIN_VOLUME, MAX_VOLUME = 5, 60  # 技术验证阶段限制，非硬件音量范围。
+MIN_BRIGHTNESS, MAX_BRIGHTNESS = 5, 100
 MAX_ANNOUNCEMENT_CHARS = 80
 MAX_ANNOUNCEMENT_TTL_SECONDS = 300
 
@@ -42,12 +45,19 @@ def tool_schema(client, original_name):
             raise ControlError("tool_schema_unsupported")
         return schema
     properties = schema.get("properties", {})
-    volume = properties.get("volume", {}) if isinstance(properties, dict) else {}
-    if volume.get("type") != "integer" or set(required) - {"volume"}:
+    definitions = {
+        VOLUME_TOOL: ("volume", "integer"),
+        BRIGHTNESS_TOOL: ("brightness", "integer"),
+        THEME_TOOL: ("theme", "string"),
+    }
+    field, expected_type = definitions.get(original_name, (None, None))
+    value = properties.get(field, {}) if isinstance(properties, dict) and field else {}
+    if value.get("type") != expected_type or set(required) - {field}:
         raise ControlError("tool_schema_unsupported")
-    for field, default in (("minimum", 0), ("maximum", 100)):
-        if type(volume.get(field, default)) is not int:
-            raise ControlError("tool_schema_unsupported")
+    if expected_type == "integer":
+        for bound, default in (("minimum", 0), ("maximum", 100)):
+            if type(value.get(bound, default)) is not int:
+                raise ControlError("tool_schema_unsupported")
     return schema
 
 
@@ -106,14 +116,22 @@ class DeviceControl:
         """只读缓存的握手状态；此接口不向圆屏发命令，也不返回工具描述全文。"""
         result = {"connection_count": len(self.connections), "ready": False,
                   "read_volume_supported": False, "set_volume_supported": False,
+                  "read_status_supported": False, "set_brightness_supported": False,
+                  "set_theme_supported": False,
+                  "aec_advertised": False,
                   "announcement_supported": False, "announcement_ready": False,
                   "user_session_active": False,
                   "allowed_volume": {"minimum": MIN_VOLUME, "maximum": MAX_VOLUME}}
         try:
             conn = self._connection()
             result["ready"] = True
-            for name, field in ((STATUS_TOOL, "read_volume_supported"),
-                                (VOLUME_TOOL, "set_volume_supported")):
+            # AEC 是自由说话打断的必要基础之一，但仅凭握手字段不能证明整条打断链路可用。
+            result["aec_advertised"] = getattr(conn, "features", {}).get("aec") is True
+            for name, field in ((STATUS_TOOL, "read_status_supported"),
+                                (STATUS_TOOL, "read_volume_supported"),
+                                (VOLUME_TOOL, "set_volume_supported"),
+                                (BRIGHTNESS_TOOL, "set_brightness_supported"),
+                                (THEME_TOOL, "set_theme_supported")):
                 try:
                     tool_schema(conn.mcp_client, name)
                     result[field] = True
@@ -146,7 +164,7 @@ class DeviceControl:
         """
         if self._connection() is not conn:
             raise ControlError("device_connection_changed")
-        if name not in (STATUS_TOOL, VOLUME_TOOL):
+        if name not in (STATUS_TOOL, VOLUME_TOOL, BRIGHTNESS_TOOL, THEME_TOOL):
             raise ControlError("tool_not_allowed", 403)
         client = conn.mcp_client
         tool_schema(client, name)
@@ -175,13 +193,53 @@ class DeviceControl:
                 future.cancel()
 
     async def _read_volume(self, conn):
-        status = await self._call(conn, STATUS_TOOL, {})
+        status = await self._read_status(conn)
         speaker = status.get("audio_speaker", {}) if isinstance(status, dict) else {}
         volume = speaker.get("volume") if isinstance(speaker, dict) else None
         if type(volume) is not int or not 0 <= volume <= 100:
             raise ControlError("volume_readback_unavailable", 502)
         # 完整状态可能包含网络/电量等信息，控制 API 只保留所需音量。
         return volume
+
+    async def _read_status(self, conn):
+        status = await self._call(conn, STATUS_TOOL, {})
+        if not isinstance(status, dict):
+            raise ControlError("status_readback_unavailable", 502)
+        return status
+
+    @staticmethod
+    def _project_status(status):
+        """只向控制台暴露产品需要的状态，不返回 SSID 等网络标识。"""
+        result = {}
+        speaker = status.get("audio_speaker")
+        if isinstance(speaker, dict) and type(speaker.get("volume")) is int and 0 <= speaker["volume"] <= 100:
+            result["volume"] = speaker["volume"]
+        screen = status.get("screen")
+        if isinstance(screen, dict):
+            if type(screen.get("brightness")) is int and 0 <= screen["brightness"] <= 100:
+                result["brightness"] = screen["brightness"]
+            if screen.get("theme") in {"light", "dark"}:
+                result["theme"] = screen["theme"]
+        battery = status.get("battery")
+        if isinstance(battery, dict) and type(battery.get("level")) is int and 0 <= battery["level"] <= 100 and type(battery.get("charging")) is bool:
+            result["battery"] = {"level": battery["level"], "charging": battery["charging"]}
+        network = status.get("network")
+        if isinstance(network, dict) and network.get("signal") in {"strong", "medium", "weak"}:
+            result["network"] = {"signal": network["signal"]}
+        chip = status.get("chip")
+        temperature = chip.get("temperature") if isinstance(chip, dict) else None
+        if type(temperature) in {int, float} and -40 <= temperature <= 125:
+            result["chip"] = {"temperature": round(float(temperature), 1)}
+        if not result:
+            raise ControlError("status_readback_unavailable", 502)
+        return result
+
+    async def read_status(self):
+        if self.operation_lock.locked():
+            raise ControlError("control_busy")
+        async with self.operation_lock:
+            conn = self._connection()
+            return self._project_status(await self._read_status(conn))
 
     async def read_volume(self):
         if self.operation_lock.locked():
@@ -216,6 +274,42 @@ class DeviceControl:
                 result["reason"] = exc.code
             result["operation_id"] = uuid4().hex
             return result
+
+    async def _set_screen_value(self, *, tool, field, value):
+        if self.operation_lock.locked():
+            raise ControlError("control_busy")
+        async with self.operation_lock:
+            conn = self._connection()
+            schema = tool_schema(conn.mcp_client, tool)
+            prop = schema["properties"][field]
+            if type(value) is int and not prop.get("minimum", 0) <= value <= prop.get("maximum", 100):
+                raise ControlError("value_outside_device_schema", 400)
+            before_status = self._project_status(await self._read_status(conn))
+            acknowledged = await self._call(conn, tool, {field: value})
+            if acknowledged is not True:
+                raise ControlError("set_not_acknowledged_outcome_unknown", 502)
+            result = {"requested_value": value, "previous_value": before_status.get(field),
+                      "acknowledged": True, "readback_value": None, "verified": False}
+            try:
+                after = self._project_status(await self._read_status(conn))
+                result["readback_value"] = after.get(field)
+                result["verified"] = result["readback_value"] == value
+                if not result["verified"]:
+                    result["reason"] = "readback_mismatch"
+            except ControlError as exc:
+                result["reason"] = exc.code
+            result["operation_id"] = uuid4().hex
+            return result
+
+    async def set_brightness(self, brightness):
+        if type(brightness) is not int or not MIN_BRIGHTNESS <= brightness <= MAX_BRIGHTNESS:
+            raise ControlError("brightness_out_of_range", 400)
+        return await self._set_screen_value(tool=BRIGHTNESS_TOOL, field="brightness", value=brightness)
+
+    async def set_theme(self, theme):
+        if theme not in {"light", "dark"}:
+            raise ControlError("theme_invalid", 400)
+        return await self._set_screen_value(tool=THEME_TOOL, field="theme", value=theme)
 
     async def announce(self, text, expires_at_ms):
         """把一条短测试文本放入当前连接的既有 TTS 队列。

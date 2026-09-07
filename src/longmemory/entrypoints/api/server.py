@@ -114,6 +114,37 @@ def create_app(*, port=8765, bridge=None, web_root=None, database=None, allow_me
             except BridgeError as error:
                 return web.json_response({"error": error.code}, status=error.status)
 
+    async def device_snapshot(request):
+        if operation_lock.locked():
+            return web.json_response({"error": "operation_busy"}, status=409)
+        async with operation_lock:
+            try:
+                return web.json_response(await client.read_status())
+            except BridgeError as error:
+                return web.json_response({"error": error.code}, status=error.status)
+
+    async def screen(request):
+        if operation_lock.locked():
+            return web.json_response({"error": "operation_busy"}, status=409)
+        async with operation_lock:
+            try:
+                if request.content_type != "application/json":
+                    return web.json_response({"error": "invalid_body"}, status=400)
+                body = await request.json()
+                if not isinstance(body, dict) or len(body) != 1:
+                    return web.json_response({"error": "invalid_screen_setting"}, status=400)
+                if set(body) == {"brightness"} and type(body["brightness"]) is int and 5 <= body["brightness"] <= 100:
+                    data = await client.set_screen("brightness", body["brightness"])
+                elif set(body) == {"theme"} and body["theme"] in {"light", "dark"}:
+                    data = await client.set_screen("theme", body["theme"])
+                else:
+                    return web.json_response({"error": "invalid_screen_setting"}, status=400)
+                return web.json_response(data)
+            except (ValueError, UnicodeError):
+                return web.json_response({"error": "invalid_body"}, status=400)
+            except BridgeError as error:
+                return web.json_response({"error": error.code}, status=error.status)
+
     async def close(_app):
         await client.close()
 
@@ -124,6 +155,8 @@ def create_app(*, port=8765, bridge=None, web_root=None, database=None, allow_me
     app.router.add_get("/api/device", device, allow_head=False)
     app.router.add_get("/api/device/volume", volume, allow_head=False)
     app.router.add_post("/api/device/volume", volume)
+    app.router.add_get("/api/device/snapshot", device_snapshot, allow_head=False)
+    app.router.add_post("/api/device/screen", screen)
     memory_backend = MemoryBackend(
         database,
         allow_delete=allow_memory_delete,

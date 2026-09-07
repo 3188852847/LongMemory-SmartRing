@@ -64,6 +64,9 @@ def create_app(control, token, port=PORT):
     async def read_volume(request):
         return web.json_response(await control.read_volume())
 
+    async def read_status(request):
+        return web.json_response(await control.read_status())
+
     async def set_volume(request):
         if request.content_type != "application/json":
             raise ControlError("json_required", 415)
@@ -74,6 +77,21 @@ def create_app(control, token, port=PORT):
         if not isinstance(body, dict) or set(body) != {"volume"}:
             raise ControlError("invalid_fields", 400)
         return web.json_response(await control.set_volume(body["volume"]))
+
+    async def set_screen(request):
+        if request.content_type != "application/json":
+            raise ControlError("json_required", 415)
+        try:
+            body = await request.json()
+        except (ValueError, UnicodeError):
+            raise ControlError("invalid_json", 400) from None
+        if not isinstance(body, dict) or len(body) != 1:
+            raise ControlError("invalid_fields", 400)
+        if set(body) == {"brightness"}:
+            return web.json_response(await control.set_brightness(body["brightness"]))
+        if set(body) == {"theme"}:
+            return web.json_response(await control.set_theme(body["theme"]))
+        raise ControlError("invalid_fields", 400)
 
     async def announce(request):
         if request.content_type != "application/json":
@@ -92,6 +110,8 @@ def create_app(control, token, port=PORT):
     app.router.add_get("/api/device", status, allow_head=False)
     app.router.add_get("/api/device/volume", read_volume, allow_head=False)
     app.router.add_post("/api/device/volume", set_volume)
+    app.router.add_get("/api/device/status", read_status, allow_head=False)
+    app.router.add_post("/api/device/screen", set_screen)
     app.router.add_post("/api/device/announcement", announce)
     return app
 

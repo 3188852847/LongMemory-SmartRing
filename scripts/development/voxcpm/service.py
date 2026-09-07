@@ -17,11 +17,44 @@ from pathlib import Path
 import threading
 from typing import Protocol
 
-from trial import MODEL, REVISION, verify_weights
+from trial import MODEL, REVISION, ROOT, verify_weights
 
 MAX_REQUEST_BYTES = 32 * 1024
 MAX_TEXT_CHARS = 600
 DEFAULT_PORT = 18768
+PROFILE_PATH = ROOT / "data/audio/voxcpm-settings.json"
+AUDIO_ROOT = (ROOT / "data/audio").resolve()
+QUALITY_STEPS = {"fast": 6, "balanced": 10, "quality": 20}
+
+
+def current_profile():
+    default = {"version": 1, "reference": None, "style": "", "cfg_value": 2.0,
+               "quality": "balanced"}
+    try:
+        value = json.loads(PROFILE_PATH.read_text(encoding="utf-8"))
+    except (OSError, ValueError, UnicodeError):
+        return default
+    if not isinstance(value, dict) or set(value) != set(default) or value.get("version") != 1:
+        return default
+    reference = value.get("reference")
+    if reference is not None:
+        if not isinstance(reference, str) or not reference.endswith(".wav"):
+            return default
+        path = (AUDIO_ROOT / reference).resolve()
+        try:
+            path.relative_to(AUDIO_ROOT)
+        except ValueError:
+            return default
+        if not path.is_file() or path.is_symlink():
+            return default
+    if (not isinstance(value.get("style"), str) or len(value["style"]) > 100
+            or any(ord(char) < 32 for char in value["style"])):
+        return default
+    if type(value.get("cfg_value")) not in {int, float} or not 1.0 <= value["cfg_value"] <= 3.0:
+        return default
+    if value.get("quality") not in QUALITY_STEPS:
+        return default
+    return value
 
 
 class SpeechSynthesizer(Protocol):
@@ -55,16 +88,21 @@ class VoxCPMSynthesizer:
     def synthesize(self, text: str) -> bytes:
         # VoxCPM/PyTorch 的随机状态与模型对象不是并发请求边界；一次只生成一句。
         with self._lock:
-            cached = self._cache.pop(text, None)
+            profile = current_profile()
+            cache_key = json.dumps(profile, ensure_ascii=False, sort_keys=True) + "\0" + text
+            cached = self._cache.pop(cache_key, None)
             if cached is not None:
-                self._cache[text] = cached
+                self._cache[cache_key] = cached
                 return cached
             self._torch.manual_seed(42)
             self._torch.cuda.manual_seed_all(42)
+            reference = profile["reference"]
+            styled_text = f"({profile['style']}){text}" if profile["style"].strip() else text
             waveform = self._model.generate(
-                text=text,
-                cfg_value=2.0,
-                inference_timesteps=10,
+                text=styled_text,
+                reference_wav_path=str(AUDIO_ROOT / reference) if reference else None,
+                cfg_value=float(profile["cfg_value"]),
+                inference_timesteps=QUALITY_STEPS[profile["quality"]],
                 normalize=False,
                 denoise=False,
                 retry_badcase=False,
@@ -77,7 +115,7 @@ class VoxCPMSynthesizer:
                 output, waveform, self._sample_rate, format="WAV", subtype="PCM_16"
             )
             audio = output.getvalue()
-            self._cache[text] = audio
+            self._cache[cache_key] = audio
             while len(self._cache) > self._cache_entries:
                 self._cache.popitem(last=False)
             return audio

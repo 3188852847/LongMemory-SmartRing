@@ -1,5 +1,6 @@
 import asyncio
 import json
+import pytest
 from test_console import console, login
 from longmemory.entrypoints.api import server
 from longmemory.entrypoints.api.chat_backend import ChatBackend
@@ -50,3 +51,21 @@ def test_voice_api_auth_strict_body_and_audio(tmp_path, monkeypatch):
             assert (await client.post(url, headers=headers, json={'voice':'synthetic', 'expected_digest':'a'*64})).status == 200
     asyncio.run(run())
     assert len(calls) == 3
+
+
+def test_voxcpm_profile_only_accepts_controlled_local_wav(tmp_path):
+    audio = tmp_path / 'data/audio/trial/plain.wav'
+    audio.parent.mkdir(parents=True); audio.write_bytes(b'RIFF-synthetic')
+    backend = server.VoiceSettings(tmp_path, tmp_path / 'synthetic.db', tmp_path)
+    profile, digest = backend.profile()
+    assert profile['reference'] is None
+    saved, new_digest = backend.save_profile({
+        'reference':'trial/plain.wav', 'style':'温柔自然', 'cfg_value':2.1,
+        'quality':'balanced', 'expected_profile_digest':digest,
+    })
+    assert saved['reference'] == 'trial/plain.wav' and new_digest != digest
+    with pytest.raises(ValueError):
+        backend.save_profile({
+            'reference':'../../secret.wav', 'style':'', 'cfg_value':2.0,
+            'quality':'balanced', 'expected_profile_digest':new_digest,
+        })

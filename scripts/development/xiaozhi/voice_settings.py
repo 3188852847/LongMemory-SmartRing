@@ -76,15 +76,20 @@ def settings(server, body):
                      'config_matches': True, 'editable': True, 'service_ready': None}
 
 
-async def preview(voice, factory=None):
+async def preview(voice, text=TEXT, factory=None):
     if voice not in VOICES:
         raise ValueError('invalid_voice')
+    # 保留旧测试/调用方的 preview(voice, factory) 兼容入口。
+    if callable(text) and factory is None:
+        factory, text = text, TEXT
     if factory is None:
         import edge_tts
         factory = edge_tts.Communicate
-    # 不接受任意文本；音频只经过内存，不写入聊天、记忆或音频档案。
+    if not isinstance(text, str) or not text.strip() or len(text) > 600:
+        raise ValueError('invalid_text')
+    # 音频只经过内存，不写入聊天、记忆或音频档案。
     audio = bytearray()
-    async for chunk in factory(TEXT, voice=voice).stream():
+    async for chunk in factory(text.strip(), voice=voice).stream():
         if chunk['type'] == 'audio':
             audio.extend(chunk['data'])
             if len(audio) > 2 * 1024 * 1024:
@@ -98,7 +103,7 @@ if __name__ == '__main__':
     try:
         body = json.loads(sys.stdin.buffer.read(4096))
         if body.get('action') == 'preview':
-            sys.stdout.buffer.write(asyncio.run(asyncio.wait_for(preview(body.get('voice')), 25)))
+            sys.stdout.buffer.write(asyncio.run(asyncio.wait_for(preview(body.get('voice'), body.get('text', TEXT)), 30)))
         else:
             print(json.dumps(settings(Path(sys.argv[1]).resolve(), body)))
     except Exception:

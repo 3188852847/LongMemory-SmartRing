@@ -23,6 +23,8 @@ REASONS = frozenset({
     "unexpected_device_result", "device_connection_changed", "tool_not_allowed",
     "device_timeout_outcome_unknown", "device_call_failed_outcome_unknown",
     "volume_readback_unavailable", "control_busy", "volume_outside_device_schema",
+    "status_readback_unavailable", "value_outside_device_schema",
+    "brightness_out_of_range", "theme_invalid",
     "set_not_acknowledged_outcome_unknown",
     "device_offline", "device_not_ready", "tools_not_ready", "readback_mismatch",
     "volume_out_of_range", "tool_unavailable",
@@ -94,21 +96,50 @@ class XiaozhiControlClient:
     async def status(self) -> dict:
         data = await self._request("GET", "/api/device")
         count = data.get("connection_count")
-        flags = (
+        required_flags = (
             "ready", "read_volume_supported", "set_volume_supported",
             "announcement_supported", "announcement_ready", "user_session_active",
         )
-        if type(count) is not int or count < 0 or any(type(data.get(k)) is not bool for k in flags):
+        optional_flags = ("read_status_supported", "set_brightness_supported", "set_theme_supported", "aec_advertised")
+        if type(count) is not int or count < 0 or any(type(data.get(k)) is not bool for k in required_flags):
+            raise BridgeError("bridge_invalid_response", 502)
+        if any(k in data and type(data[k]) is not bool for k in optional_flags):
             raise BridgeError("bridge_invalid_response", 502)
         if data["ready"] and count != 1:
             raise BridgeError("bridge_invalid_response", 502)
-        result = {"connection_count": count, **{k: data[k] for k in flags}}
+        result = {"connection_count": count, **{k: data[k] for k in required_flags},
+                  **{k: data.get(k, False) for k in optional_flags}}
         result["allowed_volume"] = {"minimum": 5, "maximum": 60}
         if "reason" in data:
             result["reason"] = safe_reason(data["reason"])
         if "announcement_reason" in data:
             result["announcement_reason"] = safe_reason(data["announcement_reason"])
         return result
+
+    async def read_status(self) -> dict:
+        data = await self._request("GET", "/api/device/status")
+        allowed = {"volume", "brightness", "theme", "battery", "network", "chip"}
+        if not data or set(data) - allowed:
+            raise BridgeError("bridge_invalid_response", 502)
+        if "volume" in data and not volume_value(data["volume"]):
+            raise BridgeError("bridge_invalid_response", 502)
+        if "brightness" in data and not volume_value(data["brightness"]):
+            raise BridgeError("bridge_invalid_response", 502)
+        if "theme" in data and data["theme"] not in {"light", "dark"}:
+            raise BridgeError("bridge_invalid_response", 502)
+        battery = data.get("battery")
+        if battery is not None and (not isinstance(battery, dict) or set(battery) != {"level", "charging"}
+                or not volume_value(battery.get("level")) or type(battery.get("charging")) is not bool):
+            raise BridgeError("bridge_invalid_response", 502)
+        network = data.get("network")
+        if network is not None and (not isinstance(network, dict) or set(network) != {"signal"}
+                or network.get("signal") not in {"strong", "medium", "weak"}):
+            raise BridgeError("bridge_invalid_response", 502)
+        chip = data.get("chip")
+        if chip is not None and (not isinstance(chip, dict) or set(chip) != {"temperature"}
+                or type(chip.get("temperature")) not in {int, float} or not -40 <= chip["temperature"] <= 125):
+            raise BridgeError("bridge_invalid_response", 502)
+        return data
 
     async def read_volume(self) -> dict:
         data = await self._request("GET", "/api/device/volume")
@@ -129,6 +160,24 @@ class XiaozhiControlClient:
             raise BridgeError("bridge_invalid_response", 502)
         result = {key: data.get(key) for key in (
             "requested_volume", "previous_volume", "acknowledged", "readback_volume", "verified"
+        )}
+        if "reason" in data:
+            result["reason"] = safe_reason(data["reason"])
+        return result
+
+    async def set_screen(self, field: str, value: object) -> dict:
+        if ((field == "brightness" and (type(value) is not int or not 5 <= value <= 100))
+                or (field == "theme" and value not in {"light", "dark"})
+                or field not in {"brightness", "theme"}):
+            raise BridgeError("invalid_screen_setting", 400)
+        data = await self._request("POST", "/api/device/screen", {field: value})
+        if (data.get("requested_value") != value or data.get("acknowledged") is not True
+                or type(data.get("verified")) is not bool):
+            raise BridgeError("bridge_invalid_response", 502)
+        if data["verified"] and data.get("readback_value") != value:
+            raise BridgeError("bridge_invalid_response", 502)
+        result = {key: data.get(key) for key in (
+            "requested_value", "previous_value", "acknowledged", "readback_value", "verified"
         )}
         if "reason" in data:
             result["reason"] = safe_reason(data["reason"])

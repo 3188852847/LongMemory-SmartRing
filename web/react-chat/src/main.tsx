@@ -9,6 +9,7 @@ import './style.css';
 import {AppearanceProvider} from './AppearanceProvider';
 import {AppShell, ConsoleNav} from './AppShell';
 import {PageHeader} from './PageHeader';
+import {SpeechPlayer} from './SpeechPlayer';
 import {createConsoleQueryClient} from './queryClient';
 
 const DeviceApp = lazy(() => import('./DeviceApp').then(module => ({default: module.DeviceApp})));
@@ -99,7 +100,7 @@ function ChatApp() {
     </>;
   return <><AppShell subtitle="你的日常聊天空间" sidebar={sidebar}><PageHeader eyebrow="日常使用" title="聊聊今天" description="在这里用文字继续日常对话；新事实是否进入长期记忆，可以在每轮回答下方核对。" action={<span>{chat?.turns.length ?? 0} / 40 轮</span>}/>
       <section className="messages" aria-label="聊天记录">{!chat?.turns.length && <div className="empty"><h2>今天想聊些什么？</h2><p>可以说说今天的事，也可以继续上次的话题。</p></div>}
-        {chat?.turns.map((turn, i) => <article key={i}><div className="bubble user"><strong>你</strong><p>{turn.input}</p></div><div className="bubble assistant"><strong>助手</strong><p>{turn.answer ?? '未获得完整回答。'}</p></div>
+        {chat?.turns.map((turn, i) => <article key={i}><div className="bubble user"><strong>你</strong><p>{turn.input}</p></div><div className="bubble assistant"><strong>助手</strong><p>{turn.answer ?? '未获得完整回答。'}</p>{turn.answer&&<SpeechPlayer api={api} text={turn.answer}/>}</div>
           {turn.memory_processing === 'source_only' && <p className="memory-warning">{memoryWarning(turn)} 可继续聊天，之后需要重新整理这条来源。</p>}
           {turn.retrieval_warning === 'dense_retrieval_failed' && <p className="memory-warning">本轮本地 BGE 检索失败，已使用关键词结果继续回答；展开过程可查看实际策略。</p>}
           {Boolean(turn.scenario_retrieved?.length) && <p className="scenario-trace">本轮使用 L2：{turn.scenario_retrieved!.map(item => item.title).join('、')}</p>}

@@ -28,7 +28,7 @@ export function SettingsApp() {
         <RoleEditor api={api} disabled={!enabled} onSaved={() => {void queryClient.invalidateQueries({queryKey:['chat-config']});}}/>
       </Card>},
       {key:'voice', label:'声音', children:<Card title="声音" extra={<span className="setting-scope">小智 TTS</span>}>
-        <p>查看当前 EdgeTTS 或 VoxCPM2 后端。Edge 音色可试听和保存；VoxCPM2 参数仍由独立适配层管理。</p>
+        <p>查看并试听当前 TTS。Edge 可选择标准音色；VoxCPM2 可选择参考音色、表达指令与质量档位。</p>
         <VoiceSettings api={api} disabled={!enabled}/>
       </Card>},
       {key:'appearance', label:'外观与阅读', children:<Card title="外观与阅读" extra={<span className="setting-scope">当前浏览器</span>}>

@@ -27,6 +27,11 @@ class FakeClient:
             "volume": {"name": control.VOLUME_TOOL, "inputSchema": {
                 "type": "object", "properties": {"volume": {
                     "type": "integer", "minimum": 0, "maximum": 100}}, "required": ["volume"]}},
+            "brightness": {"name": control.BRIGHTNESS_TOOL, "inputSchema": {
+                "type": "object", "properties": {"brightness": {
+                    "type": "integer", "minimum": 0, "maximum": 100}}, "required": ["brightness"]}},
+            "theme": {"name": control.THEME_TOOL, "inputSchema": {
+                "type": "object", "properties": {"theme": {"type": "string"}}, "required": ["theme"]}},
         }
 
     async def get_next_id(self):
@@ -47,6 +52,8 @@ class FakeSocket:
         self.state = SimpleNamespace(name="OPEN")
         self.calls = []
         self.volume = 45
+        self.brightness = 45
+        self.theme = "light"
         self.no_response = False
         self.set_error = False
         self.mismatch = False
@@ -58,13 +65,23 @@ class FakeSocket:
         if self.no_response:
             return
         name = call["params"]["name"]
-        value = {"audio_speaker": {"volume": self.volume}, "private_network": "never_return_this"}
+        value = {"audio_speaker": {"volume": self.volume},
+                 "screen":{"brightness":self.brightness,"theme":self.theme},
+                 "battery":{"level":72,"charging":True},
+                 "network":{"ssid":"private","signal":"strong"},
+                 "chip":{"temperature":41.25}, "private_network": "never_return_this"}
         if name == control.VOLUME_TOOL:
             if not self.mismatch:
                 self.volume = call["params"]["arguments"]["volume"]
             value = True
             if self.fail_after_set:
                 self.no_response = True
+        elif name == control.BRIGHTNESS_TOOL:
+            self.brightness = call["params"]["arguments"]["brightness"]
+            value = True
+        elif name == control.THEME_TOOL:
+            self.theme = call["params"]["arguments"]["theme"]
+            value = True
         future = self.client.call_results.pop(call["id"])
         future.set_result({"isError": self.set_error and name == control.VOLUME_TOOL,
                            "content": [{"type": "text", "text": json.dumps(value)}]})
@@ -75,7 +92,7 @@ def rig():
     socket = FakeSocket(client)
     bound = asyncio.Event()
     bound.set()
-    conn = SimpleNamespace(websocket=socket, mcp_client=client, features={"mcp": True},
+    conn = SimpleNamespace(websocket=socket, mcp_client=client, features={"mcp": True, "aec": True},
                            bind_completed_event=bound, need_bind=False)
     bridge = control.DeviceControl("aa:bb:cc:dd:ee:ff", timeout=0.02)
     bridge.attach(conn, "AA:BB:CC:DD:EE:FF")
@@ -112,6 +129,20 @@ def test_roundtrip_requires_ack_and_readback_and_reserves_handshake_ids():
             control.STATUS_TOOL, control.VOLUME_TOOL, control.STATUS_TOOL]
         assert "private_network" not in json.dumps(result)
         assert not conn.mcp_client.call_results
+    asyncio.run(run())
+
+
+def test_status_projection_and_screen_controls_are_verified_without_ssid():
+    async def run():
+        bridge, _, _ = rig()
+        status = await bridge.read_status()
+        assert status == {"volume":45,"brightness":45,"theme":"light",
+                          "battery":{"level":72,"charging":True},
+                          "network":{"signal":"strong"},"chip":{"temperature":41.2}}
+        assert (await bridge.set_brightness(70))["verified"] is True
+        assert (await bridge.set_theme("dark"))["verified"] is True
+        cached = bridge.status()
+        assert cached["set_brightness_supported"] and cached["set_theme_supported"]
     asyncio.run(run())
 
 
@@ -155,6 +186,7 @@ def test_other_device_is_not_registered_and_status_does_not_send():
     bridge, _, socket = rig()
     bridge.attach(SimpleNamespace(), "00:00:00:00:00:00")
     assert bridge.status()["connection_count"] == 1
+    assert bridge.status()["aec_advertised"] is True
     assert bridge.status()["set_volume_supported"]
     assert not socket.calls
 
