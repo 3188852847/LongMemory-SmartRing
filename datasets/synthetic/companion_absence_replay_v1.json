@@ -1,0 +1,121 @@
+{
+  "schema_version": 1,
+  "synthetic": true,
+  "name": "companion_absence_replay",
+  "version": "1.0.0",
+  "description": "固定合成时间线，用于检查日常时段缺席草案不会绕过既有主动交流护栏。",
+  "cases": [
+    {
+      "id": "before-grace-window",
+      "now": "2026-09-07T13:45:00+08:00",
+      "expected": {"action": "wait", "reason": "before_absence_check"}
+    },
+    {
+      "id": "absence-ready",
+      "now": "2026-09-07T14:00:15+08:00",
+      "must_not_contact": false,
+      "expected": {"action": "would_queue", "reason": "ready"}
+    },
+    {
+      "id": "missed-check-does-not-catch-up",
+      "now": "2026-09-07T14:01:00+08:00",
+      "must_not_contact": true,
+      "expected": {"action": "skipped", "reason": "missed_absence_check"}
+    },
+    {
+      "id": "routine-arrival-observed",
+      "now": "2026-09-07T14:00:00+08:00",
+      "absence_state": {"routine_observed_today": true},
+      "must_not_contact": true,
+      "expected": {"action": "skipped", "reason": "routine_observed_today"}
+    },
+    {
+      "id": "other-chat-observed-today",
+      "now": "2026-09-07T14:00:00+08:00",
+      "absence_state": {"user_chatted_today": true},
+      "must_not_contact": true,
+      "expected": {"action": "skipped", "reason": "user_already_chatted_today"}
+    },
+    {
+      "id": "already-evaluated",
+      "now": "2026-09-07T14:00:00+08:00",
+      "absence_state": {"already_evaluated_today": true},
+      "must_not_contact": true,
+      "expected": {"action": "skipped", "reason": "already_evaluated_today"}
+    },
+    {
+      "id": "draft-disabled",
+      "now": "2026-09-07T14:00:00+08:00",
+      "draft": {"enabled": false},
+      "must_not_contact": true,
+      "expected": {"action": "skipped", "reason": "draft_disabled"}
+    },
+    {
+      "id": "weekday-not-allowed",
+      "now": "2026-09-07T14:00:00+08:00",
+      "draft": {"allowed_weekdays": [1, 2, 3, 4, 5, 6]},
+      "must_not_contact": true,
+      "expected": {"action": "skipped", "reason": "weekday_not_allowed"}
+    },
+    {
+      "id": "quiet-period",
+      "now": "2026-09-07T14:00:00+08:00",
+      "outreach": {"quiet_until": "2026-09-07T15:00:00+08:00"},
+      "must_not_contact": true,
+      "expected": {"action": "blocked", "reason": "quiet_period"}
+    },
+    {
+      "id": "contact-permission-disabled",
+      "now": "2026-09-07T14:00:00+08:00",
+      "outreach": {"enabled": false},
+      "must_not_contact": true,
+      "expected": {"action": "blocked", "reason": "disabled"}
+    },
+    {
+      "id": "outside-contact-window",
+      "now": "2026-09-07T14:00:00+08:00",
+      "outreach": {"allowed_start_minute": 540, "allowed_end_minute": 840},
+      "must_not_contact": true,
+      "expected": {"action": "blocked", "reason": "outside_allowed_window"}
+    },
+    {
+      "id": "awaiting-user-response",
+      "now": "2026-09-07T14:00:00+08:00",
+      "outreach": {"awaiting_user_response": true},
+      "must_not_contact": true,
+      "expected": {"action": "blocked", "reason": "awaiting_user_response"}
+    },
+    {
+      "id": "active-user-session",
+      "now": "2026-09-07T14:00:00+08:00",
+      "outreach": {"user_session_active": true},
+      "must_not_contact": true,
+      "expected": {"action": "blocked", "reason": "user_session_active"}
+    },
+    {
+      "id": "daily-limit-reached",
+      "now": "2026-09-07T14:00:00+08:00",
+      "outreach": {"attempted_at": ["2026-09-07T10:00:00+08:00"]},
+      "must_not_contact": true,
+      "expected": {"action": "blocked", "reason": "daily_limit_reached"}
+    },
+    {
+      "id": "minimum-interval-active",
+      "now": "2026-09-07T14:00:00+08:00",
+      "outreach": {
+        "daily_limit": 2,
+        "minimum_interval_minutes": 360,
+        "attempted_at": ["2026-09-07T13:30:00+08:00"]
+      },
+      "must_not_contact": true,
+      "expected": {"action": "blocked", "reason": "minimum_interval_active"}
+    },
+    {
+      "id": "device-offline",
+      "now": "2026-09-07T14:00:00+08:00",
+      "device_ready": false,
+      "must_not_contact": true,
+      "expected": {"action": "blocked", "reason": "device_not_ready"}
+    }
+  ]
+}

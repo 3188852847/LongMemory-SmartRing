@@ -23,8 +23,21 @@ from .models import (
     ProactiveTopicFeedbackTarget,
     UserInitiatedInteractionEvent,
 )
+from .absence_policy import (
+    AbsenceRoutineDraft,
+    AbsenceRoutineState,
+    AbsenceTriggerAction,
+    AbsenceTriggerDecision,
+    AbsenceTriggerReason,
+    decide_routine_absence,
+)
 
 __all__ = [
+    "AbsenceRoutineDraft",
+    "AbsenceRoutineState",
+    "AbsenceTriggerAction",
+    "AbsenceTriggerDecision",
+    "AbsenceTriggerReason",
     "CompanionFeedbackEvent",
     "CompanionFeedbackStore",
     "CompanionRoutineCandidate",
@@ -40,4 +53,5 @@ __all__ = [
     "ProactiveTopicFeedbackTarget",
     "UserInitiatedInteractionEvent",
     "UserInitiatedInteractionObserver",
+    "decide_routine_absence",
 ]
