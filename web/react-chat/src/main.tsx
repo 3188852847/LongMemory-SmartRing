@@ -13,6 +13,7 @@ import {SpeechPlayer} from './SpeechPlayer';
 import {createConsoleQueryClient} from './queryClient';
 import {modelFailure} from './modelHealth';
 import {loadSendShortcut, saveSendShortcut, shouldSendFromKeyboard, type SendShortcut} from './chatInput';
+import {organizeChats, readPinnedChats, togglePinnedChat, writePinnedChats} from './chatSessions';
 
 const DeviceApp = lazy(() => import('./DeviceApp').then(module => ({default: module.DeviceApp})));
 const MemoryApp = lazy(() => import('./MemoryApp').then(module => ({default: module.MemoryApp})));
@@ -40,10 +41,13 @@ function ChatApp() {
   const [rename, setRename] = useState(false);
   const [checkingModel, setCheckingModel] = useState(false);
   const [sendShortcut, setSendShortcut] = useState<SendShortcut>(() => loadSendShortcut());
+  const [chatSearch, setChatSearch] = useState('');
+  const [pinnedChats, setPinnedChats] = useState<string[]>([]);
   const [title, setTitle] = useState('');
   // ref 在同一事件循环内立即锁定，避免 React 尚未重绘时的双击重复写入。
   const locked = useRef(false);
   const selectionKey = useRef('');
+  const pinnedKey = useRef('');
   const turnsEnd = useRef<HTMLDivElement>(null);
   useEffect(() => {turnsEnd.current?.scrollIntoView({block: 'nearest'});}, [chat?.turns.length]);
   async function list() {
@@ -64,6 +68,8 @@ function ChatApp() {
         await api.bootstrap(); const info = await api.request<Config>('/api/chat-config'); setConfig(info);
         if (!info.enabled) {setNotice('文字聊天尚未启用，请通过启动面板启动文字服务。'); return;}
         selectionKey.current = `longmemory:last-chat:${info.database}`;
+        pinnedKey.current = `longmemory:pinned-chats:${info.database}`;
+        try {setPinnedChats(readPinnedChats(localStorage, pinnedKey.current));} catch { /* 会话列表仍可正常使用。 */ }
         const rows = await list(); let previous: string | null = null;
         try {previous = localStorage.getItem(selectionKey.current);} catch { /* 默认最近会话。 */ }
         if (rows.length) {const loaded = await load(rows.find(c => c.chat_id === previous)?.chat_id ?? rows[0].chat_id); setNotice(loaded.pending ? '消息仍在处理，请只查询结果。' : '会话已恢复，可以继续聊。');}
@@ -104,11 +110,22 @@ function ChatApp() {
       setNotice(health.state==='available'?'模型连接验证通过；这不代表回答质量或圆屏链路已经验收。':modelFailure(health.code)??'模型连接验证失败。');
     }catch(error){setNotice(String(error));}finally{setCheckingModel(false);}}
   const disabled = busy || unknown || !chat;
+  const visibleChats = organizeChats(chats, pinnedChats, chatSearch);
+  function toggleCurrentPin() {
+    if (!chat || !pinnedKey.current) return;
+    const next = togglePinnedChat(pinnedChats, chat.chat_id);
+    setPinnedChats(next);
+    let saved = false;
+    try {saved = writePinnedChats(localStorage, pinnedKey.current, next);} catch { /* 只降级当前页面状态。 */ }
+    setNotice(saved ? (next.includes(chat.chat_id) ? '当前会话已置顶。' : '当前会话已取消置顶。') : '置顶已在本页生效，但浏览器未能保存。');
+  }
   const sidebar = <>
       <Button block disabled={disabled} onClick={() => changeChat()}>新聊天</Button>
+      <label htmlFor="chat-search">查找会话</label><Input id="chat-search" allowClear aria-label="查找会话" value={chatSearch} onChange={event => setChatSearch(event.target.value)} placeholder="按会话名称搜索"/>
       <label htmlFor="conversation">最近会话</label><Select id="conversation" className="wide" aria-label="最近会话" value={chat?.chat_id} disabled={busy || unknown}
-        options={chats.map(c => ({value: c.chat_id, label: `${c.title} · ${c.turn_count} 轮`}))} onChange={changeChat}/>
-      <Button disabled={disabled} onClick={() => {setTitle(chat?.title ?? ''); setRename(true);}}>重命名</Button>
+        notFoundContent="没有匹配的会话" options={visibleChats.map(c => ({value: c.chat_id, label: `${pinnedChats.includes(c.chat_id) ? '★ ' : ''}${c.title} · ${c.turn_count} 轮`}))} onChange={changeChat}/>
+      <div className="chat-session-actions"><Button disabled={disabled} onClick={() => {setTitle(chat?.title ?? ''); setRename(true);}}>重命名</Button>
+        <Button disabled={disabled} onClick={toggleCurrentPin}>{chat && pinnedChats.includes(chat.chat_id) ? '取消置顶' : '置顶当前'}</Button></div>
       <ConsoleNav active="chat" legacyPath="/chat"/>
     </>;
   return <><AppShell subtitle="你的日常聊天空间" sidebar={sidebar}><PageHeader eyebrow="日常使用" title="聊聊今天" description="在这里用文字继续日常对话；新事实是否进入长期记忆，可以在每轮回答下方核对。" action={<span>{chat?.turns.length ?? 0} / 40 轮</span>}/>
