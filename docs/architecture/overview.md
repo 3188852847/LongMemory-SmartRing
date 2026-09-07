@@ -18,7 +18,7 @@ P2 声音设置有两条边界：React → 本机认证/CSRF API → 当前 TTS�
 
 React 控制台在 `web/react-chat/` 渐进扩展，开发时构建，日常由现有 Python 进程提供 `/chat-react` 与 `/memories`；不增加常驻前端服务。记忆页按路径动态加载，旧页面暂留 `/memories-legacy`。后端只公开构建清单中的 JS/CSS，HTML 使用每响应随机样式 nonce，认证与 API 边界不变。见 ADR-0032。
 
-React Router、TanStack Query、统一 AppShell 与组件测试已经建立，聊天、记忆、设备、设置和实验页已完成渐进迁移。LongMemory API 继续使用 aiohttp；Pydantic 已在聊天消息入口完成首个严格契约试点并保持旧错误语义，后续按风险渐进覆盖。FastAPI 当前只是条件触发候选，不是已实施迁移。完整技术雷达见[技术策略](technology-strategy.md)。
+React Router、TanStack Query、统一 AppShell 与组件测试已经建立，聊天、记忆、设备、设置和实验页已完成渐进迁移。LongMemory API 继续使用 aiohttp；Pydantic 已从聊天消息入口渐进覆盖到所有者明确补录入口并保持旧错误语义，后续仍按风险逐条覆盖。FastAPI 当前只是条件触发候选，不是已实施迁移。完整技术雷达见[技术策略](technology-strategy.md)。
 
 P2 聊天外观使用独立 appearance 模块和局部 CSS；浏览器仅保存枚举主题、字号和动画偏好，设置即时生效，不写服务端或记忆库。React 网页角色使用版本化旁库，圆屏仍使用小智配置，角色可显式同步；声音窗口支持 Edge 音色编辑，并只读显示 VoxCPM2 配置与服务状态。见 ADR-0021 至 ADR-0025。
 
