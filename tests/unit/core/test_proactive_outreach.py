@@ -42,6 +42,18 @@ def test_transition_is_forward_only_and_revisioned():
     assert sent.state == OutreachState.TRANSPORT_SENT and sent.revision == 3
 
 
+def test_user_observation_can_confirm_playback_from_server_queue():
+    queued = transition_outreach(
+        candidate(), new_state=OutreachState.QUEUED,
+        occurred_at=NOW + timedelta(hours=1),
+    )
+    played = transition_outreach(
+        queued, new_state=OutreachState.PLAYED,
+        occurred_at=NOW + timedelta(hours=1, seconds=1),
+    )
+    assert played.state == OutreachState.PLAYED and played.revision == 3
+
+
 @pytest.mark.parametrize("target", [
     OutreachState.PLAYED,
     OutreachState.DEVICE_ACKNOWLEDGED,

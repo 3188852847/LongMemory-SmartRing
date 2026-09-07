@@ -49,6 +49,22 @@ export function ProactiveSettings({api, ready}:{api:ChatApi; ready:boolean}) {
         : '测试请求失败且没有自动重试；请检查小智服务和圆屏连接。'
     ),
   });
+  const confirmMutation = useMutation({
+    mutationFn:(item:ProactiveOutreachSummary) => api.request<ProactiveTestResult>(
+      `/api/proactive-outreach/${item.outreach_id}/confirm-played`, 'POST',
+      {expected_revision:item.revision},
+    ),
+    onSuccess:() => {
+      setTestNotice('已按你的亲耳观察记录为 played；这不是设备自动回执。');
+      void client.invalidateQueries({queryKey:['proactive-outreach']});
+    },
+    onError:error => {
+      setTestNotice(error instanceof ApiError && error.code === 'proactive_outreach_conflict'
+        ? '记录已发生变化，请刷新后再确认。'
+        : '没有写入“已播放”；请刷新记录并核对当前状态。');
+      void client.invalidateQueries({queryKey:['proactive-outreach']});
+    },
+  });
   const change = (patch:Partial<ProactivePolicy>) => draft && setDraft({...draft, ...patch});
   if (query.isError) return <Alert type="error" showIcon title="主动交流设置不可用" description="请确认已选择当前版本的个人数据库。"/>;
   if (query.isLoading || !draft) return <Alert type="info" showIcon title="正在读取主动交流设置…"/>;
@@ -86,7 +102,9 @@ export function ProactiveSettings({api, ready}:{api:ChatApi; ready:boolean}) {
       {history.isLoading && <p className="subtle">正在读取运行记录…</p>}
       {!history.isLoading && (history.data?.items?.length ?? 0) === 0 && <p className="subtle">还没有主动交流记录。</p>}
       <div className="proactive-history">{history.data?.items?.map(item => <article className="proactive-history-item" key={item.outreach_id}>
-        <Space><Tag>{item.state}</Tag><strong>{item.content}</strong></Space>
+        <div className="setting-line"><Space><Tag>{item.state}</Tag><strong>{item.content}</strong></Space>
+          {['queued','transport_sent','device_acknowledged'].includes(item.state) && <Button size="small" loading={confirmMutation.isPending && confirmMutation.variables?.outreach_id === item.outreach_id} disabled={confirmMutation.isPending} onClick={() => confirmMutation.mutate(item)}>确认已听到</Button>}
+        </div>
         <p className="subtle">{new Date(item.created_at).toLocaleString()} · 原因 {item.reason} · {item.event_count} 个事件</p>
       </article>)}</div>
     </section>

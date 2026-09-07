@@ -55,6 +55,9 @@ ALLOWED_TRANSITIONS = {
     }),
     OutreachState.QUEUED: frozenset({
         OutreachState.TRANSPORT_SENT,
+        # 当前小智协议不返回逐条播放回执；用户亲耳确认属于更强证据，
+        # 可以跳过不可观察的传输中间态，直接形成 played 事实。
+        OutreachState.PLAYED,
         OutreachState.EXPIRED,
         OutreachState.CANCELLED,
         OutreachState.FAILED,

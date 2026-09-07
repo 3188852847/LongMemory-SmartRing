@@ -53,5 +53,5 @@ export interface ProactiveTestResult {
 }
 export interface ProactiveOutreachSummary {
   outreach_id:string; trigger:string; content:string; created_at:string; expires_at:string;
-  state:string; reason:string; event_count:number; failure_reason:string | null;
+  state:string; revision:number; reason:string; event_count:number; failure_reason:string | null;
 }

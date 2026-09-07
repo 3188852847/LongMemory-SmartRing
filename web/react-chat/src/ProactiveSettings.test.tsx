@@ -61,4 +61,37 @@ describe('主动交流设置', () => {
     expect(request.mock.calls.filter(([path]) => path === '/api/proactive-outreach/test')).toHaveLength(1);
     view.unmount(); client.clear();
   });
+
+  test('只有用户点击确认才把排队记录推进为已播放', async () => {
+    const policy = {
+      subject_id:'user:self', enabled:true, utc_offset_minutes:480,
+      allowed_weekdays:[0,1,2,3,4,5,6], allowed_start_minute:540, allowed_end_minute:1260,
+      daily_limit:1, minimum_interval_seconds:21600, maximum_lifetime_seconds:300,
+      quiet_until:null, policy_version:'proactive-contact-policy-v1', revision:3, updated_at:null,
+    };
+    const queued = {
+      outreach_id:'a'.repeat(32), trigger:'manual_test', content:'合成问候',
+      created_at:'2026-09-07T04:00:00+00:00', expires_at:'2026-09-07T04:05:00+00:00',
+      state:'queued', revision:2, reason:'ready', event_count:2, failure_reason:null,
+    };
+    const request = vi.spyOn(ChatApi.prototype, 'request').mockImplementation(async path => {
+      if (path === '/api/proactive-policy') return policy;
+      if (path.startsWith('/api/proactive-outreach?')) return {items:[queued]};
+      if (path.endsWith('/confirm-played')) return {
+        outreach_id:queued.outreach_id, state:'played', revision:3, replayed:false,
+        policy_action:null, policy_reason:null, delivery_reason:null, device:null,
+      };
+      throw new Error(`unexpected path: ${path}`);
+    });
+    const client = createConsoleQueryClient();
+    const view = render(<QueryClientProvider client={client}><ProactiveSettings api={new ChatApi()} ready={true}/></QueryClientProvider>);
+    fireEvent.click(await screen.findByRole('button', {name:'确认已听到'}));
+    expect(await screen.findByText(/亲耳观察记录为 played/)).toBeTruthy();
+    expect(request).toHaveBeenCalledWith(
+      `/api/proactive-outreach/${queued.outreach_id}/confirm-played`,
+      'POST', {expected_revision:2},
+    );
+    expect(request.mock.calls.filter(([path]) => String(path).endsWith('/confirm-played'))).toHaveLength(1);
+    view.unmount(); client.clear();
+  });
 });

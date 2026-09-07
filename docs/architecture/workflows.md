@@ -294,8 +294,9 @@ IP 变化时：刷新本机地址 → 选择圆屏可达网卡 → 显式确认�
 5. 允许时通过小智适配器排队。页面只显示“服务端已接收并排队”，圆屏是否播放由实机验收，失败不自动重试。
 6. 该入口不调用模型、不读取 L0–L3、不生成话题，也不启动任何后台定时器。
 7. 设置页从只读历史接口加载最近投影，显示当前状态、最后原因和事件数量；一次测试结束只刷新该查询，不自动重发。
+8. 圆屏实际发声后，所有者可显式“确认已听到”；后端以 revision 保护追加 `USER_OBSERVED` 事件并进入 `played`。没有点击或没有设备回执时继续保持 `queued`。
 
-具体约束见 [ADR-0064](../adr/0064-manual-proactive-delivery-test.md)和 [ADR-0065](../adr/0065-proactive-outreach-owner-history.md)。
+具体约束见 [ADR-0064](../adr/0064-manual-proactive-delivery-test.md)、[ADR-0065](../adr/0065-proactive-outreach-owner-history.md)和 [ADR-0066](../adr/0066-user-observed-proactive-playback.md)。
 
 ## 16. 拟议：主动问候与习惯（P4/P5）
 

@@ -27,8 +27,10 @@ from longmemory.application.proactive import (
     ProactiveOutreachLedger,
 )
 from longmemory.core.proactive import (
+    OutreachEvidence,
     OutreachPolicyConfig,
     OutreachPolicyState,
+    OutreachState,
     OutreachTrigger,
     ProactivePolicySettings,
 )
@@ -315,11 +317,47 @@ class MemoryBackend:
                     "created_at": outreach.created_at.isoformat(),
                     "expires_at": outreach.expires_at.isoformat(),
                     "state": outreach.state.value,
+                    "revision": outreach.revision,
                     "reason": latest.reason_code,
                     "event_count": len(events),
                     "failure_reason": outreach.failure_reason,
                 })
             return {"items": items}
+
+    def confirm_proactive_played(self, outreach_id, *, expected_revision):
+        """把所有者亲耳观察追加为证据；不从设备状态反推播放成功。"""
+
+        subject_id = "user:self"
+        with self._open(write_capability="proactive") as connection:
+            ledger = ProactiveOutreachLedger(
+                SQLiteProactiveOutreachStore(connection), clock=self.clock,
+            )
+            outreach = ledger.get(outreach_id)
+            if outreach is None or outreach.subject_id != subject_id:
+                raise MemoryAccessError("proactive_outreach_not_found", 404)
+            if outreach.state == OutreachState.PLAYED:
+                return self._outreach_result(outreach, replayed=True)
+            if outreach.revision != expected_revision:
+                raise MemoryAccessError("proactive_outreach_conflict", 409)
+            if outreach.state not in {
+                OutreachState.QUEUED,
+                OutreachState.TRANSPORT_SENT,
+                OutreachState.DEVICE_ACKNOWLEDGED,
+            }:
+                raise MemoryAccessError(
+                    "proactive_playback_confirmation_invalid_state", 409,
+                )
+            try:
+                played = ledger.record_transition(
+                    outreach.id,
+                    expected_revision=outreach.revision,
+                    new_state=OutreachState.PLAYED,
+                    reason_code="user_confirmed_playback",
+                    evidence=OutreachEvidence.USER_OBSERVED,
+                )
+            except ValueError:
+                raise MemoryAccessError("proactive_outreach_conflict", 409) from None
+            return self._outreach_result(played, replayed=False)
 
     @contextmanager
     def _open(self, *, write_capability=None):

@@ -643,6 +643,7 @@ def test_manual_proactive_test_is_csrf_protected_and_idempotent(tmp_path):
                 "created_at": now.isoformat(),
                 "expires_at": (now.replace(minute=5)).isoformat(),
                 "state": "queued",
+                "revision": 2,
                 "reason": "ready",
                 "event_count": 2,
                 "failure_reason": None,
@@ -660,6 +661,27 @@ def test_manual_proactive_test_is_csrf_protected_and_idempotent(tmp_path):
             assert repeated_data["replayed"] is True
             assert len(bridge.calls) == 1
 
+            confirm_path = (
+                base + "/api/proactive-outreach/" + first_data["outreach_id"]
+                + "/confirm-played"
+            )
+            assert (await client.post(
+                confirm_path, json={"expected_revision": 2},
+            )).status == 403
+            confirmed = await client.post(
+                confirm_path, headers=headers, json={"expected_revision": 2},
+            )
+            confirmed_data = await confirmed.json()
+            assert confirmed.status == 200
+            assert confirmed_data["state"] == "played"
+            assert confirmed_data["revision"] == 3
+            assert confirmed_data["replayed"] is False
+            replayed_confirmation = await client.post(
+                confirm_path, headers=headers, json={"expected_revision": 2},
+            )
+            assert (await replayed_confirmation.json())["replayed"] is True
+            assert len(bridge.calls) == 1
+
             stale = await client.post(
                 base + "/api/proactive-outreach/test", headers=headers,
                 json={**body, "request_id": "ac1da8a5-2ff6-4136-80ff-c52b0c98ab2f",
@@ -672,7 +694,12 @@ def test_manual_proactive_test_is_csrf_protected_and_idempotent(tmp_path):
             assert connection.execute("SELECT count(*) FROM proactive_outreach").fetchone()[0] == 1
             assert connection.execute(
                 "SELECT count(*) FROM proactive_outreach_events"
-            ).fetchone()[0] == 2
+            ).fetchone()[0] == 3
+            event = connection.execute(
+                "SELECT new_state,reason_code,evidence_kind "
+                "FROM proactive_outreach_events ORDER BY sequence DESC LIMIT 1"
+            ).fetchone()
+            assert event == ("played", "user_confirmed_playback", "user_observed")
 
     asyncio.run(run())
 
@@ -709,6 +736,18 @@ def test_manual_proactive_test_records_stable_delivery_failure(tmp_path):
             assert result["state"] == "failed"
             assert result["delivery_reason"] == "announcement_enqueue_failed"
             assert result["device"]["ready"] is False
+            history = await client.get(base + "/api/proactive-outreach?limit=1")
+            failed_item = (await history.json())["items"][0]
+            invalid_confirmation = await client.post(
+                base + "/api/proactive-outreach/" + failed_item["outreach_id"]
+                + "/confirm-played",
+                headers=headers,
+                json={"expected_revision": failed_item["revision"]},
+            )
+            assert invalid_confirmation.status == 409
+            assert (await invalid_confirmation.json())["error"] == (
+                "proactive_playback_confirmation_invalid_state"
+            )
 
     asyncio.run(run())
 

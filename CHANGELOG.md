@@ -1,5 +1,10 @@
 # Changelog
 
+### P4.1/P4.4 user-observed round-screen playback（2026-09-07）
+
+- SmartRing-Plus 圆屏手动主动问候实机验收通过：服务端账本为 `queued`，用户确认圆屏实际发声；不把该观察伪装成设备自动回执。
+- 最近运行记录对可确认状态新增“确认已听到”，以 `USER_OBSERVED` 证据推进到 `played`；CSRF、revision 和重复确认保护均已接入。
+
 ### P4.4 proactive outreach owner history（2026-09-07）
 
 - 主动交流设置页新增最近运行记录，可直接查看测试内容、账本状态、最后稳定原因和事件数量，明确区分策略拦截、服务端排队与失败。

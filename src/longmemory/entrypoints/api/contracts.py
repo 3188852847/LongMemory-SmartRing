@@ -91,3 +91,11 @@ class ProactiveTestRequest(BaseModel):
         if str(UUID(value)) != value:
             raise ValueError("non-canonical UUID")
         return value
+
+
+class ProactivePlaybackConfirmationRequest(BaseModel):
+    """所有者确认实际听到，不允许页面用旧 revision 覆盖新状态。"""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    expected_revision: int = Field(ge=1)

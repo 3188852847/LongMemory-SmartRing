@@ -5,7 +5,11 @@ import asyncio
 from aiohttp import web
 from pydantic import ValidationError
 
-from ..contracts import ProactivePolicyRequest, ProactiveTestRequest
+from ..contracts import (
+    ProactivePlaybackConfirmationRequest,
+    ProactivePolicyRequest,
+    ProactiveTestRequest,
+)
 from ..memory_backend import MemoryAccessError
 
 
@@ -61,3 +65,30 @@ def register_proactive_policy_routes(app, backend, client, operation_lock):
             return web.json_response({"error": error.code}, status=error.status)
 
     app.router.add_get("/api/proactive-outreach", history, allow_head=False)
+
+    async def confirm_played(request):
+        if operation_lock.locked():
+            return web.json_response({"error": "operation_busy"}, status=409)
+        if request.content_type != "application/json":
+            raise web.HTTPBadRequest()
+        try:
+            body = ProactivePlaybackConfirmationRequest.model_validate(
+                await request.json()
+            )
+        except (ValidationError, ValueError, UnicodeError):
+            raise web.HTTPBadRequest() from None
+        async with operation_lock:
+            try:
+                result = await asyncio.to_thread(
+                    backend.confirm_proactive_played,
+                    request.match_info["outreach_id"],
+                    expected_revision=body.expected_revision,
+                )
+                return web.json_response(result)
+            except MemoryAccessError as error:
+                return web.json_response({"error": error.code}, status=error.status)
+
+    app.router.add_post(
+        r"/api/proactive-outreach/{outreach_id:[0-9a-f]{32}}/confirm-played",
+        confirm_played,
+    )
