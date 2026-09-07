@@ -29,6 +29,11 @@ _DELETE = re.compile(
 _SOURCE = re.compile(
     r"^(?:你)?(?:为什么|怎么)(?:会)?(?:知道|记得)(?P<topic>[^。！？!?]{1,160})[？?。！!]*$"
 )
+_EXCLUDE = re.compile(
+    r"^(?:请)?(?:不要|别)(?:长期)?记(?:住|录)?[：:\s]+"
+    r"(?P<content>[^。！？!?].{0,998})[。！？!?]*$"
+)
+_EXCLUDE_WITHOUT_CONTENT = frozenset({"这句不要记", "这句话不要记", "这件事不要记", "不要记住这句"})
 _CONFIRM_DELETE = frozenset({"确认删除这条记忆", "确认删除", "是的，确认删除", "是的确认删除"})
 _CANCEL_DELETE = frozenset({"取消删除", "不要删除了", "算了，不删了", "算了不删了"})
 
@@ -81,6 +86,22 @@ class NaturalMemoryCommandService:
         if normalized in _CONFIRM_DELETE:
             return self._confirm_delete(event)
 
+        if normalized in _EXCLUDE_WITHOUT_CONTENT:
+            self._archive(event)
+            return NaturalMemoryCommandResult(
+                "exclude", "content_required",
+                "没有改动上一轮已经形成的记忆。请用“不要记住：具体内容”明确指出本轮不生成 L1；"
+                "原始对话 L0 仍会保留用于审计。",
+            )
+
+        exclusion = _EXCLUDE.fullmatch(text)
+        if exclusion:
+            self._archive(event)
+            return NaturalMemoryCommandResult(
+                "exclude", "applied",
+                "本轮没有生成 L1 长期事实；原始对话 L0 仍保留用于审计。",
+            )
+
         correction = _CORRECTION.fullmatch(text)
         if correction:
             return self._correct(event, correction.group("old"), correction.group("new"))
@@ -113,7 +134,9 @@ class NaturalMemoryCommandService:
             self._pending_delete = None
         return (
             normalized in _CONFIRM_DELETE
+            or normalized in _EXCLUDE_WITHOUT_CONTENT
             or (normalized in _CANCEL_DELETE and self._pending_delete is not None)
+            or _EXCLUDE.fullmatch(text) is not None
             or _CORRECTION.fullmatch(text) is not None
             or _CHANGE.fullmatch(text) is not None
             or _DELETE.fullmatch(text) is not None

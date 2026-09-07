@@ -136,3 +136,32 @@ def test_unrelated_statement_uses_normal_extraction_path(tmp_path):
         assert result.observation.writes[0].operation == "add"
     finally:
         runtime.close()
+
+
+def test_explicit_exclusion_archives_l0_without_creating_l1(tmp_path):
+    database, runtime = make_runtime(tmp_path)
+    try:
+        result = runtime.prepare_user("不要记住：我今天想喝茉莉花茶")
+        assert result.memory_command.kind == "exclude"
+        assert result.memory_command.status == "applied"
+        assert result.observation.writes == ()
+    finally:
+        runtime.close()
+
+    with sqlite3.connect(database) as connection:
+        assert connection.execute("SELECT count(*) FROM atomic_memories").fetchone()[0] == 0
+        assert connection.execute(
+            "SELECT content FROM conversation_messages WHERE role='user'"
+        ).fetchone() == ("不要记住：我今天想喝茉莉花茶",)
+
+
+def test_ambiguous_exclusion_does_not_retroactively_delete_previous_memory(tmp_path):
+    _database, runtime = make_runtime(tmp_path)
+    try:
+        runtime.prepare_user("我喜欢喝茉莉花茶")
+        result = runtime.prepare_user("这句不要记")
+        assert result.memory_command.kind == "exclude"
+        assert result.memory_command.status == "content_required"
+        assert "茉莉花茶" in runtime.prepare_user("我喜欢喝什么").support.context
+    finally:
+        runtime.close()
