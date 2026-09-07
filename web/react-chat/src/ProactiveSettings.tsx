@@ -1,7 +1,7 @@
 import {useEffect, useMemo, useState} from 'react';
 import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {Alert, Button, Card, Checkbox, Input, InputNumber, Select, Space, Switch, Tag} from 'antd';
-import {ApiError, ChatApi, type CompanionStrategyCandidate, type ProactiveOutreachSummary, type ProactivePolicy, type ProactiveScheduleStatus, type ProactiveTestResult, type ProactiveTopicSeed, type UserInitiatedInteraction} from './api';
+import {ApiError, ChatApi, type CompanionRoutineCandidate, type CompanionStrategyCandidate, type ProactiveOutreachSummary, type ProactivePolicy, type ProactiveScheduleStatus, type ProactiveTestResult, type ProactiveTopicSeed, type UserInitiatedInteraction} from './api';
 
 const DAYS = ['周一','周二','周三','周四','周五','周六','周日'].map((label, value) => ({label, value}));
 const minuteText = (value:number) => `${String(Math.floor(value / 60)).padStart(2,'0')}:${String(value % 60).padStart(2,'0')}`;
@@ -29,6 +29,7 @@ export function ProactiveSettings({api, ready}:{api:ChatApi; ready:boolean}) {
   const topicSeeds = useQuery({queryKey:['proactive-topic-seeds'], queryFn:() => api.request<{items:ProactiveTopicSeed[]}>('/api/proactive-topic-seeds'), enabled:ready});
   const strategyCandidates = useQuery({queryKey:['companion-strategy-candidates'], queryFn:() => api.request<{items:CompanionStrategyCandidate[]}>('/api/companion-strategy-candidates'), enabled:ready});
   const userInitiated = useQuery({queryKey:['companion-user-initiated-interactions'], queryFn:() => api.request<{items:UserInitiatedInteraction[]}>('/api/companion-user-initiated-interactions?limit=10'), enabled:ready});
+  const routineCandidates = useQuery({queryKey:['companion-routine-candidates'], queryFn:() => api.request<{items:CompanionRoutineCandidate[]}>('/api/companion-routine-candidates'), enabled:ready});
   const [draft, setDraft] = useState<ProactivePolicy>();
   const [notice, setNotice] = useState('');
   const [testText, setTestText] = useState('今天也要照顾好自己呀。');
@@ -37,6 +38,7 @@ export function ProactiveSettings({api, ready}:{api:ChatApi; ready:boolean}) {
   const [topicText, setTopicText] = useState('');
   const [topicNotice, setTopicNotice] = useState('');
   const [strategyNotice, setStrategyNotice] = useState('');
+  const [routineNotice, setRoutineNotice] = useState('');
   useEffect(() => {if (query.data) setDraft({...query.data, allowed_weekdays:[...query.data.allowed_weekdays]});}, [query.data]);
   const dirty = useMemo(() => Boolean(draft && query.data && JSON.stringify(draft) !== JSON.stringify(query.data)), [draft, query.data]);
   const mutation = useMutation({
@@ -185,6 +187,39 @@ export function ProactiveSettings({api, ready}:{api:ChatApi; ready:boolean}) {
       void client.invalidateQueries({queryKey:['companion-strategy-candidates']});
     },
   });
+  const analyzeRoutine = useMutation({
+    mutationFn:() => api.request<{
+      outcome:string; eligible_observation_count:number; distinct_local_dates:number;
+      candidate:CompanionRoutineCandidate | null;
+    }>('/api/companion-routine-candidates/analyze', 'POST', {}),
+    onSuccess:value => {
+      if (value.outcome === 'candidate_created') {
+        setRoutineNotice('已形成一条用户主动出现时段候选；它不会自动联系或修改定时设置。');
+      } else if (value.outcome === 'current_candidate_exists') {
+        setRoutineNotice('已有一条待观察的主动出现时段候选，本次没有重复创建。');
+      } else if (value.outcome === 'evidence_already_analyzed') {
+        setRoutineNotice('这些时间来源已经分析过，本次没有重新创建。');
+      } else {
+        setRoutineNotice(`跨日证据不足：当前有 ${value.eligible_observation_count} 条主动出现观察，最佳时段覆盖 ${value.distinct_local_dates}/3 个不同日期。`);
+      }
+      void client.invalidateQueries({queryKey:['companion-routine-candidates']});
+    },
+    onError:() => setRoutineNotice('分析没有完成；没有创建候选，也没有修改主动联系设置。'),
+  });
+  const dismissRoutine = useMutation({
+    mutationFn:(candidate:CompanionRoutineCandidate) => api.request<CompanionRoutineCandidate>(
+      `/api/companion-routine-candidates/${candidate.id}/dismiss`, 'POST',
+      {expected_revision:candidate.revision},
+    ),
+    onSuccess:() => {
+      setRoutineNotice('主动出现时段候选已忽略，来源记录继续保留。');
+      void client.invalidateQueries({queryKey:['companion-routine-candidates']});
+    },
+    onError:() => {
+      setRoutineNotice('候选状态已经变化或操作失败；正在重新读取。');
+      void client.invalidateQueries({queryKey:['companion-routine-candidates']});
+    },
+  });
   const change = (patch:Partial<ProactivePolicy>) => draft && setDraft({...draft, ...patch});
   if (query.isError) return <Alert type="error" showIcon title="主动交流设置不可用" description="请确认已选择当前版本的个人数据库。"/>;
   if (query.isLoading || !draft) return <Alert type="info" showIcon title="正在读取主动交流设置…"/>;
@@ -311,6 +346,26 @@ export function ProactiveSettings({api, ready}:{api:ChatApi; ready:boolean}) {
         <small>检测器：{item.detector_version} · 来源消息 ID：{item.source_message_id}</small>
       </Card>)}</div>
       {userInitiated.isSuccess && (userInitiated.data?.items?.length ?? 0) === 0 && <p className="subtle">尚无用户主动出现时间观察。</p>}
+      <h4>可能的日常交流时段</h4>
+      <p className="subtle">至少三个不同日期在同一半小时区间主动出现，才会形成弱习惯候选。候选只表示重复时间规律；某天没出现不等于需要帮助，也不会自动触发问候。</p>
+      <Button loading={analyzeRoutine.isPending} disabled={analyzeRoutine.isPending}
+        onClick={() => analyzeRoutine.mutate()}>分析主动出现规律</Button>
+      {routineNotice && <p role="status">{routineNotice}</p>}
+      {routineCandidates.isError && <Alert type="error" showIcon title="主动出现时段候选读取失败"/>}
+      <div className="proactive-history">{routineCandidates.data?.items?.map(candidate => <Card size="small" key={candidate.id}
+        title={<Space wrap><Tag color={candidate.status === 'candidate' ? 'gold' : 'default'}>{candidate.status === 'candidate' ? '待观察' : '已忽略'}</Tag><strong>常在 {minuteText(candidate.expected_minute)} 左右主动出现</strong><Tag>未生效</Tag></Space>}
+        extra={candidate.status === 'candidate' && <Button size="small" danger
+          loading={dismissRoutine.isPending && dismissRoutine.variables?.id === candidate.id}
+          disabled={dismissRoutine.isPending}
+          onClick={() => dismissRoutine.mutate(candidate)}>忽略候选</Button>}>
+        <p>来自 {candidate.distinct_local_dates} 个不同日期的 {candidate.evidence_count} 条主动出现观察。</p>
+        <p className="subtle">这不是主动联系规则，也没有定义“缺席后多久问候”。</p>
+        {candidate.sources.map(source => <p className="subtle" key={source.user_initiated_event_id}>
+          {source.local_date} {minuteText(source.local_minute)} · {source.silence_gap_seconds === null ? '首条观察' : `此前静默约 ${Math.round(source.silence_gap_seconds / 3600 * 10) / 10} 小时`}
+        </p>)}
+        <small>生成器：{candidate.generator_version} · 候选 ID：{candidate.id}</small>
+      </Card>)}</div>
+      {routineCandidates.isSuccess && (routineCandidates.data?.items?.length ?? 0) === 0 && <p className="subtle">尚无主动出现时段候选。</p>}
     </section>
     <section className="settings-section">
       <h3>最近运行记录</h3>

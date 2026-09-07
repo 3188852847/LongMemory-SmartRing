@@ -6,12 +6,14 @@
 
 from .contracts import (
     CompanionFeedbackStore,
+    CompanionRoutineCandidateStore,
     CompanionStrategyCandidateStore,
     InteractionOutcomeObserver,
     UserInitiatedInteractionObserver,
 )
 from .models import (
     CompanionFeedbackEvent,
+    CompanionRoutineCandidate,
     CompanionStrategyCandidate,
     CompanionStrategyCandidateStatus,
     CompanionStrategyObservation,
@@ -25,6 +27,8 @@ from .models import (
 __all__ = [
     "CompanionFeedbackEvent",
     "CompanionFeedbackStore",
+    "CompanionRoutineCandidate",
+    "CompanionRoutineCandidateStore",
     "CompanionStrategyCandidate",
     "CompanionStrategyCandidateStatus",
     "CompanionStrategyCandidateStore",

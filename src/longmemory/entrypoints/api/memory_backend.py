@@ -26,6 +26,9 @@ from longmemory.adapters.storage.sqlite_companion_feedback_store import (
 from longmemory.adapters.storage.sqlite_companion_strategy_store import (
     SQLiteCompanionStrategyCandidateStore,
 )
+from longmemory.adapters.storage.sqlite_companion_routine_store import (
+    SQLiteCompanionRoutineCandidateStore,
+)
 from longmemory.adapters.storage.sqlite_user_initiated_interaction_store import (
     SQLiteUserInitiatedInteractionStore,
 )
@@ -44,6 +47,9 @@ from longmemory.application.proactive import (
 )
 from longmemory.application.companion_strategy import (
     CompanionStrategyCandidateService,
+)
+from longmemory.application.companion_routine import (
+    CompanionRoutineCandidateService,
 )
 from longmemory.core.proactive import (
     OutreachEvidence,
@@ -838,6 +844,80 @@ class MemoryBackend:
                     "utc_offset_minutes": policy.config.utc_offset_minutes,
                 })
             return {"items": items}
+
+    @staticmethod
+    def _routine_candidate_json(candidate, store):
+        local_zone = timezone(timedelta(minutes=candidate.utc_offset_minutes))
+        sources = []
+        for source in store.list_sources(candidate.id):
+            local = datetime.fromisoformat(source["occurred_at"]).astimezone(
+                local_zone
+            )
+            sources.append({
+                **source,
+                "local_date": local.date().isoformat(),
+                "local_minute": local.hour * 60 + local.minute,
+            })
+        return {
+            "id": candidate.id,
+            "subject_id": candidate.subject_id,
+            "status": candidate.status.value,
+            "expected_minute": candidate.expected_minute,
+            "utc_offset_minutes": candidate.utc_offset_minutes,
+            "observation_window_minutes": candidate.observation_window_minutes,
+            "evidence_count": candidate.evidence_count,
+            "distinct_local_dates": candidate.distinct_local_dates,
+            "rationale_code": candidate.rationale_code,
+            "generator_version": candidate.generator_version,
+            "created_at": candidate.created_at.isoformat(),
+            "updated_at": candidate.updated_at.isoformat(),
+            "revision": candidate.revision,
+            "active": False,
+            "sources": sources,
+        }
+
+    def list_companion_routine_candidates(self):
+        with self._open() as connection:
+            store = SQLiteCompanionRoutineCandidateStore(connection)
+            return {"items": [
+                self._routine_candidate_json(candidate, store)
+                for candidate in store.list("user:self")
+            ]}
+
+    def generate_companion_routine_candidate(self):
+        """分析用户主动出现时间；不把候选变成联系规则。"""
+
+        with self._open(write_capability="proactive") as connection:
+            policy = SQLiteProactivePolicyStore(connection).get("user:self")
+            store = SQLiteCompanionRoutineCandidateStore(connection)
+            result = CompanionRoutineCandidateService(
+                store, clock=self.clock,
+            ).generate(
+                "user:self",
+                utc_offset_minutes=policy.config.utc_offset_minutes,
+            )
+            return {
+                "outcome": result.outcome,
+                "eligible_observation_count": result.eligible_observation_count,
+                "distinct_local_dates": result.distinct_local_dates,
+                "candidate": (
+                    None if result.candidate is None
+                    else self._routine_candidate_json(result.candidate, store)
+                ),
+            }
+
+    def dismiss_companion_routine_candidate(
+        self, candidate_id, *, expected_revision,
+    ):
+        with self._open(write_capability="proactive") as connection:
+            store = SQLiteCompanionRoutineCandidateStore(connection)
+            candidate = store.dismiss(
+                candidate_id, subject_id="user:self",
+                expected_revision=expected_revision, now=self.clock(),
+            )
+            if candidate is None:
+                raise MemoryAccessError("companion_routine_candidate_conflict", 409)
+            return self._routine_candidate_json(candidate, store)
 
     def generate_companion_strategy_candidate(self):
         """只生成未生效候选；不读取消息正文、不修改 P4 设置。"""

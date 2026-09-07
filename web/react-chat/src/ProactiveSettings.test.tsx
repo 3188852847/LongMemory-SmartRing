@@ -314,6 +314,20 @@ describe('主动交流设置', () => {
         detector_version:'user-initiated-interaction-v1',
         local_date:'2026-09-01', local_minute:780, utc_offset_minutes:480,
       }]};
+      if (path === '/api/companion-routine-candidates') return {items:[{
+        id:'b'.repeat(32), subject_id:'user:self', status:'candidate',
+        expected_minute:780, utc_offset_minutes:480,
+        observation_window_minutes:30, evidence_count:3,
+        distinct_local_dates:3,
+        rationale_code:'repeated_user_initiated_activity_near_time',
+        generator_version:'user-initiated-routine-candidate-v1',
+        created_at:'2026-09-07T05:00:00Z', updated_at:'2026-09-07T05:00:00Z',
+        revision:1, active:false,
+        sources:[{user_initiated_event_id:'event-first',
+          occurred_at:'2026-09-01T05:00:00Z', silence_gap_seconds:null,
+          evidence_kind:'silence_gap_without_recent_outreach',
+          local_date:'2026-09-01', local_minute:780}],
+      }]};
       if (path === '/api/companion-strategy-candidates/analyze' && method === 'POST') {
         created = true;
         return {outcome:'candidate_created', eligible_observation_count:3,
@@ -332,6 +346,8 @@ describe('主动交流设置', () => {
     expect(screen.getAllByText(/2 分钟后出现用户消息/)).toHaveLength(3);
     expect(screen.getByText('用户主动出现时间观察')).toBeTruthy();
     expect(await screen.findByText(/第一条可观察用户消息/)).toBeTruthy();
+    expect(await screen.findByText('常在 13:00 左右主动出现')).toBeTruthy();
+    expect(screen.getByText(/不是主动联系规则/)).toBeTruthy();
     expect(request).toHaveBeenCalledWith(
       '/api/companion-strategy-candidates/analyze', 'POST', {},
     );

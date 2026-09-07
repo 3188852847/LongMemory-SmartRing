@@ -7,6 +7,7 @@ from longmemory.core.conversation.models import ConversationMessage
 
 from .models import (
     CompanionFeedbackEvent,
+    CompanionRoutineCandidate,
     CompanionStrategyCandidate,
     CompanionStrategyObservation,
     InteractionOutcomeEvent,
@@ -65,3 +66,28 @@ class CompanionStrategyCandidateStore(Protocol):
         self, candidate_id: str, *, subject_id: str,
         expected_revision: int, now: datetime,
     ) -> CompanionStrategyCandidate | None: ...
+
+
+class CompanionRoutineCandidateStore(Protocol):
+    """用户主动出现时段候选边界；来源只包含时间证据。"""
+
+    def list_observations(
+        self, subject_id: str,
+    ) -> tuple[UserInitiatedInteractionEvent, ...]: ...
+
+    def get_current(self, subject_id: str) -> CompanionRoutineCandidate | None: ...
+
+    def get_by_fingerprint(
+        self, subject_id: str, fingerprint: str,
+    ) -> CompanionRoutineCandidate | None: ...
+
+    def create(
+        self,
+        candidate: CompanionRoutineCandidate,
+        observations: tuple[UserInitiatedInteractionEvent, ...],
+    ) -> CompanionRoutineCandidate: ...
+
+    def dismiss(
+        self, candidate_id: str, *, subject_id: str,
+        expected_revision: int, now: datetime,
+    ) -> CompanionRoutineCandidate | None: ...

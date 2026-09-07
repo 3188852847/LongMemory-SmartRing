@@ -57,6 +57,45 @@ class CompanionStrategyCandidateStatus(StrEnum):
 
 
 @dataclass(frozen=True, slots=True)
+class CompanionRoutineCandidate:
+    """由跨日主动出现时间支持的弱习惯假设；本身不触发联系。"""
+
+    id: str
+    subject_id: str
+    status: CompanionStrategyCandidateStatus
+    expected_minute: int
+    utc_offset_minutes: int
+    observation_window_minutes: int
+    evidence_count: int
+    distinct_local_dates: int
+    evidence_fingerprint: str
+    rationale_code: str
+    generator_version: str
+    created_at: datetime
+    updated_at: datetime
+    revision: int = 1
+
+    def __post_init__(self) -> None:
+        if any(not value.strip() for value in (
+            self.id, self.subject_id, self.evidence_fingerprint,
+            self.rationale_code, self.generator_version,
+        )):
+            raise ValueError("companion_routine_candidate_identity_invalid")
+        if not 0 <= self.expected_minute <= 1439:
+            raise ValueError("companion_routine_candidate_minute_invalid")
+        if not -720 <= self.utc_offset_minutes <= 840:
+            raise ValueError("companion_routine_candidate_offset_invalid")
+        if self.observation_window_minutes != 30:
+            raise ValueError("companion_routine_candidate_window_invalid")
+        if self.evidence_count < 3 or self.distinct_local_dates < 3:
+            raise ValueError("companion_routine_candidate_evidence_insufficient")
+        if self.created_at.tzinfo is None or self.updated_at.tzinfo is None:
+            raise ValueError("companion_routine_candidate_time_invalid")
+        if self.revision < 1:
+            raise ValueError("companion_routine_candidate_revision_invalid")
+
+
+@dataclass(frozen=True, slots=True)
 class CompanionStrategyObservation:
     """生成候选所需的最小时间证据；不携带对话正文。"""
 

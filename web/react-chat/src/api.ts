@@ -107,3 +107,18 @@ export interface UserInitiatedInteraction {
   evidence_kind:'silence_gap_without_recent_outreach'; detector_version:string;
   local_date:string; local_minute:number; utc_offset_minutes:number;
 }
+export interface CompanionRoutineCandidate {
+  id:string; subject_id:string; status:'candidate'|'dismissed';
+  expected_minute:number; utc_offset_minutes:number;
+  observation_window_minutes:30; evidence_count:number;
+  distinct_local_dates:number;
+  rationale_code:'repeated_user_initiated_activity_near_time';
+  generator_version:string; created_at:string; updated_at:string;
+  revision:number; active:false;
+  sources:Array<{
+    user_initiated_event_id:string; occurred_at:string;
+    silence_gap_seconds:number|null;
+    evidence_kind:'silence_gap_without_recent_outreach';
+    local_date:string; local_minute:number;
+  }>;
+}

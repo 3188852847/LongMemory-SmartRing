@@ -168,6 +168,26 @@ def test_companion_strategy_analysis_is_csrf_protected_and_never_activates(tmp_p
             assert (await client.get(
                 base + "/api/companion-user-initiated-interactions?limit=0",
             )).status == 400
+            routine_rejected = await client.post(
+                base + "/api/companion-routine-candidates/analyze", json={},
+            )
+            assert routine_rejected.status == 403
+            routine = await client.post(
+                base + "/api/companion-routine-candidates/analyze",
+                headers=headers, json={},
+            )
+            assert routine.status == 200
+            assert await routine.json() == {
+                "outcome": "insufficient_cross_date_evidence",
+                "eligible_observation_count": 0,
+                "distinct_local_dates": 0,
+                "candidate": None,
+            }
+            routine_list = await client.get(
+                base + "/api/companion-routine-candidates",
+            )
+            assert routine_list.status == 200
+            assert await routine_list.json() == {"items": []}
 
     asyncio.run(run())
 
