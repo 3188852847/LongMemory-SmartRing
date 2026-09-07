@@ -542,6 +542,7 @@ def test_proactive_policy_http_persists_defaults_and_rejects_stale_page(tmp_path
                 "automatic_enabled": True,
                 "scheduled_minute": 780,
                 "greeting_text": "下午好，今天过得怎么样？",
+                "topic_enabled": False,
             }
             assert (await client.put(base + "/api/proactive-policy", json=body)).status == 403
             saved_response = await client.put(
@@ -627,6 +628,7 @@ def test_proactive_policy_http_rejects_invalid_complete_settings(tmp_path, chang
         "maximum_lifetime_seconds": 300, "quiet_until": None,
         "automatic_enabled": False, "scheduled_minute": 780,
         "greeting_text": "下午好，今天过得怎么样？",
+        "topic_enabled": False,
     } | change
 
     async def run():
@@ -655,6 +657,7 @@ def test_manual_proactive_test_is_csrf_protected_and_idempotent(tmp_path):
         "maximum_lifetime_seconds": 300, "quiet_until": None,
         "automatic_enabled": False, "scheduled_minute": 780,
         "greeting_text": "下午好，今天过得怎么样？",
+        "topic_enabled": False,
     }
     body = {
         "text": "这是一条合成主动问候。",
@@ -701,8 +704,10 @@ def test_manual_proactive_test_is_csrf_protected_and_idempotent(tmp_path):
                 "revision": 2,
                 "reason": "ready",
                 "event_count": 2,
-                "failure_reason": None,
-            }]
+                    "failure_reason": None,
+                    "topic_seed_id": None,
+                    "topic_seed_revision": None,
+                }]
             assert (await client.get(
                 base + "/api/proactive-outreach?limit=01"
             )).status == 400
@@ -777,6 +782,7 @@ def test_manual_proactive_test_records_stable_delivery_failure(tmp_path):
                 "maximum_lifetime_seconds": 300, "quiet_until": None,
                 "automatic_enabled": False, "scheduled_minute": 780,
                 "greeting_text": "下午好，今天过得怎么样？",
+                "topic_enabled": False,
             }
             assert (await client.put(
                 base + "/api/proactive-policy", headers=headers, json=policy,

@@ -83,6 +83,8 @@ class ProactiveOutreachLedger:
         expires_at: datetime,
         idempotency_key: str,
         policy_version: str | None = None,
+        topic_seed_id: str | None = None,
+        topic_seed_revision: int | None = None,
     ) -> ProactiveOutreach:
         now = self._clock()
         outreach = ProactiveOutreach(
@@ -97,6 +99,8 @@ class ProactiveOutreachLedger:
             state_changed_at=now,
             idempotency_key=idempotency_key,
             policy_version=policy_version,
+            topic_seed_id=topic_seed_id,
+            topic_seed_revision=topic_seed_revision,
         )
         event = OutreachEvent(
             id=self._id_factory(),

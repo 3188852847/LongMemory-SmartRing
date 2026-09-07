@@ -15,6 +15,7 @@ describe('主动交流设置', () => {
       daily_limit:1, minimum_interval_seconds:21600, maximum_lifetime_seconds:300,
       quiet_until:null, policy_version:'proactive-contact-policy-v1', revision:0, updated_at:null,
       automatic_enabled:false, scheduled_minute:780, greeting_text:'下午好，今天过得怎么样？',
+      topic_enabled:false,
     });
     const client = createConsoleQueryClient();
     const api = new ChatApi();
@@ -33,6 +34,7 @@ describe('主动交流设置', () => {
       '/api/proactive-policy', 'PUT', expect.objectContaining({
         expected_revision:0, enabled:true, automatic_enabled:true,
         scheduled_minute:780, greeting_text:'下午好，今天过得怎么样？',
+        topic_enabled:false,
       }),
     ));
     view.unmount(); client.clear();
@@ -45,6 +47,7 @@ describe('主动交流设置', () => {
         daily_limit:1, minimum_interval_seconds:21600, maximum_lifetime_seconds:300,
         quiet_until:null, policy_version:'proactive-contact-policy-v1', revision:3, updated_at:null,
         automatic_enabled:false, scheduled_minute:780, greeting_text:'下午好，今天过得怎么样？',
+        topic_enabled:false,
       };
     const request = vi.spyOn(ChatApi.prototype, 'request').mockImplementation(async path => {
       if (path === '/api/proactive-policy') return policy;
@@ -81,6 +84,7 @@ describe('主动交流设置', () => {
       daily_limit:1, minimum_interval_seconds:21600, maximum_lifetime_seconds:300,
       quiet_until:null, policy_version:'proactive-contact-policy-v1', revision:3, updated_at:null,
       automatic_enabled:false, scheduled_minute:780, greeting_text:'下午好，今天过得怎么样？',
+      topic_enabled:false,
     };
     const queued = {
       outreach_id:'a'.repeat(32), trigger:'manual_test', content:'合成问候',
@@ -115,6 +119,7 @@ describe('主动交流设置', () => {
       daily_limit:1, minimum_interval_seconds:21600, maximum_lifetime_seconds:300,
       quiet_until:null, policy_version:'proactive-contact-policy-v2', revision:0, updated_at:null,
       automatic_enabled:false, scheduled_minute:780, greeting_text:'下午好，今天过得怎么样？',
+      topic_enabled:false,
     };
     const scenario = {id:'scenario-1',title:'毕业设计',summary:'用户正在准备毕业设计汇报。',revision:2};
     const request = vi.spyOn(ChatApi.prototype, 'request').mockImplementation(async (path, method) => {

@@ -36,6 +36,7 @@ class SQLiteProactivePolicyStore:
             bool(row["automatic_enabled"]),
             row["scheduled_minute"],
             row["greeting_text"],
+            bool(row["topic_enabled"]),
         )
 
     def save(
@@ -53,7 +54,7 @@ class SQLiteProactivePolicyStore:
             settings.quiet_until.isoformat() if settings.quiet_until else None,
             config.policy_version, settings.revision, settings.updated_at.isoformat(),
             int(settings.automatic_enabled), settings.scheduled_minute,
-            settings.greeting_text,
+            settings.greeting_text, int(settings.topic_enabled),
         )
         try:
             if expected_revision == 0:
@@ -63,7 +64,7 @@ class SQLiteProactivePolicyStore:
                     "allowed_start_minute,allowed_end_minute,daily_limit,"
                     "minimum_interval_seconds,maximum_lifetime_seconds,quiet_until,"
                     "policy_version,revision,updated_at,automatic_enabled,scheduled_minute,"
-                    "greeting_text) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    "greeting_text,topic_enabled) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                     (settings.subject_id, *values),
                 ).rowcount
             else:
@@ -72,7 +73,7 @@ class SQLiteProactivePolicyStore:
                     "allowed_weekdays_mask=?,allowed_start_minute=?,allowed_end_minute=?,"
                     "daily_limit=?,minimum_interval_seconds=?,maximum_lifetime_seconds=?,"
                     "quiet_until=?,policy_version=?,revision=?,updated_at=?,"
-                    "automatic_enabled=?,scheduled_minute=?,greeting_text=? "
+                    "automatic_enabled=?,scheduled_minute=?,greeting_text=?,topic_enabled=? "
                     "WHERE subject_id=? AND revision=?",
                     (*values, settings.subject_id, expected_revision),
                 ).rowcount

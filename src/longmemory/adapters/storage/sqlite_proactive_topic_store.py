@@ -56,6 +56,24 @@ class SQLiteProactiveTopicStore:
         ).fetchall()
         return tuple(dict(row) for row in rows)
 
+    def choose_for_schedule(self, subject_id: str, *, now: datetime) -> dict | None:
+        """从明确批准且仍有效的素材中，优先选择最久未使用的一条。"""
+
+        row = self._connection.execute(
+            "SELECT t.*,s.title AS scenario_title,s.summary AS scenario_summary,"
+            "s.status AS scenario_status,s.valid_from AS scenario_valid_from,"
+            "s.valid_to AS scenario_valid_to,MAX(o.created_at) AS last_used_at "
+            "FROM proactive_topic_seeds t JOIN scenario_memories s ON s.id=t.scenario_id "
+            "LEFT JOIN proactive_outreach o ON o.topic_seed_id=t.id "
+            "WHERE t.subject_id=? AND t.status='active' AND s.status='active' "
+            "AND (s.valid_from IS NULL OR julianday(s.valid_from)<=julianday(?)) "
+            "AND (s.valid_to IS NULL OR julianday(s.valid_to)>julianday(?)) "
+            "GROUP BY t.id ORDER BY (last_used_at IS NOT NULL),last_used_at,t.created_at,t.id "
+            "LIMIT 1",
+            (subject_id, now.isoformat(), now.isoformat()),
+        ).fetchone()
+        return dict(row) if row is not None else None
+
     def disable(self, seed_id: str, *, expected_revision: int, now: datetime) -> bool:
         changed = self._connection.execute(
             "UPDATE proactive_topic_seeds SET status='disabled',updated_at=?,revision=revision+1 "

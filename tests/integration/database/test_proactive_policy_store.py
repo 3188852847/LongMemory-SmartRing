@@ -80,4 +80,25 @@ def test_v15_upgrade_preserves_contact_permission_but_keeps_automatic_off(tmp_pa
     assert restored.automatic_enabled is False
     assert restored.scheduled_minute == 600
     assert restored.greeting_text == "下午好，今天过得怎么样？"
+    assert restored.topic_enabled is False
+    connection.close()
+
+
+def test_v17_upgrade_keeps_memory_topics_off_and_adds_outreach_provenance(tmp_path):
+    from longmemory.infrastructure.database.migrations.v17_to_v18 import migrate
+
+    connection = open_database(tmp_path / "v17.db")
+    connection.executescript("""
+        CREATE TABLE proactive_policy_settings (subject_id TEXT PRIMARY KEY);
+        CREATE TABLE proactive_topic_seeds (id TEXT PRIMARY KEY);
+        CREATE TABLE proactive_outreach (id TEXT PRIMARY KEY);
+    """)
+    migrate(connection)
+
+    policy_columns = {
+        row[1] for row in connection.execute("PRAGMA table_info(proactive_policy_settings)")
+    }
+    assert "topic_enabled" in policy_columns
+    columns = {row[1] for row in connection.execute("PRAGMA table_info(proactive_outreach)")}
+    assert {"topic_seed_id", "topic_seed_revision"} <= columns
     connection.close()

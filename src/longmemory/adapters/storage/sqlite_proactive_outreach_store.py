@@ -26,7 +26,8 @@ class SQLiteProactiveOutreachStore:
                 "INSERT INTO proactive_outreach "
                 "(id,subject_id,trigger_kind,trigger_reason_code,content,created_at,"
                 "scheduled_for,expires_at,state,state_changed_at,idempotency_key,"
-                "policy_version,revision,failure_reason) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                "policy_version,topic_seed_id,topic_seed_revision,revision,failure_reason) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 self._outreach_values(outreach),
             )
             self._insert_event(event)
@@ -145,6 +146,8 @@ class SQLiteProactiveOutreachStore:
             (outreach.state_changed_at or outreach.created_at).isoformat(),
             outreach.idempotency_key,
             outreach.policy_version,
+            outreach.topic_seed_id,
+            outreach.topic_seed_revision,
             outreach.revision,
             outreach.failure_reason,
         )
@@ -164,6 +167,8 @@ class SQLiteProactiveOutreachStore:
             state_changed_at=datetime.fromisoformat(row["state_changed_at"]),
             idempotency_key=row["idempotency_key"],
             policy_version=row["policy_version"],
+            topic_seed_id=row["topic_seed_id"],
+            topic_seed_revision=row["topic_seed_revision"],
             revision=row["revision"],
             failure_reason=row["failure_reason"],
         )

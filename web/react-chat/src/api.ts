@@ -46,6 +46,7 @@ export interface ProactivePolicy {
   daily_limit: number; minimum_interval_seconds: number; maximum_lifetime_seconds: number;
   quiet_until: string | null; policy_version: string; revision: number; updated_at: string | null;
   automatic_enabled: boolean; scheduled_minute: number; greeting_text: string;
+  topic_enabled: boolean;
 }
 export interface ProactiveTestResult {
   outreach_id: string; state: string; revision: number; replayed: boolean;
@@ -55,6 +56,7 @@ export interface ProactiveTestResult {
 export interface ProactiveOutreachSummary {
   outreach_id:string; trigger:string; content:string; created_at:string; expires_at:string;
   state:string; revision:number; reason:string; event_count:number; failure_reason:string | null;
+  topic_seed_id:string | null; topic_seed_revision:number | null;
 }
 export interface ProactiveTopicSeed {
   id:string; subject_id:string; scenario_id:string; prompt_text:string;

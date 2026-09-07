@@ -31,7 +31,7 @@ export function ProactiveSettings({api, ready}:{api:ChatApi; ready:boolean}) {
       minimum_interval_seconds:value.minimum_interval_seconds,
       maximum_lifetime_seconds:value.maximum_lifetime_seconds, quiet_until:value.quiet_until,
       automatic_enabled:value.automatic_enabled, scheduled_minute:value.scheduled_minute,
-      greeting_text:value.greeting_text,
+      greeting_text:value.greeting_text, topic_enabled:value.topic_enabled,
     }),
     onSuccess:value => {client.setQueryData(['proactive-policy'], value); setDraft({...value, allowed_weekdays:[...value.allowed_weekdays]}); setNotice(value.automatic_enabled ? '设置已保存；后台只会在指定分钟检查一次。' : '设置已保存；后台定时问候保持关闭。');},
     onError:error => {setNotice(error instanceof ApiError && error.code === 'proactive_settings_conflict' ? '设置已被另一个页面修改，请重新读取后再保存。' : '保存失败，未自动重试。'); void client.invalidateQueries({queryKey:['proactive-policy']});},
@@ -117,8 +117,8 @@ export function ProactiveSettings({api, ready}:{api:ChatApi; ready:boolean}) {
     <Alert type={draft.automatic_enabled ? 'warning' : 'success'} showIcon
       title={draft.automatic_enabled ? '后台定时问候已开启' : (draft.enabled ? '主动联系许可已打开，定时问候仍关闭' : '主动交流当前关闭')}
       description="定时问候只在所选星期的指定分钟检查：当天已经聊过、设备离线或忙碌、处于勿扰或错过时刻都会跳过，之后不补发。"/>
-    <div className="setting-line"><span>允许主动联系</span><Switch aria-label="允许主动联系" checked={draft.enabled} onChange={enabled => change({enabled, ...(!enabled ? {automatic_enabled:false} : {})})}/></div>
-    <div className="setting-line"><span>后台定时问候</span><Switch aria-label="后台定时问候" disabled={!draft.enabled} checked={draft.automatic_enabled} onChange={automatic_enabled => change({automatic_enabled})}/></div>
+    <div className="setting-line"><span>允许主动联系</span><Switch aria-label="允许主动联系" checked={draft.enabled} onChange={enabled => change({enabled, ...(!enabled ? {automatic_enabled:false, topic_enabled:false} : {})})}/></div>
+    <div className="setting-line"><span>后台定时问候</span><Switch aria-label="后台定时问候" disabled={!draft.enabled} checked={draft.automatic_enabled} onChange={automatic_enabled => change({automatic_enabled, ...(!automatic_enabled ? {topic_enabled:false} : {})})}/></div>
     <label>允许星期</label>
     <Checkbox.Group aria-label="允许星期" options={DAYS} value={draft.allowed_weekdays} onChange={values => change({allowed_weekdays:values.map(Number).sort()})}/>
     <div className="proactive-fields">
@@ -145,9 +145,9 @@ export function ProactiveSettings({api, ready}:{api:ChatApi; ready:boolean}) {
       {testNotice && <p role="status">{testNotice}</p>}
     </section>
     <section className="settings-section">
-      <h3>记忆驱动话题素材（预览阶段）</h3>
+      <h3>记忆驱动话题素材</h3>
       <Alert type="warning" showIcon title="这里只保存你允许圆屏公开念出的短句"
-        description="来源限定为当前有效且已接受的 L2 场景。保存后不会自动投递；后续接入定时器前仍会经过勿扰、频率和设备状态门控。请不要填写不适合被旁人听见的信息。"/>
+        description="来源限定为当前有效且已接受的 L2 场景。仅保存素材不会自动投递；还需显式打开并保存下方开关。实际定时投递仍会经过勿扰、频率和设备状态门控。请不要填写不适合被旁人听见的信息。"/>
       <label htmlFor="topic-source">来源 L2 场景</label>
       <Select id="topic-source" aria-label="来源 L2 场景" className="wide" value={topicScenarioId}
         placeholder="选择一个已接受的生活场景" onChange={setTopicScenarioId}
@@ -171,6 +171,10 @@ export function ProactiveSettings({api, ready}:{api:ChatApi; ready:boolean}) {
         <small>素材 ID：{seed.id} · 来源 ID：{seed.scenario_id}</small>
       </Card>)}</div>
       {topicSeeds.isSuccess && (topicSeeds.data?.items?.length ?? 0) === 0 && <p className="subtle">尚无话题素材。</p>}
+      <div className="setting-line"><span>定时问候优先使用可用话题素材</span><Switch
+        aria-label="优先使用记忆话题" disabled={!draft.enabled || !draft.automatic_enabled}
+        checked={draft.topic_enabled} onChange={topic_enabled => change({topic_enabled})}/></div>
+      <p className="subtle">此开关默认关闭。开启并保存后，定时点会从可用素材中优先选择最久未使用的一条；没有可用素材时仍使用上方固定问候。</p>
     </section>
     <section className="settings-section">
       <h3>最近运行记录</h3>
@@ -183,6 +187,7 @@ export function ProactiveSettings({api, ready}:{api:ChatApi; ready:boolean}) {
           {['queued','transport_sent','device_acknowledged'].includes(item.state) && <Button size="small" loading={confirmMutation.isPending && confirmMutation.variables?.outreach_id === item.outreach_id} disabled={confirmMutation.isPending} onClick={() => confirmMutation.mutate(item)}>确认已听到</Button>}
         </div>
         <p className="subtle">{new Date(item.created_at).toLocaleString()} · 原因 {item.reason} · {item.event_count} 个事件</p>
+        {item.topic_seed_id && <p className="subtle">记忆话题来源：{item.topic_seed_id} · 素材修订 {item.topic_seed_revision}</p>}
       </article>)}</div>
     </section>
   </Space>;

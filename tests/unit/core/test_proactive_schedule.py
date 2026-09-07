@@ -72,3 +72,5 @@ def test_invalid_time_and_greeting_are_rejected_at_settings_boundary():
         settings(scheduled_minute=1440)
     with pytest.raises(ValueError, match="greeting"):
         settings(greeting_text=" 带空格")
+    with pytest.raises(ValueError, match="topic_boundary"):
+        settings(automatic_enabled=False, topic_enabled=True)

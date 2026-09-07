@@ -53,6 +53,7 @@ class ProactivePolicyRequest(BaseModel):
     automatic_enabled: bool
     scheduled_minute: int = Field(ge=0, le=1439)
     greeting_text: str = Field(min_length=1, max_length=80)
+    topic_enabled: bool
 
     @field_validator("allowed_weekdays")
     @classmethod

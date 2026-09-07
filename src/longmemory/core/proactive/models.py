@@ -98,6 +98,8 @@ class ProactiveOutreach:
     state_changed_at: datetime | None = None
     idempotency_key: str = ""
     policy_version: str | None = None
+    topic_seed_id: str | None = None
+    topic_seed_revision: int | None = None
     revision: int = 1
     failure_reason: str | None = None
 
@@ -120,6 +122,12 @@ class ProactiveOutreach:
             raise ValueError("outreach_revision_invalid")
         if self.policy_version is not None:
             _bounded(self.policy_version, "outreach_policy_version", 120)
+        if (self.topic_seed_id is None) != (self.topic_seed_revision is None):
+            raise ValueError("outreach_topic_source_mismatch")
+        if self.topic_seed_id is not None:
+            _bounded(self.topic_seed_id, "outreach_topic_seed_id", 120)
+            if self.topic_seed_revision < 1:
+                raise ValueError("outreach_topic_seed_revision_invalid")
         if (self.state == OutreachState.FAILED) != (self.failure_reason is not None):
             raise ValueError("outreach_failure_reason_mismatch")
         if self.failure_reason is not None:

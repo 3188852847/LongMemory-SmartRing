@@ -183,6 +183,7 @@ class MemoryBackend:
             "automatic_enabled": settings.automatic_enabled,
             "scheduled_minute": settings.scheduled_minute,
             "greeting_text": settings.greeting_text,
+            "topic_enabled": settings.topic_enabled,
         }
 
     def proactive_policy(self):
@@ -294,6 +295,7 @@ class MemoryBackend:
                 automatic_enabled=request.automatic_enabled,
                 scheduled_minute=request.scheduled_minute,
                 greeting_text=request.greeting_text,
+                topic_enabled=request.topic_enabled,
             )
         except ValueError:
             raise MemoryAccessError("invalid_proactive_policy", 400) from None
@@ -306,7 +308,7 @@ class MemoryBackend:
                 "user:self", config, request.quiet_until,
                 current.revision + 1, datetime.now(UTC),
                 request.automatic_enabled, request.scheduled_minute,
-                request.greeting_text,
+                request.greeting_text, request.topic_enabled,
             )
             return self._proactive_json(
                 store.save(updated, expected_revision=current.revision)
@@ -447,17 +449,33 @@ class MemoryBackend:
             )
             if decision.action != ScheduledTriggerAction.CREATE:
                 return {"action": decision.action.value, "reason": decision.reason.value}
+            topic_seed = (
+                SQLiteProactiveTopicStore(connection).choose_for_schedule(
+                    subject_id, now=now,
+                )
+                if settings.topic_enabled else None
+            )
             outreach = ledger.create_candidate(
                 subject_id=subject_id,
                 trigger=OutreachTrigger.EXPLICIT_SCHEDULE,
-                trigger_reason_code="explicit_daily_schedule",
-                content=settings.greeting_text,
+                trigger_reason_code=(
+                    "approved_memory_topic" if topic_seed is not None
+                    else "explicit_daily_schedule"
+                ),
+                content=(
+                    topic_seed["prompt_text"] if topic_seed is not None
+                    else settings.greeting_text
+                ),
                 # 调度器在精确分钟内才创建；账本不允许“创建时间晚于计划时间”，
                 # 因而当前评估时刻就是本候选的实际计划时刻。
                 scheduled_for=now,
                 expires_at=decision.scheduled_for + settings.config.maximum_lifetime,
                 idempotency_key=decision.idempotency_key,
                 policy_version=settings.config.policy_version,
+                topic_seed_id=topic_seed["id"] if topic_seed is not None else None,
+                topic_seed_revision=(
+                    topic_seed["revision"] if topic_seed is not None else None
+                ),
             )
             if not device.ready:
                 blocked = ledger.record_transition(
@@ -519,6 +537,8 @@ class MemoryBackend:
                     "reason": latest.reason_code,
                     "event_count": len(events),
                     "failure_reason": outreach.failure_reason,
+                    "topic_seed_id": outreach.topic_seed_id,
+                    "topic_seed_revision": outreach.topic_seed_revision,
                 })
             return {"items": items}
 

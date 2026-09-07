@@ -1,6 +1,6 @@
-"""当前 SQLite V17 的完整结构定义；不包含历史迁移步骤。"""
+"""当前 SQLite V18 的完整结构定义；不包含历史迁移步骤。"""
 
-SCHEMA_VERSION = 17
+SCHEMA_VERSION = 18
 
 LATEST_SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS conversation_messages (
@@ -255,6 +255,10 @@ CREATE TABLE IF NOT EXISTS proactive_outreach (
     policy_version TEXT CHECK (
         policy_version IS NULL OR length(trim(policy_version)) BETWEEN 1 AND 120
     ),
+    topic_seed_id TEXT,
+    topic_seed_revision INTEGER CHECK (
+        topic_seed_revision IS NULL OR topic_seed_revision >= 1
+    ),
     revision INTEGER NOT NULL DEFAULT 1 CHECK (revision >= 1),
     failure_reason TEXT CHECK (
         failure_reason IS NULL OR length(trim(failure_reason)) BETWEEN 1 AND 120
@@ -263,7 +267,9 @@ CREATE TABLE IF NOT EXISTS proactive_outreach (
         (state = 'failed' AND failure_reason IS NOT NULL)
         OR (state <> 'failed' AND failure_reason IS NULL)
     ),
-    UNIQUE (subject_id, idempotency_key)
+    UNIQUE (subject_id, idempotency_key),
+    CHECK ((topic_seed_id IS NULL) = (topic_seed_revision IS NULL)),
+    FOREIGN KEY (topic_seed_id) REFERENCES proactive_topic_seeds (id) ON DELETE RESTRICT
 );
 CREATE INDEX IF NOT EXISTS idx_proactive_outreach_recent
     ON proactive_outreach (subject_id, created_at DESC, id DESC);
@@ -312,6 +318,7 @@ CREATE TABLE IF NOT EXISTS proactive_policy_settings (
     scheduled_minute INTEGER NOT NULL DEFAULT 780 CHECK (scheduled_minute BETWEEN 0 AND 1439),
     greeting_text TEXT NOT NULL DEFAULT '下午好，今天过得怎么样？'
         CHECK (length(trim(greeting_text)) BETWEEN 1 AND 80),
+    topic_enabled INTEGER NOT NULL DEFAULT 0 CHECK (topic_enabled IN (0,1)),
     CHECK (allowed_start_minute <> allowed_end_minute)
 );
 

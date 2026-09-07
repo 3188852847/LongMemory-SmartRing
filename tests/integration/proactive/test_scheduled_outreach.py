@@ -37,7 +37,7 @@ class ReadyBridge:
         return {"state": "queued"}
 
 
-def prepare(path, *, user_chatted=False):
+def prepare(path, *, user_chatted=False, topic_enabled=False):
     connection = open_database(path)
     initialize_schema(connection)
     SQLiteProactivePolicyStore(connection).save(
@@ -49,6 +49,7 @@ def prepare(path, *, user_chatted=False):
             automatic_enabled=True,
             scheduled_minute=13 * 60,
             greeting_text="固定合成问候。",
+            topic_enabled=topic_enabled,
         ),
         expected_revision=0,
     )
@@ -59,6 +60,26 @@ def prepare(path, *, user_chatted=False):
             (NOW.replace(hour=1).isoformat(),),
         )
         connection.commit()
+    connection.close()
+
+
+def add_topic_seed(path):
+    connection = open_database(path)
+    connection.execute(
+        "INSERT INTO scenario_memories "
+        "(id,subject_id,title,summary,generated_at,valid_from,valid_to,status,"
+        "generator_name,generator_version,revision) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+        ("scenario-topic", "user:self", "毕业设计", "用户正在准备毕业设计汇报。",
+         NOW.isoformat(), None, None, "active", "test", "1", 2),
+    )
+    connection.execute(
+        "INSERT INTO proactive_topic_seeds "
+        "(id,subject_id,scenario_id,prompt_text,status,created_at,updated_at,revision) "
+        "VALUES (?,?,?,?,?,?,?,?)",
+        ("b" * 32, "user:self", "scenario-topic", "毕业设计准备得怎么样了？",
+         "active", NOW.isoformat(), NOW.isoformat(), 1),
+    )
+    connection.commit()
     connection.close()
 
 
@@ -93,3 +114,20 @@ def test_real_user_chat_that_day_skips_without_creating_outreach(tmp_path):
     assert bridge.announcements == []
     with sqlite3.connect(path) as connection:
         assert connection.execute("SELECT count(*) FROM proactive_outreach").fetchone()[0] == 0
+
+
+def test_enabled_memory_topic_is_dispatched_with_traceable_seed_revision(tmp_path):
+    path = tmp_path / "scheduled-topic.db"
+    prepare(path, topic_enabled=True)
+    add_topic_seed(path)
+    bridge = ReadyBridge()
+
+    result = asyncio.run(MemoryBackend(path, clock=lambda: NOW).proactive_scheduled_tick(bridge))
+
+    assert result["state"] == "queued"
+    assert [item[0] for item in bridge.announcements] == ["毕业设计准备得怎么样了？"]
+    with sqlite3.connect(path) as connection:
+        assert connection.execute(
+            "SELECT trigger_reason_code,topic_seed_id,topic_seed_revision "
+            "FROM proactive_outreach"
+        ).fetchone() == ("approved_memory_topic", "b" * 32, 1)

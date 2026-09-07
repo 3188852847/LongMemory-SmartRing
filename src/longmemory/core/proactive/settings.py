@@ -16,6 +16,7 @@ class ProactivePolicySettings:
     automatic_enabled: bool = False
     scheduled_minute: int = 13 * 60
     greeting_text: str = "下午好，今天过得怎么样？"
+    topic_enabled: bool = False
 
     def __post_init__(self) -> None:
         if self.subject_id != self.subject_id.strip() or not 1 <= len(self.subject_id) <= 120:
@@ -49,3 +50,5 @@ class ProactivePolicySettings:
             not self.config.enabled or not inside_window
         ):
             raise ValueError("proactive_settings_automatic_boundary_invalid")
+        if self.topic_enabled and not self.automatic_enabled:
+            raise ValueError("proactive_settings_topic_boundary_invalid")
