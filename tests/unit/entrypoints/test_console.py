@@ -622,6 +622,48 @@ def test_memory_mode_reports_chat_disabled_instead_of_fake_state():
     asyncio.run(run())
 
 
+def test_explicit_memory_http_reuses_shared_runtime_and_respects_write_pause(tmp_path):
+    from longmemory.adapters.llm.fake import FakeAnswerGenerator
+    from longmemory.entrypoints.api.chat_backend import ChatBackend
+    from longmemory.entrypoints.api.memory_backend import MemoryBackend
+    from longmemory.methods.longmemory_v1.method import LongMemoryV1
+
+    database = tmp_path / "explicit-memory.db"
+    LongMemoryV1(database).close()
+    backend = ChatBackend(database, FakeAnswerGenerator())
+
+    async def run():
+        async with console(database, chat_backend=backend) as (client, base, _bridge):
+            headers = await login(client, base)
+            endpoint = base + "/api/memory-commands/include"
+            assert (await client.post(endpoint, json={"content": "我的猫叫豆包。"})).status == 403
+            invalid = await client.post(endpoint, headers=headers, json={"content": "豆包"})
+            assert invalid.status == 400
+
+            saved = await client.post(endpoint, headers=headers, json={"content": "我的猫叫豆包。"})
+            payload = await saved.json()
+            assert saved.status == 200
+            assert payload["kind"] == "include" and payload["status"] == "applied"
+            assert payload["writes"][0]["operation"] == "add"
+            memory_id = payload["target_memory_ids"][0]
+            assert MemoryBackend(database).get(memory_id)["content"] == "用户的猫叫豆包。"
+            duplicate = await client.post(endpoint, headers=headers, json={"content": "我的猫叫豆包。"})
+            duplicate_payload = await duplicate.json()
+            assert duplicate_payload["writes"][0]["operation"] == "noop"
+            assert MemoryBackend(database).list_page(query="豆包")["total"] == 1
+            assert len(MemoryBackend(database).get(memory_id)["sources"]) == 2
+
+            runtime = backend.memory_runtime()
+            runtime.configure(write_enabled=False, use_enabled=True)
+            paused = await client.post(endpoint, headers=headers, json={"content": "我喜欢茉莉花茶。"})
+            paused_payload = await paused.json()
+            assert paused.status == 200 and paused_payload["status"] == "write_paused"
+            assert MemoryBackend(database).list_page(query="茉莉花茶")["total"] == 0
+            assert MemoryBackend(database).list_sources(query="请记住：我喜欢茉莉花茶")["total"] == 1
+
+    asyncio.run(run())
+
+
 def test_proactive_policy_http_persists_defaults_and_rejects_stale_page(tmp_path):
     from longmemory.methods.longmemory_v1.method import LongMemoryV1
 

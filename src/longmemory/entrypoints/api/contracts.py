@@ -35,6 +35,26 @@ class ChatMessageRequest(BaseModel):
         return value
 
 
+class ExplicitMemoryRequest(BaseModel):
+    """控制台手工声明的一条自指事实；仍交由统一记忆命令处理。"""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    content: str = Field(min_length=1, max_length=1000)
+
+    @field_validator("content")
+    @classmethod
+    def complete_single_statement(cls, value: str) -> str:
+        value = value.strip()
+        if (
+            not value
+            or any(ord(character) < 32 for character in value)
+            or not value.startswith("我")
+        ):
+            raise ValueError("explicit self statement required")
+        return value
+
+
 class ProactivePolicyRequest(BaseModel):
     """完整替换主动联系设置；revision 防止旧页面覆盖新设置。"""
 

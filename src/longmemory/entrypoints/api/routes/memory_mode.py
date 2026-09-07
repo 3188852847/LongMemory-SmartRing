@@ -1,8 +1,12 @@
 """本机控制台的运行期记忆模式；不持久化、不删除数据。"""
 
 import asyncio
+from dataclasses import asdict
 
 from aiohttp import web
+from pydantic import ValidationError
+
+from longmemory.entrypoints.api.contracts import ExplicitMemoryRequest
 
 
 def register_memory_mode_routes(app, backend):
@@ -48,3 +52,28 @@ def register_memory_mode_routes(app, backend):
 
     app.router.add_get("/api/memory-mode", mode, allow_head=False)
     app.router.add_put("/api/memory-mode", mode)
+
+    async def explicit_memory(request):
+        """从管理页明确写入一条事实，但不创建第二套数据库写入路径。"""
+
+        if backend is None:
+            return web.json_response({"error": "chat_not_enabled"}, status=503)
+        if request.content_type != "application/json":
+            raise web.HTTPBadRequest()
+        try:
+            body = ExplicitMemoryRequest.model_validate(await request.json())
+        except (ValidationError, ValueError, TypeError, UnicodeError):
+            return web.json_response({"error": "invalid_explicit_memory"}, status=400)
+        prepared = await asyncio.to_thread(
+            backend.memory_runtime().prepare_user,
+            f"请记住：{body.content}",
+        )
+        command = prepared.memory_command
+        if command is None or command.kind != "include":
+            return web.json_response({"error": "explicit_memory_not_handled"}, status=409)
+        return web.json_response({
+            **asdict(command),
+            "l0_message_id": prepared.event.event_id,
+        })
+
+    app.router.add_post("/api/memory-commands/include", explicit_memory)

@@ -3,6 +3,7 @@ import {Button, Card, Checkbox, Descriptions, Drawer, Empty, Input, List, Modal,
 import {ChatApi} from './api';
 import {AppShell, ConsoleNav} from './AppShell';
 import {PageHeader} from './PageHeader';
+import {ManualMemoryAdd} from './ManualMemoryAdd';
 
 type MemoryConfig = {configured: boolean; database: string | null; allow_delete: boolean; allow_correction: boolean; allow_change: boolean};
 type RuntimeMode = {write_enabled: boolean; use_enabled: boolean; scenario_use_enabled: boolean; scenario_available: boolean; persona_use_enabled: boolean; persona_available: boolean; persistent: boolean; l0_archived_when_write_disabled: boolean};
@@ -151,7 +152,7 @@ export function MemoryApp() {
       <ConsoleNav active="memories" legacyPath="/memories-legacy"/>
       <Card size="small" title="层级说明"><p><Tag color="magenta">L1</Tag>规范化、可召回的派生事实</p><p><Tag color="blue">L0</Tag>用户或助手当时说过的原文</p></Card>
     </>;
-  return <><AppShell subtitle="可追溯的个人记忆" className="memory-shell" sidebar={sidebar}><PageHeader eyebrow="长期记忆" title="原始与原子记忆" description="查看系统保存的原话和从中提取的可召回事实，并核对两者之间的来源关系。" meta={config?.database ?? '未指定记忆库'} action={<Button loading={busy} disabled={!config?.configured} onClick={() => void refresh(page.offset)}>刷新</Button>}/>
+  return <><AppShell subtitle="可追溯的个人记忆" className="memory-shell" sidebar={sidebar}><PageHeader eyebrow="长期记忆" title="原始与原子记忆" description="查看系统保存的原话和从中提取的可召回事实，并核对两者之间的来源关系。" meta={config?.database ?? '未指定记忆库'} action={<Space><ManualMemoryAdd api={api} disabled={!config?.configured || !mode} onSaved={async memoryId => {await fetchL1(0, ''); setTab('l1'); setQuery(''); setNotice('明确事实已处理，列表已更新。'); if (memoryId) await openL1(memoryId);}}/><Button loading={busy} disabled={!config?.configured} onClick={() => void refresh(page.offset)}>刷新</Button></Space>}/>
       {mode && <Card className="mode-card" title="本次运行的记忆模式"><Space wrap size="large">
         <Space><Switch checked={modeDraft.write_enabled} disabled={busy} onChange={value => setModeDraft({...modeDraft, write_enabled: value})}/><span>从新对话生成 L1</span></Space>
         <Space><Switch checked={modeDraft.use_enabled} disabled={busy} onChange={value => setModeDraft({...modeDraft, use_enabled: value})}/><span>回答时使用已有记忆</span></Space>
