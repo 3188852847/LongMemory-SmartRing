@@ -1,5 +1,11 @@
 # Changelog
 
+### experience optimization: daily launcher clarity（2026-09-07）
+
+- Windows 启动面板保留 Tkinter、日常/高级分层和既有进程安全边界，调整页面留白、标题、分组与按钮层级；主操作明确为“启动并打开控制台”。
+- 本次配置摘要不再暴露 `elysia_v1 / llm / hybrid` 等内部枚举，改为三行人类可读的模式、角色、记忆、声音和权限摘要。
+- 运行状态增加灰/黄/绿/红辅助状态点，分别表示未启动、启动中、已就绪和失败；完整文字仍是判断依据。同步 IP、切换 TTS、关闭运行中面板等外部状态变更继续保留必要确认。
+
 ### experience optimization: page information hierarchy（2026-09-07）
 
 - 七个 React 日常入口共用统一页面标题组件，按“所属区域、页面任务、用途说明、运行状态、主要操作”展示；数据库路径和技术说明降为次级信息。

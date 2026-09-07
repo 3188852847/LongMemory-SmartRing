@@ -340,6 +340,22 @@ def test_panel_constructs_without_starting_services(monkeypatch):
     app.main()
 
 
+def test_daily_summary_uses_human_labels_instead_of_internal_enums(monkeypatch):
+    monkeypatch.syspath_prepend(str(DIRECTORY))
+    spec = importlib.util.spec_from_file_location("launcher_app_summary_test", DIRECTORY / "app.py")
+    app = importlib.util.module_from_spec(spec)
+    monkeypatch.setitem(sys.modules, "runtime", runtime)
+    spec.loader.exec_module(app)
+
+    summary = app._summary_text(True, "elysia_v1", "llm", "hybrid", "voxcpm2", True, False)
+    assert summary == (
+        "网页＋圆屏语音  ·  爱莉希雅风格\n"
+        "模型辅助提取  ·  关键词＋语义召回  ·  VoxCPM2 本地声音\n"
+        "允许单条删除  ·  低频整理关闭"
+    )
+    assert not {"elysia_v1", "llm", "hybrid", "voxcpm2"}.intersection(summary.split())
+
+
 def test_network_sync_preserves_other_configuration_and_backups(tmp_path, monkeypatch):
     monkeypatch.syspath_prepend(str(DIRECTORY))
     from sync_network import sync

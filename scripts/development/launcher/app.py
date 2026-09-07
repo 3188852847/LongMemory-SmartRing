@@ -18,6 +18,27 @@ from firewall_panel import open_panel
 from tts import config_action as tts_config_action
 
 
+APP_BACKGROUND = "#f5f6fa"
+CARD_BACKGROUND = "#ffffff"
+ACCENT = "#a72760"
+
+
+def _summary_text(voice, role, extraction, retrieval, tts, allow_delete, consolidation):
+    """把内部启动枚举翻译为日常首页可理解的三行摘要。"""
+    mode = "网页＋圆屏语音" if voice else "网页文字聊天"
+    role_label = "爱莉希雅风格" if role == "elysia_v1" else "普通助手"
+    extraction_label = "模型辅助提取" if extraction == "llm" else "规则提取"
+    retrieval_label = "关键词＋语义召回" if retrieval == "hybrid" else "关键词召回"
+    sound_label = "VoxCPM2 本地声音" if tts == "voxcpm2" else "EdgeTTS 联网声音"
+    delete_label = "允许单条删除" if allow_delete else "不开放删除"
+    consolidation_label = "低频整理已开启" if consolidation else "低频整理关闭"
+    return (
+        f"{mode}  ·  {role_label}\n"
+        f"{extraction_label}  ·  {retrieval_label}  ·  {sound_label}\n"
+        f"{delete_label}  ·  {consolidation_label}"
+    )
+
+
 def _scrollable_tab(parent):
     """创建可随窗口缩放并支持纵向滚动的页签内容区。
 
@@ -25,9 +46,14 @@ def _scrollable_tab(parent):
     和 Windows 高缩放比例下仍能访问底部操作，而不要求每个设置分组自行处理。
     """
     shell = ttk.Frame(parent)
-    canvas = tk.Canvas(shell, highlightthickness=0, borderwidth=0)
+    canvas = tk.Canvas(
+        shell,
+        highlightthickness=0,
+        borderwidth=0,
+        background=APP_BACKGROUND,
+    )
     scrollbar = ttk.Scrollbar(shell, orient="vertical", command=canvas.yview)
-    content = ttk.Frame(canvas, padding=18)
+    content = ttk.Frame(canvas, padding=(22, 20), style="Page.TFrame")
     content_window = canvas.create_window((0, 0), window=content, anchor="nw")
     canvas.configure(yscrollcommand=scrollbar.set)
 
@@ -49,13 +75,28 @@ def _scrollable_tab(parent):
 def main():
     window = tk.Tk()
     window.title("LongMemory · 日常启动")
-    window.geometry("900x720")
+    window.geometry("920x740")
     window.minsize(720, 500)
+    window.configure(background=APP_BACKGROUND)
     style = ttk.Style(window)
+    if "vista" in style.theme_names():
+        style.theme_use("vista")
+    style.configure("App.TFrame", background=APP_BACKGROUND)
+    style.configure("Page.TFrame", background=APP_BACKGROUND)
+    style.configure("Header.TFrame", background=APP_BACKGROUND)
+    style.configure("TLabel", font=("Microsoft YaHei UI", 9))
     style.configure("Title.TLabel", font=("Microsoft YaHei UI", 20, "bold"))
-    style.configure("Subtitle.TLabel", foreground="#5f6b7a")
+    style.configure("Eyebrow.TLabel", foreground=ACCENT, font=("Microsoft YaHei UI", 9, "bold"))
+    style.configure("Subtitle.TLabel", foreground="#667085")
+    style.configure("Hint.TLabel", foreground="#667085", font=("Microsoft YaHei UI", 9))
+    style.configure("Summary.TLabel", font=("Microsoft YaHei UI", 10), foreground="#303747")
+    style.configure("StatusIdle.TLabel", foreground="#98a2b3", font=("Microsoft YaHei UI", 12))
+    style.configure("StatusBusy.TLabel", foreground="#d48806", font=("Microsoft YaHei UI", 12))
+    style.configure("StatusGood.TLabel", foreground="#389e0d", font=("Microsoft YaHei UI", 12))
+    style.configure("StatusError.TLabel", foreground="#cf1322", font=("Microsoft YaHei UI", 12))
     style.configure("Primary.TButton", font=("Microsoft YaHei UI", 11, "bold"), padding=(18, 10))
-    style.configure("Section.TLabelframe", padding=12)
+    style.configure("Secondary.TButton", padding=(12, 8))
+    style.configure("Section.TLabelframe", padding=14, background=CARD_BACKGROUND)
     style.configure("Section.TLabelframe.Label", font=("Microsoft YaHei UI", 10, "bold"))
     try:
         lock = Singleton()
@@ -65,16 +106,19 @@ def main():
         window.destroy()
         return
     manager = Manager()
-    box = ttk.Frame(window, padding=(26, 22))
+    box = ttk.Frame(window, padding=(30, 24), style="App.TFrame")
     box.pack(fill="both", expand=True)
     choice_path = ROOT / 'data/control/launcher.json'
     saved = load_preferences(choice_path)
-    ttk.Label(box, text="LongMemory", style="Title.TLabel").pack(anchor="w")
+    header = ttk.Frame(box, style="Header.TFrame")
+    header.pack(fill="x", pady=(0, 18))
+    ttk.Label(header, text="个人陪伴控制台", style="Eyebrow.TLabel").pack(anchor="w")
+    ttk.Label(header, text="LongMemory", style="Title.TLabel").pack(anchor="w")
     ttk.Label(
-        box,
-        text="一个入口启动文字聊天与智能圆屏；常用设置会保存在本机。",
+        header,
+        text="启动一次，就可以使用文字聊天和 SmartRing-Plus 圆屏；常用选择保存在本机。",
         style="Subtitle.TLabel",
-    ).pack(anchor="w", pady=(2, 14))
+    ).pack(anchor="w", pady=(3, 0))
     tabs = ttk.Notebook(box)
     tabs.pack(fill="both", expand=True)
     daily_tab, daily, daily_canvas = _scrollable_tab(tabs)
@@ -118,7 +162,7 @@ def main():
         return "voxcpm2" if tts_backend.get().startswith("VoxCPM2") else "edge"
 
     def current_preferences():
-        # 删除能力有意不进入此字典：每次打开面板都恢复关闭。
+        # 删除能力有意不进入此字典：每次打开面板都按本机日常约定重新设置。
         return {
             "voice": voice.get(),
             "database": database.get().strip(),
@@ -135,8 +179,10 @@ def main():
 
     mode_box = ttk.LabelFrame(daily, text="今天怎么使用", style="Section.TLabelframe")
     mode_box.pack(fill="x", pady=(0, 12))
-    ttk.Radiobutton(mode_box, text="只用网页文字聊天", variable=voice, value=False).pack(anchor="w", pady=3)
-    ttk.Radiobutton(mode_box, text="网页文字聊天＋SmartRing-Plus 圆屏语音", variable=voice, value=True).pack(anchor="w", pady=3)
+    ttk.Radiobutton(mode_box, text="文字聊天", variable=voice, value=False).pack(anchor="w", pady=(2, 1))
+    ttk.Label(mode_box, text="只启动网页控制台，不启动小智语音服务。", style="Hint.TLabel").pack(anchor="w", padx=(24, 0), pady=(0, 8))
+    ttk.Radiobutton(mode_box, text="文字聊天＋圆屏语音", variable=voice, value=True).pack(anchor="w", pady=(1, 1))
+    ttk.Label(mode_box, text="同时启动小智；圆屏在线状态仍在网页内查看。", style="Hint.TLabel").pack(anchor="w", padx=(24, 0), pady=(0, 2))
 
     paths_box = ttk.LabelFrame(advanced, text="本机路径", style="Section.TLabelframe")
     paths_box.pack(fill="x", pady=(0, 10))
@@ -258,17 +304,14 @@ def main():
     summary = tk.StringVar()
 
     def update_summary(*_):
-        mode = "网页＋圆屏语音" if voice.get() else "网页文字聊天"
-        delete = " · 本次允许 L1 删除" if allow_memory_delete.get() else ""
-        consolidation = " · 低频整理开启" if memory_consolidation.get() else ""
-        summary.set(
-            f"{mode}  ·  {role.get()}  ·  {selected_extraction()} / "
-            f"{selected_retrieval()}  ·  {selected_tts()}{delete}{consolidation}"
-        )
+        summary.set(_summary_text(
+            voice.get(), role.get(), selected_extraction(), selected_retrieval(),
+            selected_tts(), allow_memory_delete.get(), memory_consolidation.get(),
+        ))
 
     summary_box = ttk.LabelFrame(daily, text="本次配置", style="Section.TLabelframe")
     summary_box.pack(fill="x", pady=12)
-    ttk.Label(summary_box, textvariable=summary, wraplength=760).pack(anchor="w")
+    ttk.Label(summary_box, textvariable=summary, wraplength=760, style="Summary.TLabel").pack(anchor="w")
     ttk.Label(
         summary_box,
         text="详细路径和算法选项在“高级设置”；成功启动后自动记住常用选择。",
@@ -294,7 +337,18 @@ def main():
     status = tk.StringVar(value="尚未启动。学校模型是否可用需你在校园网自行验证。")
     status_box = ttk.LabelFrame(daily, text="运行状态", style="Section.TLabelframe")
     status_box.pack(fill="x", pady=12)
-    ttk.Label(status_box, textvariable=status, wraplength=760).pack(anchor="w")
+    status_row = ttk.Frame(status_box)
+    status_row.pack(fill="x")
+    status_indicator = ttk.Label(status_row, text="●", style="StatusIdle.TLabel")
+    status_indicator.pack(side="left", anchor="n", padx=(0, 9))
+    ttk.Label(status_row, textvariable=status, wraplength=720).pack(side="left", fill="x", expand=True)
+
+    def set_status(message, tone="idle"):
+        """状态颜色只帮助扫读；完整文字仍是故障判断的唯一依据。"""
+        styles = {"idle": "StatusIdle.TLabel", "busy": "StatusBusy.TLabel",
+                  "good": "StatusGood.TLabel", "error": "StatusError.TLabel"}
+        status.set(message)
+        status_indicator.configure(style=styles.get(tone, "StatusIdle.TLabel"))
     buttons = ttk.Frame(daily)
     buttons.pack(fill="x", pady=(8, 0))
     state = {"opened": False, "started": 0.0, "failed": False}
@@ -312,11 +366,11 @@ def main():
         try:
             manager.stop()
         except Exception:
-            status.set("停止未完全确认，请关闭面板并检查服务，不要重复启动。")
+            set_status("停止未完全确认，请关闭面板并检查服务，不要重复启动。", "error")
             return False
         state.update(opened=False, failed=False)
         start_button.config(state="normal")
-        status.set("已停止本面板启动的服务；其他终端启动的程序未被停止。")
+        set_status("已停止本面板启动的服务；其他终端启动的程序未被停止。")
         return True
 
     def start():
@@ -343,7 +397,7 @@ def main():
                 settings_status.set("服务已启动，但本机首选项未保存；下次仍可手动选择。")
             state.update(started=time.monotonic(), opened=False, failed=False)
             start_button.config(state="disabled")
-            status.set("正在启动；首次加载语音模型可能较慢。尚未验证学校模型或圆屏连接。")
+            set_status("正在启动；首次加载语音模型可能较慢。尚未验证学校模型或圆屏连接。", "busy")
         except ValueError as error:
             messagebox.showerror("无法启动", str(error))
         except Exception:
@@ -359,7 +413,7 @@ def main():
                 state["failed"] = True
                 if stopped:
                     hint = "语音代码 3 表示共享路径或配置检查失败。" if ("voice", 3) in exited else ""
-                    status.set(f"服务已退出：{details}。已停止其他受管服务。{hint}请按指南核对环境、配置和端口。")
+                    set_status(f"服务已退出：{details}。已停止其他受管服务。{hint}请按指南核对环境、配置和端口。", "error")
             elif manager.ready():
                 if not state["opened"]:
                     state["opened"] = True
@@ -369,12 +423,12 @@ def main():
                               else "；VoxCPM2 正在加载，圆屏语音尚未就绪")
                 else:
                     suffix = "；语音进程运行中，设备连接请在网页查看" if manager.options.voice else ""
-                status.set("控制台已就绪" + suffix + "。学校模型未探测。保留此面板，关闭网页不会停止服务。")
+                set_status("控制台已就绪" + suffix + "。学校模型未探测。保留此面板，关闭网页不会停止服务。", "good")
             elif time.monotonic() - state["started"] > 90:
                 stopped = stop(False)
                 state["failed"] = True
                 if stopped:
-                    status.set("90 秒内未确认控制台就绪，已停止受管服务；未停止其他程序。请查看指南。")
+                    set_status("90 秒内未确认控制台就绪，已停止受管服务；未停止其他程序。请查看指南。", "error")
         window.after(1000, tick)
 
     def close():
@@ -382,11 +436,11 @@ def main():
             lock.close()
             window.destroy()
 
-    start_button = ttk.Button(buttons, text="启动日常服务", command=start, style="Primary.TButton")
+    start_button = ttk.Button(buttons, text="启动并打开控制台", command=start, style="Primary.TButton")
     start_button.pack(side="left", padx=(0, 8))
-    ttk.Button(buttons, text="打开控制台", command=open_page).pack(side="left", padx=8)
-    ttk.Button(buttons, text="停止服务", command=lambda: stop(False)).pack(side="left", padx=8)
-    ttk.Button(buttons, text="使用指南", command=lambda: os.startfile(ROOT / "docs/guides/统一启动.md")).pack(side="left", padx=8)
+    ttk.Button(buttons, text="重新打开网页", command=open_page, style="Secondary.TButton").pack(side="left", padx=8)
+    ttk.Button(buttons, text="停止服务", command=lambda: stop(False), style="Secondary.TButton").pack(side="left", padx=8)
+    ttk.Button(buttons, text="使用指南", command=lambda: os.startfile(ROOT / "docs/guides/统一启动.md"), style="Secondary.TButton").pack(side="right", padx=(8, 0))
     window.protocol("WM_DELETE_WINDOW", close)
     window.after(500, tick)
     try:
