@@ -80,4 +80,3 @@ listening → no_speech → listening 或 idle
 3. 建立服务事件到中立状态协议的适配器。
 4. 用占位几何图形完成设备端最小状态 UI，并实机验收打断与故障恢复。
 5. 最后加入可替换角色资源包；角色素材不进入 Memory Core。
-
