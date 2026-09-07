@@ -141,7 +141,9 @@ def test_v20_upgrade_adds_empty_feedback_table(tmp_path):
 def test_topic_rejection_still_works_when_l1_writes_are_paused(tmp_path):
     database = tmp_path / "paused-l1.db"
     _prepare_recent_topic(database)
-    runtime = build_memory_runtime(database)
+    runtime = build_memory_runtime(
+        database, clock=lambda: NOW + timedelta(minutes=3),
+    )
     runtime.configure(write_enabled=False, use_enabled=True)
 
     result = runtime.prepare_user("不要再主动聊这个话题")

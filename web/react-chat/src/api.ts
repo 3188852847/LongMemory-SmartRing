@@ -87,3 +87,17 @@ export interface ProactiveTopicSeed {
   revision:number; usable:boolean;
   source:{layer:'l2'; title:string; summary:string; status:string};
 }
+export interface CompanionStrategyCandidate {
+  id:string; subject_id:string; status:'candidate'|'dismissed';
+  suggested_minute:number; utc_offset_minutes:number;
+  evidence_count:number; distinct_local_dates:number;
+  rationale_code:'repeated_temporal_followup_near_contact_time';
+  generator_version:string; created_at:string; updated_at:string;
+  revision:number; active:false;
+  sources:Array<{
+    interaction_event_id:string; outreach_id:string; queued_at:string;
+    observed_at:string; latency_seconds:number;
+    local_date:string; local_minute:number;
+    delivery_evidence_level:'server_queued'|'transport_sent'|'device_acknowledged'|'played';
+  }>;
+}

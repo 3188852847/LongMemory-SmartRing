@@ -273,4 +273,59 @@ describe('主动交流设置', () => {
     });
     view.unmount(); client.clear();
   });
+
+  test('策略分析只创建未生效候选并展示逐条时间来源', async () => {
+    const policy = {
+      subject_id:'user:self', enabled:true, utc_offset_minutes:480,
+      allowed_weekdays:[0,1,2,3,4,5,6], allowed_start_minute:540, allowed_end_minute:1260,
+      daily_limit:1, minimum_interval_seconds:21600, maximum_lifetime_seconds:300,
+      quiet_until:null, policy_version:'proactive-contact-policy-v2', revision:3, updated_at:null,
+      automatic_enabled:true, scheduled_minute:780, greeting_text:'下午好。', topic_enabled:false,
+    };
+    const candidate = {
+      id:'a'.repeat(32), subject_id:'user:self', status:'candidate' as const,
+      suggested_minute:782, utc_offset_minutes:480, evidence_count:3,
+      distinct_local_dates:3,
+      rationale_code:'repeated_temporal_followup_near_contact_time' as const,
+      generator_version:'contact-time-candidate-v1',
+      created_at:'2026-09-07T05:00:00Z', updated_at:'2026-09-07T05:00:00Z',
+      revision:1, active:false as const,
+      sources:[0,1,2].map(day => ({
+        interaction_event_id:`event-${day}`, outreach_id:`outreach-${day}`,
+        queued_at:`2026-09-0${day + 1}T05:02:00Z`,
+        observed_at:`2026-09-0${day + 1}T05:04:00Z`, latency_seconds:120,
+        local_date:`2026-09-0${day + 1}`, local_minute:782,
+        delivery_evidence_level:'server_queued' as const,
+      })),
+    };
+    let created = false;
+    const request = vi.spyOn(ChatApi.prototype, 'request').mockImplementation(async (path, method) => {
+      if (path === '/api/proactive-policy') return policy;
+      if (path === '/api/proactive-schedule-status') return scheduleStatus;
+      if (path.startsWith('/api/proactive-outreach?')) return {items:[]};
+      if (path.startsWith('/api/scenarios?')) return {items:[]};
+      if (path === '/api/proactive-topic-seeds') return {items:[]};
+      if (path === '/api/companion-strategy-candidates') return {items:created ? [candidate] : []};
+      if (path === '/api/companion-strategy-candidates/analyze' && method === 'POST') {
+        created = true;
+        return {outcome:'candidate_created', eligible_observation_count:3,
+          distinct_local_dates:3, candidate};
+      }
+      throw new Error(`unexpected path: ${path}`);
+    });
+    const client = createConsoleQueryClient();
+    const view = render(<QueryClientProvider client={client}><ProactiveSettings api={new ChatApi()} ready={true}/></QueryClientProvider>);
+
+    fireEvent.click(await screen.findByRole('button', {name:'分析现有互动记录'}));
+
+    expect(await screen.findByText(/已形成一条待观察候选/)).toBeTruthy();
+    expect(await screen.findByText('建议试验 13:02')).toBeTruthy();
+    expect(screen.getByText(/不能证明你喜欢该时段/)).toBeTruthy();
+    expect(screen.getAllByText(/2 分钟后出现用户消息/)).toHaveLength(3);
+    expect(request).toHaveBeenCalledWith(
+      '/api/companion-strategy-candidates/analyze', 'POST', {},
+    );
+    expect(request.mock.calls.some(([path]) => path === '/api/proactive-policy' && request.mock.calls.some(call => call[1] === 'PUT'))).toBe(false);
+    view.unmount(); client.clear();
+  });
 });

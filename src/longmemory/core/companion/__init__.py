@@ -4,9 +4,16 @@
 用户事实，也不是对用户情绪或意图的推断。
 """
 
-from .contracts import CompanionFeedbackStore, InteractionOutcomeObserver
+from .contracts import (
+    CompanionFeedbackStore,
+    CompanionStrategyCandidateStore,
+    InteractionOutcomeObserver,
+)
 from .models import (
     CompanionFeedbackEvent,
+    CompanionStrategyCandidate,
+    CompanionStrategyCandidateStatus,
+    CompanionStrategyObservation,
     InteractionOutcomeEvent,
     InteractionOutcomeEvidence,
     InteractionOutcomeKind,
@@ -16,6 +23,10 @@ from .models import (
 __all__ = [
     "CompanionFeedbackEvent",
     "CompanionFeedbackStore",
+    "CompanionStrategyCandidate",
+    "CompanionStrategyCandidateStatus",
+    "CompanionStrategyCandidateStore",
+    "CompanionStrategyObservation",
     "InteractionOutcomeEvent",
     "InteractionOutcomeEvidence",
     "InteractionOutcomeKind",

@@ -35,7 +35,7 @@ def _legacy_method(database_path: Path, method_name: str) -> LongMemoryV1:
     return method
 
 
-def build_memory_runtime(database_path: Path) -> MemoryRuntime:
+def build_memory_runtime(database_path: Path, *, clock=None) -> MemoryRuntime:
     """装配日常入口的默认记忆运行时，但不创建或迁移数据库。
 
     ``existing_only`` 保留此前网页入口的安全边界；跨网页/圆屏线程使用
@@ -49,7 +49,8 @@ def build_memory_runtime(database_path: Path) -> MemoryRuntime:
     )
     return MemoryRuntime(database_path, method=method,
                          scenario_provider=SQLiteScenarioRecallProvider(database_path),
-                         memory_command_handler=SQLiteNaturalMemoryCommandHandler(database_path))
+                         memory_command_handler=SQLiteNaturalMemoryCommandHandler(database_path),
+                         clock=clock)
 
 
 @contextmanager

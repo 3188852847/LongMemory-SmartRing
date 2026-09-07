@@ -125,6 +125,45 @@ def test_console_serves_only_local_assets_and_protected_device_actions():
     asyncio.run(run())
 
 
+def test_companion_strategy_analysis_is_csrf_protected_and_never_activates(tmp_path):
+    from longmemory.methods.longmemory_v1.method import LongMemoryV1
+
+    database = tmp_path / "companion-strategy-http.db"
+    LongMemoryV1(database).close()
+
+    async def run():
+        async with console(database) as (client, base, _bridge):
+            headers = await login(client, base)
+            rejected = await client.post(
+                base + "/api/companion-strategy-candidates/analyze", json={},
+            )
+            assert rejected.status == 403
+            invalid = await client.post(
+                base + "/api/companion-strategy-candidates/analyze",
+                headers=headers, json={"activate": True},
+            )
+            assert invalid.status == 400
+            analyzed = await client.post(
+                base + "/api/companion-strategy-candidates/analyze",
+                headers=headers, json={},
+            )
+            result = await analyzed.json()
+            assert analyzed.status == 200
+            assert result == {
+                "outcome": "insufficient_cross_date_evidence",
+                "eligible_observation_count": 0,
+                "distinct_local_dates": 0,
+                "candidate": None,
+            }
+            listed = await client.get(
+                base + "/api/companion-strategy-candidates",
+            )
+            assert listed.status == 200
+            assert await listed.json() == {"items": []}
+
+    asyncio.run(run())
+
+
 def test_console_exposes_read_only_consolidation_status(tmp_path):
     from longmemory.bootstrap import build_application
 

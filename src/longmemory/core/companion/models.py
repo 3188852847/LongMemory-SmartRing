@@ -17,6 +17,72 @@ class InteractionOutcomeEvidence(StrEnum):
     TEMPORAL_ORDER = "temporal_order"
 
 
+class CompanionStrategyCandidateStatus(StrEnum):
+    """策略候选当前只允许等待观察或被所有者忽略。"""
+
+    CANDIDATE = "candidate"
+    DISMISSED = "dismissed"
+
+
+@dataclass(frozen=True, slots=True)
+class CompanionStrategyObservation:
+    """生成候选所需的最小时间证据；不携带对话正文。"""
+
+    interaction_event_id: str
+    outreach_id: str
+    queued_at: datetime
+    observed_at: datetime
+    latency_seconds: int
+    delivery_evidence_level: str
+
+    def __post_init__(self) -> None:
+        if not self.interaction_event_id.strip() or not self.outreach_id.strip():
+            raise ValueError("companion_strategy_observation_identity_invalid")
+        if self.queued_at.tzinfo is None or self.observed_at.tzinfo is None:
+            raise ValueError("companion_strategy_observation_time_invalid")
+        if not 0 <= self.latency_seconds <= 1800:
+            raise ValueError("companion_strategy_observation_latency_invalid")
+        if self.delivery_evidence_level not in {
+            "server_queued", "transport_sent", "device_acknowledged", "played",
+        }:
+            raise ValueError("companion_strategy_observation_evidence_invalid")
+
+
+@dataclass(frozen=True, slots=True)
+class CompanionStrategyCandidate:
+    """尚未生效的陪伴策略假设，不等同于用户画像或偏好。"""
+
+    id: str
+    subject_id: str
+    status: CompanionStrategyCandidateStatus
+    suggested_minute: int
+    utc_offset_minutes: int
+    evidence_count: int
+    distinct_local_dates: int
+    evidence_fingerprint: str
+    rationale_code: str
+    generator_version: str
+    created_at: datetime
+    updated_at: datetime
+    revision: int = 1
+
+    def __post_init__(self) -> None:
+        if not self.id.strip() or not self.subject_id.strip():
+            raise ValueError("companion_strategy_candidate_identity_invalid")
+        if not 0 <= self.suggested_minute <= 1439:
+            raise ValueError("companion_strategy_candidate_minute_invalid")
+        if not -720 <= self.utc_offset_minutes <= 840:
+            raise ValueError("companion_strategy_candidate_offset_invalid")
+        if self.evidence_count < 3 or self.distinct_local_dates < 3:
+            raise ValueError("companion_strategy_candidate_evidence_insufficient")
+        if self.created_at.tzinfo is None or self.updated_at.tzinfo is None:
+            raise ValueError("companion_strategy_candidate_time_invalid")
+        if self.revision < 1 or any(not value.strip() for value in (
+            self.evidence_fingerprint, self.rationale_code, self.generator_version,
+        )):
+            raise ValueError("companion_strategy_candidate_metadata_invalid")
+
+
 @dataclass(frozen=True, slots=True)
 class InteractionOutcomeEvent:
     id: str

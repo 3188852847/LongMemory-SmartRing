@@ -48,7 +48,8 @@ class MemoryRuntime:
 
     def __init__(self, database: Path, *, method: MemoryMethod, scenario_provider=None,
                  persona_provider=None, memory_command_handler=None,
-                 consolidation_scheduler: LowFrequencyConsolidationScheduler | None = None) -> None:
+                 consolidation_scheduler: LowFrequencyConsolidationScheduler | None = None,
+                 clock=None) -> None:
         self.database = database.resolve()
         # Runtime 只编排统一方法契约。具体使用规则、LLM 提取还是其他方法，
         # 必须由进程入口的装配层决定，不能在应用层偷偷选择实现。
@@ -64,9 +65,10 @@ class MemoryRuntime:
         self._persona_use_enabled = False
         self._memory_command_handler = memory_command_handler
         self._consolidation_scheduler = consolidation_scheduler
+        self._clock = clock or (lambda: datetime.now(UTC))
 
     def prepare_user(self, text: str) -> PreparedMemoryTurn:
-        event = MemoryEvent(str(uuid4()), "user", text, datetime.now(UTC))
+        event = MemoryEvent(str(uuid4()), "user", text, self._clock())
         with self._lock:
             self._ensure_open()
             command = None
@@ -146,7 +148,7 @@ class MemoryRuntime:
         )
 
     def record_assistant(self, text: str) -> ObservationResult:
-        event = MemoryEvent(str(uuid4()), "assistant", text, datetime.now(UTC))
+        event = MemoryEvent(str(uuid4()), "assistant", text, self._clock())
         with self._lock:
             self._ensure_open()
             return self._method.observe(event)

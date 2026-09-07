@@ -6,6 +6,7 @@ from aiohttp import web
 from pydantic import ValidationError
 
 from ..contracts import (
+    CompanionStrategyDismissRequest,
     ProactivePlaybackConfirmationRequest,
     ProactivePolicyRequest,
     ProactiveScheduleOverrideArmRequest,
@@ -191,4 +192,60 @@ def register_proactive_policy_routes(app, backend, client, operation_lock):
     app.router.add_post(
         r"/api/proactive-outreach/{outreach_id:[0-9a-f]{32}}/confirm-played",
         confirm_played,
+    )
+
+    async def strategy_candidates(request):
+        try:
+            if request.method == "GET":
+                result = await asyncio.to_thread(
+                    backend.list_companion_strategy_candidates,
+                )
+            else:
+                # 生成过程不调用模型、不修改策略，所以无需伪造第二次确认框；
+                # CSRF 保护和一次明确点击已经表达本次意图。
+                if request.content_type != "application/json":
+                    raise web.HTTPBadRequest()
+                try:
+                    body = await request.json()
+                except (ValueError, UnicodeError):
+                    raise web.HTTPBadRequest() from None
+                if body != {}:
+                    raise web.HTTPBadRequest()
+                result = await asyncio.to_thread(
+                    backend.generate_companion_strategy_candidate,
+                )
+            return web.json_response(result)
+        except MemoryAccessError as error:
+            return web.json_response({"error": error.code}, status=error.status)
+
+    app.router.add_get(
+        "/api/companion-strategy-candidates", strategy_candidates,
+        allow_head=False,
+    )
+    app.router.add_post(
+        "/api/companion-strategy-candidates/analyze", strategy_candidates,
+    )
+
+    async def dismiss_strategy_candidate(request):
+        if request.content_type != "application/json":
+            raise web.HTTPBadRequest()
+        try:
+            body = CompanionStrategyDismissRequest.model_validate(
+                await request.json()
+            )
+        except (ValidationError, ValueError, UnicodeError):
+            raise web.HTTPBadRequest() from None
+        try:
+            result = await asyncio.to_thread(
+                backend.dismiss_companion_strategy_candidate,
+                request.match_info["candidate_id"],
+                expected_revision=body.expected_revision,
+            )
+            return web.json_response(result)
+        except MemoryAccessError as error:
+            return web.json_response({"error": error.code}, status=error.status)
+
+    app.router.add_post(
+        r"/api/companion-strategy-candidates/{candidate_id:[0-9a-f]{32}}/dismiss",
+        dismiss_strategy_candidate,
     )

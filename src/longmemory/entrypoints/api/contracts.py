@@ -171,3 +171,11 @@ class ProactiveTopicDisableRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
 
     expected_revision: int = Field(ge=1)
+
+
+class CompanionStrategyDismissRequest(BaseModel):
+    """忽略一个尚未生效的策略候选；不会修改当前主动联系设置。"""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    expected_revision: int = Field(ge=1)

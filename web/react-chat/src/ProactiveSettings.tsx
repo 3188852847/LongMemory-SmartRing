@@ -1,7 +1,7 @@
 import {useEffect, useMemo, useState} from 'react';
 import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {Alert, Button, Card, Checkbox, Input, InputNumber, Select, Space, Switch, Tag} from 'antd';
-import {ApiError, ChatApi, type ProactiveOutreachSummary, type ProactivePolicy, type ProactiveScheduleStatus, type ProactiveTestResult, type ProactiveTopicSeed} from './api';
+import {ApiError, ChatApi, type CompanionStrategyCandidate, type ProactiveOutreachSummary, type ProactivePolicy, type ProactiveScheduleStatus, type ProactiveTestResult, type ProactiveTopicSeed} from './api';
 
 const DAYS = ['周一','周二','周三','周四','周五','周六','周日'].map((label, value) => ({label, value}));
 const minuteText = (value:number) => `${String(Math.floor(value / 60)).padStart(2,'0')}:${String(value % 60).padStart(2,'0')}`;
@@ -27,6 +27,7 @@ export function ProactiveSettings({api, ready}:{api:ChatApi; ready:boolean}) {
   const history = useQuery({queryKey:['proactive-outreach'], queryFn:() => api.request<{items:ProactiveOutreachSummary[]}>('/api/proactive-outreach?limit=10'), enabled:ready});
   const scenarios = useQuery({queryKey:['proactive-topic-scenarios'], queryFn:() => api.request<{items:Array<{id:string;title:string;summary:string;revision:number}>}>('/api/scenarios?state=active&offset=0&limit=100'), enabled:ready});
   const topicSeeds = useQuery({queryKey:['proactive-topic-seeds'], queryFn:() => api.request<{items:ProactiveTopicSeed[]}>('/api/proactive-topic-seeds'), enabled:ready});
+  const strategyCandidates = useQuery({queryKey:['companion-strategy-candidates'], queryFn:() => api.request<{items:CompanionStrategyCandidate[]}>('/api/companion-strategy-candidates'), enabled:ready});
   const [draft, setDraft] = useState<ProactivePolicy>();
   const [notice, setNotice] = useState('');
   const [testText, setTestText] = useState('今天也要照顾好自己呀。');
@@ -34,6 +35,7 @@ export function ProactiveSettings({api, ready}:{api:ChatApi; ready:boolean}) {
   const [topicScenarioId, setTopicScenarioId] = useState<string>();
   const [topicText, setTopicText] = useState('');
   const [topicNotice, setTopicNotice] = useState('');
+  const [strategyNotice, setStrategyNotice] = useState('');
   useEffect(() => {if (query.data) setDraft({...query.data, allowed_weekdays:[...query.data.allowed_weekdays]});}, [query.data]);
   const dirty = useMemo(() => Boolean(draft && query.data && JSON.stringify(draft) !== JSON.stringify(query.data)), [draft, query.data]);
   const mutation = useMutation({
@@ -149,6 +151,39 @@ export function ProactiveSettings({api, ready}:{api:ChatApi; ready:boolean}) {
       void client.invalidateQueries({queryKey:['proactive-topic-seeds']});
     },
   });
+  const analyzeStrategy = useMutation({
+    mutationFn:() => api.request<{
+      outcome:string; eligible_observation_count:number; distinct_local_dates:number;
+      candidate:CompanionStrategyCandidate | null;
+    }>('/api/companion-strategy-candidates/analyze', 'POST', {}),
+    onSuccess:value => {
+      if (value.outcome === 'candidate_created') {
+        setStrategyNotice('已形成一条待观察候选；它尚未修改定时问候，也不是用户画像。');
+      } else if (value.outcome === 'current_candidate_exists') {
+        setStrategyNotice('已有一条待观察候选，本次没有重复创建。');
+      } else if (value.outcome === 'evidence_already_analyzed') {
+        setStrategyNotice('这些来源已经分析过，本次没有重新创建。');
+      } else {
+        setStrategyNotice(`跨日证据不足：当前有 ${value.eligible_observation_count} 条合格观察，最佳时段覆盖 ${value.distinct_local_dates}/3 个不同日期。`);
+      }
+      void client.invalidateQueries({queryKey:['companion-strategy-candidates']});
+    },
+    onError:() => setStrategyNotice('分析没有完成；不会自动重试，也没有修改主动联系设置。'),
+  });
+  const dismissStrategy = useMutation({
+    mutationFn:(candidate:CompanionStrategyCandidate) => api.request<CompanionStrategyCandidate>(
+      `/api/companion-strategy-candidates/${candidate.id}/dismiss`, 'POST',
+      {expected_revision:candidate.revision},
+    ),
+    onSuccess:() => {
+      setStrategyNotice('候选已忽略并保留来源记录；主动联系设置没有变化。');
+      void client.invalidateQueries({queryKey:['companion-strategy-candidates']});
+    },
+    onError:() => {
+      setStrategyNotice('候选状态已经变化或操作失败；正在重新读取。');
+      void client.invalidateQueries({queryKey:['companion-strategy-candidates']});
+    },
+  });
   const change = (patch:Partial<ProactivePolicy>) => draft && setDraft({...draft, ...patch});
   if (query.isError) return <Alert type="error" showIcon title="主动交流设置不可用" description="请确认已选择当前版本的个人数据库。"/>;
   if (query.isLoading || !draft) return <Alert type="info" showIcon title="正在读取主动交流设置…"/>;
@@ -243,6 +278,29 @@ export function ProactiveSettings({api, ready}:{api:ChatApi; ready:boolean}) {
         aria-label="优先使用记忆话题" disabled={!draft.enabled || !draft.automatic_enabled}
         checked={draft.topic_enabled} onChange={topic_enabled => change({topic_enabled})}/></div>
       <p className="subtle">此开关默认关闭。开启并保存后，定时点会从可用素材中优先选择最久未使用的一条；没有可用素材时仍使用上方固定问候。</p>
+    </section>
+    <section className="settings-section">
+      <h3>联系时段观察候选</h3>
+      <Alert type="info" showIcon title="候选不会自动生效"
+        description="系统只检查时间关系：至少三个不同日期、同一半小时区间内，正式问候后 30 分钟内出现用户消息，才提出一个值得试验的时刻。它不能证明你喜欢该时段，也不会写入 L3 用户画像。"/>
+      <Button loading={analyzeStrategy.isPending} disabled={analyzeStrategy.isPending}
+        onClick={() => analyzeStrategy.mutate()}>分析现有互动记录</Button>
+      {strategyNotice && <p role="status">{strategyNotice}</p>}
+      {strategyCandidates.isError && <Alert type="error" showIcon title="策略候选读取失败"/>}
+      <div className="proactive-history">{strategyCandidates.data?.items?.map(candidate => <Card size="small" key={candidate.id}
+        title={<Space wrap><Tag color={candidate.status === 'candidate' ? 'gold' : 'default'}>{candidate.status === 'candidate' ? '待观察' : '已忽略'}</Tag><strong>建议试验 {minuteText(candidate.suggested_minute)}</strong><Tag>未生效</Tag></Space>}
+        extra={candidate.status === 'candidate' && <Button size="small" danger
+          loading={dismissStrategy.isPending && dismissStrategy.variables?.id === candidate.id}
+          disabled={dismissStrategy.isPending}
+          onClick={() => dismissStrategy.mutate(candidate)}>忽略候选</Button>}>
+        <p>来自 {candidate.distinct_local_dates} 个不同日期的 {candidate.evidence_count} 条时间观察。</p>
+        <p className="subtle">这只是“问候后出现了消息”的时间共现，不表示因果、满意或时间偏好。</p>
+        {candidate.sources.map(source => <p className="subtle" key={source.interaction_event_id}>
+          {source.local_date} {minuteText(source.local_minute)} · {Math.round(source.latency_seconds / 60)} 分钟后出现用户消息 · 投递证据 {source.delivery_evidence_level}
+        </p>)}
+        <small>生成器：{candidate.generator_version} · 候选 ID：{candidate.id}</small>
+      </Card>)}</div>
+      {strategyCandidates.isSuccess && (strategyCandidates.data?.items?.length ?? 0) === 0 && <p className="subtle">尚无联系时段候选。</p>}
     </section>
     <section className="settings-section">
       <h3>最近运行记录</h3>

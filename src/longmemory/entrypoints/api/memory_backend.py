@@ -23,6 +23,9 @@ from longmemory.adapters.storage.sqlite_interaction_outcome_store import (
 from longmemory.adapters.storage.sqlite_companion_feedback_store import (
     SQLiteCompanionFeedbackStore,
 )
+from longmemory.adapters.storage.sqlite_companion_strategy_store import (
+    SQLiteCompanionStrategyCandidateStore,
+)
 from longmemory.adapters.storage.sqlite_proactive_runtime_state import SQLiteProactiveHistoryReader
 from longmemory.adapters.storage.sqlite_proactive_topic_store import SQLiteProactiveTopicStore
 from longmemory.adapters.storage.sqlite_proactive_schedule_override_store import (
@@ -35,6 +38,9 @@ from longmemory.adapters.device_control import (
 from longmemory.application.proactive import (
     ProactiveOutreachDispatcher,
     ProactiveOutreachLedger,
+)
+from longmemory.application.companion_strategy import (
+    CompanionStrategyCandidateService,
 )
 from longmemory.core.proactive import (
     OutreachEvidence,
@@ -765,6 +771,79 @@ class MemoryBackend:
                     "explicit_feedback": feedback,
                 })
             return {"items": items}
+
+    @staticmethod
+    def _strategy_candidate_json(candidate, store):
+        local_zone = timezone(
+            timedelta(minutes=candidate.utc_offset_minutes)
+        )
+        sources = []
+        for source in store.list_sources(candidate.id):
+            local = datetime.fromisoformat(source["queued_at"]).astimezone(local_zone)
+            sources.append({
+                **source,
+                "local_date": local.date().isoformat(),
+                "local_minute": local.hour * 60 + local.minute,
+            })
+        return {
+            "id": candidate.id,
+            "subject_id": candidate.subject_id,
+            "status": candidate.status.value,
+            "suggested_minute": candidate.suggested_minute,
+            "utc_offset_minutes": candidate.utc_offset_minutes,
+            "evidence_count": candidate.evidence_count,
+            "distinct_local_dates": candidate.distinct_local_dates,
+            "rationale_code": candidate.rationale_code,
+            "generator_version": candidate.generator_version,
+            "created_at": candidate.created_at.isoformat(),
+            "updated_at": candidate.updated_at.isoformat(),
+            "revision": candidate.revision,
+            "active": False,
+            "sources": sources,
+        }
+
+    def list_companion_strategy_candidates(self):
+        with self._open() as connection:
+            store = SQLiteCompanionStrategyCandidateStore(connection)
+            return {"items": [
+                self._strategy_candidate_json(candidate, store)
+                for candidate in store.list("user:self")
+            ]}
+
+    def generate_companion_strategy_candidate(self):
+        """只生成未生效候选；不读取消息正文、不修改 P4 设置。"""
+
+        with self._open(write_capability="proactive") as connection:
+            policy = SQLiteProactivePolicyStore(connection).get("user:self")
+            store = SQLiteCompanionStrategyCandidateStore(connection)
+            result = CompanionStrategyCandidateService(
+                store, clock=self.clock,
+            ).generate(
+                "user:self",
+                utc_offset_minutes=policy.config.utc_offset_minutes,
+            )
+            return {
+                "outcome": result.outcome,
+                "eligible_observation_count": result.eligible_observation_count,
+                "distinct_local_dates": result.distinct_local_dates,
+                "candidate": (
+                    None if result.candidate is None
+                    else self._strategy_candidate_json(result.candidate, store)
+                ),
+            }
+
+    def dismiss_companion_strategy_candidate(
+        self, candidate_id, *, expected_revision,
+    ):
+        with self._open(write_capability="proactive") as connection:
+            store = SQLiteCompanionStrategyCandidateStore(connection)
+            candidate = store.dismiss(
+                candidate_id, subject_id="user:self",
+                expected_revision=expected_revision, now=self.clock(),
+            )
+            if candidate is None:
+                raise MemoryAccessError("companion_strategy_candidate_conflict", 409)
+            return self._strategy_candidate_json(candidate, store)
 
     def confirm_proactive_played(self, outreach_id, *, expected_revision):
         """把所有者亲耳观察追加为证据；不从设备状态反推播放成功。"""

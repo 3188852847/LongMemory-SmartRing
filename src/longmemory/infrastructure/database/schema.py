@@ -10,7 +10,7 @@ from longmemory.infrastructure.database.migrations import MIGRATIONS
 
 
 def initialize_schema(connection: Connection) -> None:
-    """创建 V21 结构，或把 V1–V20 数据非破坏性升级到 V21。"""
+    """创建 V22 结构，或把 V1–V21 数据非破坏性升级到 V22。"""
 
     current_version = connection.execute("PRAGMA user_version").fetchone()[0]
     if current_version > SCHEMA_VERSION:
