@@ -607,6 +607,68 @@ def test_proactive_topic_seed_http_is_traceable_preview_only_and_disableable(tmp
     asyncio.run(run())
 
 
+def test_one_shot_schedule_override_can_be_armed_read_and_cancelled(tmp_path):
+    from longmemory.methods.longmemory_v1.method import LongMemoryV1
+
+    database = tmp_path / "schedule-override-http.db"
+    LongMemoryV1(database).close()
+    now = datetime(2026, 9, 7, 4, 59, tzinfo=UTC)  # 北京时间周一 12:59。
+    policy = {
+        "expected_revision": 0, "enabled": True, "utc_offset_minutes": 480,
+        "allowed_weekdays": [0, 1, 2, 3, 4, 5, 6],
+        "allowed_start_minute": 540, "allowed_end_minute": 1260,
+        "daily_limit": 3, "minimum_interval_seconds": 0,
+        "maximum_lifetime_seconds": 300, "quiet_until": None,
+        "automatic_enabled": True, "scheduled_minute": 780,
+        "greeting_text": "下午好。", "topic_enabled": False,
+    }
+
+    async def run():
+        async with console(database, proactive_clock=lambda: now) as (client, base, _bridge):
+            headers = await login(client, base)
+            assert (await client.put(
+                base + "/api/proactive-policy", headers=headers, json=policy,
+            )).status == 200
+            body = {"expected_policy_revision": 1, "confirm_action": True}
+            assert (await client.post(
+                base + "/api/proactive-schedule-override/arm", json=body,
+            )).status == 403
+            assert (await client.post(
+                base + "/api/proactive-schedule-override/arm", headers=headers,
+                json={**body, "confirm_action": False},
+            )).status == 400
+            armed_response = await client.post(
+                base + "/api/proactive-schedule-override/arm", headers=headers,
+                json=body,
+            )
+            armed = await armed_response.json()
+            assert armed_response.status == 200
+            assert armed["status"] == "armed"
+            assert armed["local_date"] == "2026-09-07"
+            assert armed["scheduled_minute"] == 780
+            status = await (
+                await client.get(base + "/api/proactive-schedule-status")
+            ).json()
+            assert status["development_override"]["id"] == armed["id"]
+            duplicate = await client.post(
+                base + "/api/proactive-schedule-override/arm", headers=headers,
+                json=body,
+            )
+            assert duplicate.status == 409
+            cancelled = await client.post(
+                base + f"/api/proactive-schedule-override/{armed['id']}/cancel",
+                headers=headers, json={"expected_revision": 1},
+            )
+            assert cancelled.status == 200
+            assert (await cancelled.json())["status"] == "cancelled"
+            status = await (
+                await client.get(base + "/api/proactive-schedule-status")
+            ).json()
+            assert status["development_override"] is None
+
+    asyncio.run(run())
+
+
 @pytest.mark.parametrize("change", [
     {"enabled": 1},
     {"allowed_weekdays": [0, 0]},

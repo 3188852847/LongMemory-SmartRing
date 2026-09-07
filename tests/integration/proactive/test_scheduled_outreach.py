@@ -2,12 +2,25 @@
 
 import asyncio
 import sqlite3
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from longmemory.adapters.storage.sqlite_proactive_policy_store import (
     SQLiteProactivePolicyStore,
 )
-from longmemory.core.proactive import OutreachPolicyConfig, ProactivePolicySettings
+from longmemory.adapters.storage.sqlite_proactive_outreach_store import (
+    SQLiteProactiveOutreachStore,
+)
+from longmemory.adapters.storage.sqlite_proactive_schedule_override_store import (
+    SQLiteProactiveScheduleOverrideStore,
+)
+from longmemory.application.proactive import ProactiveOutreachLedger
+from longmemory.core.proactive import (
+    OutreachEvidence,
+    OutreachPolicyConfig,
+    OutreachState,
+    OutreachTrigger,
+    ProactivePolicySettings,
+)
 from longmemory.entrypoints.api.memory_backend import MemoryBackend
 from longmemory.infrastructure.database.connection import open_database
 from longmemory.infrastructure.database.schema import initialize_schema
@@ -37,13 +50,17 @@ class ReadyBridge:
         return {"state": "queued"}
 
 
-def prepare(path, *, user_chatted=False, topic_enabled=False):
+def prepare(path, *, user_chatted=False, topic_enabled=False, development_budget=False):
     connection = open_database(path)
     initialize_schema(connection)
     SQLiteProactivePolicyStore(connection).save(
         ProactivePolicySettings(
             "user:self",
-            OutreachPolicyConfig(enabled=True),
+            OutreachPolicyConfig(
+                enabled=True,
+                daily_limit=3 if development_budget else 1,
+                minimum_interval=(timedelta(0) if development_budget else timedelta(hours=6)),
+            ),
             revision=1,
             updated_at=NOW,
             automatic_enabled=True,
@@ -131,3 +148,106 @@ def test_enabled_memory_topic_is_dispatched_with_traceable_seed_revision(tmp_pat
             "SELECT trigger_reason_code,topic_seed_id,topic_seed_revision "
             "FROM proactive_outreach"
         ).fetchone() == ("approved_memory_topic", "b" * 32, 1)
+
+
+def test_one_shot_development_override_bypasses_chat_and_awaiting_once(tmp_path):
+    path = tmp_path / "development-schedule.db"
+    prepare(path, user_chatted=True, topic_enabled=True, development_budget=True)
+    add_topic_seed(path)
+    connection = open_database(path)
+    prior_time = NOW - timedelta(minutes=30)
+    ledger = ProactiveOutreachLedger(
+        SQLiteProactiveOutreachStore(connection), clock=lambda: prior_time,
+        id_factory=iter(("prior-outreach", "prior-created", "prior-queued")).__next__,
+    )
+    prior = ledger.create_candidate(
+        subject_id="user:self", trigger=OutreachTrigger.MANUAL_TEST,
+        trigger_reason_code="synthetic_prior", content="上一条合成问候。",
+        scheduled_for=prior_time, expires_at=prior_time + timedelta(minutes=5),
+        idempotency_key="synthetic-prior",
+    )
+    ledger.record_transition(
+        prior.id, expected_revision=1, new_state=OutreachState.QUEUED,
+        reason_code="ready", evidence=OutreachEvidence.SERVER_QUEUE,
+    )
+    SQLiteProactiveScheduleOverrideStore(connection).arm(
+        override_id="e" * 32, subject_id="user:self",
+        local_date="2026-09-07", scheduled_minute=780,
+        policy_revision=1,
+        now=NOW - timedelta(minutes=1),
+    )
+    connection.close()
+    bridge = ReadyBridge()
+
+    result = asyncio.run(MemoryBackend(path, clock=lambda: NOW).proactive_scheduled_tick(bridge))
+
+    assert result["state"] == "queued"
+    assert [item[0] for item in bridge.announcements] == ["毕业设计准备得怎么样了？"]
+    with sqlite3.connect(path) as connection:
+        assert connection.execute(
+            "SELECT status,consumption_reason FROM proactive_schedule_overrides"
+        ).fetchone() == ("consumed", "scheduled_attempt_started")
+        assert connection.execute(
+            "SELECT trigger_reason_code,topic_seed_id FROM proactive_outreach "
+            "WHERE id<>?", (prior.id,),
+        ).fetchone() == ("development_approved_memory_topic", "b" * 32)
+
+
+def test_missed_development_override_is_consumed_without_delivery(tmp_path):
+    path = tmp_path / "missed-development-schedule.db"
+    prepare(path, user_chatted=True)
+    connection = open_database(path)
+    SQLiteProactiveScheduleOverrideStore(connection).arm(
+        override_id="f" * 32, subject_id="user:self",
+        local_date="2026-09-07", scheduled_minute=780,
+        policy_revision=1,
+        now=NOW - timedelta(minutes=1),
+    )
+    connection.close()
+    bridge = ReadyBridge()
+
+    result = asyncio.run(
+        MemoryBackend(path, clock=lambda: NOW + timedelta(minutes=1))
+        .proactive_scheduled_tick(bridge)
+    )
+
+    assert result == {"action": "skip", "reason": "scheduled_minute_missed"}
+    assert bridge.announcements == []
+    with sqlite3.connect(path) as connection:
+        assert connection.execute(
+            "SELECT status,consumption_reason FROM proactive_schedule_overrides"
+        ).fetchone() == ("consumed", "scheduled_minute_missed")
+        assert connection.execute("SELECT count(*) FROM proactive_outreach").fetchone()[0] == 0
+
+
+def test_policy_change_invalidates_development_override_without_delivery(tmp_path):
+    path = tmp_path / "changed-development-schedule.db"
+    prepare(path, user_chatted=True)
+    connection = open_database(path)
+    SQLiteProactiveScheduleOverrideStore(connection).arm(
+        override_id="c" * 32, subject_id="user:self",
+        local_date="2026-09-07", scheduled_minute=780,
+        policy_revision=1,
+        now=NOW - timedelta(minutes=1),
+    )
+    connection.execute(
+        "UPDATE proactive_policy_settings SET revision=revision+1 "
+        "WHERE subject_id='user:self'"
+    )
+    connection.commit()
+    connection.close()
+    bridge = ReadyBridge()
+
+    result = asyncio.run(
+        MemoryBackend(path, clock=lambda: NOW).proactive_scheduled_tick(bridge)
+    )
+
+    assert result == {
+        "action": "skip", "reason": "configuration_changed_or_date_expired",
+    }
+    assert bridge.announcements == []
+    with sqlite3.connect(path) as connection:
+        assert connection.execute(
+            "SELECT status,consumption_reason FROM proactive_schedule_overrides"
+        ).fetchone() == ("consumed", "configuration_changed_or_date_expired")
+        assert connection.execute("SELECT count(*) FROM proactive_outreach").fetchone()[0] == 0

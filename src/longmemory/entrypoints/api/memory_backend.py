@@ -19,6 +19,9 @@ from longmemory.adapters.storage.sqlite_proactive_policy_store import SQLiteProa
 from longmemory.adapters.storage.sqlite_proactive_outreach_store import SQLiteProactiveOutreachStore
 from longmemory.adapters.storage.sqlite_proactive_runtime_state import SQLiteProactiveHistoryReader
 from longmemory.adapters.storage.sqlite_proactive_topic_store import SQLiteProactiveTopicStore
+from longmemory.adapters.storage.sqlite_proactive_schedule_override_store import (
+    SQLiteProactiveScheduleOverrideStore,
+)
 from longmemory.adapters.device_control import (
     XiaozhiProactiveDelivery,
     XiaozhiRuntimeStateProbe,
@@ -215,6 +218,8 @@ class MemoryBackend:
             already_evaluated_today = (
                 ledger.get_by_idempotency(subject_id, idempotency_key) is not None
             )
+            override_store = SQLiteProactiveScheduleOverrideStore(connection)
+            development_override = override_store.get_armed(subject_id)
             decision = decide_scheduled_trigger(
                 settings,
                 now=now,
@@ -232,7 +237,59 @@ class MemoryBackend:
                 "user_chatted_today": user_chatted_today,
                 "awaiting_user_response": runtime.awaiting_user_response,
                 "already_evaluated_today": already_evaluated_today,
+                "development_override": development_override,
+                "latest_development_override": override_store.get_latest(subject_id),
             }
+
+    def arm_proactive_schedule_override(self, request):
+        """仅授权今天当前设置中的未来时刻；不立即投递。"""
+
+        subject_id = "user:self"
+        now = self.clock()
+        with self._open(write_capability="proactive") as connection:
+            settings = SQLiteProactivePolicyStore(connection).get(subject_id)
+            if settings.revision != request.expected_policy_revision:
+                raise MemoryAccessError("proactive_settings_conflict", 409)
+            if not settings.config.enabled or not settings.automatic_enabled:
+                raise MemoryAccessError("proactive_schedule_override_requires_enabled", 400)
+            local_zone = timezone(
+                timedelta(minutes=settings.config.utc_offset_minutes)
+            )
+            local_now = now.astimezone(local_zone)
+            if local_now.weekday() not in settings.config.allowed_weekdays:
+                raise MemoryAccessError("proactive_schedule_override_weekday_blocked", 400)
+            current_minute = local_now.hour * 60 + local_now.minute
+            if current_minute >= settings.scheduled_minute:
+                raise MemoryAccessError("proactive_schedule_override_time_not_future", 400)
+            try:
+                row = SQLiteProactiveScheduleOverrideStore(connection).arm(
+                    override_id=secrets.token_hex(16),
+                    subject_id=subject_id,
+                    local_date=local_now.date().isoformat(),
+                    scheduled_minute=settings.scheduled_minute,
+                    policy_revision=settings.revision,
+                    now=now,
+                )
+            except ValueError:
+                raise MemoryAccessError("proactive_schedule_override_already_armed", 409) from None
+            return row
+
+    def cancel_proactive_schedule_override(
+        self, override_id, *, expected_revision,
+    ):
+        now = self.clock()
+        with self._open(write_capability="proactive") as connection:
+            try:
+                return SQLiteProactiveScheduleOverrideStore(connection).finish(
+                    override_id,
+                    subject_id="user:self",
+                    expected_revision=expected_revision,
+                    status="cancelled",
+                    reason="owner_cancelled",
+                    now=now,
+                )
+            except ValueError:
+                raise MemoryAccessError("proactive_schedule_override_conflict", 409) from None
 
     @staticmethod
     def _topic_seed_json(row, *, now):
@@ -447,27 +504,71 @@ class MemoryBackend:
 
         subject_id = "user:self"
         now = self.clock()
+        development_override = None
+        invalid_override = None
         with self._open() as connection:
             settings = SQLiteProactivePolicyStore(connection).get(subject_id)
             history = SQLiteProactiveHistoryReader(connection)
             offset = timezone(timedelta(minutes=settings.config.utc_offset_minutes))
-            local_day = now.astimezone(offset).date()
+            local_now = now.astimezone(offset)
+            local_day = local_now.date()
             idempotency_key = f"explicit-schedule:{local_day.isoformat()}"
             ledger = ProactiveOutreachLedger(
                 SQLiteProactiveOutreachStore(connection, commit_changes=False),
                 clock=lambda: now,
             )
+            development_override = SQLiteProactiveScheduleOverrideStore(
+                connection
+            ).get_armed(subject_id)
+            if development_override is not None:
+                invalid_reason = None
+                if (
+                    development_override["local_date"] != local_day.isoformat()
+                    or development_override["scheduled_minute"]
+                    != settings.scheduled_minute
+                    or development_override["policy_revision"] != settings.revision
+                ):
+                    invalid_reason = "configuration_changed_or_date_expired"
+                elif not settings.config.enabled or not settings.automatic_enabled:
+                    invalid_reason = "automatic_setting_disabled"
+                elif local_now.weekday() not in settings.config.allowed_weekdays:
+                    invalid_reason = "weekday_no_longer_allowed"
+                elif (
+                    local_now.hour * 60 + local_now.minute
+                    > development_override["scheduled_minute"]
+                ):
+                    invalid_reason = "scheduled_minute_missed"
+                if invalid_reason is not None:
+                    invalid_override = (
+                        development_override["id"],
+                        development_override["revision"],
+                        invalid_reason,
+                    )
             decision = decide_scheduled_trigger(
                 settings,
                 now=now,
-                user_chatted_today=history.user_chatted_on_local_date(
-                    now=now,
-                    utc_offset_minutes=settings.config.utc_offset_minutes,
-                ),
+                user_chatted_today=(False if development_override is not None else
+                    history.user_chatted_on_local_date(
+                        now=now,
+                        utc_offset_minutes=settings.config.utc_offset_minutes,
+                    )),
                 already_evaluated_today=(
+                    False if development_override is not None else
                     ledger.get_by_idempotency(subject_id, idempotency_key) is not None
                 ),
             )
+        if invalid_override is not None:
+            override_id, override_revision, invalid_reason = invalid_override
+            with self._open(write_capability="proactive") as write_connection:
+                SQLiteProactiveScheduleOverrideStore(write_connection).finish(
+                    override_id,
+                    subject_id=subject_id,
+                    expected_revision=override_revision,
+                    status="consumed",
+                    reason=invalid_reason,
+                    now=now,
+                )
+            return {"action": "skip", "reason": invalid_reason}
         if decision.action != ScheduledTriggerAction.CREATE:
             return {"action": decision.action.value, "reason": decision.reason.value}
 
@@ -480,19 +581,49 @@ class MemoryBackend:
             ledger = ProactiveOutreachLedger(
                 SQLiteProactiveOutreachStore(connection), clock=lambda: now,
             )
+            override_store = SQLiteProactiveScheduleOverrideStore(connection)
+            current_override = (
+                override_store.get_armed(subject_id)
+                if development_override is not None else None
+            )
+            if development_override is not None and (
+                current_override is None
+                or current_override["id"] != development_override["id"]
+            ):
+                return {"action": "skip", "reason": "development_override_unavailable"}
             decision = decide_scheduled_trigger(
                 settings,
                 now=now,
-                user_chatted_today=history.user_chatted_on_local_date(
-                    now=now,
-                    utc_offset_minutes=settings.config.utc_offset_minutes,
-                ),
+                user_chatted_today=(False if current_override is not None else
+                    history.user_chatted_on_local_date(
+                        now=now,
+                        utc_offset_minutes=settings.config.utc_offset_minutes,
+                    )),
                 already_evaluated_today=(
+                    False if current_override is not None else
                     ledger.get_by_idempotency(subject_id, decision.idempotency_key) is not None
                 ),
             )
             if decision.action != ScheduledTriggerAction.CREATE:
+                if current_override is not None:
+                    override_store.finish(
+                        current_override["id"],
+                        subject_id=subject_id,
+                        expected_revision=current_override["revision"],
+                        status="consumed",
+                        reason=f"second_check_{decision.reason.value}",
+                        now=now,
+                    )
                 return {"action": decision.action.value, "reason": decision.reason.value}
+            if current_override is not None:
+                override_store.finish(
+                    current_override["id"],
+                    subject_id=subject_id,
+                    expected_revision=current_override["revision"],
+                    status="consumed",
+                    reason="scheduled_attempt_started",
+                    now=now,
+                )
             topic_seed = (
                 SQLiteProactiveTopicStore(connection).choose_for_schedule(
                     subject_id, now=now,
@@ -503,7 +634,11 @@ class MemoryBackend:
                 subject_id=subject_id,
                 trigger=OutreachTrigger.EXPLICIT_SCHEDULE,
                 trigger_reason_code=(
-                    "approved_memory_topic" if topic_seed is not None
+                    "development_approved_memory_topic"
+                    if current_override is not None and topic_seed is not None
+                    else "development_fixed_schedule"
+                    if current_override is not None
+                    else "approved_memory_topic" if topic_seed is not None
                     else "explicit_daily_schedule"
                 ),
                 content=(
@@ -514,7 +649,10 @@ class MemoryBackend:
                 # 因而当前评估时刻就是本候选的实际计划时刻。
                 scheduled_for=now,
                 expires_at=decision.scheduled_for + settings.config.maximum_lifetime,
-                idempotency_key=decision.idempotency_key,
+                idempotency_key=(
+                    f"development-schedule:{current_override['id']}"
+                    if current_override is not None else decision.idempotency_key
+                ),
                 policy_version=settings.config.policy_version,
                 topic_seed_id=topic_seed["id"] if topic_seed is not None else None,
                 topic_seed_revision=(
@@ -533,7 +671,10 @@ class MemoryBackend:
             runtime = history.read(subject_id, now=now)
             runtime = OutreachPolicyState(
                 attempted_at=runtime.attempted_at,
-                awaiting_user_response=runtime.awaiting_user_response,
+                awaiting_user_response=(
+                    False if current_override is not None
+                    else runtime.awaiting_user_response
+                ),
                 user_session_active=device.user_session_active,
                 quiet_until=settings.quiet_until,
             )

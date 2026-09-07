@@ -57,6 +57,14 @@ export interface ProactiveScheduleStatus {
   action:'create'|'skip'|'wait'; reason:string; local_date:string;
   scheduled_for:string | null; user_chatted_today:boolean;
   awaiting_user_response:boolean; already_evaluated_today:boolean;
+  development_override: null | ProactiveScheduleOverride;
+  latest_development_override: null | ProactiveScheduleOverride;
+}
+export interface ProactiveScheduleOverride {
+    id:string; subject_id:string; local_date:string; scheduled_minute:number;
+    policy_revision:number;
+    status:'armed'|'consumed'|'cancelled'; created_at:string; updated_at:string;
+    consumption_reason:string | null; revision:number;
 }
 export interface ProactiveOutreachSummary {
   outreach_id:string; trigger:string; content:string; created_at:string; expires_at:string;

@@ -8,6 +8,8 @@ from pydantic import ValidationError
 from ..contracts import (
     ProactivePlaybackConfirmationRequest,
     ProactivePolicyRequest,
+    ProactiveScheduleOverrideArmRequest,
+    ProactiveScheduleOverrideCancelRequest,
     ProactiveTestRequest,
     ProactiveTopicDisableRequest,
     ProactiveTopicSeedRequest,
@@ -44,6 +46,50 @@ def register_proactive_policy_routes(app, backend, client, operation_lock):
 
     app.router.add_get(
         "/api/proactive-schedule-status", schedule_status, allow_head=False,
+    )
+
+    async def arm_schedule_override(request):
+        if request.content_type != "application/json":
+            raise web.HTTPBadRequest()
+        try:
+            body = ProactiveScheduleOverrideArmRequest.model_validate(
+                await request.json()
+            )
+        except (ValidationError, ValueError, UnicodeError):
+            raise web.HTTPBadRequest() from None
+        try:
+            result = await asyncio.to_thread(
+                backend.arm_proactive_schedule_override, body,
+            )
+            return web.json_response(result)
+        except MemoryAccessError as error:
+            return web.json_response({"error": error.code}, status=error.status)
+
+    async def cancel_schedule_override(request):
+        if request.content_type != "application/json":
+            raise web.HTTPBadRequest()
+        try:
+            body = ProactiveScheduleOverrideCancelRequest.model_validate(
+                await request.json()
+            )
+        except (ValidationError, ValueError, UnicodeError):
+            raise web.HTTPBadRequest() from None
+        try:
+            result = await asyncio.to_thread(
+                backend.cancel_proactive_schedule_override,
+                request.match_info["override_id"],
+                expected_revision=body.expected_revision,
+            )
+            return web.json_response(result)
+        except MemoryAccessError as error:
+            return web.json_response({"error": error.code}, status=error.status)
+
+    app.router.add_post(
+        "/api/proactive-schedule-override/arm", arm_schedule_override,
+    )
+    app.router.add_post(
+        r"/api/proactive-schedule-override/{override_id:[0-9a-f]{32}}/cancel",
+        cancel_schedule_override,
     )
 
     async def test_once(request):

@@ -6,6 +6,14 @@ import {ApiError, ChatApi, type ProactiveOutreachSummary, type ProactivePolicy, 
 const DAYS = ['周一','周二','周三','周四','周五','周六','周日'].map((label, value) => ({label, value}));
 const minuteText = (value:number) => `${String(Math.floor(value / 60)).padStart(2,'0')}:${String(value % 60).padStart(2,'0')}`;
 const parseMinute = (value:string) => {const [hour, minute] = value.split(':').map(Number); return hour * 60 + minute;};
+const overrideResultText = (reason:string | null) => ({
+  scheduled_attempt_started:'已到点并开始尝试',
+  scheduled_minute_missed:'已错过设定时刻',
+  configuration_changed_or_date_expired:'日期或设置已经变化',
+  automatic_setting_disabled:'后台定时已经关闭',
+  weekday_no_longer_allowed:'当天星期已不再允许',
+  owner_cancelled:'由你主动撤销',
+}[reason ?? ''] ?? reason ?? '未记录原因');
 
 /** 编辑明确许可边界；保存设置不会调用模型、创建候选或向设备投递。 */
 export function ProactiveSettings({api, ready}:{api:ChatApi; ready:boolean}) {
@@ -38,7 +46,7 @@ export function ProactiveSettings({api, ready}:{api:ChatApi; ready:boolean}) {
       automatic_enabled:value.automatic_enabled, scheduled_minute:value.scheduled_minute,
       greeting_text:value.greeting_text, topic_enabled:value.topic_enabled,
     }),
-    onSuccess:value => {client.setQueryData(['proactive-policy'], value); setDraft({...value, allowed_weekdays:[...value.allowed_weekdays]}); setNotice(value.automatic_enabled ? '设置已保存；后台只会在指定分钟检查一次。' : '设置已保存；后台定时问候保持关闭。');},
+    onSuccess:value => {client.setQueryData(['proactive-policy'], value); setDraft({...value, allowed_weekdays:[...value.allowed_weekdays]}); setNotice(value.automatic_enabled ? '设置已保存；后台只会在指定分钟检查一次。' : '设置已保存；后台定时问候保持关闭。'); void client.invalidateQueries({queryKey:['proactive-schedule-status']});},
     onError:error => {setNotice(error instanceof ApiError && error.code === 'proactive_settings_conflict' ? '设置已被另一个页面修改，请重新读取后再保存。' : '保存失败，未自动重试。'); void client.invalidateQueries({queryKey:['proactive-policy']});},
   });
   const testMutation = useMutation({
@@ -60,6 +68,36 @@ export function ProactiveSettings({api, ready}:{api:ChatApi; ready:boolean}) {
         ? '设置已在别处变化，请刷新设置后再测试。'
         : '测试请求失败且没有自动重试；请检查小智服务和圆屏连接。'
     ),
+  });
+  const armScheduleTest = useMutation({
+    mutationFn:() => api.request('/api/proactive-schedule-override/arm', 'POST', {
+      expected_policy_revision:draft!.revision, confirm_action:true,
+    }),
+    onSuccess:() => {
+      setNotice('已授权下一次开发定时验证；到点后无论成功、拦截或错过都会自动失效。');
+      void client.invalidateQueries({queryKey:['proactive-schedule-status']});
+    },
+    onError:error => setNotice(
+      error instanceof ApiError && error.code === 'proactive_schedule_override_time_not_future'
+        ? '授权失败：请先把定时问候设置为今天稍后的时间并保存。'
+        : error instanceof ApiError && error.code === 'proactive_schedule_override_already_armed'
+        ? '已经存在一次待执行授权；请先撤销或等待它被消费。'
+        : '一次性定时授权没有创建，请核对总开关、后台定时、星期和未保存设置。'
+    ),
+  });
+  const cancelScheduleTest = useMutation({
+    mutationFn:() => api.request(
+      `/api/proactive-schedule-override/${scheduleStatus.data!.development_override!.id}/cancel`,
+      'POST', {expected_revision:scheduleStatus.data!.development_override!.revision},
+    ),
+    onSuccess:() => {
+      setNotice('已撤销一次性开发定时授权。');
+      void client.invalidateQueries({queryKey:['proactive-schedule-status']});
+    },
+    onError:() => {
+      setNotice('撤销失败，授权可能已经被后台消费；正在重新读取状态。');
+      void client.invalidateQueries({queryKey:['proactive-schedule-status']});
+    },
   });
   const confirmMutation = useMutation({
     mutationFn:(item:ProactiveOutreachSummary) => api.request<ProactiveTestResult>(
@@ -129,6 +167,24 @@ export function ProactiveSettings({api, ready}:{api:ChatApi; ready:boolean}) {
       title="上一条主动问候之后还没有收到新的用户消息"
       description="自动定时会继续停止追问；真正说出并保存一条新消息后会解除。所有者手动验证不受这一项限制。"/>}
     {scheduleStatus.isError && <Alert type="error" showIcon title="暂时无法读取今天的定时状态"/>}
+    <section className="settings-section">
+      <h3>开发阶段：一次性定时验证</h3>
+      <p className="subtle">授权后，今天下一次设定时刻可临时绕过“今天聊过”和“上一条待回应”。它不会绕过总开关、星期/时段、勿扰、频率或设备忙碌，也不会自动延续到下一天。</p>
+      {scheduleStatus.data?.development_override ? <Alert type="warning" showIcon
+        title={`已授权 ${scheduleStatus.data.development_override.local_date} ${minuteText(scheduleStatus.data.development_override.scheduled_minute)}`}
+        description="到点后无论发送、拦截还是错过都会消费本次授权。"/> : <p className="subtle">当前没有待执行的一次性授权。</p>}
+      {!scheduleStatus.data?.development_override && scheduleStatus.data?.latest_development_override && <p className="subtle">
+        最近一次授权：{scheduleStatus.data.latest_development_override.status === 'cancelled' ? '已撤销' : '已消费'} · {overrideResultText(scheduleStatus.data.latest_development_override.consumption_reason)}
+      </p>}
+      <Space>
+        <Button type="primary" loading={armScheduleTest.isPending}
+          disabled={dirty || !draft.enabled || !draft.automatic_enabled || Boolean(scheduleStatus.data?.development_override) || armScheduleTest.isPending}
+          onClick={() => armScheduleTest.mutate()}>允许下一次定时验证</Button>
+        <Button danger loading={cancelScheduleTest.isPending}
+          disabled={!scheduleStatus.data?.development_override || cancelScheduleTest.isPending}
+          onClick={() => cancelScheduleTest.mutate()}>撤销一次性授权</Button>
+      </Space>
+    </section>
     <div className="setting-line"><span>允许主动联系</span><Switch aria-label="允许主动联系" checked={draft.enabled} onChange={enabled => change({enabled, ...(!enabled ? {automatic_enabled:false, topic_enabled:false} : {})})}/></div>
     <div className="setting-line"><span>后台定时问候</span><Switch aria-label="后台定时问候" disabled={!draft.enabled} checked={draft.automatic_enabled} onChange={automatic_enabled => change({automatic_enabled, ...(!automatic_enabled ? {topic_enabled:false} : {})})}/></div>
     <label>允许星期</label>

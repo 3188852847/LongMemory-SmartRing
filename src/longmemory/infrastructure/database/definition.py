@@ -1,6 +1,6 @@
-"""当前 SQLite V18 的完整结构定义；不包含历史迁移步骤。"""
+"""当前 SQLite V19 的完整结构定义；不包含历史迁移步骤。"""
 
-SCHEMA_VERSION = 18
+SCHEMA_VERSION = 19
 
 LATEST_SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS conversation_messages (
@@ -335,6 +335,29 @@ CREATE TABLE IF NOT EXISTS proactive_topic_seeds (
 );
 CREATE INDEX IF NOT EXISTS idx_proactive_topic_seeds_subject
     ON proactive_topic_seeds (subject_id, status, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS proactive_schedule_overrides (
+    id TEXT PRIMARY KEY,
+    subject_id TEXT NOT NULL CHECK (length(trim(subject_id)) BETWEEN 1 AND 120),
+    local_date TEXT NOT NULL CHECK (length(local_date) = 10),
+    scheduled_minute INTEGER NOT NULL CHECK (scheduled_minute BETWEEN 0 AND 1439),
+    policy_revision INTEGER NOT NULL CHECK (policy_revision >= 1),
+    status TEXT NOT NULL CHECK (status IN ('armed', 'consumed', 'cancelled')),
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    consumption_reason TEXT CHECK (
+        consumption_reason IS NULL OR length(trim(consumption_reason)) BETWEEN 1 AND 120
+    ),
+    revision INTEGER NOT NULL DEFAULT 1 CHECK (revision >= 1),
+    CHECK (
+        (status = 'armed' AND consumption_reason IS NULL)
+        OR (status <> 'armed' AND consumption_reason IS NOT NULL)
+    )
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_proactive_schedule_override_one_armed
+    ON proactive_schedule_overrides (subject_id) WHERE status='armed';
+CREATE INDEX IF NOT EXISTS idx_proactive_schedule_override_recent
+    ON proactive_schedule_overrides (subject_id, created_at DESC, id DESC);
 
 CREATE TRIGGER IF NOT EXISTS trg_scenario_stale_on_l1_retire
 AFTER UPDATE OF retired_at ON atomic_memories

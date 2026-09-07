@@ -12,6 +12,8 @@ describe('主动交流设置', () => {
     action:'wait', reason:'before_schedule', local_date:'2026-09-07',
     scheduled_for:null, user_chatted_today:false,
     awaiting_user_response:false, already_evaluated_today:false,
+    development_override:null,
+    latest_development_override:null,
   };
   test('默认关闭并明确保存不等于后台投递', async () => {
     const request = vi.spyOn(ChatApi.prototype, 'request').mockResolvedValue({
@@ -183,6 +185,50 @@ describe('主动交流设置', () => {
     const view = render(<QueryClientProvider client={client}><ProactiveSettings api={new ChatApi()} ready={true}/></QueryClientProvider>);
     expect(await screen.findByText('今天已经聊过，今天的定时问候会跳过')).toBeTruthy();
     expect(screen.getByText('上一条主动问候之后还没有收到新的用户消息')).toBeTruthy();
+    view.unmount(); client.clear();
+  });
+
+  test('显式创建一次性定时授权并显示目标时间', async () => {
+    const policy = {
+      subject_id:'user:self', enabled:true, utc_offset_minutes:480,
+      allowed_weekdays:[0,1,2,3,4,5,6], allowed_start_minute:540, allowed_end_minute:1260,
+      daily_limit:3, minimum_interval_seconds:0, maximum_lifetime_seconds:300,
+      quiet_until:null, policy_version:'proactive-contact-policy-v2', revision:4, updated_at:null,
+      automatic_enabled:true, scheduled_minute:790, greeting_text:'下午好。', topic_enabled:true,
+    };
+    let armed = false;
+    const request = vi.spyOn(ChatApi.prototype, 'request').mockImplementation(async (path, method) => {
+      if (path === '/api/proactive-policy') return policy;
+      if (path === '/api/proactive-schedule-status') return {
+        ...scheduleStatus,
+        development_override:armed ? {
+          id:'a'.repeat(32), subject_id:'user:self', local_date:'2026-09-07',
+          scheduled_minute:790, policy_revision:4, status:'armed', created_at:'2026-09-07T05:00:00Z',
+          updated_at:'2026-09-07T05:00:00Z', consumption_reason:null, revision:1,
+        } : null,
+        latest_development_override:armed ? {
+          id:'a'.repeat(32), subject_id:'user:self', local_date:'2026-09-07',
+          scheduled_minute:790, policy_revision:4, status:'armed',
+          created_at:'2026-09-07T05:00:00Z', updated_at:'2026-09-07T05:00:00Z',
+          consumption_reason:null, revision:1,
+        } : null,
+      };
+      if (path === '/api/proactive-schedule-override/arm' && method === 'POST') {
+        armed = true; return {status:'armed'};
+      }
+      if (path.startsWith('/api/proactive-outreach?')) return {items:[]};
+      if (path.startsWith('/api/scenarios?')) return {items:[]};
+      if (path === '/api/proactive-topic-seeds') return {items:[]};
+      throw new Error(`unexpected path: ${path}`);
+    });
+    const client = createConsoleQueryClient();
+    const view = render(<QueryClientProvider client={client}><ProactiveSettings api={new ChatApi()} ready={true}/></QueryClientProvider>);
+    fireEvent.click(await screen.findByRole('button', {name:'允许下一次定时验证'}));
+    expect(await screen.findByText(/已授权下一次开发定时验证/)).toBeTruthy();
+    await waitFor(() => expect(screen.getByText(/已授权 2026-09-07 13:10/)).toBeTruthy());
+    expect(request).toHaveBeenCalledWith('/api/proactive-schedule-override/arm', 'POST', {
+      expected_policy_revision:4, confirm_action:true,
+    });
     view.unmount(); client.clear();
   });
 });

@@ -108,6 +108,30 @@ class ProactiveTestRequest(BaseModel):
         return value
 
 
+class ProactiveScheduleOverrideArmRequest(BaseModel):
+    """显式授权当前设置对应的下一次开发定时验证。"""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    expected_policy_revision: int = Field(ge=1)
+    confirm_action: bool
+
+    @field_validator("confirm_action")
+    @classmethod
+    def confirmation_required(cls, value: bool) -> bool:
+        if value is not True:
+            raise ValueError("confirmation required")
+        return value
+
+
+class ProactiveScheduleOverrideCancelRequest(BaseModel):
+    """撤销尚未被后台消费的一次性授权。"""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    expected_revision: int = Field(ge=1)
+
+
 class ProactivePlaybackConfirmationRequest(BaseModel):
     """所有者确认实际听到，不允许页面用旧 revision 覆盖新状态。"""
 
