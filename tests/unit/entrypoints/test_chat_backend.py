@@ -77,6 +77,16 @@ def test_model_health_records_safe_failure_and_explicit_probe_does_not_write_mem
     assert "private upstream body" not in json.dumps(result)
 
 
+def test_model_info_exposes_endpoint_but_never_credentials(database):
+    backend = ChatBackend(database, FakeAnswerGenerator(), provider="openai_compatible",
+                          model="synthetic", model_endpoint="http://model.invalid/tenant/v1",
+                          insecure_model_transport=True)
+    info = backend.info()
+    assert info["model_endpoint"] == "http://model.invalid/tenant/v1"
+    assert info["insecure_model_transport"] is True
+    assert "api_key" not in json.dumps(info).lower()
+
+
 def test_missing_and_old_database_not_created_or_migrated(tmp_path):
     missing = tmp_path / "missing.db"
     result = ChatBackend(missing, FakeAnswerGenerator()).run("你好", ())

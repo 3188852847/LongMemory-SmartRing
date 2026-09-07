@@ -15,10 +15,13 @@ from .role_settings import RoleSettings
 
 class ChatBackend:
     def __init__(self, database: Path, generator, *, provider="fake", model="fake",
-                 role="plain_v1", runtime=None):
+                 role="plain_v1", runtime=None, model_endpoint=None, insecure_model_transport=False):
         self.database = database.resolve()
         self.generator = generator
         self.provider, self.model, self.role = provider, model, role
+        # 只保留不含凭据的端点；供本机设置页辨认当前启动配置，绝不返回 API Key。
+        self.model_endpoint = model_endpoint if provider != "fake" else None
+        self.insecure_model_transport = bool(insecure_model_transport and provider != "fake")
         self.roles = RoleSettings(self.database, role)
         # 延迟打开让错误仍在一次请求的固定错误边界内返回；生产服务器和
         # 内部语音接口随后复用同一个实例，不再每轮重新装配记忆引擎。
@@ -73,6 +76,8 @@ class ChatBackend:
                 "persona_available": runtime["persona_available"],
                 "memory_mode_persistent": runtime["settings_persistent"],
                 "model_health": self.model_health(),
+                "model_endpoint": self.model_endpoint,
+                "insecure_model_transport": self.insecure_model_transport,
                 "speaks_on_device": False}
 
     def run(self, text, history):

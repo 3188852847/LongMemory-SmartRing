@@ -364,7 +364,8 @@ def main():
                 )
             chat_backend = ChatBackend(args.database, generator, provider=settings.provider,
                                        model=settings.model or "fake", role=args.assistant_role,
-                                       runtime=runtime)
+                                       runtime=runtime, model_endpoint=settings.base_url or None,
+                                       insecure_model_transport=settings.base_url.startswith("http://"))
             if args.allow_scenario_management and settings.provider == "openai_compatible":
                 from longmemory.adapters.llm.scenario_candidate import OpenAICompatibleScenarioProposalProducer
                 scenario_producer = OpenAICompatibleScenarioProposalProducer(settings)

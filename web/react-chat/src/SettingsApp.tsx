@@ -7,10 +7,11 @@ import {VoiceSettings} from './VoiceSettings';
 import {ProactiveSettings} from './ProactiveSettings';
 import {useAppearance} from './AppearanceProvider';
 import {PageHeader} from './PageHeader';
+import {ModelConnectionSettings} from './ModelConnectionSettings';
 
 const api = new ChatApi();
 
-/** 将助手角色、声音和浏览器外观汇集到一个入口；三类设置仍保持不同生效边界。 */
+/** 将模型、助手角色、声音和浏览器外观汇集到一个入口；设置仍保持不同生效边界。 */
 export function SettingsApp() {
   const queryClient = useQueryClient();
   const {prefs, update, reset} = useAppearance();
@@ -23,6 +24,11 @@ export function SettingsApp() {
     <PageHeader eyebrow="控制与观察" title="设置中心" description="调整助手的表达、声音、页面外观和主动联系边界；这些设置不会修改你的事实记忆。"/>
     {(session.isError || config.isError) && <Alert type="error" showIcon title="设置服务当前不可用" description="请确认统一启动的文字服务仍在运行，再刷新本页。"/>}
     <Tabs className="settings-tabs" defaultActiveKey="role" items={[
+      {key:'model', label:'模型与服务', children:<Card title="模型与服务" extra={<span className="setting-scope">当前服务进程</span>}>
+        <p>核对本次启动实际使用的模型与地址，并执行不会读取个人数据的最小连接检测。页面永远不显示 API Key。</p>
+        <ModelConnectionSettings api={api} config={config.data} disabled={!enabled}
+          onHealth={health => queryClient.setQueryData<Config>(['chat-config'], current => current ? {...current, model_health:health} : current)}/>
+      </Card>},
       {key:'role', label:'助手角色', children:<Card title="助手角色" extra={<span className="setting-scope">网页＋可选圆屏同步</span>}>
         <p>编辑角色名称与系统提示词。网页从下一轮开始使用；圆屏必须在弹窗里单独预检和同步。</p>
         <RoleEditor api={api} disabled={!enabled} onSaved={() => {void queryClient.invalidateQueries({queryKey:['chat-config']});}}/>
