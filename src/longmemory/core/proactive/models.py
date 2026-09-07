@@ -5,7 +5,7 @@
 """
 
 from dataclasses import dataclass, replace
-from datetime import datetime
+from datetime import date, datetime
 from enum import StrEnum
 
 
@@ -100,6 +100,9 @@ class ProactiveOutreach:
     policy_version: str | None = None
     topic_seed_id: str | None = None
     topic_seed_revision: int | None = None
+    strategy_version_id: str | None = None
+    strategy_selection_revision: int | None = None
+    strategy_evaluated_local_date: str | None = None
     revision: int = 1
     failure_reason: str | None = None
 
@@ -128,6 +131,26 @@ class ProactiveOutreach:
             _bounded(self.topic_seed_id, "outreach_topic_seed_id", 120)
             if self.topic_seed_revision < 1:
                 raise ValueError("outreach_topic_seed_revision_invalid")
+        strategy_source = (
+            self.strategy_version_id,
+            self.strategy_selection_revision,
+            self.strategy_evaluated_local_date,
+        )
+        # 三个字段共同构成一次运行对策略来源的不可歧义绑定；禁止只写一半。
+        if any(value is not None for value in strategy_source):
+            if any(value is None for value in strategy_source):
+                raise ValueError("outreach_strategy_source_mismatch")
+            if self.trigger != OutreachTrigger.HABIT_CANDIDATE:
+                raise ValueError("outreach_strategy_source_trigger_invalid")
+            _bounded(self.strategy_version_id, "outreach_strategy_version_id", 120)
+            if self.strategy_selection_revision < 1:
+                raise ValueError("outreach_strategy_selection_revision_invalid")
+            try:
+                parsed_date = date.fromisoformat(self.strategy_evaluated_local_date)
+            except ValueError:
+                raise ValueError("outreach_strategy_local_date_invalid") from None
+            if parsed_date.isoformat() != self.strategy_evaluated_local_date:
+                raise ValueError("outreach_strategy_local_date_invalid")
         if (self.state == OutreachState.FAILED) != (self.failure_reason is not None):
             raise ValueError("outreach_failure_reason_mismatch")
         if self.failure_reason is not None:

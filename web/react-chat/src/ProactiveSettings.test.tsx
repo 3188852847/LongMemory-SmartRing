@@ -98,6 +98,7 @@ describe('主动交流设置', () => {
       outreach_id:'a'.repeat(32), trigger:'manual_test', content:'合成问候',
       created_at:'2026-09-07T04:00:00+00:00', expires_at:'2026-09-07T04:05:00+00:00',
       state:'queued', revision:2, reason:'ready', event_count:2, failure_reason:null,
+      topic_seed_id:null, topic_seed_revision:null, strategy_source:null,
     };
     const request = vi.spyOn(ChatApi.prototype, 'request').mockImplementation(async path => {
       if (path === '/api/proactive-policy') return policy;
@@ -134,10 +135,16 @@ describe('主动交流设置', () => {
       if (path === '/api/proactive-policy') return policy;
       if (path === '/api/proactive-schedule-status') return scheduleStatus;
       if (path.startsWith('/api/proactive-outreach?')) return {items:[{
-        outreach_id:'formal-1', trigger:'explicit_schedule', content:'下午好',
+        outreach_id:'formal-1', trigger:'habit_candidate', content:'下午好',
         created_at:'2026-09-07T04:00:00+00:00', expires_at:'2026-09-07T04:05:00+00:00',
         state:'played', revision:3, reason:'user_confirmed_playback', event_count:3,
         failure_reason:null, topic_seed_id:null, topic_seed_revision:null,
+        strategy_source:{
+          version_id:'absence-version', selection_revision:2,
+          evaluated_local_date:'2026-09-07', source_candidate_id:'routine-candidate',
+          source_candidate_revision:1, expected_minute:720, grace_minutes:60,
+          utc_offset_minutes:480, trigger_policy_version:'routine-absence-trigger-v1',
+        },
         outcome_observation_state:'subsequent_user_message_observed',
         delivery_evidence_level:'played',
         subsequent_user_message:{
@@ -159,6 +166,8 @@ describe('主动交流设置', () => {
 
     expect(await screen.findByText(/已观察（3 分钟后；仅表示时间先后）/)).toBeTruthy();
     expect(screen.getByText(/用户拒绝继续使用该话题/)).toBeTruthy();
+    expect(screen.getByText(/习惯策略来源：版本 absence-version/)).toBeTruthy();
+    expect(screen.getByText(/2026-09-07 在 13:00 检查/)).toBeTruthy();
 
     view.unmount(); client.clear();
   });

@@ -177,12 +177,27 @@ def test_active_absence_version_dispatches_once_through_existing_ledger(tmp_path
     assert [item[0] for item in bridge.announcements] == ["固定合成问候。"]
     with sqlite3.connect(path) as connection:
         assert connection.execute(
-            "SELECT trigger_kind,trigger_reason_code,state,policy_version "
+            "SELECT trigger_kind,trigger_reason_code,state,policy_version,"
+            "strategy_version_id,strategy_selection_revision,"
+            "strategy_evaluated_local_date "
             "FROM proactive_outreach"
         ).fetchone() == (
             "habit_candidate", "routine_absence_fixed_greeting", "queued",
             "proactive-contact-policy-v2+routine-absence-trigger-v1+selection-r1",
+            "absence-version", 1, "2026-09-07",
         )
+    history = backend.proactive_history(limit=1)["items"][0]
+    assert history["strategy_source"] == {
+        "version_id": "absence-version",
+        "selection_revision": 1,
+        "evaluated_local_date": "2026-09-07",
+        "source_candidate_id": "routine-candidate",
+        "source_candidate_revision": 1,
+        "expected_minute": 720,
+        "grace_minutes": 60,
+        "utc_offset_minutes": 480,
+        "trigger_policy_version": "routine-absence-trigger-v1",
+    }
 
 
 def test_explicit_schedule_wins_when_both_sources_share_the_same_minute(tmp_path):
@@ -201,8 +216,9 @@ def test_explicit_schedule_wins_when_both_sources_share_the_same_minute(tmp_path
     with sqlite3.connect(path) as connection:
         assert connection.execute("SELECT count(*) FROM proactive_outreach").fetchone()[0] == 1
         assert connection.execute(
-            "SELECT trigger_kind FROM proactive_outreach"
-        ).fetchone()[0] == "explicit_schedule"
+            "SELECT trigger_kind,strategy_version_id,strategy_selection_revision,"
+            "strategy_evaluated_local_date FROM proactive_outreach"
+        ).fetchone() == ("explicit_schedule", None, None, None)
 
 
 def test_absence_without_current_version_does_not_probe_or_create(tmp_path):

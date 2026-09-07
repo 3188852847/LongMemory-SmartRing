@@ -85,6 +85,9 @@ class ProactiveOutreachLedger:
         policy_version: str | None = None,
         topic_seed_id: str | None = None,
         topic_seed_revision: int | None = None,
+        strategy_version_id: str | None = None,
+        strategy_selection_revision: int | None = None,
+        strategy_evaluated_local_date: str | None = None,
     ) -> ProactiveOutreach:
         now = self._clock()
         outreach = ProactiveOutreach(
@@ -101,6 +104,9 @@ class ProactiveOutreachLedger:
             policy_version=policy_version,
             topic_seed_id=topic_seed_id,
             topic_seed_revision=topic_seed_revision,
+            strategy_version_id=strategy_version_id,
+            strategy_selection_revision=strategy_selection_revision,
+            strategy_evaluated_local_date=strategy_evaluated_local_date,
         )
         event = OutreachEvent(
             id=self._id_factory(),

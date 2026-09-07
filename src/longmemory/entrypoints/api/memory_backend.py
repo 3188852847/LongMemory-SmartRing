@@ -838,6 +838,9 @@ class MemoryBackend:
                 ),
                 topic_seed_id=topic_seed["id"] if topic_seed is not None else None,
                 topic_seed_revision=topic_seed["revision"] if topic_seed is not None else None,
+                strategy_version_id=version.id,
+                strategy_selection_revision=selection.revision,
+                strategy_evaluated_local_date=decision.local_date.isoformat(),
             )
             if not device.ready:
                 blocked = ledger.record_transition(
@@ -893,6 +896,7 @@ class MemoryBackend:
                 connection, commit_changes=False,
             )
             feedbacks = SQLiteCompanionFeedbackStore(connection)
+            absence_versions = SQLiteCompanionAbsenceStrategyVersionStore(connection)
             items = []
             for outreach in ledger.list_recent(subject_id, limit=limit):
                 events = ledger.list_events(outreach.id)
@@ -918,6 +922,29 @@ class MemoryBackend:
                     observation_state = "awaiting_subsequent_user_message"
                 else:
                     observation_state = "delivery_not_established"
+                strategy_version = (
+                    absence_versions.get_version(
+                        outreach.strategy_version_id, subject_id=subject_id,
+                    )
+                    if outreach.strategy_version_id is not None else None
+                )
+                strategy_source = None
+                if strategy_version is not None:
+                    strategy_source = {
+                        "version_id": strategy_version.id,
+                        "selection_revision": outreach.strategy_selection_revision,
+                        "evaluated_local_date": outreach.strategy_evaluated_local_date,
+                        "source_candidate_id": strategy_version.source_candidate_id,
+                        "source_candidate_revision": (
+                            strategy_version.source_candidate_revision
+                        ),
+                        "expected_minute": strategy_version.expected_minute,
+                        "grace_minutes": strategy_version.grace_minutes,
+                        "utc_offset_minutes": strategy_version.utc_offset_minutes,
+                        "trigger_policy_version": (
+                            strategy_version.trigger_policy_version
+                        ),
+                    }
                 items.append({
                     "outreach_id": outreach.id,
                     "trigger": outreach.trigger.value,
@@ -931,6 +958,7 @@ class MemoryBackend:
                     "failure_reason": outreach.failure_reason,
                     "topic_seed_id": outreach.topic_seed_id,
                     "topic_seed_revision": outreach.topic_seed_revision,
+                    "strategy_source": strategy_source,
                     "outcome_observation_state": observation_state,
                     "delivery_evidence_level": delivery_evidence,
                     "subsequent_user_message": None if outcome is None else {

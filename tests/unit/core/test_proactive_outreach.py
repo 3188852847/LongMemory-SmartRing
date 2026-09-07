@@ -103,3 +103,28 @@ def test_times_require_timezone_and_valid_window():
             created_at=NOW.replace(tzinfo=None), scheduled_for=NOW,
             expires_at=NOW + timedelta(minutes=1), idempotency_key="key",
         )
+
+
+def test_strategy_runtime_source_is_atomic_and_only_for_habit_trigger():
+    values = dict(
+        id="habit-1", subject_id="user:self",
+        trigger=OutreachTrigger.HABIT_CANDIDATE,
+        trigger_reason_code="routine_absence_fixed_greeting", content="下午好。",
+        created_at=NOW, scheduled_for=NOW,
+        expires_at=NOW + timedelta(minutes=5), idempotency_key="habit-key",
+    )
+    outreach = ProactiveOutreach(
+        **values, strategy_version_id="version-1",
+        strategy_selection_revision=2,
+        strategy_evaluated_local_date="2026-09-06",
+    )
+    assert outreach.strategy_version_id == "version-1"
+
+    with pytest.raises(ValueError, match="outreach_strategy_source_mismatch"):
+        ProactiveOutreach(**values, strategy_version_id="version-1")
+    with pytest.raises(ValueError, match="outreach_strategy_source_trigger_invalid"):
+        ProactiveOutreach(
+            **{**values, "trigger": OutreachTrigger.EXPLICIT_SCHEDULE},
+            strategy_version_id="version-1", strategy_selection_revision=2,
+            strategy_evaluated_local_date="2026-09-06",
+        )

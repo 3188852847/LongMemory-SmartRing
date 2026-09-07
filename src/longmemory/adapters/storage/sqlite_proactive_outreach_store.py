@@ -26,8 +26,10 @@ class SQLiteProactiveOutreachStore:
                 "INSERT INTO proactive_outreach "
                 "(id,subject_id,trigger_kind,trigger_reason_code,content,created_at,"
                 "scheduled_for,expires_at,state,state_changed_at,idempotency_key,"
-                "policy_version,topic_seed_id,topic_seed_revision,revision,failure_reason) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                "policy_version,topic_seed_id,topic_seed_revision,"
+                "strategy_version_id,strategy_selection_revision,"
+                "strategy_evaluated_local_date,revision,failure_reason) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 self._outreach_values(outreach),
             )
             self._insert_event(event)
@@ -148,6 +150,9 @@ class SQLiteProactiveOutreachStore:
             outreach.policy_version,
             outreach.topic_seed_id,
             outreach.topic_seed_revision,
+            outreach.strategy_version_id,
+            outreach.strategy_selection_revision,
+            outreach.strategy_evaluated_local_date,
             outreach.revision,
             outreach.failure_reason,
         )
@@ -169,6 +174,9 @@ class SQLiteProactiveOutreachStore:
             policy_version=row["policy_version"],
             topic_seed_id=row["topic_seed_id"],
             topic_seed_revision=row["topic_seed_revision"],
+            strategy_version_id=row["strategy_version_id"],
+            strategy_selection_revision=row["strategy_selection_revision"],
+            strategy_evaluated_local_date=row["strategy_evaluated_local_date"],
             revision=row["revision"],
             failure_reason=row["failure_reason"],
         )

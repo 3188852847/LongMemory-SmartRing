@@ -1,6 +1,6 @@
-"""当前 SQLite V26 的完整结构定义；不包含历史迁移步骤。"""
+"""当前 SQLite V27 的完整结构定义；不包含历史迁移步骤。"""
 
-SCHEMA_VERSION = 26
+SCHEMA_VERSION = 27
 
 LATEST_SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS conversation_messages (
@@ -259,6 +259,11 @@ CREATE TABLE IF NOT EXISTS proactive_outreach (
     topic_seed_revision INTEGER CHECK (
         topic_seed_revision IS NULL OR topic_seed_revision >= 1
     ),
+    strategy_version_id TEXT,
+    strategy_selection_revision INTEGER CHECK (
+        strategy_selection_revision IS NULL OR strategy_selection_revision >= 1
+    ),
+    strategy_evaluated_local_date TEXT,
     revision INTEGER NOT NULL DEFAULT 1 CHECK (revision >= 1),
     failure_reason TEXT CHECK (
         failure_reason IS NULL OR length(trim(failure_reason)) BETWEEN 1 AND 120
@@ -269,7 +274,17 @@ CREATE TABLE IF NOT EXISTS proactive_outreach (
     ),
     UNIQUE (subject_id, idempotency_key),
     CHECK ((topic_seed_id IS NULL) = (topic_seed_revision IS NULL)),
-    FOREIGN KEY (topic_seed_id) REFERENCES proactive_topic_seeds (id) ON DELETE RESTRICT
+    CHECK (
+        (strategy_version_id IS NULL AND strategy_selection_revision IS NULL
+            AND strategy_evaluated_local_date IS NULL)
+        OR
+        (trigger_kind = 'habit_candidate' AND strategy_version_id IS NOT NULL
+            AND strategy_selection_revision IS NOT NULL
+            AND length(strategy_evaluated_local_date) = 10)
+    ),
+    FOREIGN KEY (topic_seed_id) REFERENCES proactive_topic_seeds (id) ON DELETE RESTRICT,
+    FOREIGN KEY (strategy_version_id)
+        REFERENCES companion_absence_strategy_versions (id)
 );
 CREATE INDEX IF NOT EXISTS idx_proactive_outreach_recent
     ON proactive_outreach (subject_id, created_at DESC, id DESC);
