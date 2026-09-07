@@ -1,7 +1,7 @@
 import {useEffect, useMemo, useState} from 'react';
 import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {Alert, Button, Card, Checkbox, Input, InputNumber, Select, Space, Switch, Tag} from 'antd';
-import {ApiError, ChatApi, type CompanionStrategyCandidate, type ProactiveOutreachSummary, type ProactivePolicy, type ProactiveScheduleStatus, type ProactiveTestResult, type ProactiveTopicSeed} from './api';
+import {ApiError, ChatApi, type CompanionStrategyCandidate, type ProactiveOutreachSummary, type ProactivePolicy, type ProactiveScheduleStatus, type ProactiveTestResult, type ProactiveTopicSeed, type UserInitiatedInteraction} from './api';
 
 const DAYS = ['周一','周二','周三','周四','周五','周六','周日'].map((label, value) => ({label, value}));
 const minuteText = (value:number) => `${String(Math.floor(value / 60)).padStart(2,'0')}:${String(value % 60).padStart(2,'0')}`;
@@ -28,6 +28,7 @@ export function ProactiveSettings({api, ready}:{api:ChatApi; ready:boolean}) {
   const scenarios = useQuery({queryKey:['proactive-topic-scenarios'], queryFn:() => api.request<{items:Array<{id:string;title:string;summary:string;revision:number}>}>('/api/scenarios?state=active&offset=0&limit=100'), enabled:ready});
   const topicSeeds = useQuery({queryKey:['proactive-topic-seeds'], queryFn:() => api.request<{items:ProactiveTopicSeed[]}>('/api/proactive-topic-seeds'), enabled:ready});
   const strategyCandidates = useQuery({queryKey:['companion-strategy-candidates'], queryFn:() => api.request<{items:CompanionStrategyCandidate[]}>('/api/companion-strategy-candidates'), enabled:ready});
+  const userInitiated = useQuery({queryKey:['companion-user-initiated-interactions'], queryFn:() => api.request<{items:UserInitiatedInteraction[]}>('/api/companion-user-initiated-interactions?limit=10'), enabled:ready});
   const [draft, setDraft] = useState<ProactivePolicy>();
   const [notice, setNotice] = useState('');
   const [testText, setTestText] = useState('今天也要照顾好自己呀。');
@@ -301,6 +302,15 @@ export function ProactiveSettings({api, ready}:{api:ChatApi; ready:boolean}) {
         <small>生成器：{candidate.generator_version} · 候选 ID：{candidate.id}</small>
       </Card>)}</div>
       {strategyCandidates.isSuccess && (strategyCandidates.data?.items?.length ?? 0) === 0 && <p className="subtle">尚无联系时段候选。</p>}
+      <h4>用户主动出现时间观察</h4>
+      <p className="subtle">当前只把“距离上一条用户消息至少 4 小时，且此前 30 分钟没有主动问候”的消息记作一次观察。它是可审计的时间启发式，不等同于真实会话边界，也不会保存或展示消息正文。</p>
+      {userInitiated.isError && <Alert type="error" showIcon title="主动出现记录读取失败"/>}
+      <div className="proactive-history">{userInitiated.data?.items?.map(item => <Card size="small" key={item.id}>
+        <p><strong>{item.local_date} {minuteText(item.local_minute)}</strong></p>
+        <p className="subtle">{item.silence_gap_seconds === null ? '第一条可观察用户消息' : `此前静默约 ${Math.round(item.silence_gap_seconds / 3600 * 10) / 10} 小时`} · 近期无主动问候</p>
+        <small>检测器：{item.detector_version} · 来源消息 ID：{item.source_message_id}</small>
+      </Card>)}</div>
+      {userInitiated.isSuccess && (userInitiated.data?.items?.length ?? 0) === 0 && <p className="subtle">尚无用户主动出现时间观察。</p>}
     </section>
     <section className="settings-section">
       <h3>最近运行记录</h3>

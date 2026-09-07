@@ -11,6 +11,7 @@ from .models import (
     CompanionStrategyObservation,
     InteractionOutcomeEvent,
     ProactiveTopicFeedbackTarget,
+    UserInitiatedInteractionEvent,
 )
 
 
@@ -19,6 +20,14 @@ class InteractionOutcomeObserver(Protocol):
         self, message: ConversationMessage,
     ) -> InteractionOutcomeEvent | None:
         """若该消息是正式主动问候后的首条用户消息，记录时间关系。"""
+        ...
+
+
+class UserInitiatedInteractionObserver(Protocol):
+    def record_user_message(
+        self, message: ConversationMessage,
+    ) -> UserInitiatedInteractionEvent | None:
+        """若消息满足长静默且近期无主动问候，记录启动时间证据。"""
         ...
 
 

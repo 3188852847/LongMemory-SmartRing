@@ -1,6 +1,6 @@
-"""当前 SQLite V22 的完整结构定义；不包含历史迁移步骤。"""
+"""当前 SQLite V23 的完整结构定义；不包含历史迁移步骤。"""
 
-SCHEMA_VERSION = 22
+SCHEMA_VERSION = 23
 
 LATEST_SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS conversation_messages (
@@ -344,6 +344,31 @@ CREATE TABLE IF NOT EXISTS companion_feedback_events (
 );
 CREATE INDEX IF NOT EXISTS idx_companion_feedback_subject_recent
     ON companion_feedback_events (subject_id, occurred_at DESC, id DESC);
+
+CREATE TABLE IF NOT EXISTS companion_user_initiated_interactions (
+    id TEXT PRIMARY KEY,
+    subject_id TEXT NOT NULL CHECK (length(trim(subject_id)) BETWEEN 1 AND 120),
+    source_message_id TEXT NOT NULL UNIQUE,
+    occurred_at TEXT NOT NULL,
+    previous_user_message_at TEXT,
+    silence_gap_seconds INTEGER CHECK (
+        silence_gap_seconds IS NULL OR silence_gap_seconds >= 14400
+    ),
+    evidence_kind TEXT NOT NULL CHECK (
+        evidence_kind = 'silence_gap_without_recent_outreach'
+    ),
+    detector_version TEXT NOT NULL CHECK (
+        length(trim(detector_version)) BETWEEN 1 AND 120
+    ),
+    CHECK (
+        (previous_user_message_at IS NULL AND silence_gap_seconds IS NULL)
+        OR (previous_user_message_at IS NOT NULL AND silence_gap_seconds IS NOT NULL)
+    ),
+    FOREIGN KEY (source_message_id) REFERENCES conversation_messages (id)
+        ON DELETE RESTRICT
+);
+CREATE INDEX IF NOT EXISTS idx_companion_user_initiated_subject_recent
+    ON companion_user_initiated_interactions (subject_id, occurred_at DESC, id DESC);
 
 CREATE TABLE IF NOT EXISTS companion_strategy_candidates (
     id TEXT PRIMARY KEY,

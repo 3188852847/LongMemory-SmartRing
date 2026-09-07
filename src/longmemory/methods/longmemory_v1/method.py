@@ -10,6 +10,9 @@ from longmemory.adapters.storage.sqlite_memory_store import SQLiteMemoryStore
 from longmemory.adapters.storage.sqlite_interaction_outcome_store import (
     SQLiteInteractionOutcomeStore,
 )
+from longmemory.adapters.storage.sqlite_user_initiated_interaction_store import (
+    SQLiteUserInitiatedInteractionStore,
+)
 from longmemory.application.memory_turn import MemoryTurnService
 from longmemory.core.common.identifiers import MessageId
 from longmemory.core.conversation.models import ConversationMessage, MessageRole
@@ -77,6 +80,11 @@ class LongMemoryV1:
                 write_transaction=self._write_transaction,
                 interaction_outcome_observer=SQLiteInteractionOutcomeStore(
                     self.connection, commit_changes=False,
+                ),
+                user_initiated_interaction_observer=(
+                    SQLiteUserInitiatedInteractionStore(
+                        self.connection, commit_changes=False,
+                    )
                 ),
             )
         except BaseException:

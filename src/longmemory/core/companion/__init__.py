@@ -8,6 +8,7 @@ from .contracts import (
     CompanionFeedbackStore,
     CompanionStrategyCandidateStore,
     InteractionOutcomeObserver,
+    UserInitiatedInteractionObserver,
 )
 from .models import (
     CompanionFeedbackEvent,
@@ -18,6 +19,7 @@ from .models import (
     InteractionOutcomeEvidence,
     InteractionOutcomeKind,
     ProactiveTopicFeedbackTarget,
+    UserInitiatedInteractionEvent,
 )
 
 __all__ = [
@@ -32,4 +34,6 @@ __all__ = [
     "InteractionOutcomeKind",
     "InteractionOutcomeObserver",
     "ProactiveTopicFeedbackTarget",
+    "UserInitiatedInteractionEvent",
+    "UserInitiatedInteractionObserver",
 ]

@@ -160,6 +160,14 @@ def test_companion_strategy_analysis_is_csrf_protected_and_never_activates(tmp_p
             )
             assert listed.status == 200
             assert await listed.json() == {"items": []}
+            initiated = await client.get(
+                base + "/api/companion-user-initiated-interactions?limit=10",
+            )
+            assert initiated.status == 200
+            assert await initiated.json() == {"items": []}
+            assert (await client.get(
+                base + "/api/companion-user-initiated-interactions?limit=0",
+            )).status == 400
 
     asyncio.run(run())
 

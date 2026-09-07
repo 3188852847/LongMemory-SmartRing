@@ -17,6 +17,38 @@ class InteractionOutcomeEvidence(StrEnum):
     TEMPORAL_ORDER = "temporal_order"
 
 
+@dataclass(frozen=True, slots=True)
+class UserInitiatedInteractionEvent:
+    """长静默后且非主动问候引出的用户消息时间证据。"""
+
+    id: str
+    subject_id: str
+    source_message_id: str
+    occurred_at: datetime
+    previous_user_message_at: datetime | None
+    silence_gap_seconds: int | None
+    evidence_kind: str = "silence_gap_without_recent_outreach"
+    detector_version: str = "user-initiated-interaction-v1"
+
+    def __post_init__(self) -> None:
+        if any(not value.strip() for value in (
+            self.id, self.subject_id, self.source_message_id,
+            self.evidence_kind, self.detector_version,
+        )):
+            raise ValueError("user_initiated_interaction_identity_invalid")
+        if self.occurred_at.tzinfo is None:
+            raise ValueError("user_initiated_interaction_time_invalid")
+        if self.previous_user_message_at is None:
+            if self.silence_gap_seconds is not None:
+                raise ValueError("user_initiated_interaction_gap_invalid")
+        elif (
+            self.previous_user_message_at.tzinfo is None
+            or self.silence_gap_seconds is None
+            or self.silence_gap_seconds < 0
+        ):
+            raise ValueError("user_initiated_interaction_gap_invalid")
+
+
 class CompanionStrategyCandidateStatus(StrEnum):
     """策略候选当前只允许等待观察或被所有者忽略。"""
 

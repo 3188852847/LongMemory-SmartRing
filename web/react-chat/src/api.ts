@@ -101,3 +101,9 @@ export interface CompanionStrategyCandidate {
     delivery_evidence_level:'server_queued'|'transport_sent'|'device_acknowledged'|'played';
   }>;
 }
+export interface UserInitiatedInteraction {
+  id:string; subject_id:string; source_message_id:string; occurred_at:string;
+  previous_user_message_at:string|null; silence_gap_seconds:number|null;
+  evidence_kind:'silence_gap_without_recent_outreach'; detector_version:string;
+  local_date:string; local_minute:number; utc_offset_minutes:number;
+}

@@ -9,7 +9,10 @@ from uuid import uuid4
 from dataclasses import dataclass
 from longmemory.core.memory.l1_atomic.models import AtomicMemory
 from longmemory.core.common.exceptions import EmptyMessageError
-from longmemory.core.companion.contracts import InteractionOutcomeObserver
+from longmemory.core.companion.contracts import (
+    InteractionOutcomeObserver,
+    UserInitiatedInteractionObserver,
+)
 from longmemory.core.common.identifiers import MessageId
 from longmemory.core.conversation.contracts import ConversationStore
 from longmemory.core.conversation.models import (
@@ -73,6 +76,9 @@ class MemoryTurnService:
         audit_sink: Callable[..., None] = _ignore_event,
         write_transaction: Callable = nullcontext,
         interaction_outcome_observer: InteractionOutcomeObserver | None = None,
+        user_initiated_interaction_observer: (
+            UserInitiatedInteractionObserver | None
+        ) = None,
     ) -> None:
         self._conversation_store = conversation_store
         self._memory_store = memory_store
@@ -83,6 +89,9 @@ class MemoryTurnService:
         self._audit = audit_sink
         self._write_transaction = write_transaction
         self._interaction_outcome_observer = interaction_outcome_observer
+        self._user_initiated_interaction_observer = (
+            user_initiated_interaction_observer
+        )
 
     def prepare(self, text: str) -> MemoryTurn:
         """处理一条用户输入并返回可检查的完整结果。"""
@@ -135,6 +144,11 @@ class MemoryTurnService:
                 and self._interaction_outcome_observer is not None
             ):
                 self._interaction_outcome_observer.record_user_message(message)
+            if (
+                message.role == MessageRole.USER
+                and self._user_initiated_interaction_observer is not None
+            ):
+                self._user_initiated_interaction_observer.record_user_message(message)
         if message.role == MessageRole.USER:
             self._audit("user_saved", turn_id=str(message.id))
 
@@ -165,6 +179,8 @@ class MemoryTurnService:
             return ()
         if self._interaction_outcome_observer is not None:
             self._interaction_outcome_observer.record_user_message(message)
+        if self._user_initiated_interaction_observer is not None:
+            self._user_initiated_interaction_observer.record_user_message(message)
         turn_id = str(message.id)
         self._audit("user_saved", turn_id=turn_id)
 

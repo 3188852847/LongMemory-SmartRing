@@ -7,6 +7,9 @@ from longmemory.adapters.storage.sqlite_conversation_store import SQLiteConversa
 from longmemory.adapters.storage.sqlite_interaction_outcome_store import (
     SQLiteInteractionOutcomeStore,
 )
+from longmemory.adapters.storage.sqlite_user_initiated_interaction_store import (
+    SQLiteUserInitiatedInteractionStore,
+)
 from longmemory.adapters.storage.sqlite_companion_feedback_store import (
     SQLiteCompanionFeedbackStore,
 )
@@ -39,6 +42,9 @@ class SQLiteNaturalMemoryCommandHandler:
             conversation_store=SQLiteConversationStore(self._connection, commit_changes=False),
         )
         self._outcome_observer = SQLiteInteractionOutcomeStore(
+            self._connection, commit_changes=False,
+        )
+        self._user_initiated_observer = SQLiteUserInitiatedInteractionStore(
             self._connection, commit_changes=False,
         )
         self._companion_service = NaturalCompanionCommandService(
@@ -79,12 +85,12 @@ class SQLiteNaturalMemoryCommandHandler:
             if result is not None:
                 # 自然纠错、来源询问和删除等命令会在上面的服务中保存同一条
                 # 用户 L0；这里在同一事务补记陪伴结果，避免命令路径漏样本。
-                self._outcome_observer.record_user_message(
-                    ConversationMessage(
-                        MessageId(event.event_id), MessageRole.USER,
-                        event.content, event.occurred_at,
-                    )
+                message = ConversationMessage(
+                    MessageId(event.event_id), MessageRole.USER,
+                    event.content, event.occurred_at,
                 )
+                self._outcome_observer.record_user_message(message)
+                self._user_initiated_observer.record_user_message(message)
             self._connection.commit()
             return result
         except BaseException:

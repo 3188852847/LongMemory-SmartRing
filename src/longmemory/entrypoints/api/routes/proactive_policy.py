@@ -226,6 +226,27 @@ def register_proactive_policy_routes(app, backend, client, operation_lock):
         "/api/companion-strategy-candidates/analyze", strategy_candidates,
     )
 
+    async def user_initiated_interactions(request):
+        raw_limit = request.query.get("limit", "30")
+        try:
+            limit = int(raw_limit)
+            if str(limit) != raw_limit:
+                raise ValueError
+            result = await asyncio.to_thread(
+                backend.list_user_initiated_interactions, limit=limit,
+            )
+            return web.json_response(result)
+        except ValueError:
+            raise web.HTTPBadRequest() from None
+        except MemoryAccessError as error:
+            return web.json_response({"error": error.code}, status=error.status)
+
+    app.router.add_get(
+        "/api/companion-user-initiated-interactions",
+        user_initiated_interactions,
+        allow_head=False,
+    )
+
     async def dismiss_strategy_candidate(request):
         if request.content_type != "application/json":
             raise web.HTTPBadRequest()

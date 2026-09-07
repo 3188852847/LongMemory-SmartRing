@@ -306,6 +306,14 @@ describe('主动交流设置', () => {
       if (path.startsWith('/api/scenarios?')) return {items:[]};
       if (path === '/api/proactive-topic-seeds') return {items:[]};
       if (path === '/api/companion-strategy-candidates') return {items:created ? [candidate] : []};
+      if (path.startsWith('/api/companion-user-initiated-interactions')) return {items:[{
+        id:'event-first', subject_id:'user:self', source_message_id:'message-first',
+        occurred_at:'2026-09-01T05:00:00Z', previous_user_message_at:null,
+        silence_gap_seconds:null,
+        evidence_kind:'silence_gap_without_recent_outreach',
+        detector_version:'user-initiated-interaction-v1',
+        local_date:'2026-09-01', local_minute:780, utc_offset_minutes:480,
+      }]};
       if (path === '/api/companion-strategy-candidates/analyze' && method === 'POST') {
         created = true;
         return {outcome:'candidate_created', eligible_observation_count:3,
@@ -322,6 +330,8 @@ describe('主动交流设置', () => {
     expect(await screen.findByText('建议试验 13:02')).toBeTruthy();
     expect(screen.getByText(/不能证明你喜欢该时段/)).toBeTruthy();
     expect(screen.getAllByText(/2 分钟后出现用户消息/)).toHaveLength(3);
+    expect(screen.getByText('用户主动出现时间观察')).toBeTruthy();
+    expect(await screen.findByText(/第一条可观察用户消息/)).toBeTruthy();
     expect(request).toHaveBeenCalledWith(
       '/api/companion-strategy-candidates/analyze', 'POST', {},
     );

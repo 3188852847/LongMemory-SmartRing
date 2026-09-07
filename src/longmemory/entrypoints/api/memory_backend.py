@@ -26,6 +26,9 @@ from longmemory.adapters.storage.sqlite_companion_feedback_store import (
 from longmemory.adapters.storage.sqlite_companion_strategy_store import (
     SQLiteCompanionStrategyCandidateStore,
 )
+from longmemory.adapters.storage.sqlite_user_initiated_interaction_store import (
+    SQLiteUserInitiatedInteractionStore,
+)
 from longmemory.adapters.storage.sqlite_proactive_runtime_state import SQLiteProactiveHistoryReader
 from longmemory.adapters.storage.sqlite_proactive_topic_store import SQLiteProactiveTopicStore
 from longmemory.adapters.storage.sqlite_proactive_schedule_override_store import (
@@ -809,6 +812,32 @@ class MemoryBackend:
                 self._strategy_candidate_json(candidate, store)
                 for candidate in store.list("user:self")
             ]}
+
+    def list_user_initiated_interactions(self, *, limit=30):
+        """只返回时间与来源 ID，不把私人消息正文复制到观察视图。"""
+
+        if not 1 <= limit <= 100:
+            raise ValueError("user_initiated_interaction_limit_invalid")
+        with self._open() as connection:
+            policy = SQLiteProactivePolicyStore(connection).get("user:self")
+            local_zone = timezone(
+                timedelta(minutes=policy.config.utc_offset_minutes)
+            )
+            rows = SQLiteUserInitiatedInteractionStore(connection).list_recent(
+                "user:self", limit=limit,
+            )
+            items = []
+            for row in rows:
+                local = datetime.fromisoformat(row["occurred_at"]).astimezone(
+                    local_zone
+                )
+                items.append({
+                    **row,
+                    "local_date": local.date().isoformat(),
+                    "local_minute": local.hour * 60 + local.minute,
+                    "utc_offset_minutes": policy.config.utc_offset_minutes,
+                })
+            return {"items": items}
 
     def generate_companion_strategy_candidate(self):
         """只生成未生效候选；不读取消息正文、不修改 P4 设置。"""
