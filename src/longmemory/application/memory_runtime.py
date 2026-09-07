@@ -78,12 +78,17 @@ class MemoryRuntime:
                 )
                 if companion_handler is not None:
                     command = companion_handler(event)
-                if command is None and self._write_enabled:
+                if command is None:
                     memory_handler = getattr(
                         self._memory_command_handler, "handle_memory",
-                        self._memory_command_handler.handle,
+                        None,
                     )
-                    command = memory_handler(event)
+                    if memory_handler is not None:
+                        command = memory_handler(
+                            event, write_enabled=self._write_enabled,
+                        )
+                    elif self._write_enabled:
+                        command = self._memory_command_handler.handle(event)
             if command is not None:
                 observation = ObservationResult(event.event_id, command.writes)
             else:

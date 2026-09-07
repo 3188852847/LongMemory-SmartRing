@@ -3,12 +3,19 @@
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 import re
+from uuid import uuid4
 
 from longmemory.application.memory_management.service import MemoryManagementService
 from longmemory.core.common.identifiers import MemoryId, MessageId
 from longmemory.core.conversation.contracts import ConversationStore
 from longmemory.core.conversation.models import ConversationMessage, MessageRole
 from longmemory.core.memory.l1_atomic.contracts import MemoryStore
+from longmemory.core.memory.l1_atomic.models import (
+    AtomicMemory,
+    CURRENT_USER_SUBJECT_ID,
+    MemoryEvidence,
+    MemorySourceType,
+)
 from longmemory.core.memory.retrieval.service import keyword_overlap_score
 from longmemory.methods.contracts import MemoryEvent, WriteTrace
 
@@ -32,6 +39,9 @@ _SOURCE = re.compile(
 _EXCLUDE = re.compile(
     r"^(?:请)?(?:不要|别)(?:长期)?记(?:住|录)?[：:\s]+"
     r"(?P<content>[^。！？!?].{0,998})[。！？!?]*$"
+)
+_INCLUDE = re.compile(
+    r"^(?:请)?记住[：:\s]+(?P<content>.{1,1000})$"
 )
 _EXCLUDE_WITHOUT_CONTENT = frozenset({"这句不要记", "这句话不要记", "这件事不要记", "不要记住这句"})
 _CONFIRM_DELETE = frozenset({"确认删除这条记忆", "确认删除", "是的，确认删除", "是的确认删除"})
@@ -72,7 +82,9 @@ class NaturalMemoryCommandService:
         )
         self._pending_delete: _PendingDelete | None = None
 
-    def handle(self, event: MemoryEvent) -> NaturalMemoryCommandResult | None:
+    def handle(
+        self, event: MemoryEvent, *, write_enabled: bool = True,
+    ) -> NaturalMemoryCommandResult | None:
         if event.role != "user":
             return None
         text = event.content.strip()
@@ -85,6 +97,16 @@ class NaturalMemoryCommandService:
 
         if normalized in _CONFIRM_DELETE:
             return self._confirm_delete(event)
+
+        inclusion = _INCLUDE.fullmatch(text)
+        if inclusion:
+            if not write_enabled:
+                self._archive(event)
+                return NaturalMemoryCommandResult(
+                    "include", "write_paused",
+                    "当前已暂停生成新的 L1 长期事实，因此本轮只保留了 L0 原始对话，没有写入长期事实。",
+                )
+            return self._include(event, inclusion.group("content"))
 
         if normalized in _EXCLUDE_WITHOUT_CONTENT:
             self._archive(event)
@@ -104,10 +126,14 @@ class NaturalMemoryCommandService:
 
         correction = _CORRECTION.fullmatch(text)
         if correction:
+            if not write_enabled:
+                return self._write_paused(event, "correct")
             return self._correct(event, correction.group("old"), correction.group("new"))
 
         change = _CHANGE.fullmatch(text)
         if change:
+            if not write_enabled:
+                return self._write_paused(event, "change")
             return self._change(event, change.group("old"), change.group("new"))
 
         deletion = _DELETE.fullmatch(text)
@@ -136,12 +162,70 @@ class NaturalMemoryCommandService:
             normalized in _CONFIRM_DELETE
             or normalized in _EXCLUDE_WITHOUT_CONTENT
             or (normalized in _CANCEL_DELETE and self._pending_delete is not None)
+            or _INCLUDE.fullmatch(text) is not None
             or _EXCLUDE.fullmatch(text) is not None
             or _CORRECTION.fullmatch(text) is not None
             or _CHANGE.fullmatch(text) is not None
             or _DELETE.fullmatch(text) is not None
             or _SOURCE.fullmatch(text) is not None
         )
+
+    def _include(self, event: MemoryEvent, raw_content: str) -> NaturalMemoryCommandResult:
+        """保存用户明确要求记住的单条、自指事实，不猜测第三方主体。"""
+
+        content = self._normalize_explicit_fact(raw_content)
+        self._archive(event)
+        if content is None:
+            return NaturalMemoryCommandResult(
+                "include", "content_invalid",
+                "没有写入 L1。请用“请记住：我……”或“请记住：我的……”说出一条完整陈述；问题和主体不明的片段不会强制保存。",
+            )
+
+        existing = self._memory_store.find_by_content(
+            content, subject_id=CURRENT_USER_SUBJECT_ID,
+        )
+        memory = existing or AtomicMemory(
+            id=MemoryId(str(uuid4())),
+            subject_id=CURRENT_USER_SUBJECT_ID,
+            content=content,
+            recorded_at=event.occurred_at,
+        )
+        evidence = MemoryEvidence(
+            memory_id=memory.id,
+            source_message_id=MessageId(event.event_id),
+            source_type=MemorySourceType.USER_STATED,
+            linked_at=event.occurred_at,
+        )
+        operation = "noop" if existing is not None else "add"
+        if existing is None:
+            self._memory_store.save(memory, evidence)
+            notice = f"已保存为 L1 长期事实：“{content}”"
+        else:
+            self._memory_store.add_evidence(evidence)
+            notice = f"这条 L1 长期事实已经存在，本轮只增加了新的 L0 来源：“{content}”"
+        return NaturalMemoryCommandResult(
+            "include", "applied", notice,
+            (WriteTrace(operation, str(memory.id), (event.event_id,)),),
+            (str(memory.id),),
+        )
+
+    @staticmethod
+    def _normalize_explicit_fact(raw_content: str) -> str | None:
+        text = raw_content.strip()
+        if not text or "？" in text or "?" in text:
+            return None
+        text = text.rstrip("。！! ")
+        if text.startswith("我的"):
+            normalized = "用户的" + text[2:]
+        elif text.startswith("我"):
+            normalized = "用户" + text[1:]
+        elif text.startswith("用户"):
+            normalized = text
+        else:
+            return None
+        if len(normalized) < 3 or len(normalized) > 1000:
+            return None
+        return normalized + "。"
 
     def _correct(self, event: MemoryEvent, old: str, new: str) -> NaturalMemoryCommandResult:
         old, new = old.strip(), new.strip()
@@ -245,6 +329,13 @@ class NaturalMemoryCommandService:
             notice = f"因为你之前说过{quoted}，系统才形成了长期记忆“{target.content}”。"
         return NaturalMemoryCommandResult(
             "source", "explained", notice, target_memory_ids=(str(target.id),),
+        )
+
+    def _write_paused(self, event: MemoryEvent, kind: str) -> NaturalMemoryCommandResult:
+        self._archive(event)
+        return NaturalMemoryCommandResult(
+            kind, "write_paused",
+            "当前已暂停生成新的 L1 长期事实，因此只保留了 L0 原始对话，没有执行纠正或事实变化。",
         )
 
     def _best_matches(self, query: str):

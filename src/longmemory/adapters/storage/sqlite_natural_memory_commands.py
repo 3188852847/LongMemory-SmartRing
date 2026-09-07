@@ -70,17 +70,21 @@ class SQLiteNaturalMemoryCommandHandler:
             return None
         return self._execute(event, companion_command=True)
 
-    def handle_memory(self, event):
+    def handle_memory(self, event, *, write_enabled=True):
         if not self._service.recognizes(event):
             return None
-        return self._execute(event, companion_command=False)
+        return self._execute(
+            event, companion_command=False, write_enabled=write_enabled,
+        )
 
-    def _execute(self, event, *, companion_command: bool):
+    def _execute(self, event, *, companion_command: bool, write_enabled=True):
         self._connection.execute("BEGIN IMMEDIATE")
         try:
             result = (
                 self._companion_service.handle(event)
-                if companion_command else self._service.handle(event)
+                if companion_command else self._service.handle(
+                    event, write_enabled=write_enabled,
+                )
             )
             if result is not None:
                 # 自然纠错、来源询问和删除等命令会在上面的服务中保存同一条

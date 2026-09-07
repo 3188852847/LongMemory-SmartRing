@@ -155,6 +155,94 @@ def test_explicit_exclusion_archives_l0_without_creating_l1(tmp_path):
         ).fetchone() == ("不要记住：我今天想喝茉莉花茶",)
 
 
+def test_explicit_include_normalizes_self_fact_and_deduplicates_l1(tmp_path):
+    database, runtime = make_runtime(tmp_path)
+    try:
+        first = runtime.prepare_user("请记住：我叫小林")
+        repeated = runtime.prepare_user("记住：我叫小林。")
+        assert first.memory_command.kind == "include"
+        assert first.memory_command.status == "applied"
+        assert first.observation.writes[0].operation == "add"
+        assert repeated.observation.writes[0].operation == "noop"
+        assert "用户叫小林。" in runtime.prepare_user("小林").support.context
+    finally:
+        runtime.close()
+
+    with sqlite3.connect(database) as connection:
+        assert connection.execute(
+            "SELECT content FROM atomic_memories"
+        ).fetchall() == [("用户叫小林。",)]
+        assert connection.execute(
+            "SELECT count(*) FROM memory_evidence"
+        ).fetchone()[0] == 2
+        assert connection.execute(
+            "SELECT content FROM conversation_messages WHERE role='user' AND content LIKE '%记住：%'"
+        ).fetchall() == [("请记住：我叫小林",), ("记住：我叫小林。",)]
+
+
+def test_explicit_include_rejects_question_and_unknown_subject(tmp_path):
+    database, runtime = make_runtime(tmp_path)
+    try:
+        question = runtime.prepare_user("请记住：我的猫叫什么？")
+        fragment = runtime.prepare_user("请记住：豆包")
+        assert question.memory_command.status == "content_invalid"
+        assert fragment.memory_command.status == "content_invalid"
+        assert question.observation.writes == ()
+        assert fragment.observation.writes == ()
+    finally:
+        runtime.close()
+
+    with sqlite3.connect(database) as connection:
+        assert connection.execute("SELECT count(*) FROM atomic_memories").fetchone()[0] == 0
+        assert connection.execute(
+            "SELECT count(*) FROM conversation_messages WHERE role='user'"
+        ).fetchone()[0] == 2
+
+
+def test_explicit_include_respects_paused_l1_generation(tmp_path):
+    database, runtime = make_runtime(tmp_path)
+    try:
+        runtime.configure(write_enabled=False, use_enabled=True)
+        result = runtime.prepare_user("请记住：我叫小林")
+        assert result.memory_command.status == "write_paused"
+        assert result.observation.writes == ()
+    finally:
+        runtime.close()
+
+    with sqlite3.connect(database) as connection:
+        assert connection.execute("SELECT count(*) FROM atomic_memories").fetchone()[0] == 0
+        assert connection.execute(
+            "SELECT content FROM conversation_messages WHERE role='user'"
+        ).fetchone() == ("请记住：我叫小林",)
+
+
+def test_paused_generation_still_allows_read_only_source_command(tmp_path):
+    _database, runtime = make_runtime(tmp_path)
+    try:
+        runtime.prepare_user("我养了一只叫豆包的猫")
+        runtime.configure(write_enabled=False, use_enabled=True)
+        result = runtime.prepare_user("你怎么知道豆包？")
+        assert result.memory_command.kind == "source"
+        assert result.memory_command.status == "explained"
+        assert "我养了一只叫豆包的猫" in result.memory_command.notice
+    finally:
+        runtime.close()
+
+
+def test_paused_generation_does_not_allow_correction_to_create_new_l1(tmp_path):
+    _database, runtime = make_runtime(tmp_path)
+    try:
+        runtime.prepare_user("我养了一只叫豆包的猫")
+        runtime.configure(write_enabled=False, use_enabled=True)
+        result = runtime.prepare_user("不是豆包，是年糕")
+        assert result.memory_command.kind == "correct"
+        assert result.memory_command.status == "write_paused"
+        assert "豆包" in runtime.prepare_user("豆包").support.context
+        assert "年糕" not in runtime.prepare_user("年糕").support.context
+    finally:
+        runtime.close()
+
+
 def test_ambiguous_exclusion_does_not_retroactively_delete_previous_memory(tmp_path):
     _database, runtime = make_runtime(tmp_path)
     try:

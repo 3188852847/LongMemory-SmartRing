@@ -32,7 +32,7 @@ function memoryWarning(turn: Turn) {
 }
 function memoryCommandAlert(status: string) {
   if (status === 'applied' || status === 'explained' || status === 'cancelled') return 'success' as const;
-  if (status === 'confirmation_required' || status === 'content_required') return 'warning' as const;
+  if (status === 'confirmation_required' || status === 'content_required' || status === 'write_paused' || status === 'content_invalid') return 'warning' as const;
   return 'info' as const;
 }
 function ChatApp() {
