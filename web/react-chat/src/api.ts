@@ -41,6 +41,7 @@ export interface Turn {
   retrieval_warning?: string | null; scenario_use_enabled?: boolean; persona_use_enabled?: boolean;
   persona_retrieved?: Array<{persona_id: string; label: string; statement: string}>;
   scenario_retrieved?: {scenario_id:string; title:string; summary:string; source_memory_ids:string[]; source_message_ids:string[]}[] | null;
+  memory_command?: {kind:string; status:string; notice:string; target_memory_ids?:string[]} | null;
   [key: string]: unknown;
 }
 export interface Snapshot {chat_id: string; title: string; pending: boolean; turns: Turn[]}

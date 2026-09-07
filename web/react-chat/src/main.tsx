@@ -30,6 +30,11 @@ function memoryWarning(turn: Turn) {
     ? '本轮 L0 原始对话已保存，但 L1 记忆写入失败。'
     : '本轮 L0 原始对话已保存，但 L1 记忆提取失败。';
 }
+function memoryCommandAlert(status: string) {
+  if (status === 'applied' || status === 'explained' || status === 'cancelled') return 'success' as const;
+  if (status === 'confirmation_required' || status === 'content_required') return 'warning' as const;
+  return 'info' as const;
+}
 function ChatApp() {
   const [config, setConfig] = useState<Config>();
   const [chats, setChats] = useState<Summary[]>([]);
@@ -135,6 +140,7 @@ function ChatApp() {
         action={<Button loading={checkingModel} disabled={busy||unknown}
           onClick={()=>void checkModel()}>检测模型连接</Button>}/>}<section className="messages" aria-label="聊天记录">{!chat?.turns.length && <div className="empty"><h2>今天想聊些什么？</h2><p>可以说说今天的事，也可以继续上次的话题。</p></div>}
         {chat?.turns.map((turn, i) => <article key={i}><div className="bubble user"><strong>你</strong><p>{turn.input}</p></div><div className="bubble assistant"><strong>助手</strong><p>{turn.answer ?? '未获得完整回答。'}</p>{turn.answer&&<SpeechPlayer api={api} text={turn.answer}/>}</div>
+          {turn.memory_command && <Alert className="memory-command-result" showIcon type={memoryCommandAlert(turn.memory_command.status)} title="实际记忆操作结果" description={turn.memory_command.notice}/>}
           {turn.memory_processing === 'source_only' && <p className="memory-warning">{memoryWarning(turn)} 可继续聊天，之后需要重新整理这条来源。</p>}
           {turn.retrieval_warning === 'dense_retrieval_failed' && <p className="memory-warning">本轮本地 BGE 检索失败，已使用关键词结果继续回答；展开过程可查看实际策略。</p>}
           {Boolean(turn.scenario_retrieved?.length) && <p className="scenario-trace">本轮使用 L2：{turn.scenario_retrieved!.map(item => item.title).join('、')}</p>}

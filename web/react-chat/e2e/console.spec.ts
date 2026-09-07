@@ -17,6 +17,13 @@ test('文字聊天可保存并在刷新后恢复，React 页面可统一导航',
   await expect(page.locator('.bubble.user').getByText('我养了一只叫豆包的猫', {exact:true})).toBeVisible();
   await expect(page.locator('.bubble.assistant').getByText('好的，我记住了。', {exact:true})).toBeVisible();
 
+  await page.getByRole('textbox', {name:'消息'}).fill('不要记住：我今天想喝茉莉花茶');
+  await page.locator('button[type="submit"]').click();
+  await expect(page.getByText('实际记忆操作结果')).toBeVisible();
+  await expect(page.getByRole('alert').getByText(
+    '本轮没有生成 L1 长期事实；原始对话 L0 仍保留用于审计。', {exact:true},
+  )).toBeVisible();
+
   await page.getByRole('link', {name:'设备状态'}).click();
   await expect(page.getByRole('heading', {name:'设备与状态'})).toBeVisible();
   await page.getByRole('link', {name:'圆屏预览'}).click();
