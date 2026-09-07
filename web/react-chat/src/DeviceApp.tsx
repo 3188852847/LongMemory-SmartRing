@@ -38,6 +38,7 @@ export function DeviceApp() {
   const [theme, setTheme] = useState<'light'|'dark'>('light');
   const [reading, setReading] = useState<{value: number; at: number}>();
   const [snapshot, setSnapshot] = useState<DeviceSnapshot>();
+  const [snapshotAt, setSnapshotAt] = useState<number>();
   const [operation, setOperation] = useState<Operation>();
   const session = useQuery({queryKey: ['console-session'], queryFn: async () => {await api.bootstrap(); return true;}, staleTime: Infinity});
   const status = useQuery({
@@ -75,7 +76,11 @@ export function DeviceApp() {
   });
   const readSnapshot = useMutation({
     mutationFn: () => api.request<DeviceSnapshot>('/api/device/snapshot'),
-    onSuccess(data) {setSnapshot(data); if (Number.isInteger(data.volume)) setReading({value:data.volume!, at:Date.now()});},
+    onSuccess(data) {
+      const at = Date.now();
+      setSnapshot(data); setSnapshotAt(at);
+      if (Number.isInteger(data.volume)) setReading({value:data.volume!, at});
+    },
     onError(error) {setOperation({action:'read', error:codeOf(error), at:clock()});},
     onSettled: refreshAfterOperation,
   });
@@ -103,16 +108,16 @@ export function DeviceApp() {
         {key:'aec',label:'说话打断基础',children:status.data?.aec_advertised?'固件已上报 AEC':'未上报 AEC'},
       ]}/><p>{view.help}</p><small>{status.dataUpdatedAt ? `刷新于 ${new Date(status.dataUpdatedAt).toLocaleTimeString('zh-CN', {hour12:false})}` : '尚未刷新'} · 每 5 秒检查连接，不轮询设备音量</small>
     </Card>
-    {snapshot && <Card title="最近设备快照"><Descriptions column={{xs:1,sm:3}} items={[
+    {snapshot && <Card title="最近设备快照" extra={<Tag color={status.data?.ready && !status.error ? 'blue' : 'gold'}>{status.data?.ready && !status.error ? '单次读取' : '历史读数'}</Tag>}><Descriptions column={{xs:1,sm:3}} items={[
       {key:'battery',label:'电池',children:snapshot.battery ? `${snapshot.battery.level}% · ${snapshot.battery.charging?'充电中':'未充电'}` : '固件未报告'},
       {key:'network',label:'Wi‑Fi 信号',children:snapshot.network?.signal === 'strong'?'强':snapshot.network?.signal === 'medium'?'中':snapshot.network?.signal === 'weak'?'弱':'固件未报告'},
       {key:'temperature',label:'芯片温度',children:snapshot.chip ? `${snapshot.chip.temperature} ℃` : '固件未报告'},
       {key:'brightness',label:'屏幕亮度',children:snapshot.brightness ?? '固件未报告'},
       {key:'theme',label:'屏幕主题',children:snapshot.theme === 'dark'?'深色':snapshot.theme === 'light'?'浅色':'固件未报告'},
-    ]}/><p className="subtle">这是一次主动读取，不是持续监测；为保护隐私不显示 Wi‑Fi 名称。</p></Card>}
+    ]}/><p className="subtle">读取于 {snapshotAt ? new Date(snapshotAt).toLocaleTimeString('zh-CN', {hour12:false}) : '未知时间'}。这是一次主动读取，不是持续监测；为保护隐私不显示 Wi‑Fi 名称。{(!status.data?.ready || status.error) ? ' 当前连接不可用，上述内容只代表上一次成功快照。' : ''}</p></Card>}
     <div className="device-grid">
       <Card title="扬声器音量" extra={<Button disabled={!view.read || busy} loading={readVolume.isPending} onClick={() => readVolume.mutate()}>读取当前值</Button>}>
-        <div className="volume-value"><strong>{reading?.value ?? '—'}</strong><span>/ 100</span></div>
+        <div className="volume-value"><strong>{reading?.value ?? '—'}</strong><span>/ {status.data?.allowed_volume?.maximum ?? 60}</span></div>
         <p className="subtle">{reading ? `最近读取于 ${new Date(reading.at).toLocaleTimeString('zh-CN', {hour12:false})}；不是持续监测。` : '还没有可用的设备音量读数。'}</p>
         <label htmlFor="device-volume">目标音量</label>
         <Space.Compact block><Slider id="device-volume" className="volume-slider" min={5} max={60} value={target ?? 30} disabled={!view.set || busy} onChange={setTarget}/><InputNumber min={5} max={60} value={target} disabled={!view.set || busy} onChange={setTarget}/></Space.Compact>
