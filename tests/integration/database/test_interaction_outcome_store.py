@@ -192,3 +192,35 @@ def test_history_distinguishes_no_delivery_waiting_and_observed(tmp_path):
     assert items[observed.id]["outcome_observation_state"] == (
         "subsequent_user_message_observed"
     )
+
+
+def test_natural_memory_command_path_also_records_outcome(tmp_path):
+    database = tmp_path / "natural-command.db"
+    connection = open_database(database)
+    initialize_schema(connection)
+    connection.close()
+
+    runtime = build_memory_runtime(database)
+    runtime.prepare_user("我养了一只叫豆包的猫。")
+    runtime.close()
+
+    connection = open_database(database)
+    outreach = _create_outreach(connection, suffix="natural-command")
+    connection.close()
+
+    runtime = build_memory_runtime(database)
+    result = runtime.prepare_user("你怎么知道豆包？")
+    assert result.memory_command is not None
+    assert result.memory_command.kind == "source"
+    runtime.close()
+
+    connection = open_database(database)
+    event = connection.execute(
+        "SELECT outreach_id,source_message_id FROM companion_interaction_events"
+    ).fetchone()
+    assert event["outreach_id"] == outreach.id
+    assert connection.execute(
+        "SELECT content FROM conversation_messages WHERE id=?",
+        (event["source_message_id"],),
+    ).fetchone()[0] == "你怎么知道豆包？"
+    connection.close()
