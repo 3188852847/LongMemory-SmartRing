@@ -9,6 +9,9 @@ test('文字聊天可保存并在刷新后恢复，React 页面可统一导航',
 
   await page.goto('/chat-react');
   await expect(page.getByRole('heading', {name:'聊聊今天'})).toBeVisible();
+  await page.getByRole('button', {name:'记忆命令'}).click();
+  await expect(page.getByRole('dialog', {name:'可直接使用的记忆命令'})).toBeVisible();
+  await page.locator('.ant-modal-close').click();
   await page.getByRole('textbox', {name:'消息'}).fill('我养了一只叫豆包的猫');
   await page.locator('button[type="submit"]').click();
   await expect(page.locator('.bubble.assistant').getByText('好的，我记住了。', {exact:true})).toBeVisible();

@@ -12,6 +12,7 @@ import {PageHeader} from './PageHeader';
 import {SpeechPlayer} from './SpeechPlayer';
 import {createConsoleQueryClient} from './queryClient';
 import {modelFailure} from './modelHealth';
+import {MemoryCommandHelp} from './MemoryCommandHelp';
 import {loadSendShortcut, saveSendShortcut, shouldSendFromKeyboard, type SendShortcut} from './chatInput';
 import {organizeChats, readPinnedChats, togglePinnedChat, writePinnedChats} from './chatSessions';
 
@@ -133,7 +134,7 @@ function ChatApp() {
         <Button disabled={disabled} onClick={toggleCurrentPin}>{chat && pinnedChats.includes(chat.chat_id) ? '取消置顶' : '置顶当前'}</Button></div>
       <ConsoleNav active="chat" legacyPath="/chat"/>
     </>;
-  return <><AppShell subtitle="你的日常聊天空间" sidebar={sidebar}><PageHeader eyebrow="日常使用" title="聊聊今天" description="在这里用文字继续日常对话；新事实是否进入长期记忆，可以在每轮回答下方核对。" action={<span>{chat?.turns.length ?? 0} / 40 轮</span>}/>
+  return <><AppShell subtitle="你的日常聊天空间" sidebar={sidebar}><PageHeader eyebrow="日常使用" title="聊聊今天" description="在这里用文字继续日常对话；新事实是否进入长期记忆，可以在每轮回答下方核对。" action={<div className="page-header-actions"><span>{chat?.turns.length ?? 0} / 40 轮</span><MemoryCommandHelp/></div>}/>
       {config?.provider==='openai_compatible'&&<Alert showIcon type={config.model_health?.state==='available'?'success':config.model_health?.state==='unavailable'?'error':'info'}
         title={config.model_health?.state==='available'?'模型服务最近验证可用':config.model_health?.state==='unavailable'?'模型服务最近验证失败':'模型服务尚未验证'}
         description={config.model_health?.state==='unavailable'?(modelFailure(config.model_health.code)??'模型调用失败。'):'检测只发送固定合成短句，不读取或写入个人记忆，也不自动重试。'}
