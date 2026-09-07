@@ -12,6 +12,7 @@ import {PageHeader} from './PageHeader';
 import {SpeechPlayer} from './SpeechPlayer';
 import {createConsoleQueryClient} from './queryClient';
 import {modelFailure} from './modelHealth';
+import {loadSendShortcut, saveSendShortcut, shouldSendFromKeyboard, type SendShortcut} from './chatInput';
 
 const DeviceApp = lazy(() => import('./DeviceApp').then(module => ({default: module.DeviceApp})));
 const MemoryApp = lazy(() => import('./MemoryApp').then(module => ({default: module.MemoryApp})));
@@ -38,6 +39,7 @@ function ChatApp() {
   const [notice, setNotice] = useState('正在连接本机服务…');
   const [rename, setRename] = useState(false);
   const [checkingModel, setCheckingModel] = useState(false);
+  const [sendShortcut, setSendShortcut] = useState<SendShortcut>(() => loadSendShortcut());
   const [title, setTitle] = useState('');
   // ref 在同一事件循环内立即锁定，避免 React 尚未重绘时的双击重复写入。
   const locked = useRef(false);
@@ -121,8 +123,12 @@ function ChatApp() {
           {Boolean(turn.scenario_retrieved?.length) && <p className="scenario-trace">本轮使用 L2：{turn.scenario_retrieved!.map(item => item.title).join('、')}</p>}
           {Boolean(turn.persona_retrieved?.length) && <p className="scenario-trace">本轮使用 L3：{turn.persona_retrieved!.map(item => item.label).join('、')}</p>}
           <details><summary>{turnSummary(turn)}</summary><pre>{JSON.stringify(turn, null, 2)}</pre></details></article>)}<div ref={turnsEnd}/></section>
-      <form onSubmit={event => {event.preventDefault(); void send();}}><Input.TextArea aria-label="消息" value={draft} maxLength={1000} rows={3} disabled={disabled || (chat?.turns.length ?? 0) >= 40} onChange={event => setDraft(event.target.value)} placeholder="写下想说的话…"/>
-        <div className="send-row"><small>发送会先保存原始输入，再按当前提取策略生成长期记忆。</small><Button type="primary" htmlType="submit" disabled={disabled || !draft.trim() || (chat?.turns.length ?? 0) >= 40}>发送</Button></div></form>
+      <form onSubmit={event => {event.preventDefault(); void send();}}><Input.TextArea aria-label="消息" value={draft} maxLength={1000} rows={3} disabled={disabled || (chat?.turns.length ?? 0) >= 40} onChange={event => setDraft(event.target.value)}
+        onKeyDown={event => {if (shouldSendFromKeyboard({...event, isComposing: event.nativeEvent.isComposing}, sendShortcut)) {event.preventDefault(); void send();}}}
+        placeholder="写下想说的话…"/>
+        <div className="send-row"><div><small>发送会先保存原始输入，再按当前提取策略生成长期记忆。</small><Select size="small" aria-label="发送快捷键" value={sendShortcut}
+          options={[{value:'enter',label:'Enter 发送 · Shift+Enter 换行'},{value:'ctrl_enter',label:'Ctrl+Enter 发送 · Enter 换行'}]}
+          onChange={value => {setSendShortcut(value); saveSendShortcut(value);}}/></div><Button type="primary" htmlType="submit" disabled={disabled || !draft.trim() || (chat?.turns.length ?? 0) >= 40}>发送</Button></div></form>
       <p role="status">{notice}</p>{unknown && <Button disabled={busy} onClick={() => void action(async () => {if (!chat) return; const result = await load(chat.chat_id); if (!result.pending && result.turns.length > chat.turns.length) setDraft(''); setNotice(result.pending ? '后台仍在处理，没有重发。' : '已查询。服务中断时不能据此保证未写入，请检查过程。');})}>只查询结果，不重发</Button>}
       <details className="runtime"><summary>运行配置与记忆说明</summary><p>{config?.enabled ? `${config.model} · ${config.role} · ${config.provider}` : '聊天未启用'}</p>{config?.provider === 'fake' && <p>Fake 是离线工程替身，不具备角色和多轮理解能力。</p>}<p>提取：{config?.method === 'longmemory_daily_llm_v2' ? '模型辅助 P3.2（失败保留 L0）' : '规则基线'}；检索：{config?.retrieval === 'keyword_dense_rrf_v1' ? '关键词＋本地 BGE 融合 P3.2' : '关键词基线'}。网页不自动驱动圆屏播放。</p>{config?.enabled && <p>记忆库：{config.database}</p>}</details>
     </AppShell>
