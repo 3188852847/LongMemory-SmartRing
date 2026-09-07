@@ -293,6 +293,34 @@ class MemoryBackend:
                 device=device,
             )
 
+    def proactive_history(self, *, limit=20):
+        """只读最近投影和最后事件原因，不暴露幂等键或内部连接数据。"""
+
+        subject_id = "user:self"
+        if type(limit) is not int or not 1 <= limit <= 100:
+            raise MemoryAccessError("invalid_proactive_history_limit", 400)
+        with self._open() as connection:
+            ledger = ProactiveOutreachLedger(
+                SQLiteProactiveOutreachStore(connection, commit_changes=False),
+                clock=self.clock,
+            )
+            items = []
+            for outreach in ledger.list_recent(subject_id, limit=limit):
+                events = ledger.list_events(outreach.id)
+                latest = events[-1]
+                items.append({
+                    "outreach_id": outreach.id,
+                    "trigger": outreach.trigger.value,
+                    "content": outreach.content,
+                    "created_at": outreach.created_at.isoformat(),
+                    "expires_at": outreach.expires_at.isoformat(),
+                    "state": outreach.state.value,
+                    "reason": latest.reason_code,
+                    "event_count": len(events),
+                    "failure_reason": outreach.failure_reason,
+                })
+            return {"items": items}
+
     @contextmanager
     def _open(self, *, write_capability=None):
         if self.database is None:

@@ -65,6 +65,13 @@ class ProactiveOutreachLedger:
 
         return self._store.get_by_idempotency(subject_id, idempotency_key)
 
+    def list_recent(
+        self, subject_id: str, *, limit: int = 20,
+    ) -> tuple[ProactiveOutreach, ...]:
+        """按创建时间读取最近投影，供所有者控制台审计结果。"""
+
+        return self._store.list_recent(subject_id, limit=limit)
+
     def create_candidate(
         self,
         *,

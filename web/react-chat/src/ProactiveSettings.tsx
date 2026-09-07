@@ -1,7 +1,7 @@
 import {useEffect, useMemo, useState} from 'react';
 import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
-import {Alert, Button, Checkbox, Input, InputNumber, Space, Switch} from 'antd';
-import {ApiError, ChatApi, type ProactivePolicy, type ProactiveTestResult} from './api';
+import {Alert, Button, Checkbox, Input, InputNumber, Space, Switch, Tag} from 'antd';
+import {ApiError, ChatApi, type ProactiveOutreachSummary, type ProactivePolicy, type ProactiveTestResult} from './api';
 
 const DAYS = ['周一','周二','周三','周四','周五','周六','周日'].map((label, value) => ({label, value}));
 const minuteText = (value:number) => `${String(Math.floor(value / 60)).padStart(2,'0')}:${String(value % 60).padStart(2,'0')}`;
@@ -11,6 +11,7 @@ const parseMinute = (value:string) => {const [hour, minute] = value.split(':').m
 export function ProactiveSettings({api, ready}:{api:ChatApi; ready:boolean}) {
   const client = useQueryClient();
   const query = useQuery({queryKey:['proactive-policy'], queryFn:() => api.request<ProactivePolicy>('/api/proactive-policy'), enabled:ready});
+  const history = useQuery({queryKey:['proactive-outreach'], queryFn:() => api.request<{items:ProactiveOutreachSummary[]}>('/api/proactive-outreach?limit=10'), enabled:ready});
   const [draft, setDraft] = useState<ProactivePolicy>();
   const [notice, setNotice] = useState('');
   const [testText, setTestText] = useState('今天也要照顾好自己呀。');
@@ -33,6 +34,7 @@ export function ProactiveSettings({api, ready}:{api:ChatApi; ready:boolean}) {
       text:testText, request_id:crypto.randomUUID(), expected_policy_revision:draft!.revision,
     }),
     onSuccess:value => {
+      void client.invalidateQueries({queryKey:['proactive-outreach']});
       if (value.state === 'queued') {
         setTestNotice('小智服务已接收并排队；当前协议不能确认圆屏已经播放，请以实机声音为准。');
       } else if (value.state === 'blocked') {
@@ -76,6 +78,17 @@ export function ProactiveSettings({api, ready}:{api:ChatApi; ready:boolean}) {
       {!draft.enabled && <p className="subtle">请先打开并保存“允许主动联系”，再进行测试。</p>}
       {dirty && <p className="subtle">当前设置尚未保存，请保存或放弃修改后再测试。</p>}
       {testNotice && <p role="status">{testNotice}</p>}
+    </section>
+    <section className="settings-section">
+      <h3>最近运行记录</h3>
+      <p className="subtle">这里展示真实账本状态；排队、设备确认和播放是不同证据级别。</p>
+      {history.isError && <Alert type="error" showIcon title="运行记录读取失败"/>}
+      {history.isLoading && <p className="subtle">正在读取运行记录…</p>}
+      {!history.isLoading && (history.data?.items?.length ?? 0) === 0 && <p className="subtle">还没有主动交流记录。</p>}
+      <div className="proactive-history">{history.data?.items?.map(item => <article className="proactive-history-item" key={item.outreach_id}>
+        <Space><Tag>{item.state}</Tag><strong>{item.content}</strong></Space>
+        <p className="subtle">{new Date(item.created_at).toLocaleString()} · 原因 {item.reason} · {item.event_count} 个事件</p>
+      </article>)}</div>
     </section>
   </Space>;
 }

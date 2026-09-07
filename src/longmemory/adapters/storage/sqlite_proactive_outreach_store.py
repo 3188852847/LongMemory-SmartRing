@@ -94,6 +94,18 @@ class SQLiteProactiveOutreachStore:
         ).fetchone()
         return self._row_to_outreach(row) if row is not None else None
 
+    def list_recent(
+        self, subject_id: str, *, limit: int = 20,
+    ) -> tuple[ProactiveOutreach, ...]:
+        if type(limit) is not int or not 1 <= limit <= 100:
+            raise ValueError("outreach_list_limit_invalid")
+        rows = self._connection.execute(
+            "SELECT * FROM proactive_outreach WHERE subject_id=? "
+            "ORDER BY created_at DESC, id DESC LIMIT ?",
+            (subject_id, limit),
+        ).fetchall()
+        return tuple(self._row_to_outreach(row) for row in rows)
+
     def list_events(self, outreach_id: str) -> tuple[OutreachEvent, ...]:
         rows = self._connection.execute(
             "SELECT * FROM proactive_outreach_events WHERE outreach_id=? "

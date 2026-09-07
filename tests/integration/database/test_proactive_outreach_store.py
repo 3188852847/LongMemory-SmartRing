@@ -72,6 +72,7 @@ def test_projection_and_append_only_events_survive_reopen(tmp_path):
     assert restored == sent and restored.revision == 3
     assert store.get_by_idempotency("user:self", "probe-1") == sent
     assert store.get_by_idempotency("user:self", "missing") is None
+    assert store.list_recent("user:self", limit=1) == (sent,)
     events = store.list_events(outreach.id)
     assert [event.new_state for event in events] == [
         OutreachState.CANDIDATE, OutreachState.QUEUED, OutreachState.TRANSPORT_SENT,

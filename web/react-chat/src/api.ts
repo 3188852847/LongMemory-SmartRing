@@ -51,3 +51,7 @@ export interface ProactiveTestResult {
   policy_action: string | null; policy_reason: string | null; delivery_reason: string | null;
   device: {ready:boolean; user_session_active:boolean; reason:string | null} | null;
 }
+export interface ProactiveOutreachSummary {
+  outreach_id:string; trigger:string; content:string; created_at:string; expires_at:string;
+  state:string; reason:string; event_count:number; failure_reason:string | null;
+}

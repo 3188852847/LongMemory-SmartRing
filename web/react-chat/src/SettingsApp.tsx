@@ -39,7 +39,7 @@ export function SettingsApp() {
         </Space>
       </Card>
       <Card title="主动交流" extra={<span className="setting-scope">持久许可边界</span>}>
-        <p>设置系统什么时候可以联系你。当前只保存设置；后台触发和圆屏投递尚未接入。</p>
+        <p>设置系统什么时候可以联系你，并查看手动端到端验证记录；后台定时触发尚未接入。</p>
         <ProactiveSettings api={api} ready={session.isSuccess}/>
       </Card>
     </div>

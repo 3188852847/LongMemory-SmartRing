@@ -46,3 +46,18 @@ def register_proactive_policy_routes(app, backend, client, operation_lock):
                 return web.json_response({"error": error.code}, status=error.status)
 
     app.router.add_post("/api/proactive-outreach/test", test_once)
+
+    async def history(request):
+        raw_limit = request.query.get("limit", "20")
+        try:
+            limit = int(raw_limit)
+            if str(limit) != raw_limit:
+                raise ValueError
+            result = await asyncio.to_thread(backend.proactive_history, limit=limit)
+            return web.json_response(result)
+        except ValueError:
+            raise web.HTTPBadRequest() from None
+        except MemoryAccessError as error:
+            return web.json_response({"error": error.code}, status=error.status)
+
+    app.router.add_get("/api/proactive-outreach", history, allow_head=False)

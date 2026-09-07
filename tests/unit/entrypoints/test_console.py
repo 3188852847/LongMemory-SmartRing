@@ -633,6 +633,24 @@ def test_manual_proactive_test_is_csrf_protected_and_idempotent(tmp_path):
             assert first_data["delivery_reason"] == "xiaozhi_queue_accepted"
             assert len(bridge.calls) == 1 and bridge.calls[0][0] == "announce"
 
+            history = await client.get(base + "/api/proactive-outreach?limit=10")
+            history_data = await history.json()
+            assert history.status == 200
+            assert history_data["items"] == [{
+                "outreach_id": first_data["outreach_id"],
+                "trigger": "manual_test",
+                "content": body["text"],
+                "created_at": now.isoformat(),
+                "expires_at": (now.replace(minute=5)).isoformat(),
+                "state": "queued",
+                "reason": "ready",
+                "event_count": 2,
+                "failure_reason": None,
+            }]
+            assert (await client.get(
+                base + "/api/proactive-outreach?limit=01"
+            )).status == 400
+
             repeated = await client.post(
                 base + "/api/proactive-outreach/test", headers=headers, json=body,
             )
