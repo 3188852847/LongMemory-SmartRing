@@ -769,7 +769,8 @@ def test_manual_proactive_test_is_csrf_protected_and_idempotent(tmp_path):
                 "failure_reason": None,
                 "topic_seed_id": None,
                 "topic_seed_revision": None,
-                "outcome_tracking_eligible": False,
+                "outcome_observation_state": "not_applicable",
+                "delivery_evidence_level": "server_queued",
                 "subsequent_user_message": None,
             }]
             assert (await client.get(

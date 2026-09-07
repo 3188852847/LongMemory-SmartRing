@@ -718,10 +718,25 @@ class MemoryBackend:
                 events = ledger.list_events(outreach.id)
                 latest = events[-1]
                 outcome = outcomes.get_for_outreach(outreach.id)
-                outcome_tracking_eligible = (
+                formal_trigger = (
                     outreach.trigger.value != "manual_test"
                     and not outreach.trigger_reason_code.startswith("development_")
                 )
+                delivery_levels = {
+                    "queued": "server_queued",
+                    "transport_sent": "transport_sent",
+                    "device_acknowledged": "device_acknowledged",
+                    "played": "played",
+                }
+                delivery_evidence = delivery_levels.get(outreach.state.value)
+                if not formal_trigger:
+                    observation_state = "not_applicable"
+                elif outcome is not None:
+                    observation_state = "subsequent_user_message_observed"
+                elif delivery_evidence is not None:
+                    observation_state = "awaiting_subsequent_user_message"
+                else:
+                    observation_state = "delivery_not_established"
                 items.append({
                     "outreach_id": outreach.id,
                     "trigger": outreach.trigger.value,
@@ -735,7 +750,8 @@ class MemoryBackend:
                     "failure_reason": outreach.failure_reason,
                     "topic_seed_id": outreach.topic_seed_id,
                     "topic_seed_revision": outreach.topic_seed_revision,
-                    "outcome_tracking_eligible": outcome_tracking_eligible,
+                    "outcome_observation_state": observation_state,
+                    "delivery_evidence_level": delivery_evidence,
                     "subsequent_user_message": None if outcome is None else {
                         "occurred_at": outcome.occurred_at.isoformat(),
                         "latency_seconds": outcome.latency_seconds,

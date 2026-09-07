@@ -70,7 +70,8 @@ export interface ProactiveOutreachSummary {
   outreach_id:string; trigger:string; content:string; created_at:string; expires_at:string;
   state:string; revision:number; reason:string; event_count:number; failure_reason:string | null;
   topic_seed_id:string | null; topic_seed_revision:number | null;
-  outcome_tracking_eligible:boolean;
+  outcome_observation_state:'not_applicable'|'delivery_not_established'|'awaiting_subsequent_user_message'|'subsequent_user_message_observed';
+  delivery_evidence_level:null|'server_queued'|'transport_sent'|'device_acknowledged'|'played';
   subsequent_user_message:null | {
     occurred_at:string; latency_seconds:number; evidence:'temporal_order';
   };

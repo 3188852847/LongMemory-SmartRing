@@ -138,7 +138,8 @@ describe('主动交流设置', () => {
         created_at:'2026-09-07T04:00:00+00:00', expires_at:'2026-09-07T04:05:00+00:00',
         state:'played', revision:3, reason:'user_confirmed_playback', event_count:3,
         failure_reason:null, topic_seed_id:null, topic_seed_revision:null,
-        outcome_tracking_eligible:true,
+        outcome_observation_state:'subsequent_user_message_observed',
+        delivery_evidence_level:'played',
         subsequent_user_message:{
           occurred_at:'2026-09-07T04:03:00+00:00', latency_seconds:180,
           evidence:'temporal_order',

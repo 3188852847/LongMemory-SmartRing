@@ -256,11 +256,14 @@ export function ProactiveSettings({api, ready}:{api:ChatApi; ready:boolean}) {
         </div>
         <p className="subtle">{new Date(item.created_at).toLocaleString()} · 原因 {item.reason} · {item.event_count} 个事件</p>
         {item.topic_seed_id && <p className="subtle">记忆话题来源：{item.topic_seed_id} · 素材修订 {item.topic_seed_revision}</p>}
-        {item.outcome_tracking_eligible && item.subsequent_user_message && <p className="subtle">
+        {item.outcome_observation_state === 'subsequent_user_message_observed' && item.subsequent_user_message && <p className="subtle">
           后续用户消息：已观察（{Math.round(item.subsequent_user_message.latency_seconds / 60)} 分钟后；仅表示时间先后）
         </p>}
-        {item.outcome_tracking_eligible && !item.subsequent_user_message && <p className="subtle">
-          后续用户消息：尚未观察
+        {item.outcome_observation_state === 'awaiting_subsequent_user_message' && <p className="subtle">
+          后续用户消息：尚未观察（投递证据：{item.delivery_evidence_level}）
+        </p>}
+        {item.outcome_observation_state === 'delivery_not_established' && <p className="subtle">
+          互动观察：投递未成立，不能解释为用户未回应
         </p>}
       </article>)}</div>
     </section>
