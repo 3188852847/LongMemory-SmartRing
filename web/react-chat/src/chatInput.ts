@@ -2,17 +2,17 @@ export type SendShortcut = 'enter' | 'ctrl_enter';
 
 const STORAGE_KEY = 'longmemory:chat-send-shortcut:v1';
 
-export function loadSendShortcut(storage: Pick<Storage, 'getItem'> | undefined = globalThis.localStorage): SendShortcut {
+export function loadSendShortcut(storage?: Pick<Storage, 'getItem'>): SendShortcut {
   try {
-    return storage?.getItem(STORAGE_KEY) === 'ctrl_enter' ? 'ctrl_enter' : 'enter';
+    return (storage ?? globalThis.localStorage).getItem(STORAGE_KEY) === 'ctrl_enter' ? 'ctrl_enter' : 'enter';
   } catch {
     return 'enter';
   }
 }
 
-export function saveSendShortcut(value: SendShortcut, storage: Pick<Storage, 'setItem'> | undefined = globalThis.localStorage) {
+export function saveSendShortcut(value: SendShortcut, storage?: Pick<Storage, 'setItem'>) {
   try {
-    storage?.setItem(STORAGE_KEY, value);
+    (storage ?? globalThis.localStorage).setItem(STORAGE_KEY, value);
   } catch {
     // 浏览器禁用本地存储时仅在当前页面生效，不影响聊天。
   }

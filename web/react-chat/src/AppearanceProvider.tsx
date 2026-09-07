@@ -4,7 +4,8 @@ import {KEY, normalize, read, save, apply} from '../../assets/appearance.mjs';
 
 type ThemePreference = 'system' | 'light' | 'dark';
 type ReadingSize = 'normal' | 'large' | 'larger';
-export type AppearancePreferences = {theme: ThemePreference; size: ReadingSize};
+type MotionPreference = 'system' | 'reduce' | 'full';
+export type AppearancePreferences = {theme: ThemePreference; size: ReadingSize; motion: MotionPreference};
 type AppearanceContextValue = {
   prefs: AppearancePreferences;
   update: (next: AppearancePreferences) => boolean;
@@ -23,22 +24,31 @@ function safeRead(): AppearancePreferences {
 export function AppearanceProvider({children}: {children: ReactNode}) {
   const [prefs, setPrefs] = useState<AppearancePreferences>(safeRead);
   const [systemDark, setSystemDark] = useState(() => matchMedia('(prefers-color-scheme: dark)').matches);
+  const [systemReducedMotion, setSystemReducedMotion] = useState(
+    () => matchMedia('(prefers-reduced-motion: reduce)').matches,
+  );
 
   useEffect(() => {
     const media = matchMedia('(prefers-color-scheme: dark)');
+    const motionMedia = matchMedia('(prefers-reduced-motion: reduce)');
     const onMedia = () => setSystemDark(media.matches);
+    const onMotionMedia = () => setSystemReducedMotion(motionMedia.matches);
     const onStorage = (event: StorageEvent) => {
       if (event.key === KEY || event.key === null) setPrefs(safeRead());
     };
     media.addEventListener('change', onMedia);
+    motionMedia.addEventListener('change', onMotionMedia);
     window.addEventListener('storage', onStorage);
     return () => {
       media.removeEventListener('change', onMedia);
+      motionMedia.removeEventListener('change', onMotionMedia);
       window.removeEventListener('storage', onStorage);
     };
   }, []);
 
-  useEffect(() => {apply(document.documentElement, prefs, systemDark);}, [prefs, systemDark]);
+  useEffect(() => {
+    apply(document.documentElement, prefs, systemDark, systemReducedMotion);
+  }, [prefs, systemDark, systemReducedMotion]);
 
   const value = useMemo<AppearanceContextValue>(() => ({
     prefs,
