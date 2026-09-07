@@ -17,12 +17,15 @@ ROOT = Path(__file__).resolve().parents[3]
 VOICE_ROOT = Path(r"D:\ESP32-Workspace\xiaozhi-esp32-server\main\xiaozhi-server")
 VOXCPM_PORT = 18768
 DEFAULT_CHAT_PATH = "/chat-react"
+CONSOLE_PATHS = {"chat": DEFAULT_CHAT_PATH, "device": "/device", "memories": "/memories", "settings": "/settings"}
 DEFAULT_BGE_MODEL = ROOT / "data/models/bge-small-zh-v1.5/7999e1d3359715c523056ef9478215996d62a620"
 
 
-def console_url(port: int) -> str:
-    """统一日常入口；旧版 /chat 仍保留用于回退。"""
-    return f"http://127.0.0.1:{port}{DEFAULT_CHAT_PATH}"
+def console_url(port: int, page: str = "chat") -> str:
+    """只允许打开控制台内的固定页面，不能从首选项注入任意网址。"""
+    if page not in CONSOLE_PATHS:
+        raise ValueError("未知控制台起始页。")
+    return f"http://127.0.0.1:{port}{CONSOLE_PATHS[page]}"
 
 
 @dataclass(frozen=True)

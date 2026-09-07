@@ -19,6 +19,7 @@ def test_preferences_roundtrip_and_never_persist_delete_permission(tmp_path):
     path = tmp_path / "launcher.json"
     preferences.save_preferences(path, {
         "voice": True,
+        "start_page": "settings",
         "database": "D:/synthetic.db",
         "voice_root": "D:/xiaozhi",
         "lan_ip": "192.168.1.8",
@@ -36,6 +37,7 @@ def test_preferences_roundtrip_and_never_persist_delete_permission(tmp_path):
     raw = path.read_text(encoding="utf-8")
     loaded = preferences.load_preferences(path)
     assert loaded["voice"] is True
+    assert loaded["start_page"] == "settings"
     assert loaded["memory_retrieval"] == "hybrid"
     assert loaded["memory_consolidation"] is True
     assert loaded["http_risk_ack"] is True

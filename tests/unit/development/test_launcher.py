@@ -128,6 +128,9 @@ def test_voice_command_uses_own_environment(options):
 
 def test_default_console_url_opens_react_chat():
     assert runtime.console_url(8767) == "http://127.0.0.1:8767/chat-react"
+    assert runtime.console_url(8767, "memories") == "http://127.0.0.1:8767/memories"
+    with pytest.raises(ValueError, match="未知控制台起始页"):
+        runtime.console_url(8767, "https://example.invalid")
 
 
 def test_voxcpm_commands_use_isolated_environment_and_start_before_voice(options):
@@ -347,9 +350,9 @@ def test_daily_summary_uses_human_labels_instead_of_internal_enums(monkeypatch):
     monkeypatch.setitem(sys.modules, "runtime", runtime)
     spec.loader.exec_module(app)
 
-    summary = app._summary_text(True, "elysia_v1", "llm", "hybrid", "voxcpm2", True, False)
+    summary = app._summary_text(True, "memories", "elysia_v1", "llm", "hybrid", "voxcpm2", True, False)
     assert summary == (
-        "网页＋圆屏语音  ·  爱莉希雅风格\n"
+        "网页＋圆屏语音  ·  打开记忆管理  ·  爱莉希雅风格\n"
         "模型辅助提取  ·  关键词＋语义召回  ·  VoxCPM2 本地声音\n"
         "允许单条删除  ·  低频整理关闭"
     )

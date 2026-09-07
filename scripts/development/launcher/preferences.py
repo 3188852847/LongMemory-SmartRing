@@ -5,13 +5,14 @@ import os
 from pathlib import Path
 
 
-PREFERENCES_VERSION = 1
+PREFERENCES_VERSION = 2
 RISK_ACK_VERSION = "campus-http-v1"
 # 只影响当前本机启动面板，不写入偏好文件，也不改变服务端安全默认。
 DEFAULT_SESSION_ALLOW_MEMORY_DELETE = True
 
 DEFAULTS = {
     "voice": False,
+    "start_page": "chat",
     "database": "",
     "voice_root": "",
     "lan_ip": "",
@@ -25,6 +26,7 @@ DEFAULTS = {
 }
 
 _CHOICES = {
+    "start_page": {"chat", "device", "memories", "settings"},
     "role": {"elysia_v1", "plain_v1"},
     "memory_extraction": {"rules", "llm"},
     "memory_retrieval": {"keyword", "hybrid"},
@@ -67,6 +69,7 @@ def save_preferences(path: Path, values: dict) -> None:
     body = {
         "version": PREFERENCES_VERSION,
         "voice": bool(values.get("voice", False)),
+        "start_page": values.get("start_page", DEFAULTS["start_page"]),
         "database": str(values.get("database", ""))[:2048],
         "voice_root": str(values.get("voice_root", ""))[:2048],
         "lan_ip": str(values.get("lan_ip", ""))[:64],

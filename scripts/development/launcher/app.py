@@ -23,9 +23,10 @@ CARD_BACKGROUND = "#ffffff"
 ACCENT = "#a72760"
 
 
-def _summary_text(voice, role, extraction, retrieval, tts, allow_delete, consolidation):
+def _summary_text(voice, start_page, role, extraction, retrieval, tts, allow_delete, consolidation):
     """把内部启动枚举翻译为日常首页可理解的三行摘要。"""
     mode = "网页＋圆屏语音" if voice else "网页文字聊天"
+    page_label = {"chat": "聊天", "device": "设备状态", "memories": "记忆管理", "settings": "设置中心"}[start_page]
     role_label = "爱莉希雅风格" if role == "elysia_v1" else "普通助手"
     extraction_label = "模型辅助提取" if extraction == "llm" else "规则提取"
     retrieval_label = "关键词＋语义召回" if retrieval == "hybrid" else "关键词召回"
@@ -33,7 +34,7 @@ def _summary_text(voice, role, extraction, retrieval, tts, allow_delete, consoli
     delete_label = "允许单条删除" if allow_delete else "不开放删除"
     consolidation_label = "低频整理已开启" if consolidation else "低频整理关闭"
     return (
-        f"{mode}  ·  {role_label}\n"
+        f"{mode}  ·  打开{page_label}  ·  {role_label}\n"
         f"{extraction_label}  ·  {retrieval_label}  ·  {sound_label}\n"
         f"{delete_label}  ·  {consolidation_label}"
     )
@@ -137,6 +138,8 @@ def main():
     window.bind_all("<MouseWheel>", scroll_current_tab, add="+")
 
     voice = tk.BooleanVar(value=saved["voice"])
+    start_page_labels = {"聊天": "chat", "设备状态": "device", "记忆管理": "memories", "设置中心": "settings"}
+    start_page = tk.StringVar(value=next(label for label, value in start_page_labels.items() if value == saved["start_page"]))
     consent = tk.BooleanVar(value=saved["http_risk_ack"])
     database = tk.StringVar(value=saved["database"] or str(ROOT / "data/databases/xiaozhi-demo-v1.db"))
     server = tk.StringVar(value=saved["voice_root"] or str(VOICE_ROOT))
@@ -165,6 +168,7 @@ def main():
         # 删除能力有意不进入此字典：每次打开面板都按本机日常约定重新设置。
         return {
             "voice": voice.get(),
+            "start_page": start_page_labels[start_page.get()],
             "database": database.get().strip(),
             "voice_root": server.get().strip(),
             "lan_ip": ip.get().strip(),
@@ -183,6 +187,10 @@ def main():
     ttk.Label(mode_box, text="只启动网页控制台，不启动小智语音服务。", style="Hint.TLabel").pack(anchor="w", padx=(24, 0), pady=(0, 8))
     ttk.Radiobutton(mode_box, text="文字聊天＋圆屏语音", variable=voice, value=True).pack(anchor="w", pady=(1, 1))
     ttk.Label(mode_box, text="同时启动小智；圆屏在线状态仍在网页内查看。", style="Hint.TLabel").pack(anchor="w", padx=(24, 0), pady=(0, 2))
+    open_row = ttk.Frame(mode_box)
+    open_row.pack(fill="x", pady=(12, 2))
+    ttk.Label(open_row, text="启动后打开：").pack(side="left")
+    ttk.Combobox(open_row, textvariable=start_page, values=tuple(start_page_labels), state="readonly", width=16).pack(side="left")
 
     paths_box = ttk.LabelFrame(advanced, text="本机路径", style="Section.TLabelframe")
     paths_box.pack(fill="x", pady=(0, 10))
@@ -305,7 +313,7 @@ def main():
 
     def update_summary(*_):
         summary.set(_summary_text(
-            voice.get(), role.get(), selected_extraction(), selected_retrieval(),
+            voice.get(), start_page_labels[start_page.get()], role.get(), selected_extraction(), selected_retrieval(),
             selected_tts(), allow_memory_delete.get(), memory_consolidation.get(),
         ))
 
@@ -317,7 +325,7 @@ def main():
         text="详细路径和算法选项在“高级设置”；成功启动后自动记住常用选择。",
         style="Subtitle.TLabel",
     ).pack(anchor="w", pady=(4, 0))
-    for variable in (voice, role, memory_extraction, memory_retrieval,
+    for variable in (voice, start_page, role, memory_extraction, memory_retrieval,
                      tts_backend, allow_memory_delete, memory_consolidation):
         variable.trace_add("write", update_summary)
     update_summary()
@@ -355,7 +363,7 @@ def main():
 
     def open_page():
         if manager.ready():
-            webbrowser.open(console_url(manager.options.port))
+            webbrowser.open(console_url(manager.options.port, start_page_labels[start_page.get()]))
         else:
             messagebox.showinfo("尚未就绪", "请先启动并等待控制台就绪。")
 
