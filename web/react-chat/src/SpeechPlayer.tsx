@@ -1,6 +1,7 @@
 import {useEffect, useRef, useState} from 'react';
 import {Button, Space, Switch} from 'antd';
 import {ChatApi} from './api';
+import {claimSpeechPlayback} from './speechPlaybackCoordinator';
 
 /** 网页朗读只在电脑播放；麦克风仅在播放监听期间用于本地音量判断，不上传录音。 */
 export function SpeechPlayer({api, text}: {api: ChatApi; text: string}) {
@@ -10,6 +11,7 @@ export function SpeechPlayer({api, text}: {api: ChatApi; text: string}) {
   const audioContext = useRef<AudioContext | undefined>(undefined);
   const frame = useRef(0);
   const requestGeneration = useRef(0);
+  const releasePlaybackLease = useRef<() => void>(() => undefined);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
   const [speechInterrupt, setSpeechInterrupt] = useState(false);
@@ -37,6 +39,8 @@ export function SpeechPlayer({api, text}: {api: ChatApi; text: string}) {
     }
     releaseMicrophone();
     releaseAudioUrl();
+    releasePlaybackLease.current();
+    releasePlaybackLease.current = () => undefined;
   };
 
   const stop = () => {
@@ -112,18 +116,26 @@ export function SpeechPlayer({api, text}: {api: ChatApi; text: string}) {
       stopPlayback();
       const url = URL.createObjectURL(blob);
       objectUrl.current = url;
+      releasePlaybackLease.current = claimSpeechPlayback(() => {
+        stopPlayback();
+        setNotice('另一条网页朗读已开始，本条已停止并释放麦克风。');
+      });
       const element = new Audio(url);
       audio.current = element;
       element.onended = () => {
         audio.current = undefined;
         releaseMicrophone();
         releaseAudioUrl();
+        releasePlaybackLease.current();
+        releasePlaybackLease.current = () => undefined;
         setNotice('朗读完成，麦克风已释放。');
       };
       element.onerror = () => {
         audio.current = undefined;
         releaseMicrophone();
         releaseAudioUrl();
+        releasePlaybackLease.current();
+        releasePlaybackLease.current = () => undefined;
         setNotice('浏览器无法播放生成的音频。');
       };
       await element.play();
