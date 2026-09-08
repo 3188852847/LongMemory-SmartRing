@@ -1,0 +1,59 @@
+{
+  "schema_version": 1,
+  "captured_on": "2026-09-08",
+  "experiment": "0001-align-viewe-lvgl-assets",
+  "source_baseline": "../upstream-baseline.json",
+  "working_copy": "D:\\sr-bv2-lvgl-assets",
+  "board": "viewe-smartring-plus",
+  "application_version": "2.2.3",
+  "esp_idf_version": "5.5.4",
+  "configuration": {
+    "wechat_message_style": true,
+    "emote_message_style": false,
+    "flash_default_assets": true,
+    "partition_table_changed": false
+  },
+  "artifacts": {
+    "application": {
+      "length_bytes": 3957712,
+      "sha256": "340CCB674F9EEBB663CF88EA9261EA81668DF5C9A9760A15FF4C46BCF12A9B6E"
+    },
+    "generated_assets": {
+      "length_bytes": 352105,
+      "sha256": "C31A144A0DF77BFD8F70545D3AF12E3B23F1501CC3B4865EBD91E0FCAC965478"
+    },
+    "release_zip": {
+      "length_bytes": 2600008,
+      "sha256": "BA5016D7950CFA3238438B1B8B25D7FFC97034CAF240D67A7A01A210FA1318F0"
+    }
+  },
+  "application_partition": {
+    "length_bytes": 4128768,
+    "remaining_bytes": 171056,
+    "baseline_remaining_bytes": 2352,
+    "application_reduction_bytes": 168704
+  },
+  "flash": {
+    "port": "COM3",
+    "result": "verified",
+    "nvs_written": false,
+    "written_partitions": [
+      "bootloader",
+      "partition_table",
+      "ota_data_initial",
+      "application",
+      "generated_assets"
+    ]
+  },
+  "runtime": {
+    "assets_partition_mounted": true,
+    "hardware_initialization": "passed",
+    "wifi_reconnected": true,
+    "visual_state_sequence": "pending_user_validation",
+    "font_awesome_fallback_icons": [
+      "microchip_ai",
+      "cloud_slash"
+    ],
+    "ota_failure_during_validation": "expected_server_offline_at_192.168.124.111:8003"
+  }
+}

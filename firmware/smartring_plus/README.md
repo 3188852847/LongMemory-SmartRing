@@ -6,6 +6,7 @@
 
 - 厂家 ZIP 副本：`D:\SmartRing-Plus-main\examples\esp-idf\11_xiaozhi\xiaozhi-esp32-main_smartring_plus_B_V2`
 - 干净短路径构建副本：`D:\sr-bv2`
+- 补丁实验副本：`D:\sr-bv2-lvgl-assets`
 - 板型：`viewe-smartring-plus`
 - 应用：v2.2.3
 - 工具链：ESP-IDF v5.5.4、Python 3.11.15、CMake 3.30.2、Ninja 1.12.1、Xtensa GCC 14.2.0
@@ -20,5 +21,6 @@
 4. 使用全新 build 目录构建并记录 map、应用、assets 与分区余量。
 5. 先做离线审查；烧录仍需单独说明写入范围和恢复路径。
 
-详细决定见 [ADR-0090](../../docs/adr/0090-audited-upstream-firmware-overlay.md)，实机证据见[固件审计](../../docs/research/round-display-firmware-audit-2026-09-08.md)。
+首次补丁实验的机器可读结果保存在 `experiments/0001-lvgl-assets.json`。该记录固定产物和实机日志结论，但不把本机工作副本或二进制提交进主仓库。
 
+详细决定见 [ADR-0090](../../docs/adr/0090-audited-upstream-firmware-overlay.md)，实机证据见[固件审计](../../docs/research/round-display-firmware-audit-2026-09-08.md)。

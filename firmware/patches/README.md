@@ -14,4 +14,4 @@
 
 当前补丁：
 
-- `0001-align-viewe-lvgl-assets.patch`：只用于验证 B V2 的 LVGL 显示和资源策略一致性；尚未烧录。
+- `0001-align-viewe-lvgl-assets.patch`：对齐 B V2 的 LVGL 显示和资源策略；已完成隔离构建、实机烧录和资源分区挂载验证，逐项视觉状态仍待验收。
