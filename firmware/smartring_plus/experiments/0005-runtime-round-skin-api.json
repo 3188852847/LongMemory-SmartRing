@@ -39,9 +39,10 @@
     "assets_partition_written": false
   },
   "runtime": {
-    "capability_probe": "pending_device_validation",
-    "set_and_exact_readback": "pending_device_validation",
-    "restart_persistence": "pending_device_validation",
+    "capability_probe": "verified",
+    "set_and_exact_readback": "verified_mint_calm_v1",
+    "device_manifest_sha256": "7475a1d10bb26cfbb3407813d940b861a50b7d8e5cacb2702eff3fdbe7eae3fb",
+    "restart_persistence": "user_reported_verified",
     "core_state_visuals": "pending_user_validation"
   }
 }
