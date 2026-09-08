@@ -17,9 +17,16 @@ _ID = re.compile(r"^[a-z0-9][a-z0-9-]{2,39}$")
 _COLOR = re.compile(r"^#[0-9a-fA-F]{6}$")
 _ROOT_KEYS = {"schema_version", "id", "name", "description", "target", "palette", "face", "motion"}
 _TARGET_KEYS = {"board", "width", "height", "color_format", "skin_api"}
-_PALETTE_KEYS = {"background", "background_edge", "foreground", "muted", "accent", "warning", "error", "charging"}
+_PALETTE_KEYS = {
+    "background", "background_edge", "foreground", "muted", "accent",
+    "listening", "thinking", "happy", "concerned", "warning", "error", "charging",
+}
 _FACE_KEYS = {"eye_width", "eye_height", "mouth_width"}
 _MOTION_KEYS = {"blink_seconds", "speaking_seconds"}
+_DEVICE_PALETTE_KEYS = (
+    "background", "foreground", "muted", "accent", "listening", "thinking",
+    "happy", "concerned", "error",
+)
 
 
 def _exact_keys(value: object, expected: set[str], code: str) -> dict:
@@ -106,9 +113,24 @@ class RoundSkinStore:
                 "console_preview": True,
                 "upstream_assets_ota_detected": True,
                 "device_apply_supported": False,
-                "reason": "firmware_skin_loader_missing",
+                "device_delivery_implemented": True,
+                "reason": "device_capability_probe_required",
                 "known_firmware_baseline": "round-face-0004",
             },
+        }
+
+    def device_payload(self, skin_id: str) -> dict:
+        """生成 skin_api=1 的固件子集；浏览器动画和渐变边缘不冒充设备能力。"""
+        matches = [item for item in self._skins() if item["id"] == skin_id]
+        if len(matches) != 1:
+            raise ValueError("unknown_round_skin")
+        skin = matches[0]
+        return {
+            "skin_api": 1,
+            "skin_id": skin["id"],
+            "manifest_sha256": skin["manifest_sha256"],
+            **{key: int(skin["palette"][key][1:], 16) for key in _DEVICE_PALETTE_KEYS},
+            **skin["face"],
         }
 
     def select(self, skin_id: str) -> dict:

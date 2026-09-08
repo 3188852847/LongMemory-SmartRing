@@ -38,6 +38,16 @@ def client_for(tmp_path, value, status=200):
     return client
 
 
+def round_skin():
+    return {
+        "skin_api": 1, "skin_id": "rose-night-v1", "manifest_sha256": "a" * 64,
+        "background": 0x171B26, "foreground": 0xF7F4F8, "muted": 0xCBD1DC,
+        "accent": 0xDF72A8, "listening": 0x69D5FF, "thinking": 0xF7C65A,
+        "happy": 0x7DE2B8, "concerned": 0x8AA8FF, "error": 0xF16C73,
+        "eye_width": 22, "eye_height": 36, "mouth_width": 38,
+    }
+
+
 def test_token_is_backend_only_and_volume_is_projected(tmp_path):
     client = client_for(tmp_path, {"volume": 25, "wifi_password": "synthetic-secret", "message": "<script>alert(1)</script>"})
     assert asyncio.run(client.read_volume()) == {"volume": 25}
@@ -140,3 +150,36 @@ def test_announcement_rejects_unproven_or_mismatched_response(tmp_path, change):
     client = client_for(tmp_path, value)
     with pytest.raises(BridgeError, match="bridge_invalid_response"):
         asyncio.run(client.announce("合成问候。", expires_at))
+
+
+def test_round_skin_read_and_verified_write_are_strictly_projected(tmp_path):
+    skin = round_skin()
+    client = client_for(tmp_path, skin)
+    assert asyncio.run(client.read_round_skin()) == skin
+    assert client._session.calls[0][0] == (
+        "GET", "http://127.0.0.1:8766/api/device/round-skin",
+    )
+
+    response = {
+        "requested_skin_id": skin["skin_id"],
+        "requested_manifest_sha256": skin["manifest_sha256"],
+        "acknowledged": True, "verified": True, "device_skin": skin,
+        "private": "must-not-escape",
+    }
+    client = client_for(tmp_path, response)
+    result = asyncio.run(client.set_round_skin(skin))
+    assert result["verified"] is True and "private" not in result
+    assert client._session.calls[0][1]["json"] == skin
+
+
+def test_round_skin_rejects_false_verified_mismatch(tmp_path):
+    skin = round_skin()
+    changed = {**skin, "accent": 0}
+    response = {
+        "requested_skin_id": skin["skin_id"],
+        "requested_manifest_sha256": skin["manifest_sha256"],
+        "acknowledged": True, "verified": True, "device_skin": changed,
+    }
+    client = client_for(tmp_path, response)
+    with pytest.raises(BridgeError, match="bridge_invalid_response"):
+        asyncio.run(client.set_round_skin(skin))

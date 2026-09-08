@@ -6,6 +6,7 @@
 
 import asyncio
 import json
+import re
 import time
 from uuid import uuid4
 
@@ -14,10 +15,21 @@ STATUS_TOOL = "self.get_device_status"
 VOLUME_TOOL = "self.audio_speaker.set_volume"
 BRIGHTNESS_TOOL = "self.screen.set_brightness"
 THEME_TOOL = "self.screen.set_theme"
+GET_ROUND_SKIN_TOOL = "self.screen.get_round_skin"
+SET_ROUND_SKIN_TOOL = "self.screen.set_round_skin"
 MIN_VOLUME, MAX_VOLUME = 5, 60  # 技术验证阶段限制，非硬件音量范围。
 MIN_BRIGHTNESS, MAX_BRIGHTNESS = 5, 100
 MAX_ANNOUNCEMENT_CHARS = 80
 MAX_ANNOUNCEMENT_TTL_SECONDS = 300
+ROUND_SKIN_FIELDS = (
+    "skin_api", "skin_id", "manifest_sha256", "background", "foreground", "muted",
+    "accent", "listening", "thinking", "happy", "concerned", "error",
+    "eye_width", "eye_height", "mouth_width",
+)
+ROUND_SKIN_COLOR_FIELDS = (
+    "background", "foreground", "muted", "accent", "listening", "thinking",
+    "happy", "concerned", "error",
+)
 
 
 class ControlError(Exception):
@@ -78,6 +90,28 @@ def decode_result(result):
         return json.loads(text)
     except ValueError:
         raise ControlError("unexpected_device_result", 502) from None
+
+
+def validate_round_skin(value):
+    """验证固件回读与即将下发的 skin_api=1 子集，拒绝设备返回的开放字段。"""
+    if not isinstance(value, dict) or set(value) != set(ROUND_SKIN_FIELDS):
+        raise ControlError("round_skin_readback_invalid", 502)
+    if value.get("skin_api") != 1:
+        raise ControlError("round_skin_readback_invalid", 502)
+    if (not isinstance(value.get("skin_id"), str)
+            or re.fullmatch(r"[a-z0-9][a-z0-9-]{2,39}", value["skin_id"]) is None
+            or not isinstance(value.get("manifest_sha256"), str)
+            or re.fullmatch(r"[0-9a-f]{64}", value["manifest_sha256"]) is None):
+        raise ControlError("round_skin_readback_invalid", 502)
+    if any(type(value.get(key)) is not int or not 0 <= value[key] <= 0xFFFFFF
+           for key in ROUND_SKIN_COLOR_FIELDS):
+        raise ControlError("round_skin_readback_invalid", 502)
+    for key, minimum, maximum in (
+        ("eye_width", 12, 36), ("eye_height", 18, 48), ("mouth_width", 20, 64),
+    ):
+        if type(value.get(key)) is not int or not minimum <= value[key] <= maximum:
+            raise ControlError("round_skin_readback_invalid", 502)
+    return value
 
 
 class DeviceControl:
@@ -164,10 +198,14 @@ class DeviceControl:
         """
         if self._connection() is not conn:
             raise ControlError("device_connection_changed")
-        if name not in (STATUS_TOOL, VOLUME_TOOL, BRIGHTNESS_TOOL, THEME_TOOL):
+        if name not in (STATUS_TOOL, VOLUME_TOOL, BRIGHTNESS_TOOL, THEME_TOOL,
+                        GET_ROUND_SKIN_TOOL, SET_ROUND_SKIN_TOOL):
             raise ControlError("tool_not_allowed", 403)
         client = conn.mcp_client
-        tool_schema(client, name)
+        # 皮肤工具在固件中标为 user-only，避免语言模型擅自修改外观；因此不会
+        # 出现在普通 tools/list 中。只有本机窄控制通道能按固定契约直接调用。
+        if name not in (GET_ROUND_SKIN_TOOL, SET_ROUND_SKIN_TOOL):
+            tool_schema(client, name)
         call_id = await client.get_next_id()
         while call_id < 3:
             call_id = await client.get_next_id()
@@ -310,6 +348,45 @@ class DeviceControl:
         if theme not in {"light", "dark"}:
             raise ControlError("theme_invalid", 400)
         return await self._set_screen_value(tool=THEME_TOOL, field="theme", value=theme)
+
+    async def read_round_skin(self):
+        if self.operation_lock.locked():
+            raise ControlError("control_busy")
+        async with self.operation_lock:
+            return validate_round_skin(
+                await self._call(self._connection(), GET_ROUND_SKIN_TOOL, {})
+            )
+
+    async def set_round_skin(self, skin):
+        try:
+            requested = validate_round_skin(skin)
+        except ControlError:
+            raise ControlError("round_skin_invalid", 400) from None
+        if self.operation_lock.locked():
+            raise ControlError("control_busy")
+        async with self.operation_lock:
+            conn = self._connection()
+            acknowledged = await self._call(conn, SET_ROUND_SKIN_TOOL, requested)
+            if acknowledged is not True:
+                raise ControlError("set_not_acknowledged_outcome_unknown", 502)
+            result = {
+                "requested_skin_id": requested["skin_id"],
+                "requested_manifest_sha256": requested["manifest_sha256"],
+                "acknowledged": True,
+                "verified": False,
+            }
+            try:
+                readback = validate_round_skin(
+                    await self._call(conn, GET_ROUND_SKIN_TOOL, {})
+                )
+                result["device_skin"] = readback
+                result["verified"] = readback == requested
+                if not result["verified"]:
+                    result["reason"] = "round_skin_readback_mismatch"
+            except ControlError as exc:
+                result["reason"] = exc.code
+            result["operation_id"] = uuid4().hex
+            return result
 
     async def announce(self, text, expires_at_ms):
         """把一条短测试文本放入当前连接的既有 TTS 队列。

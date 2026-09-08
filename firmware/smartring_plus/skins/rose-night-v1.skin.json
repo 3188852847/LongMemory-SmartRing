@@ -4,7 +4,7 @@
   "name": "蔷薇夜色",
   "description": "深色背景与柔和蔷薇色状态脸，作为首个 LongMemory 圆屏设计基线。",
   "target": {"board": "viewe-smartring-plus", "width": 360, "height": 360, "color_format": "RGB565", "skin_api": 1},
-  "palette": {"background": "#171B26", "background_edge": "#090B10", "foreground": "#F7F4F8", "muted": "#CBD1DC", "accent": "#DF72A8", "warning": "#F0B34B", "error": "#F16C73", "charging": "#8DE39E"},
+  "palette": {"background": "#171B26", "background_edge": "#090B10", "foreground": "#F7F4F8", "muted": "#CBD1DC", "accent": "#DF72A8", "listening": "#69D5FF", "thinking": "#F7C65A", "happy": "#7DE2B8", "concerned": "#8AA8FF", "warning": "#F0B34B", "error": "#F16C73", "charging": "#8DE39E"},
   "face": {"eye_width": 22, "eye_height": 36, "mouth_width": 38},
   "motion": {"blink_seconds": 5.4, "speaking_seconds": 0.52}
 }

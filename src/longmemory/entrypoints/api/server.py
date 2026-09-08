@@ -220,8 +220,10 @@ def create_app(*, port=8765, bridge=None, web_root=None, database=None, allow_me
         if xiaozhi_server and memory_backend_store else None
     )
     register_memory_backend_routes(app, memory_backend_store, memory_backends)
-    # 皮肤档案当前只驱动本机设计预览；设备端安全加载器完成前不会下发 assets。
-    register_round_skin_routes(app, round_skin_store or RoundSkinStore(ROOT))
+    # 皮肤档案可经 0005 固件下发固定参数子集；资源 assets 仍不在这条通路中。
+    register_round_skin_routes(
+        app, round_skin_store or RoundSkinStore(ROOT), client, operation_lock,
+    )
     experiments = experiment_backend if experiment_backend is not None else ExperimentBackend(ROOT / "experiments")
     register_experiment_routes(app, experiments)
     register_job_routes(app, job_backend if job_backend is not None else ExperimentJobs(experiments))

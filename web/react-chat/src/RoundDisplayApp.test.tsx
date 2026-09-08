@@ -22,16 +22,18 @@ describe('圆屏状态协议与模拟器', () => {
     vi.spyOn(ChatApi.prototype, 'request').mockResolvedValue({
       enabled:true, selected_skin:'rose-night-v1', skins:[],
       delivery:{console_preview:true, upstream_assets_ota_detected:true, device_apply_supported:false,
-        reason:'firmware_skin_loader_missing', known_firmware_baseline:'round-face-0004'},
+        device_delivery_implemented:true, reason:'device_capability_probe_required', known_firmware_baseline:'round-face-0004'},
     });
     render(<QueryClientProvider client={createConsoleQueryClient()}><MemoryRouter><RoundDisplayApp/></MemoryRouter></QueryClientProvider>);
     expect(screen.getByRole('heading', {name: '圆屏状态预览'})).toBeTruthy();
     expect(screen.getByText(/画布：360 × 360 px/)).toBeTruthy();
-    expect(screen.getByText('这是设计模拟器，不是真实设备控制器')).toBeTruthy();
+    expect(screen.getByText('预览与真机采用同一版皮肤清单')).toBeTruthy();
     expect(screen.getByRole('region', {name: '圆屏模拟画布'})).toBeTruthy();
     expect(screen.getByText('1. 交互阶段')).toBeTruthy();
     expect(screen.getByText('2. 情绪表达')).toBeTruthy();
     expect(screen.getByText('3. 系统覆盖')).toBeTruthy();
     expect(screen.getByText('4. 皮肤档案')).toBeTruthy();
+    expect(screen.getByRole('button', {name:'检测真机皮肤能力'})).toBeTruthy();
+    expect((screen.getByRole('button', {name:'应用到真机'}) as HTMLButtonElement).disabled).toBe(true);
   });
 });

@@ -56,6 +56,30 @@ class FakeBridge:
                 "playback_acknowledgement": "unavailable",
                 "expires_at_ms": int(expires_at.timestamp() * 1000)}
 
+    async def read_round_skin(self):
+        self.calls.append("read-round-skin")
+        if self.error:
+            raise self.error
+        return self.round_skin()
+
+    async def set_round_skin(self, skin):
+        self.calls.append(("set-round-skin", skin))
+        if self.error:
+            raise self.error
+        return {"requested_skin_id": skin["skin_id"],
+                "requested_manifest_sha256": skin["manifest_sha256"],
+                "acknowledged": True, "verified": True, "device_skin": skin}
+
+    @staticmethod
+    def round_skin():
+        return {
+            "skin_api": 1, "skin_id": "rose-night-v1", "manifest_sha256": "a" * 64,
+            "background": 0x171B26, "foreground": 0xF7F4F8, "muted": 0xCBD1DC,
+            "accent": 0xDF72A8, "listening": 0x69D5FF, "thinking": 0xF7C65A,
+            "happy": 0x7DE2B8, "concerned": 0x8AA8FF, "error": 0xF16C73,
+            "eye_width": 22, "eye_height": 36, "mouth_width": 38,
+        }
+
     async def close(self):
         self.closed = True
 
@@ -155,6 +179,13 @@ def test_round_skin_api_is_csrf_protected_and_does_not_claim_device_apply(tmp_pa
             response = await client.put(base + "/api/round-skins/selection", headers=headers, json={"skin_id": "rose-night-v1"})
             assert response.status == 200
             assert (await response.json())["selected_skin"] == "rose-night-v1"
+            readback = await client.get(base + "/api/round-skins/device")
+            assert readback.status == 200
+            assert (await readback.json())["skin_id"] == "rose-night-v1"
+            assert (await client.post(base + "/api/round-skins/device", json={"skin_id": "rose-night-v1"})).status == 403
+            applied = await client.post(base + "/api/round-skins/device", headers=headers, json={"skin_id": "rose-night-v1"})
+            assert applied.status == 200
+            assert (await applied.json())["verified"] is True
 
     asyncio.run(run())
 

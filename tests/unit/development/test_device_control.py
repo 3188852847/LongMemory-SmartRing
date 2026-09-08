@@ -17,6 +17,16 @@ control = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(control)
 
 
+def round_skin(skin_id="rose-night-v1"):
+    return {
+        "skin_api": 1, "skin_id": skin_id, "manifest_sha256": "a" * 64,
+        "background": 0x171B26, "foreground": 0xF7F4F8, "muted": 0xCBD1DC,
+        "accent": 0xDF72A8, "listening": 0x69D5FF, "thinking": 0xF7C65A,
+        "happy": 0x7DE2B8, "concerned": 0x8AA8FF, "error": 0xF16C73,
+        "eye_width": 22, "eye_height": 36, "mouth_width": 38,
+    }
+
+
 class FakeClient:
     def __init__(self):
         self.ready = True
@@ -54,6 +64,7 @@ class FakeSocket:
         self.volume = 45
         self.brightness = 45
         self.theme = "light"
+        self.round_skin = round_skin()
         self.no_response = False
         self.set_error = False
         self.mismatch = False
@@ -81,6 +92,11 @@ class FakeSocket:
             value = True
         elif name == control.THEME_TOOL:
             self.theme = call["params"]["arguments"]["theme"]
+            value = True
+        elif name == control.GET_ROUND_SKIN_TOOL:
+            value = self.round_skin
+        elif name == control.SET_ROUND_SKIN_TOOL:
+            self.round_skin = call["params"]["arguments"]
             value = True
         future = self.client.call_results.pop(call["id"])
         future.set_result({"isError": self.set_error and name == control.VOLUME_TOOL,
@@ -143,6 +159,34 @@ def test_status_projection_and_screen_controls_are_verified_without_ssid():
         assert (await bridge.set_theme("dark"))["verified"] is True
         cached = bridge.status()
         assert cached["set_brightness_supported"] and cached["set_theme_supported"]
+    asyncio.run(run())
+
+
+def test_round_skin_uses_hidden_fixed_tools_and_requires_exact_readback():
+    async def run():
+        bridge, conn, socket = rig()
+        wanted = round_skin("mint-calm-v1")
+        wanted["manifest_sha256"] = "b" * 64
+        result = await bridge.set_round_skin(wanted)
+        assert result["verified"] is True
+        assert result["device_skin"] == wanted
+        assert [call["params"]["name"] for call in socket.calls] == [
+            control.SET_ROUND_SKIN_TOOL, control.GET_ROUND_SKIN_TOOL,
+        ]
+        assert control.GET_ROUND_SKIN_TOOL not in {
+            item["name"] for item in conn.mcp_client.tools.values()
+        }
+        assert await bridge.read_round_skin() == wanted
+    asyncio.run(run())
+
+
+def test_round_skin_rejects_open_fields_before_sending():
+    async def run():
+        bridge, _, socket = rig()
+        invalid = {**round_skin(), "script": "unknown"}
+        with pytest.raises(control.ControlError, match="round_skin_invalid"):
+            await bridge.set_round_skin(invalid)
+        assert not socket.calls
     asyncio.run(run())
 
 

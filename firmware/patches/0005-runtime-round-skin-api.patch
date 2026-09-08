@@ -1,0 +1,324 @@
+diff --git a/main/boards/viewe-smartring-plus/viewe-smartring-plus.cc b/main/boards/viewe-smartring-plus/viewe-smartring-plus.cc
+index db38361..72f07ce 100644
+--- a/main/boards/viewe-smartring-plus/viewe-smartring-plus.cc
++++ b/main/boards/viewe-smartring-plus/viewe-smartring-plus.cc
+@@ -8,6 +8,8 @@
+ #include "config.h"
+ #include "backlight.h"
+ #include "axp2101.h"
++#include "mcp_server.h"
++#include "settings.h"
+ 
+ #include <wifi_manager.h>
+ #include <esp_log.h>
+@@ -23,7 +25,10 @@
+ #include <freertos/FreeRTOS.h>
+ #include <freertos/semphr.h>
+ #include <freertos/task.h>
++#include <algorithm>
+ #include <cstring>
++#include <cctype>
++#include <stdexcept>
+ 
+ #include "power_manager.h"
+ #include "assets/lang_config.h"
+@@ -578,6 +583,108 @@ private:
+     SemaphoreHandle_t touch_isr_mux_;
+ };
+ 
++struct RoundSkinConfig {
++    int api = 1;
++    std::string id = "rose-night-v1";
++    std::string manifest_sha256 = "a30a24b7de67b26b40812d6fd234b18723d8345b5ba8b230e1cdcc3dfb70f6f5";
++    int background = 0x171B26;
++    int foreground = 0xF7F4F8;
++    int muted = 0xCBD1DC;
++    int accent = 0xDF72A8;
++    int listening = 0x69D5FF;
++    int thinking = 0xF7C65A;
++    int happy = 0x7DE2B8;
++    int concerned = 0x8AA8FF;
++    int error = 0xF16C73;
++    int eye_width = 22;
++    int eye_height = 36;
++    int mouth_width = 38;
++};
++
++static bool IsRoundSkinId(const std::string& value) {
++    if (value.size() < 3 || value.size() > 40 ||
++        !std::isalnum(static_cast<unsigned char>(value.front()))) {
++        return false;
++    }
++    for (unsigned char ch : value) {
++        if (!(std::islower(ch) || std::isdigit(ch) || ch == '-')) {
++            return false;
++        }
++    }
++    return true;
++}
++
++static bool IsLowerHexSha256(const std::string& value) {
++    if (value.size() != 64) {
++        return false;
++    }
++    for (unsigned char ch : value) {
++        if (!(std::isdigit(ch) || (ch >= 'a' && ch <= 'f'))) {
++            return false;
++        }
++    }
++    return true;
++}
++
++static bool IsRoundSkinValid(const RoundSkinConfig& skin) {
++    auto color = [](int value) { return value >= 0 && value <= 0xFFFFFF; };
++    return skin.api == 1 && IsRoundSkinId(skin.id) && IsLowerHexSha256(skin.manifest_sha256) &&
++           color(skin.background) && color(skin.foreground) && color(skin.muted) &&
++           color(skin.accent) && color(skin.listening) && color(skin.thinking) &&
++           color(skin.happy) && color(skin.concerned) && color(skin.error) &&
++           skin.eye_width >= 12 && skin.eye_width <= 36 &&
++           skin.eye_height >= 18 && skin.eye_height <= 48 &&
++           skin.mouth_width >= 20 && skin.mouth_width <= 64;
++}
++
++static RoundSkinConfig LoadRoundSkin() {
++    RoundSkinConfig skin;
++    Settings settings("round_skin");
++    skin.api = settings.GetInt("api", 0);
++    skin.id = settings.GetString("skin_id");
++    skin.manifest_sha256 = settings.GetString("skin_sha");
++    skin.background = settings.GetInt("background", -1);
++    skin.foreground = settings.GetInt("foreground", -1);
++    skin.muted = settings.GetInt("muted", -1);
++    skin.accent = settings.GetInt("accent", -1);
++    skin.listening = settings.GetInt("listening", -1);
++    skin.thinking = settings.GetInt("thinking", -1);
++    skin.happy = settings.GetInt("happy", -1);
++    skin.concerned = settings.GetInt("concerned", -1);
++    skin.error = settings.GetInt("error", -1);
++    skin.eye_width = settings.GetInt("eye_width", -1);
++    skin.eye_height = settings.GetInt("eye_height", -1);
++    skin.mouth_width = settings.GetInt("mouth_width", -1);
++    if (!IsRoundSkinValid(skin)) {
++        ESP_LOGI(TAG, "No valid persisted round skin; using built-in fallback");
++        return RoundSkinConfig();
++    }
++    ESP_LOGI(TAG, "Loaded round skin %s", skin.id.c_str());
++    return skin;
++}
++
++static void SaveRoundSkin(const RoundSkinConfig& skin) {
++    if (!IsRoundSkinValid(skin)) {
++        throw std::invalid_argument("Invalid round skin");
++    }
++    Settings settings("round_skin", true);
++    settings.SetString("skin_id", skin.id);
++    settings.SetString("skin_sha", skin.manifest_sha256);
++    settings.SetInt("background", skin.background);
++    settings.SetInt("foreground", skin.foreground);
++    settings.SetInt("muted", skin.muted);
++    settings.SetInt("accent", skin.accent);
++    settings.SetInt("listening", skin.listening);
++    settings.SetInt("thinking", skin.thinking);
++    settings.SetInt("happy", skin.happy);
++    settings.SetInt("concerned", skin.concerned);
++    settings.SetInt("error", skin.error);
++    settings.SetInt("eye_width", skin.eye_width);
++    settings.SetInt("eye_height", skin.eye_height);
++    settings.SetInt("mouth_width", skin.mouth_width);
++    settings.SetInt("api", skin.api);
++}
++
+ // SmartRing-Plus 的日常入口以状态可见性为先：继续复用通用 LCD 的状态栏、
+ // 电量、通知、预览图和字幕，只把中央内容替换为适合 360x360 圆屏的轻量脸。
+ // 所有图形都由 LVGL 基础对象绘制，不增加图片资源和解码负担。
+@@ -586,6 +693,8 @@ private:
+     lv_obj_t* left_eye_ = nullptr;
+     lv_obj_t* right_eye_ = nullptr;
+     lv_obj_t* mouth_ = nullptr;
++    RoundSkinConfig skin_ = LoadRoundSkin();
++    std::string current_emotion_ = "neutral";
+ 
+     static void ConfigureFacePart(lv_obj_t* object) {
+         lv_obj_set_style_border_width(object, 0, 0);
+@@ -614,22 +723,23 @@ private:
+         const bool sad = std::strcmp(value, "sad") == 0 ||
+                          std::strcmp(value, "crying") == 0;
+ 
+-        lv_color_t accent = lv_color_hex(0xFF748C);
++        lv_color_t accent = lv_color_hex(skin_.accent);
+         if (listening) {
+-            accent = lv_color_hex(0x69D5FF);
++            accent = lv_color_hex(skin_.listening);
+         } else if (thinking) {
+-            accent = lv_color_hex(0xF7C65A);
++            accent = lv_color_hex(skin_.thinking);
+         } else if (error) {
+-            accent = lv_color_hex(0xFF5C6C);
++            accent = lv_color_hex(skin_.error);
+         } else if (happy) {
+-            accent = lv_color_hex(0x7DE2B8);
++            accent = lv_color_hex(skin_.happy);
+         } else if (sad) {
+-            accent = lv_color_hex(0x8AA8FF);
++            accent = lv_color_hex(skin_.concerned);
+         }
+ 
+-        lv_coord_t eye_width = thinking ? 16 : 19;
+-        lv_coord_t eye_height = thinking ? 16 : (listening ? 40 : 34);
+-        lv_coord_t mouth_width = error ? 18 : (speaking ? 46 : (happy ? 52 : 38));
++        lv_coord_t eye_width = thinking ? std::max(12, skin_.eye_width - 6) : skin_.eye_width;
++        lv_coord_t eye_height = thinking ? 18 : (listening ? std::min(48, skin_.eye_height + 6) : skin_.eye_height);
++        lv_coord_t mouth_width = error ? 20 : (speaking ? std::min(64, skin_.mouth_width + 8) :
++                                              (happy ? std::min(64, skin_.mouth_width + 14) : skin_.mouth_width));
+         lv_coord_t mouth_height = error ? 18 : (speaking ? 20 : (happy ? 13 : 8));
+ 
+         lv_obj_set_size(left_eye_, eye_width, eye_height);
+@@ -643,6 +753,21 @@ private:
+         lv_obj_set_style_bg_color(mouth_, accent, 0);
+     }
+ 
++    void ApplySkinStyles() {
++        const lv_color_t background = lv_color_hex(skin_.background);
++        const lv_color_t foreground = lv_color_hex(skin_.foreground);
++        const lv_color_t muted = lv_color_hex(skin_.muted);
++        if (container_ != nullptr) lv_obj_set_style_bg_color(container_, background, 0);
++        if (top_bar_ != nullptr) lv_obj_set_style_bg_color(top_bar_, background, 0);
++        if (bottom_bar_ != nullptr) lv_obj_set_style_bg_color(bottom_bar_, background, 0);
++        if (status_label_ != nullptr) lv_obj_set_style_text_color(status_label_, foreground, 0);
++        if (notification_label_ != nullptr) lv_obj_set_style_text_color(notification_label_, foreground, 0);
++        if (chat_message_label_ != nullptr) lv_obj_set_style_text_color(chat_message_label_, muted, 0);
++        if (network_label_ != nullptr) lv_obj_set_style_text_color(network_label_, muted, 0);
++        if (battery_label_ != nullptr) lv_obj_set_style_text_color(battery_label_, muted, 0);
++        ApplyFace(current_emotion_.c_str());
++    }
++
+ public:
+     SmartRingFaceDisplay(esp_lcd_panel_io_handle_t panel_io,
+                          esp_lcd_panel_handle_t panel,
+@@ -673,7 +798,7 @@ public:
+         ConfigureFacePart(left_eye_);
+         ConfigureFacePart(right_eye_);
+         ConfigureFacePart(mouth_);
+-        ApplyFace("neutral");
++        ApplySkinStyles();
+ 
+         // 字幕最多占中央安全区下方两行，不再堆叠历史聊天气泡。
+         if (bottom_bar_ != nullptr && chat_message_label_ != nullptr) {
+@@ -687,6 +812,15 @@ public:
+         }
+     }
+ 
++    void SetTheme(Theme* theme) override {
++        LcdDisplay::SetTheme(theme);
++        if (!setup_ui_called_) {
++            return;
++        }
++        DisplayLockGuard lock(this);
++        ApplySkinStyles();
++    }
++
+     void SetStatus(const char* status) override {
+         LvglDisplay::SetStatus(status);
+         if (status == nullptr) {
+@@ -709,7 +843,22 @@ public:
+             return;
+         }
+         DisplayLockGuard lock(this);
+-        ApplyFace(emotion);
++        current_emotion_ = emotion == nullptr ? "neutral" : emotion;
++        ApplyFace(current_emotion_.c_str());
++    }
++
++    RoundSkinConfig GetRoundSkin() const {
++        return skin_;
++    }
++
++    void SetRoundSkin(const RoundSkinConfig& skin) {
++        if (!IsRoundSkinValid(skin)) {
++            throw std::invalid_argument("Invalid round skin");
++        }
++        SaveRoundSkin(skin);
++        DisplayLockGuard lock(this);
++        skin_ = skin;
++        ApplySkinStyles();
+     }
+ };
+ 
+@@ -971,6 +1111,69 @@ private:
+         });
+     }
+ 
++    void InitializeRoundSkinTools() {
++        auto* face_display = static_cast<SmartRingFaceDisplay*>(display_);
++        auto& mcp = McpServer::GetInstance();
++        mcp.AddUserOnlyTool("self.screen.get_round_skin", "Read the audited round skin configuration",
++            PropertyList(), [face_display](const PropertyList&) -> ReturnValue {
++                const auto skin = face_display->GetRoundSkin();
++                cJSON* json = cJSON_CreateObject();
++                cJSON_AddNumberToObject(json, "skin_api", skin.api);
++                cJSON_AddStringToObject(json, "skin_id", skin.id.c_str());
++                cJSON_AddStringToObject(json, "manifest_sha256", skin.manifest_sha256.c_str());
++                cJSON_AddNumberToObject(json, "background", skin.background);
++                cJSON_AddNumberToObject(json, "foreground", skin.foreground);
++                cJSON_AddNumberToObject(json, "muted", skin.muted);
++                cJSON_AddNumberToObject(json, "accent", skin.accent);
++                cJSON_AddNumberToObject(json, "listening", skin.listening);
++                cJSON_AddNumberToObject(json, "thinking", skin.thinking);
++                cJSON_AddNumberToObject(json, "happy", skin.happy);
++                cJSON_AddNumberToObject(json, "concerned", skin.concerned);
++                cJSON_AddNumberToObject(json, "error", skin.error);
++                cJSON_AddNumberToObject(json, "eye_width", skin.eye_width);
++                cJSON_AddNumberToObject(json, "eye_height", skin.eye_height);
++                cJSON_AddNumberToObject(json, "mouth_width", skin.mouth_width);
++                return json;
++            });
++        mcp.AddUserOnlyTool("self.screen.set_round_skin", "Set an audited skin_api=1 round skin configuration",
++            PropertyList({
++                Property("skin_api", kPropertyTypeInteger, 1, 1),
++                Property("skin_id", kPropertyTypeString),
++                Property("manifest_sha256", kPropertyTypeString),
++                Property("background", kPropertyTypeInteger, 0, 0xFFFFFF),
++                Property("foreground", kPropertyTypeInteger, 0, 0xFFFFFF),
++                Property("muted", kPropertyTypeInteger, 0, 0xFFFFFF),
++                Property("accent", kPropertyTypeInteger, 0, 0xFFFFFF),
++                Property("listening", kPropertyTypeInteger, 0, 0xFFFFFF),
++                Property("thinking", kPropertyTypeInteger, 0, 0xFFFFFF),
++                Property("happy", kPropertyTypeInteger, 0, 0xFFFFFF),
++                Property("concerned", kPropertyTypeInteger, 0, 0xFFFFFF),
++                Property("error", kPropertyTypeInteger, 0, 0xFFFFFF),
++                Property("eye_width", kPropertyTypeInteger, 12, 36),
++                Property("eye_height", kPropertyTypeInteger, 18, 48),
++                Property("mouth_width", kPropertyTypeInteger, 20, 64),
++            }), [face_display](const PropertyList& properties) -> ReturnValue {
++                RoundSkinConfig skin;
++                skin.api = properties["skin_api"].value<int>();
++                skin.id = properties["skin_id"].value<std::string>();
++                skin.manifest_sha256 = properties["manifest_sha256"].value<std::string>();
++                skin.background = properties["background"].value<int>();
++                skin.foreground = properties["foreground"].value<int>();
++                skin.muted = properties["muted"].value<int>();
++                skin.accent = properties["accent"].value<int>();
++                skin.listening = properties["listening"].value<int>();
++                skin.thinking = properties["thinking"].value<int>();
++                skin.happy = properties["happy"].value<int>();
++                skin.concerned = properties["concerned"].value<int>();
++                skin.error = properties["error"].value<int>();
++                skin.eye_width = properties["eye_width"].value<int>();
++                skin.eye_height = properties["eye_height"].value<int>();
++                skin.mouth_width = properties["mouth_width"].value<int>();
++                face_display->SetRoundSkin(skin);
++                return true;
++            });
++    }
++
+ public:
+     ViewESmartRingPlus() : boot_button_(BOOT_BUTTON_GPIO) {
+         InitializePowerOffPin();
+@@ -983,6 +1186,7 @@ public:
+         InitializeSpi();
+         InitializeSt77916Display();
+         InitializeButtons();
++        InitializeRoundSkinTools();
+         InitializePowerManager();
+     }
+ 

@@ -93,6 +93,17 @@ def create_app(control, token, port=PORT):
             return web.json_response(await control.set_theme(body["theme"]))
         raise ControlError("invalid_fields", 400)
 
+    async def round_skin(request):
+        if request.method == "GET":
+            return web.json_response(await control.read_round_skin())
+        if request.content_type != "application/json":
+            raise ControlError("json_required", 415)
+        try:
+            body = await request.json()
+        except (ValueError, UnicodeError):
+            raise ControlError("invalid_json", 400) from None
+        return web.json_response(await control.set_round_skin(body))
+
     async def announce(request):
         if request.content_type != "application/json":
             raise ControlError("json_required", 415)
@@ -112,6 +123,8 @@ def create_app(control, token, port=PORT):
     app.router.add_post("/api/device/volume", set_volume)
     app.router.add_get("/api/device/status", read_status, allow_head=False)
     app.router.add_post("/api/device/screen", set_screen)
+    app.router.add_get("/api/device/round-skin", round_skin, allow_head=False)
+    app.router.add_post("/api/device/round-skin", round_skin)
     app.router.add_post("/api/device/announcement", announce)
     return app
 

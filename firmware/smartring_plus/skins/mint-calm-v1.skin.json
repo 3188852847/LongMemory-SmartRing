@@ -4,7 +4,7 @@
   "name": "薄荷微光",
   "description": "低刺激的青绿色状态脸，用于验证同一交互协议下的可替换视觉表达。",
   "target": {"board": "viewe-smartring-plus", "width": 360, "height": 360, "color_format": "RGB565", "skin_api": 1},
-  "palette": {"background": "#14211F", "background_edge": "#07100F", "foreground": "#F2FAF8", "muted": "#BDD3CD", "accent": "#65D6B0", "warning": "#EAB866", "error": "#F1787F", "charging": "#8EE6A2"},
+  "palette": {"background": "#14211F", "background_edge": "#07100F", "foreground": "#F2FAF8", "muted": "#BDD3CD", "accent": "#65D6B0", "listening": "#69C9DB", "thinking": "#E6C66A", "happy": "#91E4B5", "concerned": "#8FB6D9", "warning": "#EAB866", "error": "#F1787F", "charging": "#8EE6A2"},
   "face": {"eye_width": 20, "eye_height": 32, "mouth_width": 42},
   "motion": {"blink_seconds": 6.2, "speaking_seconds": 0.58}
 }

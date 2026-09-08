@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "captured_on": "2026-09-08",
+  "experiment": "0005-runtime-round-skin-api",
+  "depends_on": "0004-round-face-core-states",
+  "board": "viewe-smartring-plus",
+  "application_version": "2.2.3",
+  "esp_idf_version": "5.5.4",
+  "contract": {
+    "skin_api": 1,
+    "transport": "owner_only_fixed_mcp_tools",
+    "persistence": "nvs_round_skin",
+    "fallback": "built_in_rose_night_v1",
+    "write_verified_by_exact_readback": true,
+    "assets_partition_changed": false
+  },
+  "source": {
+    "board_cc_sha256_before": "013748A5A5F89AF8585A8044604D3686E069F3FF3014FCBC68D93FAC5E4DE29F",
+    "board_cc_sha256_after": "359621C4CE5FED493B4F7800C26A530926C3BC0615043172442D523773674DDB",
+    "clean_apply": true,
+    "reverse_check": true
+  },
+  "application": {
+    "length_bytes": 3967088,
+    "sha256": "177F293F7BB344EF6027F5C170AE1A2E5338CB546AD763AD9EC5A8AA7524AD33",
+    "partition_length_bytes": 4128768,
+    "remaining_bytes": 161680,
+    "increase_from_0004_bytes": 9264
+  },
+  "flash": {
+    "result": "not_run",
+    "application_offset": "0x20000",
+    "application_only_planned": true,
+    "nvs_written_by_flash": false
+  },
+  "runtime": {
+    "capability_probe": "pending_device_validation",
+    "set_and_exact_readback": "pending_device_validation",
+    "restart_persistence": "pending_device_validation",
+    "core_state_visuals": "pending_user_validation"
+  }
+}

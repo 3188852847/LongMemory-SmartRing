@@ -25,6 +25,7 @@ REASONS = frozenset({
     "volume_readback_unavailable", "control_busy", "volume_outside_device_schema",
     "status_readback_unavailable", "value_outside_device_schema",
     "brightness_out_of_range", "theme_invalid",
+    "round_skin_invalid", "round_skin_readback_invalid", "round_skin_readback_mismatch",
     "set_not_acknowledged_outcome_unknown",
     "device_offline", "device_not_ready", "tools_not_ready", "readback_mismatch",
     "volume_out_of_range", "tool_unavailable",
@@ -182,6 +183,53 @@ class XiaozhiControlClient:
         if "reason" in data:
             result["reason"] = safe_reason(data["reason"])
         return result
+
+    async def read_round_skin(self) -> dict:
+        data = await self._request("GET", "/api/device/round-skin")
+        return self._round_skin(data)
+
+    async def set_round_skin(self, skin: dict) -> dict:
+        requested = self._round_skin(skin)
+        data = await self._request("POST", "/api/device/round-skin", requested)
+        if (data.get("requested_skin_id") != requested["skin_id"]
+                or data.get("requested_manifest_sha256") != requested["manifest_sha256"]
+                or data.get("acknowledged") is not True
+                or type(data.get("verified")) is not bool):
+            raise BridgeError("bridge_invalid_response", 502)
+        result = {
+            "requested_skin_id": data["requested_skin_id"],
+            "requested_manifest_sha256": data["requested_manifest_sha256"],
+            "acknowledged": True,
+            "verified": data["verified"],
+        }
+        if "device_skin" in data:
+            result["device_skin"] = self._round_skin(data["device_skin"])
+        if result["verified"] and result.get("device_skin") != requested:
+            raise BridgeError("bridge_invalid_response", 502)
+        if "reason" in data:
+            result["reason"] = safe_reason(data["reason"])
+        return result
+
+    @staticmethod
+    def _round_skin(value: object) -> dict:
+        fields = {
+            "skin_api", "skin_id", "manifest_sha256", "background", "foreground", "muted",
+            "accent", "listening", "thinking", "happy", "concerned", "error",
+            "eye_width", "eye_height", "mouth_width",
+        }
+        colors = fields - {"skin_api", "skin_id", "manifest_sha256", "eye_width", "eye_height", "mouth_width"}
+        if not isinstance(value, dict) or set(value) != fields or value.get("skin_api") != 1:
+            raise BridgeError("bridge_invalid_response", 502)
+        if (not isinstance(value.get("skin_id"), str)
+                or re.fullmatch(r"[a-z0-9][a-z0-9-]{2,39}", value["skin_id"]) is None
+                or not isinstance(value.get("manifest_sha256"), str)
+                or re.fullmatch(r"[0-9a-f]{64}", value["manifest_sha256"]) is None
+                or any(type(value.get(key)) is not int or not 0 <= value[key] <= 0xFFFFFF for key in colors)):
+            raise BridgeError("bridge_invalid_response", 502)
+        for key, minimum, maximum in (("eye_width", 12, 36), ("eye_height", 18, 48), ("mouth_width", 20, 64)):
+            if type(value.get(key)) is not int or not minimum <= value[key] <= maximum:
+                raise BridgeError("bridge_invalid_response", 502)
+        return value
 
     async def announce(self, text: str, expires_at: datetime) -> dict:
         """请求现有小智 TTS 队列接收短文本，不声称设备已经播放。"""

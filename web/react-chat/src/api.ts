@@ -78,13 +78,23 @@ export interface MemoryBackends {
 export interface RoundSkin {
   schema_version:1; id:string; name:string; description:string;
   target:{board:'viewe-smartring-plus'; width:360; height:360; color_format:'RGB565'; skin_api:1};
-  palette:{background:string; background_edge:string; foreground:string; muted:string; accent:string; warning:string; error:string; charging:string};
+  palette:{background:string; background_edge:string; foreground:string; muted:string; accent:string; listening:string; thinking:string; happy:string; concerned:string; warning:string; error:string; charging:string};
   face:{eye_width:number; eye_height:number; mouth_width:number};
   motion:{blink_seconds:number; speaking_seconds:number}; manifest_sha256:string;
 }
 export interface RoundSkins {
   enabled:boolean; selected_skin:string; skins:RoundSkin[];
-  delivery:{console_preview:boolean; upstream_assets_ota_detected:boolean; device_apply_supported:boolean; reason:string; known_firmware_baseline:string};
+  delivery:{console_preview:boolean; upstream_assets_ota_detected:boolean; device_apply_supported:boolean; device_delivery_implemented?:boolean; reason:string; known_firmware_baseline:string};
+}
+export interface RoundDeviceSkin {
+  skin_api:1; skin_id:string; manifest_sha256:string;
+  background:number; foreground:number; muted:number; accent:number; listening:number;
+  thinking:number; happy:number; concerned:number; error:number;
+  eye_width:number; eye_height:number; mouth_width:number;
+}
+export interface RoundSkinApply {
+  requested_skin_id:string; requested_manifest_sha256:string; acknowledged:true;
+  verified:boolean; device_skin?:RoundDeviceSkin; reason?:string;
 }
 export interface ProactivePolicy {
   subject_id: string; enabled: boolean; utc_offset_minutes: number;
