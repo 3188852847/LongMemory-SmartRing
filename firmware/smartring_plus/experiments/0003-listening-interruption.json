@@ -36,7 +36,9 @@
   },
   "runtime": {
     "normal_listening_visual": "pending_user_validation",
-    "speaking_interruption_visual": "pending_user_validation",
+    "speaking_interruption_visual": "failed_no_interruption_observed",
+    "interruption_detection_scope": "wake_word_only_not_arbitrary_speech",
+    "aec_configuration": "device_and_server_aec_disabled",
     "ordinary_listening_does_not_claim_interruption": "pending_user_validation",
     "stt_thinking_tts_visual_sequence": "pending_user_validation"
   }
