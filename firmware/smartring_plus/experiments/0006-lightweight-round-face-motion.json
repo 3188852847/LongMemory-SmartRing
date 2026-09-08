@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "captured_on": "2026-09-08",
+  "experiment": "0006-lightweight-round-face-motion",
+  "depends_on": "0005-runtime-round-skin-api",
+  "board": "viewe-smartring-plus",
+  "application_version": "2.2.3",
+  "esp_idf_version": "5.5.4",
+  "contract": {
+    "timer_period_ms": 140,
+    "animated_states": ["idle", "listening", "thinking", "speaking"],
+    "static_states": ["error"],
+    "new_assets": false,
+    "skin_api_changed": false,
+    "device_state_machine_changed": false
+  },
+  "source": {
+    "board_cc_sha256_before": "359621C4CE5FED493B4F7800C26A530926C3BC0615043172442D523773674DDB",
+    "board_cc_sha256_after": "9452015FC756D169511874E9857F6A66BE4BD935262E649FA1577660A5ACB9B5",
+    "clean_apply": true,
+    "reverse_check": true
+  },
+  "application": {
+    "length_bytes": 3967248,
+    "sha256": "3A41852890F5129BEB29E8D0EF945399759C3925C2808BF332C8245D8FD0D209",
+    "partition_length_bytes": 4128768,
+    "remaining_bytes": 161520,
+    "increase_from_0005_bytes": 160
+  },
+  "flash": {
+    "result": "not_started",
+    "application_offset": "0x20000",
+    "application_only_planned": true
+  },
+  "runtime": {
+    "core_state_visuals": "pending_user_validation"
+  }
+}

@@ -1,0 +1,86 @@
+diff --git a/main/boards/viewe-smartring-plus/viewe-smartring-plus.cc b/main/boards/viewe-smartring-plus/viewe-smartring-plus.cc
+--- a/main/boards/viewe-smartring-plus/viewe-smartring-plus.cc
++++ b/main/boards/viewe-smartring-plus/viewe-smartring-plus.cc
+@@ -693,9 +693,17 @@ private:
+     lv_obj_t* left_eye_ = nullptr;
+     lv_obj_t* right_eye_ = nullptr;
+     lv_obj_t* mouth_ = nullptr;
++    lv_timer_t* face_timer_ = nullptr;
++    uint32_t animation_frame_ = 0;
+     RoundSkinConfig skin_ = LoadRoundSkin();
+     std::string current_emotion_ = "neutral";
+
++    static void FaceTimerCallback(lv_timer_t* timer) {
++        auto* display = static_cast<SmartRingFaceDisplay*>(lv_timer_get_user_data(timer));
++        display->animation_frame_++;
++        display->ApplyFace(display->current_emotion_.c_str());
++    }
++
+     static void ConfigureFacePart(lv_obj_t* object) {
+         lv_obj_set_style_border_width(object, 0, 0);
+         lv_obj_set_style_pad_all(object, 0, 0);
+@@ -736,17 +745,39 @@ private:
+             accent = lv_color_hex(skin_.concerned);
+         }
+
++        // 一个 140 ms 的低频时钟只改变三个既有几何对象。它不读取麦克风、
++        // 不推断业务状态，也不创建逐帧图片，因此不会把动画冒充设备回执。
++        const uint32_t short_phase = animation_frame_ % 8;
++        const int pulse = short_phase <= 4 ? static_cast<int>(short_phase)
++                                           : 8 - static_cast<int>(short_phase);
++        const uint32_t speaking_phase = animation_frame_ % 6;
++        const int mouth_pulse = speaking_phase <= 3 ? static_cast<int>(speaking_phase)
++                                                     : 6 - static_cast<int>(speaking_phase);
++        const bool blink = !listening && !thinking && !speaking && !error &&
++                           animation_frame_ % 32 == 0;
++
+         lv_coord_t eye_width = thinking ? std::max(12, skin_.eye_width - 6) : skin_.eye_width;
+         lv_coord_t eye_height = thinking ? 18 : (listening ? std::min(48, skin_.eye_height + 6) : skin_.eye_height);
+         lv_coord_t mouth_width = error ? 20 : (speaking ? std::min(64, skin_.mouth_width + 8) :
+                                               (happy ? std::min(64, skin_.mouth_width + 14) : skin_.mouth_width));
+-        lv_coord_t mouth_height = error ? 18 : (speaking ? 20 : (happy ? 13 : 8));
++        lv_coord_t mouth_height = error ? 18 :
++                                  (speaking ? 10 + mouth_pulse * 4 : (happy ? 13 : 8));
++        lv_coord_t left_eye_y = -18;
++        lv_coord_t right_eye_y = -18;
++        if (blink) {
++            eye_height = 5;
++        } else if (listening) {
++            eye_height = std::min<lv_coord_t>(48, eye_height + pulse);
++        } else if (thinking) {
++            left_eye_y -= pulse;
++            right_eye_y += pulse;
++        }
+
+         lv_obj_set_size(left_eye_, eye_width, eye_height);
+         lv_obj_set_size(right_eye_, eye_width, eye_height);
+         lv_obj_set_size(mouth_, mouth_width, mouth_height);
+-        lv_obj_align(left_eye_, LV_ALIGN_CENTER, -42, -18);
+-        lv_obj_align(right_eye_, LV_ALIGN_CENTER, 42, -18);
++        lv_obj_align(left_eye_, LV_ALIGN_CENTER, -42, left_eye_y);
++        lv_obj_align(right_eye_, LV_ALIGN_CENTER, 42, right_eye_y);
+         lv_obj_align(mouth_, LV_ALIGN_CENTER, 0, 38);
+         lv_obj_set_style_bg_color(left_eye_, accent, 0);
+         lv_obj_set_style_bg_color(right_eye_, accent, 0);
+@@ -799,6 +833,9 @@ public:
+         ConfigureFacePart(right_eye_);
+         ConfigureFacePart(mouth_);
+         ApplySkinStyles();
++        face_timer_ = lv_timer_create(FaceTimerCallback, 140, this);
++        lv_timer_set_repeat_count(face_timer_, -1);
++        lv_timer_reset(face_timer_);
+
+         // 字幕最多占中央安全区下方两行，不再堆叠历史聊天气泡。
+         if (bottom_bar_ != nullptr && chat_message_label_ != nullptr) {
+@@ -843,6 +880,10 @@ public:
+             return;
+         }
+         DisplayLockGuard lock(this);
+-        current_emotion_ = emotion == nullptr ? "neutral" : emotion;
++        const std::string next_emotion = emotion == nullptr ? "neutral" : emotion;
++        if (next_emotion != current_emotion_) {
++            current_emotion_ = next_emotion;
++            animation_frame_ = 1;
++        }
+         ApplyFace(current_emotion_.c_str());
+     }
