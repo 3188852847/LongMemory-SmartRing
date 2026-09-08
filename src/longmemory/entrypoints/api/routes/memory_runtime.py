@@ -42,6 +42,8 @@ def register_memory_runtime_routes(app, backend):
             "scenario_retrieved": [asdict(item) for item in prepared.scenarios],
             "persona_use_enabled": prepared.persona_use_enabled,
             "persona_retrieved": [asdict(item) for item in prepared.personas],
+            # 只暴露各阶段耗时，便于定位圆屏首句延迟；不包含正文或模型响应。
+            "timings_ms": asdict(prepared.timings),
             "memory_command": (asdict(prepared.memory_command)
                                if prepared.memory_command is not None else None),
             # 小智当前 Memory 插槽不能直接短路回答；把应用层固定回执作为

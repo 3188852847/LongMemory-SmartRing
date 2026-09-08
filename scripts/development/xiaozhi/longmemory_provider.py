@@ -133,10 +133,30 @@ class MemoryProvider(MemoryProviderBase):
                 not isinstance(command_reply, str) or not command_reply.strip()
                 or len(command_reply) > 2000):
             raise RuntimeError("LongMemory 返回协议无效")
-        logger.bind(tag="LongMemory").info(
-            "记忆处理完成 turn_id={} added={} retrieved={}",
-            response["turn_id"], response["added"], response["retrieved"],
-        )
+        timings = response.get("timings_ms")
+        timing_fields = {
+            "lock_wait_ms", "command_ms", "observe_ms", "recall_ms",
+            "scenario_ms", "persona_ms", "total_ms",
+        }
+        # 计时字段是向后兼容的协议扩展：新 Runtime 会返回它，但更新期间旧
+        # Runtime 仍可继续服务，避免仅因观测字段不同步而中断圆屏对话。
+        if timings is not None:
+            if (not isinstance(timings, dict) or set(timings) != timing_fields
+                    or any(type(value) not in (int, float) or value < 0
+                           for value in timings.values())):
+                raise RuntimeError("LongMemory 返回协议无效")
+            logger.bind(tag="LongMemory").info(
+                "记忆处理完成 turn_id={} added={} retrieved={} "
+                "timing_ms(total={}, observe={}, recall={}, command={}, lock={})",
+                response["turn_id"], response["added"], response["retrieved"],
+                timings["total_ms"], timings["observe_ms"], timings["recall_ms"],
+                timings["command_ms"], timings["lock_wait_ms"],
+            )
+        else:
+            logger.bind(tag="LongMemory").info(
+                "记忆处理完成 turn_id={} added={} retrieved={}",
+                response["turn_id"], response["added"], response["retrieved"],
+            )
         if command_reply is not None:
             reply = html.escape(command_reply, quote=False)
             context = (

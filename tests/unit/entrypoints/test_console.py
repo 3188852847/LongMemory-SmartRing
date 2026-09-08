@@ -504,6 +504,11 @@ def test_internal_runtime_requires_token_and_is_immediately_shared_with_web(tmp_
             assert response.status == 200
             written = await response.json()
             assert written["added"] == 1 and "豆包" in written["context"]
+            assert set(written["timings_ms"]) == {
+                "lock_wait_ms", "command_ms", "observe_ms", "recall_ms",
+                "scenario_ms", "persona_ms", "total_ms",
+            }
+            assert all(value >= 0 for value in written["timings_ms"].values())
             assert written["memory_command"] is None
             assert written["command_reply"] is None
 

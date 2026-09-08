@@ -64,6 +64,9 @@ def main():
         setup.validate_config(config, lan_ip, tts_backend)
         if not shared_paths_match(config, root, database) or not tts_matches(config, tts_backend):
             return 3
+        # 统一启动本来就是项目侧适配器的发布入口。这里只允许 setup 中列出的
+        # 已知旧哈希升级；未知文件仍会拒绝覆盖，避免掩盖用户或上游修改。
+        setup.install_memory_provider(server, allow_known_update=True)
         if tts_backend == "voxcpm2" and not wait_for_voxcpm():
             return 4
         sys.argv = [str(root / "scripts/development/xiaozhi/setup.py"), "start", "--server-dir", str(server),

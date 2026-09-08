@@ -192,6 +192,31 @@ def test_provider_uses_runtime_transport_without_starting_subprocess(provider_cl
     assert timeout == 20
 
 
+def test_provider_rejects_malformed_optional_timings(provider_class, config, monkeypatch):
+    provider = provider_class(config)
+    provider.init_memory(config["allowed_device_id"], None)
+
+    class Response:
+        status = 200
+        def __enter__(self): return self
+        def __exit__(self, *_args): return None
+        def read(self, _limit):
+            return json.dumps({
+                "version": 1, "context": "", "turn_id": "turn-1",
+                "added": 0, "retrieved": 0, "timings_ms": {"total_ms": -1},
+            }).encode()
+
+    monkeypatch.setenv("LONGMEMORY_MEMORY_TRANSPORT", "runtime")
+    monkeypatch.setenv(
+        "LONGMEMORY_RUNTIME_URL",
+        "http://127.0.0.1:8767/api/internal/memory/prepare",
+    )
+    monkeypatch.setenv("LONGMEMORY_RUNTIME_TOKEN", "d" * 64)
+    monkeypatch.setattr("urllib.request.urlopen", lambda *_a, **_k: Response())
+    with pytest.raises(RuntimeError, match="返回协议无效"):
+        asyncio.run(provider.query_memory("合成问题"))
+
+
 def test_provider_marks_application_command_as_operation_result(provider_class, config, monkeypatch):
     provider = provider_class(config)
     provider.init_memory(config["allowed_device_id"], None)

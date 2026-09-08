@@ -22,6 +22,8 @@ DEFAULT_FFMPEG = Path(
     r"\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\ffmpeg-8.1.2-full_build\bin"
 )
 LEGACY_MEMORY_PROVIDER_SHA256 = {
+    # P5/U8 延迟分段计时前的已发布共享 Runtime 提供器。
+    "b9c76faf1cc123bd99111eb35e2aea544ac76f6bf7033d4984d805a87b746041",
     # 逐轮启动 Python 3.12 子进程的已发布版本；只允许从这个精确内容升级。
     "aeb5df153de32986df4cfece8cf8d6ecea6b49dd936f250497b684eb41ca3ac4",
     # P3.1 本机首次安装后追加 URL/令牌严格校验前的过渡版本。

@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from threading import RLock
+from time import perf_counter
 from uuid import uuid4
 
 from longmemory.methods.contracts import (
@@ -22,6 +23,19 @@ from longmemory.application.consolidation.scheduler import (
 
 
 @dataclass(frozen=True, slots=True)
+class MemoryPreparationTimings:
+    """记忆准备各阶段耗时；只记录时长，不携带用户内容或模型响应。"""
+
+    lock_wait_ms: float
+    command_ms: float
+    observe_ms: float
+    recall_ms: float
+    scenario_ms: float
+    persona_ms: float
+    total_ms: float
+
+
+@dataclass(frozen=True, slots=True)
 class PreparedMemoryTurn:
     """一次用户输入的实际写入与召回结果，供不同入口统一消费。"""
 
@@ -34,6 +48,7 @@ class PreparedMemoryTurn:
     scenarios: tuple[ScenarioRecallItem, ...]
     persona_use_enabled: bool
     personas: tuple[PersonaRecallItem, ...]
+    timings: MemoryPreparationTimings
     # 字段名为兼容既有 API 保留；它现在也可承载明确的陪伴控制命令。
     memory_command: NaturalMemoryCommandResult | NaturalCompanionCommandResult | None
 
@@ -68,9 +83,13 @@ class MemoryRuntime:
         self._clock = clock or (lambda: datetime.now(UTC))
 
     def prepare_user(self, text: str) -> PreparedMemoryTurn:
+        started = perf_counter()
         event = MemoryEvent(str(uuid4()), "user", text, self._clock())
+        lock_started = perf_counter()
         with self._lock:
+            lock_acquired = perf_counter()
             self._ensure_open()
+            command_started = perf_counter()
             command = None
             if self._memory_command_handler is not None:
                 companion_handler = getattr(
@@ -89,16 +108,22 @@ class MemoryRuntime:
                         )
                     elif self._write_enabled:
                         command = self._memory_command_handler.handle(event)
+            command_finished = perf_counter()
+            observe_started = perf_counter()
             if command is not None:
                 observation = ObservationResult(event.event_id, command.writes)
             else:
                 observation = (self._method.observe(event) if self._write_enabled
                                else self._method.archive(event))
+            observe_finished = perf_counter()
+            recall_started = perf_counter()
             support = (
                 self._method.recall(text)
                 if self._use_enabled
                 else MemorySupport(str(uuid4()), "", (), "disabled_by_user", None)
             )
+            recall_finished = perf_counter()
+            scenario_started = perf_counter()
             scenario_result = ScenarioRecallResult("", ())
             if self._use_enabled and self._scenario_use_enabled and self._scenario_provider:
                 scenario_result = self._scenario_provider.recall(text)
@@ -111,6 +136,8 @@ class MemoryRuntime:
                         support.call_id, combined, support.retrieved,
                         strategy, support.warning_code,
                     )
+            scenario_finished = perf_counter()
+            persona_started = perf_counter()
             persona_result = PersonaRecallResult("", ())
             if self._use_enabled and self._persona_use_enabled and self._persona_provider:
                 persona_result = self._persona_provider.recall(text)
@@ -125,6 +152,7 @@ class MemoryRuntime:
                         support.call_id, combined, support.retrieved,
                         strategy, support.warning_code,
                     )
+            persona_finished = perf_counter()
             if command is not None:
                 label = (
                     "[陪伴设置结果]"
@@ -143,13 +171,23 @@ class MemoryRuntime:
             use_enabled = self._use_enabled
             scenario_use_enabled = self._scenario_use_enabled
             persona_use_enabled = self._persona_use_enabled
+        finished = perf_counter()
+        timings = MemoryPreparationTimings(
+            lock_wait_ms=round((lock_acquired - lock_started) * 1000, 3),
+            command_ms=round((command_finished - command_started) * 1000, 3),
+            observe_ms=round((observe_finished - observe_started) * 1000, 3),
+            recall_ms=round((recall_finished - recall_started) * 1000, 3),
+            scenario_ms=round((scenario_finished - scenario_started) * 1000, 3),
+            persona_ms=round((persona_finished - persona_started) * 1000, 3),
+            total_ms=round((finished - started) * 1000, 3),
+        )
         # 通知发生在 SQLite 互斥锁之外；它只唤醒后台线程，不让聊天等待整理。
         if observation.writes and self._consolidation_scheduler is not None:
             self._consolidation_scheduler.notify_new_evidence()
         return PreparedMemoryTurn(
             event, observation, support, write_enabled, use_enabled,
             scenario_use_enabled, scenario_result.items,
-            persona_use_enabled, persona_result.items, command,
+            persona_use_enabled, persona_result.items, timings, command,
         )
 
     def record_assistant(self, text: str) -> ObservationResult:
