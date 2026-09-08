@@ -28,10 +28,15 @@
     "increase_from_0004_bytes": 9264
   },
   "flash": {
-    "result": "not_run",
+    "port": "COM3",
+    "device_mac_suffix": "6d:38",
+    "result": "verified",
     "application_offset": "0x20000",
-    "application_only_planned": true,
-    "nvs_written_by_flash": false
+    "application_only": true,
+    "erased_range": "0x00020000-0x003e8fff",
+    "independent_verify_flash": "digest_matched",
+    "nvs_written_by_flash": false,
+    "assets_partition_written": false
   },
   "runtime": {
     "capability_probe": "pending_device_validation",
