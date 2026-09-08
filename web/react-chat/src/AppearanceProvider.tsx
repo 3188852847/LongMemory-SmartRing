@@ -68,7 +68,32 @@ export function AppearanceProvider({children}: {children: ReactNode}) {
   const fontSize = prefs.size === 'larger' ? 20 : prefs.size === 'large' ? 18 : 16;
   return <AppearanceContext.Provider value={value}>
     <ConfigProvider csp={{nonce}} theme={{algorithm: dark ? theme.darkAlgorithm : theme.defaultAlgorithm,
-      token: {colorPrimary: '#b62e68', fontSize, borderRadius: 10}}}>
+      token: {
+        colorPrimary: dark ? '#e16e9e' : '#a72a5f',
+        colorInfo: dark ? '#74a0df' : '#3769b0',
+        colorSuccess: dark ? '#55b889' : '#198754',
+        colorWarning: dark ? '#d6a94e' : '#b7791f',
+        colorError: dark ? '#e06b75' : '#c43d4b',
+        colorBgLayout: dark ? '#101217' : '#f5f6f8',
+        colorBgContainer: dark ? '#171a21' : '#ffffff',
+        colorBgElevated: dark ? '#1b1f27' : '#ffffff',
+        colorBorderSecondary: dark ? '#2a2f39' : '#e3e6eb',
+        colorText: dark ? '#e7eaf0' : '#20232b',
+        colorTextSecondary: dark ? '#9da5b3' : '#6b7280',
+        fontFamily: 'Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif',
+        fontSize,
+        borderRadius: 8,
+        borderRadiusLG: 12,
+        controlHeight: 36,
+        boxShadow: dark ? '0 12px 32px rgba(0,0,0,.2)' : '0 8px 28px rgba(17,24,39,.055)',
+      },
+      components: {
+        Button: {primaryShadow: 'none', defaultShadow: 'none', dangerShadow: 'none'},
+        Card: {headerBg: 'transparent'},
+        Drawer: {colorBgElevated: dark ? '#171a21' : '#ffffff'},
+        Modal: {contentBg: dark ? '#171a21' : '#ffffff', headerBg: dark ? '#171a21' : '#ffffff'},
+      },
+    }}>
       {children}
     </ConfigProvider>
   </AppearanceContext.Provider>;

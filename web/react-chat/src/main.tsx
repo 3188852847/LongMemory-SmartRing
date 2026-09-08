@@ -126,15 +126,17 @@ function ChatApp() {
     setNotice(saved ? (next.includes(chat.chat_id) ? '当前会话已置顶。' : '当前会话已取消置顶。') : '置顶已在本页生效，但浏览器未能保存。');
   }
   const sidebar = <>
-      <Button block disabled={disabled} onClick={() => changeChat()}>新聊天</Button>
-      <label htmlFor="chat-search">查找会话</label><Input id="chat-search" allowClear aria-label="查找会话" value={chatSearch} onChange={event => setChatSearch(event.target.value)} placeholder="按会话名称搜索"/>
-      <label htmlFor="conversation">最近会话</label><Select id="conversation" className="wide" aria-label="最近会话" value={chat?.chat_id} disabled={busy || unknown}
-        notFoundContent="没有匹配的会话" options={visibleChats.map(c => ({value: c.chat_id, label: `${pinnedChats.includes(c.chat_id) ? '★ ' : ''}${c.title} · ${c.turn_count} 轮`}))} onChange={changeChat}/>
-      <div className="chat-session-actions"><Button disabled={disabled} onClick={() => {setTitle(chat?.title ?? ''); setRename(true);}}>重命名</Button>
-        <Button disabled={disabled} onClick={toggleCurrentPin}>{chat && pinnedChats.includes(chat.chat_id) ? '取消置顶' : '置顶当前'}</Button></div>
       <ConsoleNav active="chat" legacyPath="/chat"/>
+      <section className="chat-sidebar-panel" aria-labelledby="chat-session-heading">
+        <div className="chat-sidebar-heading"><h2 id="chat-session-heading">会话</h2><Button size="small" disabled={disabled} onClick={() => changeChat()}>新建</Button></div>
+        <label htmlFor="chat-search">查找会话</label><Input id="chat-search" allowClear aria-label="查找会话" value={chatSearch} onChange={event => setChatSearch(event.target.value)} placeholder="按名称搜索"/>
+        <label htmlFor="conversation">当前会话</label><Select id="conversation" className="wide" aria-label="最近会话" value={chat?.chat_id} disabled={busy || unknown}
+          notFoundContent="没有匹配的会话" options={visibleChats.map(c => ({value: c.chat_id, label: `${pinnedChats.includes(c.chat_id) ? '★ ' : ''}${c.title} · ${c.turn_count} 轮`}))} onChange={changeChat}/>
+        <div className="chat-session-actions"><Button size="small" disabled={disabled} onClick={() => {setTitle(chat?.title ?? ''); setRename(true);}}>重命名</Button>
+          <Button size="small" disabled={disabled} onClick={toggleCurrentPin}>{chat && pinnedChats.includes(chat.chat_id) ? '取消置顶' : '置顶'}</Button></div>
+      </section>
     </>;
-  return <><AppShell subtitle="你的日常聊天空间" sidebar={sidebar}><PageHeader eyebrow="日常使用" title="聊聊今天" description="在这里用文字继续日常对话；新事实是否进入长期记忆，可以在每轮回答下方核对。" action={<div className="page-header-actions"><span>{chat?.turns.length ?? 0} / 40 轮</span><MemoryCommandHelp/></div>}/>
+  return <><AppShell subtitle="你的日常聊天空间" className="chat-shell" sidebar={sidebar}><PageHeader eyebrow="日常使用" title="聊聊今天" description="在这里用文字继续日常对话；新事实是否进入长期记忆，可以在每轮回答下方核对。" action={<div className="page-header-actions"><span>{chat?.turns.length ?? 0} / 40 轮</span><MemoryCommandHelp/></div>}/>
       {config?.provider==='openai_compatible'&&<Alert showIcon type={config.model_health?.state==='available'?'success':config.model_health?.state==='unavailable'?'error':'info'}
         title={config.model_health?.state==='available'?'模型服务最近验证可用':config.model_health?.state==='unavailable'?'模型服务最近验证失败':'模型服务尚未验证'}
         description={config.model_health?.state==='unavailable'?(modelFailure(config.model_health.code)??'模型调用失败。'):'检测只发送固定合成短句，不读取或写入个人记忆，也不自动重试。'}
@@ -147,13 +149,13 @@ function ChatApp() {
           {Boolean(turn.scenario_retrieved?.length) && <p className="scenario-trace">本轮使用 L2：{turn.scenario_retrieved!.map(item => item.title).join('、')}</p>}
           {Boolean(turn.persona_retrieved?.length) && <p className="scenario-trace">本轮使用 L3：{turn.persona_retrieved!.map(item => item.label).join('、')}</p>}
           <details><summary>{turnSummary(turn)}</summary><pre>{JSON.stringify(turn, null, 2)}</pre></details></article>)}<div ref={turnsEnd}/></section>
-      <form onSubmit={event => {event.preventDefault(); void send();}}><Input.TextArea aria-label="消息" value={draft} maxLength={1000} rows={3} disabled={disabled || (chat?.turns.length ?? 0) >= 40} onChange={event => setDraft(event.target.value)}
+      <form className="chat-composer" onSubmit={event => {event.preventDefault(); void send();}}><Input.TextArea aria-label="消息" value={draft} maxLength={1000} rows={3} disabled={disabled || (chat?.turns.length ?? 0) >= 40} onChange={event => setDraft(event.target.value)}
         onKeyDown={event => {if (shouldSendFromKeyboard({...event, isComposing: event.nativeEvent.isComposing}, sendShortcut)) {event.preventDefault(); void send();}}}
         placeholder="写下想说的话…"/>
         <div className="send-row"><div><small>发送会先保存原始输入，再按当前提取策略生成长期记忆。</small><Select size="small" aria-label="发送快捷键" value={sendShortcut}
           options={[{value:'enter',label:'Enter 发送 · Shift+Enter 换行'},{value:'ctrl_enter',label:'Ctrl+Enter 发送 · Enter 换行'}]}
           onChange={value => {setSendShortcut(value); saveSendShortcut(value);}}/></div><Button type="primary" htmlType="submit" disabled={disabled || !draft.trim() || (chat?.turns.length ?? 0) >= 40}>发送</Button></div></form>
-      <p role="status">{notice}</p>{unknown && <Button disabled={busy} onClick={() => void action(async () => {if (!chat) return; const result = await load(chat.chat_id); if (!result.pending && result.turns.length > chat.turns.length) setDraft(''); setNotice(result.pending ? '后台仍在处理，没有重发。' : '已查询。服务中断时不能据此保证未写入，请检查过程。');})}>只查询结果，不重发</Button>}
+      <p className="chat-status" role="status"><i aria-hidden="true"/>{notice}</p>{unknown && <Button disabled={busy} onClick={() => void action(async () => {if (!chat) return; const result = await load(chat.chat_id); if (!result.pending && result.turns.length > chat.turns.length) setDraft(''); setNotice(result.pending ? '后台仍在处理，没有重发。' : '已查询。服务中断时不能据此保证未写入，请检查过程。');})}>只查询结果，不重发</Button>}
       <details className="runtime"><summary>运行配置与记忆说明</summary><p>{config?.enabled ? `${config.model} · ${config.role} · ${config.provider}` : '聊天未启用'}</p>{config?.provider === 'fake' && <p>Fake 是离线工程替身，不具备角色和多轮理解能力。</p>}<p>提取：{config?.method === 'longmemory_daily_llm_v2' ? '模型辅助 P3.2（失败保留 L0）' : '规则基线'}；检索：{config?.retrieval === 'keyword_dense_rrf_v1' ? '关键词＋本地 BGE 融合 P3.2' : '关键词基线'}。网页不自动驱动圆屏播放。</p>{config?.enabled && <p>记忆库：{config.database}</p>}</details>
     </AppShell>
     <Modal title="重命名聊天" open={rename} onCancel={() => setRename(false)} confirmLoading={busy} okText="保存" cancelText="取消" okButtonProps={{disabled: !title.trim() || busy}}

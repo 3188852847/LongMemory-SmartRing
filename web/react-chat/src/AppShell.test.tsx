@@ -16,6 +16,8 @@ describe('控制台共享导航', () => {
     expect(screen.getByRole('link', {name: '用户画像'}).getAttribute('href')).toBe('/personas');
     expect(screen.getByRole('link', {name: '设置中心'}).getAttribute('href')).toBe('/settings');
     expect(screen.getByRole('link', {name: '打开原版页面'}).getAttribute('href')).toBe('/chat');
+    expect(screen.getByRole('link', {name: '跳到主要内容'}).getAttribute('href')).toBe('#main-content');
+    expect(screen.getByText('本机个人空间')).toBeTruthy();
     expect(screen.getByText('日常使用')).toBeTruthy();
     expect(screen.getByText('长期记忆')).toBeTruthy();
     expect(screen.getByText('控制与观察')).toBeTruthy();
