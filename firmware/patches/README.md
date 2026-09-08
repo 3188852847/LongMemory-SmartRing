@@ -16,3 +16,4 @@
 
 - `0001-align-viewe-lvgl-assets.patch`：对齐 B V2 的 LVGL 显示和资源策略；已完成隔离构建、实机烧录和资源分区挂载验证，逐项视觉状态仍待验收。
 - `0002-show-thinking-after-stt.patch`：在收到有效 STT 后显示 SmartRing-Plus 专用“思考中”过渡；已应用、编译和烧录应用分区，待真实 STT/TTS 视觉序列验收，不改变音频或协议状态机。
+- `0003-distinguish-listening-and-interruption.patch`：普通聆听使用已有麦克风图标；仅在设备从实际播放执行中止并返回采集时显示一次“已打断”，不新增协议状态。已通过增量构建，尚未烧录和实机验收。

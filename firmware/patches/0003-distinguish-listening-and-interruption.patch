@@ -1,0 +1,42 @@
+diff --git a/main/application.cc b/main/application.cc
+--- a/main/application.cc
++++ b/main/application.cc
+@@ -805,6 +805,9 @@ void Application::HandleWakeWordDetectedEvent() {
+         // Channel already opened, continue directly
+         ContinueWakeWordInvoke(wake_word);
+     } else if (state == kDeviceStateSpeaking || state == kDeviceStateListening) {
++        if (state == kDeviceStateSpeaking) {
++            show_interrupted_on_listening_ = true;
++        }
+         AbortSpeaking(kAbortReasonWakeWordDetected);
+         // Clear send queue to avoid sending residues to server
+         while (audio_service_.PopPacketFromSendQueue());
+@@ -883,8 +886,15 @@ void Application::HandleStateChangedEvent() {
+             display->SetChatMessage("system", "");
+             break;
+         case kDeviceStateListening:
+-            display->SetStatus(Lang::Strings::LISTENING);
+-            display->SetEmotion("neutral");
++            if (show_interrupted_on_listening_) {
++                // 只有设备确实从播放中发送 abort 并回到采集，才显示“已打断”。
++                display->SetStatus("已打断，请继续...");
++                show_interrupted_on_listening_ = false;
++            } else {
++                display->SetStatus(Lang::Strings::LISTENING);
++            }
++            // 使用已有字体图标表达采集状态，不新增角色素材，也不推断用户情绪。
++            display->SetEmotion("microphone");
+-
++
+             // Make sure the audio processor is running
+             if (play_popup_on_listening_ || !audio_service_.IsAudioProcessorRunning()) {
+diff --git a/main/application.h b/main/application.h
+--- a/main/application.h
++++ b/main/application.h
+@@ -140,5 +140,6 @@ private:
+     bool aborted_ = false;
+     bool assets_version_checked_ = false;
+     bool play_popup_on_listening_ = false;  // Flag to play popup sound after state changes to listening
++    bool show_interrupted_on_listening_ = false;  // One-shot UI evidence after aborting active playback
+     int clock_ticks_ = 0;
+     TaskHandle_t activation_task_handle_ = nullptr;

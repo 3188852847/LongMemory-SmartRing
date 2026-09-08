@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "captured_on": "2026-09-08",
+  "experiment": "0003-distinguish-listening-and-interruption",
+  "depends_on": "0002-show-thinking-after-stt",
+  "board": "viewe-smartring-plus",
+  "application_version": "2.2.3",
+  "esp_idf_version": "5.5.4",
+  "evidence_contract": {
+    "normal_listening": "device_state_listening",
+    "interruption": "wake_word_detected_while_device_state_speaking_then_abort",
+    "normal_listening_status": "聆听中",
+    "normal_listening_emotion": "microphone",
+    "interruption_status_once": "已打断，请继续...",
+    "device_state_added": false,
+    "audio_or_protocol_changed": false
+  },
+  "source": {
+    "application_cc_sha256": "BA4FA50B33632FEE82DE167AABE0929E2B95D282D3F3EC082D122F2DF09E6142",
+    "application_h_sha256": "DDC316F95350B6B2F30ACD538F775BD6030CD82DEE7EAA71FD345F4D4DDC8F24"
+  },
+  "application": {
+    "length_bytes": 3957824,
+    "sha256": "70685E78D661DE1498BBA1ABB1B966A2B0857AFC3BF9272A8BD497F32CD0748A",
+    "partition_length_bytes": 4128768,
+    "remaining_bytes": 170944,
+    "increase_from_0002_bytes": 80
+  },
+  "flash": {
+    "result": "not_run",
+    "planned_application_offset": "0x20000",
+    "planned_application_only": true,
+    "nvs_written": false
+  },
+  "runtime": {
+    "normal_listening_visual": "pending_user_validation",
+    "speaking_interruption_visual": "pending_user_validation",
+    "ordinary_listening_does_not_claim_interruption": "pending_user_validation",
+    "stt_thinking_tts_visual_sequence": "pending_user_validation"
+  }
+}
