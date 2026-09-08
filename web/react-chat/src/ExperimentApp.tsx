@@ -73,14 +73,21 @@ export function ExperimentApp() {
   useEffect(() => {setQuestionId(detail.data?.questions[0]?.id ?? '');}, [detail.data?.report_sha256]);
   const question = useQuery({queryKey:['experiment-question', selected, questionId], queryFn:() => api.request<QuestionDetail>(`/api/experiments/${selected}/question?id=${encodeURIComponent(questionId)}`), enabled:Boolean(selected && questionId)});
   async function openResult(reportId:string) {setSelected(reportId); await runs.refetch();}
-  const sidebar = <><ConsoleNav active="experiments" legacyPath="/experiments"/><Card size="small" title="页面说明"><p>运行、档案、证据和人工复核均已迁移。原版仅作为迁移期回退入口。</p></Card></>;
+  const selectedRun = runs.data?.items.find(item => item.id === selected);
+  const sidebar = <><ConsoleNav active="experiments" legacyPath="/experiments"/><Card size="small" className="experiment-guide" title="页面说明"><p>运行、档案、证据和人工复核均已迁移。</p><p>原版仅作为迁移期回退入口。</p></Card></>;
 
   return <AppShell subtitle="冻结档案与逐题证据" className="experiment-shell" sidebar={sidebar}>
     <PageHeader eyebrow="控制与观察" title="实验中心" description="运行可控的对照实验，查看冻结结果并逐题核对回答与证据。" meta="浏览已有档案不会调用模型；启动新实验前会单独展示预算与网络风险。" action={<Button loading={runs.isFetching} disabled={!session.isSuccess} onClick={() => void runs.refetch()}>刷新档案</Button>}/>
     {(session.isError || runs.isError) && <Alert type="error" showIcon title="实验档案读取失败" description="请确认本机控制台仍在运行；没有自动启动或重试任何模型实验。"/>}
+    <section className="experiment-overview" aria-label="实验中心概览">
+      <div><small>可读档案</small><strong>{runs.data?.items.length ?? 0}</strong></div>
+      <div><small>当前筛选</small><strong>{filtered.length}</strong></div>
+      <div><small>当前档案</small><strong>{selectedRun ? statusLabel(selectedRun.status) : '未选择'}</strong></div>
+      <div><small>逐题人工复核</small><strong className={detail.data?.review_enabled ? 'is-positive' : ''}>{detail.data?.review_enabled ? '可用' : '未开放'}</strong></div>
+    </section>
     <ExperimentJobs api={api} ready={session.isSuccess} onOpen={reportId => void openResult(reportId)}/>
     <div className="experiment-layout">
-      <Card title="实验档案">
+      <Card className="experiment-archive-card" title="实验档案">
         <Input.Search aria-label="搜索实验" allowClear value={query} onChange={event => {setQuery(event.target.value); setPage(0);}} placeholder="模型、数据集或编号"/>
         <Select className="wide" aria-label="实验类型" value={filter} onChange={value => {setFilter(value); setPage(0);}} options={[{value:'all',label:'全部'},{value:'real',label:'真实模型回答'},{value:'fake',label:'Fake 工程验证'},{value:'retrieval',label:'仅检索'}]}/>
         <div className="experiment-run-list" aria-busy={runs.isLoading}>{filtered.slice(page*10,page*10+10).map(run => <button type="button" className="experiment-run" aria-pressed={selected===run.id} key={run.id} onClick={() => setSelected(run.id)}><Space><Tag>{run.kind === 'retrieval' ? '仅检索' : run.provider === 'fake' ? 'Fake' : '真实回答'}</Tag><strong>{run.model ?? '模型未提供'}</strong></Space><span>{dateText(run.started_at)}<br/>{run.dataset} · {run.split} · {statusLabel(run.status)} {run.completed}/{run.total}<br/>{run.id.slice(-8)}</span></button>)}{!runs.isLoading && !filtered.length && <Empty description="没有匹配的实验"/>}</div>
@@ -89,7 +96,7 @@ export function ExperimentApp() {
       </Card>
       <section>
         {!selected ? <Card><Empty description="选择一条实验查看结果"/></Card> : <>
-          <Card loading={detail.isLoading} title={detail.data?.kind === 'retrieval' ? '冻结检索对照' : '逐题回答对照'}>
+          <Card className="experiment-detail-card" loading={detail.isLoading} title={detail.data?.kind === 'retrieval' ? '冻结检索对照' : '逐题回答对照'}>
             {detail.data && <><p>{dateText(detail.data.started_at)} · {detail.data.dataset?.name ?? '未知数据集'} · {detail.data.split} · {statusLabel(detail.data.status)}</p>
               <Table pagination={false} rowKey="id" dataSource={detail.data.groups} columns={[
                 {title:'实验组',dataIndex:'id',render:groupLabel},

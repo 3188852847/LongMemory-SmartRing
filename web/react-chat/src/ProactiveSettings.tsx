@@ -275,7 +275,13 @@ export function ProactiveSettings({api, ready}:{api:ChatApi; ready:boolean}) {
   const scheduleInsideWindow = draft.allowed_start_minute < draft.allowed_end_minute
     ? draft.scheduled_minute >= draft.allowed_start_minute && draft.scheduled_minute < draft.allowed_end_minute
     : draft.scheduled_minute >= draft.allowed_start_minute || draft.scheduled_minute < draft.allowed_end_minute;
-  return <Space orientation="vertical" style={{width:'100%'}}>
+  return <Space className="proactive-settings" orientation="vertical" style={{width:'100%'}}>
+    <section className="proactive-overview" aria-label="主动交流概览">
+      <div><small>主动联系许可</small><strong className={draft.enabled ? 'is-positive' : ''}>{draft.enabled ? '已开启' : '已关闭'}</strong></div>
+      <div><small>后台定时</small><strong>{draft.automatic_enabled ? minuteText(draft.scheduled_minute) : '已关闭'}</strong></div>
+      <div><small>今日对话</small><strong>{scheduleStatus.data?.user_chatted_today ? '已聊过' : '未观察'}</strong></div>
+      <div><small>上次问候</small><strong className={scheduleStatus.data?.awaiting_user_response ? 'is-warning' : ''}>{scheduleStatus.data?.awaiting_user_response ? '等待回应' : '无待回应'}</strong></div>
+    </section>
     <Alert type={draft.automatic_enabled ? 'warning' : 'success'} showIcon
       title={draft.automatic_enabled ? '后台定时问候已开启' : (draft.enabled ? '主动联系许可已打开，定时问候仍关闭' : '主动交流当前关闭')}
       description="定时问候只在所选星期的指定分钟检查：当天已经聊过、设备离线或忙碌、处于勿扰或错过时刻都会跳过，之后不补发。"/>
@@ -304,6 +310,9 @@ export function ProactiveSettings({api, ready}:{api:ChatApi; ready:boolean}) {
           onClick={() => cancelScheduleTest.mutate()}>撤销一次性授权</Button>
       </Space>
     </section>
+    <section className="settings-section proactive-policy-section">
+    <h3>联系许可与时间边界</h3>
+    <p className="subtle">这些是所有自动问候都必须通过的总边界；修改后需要显式保存。</p>
     <div className="setting-line"><span>允许主动联系</span><Switch aria-label="允许主动联系" checked={draft.enabled} onChange={enabled => change({enabled, ...(!enabled ? {automatic_enabled:false, topic_enabled:false} : {})})}/></div>
     <div className="setting-line"><span>后台定时问候</span><Switch aria-label="后台定时问候" disabled={!draft.enabled} checked={draft.automatic_enabled} onChange={automatic_enabled => change({automatic_enabled, ...(!automatic_enabled ? {topic_enabled:false} : {})})}/></div>
     <label>允许星期</label>
@@ -322,6 +331,7 @@ export function ProactiveSettings({api, ready}:{api:ChatApi; ready:boolean}) {
     <div className="setting-line"><span>{quietActive ? `临时勿扰至 ${new Date(draft.quiet_until!).toLocaleString()}` : '临时勿扰未开启'}</span><Space><Button onClick={() => change({quiet_until:new Date(Date.now() + 60 * 60 * 1000).toISOString()})}>勿扰 1 小时</Button><Button disabled={!draft.quiet_until} onClick={() => change({quiet_until:null})}>解除勿扰</Button></Space></div>
     <Space><Button type="primary" loading={mutation.isPending} disabled={!dirty || draft.allowed_weekdays.length === 0 || draft.allowed_start_minute === draft.allowed_end_minute || (draft.automatic_enabled && !scheduleInsideWindow) || !draft.greeting_text.trim() || draft.greeting_text !== draft.greeting_text.trim()} onClick={() => mutation.mutate(draft)}>保存主动交流设置</Button><Button disabled={!dirty || mutation.isPending} onClick={() => {setDraft({...query.data!, allowed_weekdays:[...query.data!.allowed_weekdays]}); setNotice('已放弃未保存修改。');}}>放弃修改</Button></Space>
     {notice && <p role="status">{notice}</p>}
+    </section>
     <section className="settings-section">
       <h3>手动验证圆屏问候</h3>
       <p className="subtle">每次点击只尝试一次。它由你明确触发，因此不受“等待用户回应”限制；仍遵守总开关、时间段、勿扰、频率和设备忙碌限制，失败不会自动重试。</p>
