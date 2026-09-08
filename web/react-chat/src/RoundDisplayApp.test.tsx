@@ -1,7 +1,10 @@
-import {describe, expect, test} from 'vitest';
+import {describe, expect, test, vi} from 'vitest';
 import {render, screen} from '@testing-library/react';
 import {MemoryRouter} from 'react-router-dom';
+import {QueryClientProvider} from '@tanstack/react-query';
 import {RoundDisplayApp, resolveRoundDisplay} from './RoundDisplayApp';
+import {ChatApi} from './api';
+import {createConsoleQueryClient} from './queryClient';
 
 describe('圆屏状态协议与模拟器', () => {
   test('阻塞性系统状态覆盖普通交互状态', () => {
@@ -14,8 +17,14 @@ describe('圆屏状态协议与模拟器', () => {
     expect(resolveRoundDisplay('speaking', 'low_battery').title).toBe('回应中');
   });
 
-  test('默认页面明确模拟边界并提供三层控制', () => {
-    render(<MemoryRouter><RoundDisplayApp/></MemoryRouter>);
+  test('默认页面明确模拟边界并提供皮肤档案入口', () => {
+    vi.spyOn(ChatApi.prototype, 'bootstrap').mockResolvedValue(undefined);
+    vi.spyOn(ChatApi.prototype, 'request').mockResolvedValue({
+      enabled:true, selected_skin:'rose-night-v1', skins:[],
+      delivery:{console_preview:true, upstream_assets_ota_detected:true, device_apply_supported:false,
+        reason:'firmware_skin_loader_missing', known_firmware_baseline:'round-face-0004'},
+    });
+    render(<QueryClientProvider client={createConsoleQueryClient()}><MemoryRouter><RoundDisplayApp/></MemoryRouter></QueryClientProvider>);
     expect(screen.getByRole('heading', {name: '圆屏状态预览'})).toBeTruthy();
     expect(screen.getByText(/画布：360 × 360 px/)).toBeTruthy();
     expect(screen.getByText('这是设计模拟器，不是真实设备控制器')).toBeTruthy();
@@ -23,5 +32,6 @@ describe('圆屏状态协议与模拟器', () => {
     expect(screen.getByText('1. 交互阶段')).toBeTruthy();
     expect(screen.getByText('2. 情绪表达')).toBeTruthy();
     expect(screen.getByText('3. 系统覆盖')).toBeTruthy();
+    expect(screen.getByText('4. 皮肤档案')).toBeTruthy();
   });
 });

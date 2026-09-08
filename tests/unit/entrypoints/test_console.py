@@ -5,6 +5,7 @@ import socket
 import sqlite3
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
+from pathlib import Path
 
 import pytest
 
@@ -13,6 +14,8 @@ pydantic = pytest.importorskip("pydantic", reason="网页契约测试需要 uv s
 from aiohttp import web
 from longmemory.entrypoints.api.server import create_app
 from longmemory.adapters.device_control.xiaozhi import BridgeError
+
+ROOT = Path(__file__).resolve().parents[3]
 
 
 class FakeBridge:
@@ -65,7 +68,8 @@ async def console(database=None, allow_memory_delete=False, chat_backend=None,
                   scenario_producer=None, scenario_model=None,
                   persona_producer=None, persona_model=None,
                   proactive_clock=None, model_profile_store=None, voice_model_profiles=None,
-                  memory_backend_store=None, xiaozhi_memory_backends=None):
+                  memory_backend_store=None, xiaozhi_memory_backends=None,
+                  round_skin_store=None):
     # 先占用随机回环端口，再把精确 Host 交给应用，避免探测后抢占端口。
     sock = socket.socket()
     sock.bind(("127.0.0.1", 0))
@@ -86,7 +90,8 @@ async def console(database=None, allow_memory_delete=False, chat_backend=None,
                                      model_profile_store=model_profile_store,
                                      voice_model_profiles=voice_model_profiles,
                                      memory_backend_store=memory_backend_store,
-                                     xiaozhi_memory_backends=xiaozhi_memory_backends), access_log=None)
+                                     xiaozhi_memory_backends=xiaozhi_memory_backends,
+                                     round_skin_store=round_skin_store), access_log=None)
     await runner.setup()
     await web.SockSite(runner, sock).start()
     try:
@@ -127,6 +132,30 @@ def test_console_serves_only_local_assets_and_protected_device_actions():
             assert response.status == 200
             assert (await response.json())["verified"] is True
             assert bridge.calls == ["read", 30]
+    asyncio.run(run())
+
+
+def test_round_skin_api_is_csrf_protected_and_does_not_claim_device_apply(tmp_path):
+    from longmemory.infrastructure.config.round_skins import RoundSkinStore
+
+    skin_root = tmp_path / "firmware/smartring_plus/skins"
+    skin_root.mkdir(parents=True)
+    source = ROOT / "firmware/smartring_plus/skins/rose-night-v1.skin.json"
+    (skin_root / source.name).write_bytes(source.read_bytes())
+
+    async def run():
+        store = RoundSkinStore(tmp_path)
+        async with console(round_skin_store=store) as (client, base, _bridge):
+            headers = await login(client, base)
+            response = await client.get(base + "/api/round-skins")
+            data = await response.json()
+            assert response.status == 200
+            assert data["delivery"]["device_apply_supported"] is False
+            assert (await client.put(base + "/api/round-skins/selection", json={"skin_id": "rose-night-v1"})).status == 403
+            response = await client.put(base + "/api/round-skins/selection", headers=headers, json={"skin_id": "rose-night-v1"})
+            assert response.status == 200
+            assert (await response.json())["selected_skin"] == "rose-night-v1"
+
     asyncio.run(run())
 
 

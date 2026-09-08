@@ -1,5 +1,13 @@
 # Changelog
 
+### versioned round-screen skin packs, phase 1（2026-09-08）
+
+- 审计厂家 B V2 资源通道：确认单一 8 MiB Assets 分区、运行时 URL 下载和 LVGL 图片/字体资源能力，同时确认当前实现会原地擦写、只有 16 位加和校验且没有 A/B 回滚。
+- 新增 `skin_api=1` 严格声明式皮肤契约与“蔷薇夜色 / 薄荷微光”两个内置档案；只允许固定板型、360×360 RGB565、调色板、脸部比例和动画周期，不接收脚本、HTML、任意文件路径或 URL。
+- 控制台新增受 CSRF 保护的皮肤查询/选择 API；选择原子保存到被忽略的本机控制目录，每份清单返回 SHA-256 身份。
+- 圆屏模拟器复用相同清单并可即时切换、保存预览选择。页面和 API 均明确标记真机下发未开放，不能把网页效果冒充为设备已应用。
+- 新增 ADR-0093 与圆屏皮肤架构文档；本轮不修改外部固件副本、不写 Flash、不改个人数据库。
+
 ### switchable round-screen memory backends（2026-09-08）
 
 - 明确 SmartRing-Plus 圆屏固件不承载长期记忆：Xiaozhi 默认 `nomem`，可选 `mem_local_short` 在连接关闭时用 LLM 把本轮与旧摘要压成每设备一份 JSON；LongMemory 继续通过同一 Memory 插槽接入。

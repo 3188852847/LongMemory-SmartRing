@@ -75,6 +75,17 @@ export interface MemoryBackends {
   backends?:MemoryBackendOption[];
   xiaozhi?:{enabled:boolean; selected_backend:string; status:'configured'|'restart_pending'|'configuration_unavailable'; configured_provider?:string; provider_name?:string};
 }
+export interface RoundSkin {
+  schema_version:1; id:string; name:string; description:string;
+  target:{board:'viewe-smartring-plus'; width:360; height:360; color_format:'RGB565'; skin_api:1};
+  palette:{background:string; background_edge:string; foreground:string; muted:string; accent:string; warning:string; error:string; charging:string};
+  face:{eye_width:number; eye_height:number; mouth_width:number};
+  motion:{blink_seconds:number; speaking_seconds:number}; manifest_sha256:string;
+}
+export interface RoundSkins {
+  enabled:boolean; selected_skin:string; skins:RoundSkin[];
+  delivery:{console_preview:boolean; upstream_assets_ota_detected:boolean; device_apply_supported:boolean; reason:string; known_firmware_baseline:string};
+}
 export interface ProactivePolicy {
   subject_id: string; enabled: boolean; utc_offset_minutes: number;
   allowed_weekdays: number[]; allowed_start_minute: number; allowed_end_minute: number;

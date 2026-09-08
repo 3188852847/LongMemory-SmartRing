@@ -24,7 +24,7 @@ P2 助手角色设置已接入“设置中心 → 助手角色”：网页编辑
 
 Web 控制台已渐进统一到 React + TypeScript + Vite + antd：聊天 `/chat-react`、L0/L1 记忆 `/memories`、L2 生活场景 `/scenarios`、设备 `/device`、个性化 `/settings` 与实验 `/experiments-react` 共用 React Router、AppShell 和外观状态；TanStack Query 管理服务器状态及不自动重试的写操作。实验页保留预检/确认分离、任务进度与逐题复核；原生入口暂留回退。组件测试使用 Vitest/React Testing Library。见[体验指南](docs/guides/React聊天页.md)、[技术策略](docs/architecture/technology-strategy.md)、[迁移清单](docs/architecture/react-chat-migration.md)与 [ADR-0032](docs/adr/0032-progressive-react-console-migration.md)。
 
-圆屏 UI 专项已建立第一阶段状态协议和浏览器模拟器：`/display-preview` 按当前 B V2 板级源码配置的 360×360 圆屏预览交互阶段、情绪表达、系统覆盖与中央安全区。2026-09-08 已用 ESP-IDF v5.5.4 完成厂家 B V2 原样基线和首个可审计 LVGL 资源补丁的构建、实机烧录；实验固件正常挂载资源分区，应用余量由 2,352 增至 171,056 字节。真实状态 UI 尚未接入，Font Awesome 回退图标的日志提示和逐项视觉状态仍待验收。见[圆屏状态协议](docs/architecture/round-display-state-protocol.md)、[固件审计](docs/research/round-display-firmware-audit-2026-09-08.md)与 [ADR-0090](docs/adr/0090-audited-upstream-firmware-overlay.md)。
+圆屏 UI 专项已建立状态协议和浏览器模拟器：`/display-preview` 按 B V2 的 360×360 板级配置预览交互阶段、情绪、系统覆盖与中央安全区。0004 状态脸已编译进真机应用分区并完成构建、烧录和读回核对，但逐态视觉仍待验收。U5 第一切片进一步加入两套版本化皮肤清单、严格参数校验和网页选择；当前只作用于模拟器，真机安全加载器尚未完成。原厂 `assets.bin` 虽可运行时下载，但会原地覆盖唯一资源分区，现有弱校验与无 A/B 回滚不足以直接开放。见[圆屏状态协议](docs/architecture/round-display-state-protocol.md)、[皮肤架构](docs/architecture/round-screen-skins.md)、[固件审计](docs/research/round-display-firmware-audit-2026-09-08.md)、[ADR-0090](docs/adr/0090-audited-upstream-firmware-overlay.md)与 [ADR-0093](docs/adr/0093-versioned-round-screen-skin-packs.md)。
 
 Python HTTP 入口继续使用 aiohttp；Pydantic 2.13.5 已从聊天消息 POST 试点渐进覆盖到所有者明确补录入口，保持原有 400 错误、响应和幂等行为，不进入 Memory Core，也不代表已决定迁移 FastAPI。见 [ADR-0033](docs/adr/0033-staged-technology-adoption.md)。
 

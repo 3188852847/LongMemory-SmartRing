@@ -26,6 +26,8 @@ from .routes.model_profiles import register_model_profile_routes
 from .xiaozhi_model_profiles import XiaozhiModelProfiles
 from .routes.memory_backends import register_memory_backend_routes
 from .xiaozhi_memory_backends import XiaozhiMemoryBackends
+from .routes.round_skins import register_round_skin_routes
+from longmemory.infrastructure.config.round_skins import RoundSkinStore
 from .routes.proactive_policy import register_proactive_policy_routes
 from .device_role import DeviceRole
 from .voice_settings import VoiceSettings, register_voice_routes
@@ -64,7 +66,8 @@ def create_app(*, port=8765, bridge=None, web_root=None, database=None, allow_me
                scenario_model=None, persona_producer=None, persona_model=None,
                consolidation_background_enabled=False, proactive_clock=None,
                model_profile_store=None, voice_model_profiles=None,
-               memory_backend_store=None, xiaozhi_memory_backends=None):
+               memory_backend_store=None, xiaozhi_memory_backends=None,
+               round_skin_store=None):
     sessions = Sessions()
     assets = web_root or ROOT / "web"
     client = bridge if bridge is not None else XiaozhiControlClient(ROOT / "data/control/device-control.token")
@@ -217,6 +220,8 @@ def create_app(*, port=8765, bridge=None, web_root=None, database=None, allow_me
         if xiaozhi_server and memory_backend_store else None
     )
     register_memory_backend_routes(app, memory_backend_store, memory_backends)
+    # 皮肤档案当前只驱动本机设计预览；设备端安全加载器完成前不会下发 assets。
+    register_round_skin_routes(app, round_skin_store or RoundSkinStore(ROOT))
     experiments = experiment_backend if experiment_backend is not None else ExperimentBackend(ROOT / "experiments")
     register_experiment_routes(app, experiments)
     register_job_routes(app, job_backend if job_backend is not None else ExperimentJobs(experiments))
