@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "captured_on": "2026-09-08",
+  "source_kind": "github_zip_without_git_metadata",
+  "source_project_relative_path": "examples/esp-idf/11_xiaozhi/xiaozhi-esp32-main_smartring_plus_B_V2",
+  "board": "viewe-smartring-plus",
+  "application_version": "2.2.3",
+  "esp_idf_version": "5.5.4",
+  "files_sha256": {
+    "main/boards/viewe-smartring-plus/config.json": "2bc31333ebe34bf5711e5d33384260cc8c545952a5e2821e7875196826f8c719",
+    "main/boards/viewe-smartring-plus/viewe-smartring-plus.cc": "60ebb09cd61ed4c47394e159fbbdc502a904bc5a8b297a46d49d717bd6a7a5d3",
+    "main/CMakeLists.txt": "8ab8c0d2e91b3c817ad29f8f766d8d3042c6933dbd8580edc2d474b75f19dace",
+    "main/idf_component.yml": "7a529814ab0f6975efa27b07d9f83313ebed2c90ae4ad26bdcd100e957799d72",
+    "partitions/v2/16m.csv": "58a8787d486fe89bac4055acc310b7a0d6edd33e90c61d2ca6a705d251460333"
+  },
+  "build_sha256": {
+    "dependencies.lock": "cfa751e181e1cbfdca7dd96c5c3a7147b1b660495eb7e5cac2a2c604e58157ce",
+    "merged-binary.bin": "49284a8220ef6f9d93b6e1621a6a1cf90c1072bdcea0eb9da2b6027aa4dce057",
+    "release_zip": "7d4869e8c9ddf06a38b058cd374e35a3fc8439fc5d30fc8a52bd548f88998473"
+  },
+  "image_sizes_bytes": {
+    "application": 4126416,
+    "application_partition": 4128768,
+    "application_remaining": 2352,
+    "expression_assets": 2739933
+  }
+}
+

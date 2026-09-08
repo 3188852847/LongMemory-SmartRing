@@ -83,7 +83,15 @@
 - 本次所选模型接口返回 HTTP 404，且 VoxCPM2 环回端口 `18768` 未启动，因此没有把回答生成或真实声线纳入固件基线结论。
 - 停止服务时，上游把内部生成的会话结束提示按用户消息交给 Memory 插槽；LongMemory 保存了 1 条 L0、没有生成 L1。这是服务输入来源标注缺口，不是用户事实，后续应在适配边界按消息来源排除，不能靠匹配某一句提示文本掩盖。
 
-本次服务端验证还将可追溯的旧 LongMemory 小智适配器升级到当前项目版本；34 项定向测试通过。旧版本可由 Git 提交 `894b5fb` / `ff15db0` 与原 SHA-256 恢复，升级过程没有生成独立 `.bak` 文件。
+本次服务端验证还将可追溯的旧 LongMemory 小智适配器升级到当前项目版本；35 项定向测试通过。旧版本可由 Git 提交 `894b5fb` / `ff15db0` 与原 SHA-256 恢复，升级过程没有生成独立 `.bak` 文件。
+
+### 体积与资源策略诊断
+
+基线 map 的最大单项是 `lib78__xiaozhi-fonts.a`，占 `1,327,418` 字节，几乎全部为 Flash data；其后才是 LVGL、推理库、C++ 运行库和主程序。板型 `config.json` 同时写入 `CONFIG_USE_WECHAT_MESSAGE_STYLE=y`、`CONFIG_USE_EMOTE_MESSAGE_STYLE=y` 和 `CONFIG_FLASH_EXPRESSION_ASSETS=y`，但板级 `InitializeSt77916Display()` 明确创建 `SpiLcdDisplay`，注释也说明使用 LVGL chat UI。由于 `display.h` 在 Emote message style 下不定义 `HAVE_LVGL`，`Assets` 选择 `EmoteStrategy`，最终尝试把 expression assets 挂到不存在的 `EmoteDisplay`，与实机警告一致。
+
+这表明当前首先要验证的是“显示类型与资源策略一致性”，而不是直接扩大应用分区。候选实验是只在隔离副本中改为 LVGL 对应的默认资源路径，并比较字体是否仍静态进入应用、生成资源格式、应用余量和启动日志；在离线构建结果明确前不改分区表、不再次烧录。上游跟踪方式见 [ADR-0090](../adr/0090-audited-upstream-firmware-overlay.md)。
+
+补丁 `0001-align-viewe-lvgl-assets.patch` 已通过原基线的干净应用检查，并应用到独立副本 `D:\sr-bv2-lvgl-assets`。首次预检发现上游发布脚本要求 build 名与 CMake 板型一致，补丁已保留原名；第二次显式禁用 Component Manager 后，CMake 无法注册已复制的字体和 ESP-SR 组件，资源脚本因路径为空而在编译前停止。下一次构建需要启用 Component Manager 读取本地锁定组件，但它可能检查网络，按项目约定由用户执行；当前没有实验镜像，更没有烧录。
 
 ## 未执行事项
 
