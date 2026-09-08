@@ -20,7 +20,8 @@ def test_updates_only_model_fields_and_preserves_text(tmp_path):
     (project / '.env').write_text(
         'LONGMEMORY_LLM_BASE_URL=http://synthetic.local/tenant/v1\n'
         'LONGMEMORY_LLM_MODEL=synthetic-model\n'
-        'LONGMEMORY_LLM_API_KEY=SYNTHETIC_SECRET_NEW\n', encoding='utf-8')
+        'LONGMEMORY_LLM_API_KEY=SYNTHETIC_SECRET_NEW\n'
+        'LONGMEMORY_LLM_ALLOW_HTTP=true\n', encoding='utf-8')
     old = ('# preserve comment\nselected_module:\n  LLM: CampusLLM\n'
            'LLM:\n  CampusLLM:\n    type: openai\n    base_url: "http://old.local/v1"\n'
            '    api_key: "SYNTHETIC_SECRET_OLD"\n    model_name: old-model\n'
@@ -34,6 +35,23 @@ def test_updates_only_model_fields_and_preserves_text(tmp_path):
         'api_key':'SYNTHETIC_SECRET_NEW', 'model_name':'synthetic-model'}
     assert result['runtime'] == 'unverified' and '.model-' in result['backup']
     assert (target.parent / result['backup']).read_text(encoding='utf-8') == old
+
+
+def test_official_profile_check_is_read_only_and_summary_has_no_key(tmp_path):
+    project = tmp_path / 'project'; server = tmp_path / 'server'
+    project.mkdir(); (server / 'data').mkdir(parents=True)
+    (project / '.env.deepseek.local').write_text(
+        'LONGMEMORY_LLM_BASE_URL=https://api.synthetic.invalid\n'
+        'LONGMEMORY_LLM_MODEL=official-model\n'
+        'LONGMEMORY_LLM_API_KEY=SYNTHETIC_OFFICIAL_SECRET\n', encoding='utf-8')
+    target = server / 'data/.config.yaml'
+    old = ('selected_module: {LLM: CampusLLM}\nLLM: {CampusLLM: {type: openai, '
+           'base_url: old, api_key: old, model_name: old}}\n')
+    target.write_text(old, encoding='utf-8')
+    result = module.action(project, server, 'official')
+    assert result['config_matches'] is False and result['model'] == 'official-model'
+    assert target.read_text(encoding='utf-8') == old
+    assert 'SYNTHETIC_OFFICIAL_SECRET' not in str(result)
 
 
 @pytest.mark.parametrize('base', ['http://synthetic.local/v1/chat/completions', 'not-a-url'])

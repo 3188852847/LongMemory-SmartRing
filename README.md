@@ -8,7 +8,7 @@
 
 **日常启动：双击根目录 `Start.cmd`**，在小面板选择文字或文字＋圆屏，确认后启动并打开控制台。见[统一启动指南](docs/guides/统一启动.md)。原[终端使用说明](docs/guides/使用说明.md)保留用于实验与排障。
 
-学校模型与官方 DeepSeek 使用两个独立且不提交的本机配置档。可在“设置中心 → 模型与服务”编辑安全摘要、覆盖新 Key，并选择下次启动档案；当前进程不会热切换，圆屏 Xiaozhi 仍是独立配置链。见[模型配置分流指南](docs/guides/模型配置分流.md)与[ADR-0089](docs/adr/0089-editable-local-model-profiles.md)。
+学校模型与官方 DeepSeek 使用两个独立且不提交的本机配置档。可在“设置中心 → 模型与服务”编辑安全摘要、覆盖新 Key，并分别选择网页与圆屏下次启动档案；当前进程不会热切换，启动器会在语音启动前备份并同步小智私有配置。见[模型配置分流指南](docs/guides/模型配置分流.md)、[ADR-0089](docs/adr/0089-editable-local-model-profiles.md)与[ADR-0091](docs/adr/0091-independent-web-and-round-screen-model-profiles.md)。
 
 **产品自定义候选：[自定义功能清单](docs/requirements/自定义功能清单.md)**。区分已有能力、候选新增与需验证能力，不代表全部承诺开发。
 

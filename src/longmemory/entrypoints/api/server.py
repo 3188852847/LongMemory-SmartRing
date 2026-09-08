@@ -23,6 +23,7 @@ from .routes.memory_runtime import register_memory_runtime_routes
 from .routes.memory_mode import register_memory_mode_routes
 from .routes.memory_commands import register_memory_command_routes
 from .routes.model_profiles import register_model_profile_routes
+from .xiaozhi_model_profiles import XiaozhiModelProfiles
 from .routes.proactive_policy import register_proactive_policy_routes
 from .device_role import DeviceRole
 from .voice_settings import VoiceSettings, register_voice_routes
@@ -60,7 +61,7 @@ def create_app(*, port=8765, bridge=None, web_root=None, database=None, allow_me
                xiaozhi_server=None, memory_runtime_token=None, scenario_producer=None,
                scenario_model=None, persona_producer=None, persona_model=None,
                consolidation_background_enabled=False, proactive_clock=None,
-               model_profile_store=None):
+               model_profile_store=None, voice_model_profiles=None):
     sessions = Sessions()
     assets = web_root or ROOT / "web"
     client = bridge if bridge is not None else XiaozhiControlClient(ROOT / "data/control/device-control.token")
@@ -203,7 +204,11 @@ def create_app(*, port=8765, bridge=None, web_root=None, database=None, allow_me
     device_role = DeviceRole(xiaozhi_server, chat_backend.roles, chat_backend.database, ROOT) if xiaozhi_server and chat_backend else None
     register_role_routes(app, chat_backend, device_role)
     register_voice_routes(app, VoiceSettings(xiaozhi_server, chat_backend.database, ROOT) if xiaozhi_server and chat_backend else None)
-    register_model_profile_routes(app, model_profile_store)
+    voice_profiles = voice_model_profiles or (
+        XiaozhiModelProfiles(ROOT, xiaozhi_server, model_profile_store)
+        if xiaozhi_server and model_profile_store else None
+    )
+    register_model_profile_routes(app, model_profile_store, voice_profiles)
     experiments = experiment_backend if experiment_backend is not None else ExperimentBackend(ROOT / "experiments")
     register_experiment_routes(app, experiments)
     register_job_routes(app, job_backend if job_backend is not None else ExperimentJobs(experiments))

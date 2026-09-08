@@ -55,8 +55,16 @@ export interface ModelProfile {
 }
 export interface ModelProfiles {
   enabled:boolean; current_profile?:'campus'|'official'; next_start_profile?:'campus'|'official';
-  restart_required?:boolean; profiles?:ModelProfile[];
+  voice_next_start_profile?:'campus'|'official'; restart_required?:boolean; profiles?:ModelProfile[];
+  voice?:VoiceModelProfileStatus;
 }
+export interface VoiceModelProfileStatus {
+  enabled:boolean; selected_profile:'campus'|'official';
+  status:'configured'|'restart_pending'|'configuration_unavailable';
+  config_matches?:boolean; provider_name?:string; configured_base_url?:string;
+  configured_model?:string; transport?:'http'|'https';
+}
+export interface VoiceModelHealth extends ModelHealth {profile:'campus'|'official'}
 export interface ProactivePolicy {
   subject_id: string; enabled: boolean; utc_offset_minutes: number;
   allowed_weekdays: number[]; allowed_start_minute: number; allowed_end_minute: number;

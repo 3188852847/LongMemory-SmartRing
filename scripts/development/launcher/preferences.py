@@ -104,23 +104,37 @@ def save_preferences(path: Path, values: dict) -> None:
             pass
 
 
-def load_model_profile(path: Path) -> str:
+def load_model_profile(path: Path, target: str = "web") -> str:
     """读取跨启动器与网页共享的非敏感配置档指针。"""
+    if target not in {"web", "voice"}:
+        raise ValueError("launcher_model_target_invalid")
     try:
-        value = json.loads(path.read_text(encoding="utf-8")).get("active_profile")
+        data = json.loads(path.read_text(encoding="utf-8"))
+        web = data.get("web_profile", data.get("active_profile"))
+        value = data.get("voice_profile", web) if target == "voice" else web
     except (OSError, ValueError, TypeError):
         value = None
     return value if value in {"campus", "official"} else "campus"
 
 
-def save_model_profile(path: Path, profile: str) -> None:
+def save_model_profile(path: Path, profile: str, target: str = "web") -> None:
     if profile not in {"campus", "official"}:
         raise ValueError("launcher_model_profile_invalid")
+    if target not in {"web", "voice"}:
+        raise ValueError("launcher_model_target_invalid")
+    web = load_model_profile(path, "web")
+    voice = load_model_profile(path, "voice")
+    if target == "web":
+        web = profile
+    else:
+        voice = profile
+    body = {"version": 2, "active_profile": web,
+            "web_profile": web, "voice_profile": voice}
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
     try:
         temporary.write_text(
-            json.dumps({"version": 1, "active_profile": profile}, ensure_ascii=False, indent=2),
+            json.dumps(body, ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
         temporary.replace(path)

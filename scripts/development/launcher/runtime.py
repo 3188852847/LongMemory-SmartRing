@@ -45,6 +45,7 @@ class Options:
     lan_ip: str = ""
     consent: bool = False
     model_profile: str = "campus"
+    voice_model_profile: str = "campus"
 
 
 def require_free(host, port):
@@ -74,7 +75,10 @@ def build_commands(options, uv=None):
     """返回参数列表，绝不拼接 shell 命令；只引用现有环境和配置。"""
     if options.model_profile not in {"campus", "official"}:
         raise ValueError("未知模型配置档。")
-    if options.model_profile == "campus" and not options.consent:
+    if options.voice_model_profile not in {"campus", "official"}:
+        raise ValueError("未知圆屏模型配置档。")
+    if (options.model_profile == "campus" or
+            (options.voice and options.voice_model_profile == "campus")) and not options.consent:
         raise ValueError("请先确认聊天写入及当前 HTTP 传输风险。")
     if not 1024 <= options.port <= 65535 or options.port in {8000, 8003, 8766}:
         raise ValueError("控制台端口需在 1024–65535 且不占用小智端口。")
@@ -210,6 +214,15 @@ class Manager:
                 require_free(host, port)
             if options.tts_backend == "voxcpm2":
                 require_no_listener("127.0.0.1", VOXCPM_PORT)
+            # 端口均空闲后才修改小智私有配置，避免给外部正在运行的语音服务
+            # 换掉模型。档案选择是显式意图，写入只触及三个模型字段并保留备份。
+            from model import config_action as model_config_action
+            checked = model_config_action(options.voice_root, options.root,
+                                          options.voice_model_profile)
+            if not checked["config_matches"]:
+                model_config_action(options.voice_root, options.root,
+                                    options.voice_model_profile, apply=True,
+                                    expected_digest=checked["digest"])
         self.options = options
         self.instance = secrets.token_hex(24)
         runtime_token = secrets.token_hex(32)

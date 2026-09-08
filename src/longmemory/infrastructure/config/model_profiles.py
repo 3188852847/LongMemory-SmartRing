@@ -52,18 +52,31 @@ class ModelProfileStore:
                 values[key.strip()] = value.strip().strip('"').strip("'")
         return values
 
-    def selected(self) -> str:
+    def _selection(self) -> dict:
         try:
             data = json.loads(self.selection_path.read_text(encoding="utf-8"))
-            return self._profile(data.get("active_profile"))
+            return data if isinstance(data, dict) else {}
         except (OSError, ValueError, TypeError):
+            return {}
+
+    def selected(self, target: str = "web") -> str:
+        """返回网页或圆屏的下次启动档案，并兼容旧版 active_profile。"""
+        if target not in {"web", "voice"}:
+            raise ValueError("unknown_model_target")
+        data = self._selection()
+        web = data.get("web_profile", data.get("active_profile", "campus"))
+        value = data.get("voice_profile", web) if target == "voice" else web
+        try:
+            return self._profile(value)
+        except ValueError:
             return "campus"
 
     def describe(self) -> dict:
-        selected = self.selected()
+        selected = self.selected("web")
         return {
             "current_profile": self.current_profile,
             "next_start_profile": selected,
+            "voice_next_start_profile": self.selected("voice"),
             "restart_required": self.current_profile != selected,
             "profiles": [self._describe_one(name) for name in PROFILE_FILES],
         }
@@ -80,6 +93,19 @@ class ModelProfileStore:
             "allow_http": values.get("LONGMEMORY_LLM_ALLOW_HTTP", "false").lower() == "true",
             "api_key_configured": bool(values.get("LONGMEMORY_LLM_API_KEY", "").strip()),
         }
+
+    def settings(self, profile: str) -> ModelSettings:
+        """供显式连接检测使用；调用者不得序列化或返回其中的 Key。"""
+        values = self._read_values(self.path(self._profile(profile)))
+        return ModelSettings(
+            provider="openai_compatible",
+            base_url=values.get("LONGMEMORY_LLM_BASE_URL", ""),
+            api_key=values.get("LONGMEMORY_LLM_API_KEY", ""),
+            model=values.get("LONGMEMORY_LLM_MODEL", ""),
+            timeout_seconds=self._number(values.get("LONGMEMORY_LLM_TIMEOUT_SECONDS"), 30.0, float),
+            max_tokens=self._number(values.get("LONGMEMORY_LLM_MAX_TOKENS"), 512, int),
+            allow_http=values.get("LONGMEMORY_LLM_ALLOW_HTTP", "false").lower() == "true",
+        )
 
     @staticmethod
     def _number(value, fallback, converter):
@@ -115,7 +141,7 @@ class ModelProfileStore:
         }
         self._replace_managed_lines(self.path(profile), values)
         if body["activate"]:
-            self.activate(profile)
+            self.activate(profile, target="web")
         return self.describe()
 
     @staticmethod
@@ -133,14 +159,25 @@ class ModelProfileStore:
         finally:
             temporary.unlink(missing_ok=True)
 
-    def activate(self, profile: str) -> None:
+    def activate(self, profile: str, *, target: str = "web") -> None:
         profile = self._profile(profile)
+        if target not in {"web", "voice"}:
+            raise ValueError("unknown_model_target")
         if not self.path(profile).is_file():
             raise ValueError("model_profile_not_configured")
+        current = self._selection()
+        web = current.get("web_profile", current.get("active_profile", "campus"))
+        voice = current.get("voice_profile", web)
+        if target == "web":
+            web = profile
+        else:
+            voice = profile
+        body = {"version": 2, "active_profile": web,
+                "web_profile": web, "voice_profile": voice}
         self.selection_path.parent.mkdir(parents=True, exist_ok=True)
         temporary = self.selection_path.with_name(f".{self.selection_path.name}.{os.getpid()}.tmp")
         try:
-            temporary.write_text(json.dumps({"version": 1, "active_profile": profile}, ensure_ascii=False, indent=2), encoding="utf-8")
+            temporary.write_text(json.dumps(body, ensure_ascii=False, indent=2), encoding="utf-8")
             temporary.replace(self.selection_path)
         finally:
             temporary.unlink(missing_ok=True)

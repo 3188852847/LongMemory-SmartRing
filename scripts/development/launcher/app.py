@@ -158,12 +158,18 @@ def main():
     embedding_model = tk.StringVar(value=saved["embedding_model_dir"] or str(DEFAULT_BGE_MODEL))
     tts_backend = tk.StringVar(value=tts_labels[saved["tts_backend"]])
     model_profile_labels = {"学校模型（校园网）": "campus", "官方 DeepSeek（公网 HTTPS）": "official"}
-    active_model_profile = load_model_profile(model_profile_path)
+    active_model_profile = load_model_profile(model_profile_path, "web")
     model_profile = tk.StringVar(value=next(label for label, value in model_profile_labels.items()
                                              if value == active_model_profile))
+    active_voice_model_profile = load_model_profile(model_profile_path, "voice")
+    voice_model_profile = tk.StringVar(value=next(label for label, value in model_profile_labels.items()
+                                                   if value == active_voice_model_profile))
 
     def selected_model_profile():
         return model_profile_labels[model_profile.get()]
+
+    def selected_voice_model_profile():
+        return model_profile_labels[voice_model_profile.get()]
 
     def selected_extraction():
         return "llm" if memory_extraction.get().startswith("模型") else "rules"
@@ -260,7 +266,13 @@ def main():
     ttk.Label(model_row, text="大模型配置：").pack(side="left")
     ttk.Combobox(model_row, textvariable=model_profile, values=tuple(model_profile_labels),
                  state="readonly", width=31).pack(side="left")
-    ttk.Label(model_row, text="  密钥与地址请在网页设置中心管理").pack(side="left")
+    ttk.Label(model_row, text="  网页聊天、提取与整理").pack(side="left")
+    voice_model_row = ttk.Frame(behavior_box)
+    voice_model_row.pack(fill="x", pady=8)
+    ttk.Label(voice_model_row, text="圆屏语音模型：").pack(side="left")
+    ttk.Combobox(voice_model_row, textvariable=voice_model_profile,
+                 values=tuple(model_profile_labels), state="readonly", width=31).pack(side="left")
+    ttk.Label(voice_model_row, text="  启动语音前自动备份并同步小智配置").pack(side="left")
     memory_row = ttk.Frame(behavior_box)
     memory_row.pack(fill="x", pady=8)
     ttk.Label(memory_row, text="长期记忆提取：").pack(side="left")
@@ -414,17 +426,22 @@ def main():
                               enable_memory_consolidation=memory_consolidation.get(),
                               allow_memory_delete=allow_memory_delete.get(),
                               embedding_model_dir=Path(embedding_model.get()),
-                              model_profile=selected_model_profile())
+                              model_profile=selected_model_profile(),
+                              voice_model_profile=selected_voice_model_profile())
             manager.start(options)
             try:
                 save_preferences(choice_path, current_preferences())
                 save_model_profile(model_profile_path, selected_model_profile())
+                save_model_profile(model_profile_path, selected_voice_model_profile(), "voice")
             except OSError:
                 settings_status.set("服务已启动，但本机首选项未保存；下次仍可手动选择。")
             state.update(started=time.monotonic(), opened=False, failed=False)
             start_button.config(state="disabled")
             model_label = "官方 DeepSeek" if selected_model_profile() == "official" else "学校模型"
-            set_status(f"正在启动；本次网页使用 {model_label}。首次加载语音模型可能较慢，可在聊天页显式检测。", "busy")
+            voice_model_label = "官方 DeepSeek" if selected_voice_model_profile() == "official" else "学校模型"
+            set_status(f"正在启动；网页使用 {model_label}" +
+                       (f"，圆屏使用 {voice_model_label}。" if voice.get() else "。") +
+                       "首次加载语音模型可能较慢，可在设置中心查看状态。", "busy")
         except ValueError as error:
             messagebox.showerror("无法启动", str(error))
         except Exception:

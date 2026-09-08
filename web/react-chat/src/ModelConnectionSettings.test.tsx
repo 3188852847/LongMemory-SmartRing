@@ -15,6 +15,8 @@ describe('模型连接设置', () => {
     const health: ModelHealth = {state:'available',code:null,checked_at:'2026-09-08T00:00:00Z'};
     const request = vi.fn(async (path:string) => path === '/api/model-profiles' ? {
       enabled:true,current_profile:'campus',next_start_profile:'official',restart_required:true,
+      voice_next_start_profile:'official',
+      voice:{enabled:true,selected_profile:'official',status:'restart_pending',config_matches:false,configured_base_url:'http://old.invalid/v1',configured_model:'old-model',transport:'http'},
       profiles:[{id:'official',label:'官方 DeepSeek',file_exists:true,base_url:'https://api.deepseek.com/v1',model:'deepseek-chat',timeout_seconds:30,max_tokens:512,allow_http:false,api_key_configured:true}],
     } : health);
     const onHealth = vi.fn();
@@ -27,5 +29,7 @@ describe('模型连接设置', () => {
     await waitFor(() => expect(onHealth).toHaveBeenCalledWith(health));
     expect(request).toHaveBeenCalledWith('/api/chat-model/check','POST',{});
     expect(document.body.textContent).not.toContain('synthetic-secret');
+    expect(screen.getByText('等待启动器同步')).toBeTruthy();
+    expect(screen.getByText('old-model')).toBeTruthy();
   });
 });

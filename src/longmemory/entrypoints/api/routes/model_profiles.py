@@ -3,11 +3,14 @@
 from aiohttp import web
 
 
-def register_model_profile_routes(app, store):
+def register_model_profile_routes(app, store, voice=None):
     async def listing(_request):
         if store is None:
             return web.json_response({"enabled": False})
-        return web.json_response({"enabled": True, **store.describe()})
+        result = {"enabled": True, **store.describe()}
+        if voice is not None:
+            result["voice"] = await voice.describe()
+        return web.json_response(result)
 
     async def save(request):
         if store is None:
@@ -18,7 +21,32 @@ def register_model_profile_routes(app, store):
             result = store.save(request.match_info["profile"], await request.json())
         except (ValueError, TypeError, UnicodeError, OSError):
             return web.json_response({"error": "invalid_model_profile"}, status=400)
-        return web.json_response({"enabled": True, **result})
+        payload = {"enabled": True, **result}
+        if voice is not None:
+            payload["voice"] = await voice.describe()
+        return web.json_response(payload)
+
+    async def select_voice(request):
+        if store is None or voice is None:
+            return web.json_response({"error": "voice_model_profiles_disabled"}, status=403)
+        try:
+            body = await request.json()
+            if not isinstance(body, dict) or set(body) != {"profile"}:
+                raise ValueError("invalid_body")
+            result = await voice.select(body["profile"])
+        except (ValueError, TypeError, UnicodeError, OSError):
+            return web.json_response({"error": "invalid_voice_model_profile"}, status=400)
+        return web.json_response(result)
+
+    async def check_voice(_request):
+        if voice is None:
+            return web.json_response({"error": "voice_model_profiles_disabled"}, status=403)
+        try:
+            return web.json_response(await voice.check())
+        except ValueError:
+            return web.json_response({"error": "voice_model_check_busy"}, status=409)
 
     app.router.add_get("/api/model-profiles", listing, allow_head=False)
     app.router.add_put("/api/model-profiles/{profile}", save)
+    app.router.add_put("/api/model-profiles/voice/selection", select_voice)
+    app.router.add_post("/api/model-profiles/voice/check", check_voice)

@@ -252,6 +252,40 @@ def test_manager_gives_console_and_voice_one_ephemeral_runtime_identity(options,
         manager.stop()
 
 
+def test_manager_syncs_selected_voice_model_after_ports_are_free(options, monkeypatch):
+    from types import SimpleNamespace
+
+    calls = []
+    voice_root = options.root / "voice"
+    (voice_root / ".venv/Scripts").mkdir(parents=True)
+    (voice_root / ".venv/Scripts/python.exe").touch()
+    (voice_root / "app.py").touch()
+    (options.root / ".env.deepseek.local").write_text("synthetic", encoding="utf-8")
+    selected = replace(options, voice=True, voice_root=voice_root,
+                       lan_ip="192.168.1.9", voice_model_profile="official")
+
+    def model_action(server, project, profile, **kwargs):
+        calls.append((server, project, profile, kwargs))
+        return {"config_matches": bool(kwargs.get("apply")), "digest": "a" * 64}
+
+    class Owned:
+        def __init__(self, command, cwd, env): pass
+        def stop(self): pass
+
+    monkeypatch.setitem(sys.modules, "model", SimpleNamespace(config_action=model_action))
+    monkeypatch.setattr(runtime, "build_commands", lambda _: [("console", [], options.root)])
+    monkeypatch.setattr(runtime, "require_free", lambda *args: None)
+    monkeypatch.setattr(runtime, "OwnedService", Owned)
+    manager = runtime.Manager()
+    try:
+        manager.start(selected)
+        assert calls[0][2:] == ("official", {})
+        assert calls[1][2] == "official"
+        assert calls[1][3] == {"apply": True, "expected_digest": "a" * 64}
+    finally:
+        manager.stop()
+
+
 @pytest.mark.skipif(os.name != "nt", reason="Windows Job integration")
 def test_job_stops_descendant_but_not_external_process(tmp_path):
     # 孙进程占据合成端口，停止 Job 后端口释放；另一个独立进程仍活着。

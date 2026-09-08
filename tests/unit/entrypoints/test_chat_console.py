@@ -103,6 +103,37 @@ def test_model_profile_api_is_csrf_protected_and_never_returns_key(tmp_path):
     asyncio.run(run())
 
 
+def test_voice_model_selection_and_check_are_explicit_and_keyless(tmp_path):
+    store = ModelProfileStore(tmp_path, current_profile="campus")
+    store.save("official", {
+        "base_url": "https://api.deepseek.com", "model": "deepseek-chat",
+        "api_key": "synthetic-secret", "timeout_seconds": 30, "max_tokens": 512,
+        "allow_http": False, "activate": False,
+    })
+    class Voice:
+        async def describe(self):
+            return {"enabled": True, "selected_profile": store.selected("voice"),
+                    "status": "restart_pending"}
+        async def select(self, profile):
+            store.activate(profile, target="voice")
+            return await self.describe()
+        async def check(self):
+            return {"state": "available", "code": None, "checked_at": "synthetic",
+                    "profile": store.selected("voice")}
+    async def run():
+        async with console(model_profile_store=store, voice_model_profiles=Voice()) as (client, base, _):
+            headers = await login(client, base)
+            response = await client.put(base + "/api/model-profiles/voice/selection",
+                                        json={"profile": "official"}, headers=headers)
+            assert response.status == 200
+            assert store.selected("voice") == "official"
+            checked = await client.post(base + "/api/model-profiles/voice/check",
+                                        json={}, headers=headers)
+            text = await checked.text()
+            assert checked.status == 200 and "synthetic-secret" not in text
+    asyncio.run(run())
+
+
 @pytest.mark.parametrize("body", [
     {"text": "", "request_id": str(uuid4())},
     {"text": "  ", "request_id": str(uuid4())},

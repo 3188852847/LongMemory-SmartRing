@@ -1,6 +1,6 @@
 import {useEffect, useMemo, useState} from 'react';
 import {Alert, Button, Descriptions, Divider, Form, Input, InputNumber, Select, Space, Switch, Tag} from 'antd';
-import {type ChatApi, type Config, type ModelHealth, type ModelProfile, type ModelProfiles} from './api';
+import {type ChatApi, type Config, type ModelHealth, type ModelProfile, type ModelProfiles, type VoiceModelHealth} from './api';
 import {modelFailure} from './modelHealth';
 
 function healthLabel(health: ModelHealth | undefined) {
@@ -20,6 +20,10 @@ export function ModelConnectionSettings({api, config, disabled, onHealth}: {
   const [selected, setSelected] = useState<'campus'|'official'>('official');
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [voiceSelected, setVoiceSelected] = useState<'campus'|'official'>('official');
+  const [voiceSaving, setVoiceSaving] = useState(false);
+  const [voiceChecking, setVoiceChecking] = useState(false);
+  const [voiceHealth, setVoiceHealth] = useState<VoiceModelHealth>();
   const [form] = Form.useForm();
   const allowHttp = Form.useWatch('allow_http', form);
   const health = config?.model_health;
@@ -33,6 +37,7 @@ export function ModelConnectionSettings({api, config, disabled, onHealth}: {
       setProfiles(result);
       const choice = result.next_start_profile ?? 'official';
       setSelected(choice);
+      setVoiceSelected(result.voice_next_start_profile ?? result.voice?.selected_profile ?? choice);
     }).catch(error => active && setRequestError(String(error)));
     return () => {active = false;};
   }, [api, disabled]);
@@ -57,6 +62,20 @@ export function ModelConnectionSettings({api, config, disabled, onHealth}: {
     } catch (error) {setRequestError(String(error));}
     finally {setSaving(false);}
   }
+  async function saveVoiceSelection() {
+    setVoiceSaving(true); setRequestError(''); setVoiceHealth(undefined);
+    try {
+      const voice = await api.request<NonNullable<ModelProfiles['voice']>>('/api/model-profiles/voice/selection', 'PUT', {profile:voiceSelected});
+      setProfiles(current => current ? {...current, voice_next_start_profile:voice.selected_profile, voice} : current);
+    } catch (error) {setRequestError(String(error));}
+    finally {setVoiceSaving(false);}
+  }
+  async function checkVoice() {
+    setVoiceChecking(true); setRequestError('');
+    try {setVoiceHealth(await api.request<VoiceModelHealth>('/api/model-profiles/voice/check', 'POST', {}));}
+    catch (error) {setRequestError(String(error));}
+    finally {setVoiceChecking(false);}
+  }
   return <>
     <Descriptions bordered size="small" column={1} items={[
       {key:'provider', label:'连接方式', children:config?.provider ?? '未读取'},
@@ -75,7 +94,7 @@ export function ModelConnectionSettings({api, config, disabled, onHealth}: {
       检测当前模型连接
     </Button>
     <p className="subtle">检测只发送固定合成短句，不读取或写入个人记忆，不自动重试，也不代表圆屏语音链路已经可用。</p>
-    <Divider>下次启动使用的配置</Divider>
+    <Divider>网页服务：下次启动配置</Divider>
     {profiles?.enabled === false && <Alert type="warning" showIcon title="当前启动方式未开放模型配置管理"/>}
     {profiles?.enabled && <>
       <Space wrap>
@@ -103,8 +122,25 @@ export function ModelConnectionSettings({api, config, disabled, onHealth}: {
         {allowHttp && <Alert type="warning" showIcon title="HTTP 会明文传输 Key、对话和记忆证据" description="只应为已知的校园网服务开启；官方 DeepSeek 应使用 HTTPS。"/>}
         <Button htmlType="submit" type="primary" loading={saving} disabled={disabled}>保存并设为下次启动</Button>
       </Form>
-      {saved && <Alert className="settings-model-alert" type="success" showIcon title="本机配置已保存" description="请在启动面板停止并重新启动服务。当前进程不会热切换，圆屏小智的模型配置也不会被这一步自动改写。"/>}
+      {saved && <Alert className="settings-model-alert" type="success" showIcon title="网页模型配置已保存" description="请从启动面板重新启动服务。当前进程不会热切换；圆屏使用下方独立选择。"/>}
       {profiles.restart_required && <Alert className="settings-model-alert" type="info" showIcon title="等待重启生效" description={`当前进程：${profiles.current_profile === 'official' ? '官方 DeepSeek' : '学校模型'}；下次启动：${profiles.next_start_profile === 'official' ? '官方 DeepSeek' : '学校模型'}。`}/>}
+      <Divider>圆屏语音：下次启动配置</Divider>
+      <Space wrap>
+        <span>圆屏模型</span>
+        <Select aria-label="圆屏模型配置档" value={voiceSelected} onChange={setVoiceSelected} style={{minWidth:220}}
+          options={profiles.profiles?.map(item => ({value:item.id, label:item.label}))}/>
+        <Button loading={voiceSaving} disabled={disabled || !profiles.voice?.enabled} onClick={() => void saveVoiceSelection()}>保存圆屏选择</Button>
+        <Button loading={voiceChecking} disabled={disabled || !profiles.voice?.enabled} onClick={() => void checkVoice()}>检测圆屏模型连接</Button>
+      </Space>
+      {profiles.voice?.enabled ? <Descriptions className="settings-model-alert" bordered size="small" column={1} items={[
+        {key:'voice-state',label:'小智磁盘配置',children:profiles.voice.status === 'configured' ? <Tag color="success">已匹配所选档案</Tag> : <Tag color="warning">等待启动器同步</Tag>},
+        {key:'voice-model',label:'当前写入小智的模型',children:profiles.voice.configured_model || '未读取'},
+        {key:'voice-endpoint',label:'当前写入小智的地址',children:profiles.voice.configured_base_url || '未读取'},
+      ]}/> : <Alert className="settings-model-alert" type="warning" showIcon title="无法检查圆屏模型配置" description="请核对启动面板中的小智目录；未读取或显示私有 Key。"/>}
+      {profiles.voice?.status === 'restart_pending' && <Alert className="settings-model-alert" type="info" showIcon title="圆屏选择尚未应用" description="从启动面板停止并重新启动圆屏语音；启动器会先备份小智 YAML，再只同步模型地址、名称和 Key。"/>}
+      {voiceHealth?.state === 'available' && <Alert className="settings-model-alert" type="success" showIcon title="圆屏所选模型连接可用" description="固定合成短句获得了非空响应；这不代表语音、记忆或回答质量已验收。"/>}
+      {voiceHealth?.state === 'unavailable' && <Alert className="settings-model-alert" type="error" showIcon title="圆屏所选模型连接失败" description={modelFailure(voiceHealth.code) ?? '模型配置或调用失败；未返回供应商正文或密钥。'}/>}
+      <p className="subtle">圆屏检测直接检查它所选的档案，不依赖网页当前进程。保存选择不会热改运行中的小智；下次统一启动时才安全同步并生效。</p>
     </>}
   </>;
 }
