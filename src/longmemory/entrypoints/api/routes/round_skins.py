@@ -3,6 +3,7 @@
 from aiohttp import web
 
 from longmemory.adapters.device_control.xiaozhi import BridgeError
+from longmemory.infrastructure.config.round_skins import RoundSkinConflict
 
 
 def register_round_skin_routes(app, store, bridge, operation_lock):
@@ -46,7 +47,19 @@ def register_round_skin_routes(app, store, bridge, operation_lock):
                 # 只回显适配器固定错误码，不向浏览器暴露固件或网络原文。
                 return web.json_response({"error": error.code}, status=error.status)
 
+    async def save_custom(request):
+        try:
+            if request.content_type != "application/json":
+                raise ValueError("invalid_body")
+            body = await request.json()
+            return web.json_response({"enabled": True, **store.save_custom(body)})
+        except RoundSkinConflict:
+            return web.json_response({"error": "custom_round_skin_conflict"}, status=409)
+        except (ValueError, TypeError, UnicodeError, OSError):
+            return web.json_response({"error": "invalid_custom_round_skin"}, status=400)
+
     app.router.add_get("/api/round-skins", listing, allow_head=False)
     app.router.add_put("/api/round-skins/selection", select)
     app.router.add_get("/api/round-skins/device", device_skin, allow_head=False)
     app.router.add_post("/api/round-skins/device", device_skin)
+    app.router.add_put("/api/round-skins/custom", save_custom)

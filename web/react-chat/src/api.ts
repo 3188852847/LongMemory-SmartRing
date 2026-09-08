@@ -83,7 +83,7 @@ export interface RoundSkin {
   motion:{blink_seconds:number; speaking_seconds:number}; manifest_sha256:string;
 }
 export interface RoundSkins {
-  enabled:boolean; selected_skin:string; skins:RoundSkin[];
+  enabled:boolean; selected_skin:string; custom_skin_id:string; skins:RoundSkin[];
   delivery:{console_preview:boolean; upstream_assets_ota_detected:boolean; device_apply_supported:boolean; device_delivery_implemented?:boolean; reason:string; known_firmware_baseline:string};
 }
 export interface RoundDeviceSkin {

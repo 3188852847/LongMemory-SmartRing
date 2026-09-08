@@ -1,6 +1,6 @@
 import {useEffect, useMemo, useState, type CSSProperties} from 'react';
 import {useMutation, useQuery} from '@tanstack/react-query';
-import {Alert, Button, Card, Checkbox, Descriptions, Segmented, Select, Space, Tag} from 'antd';
+import {Alert, Button, Card, Checkbox, Descriptions, InputNumber, Segmented, Select, Space, Tag} from 'antd';
 import {AppShell, ConsoleNav} from './AppShell';
 import {PageHeader} from './PageHeader';
 import {ChatApi, type RoundDeviceSkin, type RoundSkin, type RoundSkinApply, type RoundSkins} from './api';
@@ -58,6 +58,25 @@ const emotionOptions = [
 
 const api = new ChatApi();
 
+const devicePaletteFields = [
+  ['background', '背景'], ['foreground', '主要文字'], ['muted', '次要文字'], ['accent', '待机'],
+  ['listening', '聆听'], ['thinking', '思考'], ['happy', '开心'], ['concerned', '关切'], ['error', '错误'],
+] as const;
+type DevicePaletteKey = typeof devicePaletteFields[number][0];
+type SkinDraft = {
+  base_skin_id:string;
+  palette:Record<DevicePaletteKey, string>;
+  face:RoundSkin['face'];
+};
+
+function createDraft(skin:RoundSkin):SkinDraft {
+  return {
+    base_skin_id:skin.id,
+    palette:Object.fromEntries(devicePaletteFields.map(([key]) => [key, skin.palette[key]])) as Record<DevicePaletteKey, string>,
+    face:{...skin.face},
+  };
+}
+
 function skinStyle(skin?: RoundSkin): CSSProperties {
   if (!skin) return {};
   return {
@@ -87,6 +106,7 @@ export function RoundDisplayApp() {
   const [system, setSystem] = useState<SystemState>('normal');
   const [showSafeArea, setShowSafeArea] = useState(false);
   const [selectedSkin, setSelectedSkin] = useState('rose-night-v1');
+  const [draft, setDraft] = useState<SkinDraft>();
   const session = useQuery({queryKey:['round-skin-session'], queryFn:async () => {await api.bootstrap(); return true;}, staleTime:Infinity});
   const skins = useQuery({queryKey:['round-skins'], queryFn:() => api.request<RoundSkins>('/api/round-skins'), enabled:session.isSuccess});
   useEffect(() => {if (skins.data?.selected_skin) setSelectedSkin(skins.data.selected_skin);}, [skins.data?.selected_skin]);
@@ -101,8 +121,21 @@ export function RoundDisplayApp() {
     mutationFn:(skin_id:string) => api.request<RoundSkinApply>('/api/round-skins/device', 'POST', {skin_id}),
     onSuccess:value => {if (value.verified) skins.refetch();},
   });
+  const saveCustom = useMutation({
+    mutationFn:(value:SkinDraft) => api.request<RoundSkins>('/api/round-skins/custom', 'PUT', {
+      ...value,
+      expected_manifest_sha256:skins.data?.skins.find(item => item.id === skins.data?.custom_skin_id)?.manifest_sha256 ?? null,
+    }),
+    onSuccess:value => {
+      setDraft(undefined);
+      skins.refetch().then(() => setSelectedSkin(value.custom_skin_id));
+    },
+  });
   const view = useMemo(() => resolveRoundDisplay(interaction, system), [interaction, system]);
   const skin = skins.data?.skins.find(item => item.id === selectedSkin);
+  const previewSkin = draft && skin ? {
+    ...skin, palette:{...skin.palette, ...draft.palette}, face:draft.face,
+  } : skin;
   const blocked = Boolean(systemCopy[system]);
   const powerLabel = system === 'charging' ? '充电中' : system === 'low_battery' ? '电量低' : '';
   const sidebar = <><ConsoleNav active="display" legacyPath="/"/><Card size="small" title="实现边界">
@@ -114,7 +147,7 @@ export function RoundDisplayApp() {
     <Alert type="info" showIcon title="预览与真机采用同一版皮肤清单" description="交互状态决定主体表达；真机写入必须手动触发，并在固件回读的皮肤 ID、清单指纹和全部支持字段一致后才显示成功。"/>
     <div className="display-preview-layout">
       <section className="display-stage" aria-label="圆屏模拟画布">
-        <div style={skinStyle(skin)} className={`round-display tone-${view.tone} state-${interaction} emotion-${emotion} focus-${view.focus}`}>
+        <div style={skinStyle(previewSkin)} className={`round-display tone-${view.tone} state-${interaction} emotion-${emotion} focus-${view.focus}`}>
           {showSafeArea && <div className="round-safe-area" aria-label="中央安全区"/>}
           <div className="round-topline">{view.title}</div>
           {powerLabel && <div className={`round-power ${system}`}>{powerLabel}</div>}
@@ -146,13 +179,14 @@ export function RoundDisplayApp() {
           <p className="subtle">“保存预览选择”只改网页；“应用到真机”会写入设备 NVS 并立即回读核对。语言模型看不到这两个固件管理工具。</p>
           {(session.isError || skins.isError || saveSkin.isError) && <Alert type="error" showIcon title="皮肤档案不可用" description="请确认控制台使用最新代码启动，并刷新页面。"/>}
           <Space wrap className="round-skin-actions">
-            <Select aria-label="圆屏皮肤" value={selectedSkin} onChange={setSelectedSkin} style={{minWidth:220}}
+            <Select aria-label="圆屏皮肤" value={selectedSkin} onChange={value => {setSelectedSkin(value); setDraft(undefined);}} style={{minWidth:220}}
               options={skins.data?.skins.map(item => ({value:item.id, label:item.name}))}/>
             <Button type="primary" loading={saveSkin.isPending} disabled={!skins.data?.enabled || selectedSkin === skins.data?.selected_skin}
               onClick={() => saveSkin.mutate(selectedSkin)}>保存预览选择</Button>
             <Button loading={deviceSkin.isPending} onClick={() => deviceSkin.mutate()}>检测真机皮肤能力</Button>
             <Button danger loading={applySkin.isPending} disabled={!deviceSkin.isSuccess || !skin}
               onClick={() => applySkin.mutate(selectedSkin)}>应用到真机</Button>
+            <Button disabled={!skin} onClick={() => skin && setDraft(createDraft(skin))}>从当前皮肤开始编辑</Button>
           </Space>
           {skin && <Descriptions bordered size="small" column={1} items={[
             {key:'description', label:'设计用途', children:skin.description},
@@ -172,6 +206,35 @@ export function RoundDisplayApp() {
               description={applySkin.data.verified ? '重启后设备会从 NVS 恢复同一皮肤。' : `原因：${applySkin.data.reason ?? 'readback_mismatch'}`}/>
           )}
           {applySkin.isError && <Alert className="settings-model-alert" type="error" showIcon title="真机皮肤写入失败" description="未把本机选择冒充成设备成功；请先重新检测设备能力。"/>}
+          {draft && <div className="round-skin-editor" role="region" aria-label="本机自定义皮肤编辑器">
+            <h3>我的自定义皮肤</h3>
+            <p className="subtle">修改会立即出现在左侧预览；保存后生成新的 SHA-256，但不会自动写入圆屏。</p>
+            <div className="round-skin-color-grid">
+              {devicePaletteFields.map(([key, label]) => <label key={key}>
+                <span>{label}</span>
+                <input type="color" aria-label={`皮肤颜色：${label}`} value={draft.palette[key]}
+                  onChange={event => setDraft(current => current ? {
+                    ...current, palette:{...current.palette, [key]:event.target.value.toUpperCase()},
+                  } : current)}/>
+                <code>{draft.palette[key]}</code>
+              </label>)}
+            </div>
+            <div className="round-skin-size-grid">
+              {([['eye_width', '眼睛宽度', 12, 36], ['eye_height', '眼睛高度', 18, 48], ['mouth_width', '嘴部宽度', 20, 64]] as const)
+                .map(([key, label, min, max]) => <label key={key}><span>{label}</span>
+                  <InputNumber aria-label={label} min={min} max={max} value={draft.face[key]}
+                    onChange={value => typeof value === 'number' && setDraft(current => current ? {
+                      ...current, face:{...current.face, [key]:value},
+                    } : current)}/>
+                </label>)}
+            </div>
+            <Space wrap>
+              <Button type="primary" loading={saveCustom.isPending} onClick={() => saveCustom.mutate(draft)}>保存为“我的自定义皮肤”</Button>
+              <Button onClick={() => setDraft(undefined)}>取消编辑</Button>
+            </Space>
+            {saveCustom.isError && <Alert className="settings-model-alert" type="warning" showIcon
+              title="自定义皮肤没有保存" description="可能有另一个页面先修改了档案。刷新页面后重新编辑，旧草稿不会覆盖新版本。"/>}
+          </div>}
           <Alert className="settings-model-alert" type="warning" showIcon title="没有改写 assets 分区"
             description="首版只修改固定 LVGL 参数并保留内置默认值；图片资源、浏览器动画和背景边缘渐变仍不下发。"/>
         </Card>

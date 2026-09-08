@@ -186,6 +186,23 @@ def test_round_skin_api_is_csrf_protected_and_does_not_claim_device_apply(tmp_pa
             applied = await client.post(base + "/api/round-skins/device", headers=headers, json={"skin_id": "rose-night-v1"})
             assert applied.status == 200
             assert (await applied.json())["verified"] is True
+            custom_body = {
+                "base_skin_id": "rose-night-v1",
+                "expected_manifest_sha256": None,
+                "palette": {key: "#335577" for key in (
+                    "background", "foreground", "muted", "accent", "listening",
+                    "thinking", "happy", "concerned", "error",
+                )},
+                "face": {"eye_width": 24, "eye_height": 38, "mouth_width": 44},
+            }
+            assert (await client.put(base + "/api/round-skins/custom", json=custom_body)).status == 403
+            custom_response = await client.put(base + "/api/round-skins/custom", headers=headers, json=custom_body)
+            assert custom_response.status == 200
+            custom_data = await custom_response.json()
+            custom = next(item for item in custom_data["skins"] if item["id"] == "local-custom-v1")
+            assert custom["face"]["mouth_width"] == 44
+            assert custom["palette"]["background"] == "#335577"
+            assert (await client.put(base + "/api/round-skins/custom", headers=headers, json=custom_body)).status == 409
 
     asyncio.run(run())
 
