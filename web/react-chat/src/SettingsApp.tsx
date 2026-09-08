@@ -24,6 +24,12 @@ export function SettingsApp() {
   return <AppShell subtitle="角色、声音与阅读体验" className="settings-shell" sidebar={sidebar}>
     <PageHeader eyebrow="控制与观察" title="设置中心" description="调整助手的表达、声音、页面外观和主动联系边界；这些设置不会修改你的事实记忆。"/>
     {(session.isError || config.isError) && <Alert type="error" showIcon title="设置服务当前不可用" description="请确认统一启动的文字服务仍在运行，再刷新本页。"/>}
+    <section className="settings-overview" aria-label="当前设置摘要">
+      <div><small>设置服务</small><strong className={enabled ? 'is-positive' : ''}>{enabled ? '可用' : '连接中'}</strong></div>
+      <div><small>当前助手</small><strong>{config.data?.role ?? '—'}</strong></div>
+      <div><small>当前模型</small><strong>{config.data?.model ?? '—'}</strong></div>
+      <div><small>模型通道</small><strong>{config.data?.provider ?? '—'}</strong></div>
+    </section>
     <Tabs className="settings-tabs" defaultActiveKey="role" items={[
       {key:'model', label:'模型与服务', children:<Card title="模型与服务" extra={<span className="setting-scope">当前服务进程</span>}>
         <p>核对当前进程，并管理学校/官方两个本机配置档。页面永远不读取或显示已有 API Key，切换在重启后生效。</p>
