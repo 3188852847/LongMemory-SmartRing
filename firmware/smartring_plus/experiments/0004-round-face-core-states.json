@@ -1,0 +1,58 @@
+{
+  "schema_version": 1,
+  "captured_on": "2026-09-08",
+  "experiment": "0004-round-face-core-states",
+  "depends_on": "0003-distinguish-listening-and-interruption",
+  "board": "viewe-smartring-plus",
+  "application_version": "2.2.3",
+  "esp_idf_version": "5.5.4",
+  "evidence_contract": {
+    "states": [
+      "idle",
+      "listening",
+      "thinking",
+      "speaking",
+      "error"
+    ],
+    "rendering": "board_specific_lvgl_primitives",
+    "message_layout": "default_multiline_single_message",
+    "status_bar_preserved": true,
+    "audio_or_protocol_changed": false
+  },
+  "source": {
+    "config_json_sha256_before": "FB9669CEACC32DAF59320867B5448E726BF6C2DAF87A43228309C47B29034D00",
+    "board_cc_sha256_before": "60EBB09CD61ED4C47394E159FBBDC502A904BC5A8B297A46D49D717BD6A7A5D3",
+    "config_json_sha256_after": "F9BC5E3106409F3ADB4A96FD6AD159BE7688C0F865EDF4BA4AAAEB6BD598DF4F",
+    "board_cc_sha256_after": "013748A5A5F89AF8585A8044604D3686E069F3FF3014FCBC68D93FAC5E4DE29F",
+    "clean_apply": true,
+    "reverse_check": true
+  },
+  "application": {
+    "length_bytes": 3957824,
+    "sha256": "F32964B68677D9B93BDD2CFDE928728F79BB1B12BBC8391E7240C2A847775EAC",
+    "partition_length_bytes": 4128768,
+    "remaining_bytes": 170944,
+    "increase_from_0003_bytes": 0
+  },
+  "release": {
+    "merged_binary_length_bytes": 8740713,
+    "merged_binary_sha256": "792F71FB3EF6510F9E0149E9CFA07A33E0F7F65C1F0E79C53F5A74EB7B74E7F0",
+    "release_zip_sha256": "A61F7350F1AD2BDF0D72B608642A3EC259A3EAEAE8E468D166523834356512A2",
+    "pre_0004_release_zip_sha256": "BA5016D7950CFA3238438B1B8B25D7FFC97034CAF240D67A7A01A210FA1318F0"
+  },
+  "flash": {
+    "port": "COM3",
+    "device_mac_suffix": "6d:38",
+    "result": "verified",
+    "application_offset": "0x20000",
+    "application_only": true,
+    "written_range": "0x00020000-0x003e6fff",
+    "independent_verify_flash": "digest_matched",
+    "nvs_written": false
+  },
+  "runtime": {
+    "core_state_visuals": "pending_user_validation",
+    "subtitle_and_status_bar": "pending_user_validation",
+    "browser_pixel_parity_claimed": false
+  }
+}

@@ -1,0 +1,182 @@
+diff --git a/main/boards/viewe-smartring-plus/config.json b/main/boards/viewe-smartring-plus/config.json
+--- a/main/boards/viewe-smartring-plus/config.json
++++ b/main/boards/viewe-smartring-plus/config.json
+@@ -1 +1 @@
+-{"target":"esp32s3","builds":[{"name":"viewe-smartring-plus","sdkconfig_append":["CONFIG_USE_WECHAT_MESSAGE_STYLE=y","CONFIG_MMAP_FILE_NAME_LENGTH=32","CONFIG_FLASH_DEFAULT_ASSETS=y","CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y","CONFIG_PARTITION_TABLE_CUSTOM_FILENAME=\"partitions/v2/16m.csv\""]}]}
++{"target":"esp32s3","builds":[{"name":"viewe-smartring-plus","sdkconfig_append":["CONFIG_USE_DEFAULT_MESSAGE_STYLE=y","CONFIG_USE_MULTILINE_CHAT_MESSAGE=y","CONFIG_MMAP_FILE_NAME_LENGTH=32","CONFIG_FLASH_DEFAULT_ASSETS=y","CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y","CONFIG_PARTITION_TABLE_CUSTOM_FILENAME=\"partitions/v2/16m.csv\""]}]}
+diff --git a/main/boards/viewe-smartring-plus/viewe-smartring-plus.cc b/main/boards/viewe-smartring-plus/viewe-smartring-plus.cc
+--- a/main/boards/viewe-smartring-plus/viewe-smartring-plus.cc
++++ b/main/boards/viewe-smartring-plus/viewe-smartring-plus.cc
+@@ -1,6 +1,7 @@
+ #include "wifi_board.h"
+ #include "codecs/es8311_audio_codec.h"
+ #include "display/lcd_display.h"
++#include "display/lvgl_display/lvgl_theme.h"
+ #include "display/emote_display.h"
+ #include "application.h"
+ #include "button.h"
+@@ -19,6 +20,7 @@
+ #include <freertos/FreeRTOS.h>
+ #include <freertos/semphr.h>
+ #include <freertos/task.h>
++#include <cstring>
+-
++
+ #include "power_manager.h"
+ #include "assets/lang_config.h"
+@@ -576,6 +578,141 @@ private:
+     SemaphoreHandle_t touch_isr_mux_;
+ };
+-
++
++// SmartRing-Plus 的日常入口以状态可见性为先：继续复用通用 LCD 的状态栏、
++// 电量、通知、预览图和字幕，只把中央内容替换为适合 360x360 圆屏的轻量脸。
++// 所有图形都由 LVGL 基础对象绘制，不增加图片资源和解码负担。
++class SmartRingFaceDisplay : public SpiLcdDisplay {
++private:
++    lv_obj_t* left_eye_ = nullptr;
++    lv_obj_t* right_eye_ = nullptr;
++    lv_obj_t* mouth_ = nullptr;
++
++    static void ConfigureFacePart(lv_obj_t* object) {
++        lv_obj_set_style_border_width(object, 0, 0);
++        lv_obj_set_style_pad_all(object, 0, 0);
++        lv_obj_set_style_radius(object, LV_RADIUS_CIRCLE, 0);
++        lv_obj_set_scrollbar_mode(object, LV_SCROLLBAR_MODE_OFF);
++    }
++
++    void ApplyFace(const char* emotion) {
++        if (left_eye_ == nullptr || right_eye_ == nullptr || mouth_ == nullptr) {
++            return;
++        }
++
++        const char* value = emotion == nullptr ? "neutral" : emotion;
++        const bool listening = std::strcmp(value, "microphone") == 0;
++        const bool thinking = std::strcmp(value, "thinking") == 0;
++        const bool speaking = std::strcmp(value, "speaking") == 0 ||
++                              Application::GetInstance().GetDeviceState() == kDeviceStateSpeaking;
++        const bool error = std::strcmp(value, "triangle_exclamation") == 0 ||
++                           std::strcmp(value, "cloud_slash") == 0 ||
++                           std::strcmp(value, "wifi_off") == 0;
++        const bool happy = std::strcmp(value, "happy") == 0 ||
++                           std::strcmp(value, "laughing") == 0 ||
++                           std::strcmp(value, "loving") == 0 ||
++                           std::strcmp(value, "funny") == 0;
++        const bool sad = std::strcmp(value, "sad") == 0 ||
++                         std::strcmp(value, "crying") == 0;
++
++        lv_color_t accent = lv_color_hex(0xFF748C);
++        if (listening) {
++            accent = lv_color_hex(0x69D5FF);
++        } else if (thinking) {
++            accent = lv_color_hex(0xF7C65A);
++        } else if (error) {
++            accent = lv_color_hex(0xFF5C6C);
++        } else if (happy) {
++            accent = lv_color_hex(0x7DE2B8);
++        } else if (sad) {
++            accent = lv_color_hex(0x8AA8FF);
++        }
++
++        lv_coord_t eye_width = thinking ? 16 : 19;
++        lv_coord_t eye_height = thinking ? 16 : (listening ? 40 : 34);
++        lv_coord_t mouth_width = error ? 18 : (speaking ? 46 : (happy ? 52 : 38));
++        lv_coord_t mouth_height = error ? 18 : (speaking ? 20 : (happy ? 13 : 8));
++
++        lv_obj_set_size(left_eye_, eye_width, eye_height);
++        lv_obj_set_size(right_eye_, eye_width, eye_height);
++        lv_obj_set_size(mouth_, mouth_width, mouth_height);
++        lv_obj_align(left_eye_, LV_ALIGN_CENTER, -42, -18);
++        lv_obj_align(right_eye_, LV_ALIGN_CENTER, 42, -18);
++        lv_obj_align(mouth_, LV_ALIGN_CENTER, 0, 38);
++        lv_obj_set_style_bg_color(left_eye_, accent, 0);
++        lv_obj_set_style_bg_color(right_eye_, accent, 0);
++        lv_obj_set_style_bg_color(mouth_, accent, 0);
++    }
++
++public:
++    SmartRingFaceDisplay(esp_lcd_panel_io_handle_t panel_io,
++                         esp_lcd_panel_handle_t panel,
++                         int width, int height, int offset_x, int offset_y,
++                         bool mirror_x, bool mirror_y, bool swap_xy)
++        : SpiLcdDisplay(panel_io, panel, width, height, offset_x, offset_y,
++                        mirror_x, mirror_y, swap_xy) {
++        // 圆屏专用界面默认采用深色；运行时的显式主题切换仍由通用实现处理。
++        current_theme_ = LvglThemeManager::GetInstance().GetTheme("dark");
++    }
++
++    void SetupUI() override {
++        LcdDisplay::SetupUI();
++        DisplayLockGuard lock(this);
++        if (emoji_box_ == nullptr) {
++            return;
++        }
++
++        // 保留通用 emoji 对象供主题/预览代码安全访问，但不让它覆盖板级脸。
++        lv_obj_add_flag(emoji_label_, LV_OBJ_FLAG_HIDDEN);
++        lv_obj_add_flag(emoji_image_, LV_OBJ_FLAG_HIDDEN);
++        lv_obj_set_size(emoji_box_, 190, 130);
++        lv_obj_align(emoji_box_, LV_ALIGN_CENTER, 0, -14);
++
++        left_eye_ = lv_obj_create(emoji_box_);
++        right_eye_ = lv_obj_create(emoji_box_);
++        mouth_ = lv_obj_create(emoji_box_);
++        ConfigureFacePart(left_eye_);
++        ConfigureFacePart(right_eye_);
++        ConfigureFacePart(mouth_);
++        ApplyFace("neutral");
++
++        // 字幕最多占中央安全区下方两行，不再堆叠历史聊天气泡。
++        if (bottom_bar_ != nullptr && chat_message_label_ != nullptr) {
++            lv_obj_set_size(bottom_bar_, 272, 58);
++            lv_obj_set_style_bg_opa(bottom_bar_, LV_OPA_TRANSP, 0);
++            lv_obj_align(bottom_bar_, LV_ALIGN_BOTTOM_MID, 0, -38);
++            lv_obj_set_width(chat_message_label_, 252);
++            lv_obj_set_height(chat_message_label_, 48);
++            lv_label_set_long_mode(chat_message_label_, LV_LABEL_LONG_DOT);
++            lv_obj_set_style_text_align(chat_message_label_, LV_TEXT_ALIGN_CENTER, 0);
++        }
++    }
++
++    void SetStatus(const char* status) override {
++        LvglDisplay::SetStatus(status);
++        if (status == nullptr) {
++            return;
++        }
++        if (std::strcmp(status, Lang::Strings::STANDBY) == 0) {
++            SetEmotion("neutral");
++        } else if (std::strcmp(status, Lang::Strings::LISTENING) == 0 ||
++                   std::strcmp(status, "已打断，请继续...") == 0) {
++            SetEmotion("microphone");
++        } else if (std::strcmp(status, Lang::Strings::SPEAKING) == 0) {
++            SetEmotion("speaking");
++        } else if (std::strcmp(status, "思考中...") == 0) {
++            SetEmotion("thinking");
++        }
++    }
++
++    void SetEmotion(const char* emotion) override {
++        if (!setup_ui_called_) {
++            return;
++        }
++        DisplayLockGuard lock(this);
++        ApplyFace(emotion);
++    }
++};
++
+ class ViewESmartRingPlus : public WifiBoard {
+ private:
+     i2c_master_bus_handle_t i2c_bus_;
+@@ -809,9 +946,9 @@ private:
+         // Use LVGL-based chat UI instead of emote message style so that
+         // dialog bubbles appear centered below the emoji, matching the
+         // customer's desired layout.
+-        display_ = new SpiLcdDisplay(panel_io, panel, DISPLAY_WIDTH, DISPLAY_HEIGHT,
+-                                     DISPLAY_OFFSET_X, DISPLAY_OFFSET_Y,
+-                                     DISPLAY_MIRROR_X, DISPLAY_MIRROR_Y, DISPLAY_SWAP_XY);
++        display_ = new SmartRingFaceDisplay(panel_io, panel, DISPLAY_WIDTH, DISPLAY_HEIGHT,
++                                            DISPLAY_OFFSET_X, DISPLAY_OFFSET_Y,
++                                            DISPLAY_MIRROR_X, DISPLAY_MIRROR_Y, DISPLAY_SWAP_XY);
+         // brightness_invert = true: hardware is "high PWM duty = dimmer", so invert so AI "调低背光" = darker
+         backlight_ = new PwmBacklight(DISPLAY_BACKLIGHT_PIN, DISPLAY_BACKLIGHT_OUTPUT_INVERT, 25000, true);
+         backlight_->RestoreBrightness();
