@@ -34,6 +34,7 @@ def test_updates_only_model_fields_and_preserves_text(tmp_path):
     assert parsed['LLM']['CampusLLM'] == {'type':'openai', 'base_url':'http://synthetic.local/tenant/v1',
         'api_key':'SYNTHETIC_SECRET_NEW', 'model_name':'synthetic-model'}
     assert result['runtime'] == 'unverified' and '.model-' in result['backup']
+    assert result['configured_base_url'] == 'http://synthetic.local/tenant/v1'
     assert (target.parent / result['backup']).read_text(encoding='utf-8') == old
 
 
@@ -50,6 +51,7 @@ def test_official_profile_check_is_read_only_and_summary_has_no_key(tmp_path):
     target.write_text(old, encoding='utf-8')
     result = module.action(project, server, 'official')
     assert result['config_matches'] is False and result['model'] == 'official-model'
+    assert result['base_url'] == 'https://api.synthetic.invalid/v1'
     assert target.read_text(encoding='utf-8') == old
     assert 'SYNTHETIC_OFFICIAL_SECRET' not in str(result)
 

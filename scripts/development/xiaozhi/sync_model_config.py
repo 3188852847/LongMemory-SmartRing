@@ -42,6 +42,12 @@ def profile_values(project: Path, profile: str) -> dict[str, str]:
             or parsed.fragment or base_url.endswith("/chat/completions")
             or (parsed.scheme == "http" and not allow_http)):
         raise ValueError("invalid_base_url")
+    # LongMemory 客户端接受官方文档给出的域名根地址；当前 Xiaozhi 启动
+    # 契约统一要求 /v1。这里只做协议等价的适配，不反向改写 env 档案。
+    if parsed.path.rstrip("/") in {"", "/"}:
+        base_url += "/v1"
+    elif not parsed.path.rstrip("/").endswith("/v1"):
+        raise ValueError("invalid_base_url")
     return {"base_url": base_url, "model_name": source["LONGMEMORY_LLM_MODEL"].strip(),
             "api_key": source["LONGMEMORY_LLM_API_KEY"].strip()}
 
@@ -108,6 +114,10 @@ def action(project: Path, server: Path, profile: str, *, apply: bool = False,
     if apply:
         body["expected_digest"] = expected_digest
     result = commit_change(path, body, original, updated, matches, backup_label="model")
+    if apply and result.get("config_matches"):
+        # apply 回执描述写入后的磁盘目标，避免页面把成功结果与写入前字段并列。
+        summary["configured_base_url"] = summary["base_url"]
+        summary["configured_model"] = summary["model"]
     return result | summary
 
 
