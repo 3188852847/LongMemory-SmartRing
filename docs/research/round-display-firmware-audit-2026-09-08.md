@@ -11,6 +11,7 @@
 - 既有厂家仓库：`D:\ESP32-Workspace\SmartRing-Plus`，其中只有此前审计的旧源码。
 - 2026-09-08 取得的厂家 ZIP 副本：`D:\SmartRing-Plus-main`；该目录没有 `.git` 元数据。
 - 当前 B V2 源码：`examples/esp-idf/11_xiaozhi/xiaozhi-esp32-main_smartring_plus_B_V2`。
+- 原下载路径首次解析 `espressif/esp_video 1.3.1` 时，组件目标路径达到 261 字符；本机 `LongPathsEnabled=0`，Python `shutil.copytree` 因传统 Windows 路径限制失败。为避免修改全局策略，已把排除 `build`、`managed_components`、`dependencies.lock` 等生成物的干净工作副本复制到 `D:\sr-bv2`，后续只在该短路径构建。
 - 同一 ZIP 还包含通用目录 `examples/esp-idf/11_xiaozhi/xiaozhi-esp32-main-2.0`，不能与 B V2 专用目录混用。
 - 已烧录 B V2 二进制：`G:\00-下载\XIOAZHI2.0-SmartRing_Plus_B_V2.bin`；项目硬件记录已保存其大小、哈希、分区与应用元数据。
 - B V2 工程的组件清单要求 ESP-IDF `>=5.5.2`；此前 v5.4.4 环境不能作为该工程的构建环境。
