@@ -26,6 +26,8 @@ LEGACY_MEMORY_PROVIDER_SHA256 = {
     "aeb5df153de32986df4cfece8cf8d6ecea6b49dd936f250497b684eb41ca3ac4",
     # P3.1 本机首次安装后追加 URL/令牌严格校验前的过渡版本。
     "c0dfe5b56b83ba3c26742147a345f15ca5600d03e293a10fd6b0d59e3aefdf81",
+    # P3.1 共享 Runtime 的已发布版本；可由 Git 历史提交 894b5fb/ff15db0 追溯。
+    "005104cc605aa05ad834774d649a0d088bf450bcc7040e44d0e40a2964d9be52",
 }
 
 

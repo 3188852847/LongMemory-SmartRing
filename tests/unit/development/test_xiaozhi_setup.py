@@ -219,6 +219,14 @@ def test_update_memory_only_replaces_known_legacy_provider(tmp_path, monkeypatch
     assert base.read_text(encoding='utf-8') == 'unchanged'
 
 
+def test_published_shared_runtime_provider_is_a_known_upgrade_source():
+    """固定实机曾安装的发布版身份，避免以后误删受控升级路径。"""
+    assert (
+        '005104cc605aa05ad834774d649a0d088bf450bcc7040e44d0e40a2964d9be52'
+        in setup.LEGACY_MEMORY_PROVIDER_SHA256
+    )
+
+
 def test_longmemory_config_requires_prompt_slot_and_explicit_device(config, tmp_path):
     config['selected_module']['Memory'] = 'LongMemory'
     config['Memory'] = {'LongMemory': dict(
