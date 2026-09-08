@@ -25,6 +25,9 @@ from tts import config_action as tts_config_action
 APP_BACKGROUND = "#f5f6fa"
 CARD_BACKGROUND = "#ffffff"
 ACCENT = "#a72760"
+TEXT_STRONG = "#18202f"
+TEXT_MUTED = "#667085"
+BORDER = "#dfe3ea"
 
 
 def _summary_text(voice, start_page, role, extraction, retrieval, tts, allow_delete,
@@ -86,29 +89,49 @@ def _scrollable_tab(parent):
 def main():
     window = tk.Tk()
     window.title("LongMemory · 日常启动")
-    window.geometry("920x740")
-    window.minsize(720, 500)
+    window.geometry("960x760")
+    window.minsize(680, 460)
     window.configure(background=APP_BACKGROUND)
     style = ttk.Style(window)
-    if "vista" in style.theme_names():
-        style.theme_use("vista")
+    # Clam 允许同一套颜色和间距在不同 Windows 主题下保持稳定；这里只
+    # 改启动器自身的绘制，不影响系统主题或 React 控制台。
+    if "clam" in style.theme_names():
+        style.theme_use("clam")
     style.configure("App.TFrame", background=APP_BACKGROUND)
     style.configure("Page.TFrame", background=APP_BACKGROUND)
     style.configure("Header.TFrame", background=APP_BACKGROUND)
-    style.configure("TLabel", font=("Microsoft YaHei UI", 9))
-    style.configure("Title.TLabel", font=("Microsoft YaHei UI", 20, "bold"))
+    style.configure("Footer.TFrame", background=APP_BACKGROUND)
+    style.configure("TFrame", background=APP_BACKGROUND)
+    style.configure("TLabel", background=APP_BACKGROUND, foreground=TEXT_STRONG,
+                    font=("Microsoft YaHei UI", 9))
+    style.configure("Title.TLabel", background=APP_BACKGROUND, foreground=TEXT_STRONG,
+                    font=("Microsoft YaHei UI", 22, "bold"))
     style.configure("Eyebrow.TLabel", foreground=ACCENT, font=("Microsoft YaHei UI", 9, "bold"))
-    style.configure("Subtitle.TLabel", foreground="#667085")
-    style.configure("Hint.TLabel", foreground="#667085", font=("Microsoft YaHei UI", 9))
-    style.configure("Summary.TLabel", font=("Microsoft YaHei UI", 10), foreground="#303747")
+    style.configure("Subtitle.TLabel", foreground=TEXT_MUTED)
+    style.configure("Hint.TLabel", foreground=TEXT_MUTED, font=("Microsoft YaHei UI", 9))
+    style.configure("Summary.TLabel", font=("Microsoft YaHei UI", 10), foreground=TEXT_STRONG)
+    style.configure("Meta.TLabel", foreground=TEXT_MUTED, background="#eef0f4",
+                    font=("Microsoft YaHei UI", 8), padding=(10, 5))
     style.configure("StatusIdle.TLabel", foreground="#98a2b3", font=("Microsoft YaHei UI", 12))
     style.configure("StatusBusy.TLabel", foreground="#d48806", font=("Microsoft YaHei UI", 12))
     style.configure("StatusGood.TLabel", foreground="#389e0d", font=("Microsoft YaHei UI", 12))
     style.configure("StatusError.TLabel", foreground="#cf1322", font=("Microsoft YaHei UI", 12))
-    style.configure("Primary.TButton", font=("Microsoft YaHei UI", 11, "bold"), padding=(18, 10))
-    style.configure("Secondary.TButton", padding=(12, 8))
-    style.configure("Section.TLabelframe", padding=14, background=CARD_BACKGROUND)
-    style.configure("Section.TLabelframe.Label", font=("Microsoft YaHei UI", 10, "bold"))
+    style.configure("Primary.TButton", background=ACCENT, foreground="#ffffff",
+                    bordercolor=ACCENT, font=("Microsoft YaHei UI", 10, "bold"), padding=(18, 10))
+    style.map("Primary.TButton", background=[("active", "#8f2051"), ("disabled", "#d7a7bd")],
+              foreground=[("disabled", "#ffffff")])
+    style.configure("Secondary.TButton", background=CARD_BACKGROUND, foreground=TEXT_STRONG,
+                    bordercolor=BORDER, padding=(12, 9))
+    style.map("Secondary.TButton", background=[("active", "#f0f2f6")])
+    style.configure("Section.TLabelframe", padding=16, background=CARD_BACKGROUND,
+                    bordercolor=BORDER, relief="solid", borderwidth=1)
+    style.configure("Section.TLabelframe.Label", background=APP_BACKGROUND,
+                    foreground=TEXT_STRONG, font=("Microsoft YaHei UI", 10, "bold"))
+    style.configure("TNotebook", background=APP_BACKGROUND, borderwidth=0, tabmargins=(0, 0, 0, 10))
+    style.configure("TNotebook.Tab", background="#e9ecf2", foreground=TEXT_MUTED,
+                    font=("Microsoft YaHei UI", 9), padding=(18, 9))
+    style.map("TNotebook.Tab", background=[("selected", CARD_BACKGROUND), ("active", "#f0f2f6")],
+              foreground=[("selected", TEXT_STRONG)])
     try:
         lock = Singleton()
     except ValueError as error:
@@ -117,7 +140,7 @@ def main():
         window.destroy()
         return
     manager = Manager()
-    box = ttk.Frame(window, padding=(30, 24), style="App.TFrame")
+    box = ttk.Frame(window, padding=(28, 22), style="App.TFrame")
     box.pack(fill="both", expand=True)
     choice_path = ROOT / 'data/control/launcher.json'
     model_profile_path = ROOT / 'data/control/model-profile.json'
@@ -125,19 +148,26 @@ def main():
     saved = load_preferences(choice_path)
     header = ttk.Frame(box, style="Header.TFrame")
     header.pack(fill="x", pady=(0, 18))
-    ttk.Label(header, text="个人陪伴控制台", style="Eyebrow.TLabel").pack(anchor="w")
-    ttk.Label(header, text="LongMemory", style="Title.TLabel").pack(anchor="w")
+    header_copy = ttk.Frame(header, style="Header.TFrame")
+    header_copy.pack(side="left", fill="x", expand=True)
+    ttk.Label(header_copy, text="个人陪伴控制台", style="Eyebrow.TLabel").pack(anchor="w")
+    ttk.Label(header_copy, text="LongMemory", style="Title.TLabel").pack(anchor="w")
     ttk.Label(
-        header,
+        header_copy,
         text="启动一次，就可以使用文字聊天和 SmartRing-Plus 圆屏；常用选择保存在本机。",
         style="Subtitle.TLabel",
     ).pack(anchor="w", pady=(3, 0))
+    ttk.Label(header, text="本机启动器 · 不接管外部进程", style="Meta.TLabel").pack(side="right", anchor="n")
     tabs = ttk.Notebook(box)
     tabs.pack(fill="both", expand=True)
     daily_tab, daily, daily_canvas = _scrollable_tab(tabs)
     advanced_tab, advanced, advanced_canvas = _scrollable_tab(tabs)
     tabs.add(daily_tab, text="日常启动")
     tabs.add(advanced_tab, text="高级设置")
+    # 高频操作固定在页签外。窗口变矮或高级设置内容较长时，用户依然可以
+    # 立即启动、停止或重新打开网页，不必先滚动到页面末尾。
+    footer = ttk.Frame(box, style="Footer.TFrame")
+    footer.pack(fill="x", pady=(14, 0))
 
     def scroll_current_tab(event):
         """鼠标位于面板任意控件上时，滚动当前可见页签。"""
@@ -420,8 +450,8 @@ def main():
                   "good": "StatusGood.TLabel", "error": "StatusError.TLabel"}
         status.set(message)
         status_indicator.configure(style=styles.get(tone, "StatusIdle.TLabel"))
-    buttons = ttk.Frame(daily)
-    buttons.pack(fill="x", pady=(8, 0))
+    buttons = ttk.Frame(footer, style="Footer.TFrame")
+    buttons.pack(fill="x")
     state = {"opened": False, "started": 0.0, "failed": False}
 
     def open_page():
@@ -526,7 +556,7 @@ def main():
             lock.close()
             window.destroy()
 
-    start_button = ttk.Button(buttons, text="启动并打开控制台", command=start, style="Primary.TButton")
+    start_button = ttk.Button(buttons, text="启动服务并打开网页", command=start, style="Primary.TButton")
     start_button.pack(side="left", padx=(0, 8))
     ttk.Button(buttons, text="重新打开网页", command=open_page, style="Secondary.TButton").pack(side="left", padx=8)
     ttk.Button(buttons, text="停止服务", command=lambda: stop(False), style="Secondary.TButton").pack(side="left", padx=8)
