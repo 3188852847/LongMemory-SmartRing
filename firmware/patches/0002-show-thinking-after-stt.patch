@@ -1,0 +1,17 @@
+diff --git a/main/application.cc b/main/application.cc
+--- a/main/application.cc
++++ b/main/application.cc
+@@ -552,6 +552,13 @@ void Application::InitializeProtocol() {
+                 ESP_LOGI(TAG, ">> %s", text->valuestring);
+                 Schedule([display, message = std::string(text->valuestring)]() {
+                     display->SetChatMessage("user", message.c_str());
++#if CONFIG_BOARD_TYPE_VIEWE_SMARTRING_PLUS
++                    // STT 正文证明本轮有效输入已经识别完成，而 TTS 尚未开始。
++                    // 这里只更新圆屏表现，不伪造新的设备/音频状态；后续 tts.start
++                    // 仍由既有状态机切换到 speaking。
++                    display->SetStatus("思考中...");
++                    display->SetEmotion("thinking");
++#endif
+                 });
+             }
+         } else if (strcmp(type->valuestring, "llm") == 0) {

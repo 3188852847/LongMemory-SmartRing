@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "captured_on": "2026-09-08",
+  "experiment": "0002-show-thinking-after-stt",
+  "depends_on": "0001-align-viewe-lvgl-assets",
+  "board": "viewe-smartring-plus",
+  "application_version": "2.2.3",
+  "esp_idf_version": "5.5.4",
+  "evidence_contract": {
+    "trigger": "valid_stt_text_received",
+    "display_status": "思考中...",
+    "display_emotion": "thinking",
+    "device_state_added": false,
+    "audio_or_protocol_changed": false
+  },
+  "application": {
+    "length_bytes": 3957744,
+    "sha256": "760ED0EE325CA150847AF655A8F5691FE872F74C5115C474CC94B811499786FA",
+    "partition_length_bytes": 4128768,
+    "remaining_bytes": 171024,
+    "increase_from_0001_bytes": 32
+  },
+  "flash": {
+    "port": "COM3",
+    "result": "verified",
+    "application_offset": "0x20000",
+    "application_only": true,
+    "nvs_written": false
+  },
+  "runtime": {
+    "boot_passed": true,
+    "assets_partition_mounted": true,
+    "hardware_initialization": "passed",
+    "wifi_reconnected": true,
+    "stt_thinking_tts_visual_sequence": "pending_user_validation",
+    "xiaozhi_service_started_by_agent": false,
+    "service_start_blocker": "explicit_insecure_lan_authorization_required"
+  }
+}
