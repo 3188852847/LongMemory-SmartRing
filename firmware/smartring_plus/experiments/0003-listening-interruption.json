@@ -27,9 +27,11 @@
     "increase_from_0002_bytes": 80
   },
   "flash": {
-    "result": "not_run",
-    "planned_application_offset": "0x20000",
-    "planned_application_only": true,
+    "port": "COM3",
+    "result": "verified",
+    "application_offset": "0x20000",
+    "application_only": true,
+    "written_range": "0x00020000-0x003e6fff",
     "nvs_written": false
   },
   "runtime": {
