@@ -64,3 +64,13 @@ def test_legacy_ip_only_file_and_broken_file_are_safe(tmp_path):
 def test_unknown_choice_is_rejected_before_write(tmp_path):
     with pytest.raises(ValueError, match="launcher_preference_role_invalid"):
         preferences.save_preferences(tmp_path / "launcher.json", {"role": "unknown"})
+
+
+def test_model_profile_pointer_is_non_secret_and_defaults_safely(tmp_path):
+    path = tmp_path / "model-profile.json"
+    assert preferences.load_model_profile(path) == "campus"
+    preferences.save_model_profile(path, "official")
+    assert preferences.load_model_profile(path) == "official"
+    assert "api_key" not in path.read_text(encoding="utf-8").lower()
+    path.write_text('{"active_profile":"unknown"}', encoding="utf-8")
+    assert preferences.load_model_profile(path) == "campus"

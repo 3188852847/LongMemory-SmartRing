@@ -44,6 +44,7 @@ class Options:
     voice_root: Path = VOICE_ROOT
     lan_ip: str = ""
     consent: bool = False
+    model_profile: str = "campus"
 
 
 def require_free(host, port):
@@ -71,7 +72,9 @@ def require_no_listener(host, port):
 
 def build_commands(options, uv=None):
     """返回参数列表，绝不拼接 shell 命令；只引用现有环境和配置。"""
-    if not options.consent:
+    if options.model_profile not in {"campus", "official"}:
+        raise ValueError("未知模型配置档。")
+    if options.model_profile == "campus" and not options.consent:
         raise ValueError("请先确认聊天写入及当前 HTTP 传输风险。")
     if not 1024 <= options.port <= 65535 or options.port in {8000, 8003, 8766}:
         raise ValueError("控制台端口需在 1024–65535 且不占用小智端口。")
@@ -86,14 +89,15 @@ def build_commands(options, uv=None):
     root = options.root.resolve()
     if not options.database.is_file():
         raise ValueError("请选择已有日常数据库；启动器不会创建或迁移数据库。")
-    if not (root / ".env").is_file() or not (root / ".venv/Scripts/python.exe").is_file():
-        raise ValueError("缺少项目 .env 或虚拟环境，请按使用说明准备。")
+    env_file = {"campus": ".env", "official": ".env.deepseek.local"}[options.model_profile]
+    if not (root / env_file).is_file() or not (root / ".venv/Scripts/python.exe").is_file():
+        raise ValueError(f"缺少项目 {env_file} 或虚拟环境，请先在控制台配置该模型档。")
     uv = uv or shutil.which("uv")
     if not uv:
         raise ValueError("未找到 uv，请检查已有安装的 PATH。启动器不自动安装依赖。")
     # 当前 uv 的 env-file 参数会拆分反斜杠/空格路径。子进程 cwd 已明确
     # 固定为项目根目录，使用相对 .env 同时规避两种路径解析问题。
-    console = [str(uv), "run", "--offline", "--no-sync", "--env-file", ".env",
+    console = [str(uv), "run", "--offline", "--no-sync", "--env-file", env_file,
                "python", "-m", "longmemory.entrypoints.api", "--port", str(options.port),
                "--database", str(options.database.resolve()), "--enable-chat",
                "--chat-provider", "openai_compatible", "--assistant-role", options.role,
@@ -101,6 +105,7 @@ def build_commands(options, uv=None):
                "--memory-retrieval", options.memory_retrieval,
                "--xiaozhi-server", str(options.voice_root.resolve()),
                "--memory-audit-log", str(root / "data/logs/xiaozhi-demo-v1.jsonl")]
+    console.extend(["--model-profile", options.model_profile])
     # 人工纠正每次都需要在网页中核对旧内容并再次确认；日常入口默认开放这一
     # 可追溯写入能力。不可恢复的硬删除仍保持关闭。
     console.append("--allow-memory-correction")

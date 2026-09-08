@@ -25,7 +25,7 @@ export function SettingsApp() {
     {(session.isError || config.isError) && <Alert type="error" showIcon title="设置服务当前不可用" description="请确认统一启动的文字服务仍在运行，再刷新本页。"/>}
     <Tabs className="settings-tabs" defaultActiveKey="role" items={[
       {key:'model', label:'模型与服务', children:<Card title="模型与服务" extra={<span className="setting-scope">当前服务进程</span>}>
-        <p>核对本次启动实际使用的模型与地址，并执行不会读取个人数据的最小连接检测。页面永远不显示 API Key。</p>
+        <p>核对当前进程，并管理学校/官方两个本机配置档。页面永远不读取或显示已有 API Key，切换在重启后生效。</p>
         <ModelConnectionSettings api={api} config={config.data} disabled={!enabled}
           onHealth={health => queryClient.setQueryData<Config>(['chat-config'], current => current ? {...current, model_health:health} : current)}/>
       </Card>},

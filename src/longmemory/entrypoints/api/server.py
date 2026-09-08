@@ -22,6 +22,7 @@ from .routes.assistant_role import register_role_routes
 from .routes.memory_runtime import register_memory_runtime_routes
 from .routes.memory_mode import register_memory_mode_routes
 from .routes.memory_commands import register_memory_command_routes
+from .routes.model_profiles import register_model_profile_routes
 from .routes.proactive_policy import register_proactive_policy_routes
 from .device_role import DeviceRole
 from .voice_settings import VoiceSettings, register_voice_routes
@@ -58,7 +59,8 @@ def create_app(*, port=8765, bridge=None, web_root=None, database=None, allow_me
                chat_backend=None, experiment_backend=None, job_backend=None, instance_id=None,
                xiaozhi_server=None, memory_runtime_token=None, scenario_producer=None,
                scenario_model=None, persona_producer=None, persona_model=None,
-               consolidation_background_enabled=False, proactive_clock=None):
+               consolidation_background_enabled=False, proactive_clock=None,
+               model_profile_store=None):
     sessions = Sessions()
     assets = web_root or ROOT / "web"
     client = bridge if bridge is not None else XiaozhiControlClient(ROOT / "data/control/device-control.token")
@@ -201,6 +203,7 @@ def create_app(*, port=8765, bridge=None, web_root=None, database=None, allow_me
     device_role = DeviceRole(xiaozhi_server, chat_backend.roles, chat_backend.database, ROOT) if xiaozhi_server and chat_backend else None
     register_role_routes(app, chat_backend, device_role)
     register_voice_routes(app, VoiceSettings(xiaozhi_server, chat_backend.database, ROOT) if xiaozhi_server and chat_backend else None)
+    register_model_profile_routes(app, model_profile_store)
     experiments = experiment_backend if experiment_backend is not None else ExperimentBackend(ROOT / "experiments")
     register_experiment_routes(app, experiments)
     register_job_routes(app, job_backend if job_backend is not None else ExperimentJobs(experiments))
@@ -232,6 +235,8 @@ def main():
     parser.add_argument("--assistant-role", choices=("plain_v1", "elysia_v1"), default="plain_v1")
     parser.add_argument("--xiaozhi-server", type=Path, help="允许用户确认后同步角色到此小智目录；不会自动修改配置或重启")
     parser.add_argument("--enable-experiment-runs", action="store_true", help="允许网页确认后运行冻结检索回答对照；默认只读实验")
+    parser.add_argument("--model-profile", choices=("campus", "official"), default="campus",
+                        help="标记本进程实际加载的本机模型配置档")
     args = parser.parse_args()
     if not 1024 <= args.port <= 65535:
         parser.error("port 必须在 1024–65535 之间")
@@ -405,6 +410,7 @@ def main():
         print(f"文字聊天已启用：{args.chat_provider} / {args.assistant_role}；L1 提取={extraction}，召回={retrieval}，不驱动圆屏播音。")
     audit_handler = configure_file_logging(args.memory_audit_log) if args.memory_audit_log else None
     try:
+        from longmemory.infrastructure.config.model_profiles import ModelProfileStore
         web.run_app(create_app(port=args.port, database=args.database, allow_memory_delete=args.allow_memory_delete,
                                allow_memory_correction=args.allow_memory_correction,
                                allow_scenario_management=args.allow_scenario_management,
@@ -414,7 +420,8 @@ def main():
                                memory_runtime_token=runtime_token,
                                scenario_producer=scenario_producer, scenario_model=scenario_model,
                                persona_producer=persona_producer, persona_model=persona_model,
-                               consolidation_background_enabled=args.enable_memory_consolidation),
+                               consolidation_background_enabled=args.enable_memory_consolidation,
+                               model_profile_store=ModelProfileStore(ROOT, current_profile=args.model_profile)),
                     host="127.0.0.1", port=args.port, access_log=None, print=None)
     except OSError:
         parser.exit(1, f"控制台未能绑定 127.0.0.1:{args.port}。请检查旧控制台是否仍在运行或端口权限；未自动停止其他进程、未换端口。\n")

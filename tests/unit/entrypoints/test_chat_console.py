@@ -9,6 +9,7 @@ from test_console import console, login
 from longmemory.adapters.llm.fake import FakeAnswerGenerator
 from longmemory.entrypoints.api.chat_backend import ChatBackend
 from longmemory.methods.longmemory_v1.method import LongMemoryV1
+from longmemory.infrastructure.config.model_profiles import ModelProfileStore
 
 
 @pytest.fixture
@@ -78,6 +79,27 @@ def test_explicit_model_check_uses_synthetic_text_without_memory_write(backend):
             import sqlite3
             with sqlite3.connect(backend.database) as connection:
                 assert connection.execute("SELECT count(*) FROM conversation_messages").fetchone()[0] == 0
+    asyncio.run(run())
+
+
+def test_model_profile_api_is_csrf_protected_and_never_returns_key(tmp_path):
+    store = ModelProfileStore(tmp_path, current_profile="campus")
+    body = {
+        "base_url": "https://api.deepseek.com/v1", "model": "deepseek-chat",
+        "api_key": "synthetic-secret", "timeout_seconds": 30, "max_tokens": 512,
+        "allow_http": False, "activate": True,
+    }
+    async def run():
+        async with console(model_profile_store=store) as (client, base, _):
+            headers = await login(client, base)
+            assert (await client.put(base + "/api/model-profiles/official", json=body)).status == 403
+            response = await client.put(base + "/api/model-profiles/official", json=body, headers=headers)
+            assert response.status == 200
+            text = await response.text()
+            assert "synthetic-secret" not in text
+            result = await (await client.get(base + "/api/model-profiles")).json()
+            assert result["next_start_profile"] == "official"
+            assert result["profiles"][1]["api_key_configured"] is True
     asyncio.run(run())
 
 

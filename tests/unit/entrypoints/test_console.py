@@ -64,7 +64,7 @@ async def console(database=None, allow_memory_delete=False, chat_backend=None,
                   xiaozhi_server=None, memory_runtime_token=None,
                   scenario_producer=None, scenario_model=None,
                   persona_producer=None, persona_model=None,
-                  proactive_clock=None):
+                  proactive_clock=None, model_profile_store=None):
     # 先占用随机回环端口，再把精确 Host 交给应用，避免探测后抢占端口。
     sock = socket.socket()
     sock.bind(("127.0.0.1", 0))
@@ -81,7 +81,8 @@ async def console(database=None, allow_memory_delete=False, chat_backend=None,
                                      scenario_model=scenario_model,
                                      persona_producer=persona_producer,
                                      persona_model=persona_model,
-                                     proactive_clock=proactive_clock), access_log=None)
+                                     proactive_clock=proactive_clock,
+                                     model_profile_store=model_profile_store), access_log=None)
     await runner.setup()
     await web.SockSite(runner, sock).start()
     try:

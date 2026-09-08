@@ -58,6 +58,15 @@ def test_explicit_launcher_choice_enables_l1_delete_capability(options):
     assert cmd.count("--allow-memory-delete") == 1
 
 
+def test_official_profile_uses_separate_env_file_and_needs_no_http_ack(options):
+    (options.root / ".env.deepseek.local").write_text("# synthetic", encoding="utf-8")
+    cmd = runtime.build_commands(
+        replace(options, model_profile="official", consent=False), uv="synthetic-uv"
+    )[0][1]
+    assert cmd[cmd.index("--env-file") + 1] == ".env.deepseek.local"
+    assert cmd[cmd.index("--model-profile") + 1] == "official"
+
+
 def test_explicit_launcher_choice_enables_single_consolidation_owner(options):
     cmd = runtime.build_commands(
         replace(options, enable_memory_consolidation=True), uv="synthetic-uv"

@@ -102,3 +102,27 @@ def save_preferences(path: Path, values: dict) -> None:
             temporary.unlink(missing_ok=True)
         except OSError:
             pass
+
+
+def load_model_profile(path: Path) -> str:
+    """读取跨启动器与网页共享的非敏感配置档指针。"""
+    try:
+        value = json.loads(path.read_text(encoding="utf-8")).get("active_profile")
+    except (OSError, ValueError, TypeError):
+        value = None
+    return value if value in {"campus", "official"} else "campus"
+
+
+def save_model_profile(path: Path, profile: str) -> None:
+    if profile not in {"campus", "official"}:
+        raise ValueError("launcher_model_profile_invalid")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    try:
+        temporary.write_text(
+            json.dumps({"version": 1, "active_profile": profile}, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        temporary.replace(path)
+    finally:
+        temporary.unlink(missing_ok=True)
