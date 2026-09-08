@@ -7,14 +7,27 @@ import sys
 import time
 
 
-def shared_paths_match(config, root, database):
-    """只核对明确的共享空间；不把两份配置强行覆盖成同一份。"""
-    if config["selected_module"]["Memory"] != "LongMemory":
+MEMORY_PROVIDERS = {
+    "longmemory": "LongMemory",
+    "xiaozhi_local": "mem_local_short",
+    "none": "nomem",
+}
+
+
+def memory_contract_matches(config, root, database, backend):
+    """核对所选后端和设备控制身份；数据仍由各后端独立保存。"""
+    if backend not in MEMORY_PROVIDERS:
+        return False
+    if config["selected_module"]["Memory"] != MEMORY_PROVIDERS[backend]:
         return False
     memory = config["Memory"]["LongMemory"]
     expected = {"database_path": database, "project_root": root,
                 "python_executable": root / ".venv/Scripts/python.exe"}
-    return all(Path(memory[key]).resolve() == value.resolve() for key, value in expected.items())
+    if not all(Path(memory[key]).resolve() == value.resolve() for key, value in expected.items()):
+        return False
+    selected = config["Memory"].get(MEMORY_PROVIDERS[backend], {})
+    expected_type = {"longmemory": "longmemory", "xiaozhi_local": "mem_local_short", "none": "nomem"}[backend]
+    return selected.get("type") == expected_type
 
 
 def tts_matches(config, backend):
@@ -56,13 +69,14 @@ def wait_for_voxcpm(timeout=90):
 def main():
     try:
         root, server, database = (Path(value).resolve() for value in sys.argv[1:4])
-        lan_ip, tts_backend = sys.argv[4:6]
+        lan_ip, tts_backend, memory_backend = sys.argv[4:7]
         sys.path.insert(0, str(root / "scripts/development/xiaozhi"))
         import yaml
         import setup
         config = yaml.safe_load((server / "data/.config.yaml").read_text(encoding="utf-8"))
         setup.validate_config(config, lan_ip, tts_backend)
-        if not shared_paths_match(config, root, database) or not tts_matches(config, tts_backend):
+        if (not memory_contract_matches(config, root, database, memory_backend)
+                or not tts_matches(config, tts_backend)):
             return 3
         # 统一启动本来就是项目侧适配器的发布入口。这里只允许 setup 中列出的
         # 已知旧哈希升级；未知文件仍会拒绝覆盖，避免掩盖用户或上游修改。

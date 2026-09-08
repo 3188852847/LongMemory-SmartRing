@@ -112,8 +112,8 @@ def validate_config(config: dict, lan_ip: str | None = None, tts_backend: str = 
         raise SetupError("本阶段不使用智控台配置。")
     selected = config.get("selected_module", {})
     memory_name = selected.get("Memory")
-    if memory_name not in ("nomem", "LongMemory"):
-        raise SetupError("Memory 必须为 nomem 或 LongMemory。")
+    if memory_name not in ("nomem", "mem_local_short", "LongMemory"):
+        raise SetupError("Memory 必须为 nomem、mem_local_short 或 LongMemory。")
     if memory_name == "LongMemory":
         memory = config.get("Memory", {}).get("LongMemory", {})
         if memory.get("type") != "longmemory":
@@ -125,6 +125,17 @@ def validate_config(config: dict, lan_ip: str | None = None, tts_backend: str = 
                 raise SetupError("LongMemory 的四个本地路径必须完整填写为绝对路径。")
         if "<memory>" not in config.get("prompt", "") or "</memory>" not in config.get("prompt", ""):
             raise SetupError("prompt 必须包含 <memory></memory>，否则上游快速提示阶段不会注入记忆。")
+    elif memory_name == "mem_local_short":
+        memory = config.get("Memory", {}).get("mem_local_short", {})
+        if memory.get("type") != "mem_local_short" or "llm" not in memory:
+            raise SetupError("mem_local_short 配置不完整。")
+    else:
+        # 小智原生 nomem 是零配置实现；历史配置可能只在 selected_module
+        # 里选择它，而没有显式的 Memory.nomem 节。若用户确实写了该节，
+        # 才检查其类型，兼容旧配置的同时仍能发现拼写错误。
+        memory = config.get("Memory", {}).get("nomem")
+        if memory is not None and memory.get("type") != "nomem":
+            raise SetupError("nomem 配置不完整。")
     validate_tts_config(config, tts_backend)
     expected = dict(VAD="SileroVAD", ASR="FunASR", LLM="CampusLLM",
                     Memory=memory_name, Intent="nointent")
@@ -246,15 +257,20 @@ def main() -> int:
         if not isinstance(config, dict):
             raise SetupError("私有配置必须是 YAML 映射，不能是空文件。")
         model = validate_config(config, args.lan_ip, args.tts_backend)
-        if args.device_control and (args.action != "start" or config["selected_module"]["Memory"] != "LongMemory"):
-            raise SetupError("--device-control 仅支持已配置 LongMemory 的 start 操作。")
+        if args.device_control and args.action != "start":
+            raise SetupError("--device-control 仅支持 start 操作。")
         if args.device_control:
+            control_memory = config.get("Memory", {}).get("LongMemory", {})
+            if (control_memory.get("type") != "longmemory" or
+                    not re.fullmatch(r"[0-9a-fA-F]{2}(?::[0-9a-fA-F]{2}){5}",
+                                     str(control_memory.get("allowed_device_id", "")))):
+                raise SetupError("设备控制需要保留已核实的 LongMemory.allowed_device_id；当前记忆算法可以不是 LongMemory。")
             from control_compatibility import verify_control_snapshot
             try:
                 verify_control_snapshot(server_dir)
             except ValueError as exc:
                 raise SetupError(str(exc)) from None
-        if config["selected_module"]["Memory"] == "LongMemory":
+        if "LongMemory" in config.get("Memory", {}):
             installed = server_dir / "core/providers/memory/longmemory/longmemory.py"
             if not installed.is_file() or installed.read_bytes() != Path(__file__).with_name("longmemory_provider.py").read_bytes():
                 raise SetupError("LongMemory 提供器未安装或版本不一致，请执行 install-memory。")
@@ -280,7 +296,8 @@ def main() -> int:
             print("临时局域网演示：请限制防火墙来源，结束后撤销规则；上游令牌不是可信设备准入。", flush=True)
         memory_name = config['selected_module']['Memory']
         print(f"仅在 {config['server']['ip']} 启动；Memory={memory_name}。Ctrl+C 停止。", flush=True)
-        entry = str(Path(__file__).with_name("launch_with_memory.py")) if memory_name == "LongMemory" else "app.py"
+        entry = (str(Path(__file__).with_name("launch_with_memory.py"))
+                 if memory_name == "LongMemory" or args.device_control else "app.py")
         command = [sys.executable, entry]
         if args.device_control:
             command.append("--device-control")

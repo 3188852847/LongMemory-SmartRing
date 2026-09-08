@@ -65,6 +65,16 @@ export interface VoiceModelProfileStatus {
   configured_model?:string; transport?:'http'|'https';
 }
 export interface VoiceModelHealth extends ModelHealth {profile:'campus'|'official'}
+export interface MemoryBackendOption {
+  id:'longmemory'|'xiaozhi_local'|'none'; label:string; provider:string;
+  description:string; persistent:boolean;
+}
+export interface MemoryBackends {
+  enabled:boolean; current_backend?:MemoryBackendOption['id'];
+  next_start_backend?:MemoryBackendOption['id']; restart_required?:boolean;
+  backends?:MemoryBackendOption[];
+  xiaozhi?:{enabled:boolean; selected_backend:string; status:'configured'|'restart_pending'|'configuration_unavailable'; configured_provider?:string; provider_name?:string};
+}
 export interface ProactivePolicy {
   subject_id: string; enabled: boolean; utc_offset_minutes: number;
   allowed_weekdays: number[]; allowed_start_minute: number; allowed_end_minute: number;

@@ -434,6 +434,17 @@ IP 变化时：刷新本机地址 → 选择圆屏可达网卡 → 显式确认�
 
 具体约束见 [ADR-0074](../adr/0074-auditable-contact-time-strategy-candidates.md)和 [ADR-0081](../adr/0081-structured-proactive-strategy-provenance.md)。
 
-## 22. 维护规则
+## 29. 当前实现：圆屏记忆后端切换
+
+1. 设置中心或启动面板只保存白名单中的下次启动项：LongMemory、小智本地摘要或无长期记忆。
+2. 停止并重新启动时，启动器先核对小智端口空闲，再以原文摘要防并发覆盖、保存私有配置备份并只切换 `selected_module.Memory`；缺少内置提供器配置时补最小配置。
+3. LongMemory 配置始终保留，用作共享 Runtime 返回路径和设备控制身份；当前算法不是 LongMemory 时，不查询其数据库。
+4. Xiaozhi 当前连接的 `Dialogue` 继续提供短期上下文。`nomem` 不跨连接；`mem_local_short` 在关闭连接时异步把本轮与旧摘要压成一份 JSON，后续直接返回整份摘要；LongMemory 逐轮经过常驻 Runtime。
+5. 三种提供器统一记录查询/保存毫秒数但不打印正文。切换不改变 ASR、回答模型、角色、TTS、固件或设备控制。
+6. 当前网页聊天仍固定为 LongMemory。未来论文方法经白名单适配器加入，正式对比使用独立实验平台冻结条件。
+
+具体边界见 [ADR-0092](../adr/0092-switchable-round-screen-memory-backends.md)，操作见[圆屏记忆后端切换](../guides/圆屏记忆后端切换.md)。
+
+## 30. 维护规则
 
 功能上线时将对应“拟议”改为“当前”，写入实际限制和验证范围，并同步架构、需求与使用说明。历史 V0.1 流程见 [memory-pipeline.md](memory-pipeline.md)，不把历史说明当作全部入口的现状。

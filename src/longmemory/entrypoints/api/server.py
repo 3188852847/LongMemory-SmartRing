@@ -24,6 +24,8 @@ from .routes.memory_mode import register_memory_mode_routes
 from .routes.memory_commands import register_memory_command_routes
 from .routes.model_profiles import register_model_profile_routes
 from .xiaozhi_model_profiles import XiaozhiModelProfiles
+from .routes.memory_backends import register_memory_backend_routes
+from .xiaozhi_memory_backends import XiaozhiMemoryBackends
 from .routes.proactive_policy import register_proactive_policy_routes
 from .device_role import DeviceRole
 from .voice_settings import VoiceSettings, register_voice_routes
@@ -61,7 +63,8 @@ def create_app(*, port=8765, bridge=None, web_root=None, database=None, allow_me
                xiaozhi_server=None, memory_runtime_token=None, scenario_producer=None,
                scenario_model=None, persona_producer=None, persona_model=None,
                consolidation_background_enabled=False, proactive_clock=None,
-               model_profile_store=None, voice_model_profiles=None):
+               model_profile_store=None, voice_model_profiles=None,
+               memory_backend_store=None, xiaozhi_memory_backends=None):
     sessions = Sessions()
     assets = web_root or ROOT / "web"
     client = bridge if bridge is not None else XiaozhiControlClient(ROOT / "data/control/device-control.token")
@@ -209,6 +212,11 @@ def create_app(*, port=8765, bridge=None, web_root=None, database=None, allow_me
         if xiaozhi_server and model_profile_store else None
     )
     register_model_profile_routes(app, model_profile_store, voice_profiles)
+    memory_backends = xiaozhi_memory_backends or (
+        XiaozhiMemoryBackends(ROOT, xiaozhi_server, memory_backend_store)
+        if xiaozhi_server and memory_backend_store else None
+    )
+    register_memory_backend_routes(app, memory_backend_store, memory_backends)
     experiments = experiment_backend if experiment_backend is not None else ExperimentBackend(ROOT / "experiments")
     register_experiment_routes(app, experiments)
     register_job_routes(app, job_backend if job_backend is not None else ExperimentJobs(experiments))
@@ -242,6 +250,8 @@ def main():
     parser.add_argument("--enable-experiment-runs", action="store_true", help="允许网页确认后运行冻结检索回答对照；默认只读实验")
     parser.add_argument("--model-profile", choices=("campus", "official"), default="campus",
                         help="标记本进程实际加载的本机模型配置档")
+    parser.add_argument("--memory-backend", choices=("longmemory", "xiaozhi_local", "none"),
+                        default="longmemory", help="标记本次圆屏进程实际选择的记忆后端")
     args = parser.parse_args()
     if not 1024 <= args.port <= 65535:
         parser.error("port 必须在 1024–65535 之间")
@@ -416,6 +426,7 @@ def main():
     audit_handler = configure_file_logging(args.memory_audit_log) if args.memory_audit_log else None
     try:
         from longmemory.infrastructure.config.model_profiles import ModelProfileStore
+        from longmemory.infrastructure.config.memory_backends import MemoryBackendStore
         web.run_app(create_app(port=args.port, database=args.database, allow_memory_delete=args.allow_memory_delete,
                                allow_memory_correction=args.allow_memory_correction,
                                allow_scenario_management=args.allow_scenario_management,
@@ -426,7 +437,8 @@ def main():
                                scenario_producer=scenario_producer, scenario_model=scenario_model,
                                persona_producer=persona_producer, persona_model=persona_model,
                                consolidation_background_enabled=args.enable_memory_consolidation,
-                               model_profile_store=ModelProfileStore(ROOT, current_profile=args.model_profile)),
+                               model_profile_store=ModelProfileStore(ROOT, current_profile=args.model_profile),
+                               memory_backend_store=MemoryBackendStore(ROOT, current_backend=args.memory_backend)),
                     host="127.0.0.1", port=args.port, access_log=None, print=None)
     except OSError:
         parser.exit(1, f"控制台未能绑定 127.0.0.1:{args.port}。请检查旧控制台是否仍在运行或端口权限；未自动停止其他进程、未换端口。\n")

@@ -46,6 +46,7 @@ class Options:
     consent: bool = False
     model_profile: str = "campus"
     voice_model_profile: str = "campus"
+    memory_backend: str = "longmemory"
 
 
 def require_free(host, port):
@@ -77,6 +78,8 @@ def build_commands(options, uv=None):
         raise ValueError("未知模型配置档。")
     if options.voice_model_profile not in {"campus", "official"}:
         raise ValueError("未知圆屏模型配置档。")
+    if options.memory_backend not in {"longmemory", "xiaozhi_local", "none"}:
+        raise ValueError("未知圆屏记忆后端。")
     if (options.model_profile == "campus" or
             (options.voice and options.voice_model_profile == "campus")) and not options.consent:
         raise ValueError("请先确认聊天写入及当前 HTTP 传输风险。")
@@ -110,6 +113,7 @@ def build_commands(options, uv=None):
                "--xiaozhi-server", str(options.voice_root.resolve()),
                "--memory-audit-log", str(root / "data/logs/xiaozhi-demo-v1.jsonl")]
     console.extend(["--model-profile", options.model_profile])
+    console.extend(["--memory-backend", options.memory_backend])
     # 人工纠正每次都需要在网页中核对旧内容并再次确认；日常入口默认开放这一
     # 可追溯写入能力。不可恢复的硬删除仍保持关闭。
     console.append("--allow-memory-correction")
@@ -150,7 +154,7 @@ def build_commands(options, uv=None):
                              service.parent))
         commands.append(("voice", [str(python), str(Path(__file__).with_name("voice.py")),
                                   str(root), str(options.voice_root.resolve()), str(options.database.resolve()),
-                                  str(ip), options.tts_backend], options.voice_root.resolve()))
+                                  str(ip), options.tts_backend, options.memory_backend], options.voice_root.resolve()))
     return commands
 
 
@@ -223,6 +227,17 @@ class Manager:
                 model_config_action(options.voice_root, options.root,
                                     options.voice_model_profile, apply=True,
                                     expected_digest=checked["digest"])
+            # 记忆后端与模型/TTS 一样只在端口空闲后同步。切换只改变提供器
+            # 指针及缺失的内置配置，不读取、迁移或删除任何后端数据。
+            from memory import config_action as memory_config_action
+            memory_checked = memory_config_action(
+                options.voice_root, options.root, options.memory_backend
+            )
+            if not memory_checked["config_matches"]:
+                memory_config_action(
+                    options.voice_root, options.root, options.memory_backend,
+                    apply=True, expected_digest=memory_checked["digest"],
+                )
         self.options = options
         self.instance = secrets.token_hex(24)
         runtime_token = secrets.token_hex(32)

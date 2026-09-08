@@ -8,6 +8,7 @@ import {ProactiveSettings} from './ProactiveSettings';
 import {useAppearance} from './AppearanceProvider';
 import {PageHeader} from './PageHeader';
 import {ModelConnectionSettings} from './ModelConnectionSettings';
+import {MemoryBackendSettings} from './MemoryBackendSettings';
 
 const api = new ChatApi();
 
@@ -28,6 +29,10 @@ export function SettingsApp() {
         <p>核对当前进程，并管理学校/官方两个本机配置档。页面永远不读取或显示已有 API Key，切换在重启后生效。</p>
         <ModelConnectionSettings api={api} config={config.data} disabled={!enabled}
           onHealth={health => queryClient.setQueryData<Config>(['chat-config'], current => current ? {...current, model_health:health} : current)}/>
+      </Card>},
+      {key:'memory-backend', label:'记忆后端', children:<Card title="圆屏记忆后端" extra={<span className="setting-scope">下次统一启动</span>}>
+        <p>在保持圆屏、模型、角色和声音不变的情况下切换长期记忆实现，用于日常体验和受控对照。</p>
+        <MemoryBackendSettings api={api} disabled={!enabled}/>
       </Card>},
       {key:'role', label:'助手角色', children:<Card title="助手角色" extra={<span className="setting-scope">网页＋可选圆屏同步</span>}>
         <p>编辑角色名称与系统提示词。网页从下一轮开始使用；圆屏必须在弹窗里单独预检和同步。</p>

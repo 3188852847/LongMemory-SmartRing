@@ -124,8 +124,9 @@ def install_control_server(server_class, connection_class):
     async def start(server):
         from aiohttp import web
         config = server.config
-        name = config["selected_module"]["Memory"]
-        allowed_id = config["Memory"][name]["allowed_device_id"]
+        # 设备控制身份不属于某一种记忆算法。即使本次选择小智摘要或
+        # nomem，仍复用已审计的单设备 ID，而不让控制能力随算法消失。
+        allowed_id = config["Memory"]["LongMemory"]["allowed_device_id"]
         control = DeviceControl(allowed_id)
         runner = web.AppRunner(create_app(control, ensure_token()), access_log=None)
         previous_handle = connection_class.handle_connection

@@ -1,5 +1,12 @@
 # Changelog
 
+### switchable round-screen memory backends（2026-09-08）
+
+- 明确 SmartRing-Plus 圆屏固件不承载长期记忆：Xiaozhi 默认 `nomem`，可选 `mem_local_short` 在连接关闭时用 LLM 把本轮与旧摘要压成每设备一份 JSON；LongMemory 继续通过同一 Memory 插槽接入。
+- 启动面板与 React 设置中心新增 LongMemory、小智本地摘要、无长期记忆三档下次启动选择。启动器只在端口空闲后备份并窄范围同步 Xiaozhi 私有配置；不热切换、不重刷固件，也不读取、迁移、合并或删除各后端数据。
+- 设备控制身份已与当前记忆算法解耦；三种后端统一记录查询/保存耗时但不打印正文，为同模型、角色和 TTS 条件下的速度排查保留证据。
+- 第一版只切换圆屏 Xiaozhi 链路，网页聊天仍使用 LongMemory；论文方法必须以后通过白名单适配器和独立实验平台加入。
+
 ### physical round-screen core state UI（2026-09-08）
 
 - SmartRing-Plus B V2 新增 0004 可审计补丁：把微信聊天气泡改为板型专用的深色状态脸，以纯 LVGL 图形区分待机、聆听、思考、说话和错误，继续保留状态栏、电量、网络与两行短字幕。

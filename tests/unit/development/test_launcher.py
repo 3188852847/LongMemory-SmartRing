@@ -8,6 +8,7 @@ import socket
 import subprocess
 import sys
 import time
+import asyncio
 
 import pytest
 
@@ -48,6 +49,7 @@ def test_command_preserves_paths_and_does_not_enable_deletion_or_jobs(options):
     assert cmd[cmd.index("--memory-retrieval") + 1] == "keyword"
     assert "--embedding-model-dir" not in cmd
     assert "--allow-insecure-http" not in cmd  # 网页仍需 .env 的独立 HTTP 许可。
+    assert cmd[cmd.index("--memory-backend") + 1] == "longmemory"
 
 
 def test_explicit_launcher_choice_enables_l1_delete_capability(options):
@@ -133,6 +135,7 @@ def test_voice_command_uses_own_environment(options):
     assert cmd[0] == str(voice / ".venv/Scripts/python.exe")
     assert cmd[1].endswith("voice.py")
     assert str(options.database.resolve()) in cmd
+    assert cmd[-1] == "longmemory"
 
 
 def test_default_console_url_opens_react_chat():
@@ -154,22 +157,38 @@ def test_voxcpm_commands_use_isolated_environment_and_start_before_voice(options
     assert [item[0] for item in commands] == ["console", "voxcpm2", "voice"]
     assert commands[1][1][0] == str(voxcpm / ".venv/Scripts/python.exe")
     assert commands[1][1][1] == str(voxcpm / "service.py")
-    assert commands[2][1][-1] == "voxcpm2"
+    assert commands[2][1][-2:] == ["voxcpm2", "longmemory"]
 
 
-@pytest.mark.parametrize("mismatch", [None, "database_path", "project_root", "python_executable", "nomem"])
+@pytest.mark.parametrize("mismatch", [None, "database_path", "project_root", "python_executable"])
 def test_voice_shared_paths_are_checked_without_loading_private_config(options, mismatch):
     spec = importlib.util.spec_from_file_location("launcher_voice_test", DIRECTORY / "voice.py")
     voice = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(voice)
     memory = {"database_path": str(options.database), "project_root": str(options.root),
               "python_executable": str(options.root / ".venv/Scripts/python.exe")}
+    memory["type"] = "longmemory"
     config = {"selected_module": {"Memory": "LongMemory"}, "Memory": {"LongMemory": memory}}
-    if mismatch == "nomem":
-        config["selected_module"]["Memory"] = "nomem"
-    elif mismatch:
+    if mismatch:
         memory[mismatch] = str(options.root / "wrong")
-    assert voice.shared_paths_match(config, options.root, options.database) is (mismatch is None)
+    assert voice.memory_contract_matches(config, options.root, options.database, "longmemory") is (mismatch is None)
+
+
+@pytest.mark.parametrize("backend,provider,provider_type", [
+    ("xiaozhi_local", "mem_local_short", "mem_local_short"),
+    ("none", "nomem", "nomem"),
+])
+def test_voice_accepts_builtin_memory_backends_without_losing_control_identity(
+        options, backend, provider, provider_type):
+    spec = importlib.util.spec_from_file_location("launcher_voice_builtin_test", DIRECTORY / "voice.py")
+    voice = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(voice)
+    longmemory = {"type": "longmemory", "database_path": str(options.database),
+                  "project_root": str(options.root),
+                  "python_executable": str(options.root / ".venv/Scripts/python.exe")}
+    config = {"selected_module": {"Memory": provider},
+              "Memory": {"LongMemory": longmemory, provider: {"type": provider_type}}}
+    assert voice.memory_contract_matches(config, options.root, options.database, backend)
 
 
 def test_voice_tts_contract_is_strict():
@@ -182,6 +201,39 @@ def test_voice_tts_contract_is_strict():
     config["TTS"]["CustomTTS"]["url"] = "http://example.invalid"
     assert not voice.tts_matches(config, "voxcpm2")
     assert voice.tts_matches({"selected_module": {"TTS": "EdgeTTS"}}, "edge")
+
+
+def test_memory_observer_records_provider_and_timing_without_content():
+    script = DIRECTORY.parent / "xiaozhi/launch_with_memory.py"
+    spec = importlib.util.spec_from_file_location("launch_memory_observer_test", script)
+    wrapper = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(wrapper)
+
+    class Provider:
+        async def query_memory(self, query):
+            return "private-memory"
+
+        async def save_memory(self, dialogue, session_id):
+            return None
+
+    class BoundLogger:
+        def __init__(self, lines): self.lines = lines
+        def info(self, line): self.lines.append(line)
+
+    class Logger:
+        def __init__(self): self.lines = []
+        def bind(self, **_kwargs): return BoundLogger(self.lines)
+
+    connection = type("Connection", (), {})()
+    connection.memory = Provider()
+    connection.config = {"selected_module": {"Memory": "mem_local_short"}}
+    connection.logger = Logger()
+    wrapper.observe_memory_operations(connection)
+    assert asyncio.run(connection.memory.query_memory("secret-query")) == "private-memory"
+    asyncio.run(connection.memory.save_memory(["secret-dialogue"], "secret-session"))
+    joined = " ".join(connection.logger.lines)
+    assert "mem_local_short" in joined and "记忆查询" in joined and "记忆保存" in joined
+    assert "secret" not in joined and "private-memory" not in joined
 
 
 def test_singleton_and_occupied_port_are_non_destructive():
@@ -252,10 +304,11 @@ def test_manager_gives_console_and_voice_one_ephemeral_runtime_identity(options,
         manager.stop()
 
 
-def test_manager_syncs_selected_voice_model_after_ports_are_free(options, monkeypatch):
+def test_manager_syncs_selected_voice_model_and_memory_after_ports_are_free(options, monkeypatch):
     from types import SimpleNamespace
 
     calls = []
+    memory_calls = []
     voice_root = options.root / "voice"
     (voice_root / ".venv/Scripts").mkdir(parents=True)
     (voice_root / ".venv/Scripts/python.exe").touch()
@@ -268,11 +321,16 @@ def test_manager_syncs_selected_voice_model_after_ports_are_free(options, monkey
         calls.append((server, project, profile, kwargs))
         return {"config_matches": bool(kwargs.get("apply")), "digest": "a" * 64}
 
+    def memory_action(server, project, profile, **kwargs):
+        memory_calls.append((server, project, profile, kwargs))
+        return {"config_matches": bool(kwargs.get("apply")), "digest": "b" * 64}
+
     class Owned:
         def __init__(self, command, cwd, env): pass
         def stop(self): pass
 
     monkeypatch.setitem(sys.modules, "model", SimpleNamespace(config_action=model_action))
+    monkeypatch.setitem(sys.modules, "memory", SimpleNamespace(config_action=memory_action))
     monkeypatch.setattr(runtime, "build_commands", lambda _: [("console", [], options.root)])
     monkeypatch.setattr(runtime, "require_free", lambda *args: None)
     monkeypatch.setattr(runtime, "OwnedService", Owned)
@@ -282,6 +340,9 @@ def test_manager_syncs_selected_voice_model_after_ports_are_free(options, monkey
         assert calls[0][2:] == ("official", {})
         assert calls[1][2] == "official"
         assert calls[1][3] == {"apply": True, "expected_digest": "a" * 64}
+        assert memory_calls[0][2:] == ("longmemory", {})
+        assert memory_calls[1][2] == "longmemory"
+        assert memory_calls[1][3] == {"apply": True, "expected_digest": "b" * 64}
     finally:
         manager.stop()
 
@@ -393,11 +454,11 @@ def test_daily_summary_uses_human_labels_instead_of_internal_enums(monkeypatch):
     monkeypatch.setitem(sys.modules, "runtime", runtime)
     spec.loader.exec_module(app)
 
-    summary = app._summary_text(True, "memories", "elysia_v1", "llm", "hybrid", "voxcpm2", True, False)
+    summary = app._summary_text(True, "memories", "elysia_v1", "llm", "hybrid", "voxcpm2", True, False, "xiaozhi_local")
     assert summary == (
         "网页＋圆屏语音  ·  打开记忆管理  ·  爱莉希雅风格\n"
         "模型辅助提取  ·  关键词＋语义召回  ·  VoxCPM2 本地声音\n"
-        "允许单条删除  ·  低频整理关闭"
+        "允许单条删除  ·  低频整理关闭  ·  圆屏：小智本地摘要"
     )
     assert not {"elysia_v1", "llm", "hybrid", "voxcpm2"}.intersection(summary.split())
 

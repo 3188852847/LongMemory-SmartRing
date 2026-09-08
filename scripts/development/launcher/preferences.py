@@ -140,3 +140,28 @@ def save_model_profile(path: Path, profile: str, target: str = "web") -> None:
         temporary.replace(path)
     finally:
         temporary.unlink(missing_ok=True)
+
+
+def load_memory_backend(path: Path) -> str:
+    """读取圆屏下次启动的记忆后端；损坏文件安全回退 LongMemory。"""
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        value = data.get("selected_backend") if isinstance(data, dict) else None
+    except (OSError, ValueError, TypeError):
+        value = None
+    return value if value in {"longmemory", "xiaozhi_local", "none"} else "longmemory"
+
+
+def save_memory_backend(path: Path, backend: str) -> None:
+    if backend not in {"longmemory", "xiaozhi_local", "none"}:
+        raise ValueError("launcher_memory_backend_invalid")
+    body = {"version": 1, "selected_backend": backend}
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    try:
+        temporary.write_text(
+            json.dumps(body, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+        temporary.replace(path)
+    finally:
+        temporary.unlink(missing_ok=True)

@@ -7,6 +7,41 @@ from pathlib import Path
 import argparse
 import runpy
 import sys
+import time
+
+
+def observe_memory_operations(connection):
+    """为任意小智 Memory 提供器记录统一耗时，不读取或打印记忆正文。"""
+    memory = connection.memory
+    if memory is None or getattr(memory, "_longmemory_observed", False):
+        return
+    provider = connection.config["selected_module"]["Memory"]
+    original_query = memory.query_memory
+    original_save = memory.save_memory
+
+    async def query_memory(*args, **kwargs):
+        started = time.perf_counter()
+        try:
+            return await original_query(*args, **kwargs)
+        finally:
+            elapsed_ms = (time.perf_counter() - started) * 1000
+            connection.logger.bind(tag="memory-comparison").info(
+                f"记忆查询后端={provider} 耗时={elapsed_ms:.1f}ms"
+            )
+
+    async def save_memory(*args, **kwargs):
+        started = time.perf_counter()
+        try:
+            return await original_save(*args, **kwargs)
+        finally:
+            elapsed_ms = (time.perf_counter() - started) * 1000
+            connection.logger.bind(tag="memory-comparison").info(
+                f"记忆保存后端={provider} 耗时={elapsed_ms:.1f}ms"
+            )
+
+    memory.query_memory = query_memory
+    memory.save_memory = save_memory
+    memory._longmemory_observed = True
 
 
 def isolate_memory_initialization(connection_class, provider_class):
@@ -19,7 +54,9 @@ def isolate_memory_initialization(connection_class, provider_class):
             # 原实例在服务启动时生成并共享；必须在设备身份绑定前替换，
             # 即使非法设备初始化失败，它也不能复用合法设备的记忆对象。
             connection.memory = provider_class(config)
-        return original(connection)
+        result = original(connection)
+        observe_memory_operations(connection)
+        return result
 
     connection_class._initialize_memory = initialize
 

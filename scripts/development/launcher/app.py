@@ -11,8 +11,10 @@ from runtime import DEFAULT_BGE_MODEL, Manager, Options, ROOT, Singleton, VOICE_
 from network import local_addresses, config_action
 from preferences import (
     DEFAULT_SESSION_ALLOW_MEMORY_DELETE,
+    load_memory_backend,
     load_model_profile,
     load_preferences,
+    save_memory_backend,
     save_model_profile,
     save_preferences,
 )
@@ -25,7 +27,8 @@ CARD_BACKGROUND = "#ffffff"
 ACCENT = "#a72760"
 
 
-def _summary_text(voice, start_page, role, extraction, retrieval, tts, allow_delete, consolidation):
+def _summary_text(voice, start_page, role, extraction, retrieval, tts, allow_delete,
+                  consolidation, memory_backend="longmemory"):
     """把内部启动枚举翻译为日常首页可理解的三行摘要。"""
     mode = "网页＋圆屏语音" if voice else "网页文字聊天"
     page_label = {"chat": "聊天", "device": "设备状态", "memories": "记忆管理", "settings": "设置中心"}[start_page]
@@ -35,10 +38,15 @@ def _summary_text(voice, start_page, role, extraction, retrieval, tts, allow_del
     sound_label = "VoxCPM2 本地声音" if tts == "voxcpm2" else "EdgeTTS 联网声音"
     delete_label = "允许单条删除" if allow_delete else "不开放删除"
     consolidation_label = "低频整理已开启" if consolidation else "低频整理关闭"
+    backend_label = {
+        "longmemory": "圆屏：LongMemory",
+        "xiaozhi_local": "圆屏：小智本地摘要",
+        "none": "圆屏：无长期记忆",
+    }[memory_backend]
     return (
         f"{mode}  ·  打开{page_label}  ·  {role_label}\n"
         f"{extraction_label}  ·  {retrieval_label}  ·  {sound_label}\n"
-        f"{delete_label}  ·  {consolidation_label}"
+        f"{delete_label}  ·  {consolidation_label}  ·  {backend_label}"
     )
 
 
@@ -113,6 +121,7 @@ def main():
     box.pack(fill="both", expand=True)
     choice_path = ROOT / 'data/control/launcher.json'
     model_profile_path = ROOT / 'data/control/model-profile.json'
+    memory_backend_path = ROOT / 'data/control/memory-backend.json'
     saved = load_preferences(choice_path)
     header = ttk.Frame(box, style="Header.TFrame")
     header.pack(fill="x", pady=(0, 18))
@@ -164,12 +173,31 @@ def main():
     active_voice_model_profile = load_model_profile(model_profile_path, "voice")
     voice_model_profile = tk.StringVar(value=next(label for label, value in model_profile_labels.items()
                                                    if value == active_voice_model_profile))
+    memory_backend_labels = {
+        "LongMemory（分层、可追溯）": "longmemory",
+        "小智本地摘要（轻量对照）": "xiaozhi_local",
+        "无长期记忆（速度基线）": "none",
+    }
+    active_memory_backend = load_memory_backend(memory_backend_path)
+    memory_backend = tk.StringVar(value=next(
+        label for label, value in memory_backend_labels.items()
+        if value == active_memory_backend
+    ))
 
     def selected_model_profile():
         return model_profile_labels[model_profile.get()]
 
     def selected_voice_model_profile():
         return model_profile_labels[voice_model_profile.get()]
+
+    def selected_memory_backend():
+        return memory_backend_labels[memory_backend.get()]
+
+    def set_memory_backend(value):
+        label = next((label for label, backend in memory_backend_labels.items()
+                      if backend == value), None)
+        if label is not None:
+            memory_backend.set(label)
 
     def selected_extraction():
         return "llm" if memory_extraction.get().startswith("模型") else "rules"
@@ -273,6 +301,12 @@ def main():
     ttk.Combobox(voice_model_row, textvariable=voice_model_profile,
                  values=tuple(model_profile_labels), state="readonly", width=31).pack(side="left")
     ttk.Label(voice_model_row, text="  启动语音前自动备份并同步小智配置").pack(side="left")
+    backend_row = ttk.Frame(behavior_box)
+    backend_row.pack(fill="x", pady=8)
+    ttk.Label(backend_row, text="圆屏记忆后端：").pack(side="left")
+    ttk.Combobox(backend_row, textvariable=memory_backend,
+                 values=tuple(memory_backend_labels), state="readonly", width=31).pack(side="left")
+    ttk.Label(backend_row, text="  下次启动生效；各后端数据隔离").pack(side="left")
     memory_row = ttk.Frame(behavior_box)
     memory_row.pack(fill="x", pady=8)
     ttk.Label(memory_row, text="长期记忆提取：").pack(side="left")
@@ -343,6 +377,7 @@ def main():
         summary.set(_summary_text(
             voice.get(), start_page_labels[start_page.get()], role.get(), selected_extraction(), selected_retrieval(),
             selected_tts(), allow_memory_delete.get(), memory_consolidation.get(),
+            selected_memory_backend(),
         ))
 
     summary_box = ttk.LabelFrame(daily, text="本次配置", style="Section.TLabelframe")
@@ -354,7 +389,7 @@ def main():
         style="Subtitle.TLabel",
     ).pack(anchor="w", pady=(4, 0))
     for variable in (voice, start_page, role, memory_extraction, memory_retrieval,
-                     tts_backend, allow_memory_delete, memory_consolidation):
+                     tts_backend, memory_backend, allow_memory_delete, memory_consolidation):
         variable.trace_add("write", update_summary)
     update_summary()
 
@@ -399,12 +434,20 @@ def main():
         if manager.services and confirm and not messagebox.askyesno("停止本面板启动的服务？",
                 "请先结束聊天。停止会中断当前回答/语音，未完成操作可能已写入；不会删除数据库。"):
             return False
+        # 网页可在服务运行时保存“下次启动”项。只有面板下拉框仍等于本次
+        # 运行值时才吸收网页选择；若用户已在面板手动改过，则保留面板意图。
+        running_backend = (manager.options.memory_backend
+                           if manager.options is not None else None)
+        panel_unchanged = (running_backend is not None
+                           and selected_memory_backend() == running_backend)
         try:
             manager.stop()
         except Exception:
             set_status("停止未完全确认，请关闭面板并检查服务，不要重复启动。", "error")
             return False
         state.update(opened=False, failed=False)
+        if panel_unchanged:
+            set_memory_backend(load_memory_backend(memory_backend_path))
         start_button.config(state="normal")
         set_status("已停止本面板启动的服务；其他终端启动的程序未被停止。")
         return True
@@ -427,20 +470,23 @@ def main():
                               allow_memory_delete=allow_memory_delete.get(),
                               embedding_model_dir=Path(embedding_model.get()),
                               model_profile=selected_model_profile(),
-                              voice_model_profile=selected_voice_model_profile())
+                              voice_model_profile=selected_voice_model_profile(),
+                              memory_backend=selected_memory_backend())
             manager.start(options)
             try:
                 save_preferences(choice_path, current_preferences())
                 save_model_profile(model_profile_path, selected_model_profile())
                 save_model_profile(model_profile_path, selected_voice_model_profile(), "voice")
+                save_memory_backend(memory_backend_path, selected_memory_backend())
             except OSError:
                 settings_status.set("服务已启动，但本机首选项未保存；下次仍可手动选择。")
             state.update(started=time.monotonic(), opened=False, failed=False)
             start_button.config(state="disabled")
             model_label = "官方 DeepSeek" if selected_model_profile() == "official" else "学校模型"
             voice_model_label = "官方 DeepSeek" if selected_voice_model_profile() == "official" else "学校模型"
+            memory_label = {"longmemory": "LongMemory", "xiaozhi_local": "小智本地摘要", "none": "无长期记忆"}[selected_memory_backend()]
             set_status(f"正在启动；网页使用 {model_label}" +
-                       (f"，圆屏使用 {voice_model_label}。" if voice.get() else "。") +
+                       (f"，圆屏使用 {voice_model_label} / {memory_label}。" if voice.get() else "。") +
                        "首次加载语音模型可能较慢，可在设置中心查看状态。", "busy")
         except ValueError as error:
             messagebox.showerror("无法启动", str(error))
