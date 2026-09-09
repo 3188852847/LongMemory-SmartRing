@@ -142,7 +142,16 @@ export function MemoryApp() {
         setL1(await api.request<Page<L1Summary>>(`/api/memories?${params}`));
         await fetchDaily();
         const linkedMemoryId = searchParams.get('memory_id')?.trim();
-        if (linkedMemoryId && linkedMemoryId.length <= 128 && !/[\u0000-\u001f\u007f]/.test(linkedMemoryId)) {
+        const linkedL0Id = searchParams.get('l0_message_id')?.trim();
+        if (linkedL0Id && linkedL0Id.length <= 128 && !/[\u0000-\u001f\u007f]/.test(linkedL0Id)) {
+          try {
+            setTab('l0');
+            setSelectedL0(await api.request<L0Detail>(`/api/source-messages/${encodeURIComponent(linkedL0Id)}`));
+            setNotice('已从圆屏质量反馈打开对应用户 L0；可核对原话和派生记忆。');
+          } catch {
+            setNotice('圆屏反馈指向的 L0 不存在或已不可用；记忆列表仍可正常浏览。');
+          }
+        } else if (linkedMemoryId && linkedMemoryId.length <= 128 && !/[\u0000-\u001f\u007f]/.test(linkedMemoryId)) {
           try {
             setSelectedL1(await api.request<L1Detail>(`/api/memories/${encodeURIComponent(linkedMemoryId)}`));
             setNotice('已从聊天证据打开对应 L1；下方可核对 L0 原始来源。');
@@ -191,6 +200,14 @@ export function MemoryApp() {
   }
   async function openL0(id: string) {
     await guarded(async () => {setSelectedL0(await api.request<L0Detail>(`/api/source-messages/${encodeURIComponent(id)}`));});
+  }
+  function closeL0() {
+    setSelectedL0(undefined);
+    if (searchParams.has('l0_message_id')) {
+      const next = new URLSearchParams(searchParams);
+      next.delete('l0_message_id');
+      setSearchParams(next, {replace: true});
+    }
   }
   function switchTab(key: string) {
     const next = key as 'l1' | 'l0'; setTab(next); setQuery(''); setL0Date(''); setSelectedL1(undefined); setSelectedL0(undefined);
@@ -332,7 +349,7 @@ export function MemoryApp() {
       width={620}
       title="L0 原始记录"
       open={Boolean(selectedL0)}
-      onClose={() => setSelectedL0(undefined)}
+      onClose={closeL0}
       extra={<Button
         disabled={!config?.allow_promote_source || selectedL0?.role !== 'user' || Boolean(selectedL0?.derived_memories.length)}
         onClick={() => {setPromotedContent(''); setPromoting(true);}}

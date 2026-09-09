@@ -285,6 +285,7 @@ def register_chat_routes(app, backend):
                     ),
                 }[kind]
                 rows.append({
+                    "source": "web_chat",
                     "chat_id": chat_id, "chat_title": chat.title,
                     "request_id": turn.get("request_id"), "kind": kind,
                     "revision": current.get("revision"),
@@ -292,6 +293,39 @@ def register_chat_routes(app, backend):
                     "retrieved_counts": layer_counts,
                     "diagnostic_focus": focus,
                 })
+        # 圆屏自然反馈与网页人工标记共享诊断口径，但来源和定位方式必须
+        # 明确区分；这里不读取、复制或返回任何语音对话正文。
+        for event in await asyncio.to_thread(backend.round_screen_memory_feedback):
+            kind = event["event_kind"]
+            counts[kind] += 1
+            if (kind_filter == "issues" and kind not in {"recall_miss", "wrong_memory"}) \
+                    or (kind_filter not in {"issues", "all"} and kind != kind_filter):
+                continue
+            layer_counts = {
+                "l1": event["retrieved_l1_count"],
+                "l2": event["retrieved_l2_count"],
+                "l3": event["retrieved_l3_count"],
+            }
+            recalled = sum(layer_counts.values())
+            focus = (
+                "context_or_answer_use" if kind == "recall_miss" and recalled
+                else "retrieval" if kind == "recall_miss"
+                else "memory_content_freshness_subject_or_ranking" if recalled
+                else "short_term_or_answer_model"
+            )
+            rows.append({
+                "source": "round_screen",
+                "chat_id": None,
+                "chat_title": "圆屏语音",
+                "request_id": event["target_user_message_id"],
+                "feedback_message_id": event["feedback_message_id"],
+                "assistant_message_id": event["assistant_message_id"],
+                "kind": kind,
+                "revision": 1,
+                "occurred_at": event["occurred_at"],
+                "retrieved_counts": layer_counts,
+                "diagnostic_focus": focus,
+            })
         rows.sort(key=lambda item: item["occurred_at"] or "", reverse=True)
         return web.json_response({"kind": kind_filter, "counts": counts,
                                   "total": len(rows), "offset": offset, "limit": limit,

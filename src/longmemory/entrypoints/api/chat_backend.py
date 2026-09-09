@@ -14,6 +14,13 @@ from longmemory.application.natural_memory_commands import NaturalMemoryCommandR
 from longmemory.adapters.storage.sqlite_round_screen_turn_store import (
     SQLiteRoundScreenTurnStore,
 )
+from longmemory.adapters.storage.sqlite_round_screen_memory_feedback_store import (
+    RoundScreenMemoryFeedbackResult,
+    SQLiteRoundScreenMemoryFeedbackStore,
+)
+from longmemory.application.round_screen_memory_feedback import (
+    classify_explicit_round_screen_feedback,
+)
 from longmemory.bootstrap import build_memory_runtime
 from .role_settings import RoleSettings
 
@@ -76,6 +83,30 @@ class ChatBackend:
             retrieved_l2_count=retrieved_counts["l2"],
             retrieved_l3_count=retrieved_counts["l3"],
         )
+
+    def prepare_round_screen_user(self, text):
+        """准备圆屏输入，并尝试记录对上一轮的严格显式质量反馈。"""
+
+        prepared = self.memory_runtime().prepare_user(text)
+        try:
+            feedback = SQLiteRoundScreenMemoryFeedbackStore(
+                self.database,
+            ).record_if_explicit(prepared.event)
+        except sqlite3.Error:
+            # 质量采集是旁路能力，短暂锁冲突不能让已经完成 L0/召回的
+            # 正常语音请求失败；返回稳定状态供内部协议观察，不伪称已记录。
+            kind = classify_explicit_round_screen_feedback(text)
+            feedback = (
+                RoundScreenMemoryFeedbackResult(
+                    kind, False, None, "storage_unavailable",
+                ) if kind is not None else None
+            )
+        return prepared, feedback
+
+    def round_screen_memory_feedback(self):
+        """读取圆屏反馈的无正文诊断索引。"""
+
+        return SQLiteRoundScreenMemoryFeedbackStore(self.database).list_events()
 
     def info(self):
         role = self.roles.current()

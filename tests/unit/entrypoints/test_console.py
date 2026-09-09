@@ -643,6 +643,7 @@ def test_internal_runtime_requires_token_and_is_immediately_shared_with_web(tmp_
             assert all(value >= 0 for value in written["timings_ms"].values())
             assert written["memory_command"] is None
             assert written["command_reply"] is None
+            assert written["round_screen_feedback"] is None
 
             completion_endpoint = base + "/api/internal/memory/complete"
             completion = {
@@ -671,6 +672,25 @@ def test_internal_runtime_requires_token_and_is_immediately_shared_with_web(tmp_
                 json={**completion, "answer": "不同的回答"},
             )
             assert conflict.status == 409
+
+            feedback_response = await client.post(
+                endpoint,
+                headers={"Authorization": "Bearer " + token},
+                json={"version": 1, "query": "你刚才没想起来我告诉过你的事情"},
+            )
+            assert feedback_response.status == 200
+            feedback_payload = await feedback_response.json()
+            assert feedback_payload["round_screen_feedback"]["recorded"] is True
+            assert feedback_payload["round_screen_feedback"]["kind"] == "recall_miss"
+            assert "尚未自动修改长期记忆" in feedback_payload["command_reply"]
+
+            ambiguous_response = await client.post(
+                endpoint,
+                headers={"Authorization": "Bearer " + token},
+                json={"version": 1, "query": "我刚才说错了"},
+            )
+            assert ambiguous_response.status == 200
+            assert (await ambiguous_response.json())["round_screen_feedback"] is None
             with sqlite3.connect(database) as connection:
                 answer_rows = connection.execute(
                     "SELECT role,content FROM conversation_messages WHERE role='assistant'"
@@ -680,8 +700,27 @@ def test_internal_runtime_requires_token_and_is_immediately_shared_with_web(tmp_
                     "FROM round_screen_turns WHERE user_message_id=?",
                     (written["turn_id"],),
                 ).fetchone()
+                feedback_rows = connection.execute(
+                    "SELECT target_user_message_id,event_kind FROM "
+                    "round_screen_memory_feedback_events"
+                ).fetchall()
             assert answer_rows == [("assistant", completion["answer"])]
             assert turn_row == (written["retrieved"], 0, 0)
+            assert feedback_rows == [(written["turn_id"], "recall_miss")]
+
+            await login(client, base)
+            quality = await client.get(
+                base + "/api/chat-memory-feedback?kind=issues&offset=0&limit=25"
+            )
+            assert quality.status == 200
+            quality_payload = await quality.json()
+            round_item = next(
+                item for item in quality_payload["items"]
+                if item["source"] == "round_screen"
+            )
+            assert round_item["request_id"] == written["turn_id"]
+            assert round_item["kind"] == "recall_miss"
+            assert "input" not in round_item and "answer" not in round_item
 
             corrected_response = await client.post(
                 endpoint,
@@ -756,6 +795,46 @@ def test_memory_mode_http_controls_the_shared_web_and_voice_runtime(tmp_path):
             web_result = await asyncio.to_thread(backend.run, "我喜欢青色", ())
             assert web_result["writes"] == []
             assert web_result["memory_context"] == ""
+
+    asyncio.run(run())
+
+
+def test_round_screen_feedback_storage_failure_does_not_block_voice(tmp_path, monkeypatch):
+    from longmemory.adapters.llm.fake import FakeAnswerGenerator
+    from longmemory.adapters.storage.sqlite_round_screen_memory_feedback_store import (
+        SQLiteRoundScreenMemoryFeedbackStore,
+    )
+    from longmemory.entrypoints.api.chat_backend import ChatBackend
+    from longmemory.methods.longmemory_v1.method import LongMemoryV1
+
+    database = tmp_path / "feedback-unavailable.db"
+    LongMemoryV1(database).close()
+    backend = ChatBackend(database, FakeAnswerGenerator())
+    token = "c" * 64
+
+    def unavailable(_self, _event):
+        raise sqlite3.OperationalError("synthetic lock")
+
+    monkeypatch.setattr(
+        SQLiteRoundScreenMemoryFeedbackStore, "record_if_explicit", unavailable,
+    )
+
+    async def run():
+        async with console(
+            database, chat_backend=backend, memory_runtime_token=token,
+        ) as (client, base, _bridge):
+            response = await client.post(
+                base + "/api/internal/memory/prepare",
+                headers={"Authorization": "Bearer " + token},
+                json={"version": 1, "query": "你刚才记错了"},
+            )
+            assert response.status == 200
+            payload = await response.json()
+            assert payload["round_screen_feedback"] == {
+                "kind": "wrong_memory", "recorded": False,
+                "target_user_message_id": None, "reason": "storage_unavailable",
+            }
+            assert payload["command_reply"] is None
 
     asyncio.run(run())
 

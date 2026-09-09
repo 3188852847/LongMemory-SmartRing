@@ -27,7 +27,25 @@ def register_memory_runtime_routes(app, backend):
             text = extract_user_text(body.get("query"))
         except (ValueError, TypeError, UnicodeError):
             return web.json_response({"error": "invalid_memory_request", "version": 1}, status=400)
-        prepared = await asyncio.to_thread(backend.memory_runtime().prepare_user, text)
+        prepared, feedback = await asyncio.to_thread(
+            backend.prepare_round_screen_user, text,
+        )
+        feedback_notice = None
+        if feedback is not None and feedback.recorded:
+            feedback_notice = {
+                "recall_miss": (
+                    "已记录你对上一轮回答的反馈：它可能没有召回相关记忆。"
+                    "这条记录只用于后续复核，尚未自动修改长期记忆。"
+                ),
+                "wrong_memory": (
+                    "已记录你对上一轮回答的反馈：它可能使用了错误记忆。"
+                    "这条记录只用于后续复核，尚未自动修改长期记忆。"
+                ),
+            }[feedback.kind]
+        command_reply = (
+            prepared.memory_command.notice
+            if prepared.memory_command is not None else feedback_notice
+        )
         return web.json_response({
             "version": 1,
             "context": prepared.support.context,
@@ -48,10 +66,12 @@ def register_memory_runtime_routes(app, backend):
             "timings_ms": asdict(prepared.timings),
             "memory_command": (asdict(prepared.memory_command)
                                if prepared.memory_command is not None else None),
+            "round_screen_feedback": (
+                asdict(feedback) if feedback is not None else None
+            ),
             # 小智当前 Memory 插槽不能直接短路回答；把应用层固定回执作为
             # 独立字段交给薄适配器，以便和普通记忆证据使用不同提示契约。
-            "command_reply": (prepared.memory_command.notice
-                              if prepared.memory_command is not None else None),
+            "command_reply": command_reply,
         })
 
     async def complete(request):

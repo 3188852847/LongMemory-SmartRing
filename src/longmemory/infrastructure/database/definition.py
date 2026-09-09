@@ -1,6 +1,6 @@
-"""当前 SQLite V30 的完整结构定义；不包含历史迁移步骤。"""
+"""当前 SQLite V31 的完整结构定义；不包含历史迁移步骤。"""
 
-SCHEMA_VERSION = 30
+SCHEMA_VERSION = 31
 
 LATEST_SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS conversation_messages (
@@ -68,6 +68,23 @@ CREATE TABLE IF NOT EXISTS round_screen_turns (
 );
 CREATE INDEX IF NOT EXISTS idx_round_screen_turns_completed
     ON round_screen_turns (completed_at DESC, user_message_id DESC);
+
+CREATE TABLE IF NOT EXISTS round_screen_memory_feedback_events (
+    id TEXT PRIMARY KEY,
+    target_user_message_id TEXT NOT NULL,
+    feedback_message_id TEXT NOT NULL UNIQUE,
+    event_kind TEXT NOT NULL CHECK (event_kind IN ('recall_miss', 'wrong_memory')),
+    evidence_kind TEXT NOT NULL CHECK (evidence_kind = 'explicit_round_screen_statement'),
+    interpreter_version TEXT NOT NULL CHECK (length(trim(interpreter_version)) BETWEEN 1 AND 120),
+    occurred_at TEXT NOT NULL,
+    FOREIGN KEY (target_user_message_id) REFERENCES round_screen_turns (user_message_id)
+        ON DELETE RESTRICT,
+    FOREIGN KEY (feedback_message_id) REFERENCES conversation_messages (id)
+        ON DELETE RESTRICT
+);
+CREATE INDEX IF NOT EXISTS idx_round_screen_memory_feedback_target
+    ON round_screen_memory_feedback_events
+        (target_user_message_id, occurred_at DESC, id DESC);
 
 CREATE TABLE IF NOT EXISTS scenario_memories (
     id TEXT PRIMARY KEY,

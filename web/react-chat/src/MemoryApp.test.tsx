@@ -8,6 +8,24 @@ import {MemoryApp} from './MemoryApp';
 afterEach(()=>vi.restoreAllMocks());
 
 describe('每日记忆回顾',()=>{
+  test('从圆屏质量样本直达指定用户 L0',async()=>{
+    vi.spyOn(ChatApi.prototype,'bootstrap').mockResolvedValue(undefined);
+    vi.spyOn(ChatApi.prototype,'request').mockImplementation(async path=>{
+      if(path==='/api/memory-config') return {configured:true,database:'synthetic.db',allow_delete:true,allow_correction:true,allow_change:true,allow_promote_source:true} as never;
+      if(path==='/api/memory-mode') return {write_enabled:true,use_enabled:true,scenario_use_enabled:false,scenario_available:true,persona_use_enabled:false,persona_available:true,persistent:false,l0_archived_when_write_disabled:true} as never;
+      if(path==='/api/consolidation-status') return {background_enabled:false,stages:[]} as never;
+      if(path.startsWith('/api/memories/daily-review')) return {local_date:'2026-09-10',utc_offset_minutes:480,items:[],total:0,limited:false,activity_counts:{added:0,corrected:0,changed:0,deleted:0},message_counts:{user:1,assistant:1,total:2,unlinked_user:1},quality_counts:{owner_confirmed_missed_extraction:0},deletions:[],deletions_limited:false} as never;
+      if(path.startsWith('/api/chat-memory-feedback/daily')) return {local_date:'2026-09-10',utc_offset_minutes:480,total:0,limited:false,action_counts:{memory_ok:0,recall_miss:0,wrong_memory:0,memory_irrelevant:0},items:[],current_total:0,current_limited:false,current_counts:{memory_ok:0,recall_miss:0,wrong_memory:0,memory_irrelevant:0},current_items:[]} as never;
+      if(path.startsWith('/api/memories?')) return {items:[],total:0,limit:25,offset:0} as never;
+      if(path==='/api/source-messages/l0-user') return {id:'l0-user',role:'user',content:'合成圆屏问题',created_at:'2026-09-10T01:00:00Z',derived_memories:[],revision:'a'.repeat(64)} as never;
+      throw new Error(`unexpected test path: ${path}`);
+    });
+    const client=new QueryClient({defaultOptions:{queries:{retry:false}}});
+    render(<QueryClientProvider client={client}><MemoryRouter initialEntries={['/memories?l0_message_id=l0-user']}><MemoryApp/></MemoryRouter></QueryClientProvider>);
+    expect(await screen.findByText('合成圆屏问题')).toBeTruthy();
+    expect(screen.getByText(/已从圆屏质量反馈打开对应用户 L0/)).toBeTruthy();
+  });
+
   test('从当天回顾直达已有的追加式纠正确认窗',async()=>{
     const item={id:'memory-1',content:'用户喜欢乌龙茶。',truncated:false,state:'active' as const,activity:'added' as const,
       recorded_at:'2026-09-09T08:00:00+00:00',subject_id:'user:self'};
@@ -40,7 +58,9 @@ describe('每日记忆回顾',()=>{
     expect(screen.getByText(/不保留被删正文/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button',{name:'核对当天未形成 L1 的原话'}));
     await waitFor(()=>expect(screen.getByText('我最近开始晨跑。')).toBeTruthy());
-    expect(screen.getByLabelText('L0 日期').getAttribute('value')).toBe('2026-09-09');
+    const today=new Date();
+    const expectedDate=`${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+    expect(screen.getByLabelText('L0 日期').getAttribute('value')).toBe(expectedDate);
     fireEvent.click(screen.getByText('L1 原子记忆 · 1'));
     const correctionButton=screen.getByRole('button',{name:'直接纠正'});
     await waitFor(()=>expect(correctionButton.hasAttribute('disabled')).toBe(false));
