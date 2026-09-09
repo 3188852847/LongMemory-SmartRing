@@ -61,7 +61,8 @@
     "ota_data_written": false
   },
   "runtime": {
-    "gif_decode": "pending_device_validation",
+    "gif_decode": "visible_on_device_confirmed_by_user",
+    "observed_on": "2026-09-10",
     "actual_frame_rate": "not_measured",
     "peak_psram": "not_measured",
     "voice_coexistence": "not_measured",

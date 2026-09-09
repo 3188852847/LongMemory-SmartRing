@@ -1,0 +1,16 @@
+diff --git a/main/boards/viewe-smartring-plus/viewe-smartring-plus.cc b/main/boards/viewe-smartring-plus/viewe-smartring-plus.cc
+index c614697..0000000 100644
+--- a/main/boards/viewe-smartring-plus/viewe-smartring-plus.cc
++++ b/main/boards/viewe-smartring-plus/viewe-smartring-plus.cc
+@@ -689,3 +689,3 @@ static void SaveRoundSkin(const RoundSkinConfig& skin) {
+-// SmartRing-Plus 的日常入口以状态可见性为先：继续复用通用 LCD 的状态栏、
+-// 电量、通知、预览图和字幕。待机时可从 assets 分区加载动态壁纸；进入
+-// 聆听、思考、说话或异常状态后，轻量几何脸会覆盖壁纸，继续保证状态可见。
++// SmartRing-Plus 的日常入口继续复用通用 LCD 的状态栏、电量、
++// 通知和字幕。动态壁纸存在时，它是所有日常交互状态的角色主视觉；
++// 几何脸只在壁纸缺失或无法解码时作为固件内置回退。
+@@ -786,2 +786,2 @@ private:
+-        // 壁纸存在时，neutral 是纯壁纸待机；业务状态和情绪仍显示明确的脸。
+-        const bool show_face = !wallpaper_ready_ || std::strcmp(value, "neutral") != 0;
++        // 动态壁纸自身是角色主视觉；状态由文字/系统覆盖表达，不再叠加几何脸。
++        const bool show_face = !wallpaper_ready_;

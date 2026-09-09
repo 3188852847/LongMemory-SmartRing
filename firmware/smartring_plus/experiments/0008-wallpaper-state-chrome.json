@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "captured_on": "2026-09-10",
+  "experiment": "0008-wallpaper-state-chrome",
+  "depends_on": "0007-round-wallpaper-gif",
+  "board": "viewe-smartring-plus",
+  "application_version": "2.2.3",
+  "esp_idf_version": "5.5.4",
+  "decision": {
+    "wallpaper_is_primary_in_all_daily_states": true,
+    "geometric_face_when_wallpaper_ready": false,
+    "status_text_retained": true,
+    "system_overlays_retained": true,
+    "geometric_face_fallback_when_wallpaper_unavailable": true
+  },
+  "source": {
+    "board_cc_sha256_before": "BF53A8D9ACCE42CCFAA007B3FA05DEE76E44D56D618737E84810CB1D0B67DB96",
+    "board_cc_sha256_after": "F2C03EE3C59BAABDBEB836C766C9D185B458AA1BAC79334AAEFC48F2B53F1C29",
+    "patch_sha256": "B331ED6F8DA339479445FEC9C87158479254363198EBBF1AA0006D9358091F36",
+    "clean_apply": true,
+    "backup_created": true
+  },
+  "application": {
+    "length_bytes": 3968528,
+    "sha256": "2506D1ABB8F7EE5FE87DBBA7CB96321E95CEFBDC1D1FEA0E8921461C384B960A",
+    "partition_length_bytes": 4128768,
+    "remaining_bytes": 160240
+  },
+  "assets": {
+    "changed": false,
+    "rewrite_required": false
+  },
+  "flash": {
+    "result": "verified",
+    "verified_on": "2026-09-10",
+    "port": "COM3",
+    "device_mac_suffix": "6d:38",
+    "required_offsets": ["0x20000"],
+    "application_only": true,
+    "independent_verify_flash": "digest_matched",
+    "nvs_written": false,
+    "assets_partition_written": false,
+    "partition_table_written": false,
+    "ota_data_written": false
+  },
+  "runtime": {
+    "wallpaper_persists_during_listening": "pending_device_validation",
+    "wallpaper_persists_during_thinking": "pending_device_validation",
+    "wallpaper_persists_during_speaking": "pending_device_validation",
+    "status_text_visible": "pending_device_validation",
+    "fallback": "pending_device_validation"
+  }
+}
