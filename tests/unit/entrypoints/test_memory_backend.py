@@ -133,8 +133,32 @@ def test_daily_review_uses_explicit_local_day_window(recorded):
     day = recorded_at[:10]
     result = backend.daily_review(local_date=day, utc_offset_minutes=0)
     assert result["total"] == 1 and result["items"][0]["id"] == memory_id
+    assert result["items"][0]["activity"] == "added"
+    assert result["activity_counts"] == {"added": 1, "corrected": 0, "changed": 0}
     with pytest.raises(MemoryAccessError, match="invalid_daily_review_window"):
         backend.daily_review(local_date="not-a-date", utc_offset_minutes=0)
+
+
+def test_daily_review_distinguishes_add_correction_and_fact_change(recorded):
+    path, original_id, _ = recorded
+    backend = MemoryBackend(path, allow_correction=True)
+    corrected = backend.correct(
+        original_id, "用户养了一只叫年糕的猫。", backend.get(original_id)["revision"],
+    )
+    corrected_id = corrected["new_memory_id"]
+    backend.record_change(
+        corrected_id,
+        "用户现在养了一只叫年糕的猫和一只叫豆包的猫。",
+        "2026-01-01T00:00:00+00:00",
+        backend.get(corrected_id)["revision"],
+    )
+
+    day = backend.get(original_id)["recorded_at"][:10]
+    result = backend.daily_review(local_date=day, utc_offset_minutes=0)
+    assert result["activity_counts"] == {"added": 1, "corrected": 1, "changed": 1}
+    assert {item["activity"] for item in result["items"]} == {
+        "added", "corrected", "changed",
+    }
 
 
 def test_delete_preserves_l0_and_clears_incoming_supersede_link(recorded):

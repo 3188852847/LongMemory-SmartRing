@@ -1382,15 +1382,32 @@ class MemoryBackend:
             raise MemoryAccessError("invalid_daily_review_window", 400) from None
         end = start + timedelta(days=1)
         with self._open() as connection:
-            items = SQLiteMemoryStore(connection).list_recorded_between(start, end)
+            store = SQLiteMemoryStore(connection)
+            items = store.list_recorded_between(start, end)
             summaries = []
+            activity_counts = {"added": 0, "corrected": 0, "changed": 0}
             for item in items:
                 row = memory_json(item)
                 row["content"] = item.content[:240]
                 row["truncated"] = len(item.content) > 240
+                source_types = {
+                    evidence.source_type.value for evidence in store.list_evidence(item.id)
+                }
+                # 当前数据模型只有“纠错”具备专门证据类型；事实变化则由新
+                # L1 的 valid_from 表达。删除后 L1 已不存在，因此这里不伪造
+                # 一条无法从现有数据库可靠还原的“删除活动”。
+                if "user_corrected" in source_types:
+                    activity = "corrected"
+                elif item.valid_from is not None:
+                    activity = "changed"
+                else:
+                    activity = "added"
+                row["activity"] = activity
+                activity_counts[activity] += 1
                 summaries.append(row)
             return {"local_date":local_date,"utc_offset_minutes":utc_offset_minutes,
-                    "items":summaries,"total":len(summaries),"limited":len(summaries)==100}
+                    "items":summaries,"total":len(summaries),"limited":len(summaries)==100,
+                    "activity_counts":activity_counts}
 
     def consolidation_status(self):
         """只读呈现自动整理门槛和账本；不会借查询触发模型或迁移。"""
