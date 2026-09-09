@@ -20,8 +20,12 @@ from longmemory.application.natural_memory_commands import NaturalMemoryCommandR
 from longmemory.application.natural_companion_commands import NaturalCompanionCommandResult
 from longmemory.application.follow_up_suggestions import FollowUpSuggestionResult
 from longmemory.application.temporary_interaction import (
+    TemporaryInteractionCommandResult,
     TemporaryInteractionDirective,
+    TemporaryInteractionMode,
     TemporaryInteractionProvider,
+    classify_next_turn_interaction,
+    directive_context,
 )
 from longmemory.application.consolidation.scheduler import (
     LowFrequencyConsolidationScheduler,
@@ -56,7 +60,12 @@ class PreparedMemoryTurn:
     personas: tuple[PersonaRecallItem, ...]
     timings: MemoryPreparationTimings
     # 字段名为兼容既有 API 保留；它现在也可承载明确的陪伴控制命令。
-    memory_command: NaturalMemoryCommandResult | NaturalCompanionCommandResult | None
+    memory_command: (
+        NaturalMemoryCommandResult
+        | NaturalCompanionCommandResult
+        | TemporaryInteractionCommandResult
+        | None
+    )
     follow_up_suggestion: FollowUpSuggestionResult | None = None
     temporary_interaction: TemporaryInteractionDirective | None = None
 
@@ -89,6 +98,9 @@ class MemoryRuntime:
         self._persona_use_enabled = False
         self._memory_command_handler = memory_command_handler
         self._temporary_interaction_provider = temporary_interaction_provider
+        # “下一轮”是进程内、至多消费一次的会话控制，不进入长期记忆层。
+        # 所有网页与圆屏入口共享同一个 Runtime，因此不会按入口各自残留。
+        self._next_interaction: tuple[TemporaryInteractionMode, str, str] | None = None
         self._consolidation_scheduler = consolidation_scheduler
         self._clock = clock or (lambda: datetime.now(UTC))
 
@@ -101,7 +113,35 @@ class MemoryRuntime:
             self._ensure_open()
             command_started = perf_counter()
             command = None
-            if self._memory_command_handler is not None:
+            next_selection = classify_next_turn_interaction(text)
+            if next_selection is not None:
+                if next_selection == "cancel":
+                    had_pending = self._next_interaction is not None
+                    self._next_interaction = None
+                    command = TemporaryInteractionCommandResult(
+                        "cancel_next_interaction",
+                        "applied" if had_pending else "not_armed",
+                        (
+                            "好的，已取消下一轮的临时互动方式。"
+                            if had_pending else
+                            "当前没有等待生效的下一轮互动方式，因此没有改动。"
+                        ),
+                        None,
+                    )
+                else:
+                    self._next_interaction = (
+                        next_selection, event.event_id, event.content,
+                    )
+                    notices = {
+                        "listen_only": "好的，下一轮我会先听你说，不主动给建议。",
+                        "ask_before_advice": "好的，下一轮我会先听你说，再问你是否需要建议。",
+                        "direct_advice": "好的，下一轮我会直接给出简洁、可执行的建议。",
+                    }
+                    command = TemporaryInteractionCommandResult(
+                        "set_next_interaction", "armed",
+                        notices[next_selection], next_selection,
+                    )
+            elif self._memory_command_handler is not None:
                 companion_handler = getattr(
                     self._memory_command_handler, "handle_companion", None,
                 )
@@ -120,7 +160,11 @@ class MemoryRuntime:
                         command = self._memory_command_handler.handle(event)
             command_finished = perf_counter()
             observe_started = perf_counter()
-            if command is not None:
+            if isinstance(command, TemporaryInteractionCommandResult):
+                # 一次性设置句是控制证据，只保留 L0，不能被规则或 LLM
+                # 提取器误写成长期用户偏好。
+                observation = self._method.archive(event)
+            elif command is not None:
                 observation = ObservationResult(event.event_id, command.writes)
             else:
                 observation = (self._method.observe(event) if self._write_enabled
@@ -171,37 +215,59 @@ class MemoryRuntime:
                     )
             persona_finished = perf_counter()
             temporary_interaction = None
-            if self._use_enabled and self._temporary_interaction_provider is not None:
+            interaction_strategy = "temporary_interaction_v1"
+            if command is None and self._next_interaction is not None:
+                mode, source_message_id, source_content = self._next_interaction
+                # 在进入模型调用前原子消费，失败或中断也不会在之后重复套用。
+                self._next_interaction = None
+                temporary_interaction = TemporaryInteractionDirective(
+                    mode=mode,
+                    source_memory_id=None,
+                    source_content=source_content,
+                    source_message_id=source_message_id,
+                    valid_to=None,
+                    context=directive_context(mode),
+                    scope="next_turn",
+                )
+                interaction_strategy = "temporary_interaction_next_turn_v1"
+            elif (
+                command is None and self._use_enabled
+                and self._temporary_interaction_provider is not None
+            ):
                 temporary_interaction = self._temporary_interaction_provider.current(
                     at=event.occurred_at,
                 )
-                if temporary_interaction is not None:
-                    combined = "\n\n".join(value for value in (
-                        support.context, temporary_interaction.context,
-                    ) if value)
-                    retrieved = tuple(support.retrieved or ())
-                    if not any(
+            if temporary_interaction is not None:
+                combined = "\n\n".join(value for value in (
+                    support.context, temporary_interaction.context,
+                ) if value)
+                retrieved = tuple(support.retrieved or ())
+                if (
+                    temporary_interaction.source_memory_id is not None
+                    and not any(
                         item.item_id == temporary_interaction.source_memory_id
                         for item in retrieved
-                    ):
-                        retrieved += (RetrievedTrace(
-                            temporary_interaction.source_memory_id,
-                            temporary_interaction.source_content,
-                            (temporary_interaction.source_message_id,),
-                        ),)
-                    strategy = "+".join(value for value in (
-                        support.retrieval_strategy, "temporary_interaction_v1",
-                    ) if value)
-                    support = MemorySupport(
-                        support.call_id, combined, retrieved,
-                        strategy, support.warning_code,
                     )
-            if command is not None:
-                label = (
-                    "[陪伴设置结果]"
-                    if isinstance(command, NaturalCompanionCommandResult)
-                    else "[记忆操作结果]"
+                ):
+                    retrieved += (RetrievedTrace(
+                        temporary_interaction.source_memory_id,
+                        temporary_interaction.source_content,
+                        (temporary_interaction.source_message_id,),
+                    ),)
+                strategy = "+".join(value for value in (
+                    support.retrieval_strategy, interaction_strategy,
+                ) if value)
+                support = MemorySupport(
+                    support.call_id, combined, retrieved,
+                    strategy, support.warning_code,
                 )
+            if command is not None:
+                if isinstance(command, TemporaryInteractionCommandResult):
+                    label = "[互动设置结果]"
+                elif isinstance(command, NaturalCompanionCommandResult):
+                    label = "[陪伴设置结果]"
+                else:
+                    label = "[记忆操作结果]"
                 operation_context = label + "\n" + command.notice
                 combined = "\n\n".join(
                     value for value in (operation_context, support.context) if value
@@ -259,6 +325,7 @@ class MemoryRuntime:
                 "temporary_interaction_available": (
                     self._temporary_interaction_provider is not None
                 ),
+                "next_interaction_armed": self._next_interaction is not None,
                 "settings_persistent": False,
                 "consolidation_scheduler": (
                     self._consolidation_scheduler.status().to_dict()

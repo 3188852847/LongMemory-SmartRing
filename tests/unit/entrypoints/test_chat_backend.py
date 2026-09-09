@@ -76,6 +76,24 @@ def test_application_command_reply_does_not_depend_on_model_wording(database):
         backend.close()
 
 
+def test_next_turn_interaction_setting_is_an_application_reply(database):
+    class MustNotRun:
+        def generate(self, **_kwargs):
+            raise AssertionError("下一轮互动设置不应交给模型自由改写")
+
+    backend = ChatBackend(database, MustNotRun())
+    try:
+        result = backend.run("下一轮先问我要不要建议", ())
+        assert result["status"] == "completed"
+        assert result["answer_source"] == "application_command"
+        assert result["memory_command"]["kind"] == "set_next_interaction"
+        assert result["memory_command"]["status"] == "armed"
+        assert result["answer"] == result["memory_command"]["notice"]
+        assert result["writes"] == []
+    finally:
+        backend.close()
+
+
 def test_model_health_records_safe_failure_and_explicit_probe_does_not_write_memory(database):
     class Broken:
         def with_role_prompt(self, _prompt):

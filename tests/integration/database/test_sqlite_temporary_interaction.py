@@ -95,3 +95,35 @@ def test_latest_explicit_default_stops_mode_without_resurrecting_old_choice(tmp_
     connection.close()
 
     assert SQLiteTemporaryInteractionProvider(path).current(at=NOW) is None
+
+
+def test_bootstrapped_next_turn_mode_archives_l0_without_creating_l1(tmp_path):
+    path = tmp_path / "next-turn-interaction.db"
+    connection = open_database(path)
+    initialize_schema(connection)
+    connection.close()
+    runtime = build_memory_runtime(path, clock=lambda: NOW)
+    try:
+        armed = runtime.prepare_user("下一轮只听我说")
+        assert armed.memory_command.kind == "set_next_interaction"
+        assert armed.observation.writes == ()
+
+        used = runtime.prepare_user("我今天在项目上碰到了一些困难")
+        assert used.temporary_interaction.mode == "listen_only"
+        assert used.temporary_interaction.scope == "next_turn"
+        assert runtime.prepare_user("再说一件事").temporary_interaction is None
+
+        connection = open_database(path)
+        try:
+            assert connection.execute(
+                "SELECT count(*) FROM conversation_messages WHERE id=?",
+                (armed.event.event_id,),
+            ).fetchone()[0] == 1
+            assert connection.execute(
+                "SELECT count(*) FROM atomic_memories "
+                "WHERE content LIKE '%下一轮只听我说%'",
+            ).fetchone()[0] == 0
+        finally:
+            connection.close()
+    finally:
+        runtime.close()

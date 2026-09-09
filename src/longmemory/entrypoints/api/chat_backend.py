@@ -11,6 +11,7 @@ from longmemory.application.chat.contracts import AnswerGenerationError
 from longmemory.application.memory_runtime import MemoryRuntime
 from longmemory.application.natural_companion_commands import NaturalCompanionCommandResult
 from longmemory.application.natural_memory_commands import NaturalMemoryCommandResult
+from longmemory.application.temporary_interaction import TemporaryInteractionCommandResult
 from longmemory.adapters.storage.sqlite_round_screen_turn_store import (
     SQLiteRoundScreenTurnStore,
 )
@@ -211,6 +212,7 @@ class ChatBackend:
             # 圆屏的上游接口只能注入系统上下文，仍由独立适配器加强约束。
             if isinstance(prepared.memory_command, (
                 NaturalMemoryCommandResult, NaturalCompanionCommandResult,
+                TemporaryInteractionCommandResult,
             )):
                 answer = prepared.memory_command.notice
                 result["answer_source"] = "application_command"
