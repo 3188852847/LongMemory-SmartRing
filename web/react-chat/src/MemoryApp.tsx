@@ -5,6 +5,7 @@ import {ChatApi} from './api';
 import {AppShell, ConsoleNav} from './AppShell';
 import {PageHeader} from './PageHeader';
 import {ManualMemoryAdd} from './ManualMemoryAdd';
+import {memoryFailure, type MemoryFailurePhase} from './memoryFailure';
 
 type MemoryConfig = {configured: boolean; database: string | null; allow_delete: boolean; allow_correction: boolean; allow_change: boolean};
 type RuntimeMode = {write_enabled: boolean; use_enabled: boolean; scenario_use_enabled: boolean; scenario_available: boolean; persona_use_enabled: boolean; persona_available: boolean; persistent: boolean; l0_archived_when_write_disabled: boolean};
@@ -60,7 +61,7 @@ export function MemoryApp() {
     try {
       if (tab === 'l1') await fetchL1(offset, search); else await fetchL0(offset, search);
       setNotice('列表已更新。');
-    } catch (error) {setNotice(String(error));}
+    } catch (error) {setNotice(memoryFailure(error, 'read'));}
     finally {setBusy(false);}
   }
   useEffect(() => {
@@ -87,7 +88,7 @@ export function MemoryApp() {
         } else {
           setNotice(linkedMemoryId ? '记忆链接格式无效；未自动打开详情。' : 'L1 原子记忆已加载；可切换到 L0 检查原始记录。');
         }
-      } catch (error) {setNotice(String(error));}
+      } catch (error) {setNotice(memoryFailure(error, 'read'));}
       finally {setBusy(false);}
     })();
   }, []);
@@ -101,10 +102,10 @@ export function MemoryApp() {
     }
   }
 
-  async function guarded(work: () => Promise<void>) {
+  async function guarded(work: () => Promise<void>, phase: MemoryFailurePhase = 'read') {
     if (locked.current) return;
     locked.current = true; setBusy(true);
-    try {await work();} catch (error) {setNotice(String(error));}
+    try {await work();} catch (error) {setNotice(memoryFailure(error, phase));}
     finally {locked.current = false; setBusy(false);}
   }
   async function openL1(id: string) {
@@ -124,7 +125,7 @@ export function MemoryApp() {
     await guarded(async () => {
       const saved = await api.request<RuntimeMode>('/api/memory-mode', 'PUT', modeDraft);
       setMode(saved); setNotice(`已应用到网页与圆屏：L1 写入${saved.write_enabled ? '开启' : '暂停'}，L1 使用${saved.use_enabled ? '开启' : '暂停'}，L2 场景${saved.scenario_use_enabled ? '参与回答' : '不参与回答'}，L3 画像${saved.persona_use_enabled ? '参与回答' : '不参与回答'}。`);
-    });
+    }, 'write');
   }
   async function saveCorrection() {
     if (!selectedL1 || !correction.trim()) return;
@@ -135,7 +136,7 @@ export function MemoryApp() {
       setCorrecting(false); setCorrection(''); await fetchL1(0, query);
       setSelectedL1(await api.request<L1Detail>(`/api/memories/${encodeURIComponent(result.new_memory_id)}`));
       setNotice('纠正已保存：新 L1 生效，旧 L1 保留为已取代历史。');
-    });
+    }, 'write');
   }
   function openChange() {
     const now = new Date();
@@ -157,7 +158,7 @@ export function MemoryApp() {
       setChanging(false); setChangedContent(''); setEffectiveLocal(''); await fetchL1(0, query);
       setSelectedL1(await api.request<L1Detail>(`/api/memories/${encodeURIComponent(result.new_memory_id)}`));
       setNotice('变化已保存：旧事实保留历史有效期，新事实从指定时间开始生效。');
-    });
+    }, 'write');
   }
   async function removeMemory() {
     if (!selectedL1) return;
@@ -165,7 +166,7 @@ export function MemoryApp() {
       await api.request(`/api/memories/${encodeURIComponent(selectedL1.id)}`, 'DELETE', {revision: selectedL1.revision, confirm_delete: true});
       setDeleting(false); setDeleteUnderstood(false); setSelectedL1(undefined);
       await fetchL1(0, query); setNotice('L1 已删除；L0 原始对话仍保留。');
-    });
+    }, 'write');
   }
 
   const page = tab === 'l1' ? l1 : l0;

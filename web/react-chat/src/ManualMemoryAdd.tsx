@@ -1,6 +1,7 @@
 import {Alert, Button, Input, Modal} from 'antd';
 import {useState} from 'react';
 import {ChatApi} from './api';
+import {memoryFailure} from './memoryFailure';
 
 type ExplicitMemoryResult = {
   kind: 'include'; status: string; notice: string;
@@ -30,7 +31,7 @@ export function ManualMemoryAdd({api, disabled, onSaved}: {
         await onSaved(result.target_memory_ids[0]);
       }
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : '没有写入，请重新检查。');
+      setNotice(memoryFailure(error, 'write'));
     } finally {
       setBusy(false);
     }
