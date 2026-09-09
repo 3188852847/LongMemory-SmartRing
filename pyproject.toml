@@ -26,6 +26,11 @@ explicit = true
 [tool.uv.sources]
 torch = [{ index = "pytorch-cpu", extra = "semantic", marker = "sys_platform == 'win32' or sys_platform == 'linux'" }]
 
+# Windows 用户级 uv 缓存和临时目录在当前机器上可能继承不可用 ACL。
+# 缓存固定在已忽略的项目目录后，常规开发命令不再依赖用户目录权限。
+[tool.uv]
+cache-dir = ".uv-cache"
+
 [project.scripts]
 longmemory = "longmemory.entrypoints.cli.app:main"
 longmemory-console = "longmemory.entrypoints.api.server:main"
@@ -41,4 +46,6 @@ where = ["src"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
-addopts = "-ra"
+# pytest 会在每次运行前清理这个专用目录；其中只能放测试夹具产物。
+# 同时关闭非必要缓存插件，避免再次写入用户级或仓库缓存目录。
+addopts = "-ra -p no:cacheprovider --basetemp=.pytest-tmp"

@@ -3,6 +3,7 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 .pytest-tmp/
+.test-runtime/
 .tmp-tests/
 .mypy_cache/
 .ruff_cache/
@@ -33,6 +34,7 @@ data/backups/*
 !data/backups/.gitkeep
 data/audio/*
 !data/audio/.gitkeep
+data/test-tmp/
 
 # 实验运行产物
 experiments/jobs/

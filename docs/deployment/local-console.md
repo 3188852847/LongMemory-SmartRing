@@ -118,13 +118,14 @@
 - 本轮最终只读检查：网页会话建立成功；设备接口返回 503 / bridge_unavailable，说明当时 8766 控制桥不可达，不代表圆屏硬件故障。未自动启动学校模型或重启小智，需保留原有 --device-control 服务才能联动。
 - 可选 WebMCP 仅暴露只读连接状态查询；没有支持上下文可验证。普通浏览器不支持时不受影响。
 
-复现测试（使用新的本地临时目录，避开本机默认 pytest 临时目录权限问题）：
+复现测试：
 
 ```powershell
-$consoleTestRoot = Join-Path (Get-Location).Path (".pytest-tmp\console-" + [guid]::NewGuid().ToString("N"))
-if (Test-Path -LiteralPath $consoleTestRoot) { throw "Test directory already exists" }
-.\.venv\Scripts\python.exe -m pytest -p no:cacheprovider --basetemp $consoleTestRoot -q
+uv run --no-sync python -m pytest -q
 node --test tests/web/*.test.mjs
 ```
+
+pytest 的夹具临时目录和缓存策略已经由项目配置统一管理，不再需要为每次运行生成
+独立的 `--basetemp` 路径。
 
 本页面不依赖 Node 运行；Node 仅用于上述前端纯逻辑测试。
