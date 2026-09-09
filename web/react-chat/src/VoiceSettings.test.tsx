@@ -1,11 +1,17 @@
 import {fireEvent, render, screen, waitFor} from '@testing-library/react';
 import {afterEach, describe, expect, test, vi} from 'vitest';
-import {ChatApi} from './api';
-import {VoiceSettings} from './VoiceSettings';
+import {ApiError, ChatApi} from './api';
+import {VoiceSettings, voiceSettingsFailure} from './VoiceSettings';
 
 afterEach(() => vi.restoreAllMocks());
 
 describe('VoxCPM2 声音设置', () => {
+  test('把声音边界错误翻译为可执行说明', () => {
+    expect(voiceSettingsFailure(new ApiError('voice_not_enabled', 403))).toMatch(/统一启动面板/);
+    expect(voiceSettingsFailure(new ApiError('voice_operation_failed_recheck', 409))).toMatch(/重新读取配置/);
+    expect(voiceSettingsFailure(new ApiError('private-provider-body', 500))).not.toContain('private-provider-body');
+  });
+
   test('只展示受控参考音频并携带版本摘要保存声音方案', async () => {
     const request = vi.spyOn(ChatApi.prototype, 'request').mockImplementation(async (path, method, body) => {
       if (method === 'POST') {
@@ -58,5 +64,13 @@ describe('VoxCPM2 声音设置', () => {
     fireEvent.click(screen.getByRole('button', {name: '声音设置'}));
     expect(await screen.findByText(/请通过统一启动面板选择 VoxCPM2 后启动/)).toBeTruthy();
     expect(screen.getByRole('button', {name: '保存声音方案'}).hasAttribute('disabled')).toBe(true);
+  });
+
+  test('读取失败时显示声音操作建议而不是技术错误码', async () => {
+    vi.spyOn(ChatApi.prototype, 'request').mockRejectedValue(new ApiError('voice_not_enabled', 403));
+    render(<VoiceSettings api={new ChatApi()} disabled={false}/>);
+    fireEvent.click(screen.getByRole('button', {name: '声音设置'}));
+    expect(await screen.findByText(/请从统一启动面板启动圆屏语音后再读取/)).toBeTruthy();
+    expect(screen.queryByText(/voice_not_enabled/)).toBeNull();
   });
 });

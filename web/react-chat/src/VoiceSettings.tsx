@@ -1,6 +1,6 @@
 import {useEffect, useRef, useState} from 'react';
 import {Alert, Button, Input, Modal, Select, Slider, Space} from 'antd';
-import {ChatApi} from './api';
+import {ApiError, ChatApi} from './api';
 import {SpeechPlayer} from './SpeechPlayer';
 
 type VoxProfile={version:number;reference:string|null;style:string;cfg_value:number;quality:'fast'|'balanced'|'quality'};
@@ -10,6 +10,18 @@ interface Settings {
   digest: string; text: string; config_matches: boolean; editable: boolean; service_ready?: boolean | null;
   profile?:VoxProfile; profile_digest?:string; references?:Array<{id:string|null;label:string}>;
 }
+
+export function voiceSettingsFailure(error: unknown) {
+  if (!(error instanceof ApiError)) return '声音操作未完成。请确认本机控制台仍在运行，再重新读取配置。';
+  const messages: Record<string, string> = {
+    voice_not_enabled: '当前控制台没有启用小智声音配置。请从统一启动面板启动圆屏语音后再读取。',
+    voice_operation_failed_recheck: '声音配置读取、试听或保存没有完成。请先重新读取配置，不要连续重试。',
+    session_required: '网页会话已经失效。请刷新整个页面；没有自动重发声音操作。',
+    csrf_rejected: '请求校验失败。请刷新整个页面；没有自动重发声音操作。',
+  };
+  return messages[error.code] ?? '声音操作未完成。请重新读取配置，不要根据旧页面判断是否已经生效。';
+}
+
 export function VoiceSettings({api, disabled}: {api: ChatApi; disabled: boolean}) {
   const [open, setOpen] = useState(false), [busy, setBusy] = useState(false);
   const [settings, setSettings] = useState<Settings>(), [voice, setVoice] = useState('');
@@ -21,7 +33,7 @@ export function VoiceSettings({api, disabled}: {api: ChatApi; disabled: boolean}
   async function run(action: () => Promise<void>) {
     if (lock.current) return;
     lock.current = true; setBusy(true); setNotice('');
-    try {await action();} catch (e) {setNotice(e instanceof Error ? e.message : '操作失败，请重新读取。');}
+    try {await action();} catch (e) {setNotice(voiceSettingsFailure(e));}
     finally {lock.current = false; setBusy(false);}
   }
   const load = () => run(async () => {setSettings(undefined); const value = await api.request<Settings>('/api/voice-settings'); setSettings(value); setVoice(value.voice ?? '');setProfile(value.profile);});

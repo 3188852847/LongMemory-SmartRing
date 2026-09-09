@@ -11,7 +11,11 @@ export class ChatApi {
   async voicePreview(voice: string): Promise<Blob> {
     const response = await fetch('/api/voice-settings/preview', {method: 'POST', credentials: 'same-origin', cache: 'no-store',
       headers: {'Content-Type': 'application/json', 'X-Console-CSRF': this.csrf}, body: JSON.stringify({voice})});
-    if (!response.ok) throw new Error('试听失败，请检查网络与小智环境；未自动重试。');
+    if (!response.ok) {
+      let code = 'voice_operation_failed_recheck';
+      try {const body = await response.json() as {error?:unknown}; if (typeof body.error === 'string') code = body.error;} catch { /* 保持安全通用错误。 */ }
+      throw new ApiError(code, response.status);
+    }
     return response.blob();
   }
   async speech(text: string): Promise<Blob> {
