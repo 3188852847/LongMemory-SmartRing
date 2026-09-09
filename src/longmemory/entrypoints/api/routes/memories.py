@@ -52,6 +52,18 @@ def register_memory_routes(app, backend):
             query=query, role=role, link_state=link_state, offset=offset, limit=limit,
         )
 
+    async def daily_review(request):
+        values=request.query
+        if set(values)!={"local_date","utc_offset_minutes"} or any(len(values.getall(key))!=1 for key in values):
+            raise web.HTTPBadRequest()
+        try:
+            offset=int(values["utc_offset_minutes"])
+        except ValueError:
+            raise web.HTTPBadRequest() from None
+        if not -840 <= offset <= 840 or not re.fullmatch(r"\d{4}-\d{2}-\d{2}",values["local_date"]):
+            raise web.HTTPBadRequest()
+        return await invoke(backend.daily_review,local_date=values["local_date"],utc_offset_minutes=offset)
+
     async def consolidation_status(request):
         if request.query:
             raise web.HTTPBadRequest()
@@ -409,6 +421,7 @@ def register_memory_routes(app, backend):
 
     app.router.add_get("/api/memory-config", config, allow_head=False)
     app.router.add_get("/api/memories", listing, allow_head=False)
+    app.router.add_get("/api/memories/daily-review", daily_review, allow_head=False)
     app.router.add_get("/api/source-messages", source_listing, allow_head=False)
     app.router.add_get("/api/consolidation-status", consolidation_status, allow_head=False)
     app.router.add_get("/api/source-messages/{source_id}", source_detail, allow_head=False)

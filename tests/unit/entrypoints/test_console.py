@@ -423,6 +423,16 @@ def test_memory_http_browse_sources_confirmed_delete_and_persistence(tmp_path):
             url = base + "/api/memories/" + memory_id
             details = await (await client.get(url)).json()
             assert details["sources"][0]["message"]["content"] == "我养了一只叫豆包的猫。"
+            day = details["recorded_at"][:10]
+            daily_response = await client.get(
+                base + f"/api/memories/daily-review?local_date={day}&utc_offset_minutes=0"
+            )
+            daily = await daily_response.json()
+            assert daily_response.status == 200
+            assert daily["total"] == 1 and daily["items"][0]["id"] == memory_id
+            assert (await client.get(
+                base + f"/api/memories/daily-review?local_date={day}&utc_offset_minutes=9999"
+            )).status == 400
             source_id = details["sources"][0]["source_message_id"]
             l0 = await (await client.get(base + "/api/source-messages?link_state=linked")).json()
             assert l0["total"] >= 1 and any(item["id"] == source_id for item in l0["items"])

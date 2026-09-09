@@ -242,6 +242,17 @@ class SQLiteMemoryStore:
         ).fetchall()
         return total, tuple(self._row_to_memory(row) for row in rows)
 
+    def list_recorded_between(self, start: datetime, end: datetime, *, limit: int = 100):
+        """按系统记录时间读取日回顾；不按当前状态隐藏当天已被取代的事实。"""
+        if start.tzinfo is None or end.tzinfo is None or start >= end or not 1 <= limit <= 100:
+            raise ValueError("无效的记忆日期窗口")
+        rows = self._connection.execute(
+            "SELECT * FROM atomic_memories WHERE recorded_at >= ? AND recorded_at < ? "
+            "ORDER BY recorded_at DESC,id DESC LIMIT ?",
+            (start.isoformat(), end.isoformat(), limit),
+        ).fetchall()
+        return tuple(self._row_to_memory(row) for row in rows)
+
     def delete(self, memory_id: MemoryId) -> bool:
         """删除指定记忆，并返回是否删除成功。"""
 

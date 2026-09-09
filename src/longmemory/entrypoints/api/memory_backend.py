@@ -1372,6 +1372,26 @@ class MemoryBackend:
                 summaries.append(row)
             return {"items": summaries, "total": total, "limit": limit, "offset": offset}
 
+    def daily_review(self, *, local_date, utc_offset_minutes):
+        """返回某个本地自然日写入的 L1；读取不触发整理、提取或迁移。"""
+        try:
+            day = datetime.strptime(local_date, "%Y-%m-%d").date()
+            offset = timezone(timedelta(minutes=utc_offset_minutes))
+            start = datetime.combine(day, datetime.min.time(), tzinfo=offset).astimezone(UTC)
+        except (TypeError, ValueError, OverflowError):
+            raise MemoryAccessError("invalid_daily_review_window", 400) from None
+        end = start + timedelta(days=1)
+        with self._open() as connection:
+            items = SQLiteMemoryStore(connection).list_recorded_between(start, end)
+            summaries = []
+            for item in items:
+                row = memory_json(item)
+                row["content"] = item.content[:240]
+                row["truncated"] = len(item.content) > 240
+                summaries.append(row)
+            return {"local_date":local_date,"utc_offset_minutes":utc_offset_minutes,
+                    "items":summaries,"total":len(summaries),"limited":len(summaries)==100}
+
     def consolidation_status(self):
         """只读呈现自动整理门槛和账本；不会借查询触发模型或迁移。"""
 

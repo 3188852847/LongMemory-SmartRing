@@ -16,10 +16,12 @@ type L0Summary = {id: string; role: 'user' | 'assistant'; content: string; trunc
 type DerivedMemory = {id: string; content: string; state: 'active' | 'retired'; source_type: string; linked_at: string};
 type L0Detail = {id: string; role: 'user' | 'assistant'; content: string; created_at: string; derived_memories: DerivedMemory[]};
 type Page<T> = {items: T[]; total: number; limit: number; offset: number};
+type DailyReview = {local_date:string;utc_offset_minutes:number;items:L1Summary[];total:number;limited:boolean};
 
 const api = new ChatApi();
 const displayTime = (value?: string | null) => value ? new Date(value).toLocaleString('zh-CN') : '未记录';
 const sourceName = (value: string) => value === 'user_stated' ? '用户陈述' : value === 'user_corrected' ? '用户纠正' : value;
+const localDateText = (date=new Date()) => `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
 
 export function MemoryApp() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -29,6 +31,7 @@ export function MemoryApp() {
   const [tab, setTab] = useState<'l1' | 'l0'>('l1');
   const [l1, setL1] = useState<Page<L1Summary>>({items: [], total: 0, limit: 25, offset: 0});
   const [l0, setL0] = useState<Page<L0Summary>>({items: [], total: 0, limit: 25, offset: 0});
+  const [daily,setDaily] = useState<DailyReview>();
   const [query, setQuery] = useState('');
   const [l1State, setL1State] = useState('active');
   const [role, setRole] = useState('all');
@@ -56,10 +59,14 @@ export function MemoryApp() {
     const data = await api.request<Page<L0Summary>>(`/api/source-messages?${params}`);
     setL0(data); setSelectedL0(undefined);
   }
+  async function fetchDaily() {
+    const params=new URLSearchParams({local_date:localDateText(),utc_offset_minutes:String(-new Date().getTimezoneOffset())});
+    setDaily(await api.request<DailyReview>(`/api/memories/daily-review?${params}`));
+  }
   async function refresh(offset = 0, search = query) {
     setBusy(true);
     try {
-      if (tab === 'l1') await fetchL1(offset, search); else await fetchL0(offset, search);
+      if (tab === 'l1') {await fetchL1(offset, search); await fetchDaily();} else await fetchL0(offset, search);
       setNotice('列表已更新。');
     } catch (error) {setNotice(memoryFailure(error, 'read'));}
     finally {setBusy(false);}
@@ -77,6 +84,7 @@ export function MemoryApp() {
         } catch {setNotice('记忆库可浏览，但聊天 Runtime 未启用，运行期开关不可用。');}
         const params = new URLSearchParams({q: '', state: 'active', offset: '0', limit: '25'});
         setL1(await api.request<Page<L1Summary>>(`/api/memories?${params}`));
+        await fetchDaily();
         const linkedMemoryId = searchParams.get('memory_id')?.trim();
         if (linkedMemoryId && linkedMemoryId.length <= 128 && !/[\u0000-\u001f\u007f]/.test(linkedMemoryId)) {
           try {
@@ -176,6 +184,13 @@ export function MemoryApp() {
     </>;
   return <><AppShell subtitle="可追溯的个人记忆" className="memory-shell" sidebar={sidebar}><PageHeader eyebrow="长期记忆" title="原始与原子记忆" description="查看系统保存的原话和从中提取的可召回事实，并核对两者之间的来源关系。" meta={config?.database ?? '未指定记忆库'} action={<Space><ManualMemoryAdd api={api} disabled={!config?.configured || !mode} onSaved={async memoryId => {await fetchL1(0, ''); setTab('l1'); setQuery(''); setNotice('明确事实已处理，列表已更新。'); if (memoryId) await openL1(memoryId);}}/><Button loading={busy} disabled={!config?.configured} onClick={() => void refresh(page.offset)}>刷新</Button></Space>}/>
       <section className="memory-overview" aria-label="记忆概览"><div><small>当前视图</small><strong>{tab === 'l1' ? 'L1 原子记忆' : 'L0 原始记录'}</strong></div><div><small>记录数</small><strong>{page.total}</strong></div><div><small>回答时召回</small><strong className={mode?.use_enabled ? 'is-positive' : ''}>{mode?.use_enabled ? '已开启' : '已关闭'}</strong></div></section>
+      {daily&&<Card className="mode-card" title={`今日记忆回顾 · ${daily.local_date}`} extra={<Tag color={daily.total?'processing':'default'}>{daily.total} 条写入</Tag>}>
+        <p className="subtle">这里按你的本地自然日显示今天形成的 L1，包括后来被纠正或取代的记录；它不是“当前有效记忆”总表，也不会触发模型整理。</p>
+        {daily.items.length?<List size="small" dataSource={daily.items.slice(0,5)} renderItem={item=><List.Item actions={[<Button type="link" key="review" onClick={()=>void openL1(item.id)}>核对来源</Button>]}>
+          <List.Item.Meta title={item.content} description={<Space><Tag color={item.state==='active'?'green':'default'}>{item.state==='active'?'当前':'已退役'}</Tag><span>{displayTime(item.recorded_at)}</span></Space>}/>
+        </List.Item>}/>:<Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="今天还没有形成 L1"/>}
+        {daily.total>5&&<p className="subtle">这里只展开最近 5 条；下方 L1 列表可查看全部。{daily.limited?'今日记录达到 100 条读取上限。':''}</p>}
+      </Card>}
       {mode && <Card className="mode-card" title={<span>本次运行的记忆模式 <Tag>临时设置</Tag></span>} extra={<Button type="primary" disabled={busy || (mode.write_enabled === modeDraft.write_enabled && mode.use_enabled === modeDraft.use_enabled && mode.scenario_use_enabled === modeDraft.scenario_use_enabled && mode.persona_use_enabled === modeDraft.persona_use_enabled)} onClick={() => void saveMode()}>应用到网页与圆屏</Button>}>
         <div className="memory-mode-grid">
           <label><Switch checked={modeDraft.write_enabled} disabled={busy} onChange={value => setModeDraft({...modeDraft, write_enabled: value})}/><span><strong>生成 L1</strong><small>从新对话提取原子记忆</small></span></label>

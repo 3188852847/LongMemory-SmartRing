@@ -126,6 +126,17 @@ def test_pagination_filter_and_literal_search(recorded):
     assert backend.list_page(query="%' OR 1=1 --")["total"] == 0
 
 
+def test_daily_review_uses_explicit_local_day_window(recorded):
+    path, memory_id, _ = recorded
+    backend = MemoryBackend(path)
+    recorded_at = backend.get(memory_id)["recorded_at"]
+    day = recorded_at[:10]
+    result = backend.daily_review(local_date=day, utc_offset_minutes=0)
+    assert result["total"] == 1 and result["items"][0]["id"] == memory_id
+    with pytest.raises(MemoryAccessError, match="invalid_daily_review_window"):
+        backend.daily_review(local_date="not-a-date", utc_offset_minutes=0)
+
+
 def test_delete_preserves_l0_and_clears_incoming_supersede_link(recorded):
     path, memory_id, source_id = recorded
     with sqlite3.connect(path) as conn:
