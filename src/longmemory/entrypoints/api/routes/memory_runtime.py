@@ -2,12 +2,36 @@
 
 import asyncio
 from dataclasses import asdict
+from hashlib import sha256
 import sqlite3
 from uuid import UUID
 
 from aiohttp import web
 
 from longmemory.entrypoints.xiaozhi.mapping import extract_user_text
+
+
+def _retrieval_evidence(prepared):
+    """生成不含正文的召回索引；指纹用于发现条目后来是否发生变化。"""
+
+    rows = []
+    groups = (
+        ("l1", prepared.support.retrieved or (), lambda item: item.item_id,
+         lambda item: item.content),
+        ("l2", prepared.scenarios, lambda item: item.scenario_id,
+         lambda item: item.title + "\n" + item.summary),
+        ("l3", prepared.personas, lambda item: item.persona_id,
+         lambda item: item.label + "\n" + item.statement),
+    )
+    for layer, items, identify, content in groups:
+        for rank, item in enumerate(items, 1):
+            rows.append({
+                "layer": layer,
+                "item_id": identify(item),
+                "rank": rank,
+                "content_sha256": sha256(content(item).encode("utf-8")).hexdigest(),
+            })
+    return rows
 
 
 def register_memory_runtime_routes(app, backend):
@@ -51,7 +75,8 @@ def register_memory_runtime_routes(app, backend):
             "context": prepared.support.context,
             "turn_id": prepared.event.event_id,
             "added": sum(item.operation == "add" for item in prepared.observation.writes),
-            "retrieved": len(prepared.support.retrieved),
+            "retrieved": len(prepared.support.retrieved or ()),
+            "retrieval_evidence": _retrieval_evidence(prepared),
             "memory_processing": prepared.observation.processing_status,
             "memory_warning": prepared.observation.warning_code,
             "retrieval_strategy": prepared.support.retrieval_strategy,
@@ -80,19 +105,23 @@ def register_memory_runtime_routes(app, backend):
         request = request.clone(client_max_size=32768)
         try:
             body = await request.json()
-            if not isinstance(body, dict) or set(body) != {
-                "version", "turn_id", "answer", "retrieved_counts",
-            } or body.get("version") != 1:
+            required = {"version", "turn_id", "answer", "retrieved_counts"}
+            allowed_shapes = (required, required | {"retrieval_evidence"})
+            if (not isinstance(body, dict) or set(body) not in allowed_shapes
+                    or body.get("version") != 1):
                 raise ValueError
             turn_id = body["turn_id"]
             answer = body["answer"]
             counts = body["retrieved_counts"]
+            evidence = body.get("retrieval_evidence")
             if (not isinstance(turn_id, str) or str(UUID(turn_id)) != turn_id
                     or not isinstance(answer, str) or not answer.strip()
                     or len(answer) > 16000 or not isinstance(counts, dict)
                     or set(counts) != {"l1", "l2", "l3"}
                     or any(type(value) is not int or not 0 <= value <= 100
                            for value in counts.values())):
+                raise ValueError
+            if evidence is not None and not isinstance(evidence, list):
                 raise ValueError
         except (ValueError, TypeError, KeyError, UnicodeError):
             return web.json_response(
@@ -102,6 +131,7 @@ def register_memory_runtime_routes(app, backend):
             result = await asyncio.to_thread(
                 backend.complete_round_screen_turn,
                 turn_id=turn_id, answer=answer, retrieved_counts=counts,
+                retrieval_evidence=(tuple(evidence) if evidence is not None else None),
             )
         except ValueError as error:
             code = str(error)

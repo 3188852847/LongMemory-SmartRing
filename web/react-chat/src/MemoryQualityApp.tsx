@@ -22,6 +22,12 @@ const focusLabel:Record<MemoryFeedbackDiagnosticFocus,string> = {
 };
 const emptyCounts = {memory_ok:0,recall_miss:0,wrong_memory:0,memory_irrelevant:0};
 
+function evidencePath(layer:'l1'|'l2'|'l3',itemId:string) {
+  const key=layer==='l1'?'memory_id':layer==='l2'?'scenario_id':'persona_id';
+  const page=layer==='l1'?'/memories':layer==='l2'?'/scenarios':'/personas';
+  return `${page}?${key}=${encodeURIComponent(itemId)}`;
+}
+
 /** 所有者跨日查看网页复核与圆屏明确反馈；列表不接收对话正文。 */
 export function MemoryQualityApp() {
   const [filter,setFilter] = useState<Filter>('issues');
@@ -60,10 +66,12 @@ export function MemoryQualityApp() {
       {value:'wrong_memory',label:'只看错误记忆'}, {value:'memory_ok',label:'正常对照'},
       {value:'memory_irrelevant',label:'记忆无关负例'}, {value:'all',label:'全部当前判断'},
     ]} onChange={(value:Filter)=>{setFilter(value);void load(value,0);}}/>}>
-      <List loading={busy} dataSource={page.items} locale={{emptyText:<Empty description={filter==='issues'?'目前没有待核对问题':'没有符合筛选的当前判断'}/>}} renderItem={item=><List.Item actions={[item.source==='round_screen'
-        ? <Link key="inspect" to={`/memories?l0_message_id=${encodeURIComponent(item.request_id)}`}>核对圆屏 L0 证据</Link>
-        : <Link key="inspect" to={`/chat-react?chat_id=${encodeURIComponent(item.chat_id ?? '')}&request_id=${encodeURIComponent(item.request_id)}`}>核对回答与证据</Link>]}>
-        <List.Item.Meta title={<Space wrap><Tag color={item.kind==='wrong_memory'?'red':item.kind==='recall_miss'?'gold':item.kind==='memory_ok'?'green':'default'}>{kindLabel[item.kind]}</Tag><Tag>{item.source==='round_screen'?'圆屏语音':'网页聊天'}</Tag><span>{item.chat_title}</span></Space>} description={<div className="quality-sample-description"><p>{focusLabel[item.diagnostic_focus]}</p><Space wrap><span>{new Date(item.occurred_at).toLocaleString('zh-CN')}</span><code>修订 {item.revision}</code><span>L1 {item.retrieved_counts.l1} · L2 {item.retrieved_counts.l2} · L3 {item.retrieved_counts.l3}</span></Space></div>}/>
+      <List loading={busy} dataSource={page.items} locale={{emptyText:<Empty description={filter==='issues'?'目前没有待核对问题':'没有符合筛选的当前判断'}/>}} renderItem={item=><List.Item actions={item.source==='round_screen' ? [
+        <Link key="question" to={`/memories?l0_message_id=${encodeURIComponent(item.request_id)}`}>问题 L0</Link>,
+        item.assistant_message_id&&<Link key="answer" to={`/memories?l0_message_id=${encodeURIComponent(item.assistant_message_id)}`}>回答 L0</Link>,
+        item.feedback_message_id&&<Link key="feedback" to={`/memories?l0_message_id=${encodeURIComponent(item.feedback_message_id)}`}>反馈 L0</Link>,
+      ].filter(Boolean) : [<Link key="inspect" to={`/chat-react?chat_id=${encodeURIComponent(item.chat_id ?? '')}&request_id=${encodeURIComponent(item.request_id)}`}>核对回答与证据</Link>]}>
+        <List.Item.Meta title={<Space wrap><Tag color={item.kind==='wrong_memory'?'red':item.kind==='recall_miss'?'gold':item.kind==='memory_ok'?'green':'default'}>{kindLabel[item.kind]}</Tag><Tag>{item.source==='round_screen'?'圆屏语音':'网页聊天'}</Tag><span>{item.chat_title}</span></Space>} description={<div className="quality-sample-description"><p>{focusLabel[item.diagnostic_focus]}</p><Space wrap><span>{new Date(item.occurred_at).toLocaleString('zh-CN')}</span><code>修订 {item.revision}</code><span>L1 {item.retrieved_counts.l1} · L2 {item.retrieved_counts.l2} · L3 {item.retrieved_counts.l3}</span></Space>{item.source==='round_screen'&&<div><small className="subtle">{item.retrieval_evidence?.length?'当轮实际召回：':item.retrieval_evidence_recorded?'当轮确认没有召回 L1/L2/L3。':'旧回执只保存数量，没有可伪造回填的条目 ID。'}</small><Space wrap>{item.retrieval_evidence?.map(evidence=><Link key={`${evidence.layer}-${evidence.rank}`} to={evidencePath(evidence.layer,evidence.item_id)}>{evidence.layer.toUpperCase()} #{evidence.rank}</Link>)}</Space></div>}</div>}/>
       </List.Item>}/>
       <div className="pagination"><Button disabled={busy||page.offset===0} onClick={()=>void load(filter,Math.max(0,page.offset-page.limit))}>上一页</Button><span>{page.total?`${page.offset+1}–${Math.min(page.offset+page.limit,page.total)} / ${page.total}`:'0 条'}</span><Button disabled={busy||page.offset+page.limit>=page.total} onClick={()=>void load(filter,page.offset+page.limit)}>下一页</Button></div>
     </Card>

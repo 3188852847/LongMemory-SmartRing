@@ -27,13 +27,16 @@ describe('记忆质量样本工作台',()=>{
     const response:MemoryFeedbackIndex={
       kind:'issues',offset:0,limit:25,total:1,
       counts:{memory_ok:0,recall_miss:0,wrong_memory:1,memory_irrelevant:0},
-      items:[{source:'round_screen',chat_id:null,chat_title:'圆屏语音',request_id:'l0-user',feedback_message_id:'l0-feedback',assistant_message_id:'l0-assistant',kind:'wrong_memory',revision:1,occurred_at:'2026-09-10T01:00:00Z',retrieved_counts:{l1:1,l2:0,l3:0},diagnostic_focus:'memory_content_freshness_subject_or_ranking'}],
+      items:[{source:'round_screen',chat_id:null,chat_title:'圆屏语音',request_id:'l0-user',feedback_message_id:'l0-feedback',assistant_message_id:'l0-assistant',kind:'wrong_memory',revision:1,occurred_at:'2026-09-10T01:00:00Z',retrieved_counts:{l1:1,l2:0,l3:0},retrieval_evidence_recorded:true,retrieval_evidence:[{layer:'l1',item_id:'memory-a',rank:1,content_sha256:'a'.repeat(64)}],diagnostic_focus:'memory_content_freshness_subject_or_ranking'}],
     };
     vi.spyOn(ChatApi.prototype,'bootstrap').mockResolvedValue(undefined);
     vi.spyOn(ChatApi.prototype,'request').mockResolvedValue(response as never);
     render(<MemoryRouter><MemoryQualityApp/></MemoryRouter>);
     expect((await screen.findAllByText('圆屏语音')).length).toBe(2);
     expect(screen.getByText('圆屏语音',{selector:'.ant-tag'})).toBeTruthy();
-    expect(screen.getByRole('link',{name:'核对圆屏 L0 证据'}).getAttribute('href')).toBe('/memories?l0_message_id=l0-user');
+    expect(screen.getByRole('link',{name:'问题 L0'}).getAttribute('href')).toBe('/memories?l0_message_id=l0-user');
+    expect(screen.getByRole('link',{name:'回答 L0'}).getAttribute('href')).toBe('/memories?l0_message_id=l0-assistant');
+    expect(screen.getByRole('link',{name:'反馈 L0'}).getAttribute('href')).toBe('/memories?l0_message_id=l0-feedback');
+    expect(screen.getByRole('link',{name:'L1 #1'}).getAttribute('href')).toBe('/memories?memory_id=memory-a');
   });
 });

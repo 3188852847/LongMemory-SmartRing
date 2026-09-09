@@ -106,11 +106,33 @@ class SQLiteRoundScreenMemoryFeedbackStore:
             rows = connection.execute(
                 "SELECT f.target_user_message_id,f.feedback_message_id,f.event_kind,"
                 "f.occurred_at,t.assistant_message_id,t.retrieved_l1_count,"
-                "t.retrieved_l2_count,t.retrieved_l3_count "
+                "t.retrieved_l2_count,t.retrieved_l3_count,"
+                "EXISTS(SELECT 1 FROM round_screen_retrieval_receipts r "
+                "WHERE r.user_message_id=t.user_message_id) "
+                "AS retrieval_evidence_recorded "
                 "FROM round_screen_memory_feedback_events f "
                 "JOIN round_screen_turns t ON t.user_message_id=f.target_user_message_id "
                 "ORDER BY f.occurred_at DESC,f.id DESC"
             ).fetchall()
-            return tuple(dict(row) for row in rows)
+            evidence_rows = connection.execute(
+                "SELECT e.user_message_id,e.layer,e.item_id,e.rank,e.content_sha256 "
+                "FROM round_screen_retrieval_evidence e JOIN "
+                "round_screen_memory_feedback_events f "
+                "ON f.target_user_message_id=e.user_message_id "
+                "ORDER BY e.user_message_id,e.layer,e.rank"
+            ).fetchall()
+            evidence_by_turn: dict[str, list[dict]] = {}
+            for evidence in evidence_rows:
+                item = dict(evidence)
+                turn_id = item.pop("user_message_id")
+                evidence_by_turn.setdefault(turn_id, []).append(item)
+            result = []
+            for row in rows:
+                item = dict(row)
+                item["retrieval_evidence"] = evidence_by_turn.get(
+                    item["target_user_message_id"], [],
+                )
+                result.append(item)
+            return tuple(result)
         finally:
             connection.close()

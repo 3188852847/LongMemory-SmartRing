@@ -22,6 +22,8 @@ DEFAULT_FFMPEG = Path(
     r"\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\ffmpeg-8.1.2-full_build\bin"
 )
 LEGACY_MEMORY_PROVIDER_SHA256 = {
+    # G2 只保存三层召回数量、尚未保存条目索引的已发布回执版。
+    "4a61e6b6bbab081304582b10516e3213d569535ce094e35996b6d4789ef0469a",
     # G2 圆屏回答完成回执前的已发布计时版提供器。
     "28969e5bee2c97cbe5c3798ebb80fe5075f6b218e0b1f2fec03e60a2d8ad1357",
     # P5/U8 延迟分段计时前的已发布共享 Runtime 提供器。

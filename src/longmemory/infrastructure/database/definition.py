@@ -1,6 +1,6 @@
-"""当前 SQLite V31 的完整结构定义；不包含历史迁移步骤。"""
+"""当前 SQLite V32 的完整结构定义；不包含历史迁移步骤。"""
 
-SCHEMA_VERSION = 31
+SCHEMA_VERSION = 32
 
 LATEST_SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS conversation_messages (
@@ -68,6 +68,29 @@ CREATE TABLE IF NOT EXISTS round_screen_turns (
 );
 CREATE INDEX IF NOT EXISTS idx_round_screen_turns_completed
     ON round_screen_turns (completed_at DESC, user_message_id DESC);
+
+CREATE TABLE IF NOT EXISTS round_screen_retrieval_receipts (
+    user_message_id TEXT PRIMARY KEY,
+    FOREIGN KEY (user_message_id) REFERENCES round_screen_turns (user_message_id)
+        ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS round_screen_retrieval_evidence (
+    user_message_id TEXT NOT NULL,
+    layer TEXT NOT NULL CHECK (layer IN ('l1', 'l2', 'l3')),
+    item_id TEXT NOT NULL CHECK (length(trim(item_id)) BETWEEN 1 AND 200),
+    rank INTEGER NOT NULL CHECK (rank >= 1),
+    content_sha256 TEXT NOT NULL CHECK (
+        length(content_sha256) = 64 AND content_sha256 = lower(content_sha256)
+        AND content_sha256 NOT GLOB '*[^0-9a-f]*'
+    ),
+    PRIMARY KEY (user_message_id, layer, rank),
+    UNIQUE (user_message_id, layer, item_id),
+    FOREIGN KEY (user_message_id) REFERENCES round_screen_turns (user_message_id)
+        ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_round_screen_retrieval_item
+    ON round_screen_retrieval_evidence (layer, item_id);
 
 CREATE TABLE IF NOT EXISTS round_screen_memory_feedback_events (
     id TEXT PRIMARY KEY,

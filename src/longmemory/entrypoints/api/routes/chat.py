@@ -324,6 +324,10 @@ def register_chat_routes(app, backend):
                 "revision": 1,
                 "occurred_at": event["occurred_at"],
                 "retrieved_counts": layer_counts,
+                "retrieval_evidence": event["retrieval_evidence"],
+                "retrieval_evidence_recorded": bool(
+                    event["retrieval_evidence_recorded"]
+                ),
                 "diagnostic_focus": focus,
             })
         rows.sort(key=lambda item: item["occurred_at"] or "", reverse=True)

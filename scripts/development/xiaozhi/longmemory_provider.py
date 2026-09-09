@@ -162,6 +162,40 @@ class MemoryProvider(MemoryProviderBase):
         persona_items = response.get("persona_retrieved", [])
         if not isinstance(scenario_items, list) or not isinstance(persona_items, list):
             raise RuntimeError("LongMemory 返回协议无效")
+        retrieval_evidence = response.get("retrieval_evidence")
+        if retrieval_evidence is not None:
+            if not isinstance(retrieval_evidence, list) or len(retrieval_evidence) > 300:
+                raise RuntimeError("LongMemory 返回协议无效")
+            layer_counts = {"l1": 0, "l2": 0, "l3": 0}
+            layer_ranks = {"l1": [], "l2": [], "l3": []}
+            seen = set()
+            for item in retrieval_evidence:
+                if (not isinstance(item, dict) or set(item) != {
+                        "layer", "item_id", "rank", "content_sha256"}):
+                    raise RuntimeError("LongMemory 返回协议无效")
+                layer = item["layer"]
+                item_id = item["item_id"]
+                rank = item["rank"]
+                digest = item["content_sha256"]
+                if (layer not in layer_counts or not isinstance(item_id, str)
+                        or not 1 <= len(item_id.strip()) <= 200
+                        or type(rank) is not int or rank < 1
+                        or not isinstance(digest, str)
+                        or re.fullmatch(r"[0-9a-f]{64}", digest) is None
+                        or (layer, item_id) in seen):
+                    raise RuntimeError("LongMemory 返回协议无效")
+                seen.add((layer, item_id))
+                layer_counts[layer] += 1
+                layer_ranks[layer].append(rank)
+            expected = {
+                "l1": response["retrieved"],
+                "l2": len(scenario_items),
+                "l3": len(persona_items),
+            }
+            if layer_counts != expected or any(
+                    sorted(layer_ranks[layer]) != list(range(1, expected[layer] + 1))
+                    for layer in expected):
+                raise RuntimeError("LongMemory 返回协议无效")
         # 顶层 chat 完成后由启动适配器取走一次。覆盖旧值表示旧回答没有得到
         # 完成回执；不能把后来的答案错误关联给旧 turn_id。
         with self._lock:
@@ -172,6 +206,7 @@ class MemoryProvider(MemoryProviderBase):
                     "l2": len(scenario_items),
                     "l3": len(persona_items),
                 },
+                "retrieval_evidence": retrieval_evidence,
             }
         if command_reply is not None:
             reply = html.escape(command_reply, quote=False)
@@ -215,12 +250,16 @@ class MemoryProvider(MemoryProviderBase):
                 or re.fullmatch(r"[0-9a-f]{64}", token) is None):
             raise RuntimeError("LongMemory Runtime 启动环境无效")
         target = parsed._replace(path="/api/internal/memory/complete").geturl()
-        body = json.dumps({
+        completion = {
             "version": 1,
             "turn_id": pending["turn_id"],
             "answer": answer,
             "retrieved_counts": pending["retrieved_counts"],
-        }).encode("utf-8")
+        }
+        # 字段缺省兼容更新期间的旧 Runtime；新 Runtime 会返回并持久化精确索引。
+        if pending.get("retrieval_evidence") is not None:
+            completion["retrieval_evidence"] = pending["retrieval_evidence"]
+        body = json.dumps(completion).encode("utf-8")
         request = urlrequest.Request(
             target, data=body, method="POST",
             headers={"Content-Type": "application/json", "Authorization": "Bearer " + token},

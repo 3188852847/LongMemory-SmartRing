@@ -73,7 +73,9 @@ class ChatBackend:
                     self._runtime = build_memory_runtime(self.database)
         return self._runtime
 
-    def complete_round_screen_turn(self, *, turn_id, answer, retrieved_counts):
+    def complete_round_screen_turn(
+        self, *, turn_id, answer, retrieved_counts, retrieval_evidence=None,
+    ):
         """归档小智实际生成的回答；关联表与助手 L0 在同一事务提交。"""
 
         return SQLiteRoundScreenTurnStore(self.database).record(
@@ -82,6 +84,7 @@ class ChatBackend:
             retrieved_l1_count=retrieved_counts["l1"],
             retrieved_l2_count=retrieved_counts["l2"],
             retrieved_l3_count=retrieved_counts["l3"],
+            retrieval_evidence=retrieval_evidence,
         )
 
     def prepare_round_screen_user(self, text):

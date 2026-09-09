@@ -644,6 +644,9 @@ def test_internal_runtime_requires_token_and_is_immediately_shared_with_web(tmp_
             assert written["memory_command"] is None
             assert written["command_reply"] is None
             assert written["round_screen_feedback"] is None
+            assert len(written["retrieval_evidence"]) == written["retrieved"]
+            assert written["retrieval_evidence"][0]["layer"] == "l1"
+            assert "content" not in written["retrieval_evidence"][0]
 
             completion_endpoint = base + "/api/internal/memory/complete"
             completion = {
@@ -651,6 +654,7 @@ def test_internal_runtime_requires_token_and_is_immediately_shared_with_web(tmp_
                 "turn_id": written["turn_id"],
                 "answer": "好的，我记得你养了一只猫。",
                 "retrieved_counts": {"l1": written["retrieved"], "l2": 0, "l3": 0},
+                "retrieval_evidence": written["retrieval_evidence"],
             }
             assert (await client.post(completion_endpoint, json=completion)).status == 401
             completed_response = await client.post(
@@ -720,6 +724,8 @@ def test_internal_runtime_requires_token_and_is_immediately_shared_with_web(tmp_
             )
             assert round_item["request_id"] == written["turn_id"]
             assert round_item["kind"] == "recall_miss"
+            assert round_item["retrieval_evidence"] == written["retrieval_evidence"]
+            assert round_item["retrieval_evidence_recorded"] is True
             assert "input" not in round_item and "answer" not in round_item
 
             corrected_response = await client.post(

@@ -78,7 +78,7 @@ export type MemoryFeedbackDiagnosticFocus = 'normal_control'|'negative_control'|
 export interface MemoryFeedbackIndex {
   kind:'issues'|'all'|MemoryFeedbackKind;counts:Record<MemoryFeedbackKind,number>;
   total:number;offset:number;limit:number;
-  items:Array<{source:'web_chat'|'round_screen';chat_id:string|null;chat_title:string;request_id:string;feedback_message_id?:string;assistant_message_id?:string;kind:MemoryFeedbackKind;revision:number;occurred_at:string;retrieved_counts:{l1:number;l2:number;l3:number};diagnostic_focus:MemoryFeedbackDiagnosticFocus}>;
+  items:Array<{source:'web_chat'|'round_screen';chat_id:string|null;chat_title:string;request_id:string;feedback_message_id?:string;assistant_message_id?:string;kind:MemoryFeedbackKind;revision:number;occurred_at:string;retrieved_counts:{l1:number;l2:number;l3:number};retrieval_evidence?:Array<{layer:'l1'|'l2'|'l3';item_id:string;rank:number;content_sha256:string}>;retrieval_evidence_recorded?:boolean;diagnostic_focus:MemoryFeedbackDiagnosticFocus}>;
 }
 export interface Snapshot {chat_id: string; title: string; pending: boolean; turns: Turn[]}
 export interface Summary {chat_id: string; title: string; turn_count: number}
