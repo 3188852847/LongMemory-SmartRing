@@ -1417,9 +1417,19 @@ class MemoryBackend:
                 (start.isoformat(), end.isoformat()),
             ).fetchall()
             activity_counts["deleted"] = deletion_total
+            message_rows = connection.execute(
+                "SELECT role,count(*) AS count FROM conversation_messages "
+                "WHERE created_at >= ? AND created_at < ? GROUP BY role",
+                (start.isoformat(), end.isoformat()),
+            ).fetchall()
+            message_counts = {"user": 0, "assistant": 0, "total": 0}
+            for row in message_rows:
+                message_counts[row["role"]] = row["count"]
+                message_counts["total"] += row["count"]
             return {"local_date":local_date,"utc_offset_minutes":utc_offset_minutes,
                     "items":summaries,"total":len(summaries),"limited":len(summaries)==100,
                     "activity_counts":activity_counts,
+                    "message_counts":message_counts,
                     "deletions":[dict(row) for row in deletion_rows],
                     "deletions_limited":deletion_total > len(deletion_rows)}
 

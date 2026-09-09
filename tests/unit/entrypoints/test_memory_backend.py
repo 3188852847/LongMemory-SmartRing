@@ -138,6 +138,7 @@ def test_daily_review_uses_explicit_local_day_window(recorded):
         "added": 1, "corrected": 0, "changed": 0, "deleted": 0,
     }
     assert result["deletions"] == [] and result["deletions_limited"] is False
+    assert result["message_counts"] == {"user": 1, "assistant": 1, "total": 2}
     with pytest.raises(MemoryAccessError, match="invalid_daily_review_window"):
         backend.daily_review(local_date="not-a-date", utc_offset_minutes=0)
 
@@ -164,6 +165,7 @@ def test_daily_review_distinguishes_add_correction_and_fact_change(recorded):
     assert {item["activity"] for item in result["items"]} == {
         "added", "corrected", "changed",
     }
+    assert result["message_counts"] == {"user": 3, "assistant": 1, "total": 4}
 
 
 def test_delete_preserves_l0_and_clears_incoming_supersede_link(recorded):

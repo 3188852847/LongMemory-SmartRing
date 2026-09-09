@@ -19,7 +19,7 @@ type Page<T> = {items: T[]; total: number; limit: number; offset: number};
 type DailyActivity = 'added'|'corrected'|'changed';
 type DailyReviewItem = L1Summary & {activity:DailyActivity};
 type DailyDeletion = {id:string;memory_id:string;subject_id:string;deleted_at:string};
-type DailyReview = {local_date:string;utc_offset_minutes:number;items:DailyReviewItem[];total:number;limited:boolean;activity_counts:Record<DailyActivity|'deleted',number>;deletions:DailyDeletion[];deletions_limited:boolean};
+type DailyReview = {local_date:string;utc_offset_minutes:number;items:DailyReviewItem[];total:number;limited:boolean;activity_counts:Record<DailyActivity|'deleted',number>;message_counts:{user:number;assistant:number;total:number};deletions:DailyDeletion[];deletions_limited:boolean};
 
 const api = new ChatApi();
 const displayTime = (value?: string | null) => value ? new Date(value).toLocaleString('zh-CN') : '未记录';
@@ -213,6 +213,7 @@ export function MemoryApp() {
         <p className="subtle">这里按你的本地自然日显示当天形成的 L1，包括后来被纠正或取代的记录；它不是“当前有效记忆”总表，也不会触发模型整理。</p>
         {dailyNotice&&<p role="status" className="subtle">{dailyNotice}</p>}
         {daily&&<>
+        <p className="subtle">当天归档 L0：用户 {daily.message_counts.user} 条，助手 {daily.message_counts.assistant} 条。这里只是原始记录计数，不代表会话轮数或内容总结。</p>
         <Space wrap><Tag>新增 {daily.activity_counts.added}</Tag><Tag color="gold">纠正 {daily.activity_counts.corrected}</Tag><Tag color="blue">事实变化 {daily.activity_counts.changed}</Tag><Tag color="red">删除 {daily.activity_counts.deleted}</Tag></Space>
         {daily.items.length?<List size="small" dataSource={daily.items.slice(0,5)} renderItem={item=><List.Item actions={[<Button type="link" key="review" onClick={()=>void openL1(item.id)}>核对来源</Button>]}>
           <List.Item.Meta title={item.content} description={<Space wrap><Tag color={item.activity==='corrected'?'gold':item.activity==='changed'?'blue':'default'}>{item.activity==='corrected'?'纠正':item.activity==='changed'?'事实变化':'新增'}</Tag><Tag color={item.state==='active'?'green':'default'}>{item.state==='active'?'当前':'已退役'}</Tag><span>{displayTime(item.recorded_at)}</span>{item.state==='active'&&config?.allow_correction&&<Button type="link" size="small" onClick={event=>{event.stopPropagation();void openCorrection(item.id);}}>直接纠正</Button>}</Space>}/>
