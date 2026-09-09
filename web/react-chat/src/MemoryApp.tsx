@@ -20,7 +20,7 @@ type Page<T> = {items: T[]; total: number; limit: number; offset: number};
 type DailyActivity = 'added'|'corrected'|'changed';
 type DailyReviewItem = L1Summary & {activity:DailyActivity};
 type DailyDeletion = {id:string;memory_id:string;subject_id:string;deleted_at:string};
-type DailyReview = {local_date:string;utc_offset_minutes:number;items:DailyReviewItem[];total:number;limited:boolean;activity_counts:Record<DailyActivity|'deleted',number>;message_counts:{user:number;assistant:number;total:number};deletions:DailyDeletion[];deletions_limited:boolean};
+type DailyReview = {local_date:string;utc_offset_minutes:number;items:DailyReviewItem[];total:number;limited:boolean;activity_counts:Record<DailyActivity|'deleted',number>;message_counts:{user:number;assistant:number;total:number;unlinked_user:number};deletions:DailyDeletion[];deletions_limited:boolean};
 
 const api = new ChatApi();
 const displayTime = (value?: string | null) => value ? new Date(value).toLocaleString('zh-CN') : '未记录';
@@ -42,6 +42,7 @@ export function MemoryApp() {
   const [l1State, setL1State] = useState('active');
   const [role, setRole] = useState('all');
   const [linkState, setLinkState] = useState('all');
+  const [l0Date, setL0Date] = useState('');
   const [selectedL1, setSelectedL1] = useState<L1Detail>();
   const [selectedL0, setSelectedL0] = useState<L0Detail>();
   const [busy, setBusy] = useState(true);
@@ -60,8 +61,12 @@ export function MemoryApp() {
     const data = await api.request<Page<L1Summary>>(`/api/memories?${params}`);
     setL1(data); setSelectedL1(undefined);
   }
-  async function fetchL0(offset = 0, search = query, roleFilter = role, linkFilter = linkState) {
+  async function fetchL0(offset = 0, search = query, roleFilter = role, linkFilter = linkState, dateFilter = l0Date) {
     const params = new URLSearchParams({q: search, role: roleFilter, link_state: linkFilter, offset: String(offset), limit: '25'});
+    if(dateFilter) {
+      params.set('local_date',dateFilter);
+      params.set('utc_offset_minutes',String(-new Date().getTimezoneOffset()));
+    }
     const data = await api.request<Page<L0Summary>>(`/api/source-messages?${params}`);
     setL0(data); setSelectedL0(undefined);
   }
@@ -149,10 +154,17 @@ export function MemoryApp() {
     await guarded(async () => {setSelectedL0(await api.request<L0Detail>(`/api/source-messages/${encodeURIComponent(id)}`));});
   }
   function switchTab(key: string) {
-    const next = key as 'l1' | 'l0'; setTab(next); setQuery(''); setSelectedL1(undefined); setSelectedL0(undefined);
+    const next = key as 'l1' | 'l0'; setTab(next); setQuery(''); setL0Date(''); setSelectedL1(undefined); setSelectedL0(undefined);
     void guarded(async () => {
       if (next === 'l1') await fetchL1(0, ''); else await fetchL0(0, '');
       setNotice(next === 'l1' ? '这里显示系统派生的 L1 原子记忆。' : '这里显示完整 L0 原始记录，包括没有形成 L1 的话语。');
+    });
+  }
+  async function inspectDailyUnlinked() {
+    setTab('l0'); setQuery(''); setRole('user'); setLinkState('unlinked'); setL0Date(reviewDate);
+    await guarded(async()=>{
+      await fetchL0(0,'','user','unlinked',reviewDate);
+      setNotice(`${reviewDate} 的未关联用户原话已加载；未形成 L1 不等于一定漏记，请逐条核对。`);
     });
   }
   async function saveMode() {
@@ -214,7 +226,8 @@ export function MemoryApp() {
         <p className="subtle">这里按你的本地自然日显示当天形成的 L1，包括后来被纠正或取代的记录；它不是“当前有效记忆”总表，也不会触发模型整理。</p>
         {dailyNotice&&<p role="status" className="subtle">{dailyNotice}</p>}
         {daily&&<>
-        <p className="subtle">当天归档 L0：用户 {daily.message_counts.user} 条，助手 {daily.message_counts.assistant} 条。这里只是原始记录计数，不代表会话轮数或内容总结。</p>
+        <p className="subtle">当天归档 L0：用户 {daily.message_counts.user} 条，助手 {daily.message_counts.assistant} 条；其中 {daily.message_counts.unlinked_user} 条用户原话没有形成 L1。这里只是原始记录计数，不代表会话轮数、内容总结或漏记结论。</p>
+        {daily.message_counts.unlinked_user>0&&<Button size="small" onClick={()=>void inspectDailyUnlinked()}>核对当天未形成 L1 的原话</Button>}
         <Space wrap><Tag>新增 {daily.activity_counts.added}</Tag><Tag color="gold">纠正 {daily.activity_counts.corrected}</Tag><Tag color="blue">事实变化 {daily.activity_counts.changed}</Tag><Tag color="red">删除 {daily.activity_counts.deleted}</Tag></Space>
         {daily.items.length?<List size="small" dataSource={daily.items.slice(0,5)} renderItem={item=><List.Item actions={[<Button type="link" key="review" onClick={()=>void openL1(item.id)}>核对来源</Button>]}>
           <List.Item.Meta title={item.content} description={<Space wrap><Tag color={item.activity==='corrected'?'gold':item.activity==='changed'?'blue':'default'}>{item.activity==='corrected'?'纠正':item.activity==='changed'?'事实变化':'新增'}</Tag><Tag color={item.state==='active'?'green':'default'}>{item.state==='active'?'当前':'已退役'}</Tag><span>{displayTime(item.recorded_at)}</span>{item.state==='active'&&config?.allow_correction&&<Button type="link" size="small" onClick={event=>{event.stopPropagation();void openCorrection(item.id);}}>直接纠正</Button>}</Space>}/>
@@ -235,7 +248,8 @@ export function MemoryApp() {
       <div className="memory-toolbar"><Input.Search aria-label="搜索当前层级" value={query} maxLength={200} allowClear disabled={busy || !config?.configured} placeholder={tab === 'l1' ? '搜索原子事实' : '搜索原始对话'} onChange={e => setQuery(e.target.value)} onSearch={value => void refresh(0, value.trim())}/>
         {tab === 'l1' ? <Select aria-label="L1 状态" value={l1State} disabled={busy || !config?.configured} onChange={value => {setL1State(value); void guarded(async () => {await fetchL1(0, query, value); setNotice('L1 状态筛选已应用。');});}} options={[{value:'active',label:'当前记忆'},{value:'retired',label:'已退役'},{value:'all',label:'全部 L1'}]}/>
           : <><Select aria-label="L0 角色" value={role} disabled={busy || !config?.configured} onChange={value => {setRole(value); void guarded(async () => {await fetchL0(0, query, value, linkState); setNotice('L0 角色筛选已应用。');});}} options={[{value:'all',label:'全部角色'},{value:'user',label:'用户原话'},{value:'assistant',label:'助手原话'}]}/>
-            <Select aria-label="L1 关联" value={linkState} disabled={busy || !config?.configured} onChange={value => {setLinkState(value); void guarded(async () => {await fetchL0(0, query, role, value); setNotice('L0 关联筛选已应用。');});}} options={[{value:'all',label:'全部关联状态'},{value:'linked',label:'已形成 L1'},{value:'unlinked',label:'未形成 L1'}]}/></>}
+            <Select aria-label="L1 关联" value={linkState} disabled={busy || !config?.configured} onChange={value => {setLinkState(value); void guarded(async () => {await fetchL0(0, query, role, value); setNotice('L0 关联筛选已应用。');});}} options={[{value:'all',label:'全部关联状态'},{value:'linked',label:'已形成 L1'},{value:'unlinked',label:'未形成 L1'}]}/>
+            <Input aria-label="L0 日期" type="date" value={l0Date} disabled={busy || !config?.configured} onChange={event=>{const value=event.target.value;setL0Date(value);void guarded(async()=>{await fetchL0(0,query,role,linkState,value);setNotice(value?`${value} 的 L0 已加载。`:'已恢复全部日期的 L0。');});}}/></>}
       </div>
       {tab === 'l1' ? <List loading={busy} dataSource={l1.items} locale={{emptyText: <Empty description="没有符合条件的 L1"/>}} renderItem={item => <List.Item className="memory-item" onClick={() => void openL1(item.id)} actions={[<Button key="open" type="link">查看来源</Button>]}>
         <List.Item.Meta title={<span className="memory-title"><Tag color="magenta">L1</Tag><span>{item.content}{item.truncated ? '…' : ''}</span></span>} description={<span className="memory-meta"><Tag color={item.state === 'active' ? 'green' : 'default'}>{item.state === 'active' ? '当前' : '已退役'}</Tag><span>{displayTime(item.recorded_at)}</span><code>{item.id}</code></span>}/></List.Item>}/>

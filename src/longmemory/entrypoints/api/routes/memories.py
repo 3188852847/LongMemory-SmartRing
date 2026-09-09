@@ -34,22 +34,29 @@ def register_memory_routes(app, backend):
 
     async def source_listing(request):
         values = request.query
-        if (set(values) - {"q", "role", "link_state", "offset", "limit"}
+        if (set(values) - {"q", "role", "link_state", "offset", "limit", "local_date", "utc_offset_minutes"}
                 or any(len(values.getall(key)) != 1 for key in values)):
             raise web.HTTPBadRequest()
         query = values.get("q", "").strip()
         role, link_state = values.get("role", "all"), values.get("link_state", "all")
         try:
             offset, limit = int(values.get("offset", "0")), int(values.get("limit", "25"))
+            utc_offset = int(values["utc_offset_minutes"]) if "utc_offset_minutes" in values else None
         except ValueError:
             raise web.HTTPBadRequest() from None
+        local_date = values.get("local_date")
+        has_day = local_date is not None or utc_offset is not None
         if (len(query) > 200 or role not in {"all", "user", "assistant"}
                 or link_state not in {"all", "linked", "unlinked"}
+                or (has_day and (local_date is None or utc_offset is None))
+                or (local_date is not None and not re.fullmatch(r"\d{4}-\d{2}-\d{2}", local_date))
+                or (utc_offset is not None and not -840 <= utc_offset <= 840)
                 or not 0 <= offset <= 100000 or not 1 <= limit <= 100):
             raise web.HTTPBadRequest()
         return await invoke(
             backend.list_sources,
             query=query, role=role, link_state=link_state, offset=offset, limit=limit,
+            local_date=local_date, utc_offset_minutes=utc_offset,
         )
 
     async def daily_review(request):

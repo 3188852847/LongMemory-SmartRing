@@ -1372,15 +1372,20 @@ class MemoryBackend:
                 summaries.append(row)
             return {"items": summaries, "total": total, "limit": limit, "offset": offset}
 
-    def daily_review(self, *, local_date, utc_offset_minutes):
-        """返回某个本地自然日写入的 L1；读取不触发整理、提取或迁移。"""
+    @staticmethod
+    def _local_day_window(local_date, utc_offset_minutes):
+        """把浏览器自然日转换成半开 UTC 区间，供多个只读视图共用。"""
         try:
             day = datetime.strptime(local_date, "%Y-%m-%d").date()
             offset = timezone(timedelta(minutes=utc_offset_minutes))
             start = datetime.combine(day, datetime.min.time(), tzinfo=offset).astimezone(UTC)
         except (TypeError, ValueError, OverflowError):
             raise MemoryAccessError("invalid_daily_review_window", 400) from None
-        end = start + timedelta(days=1)
+        return start, start + timedelta(days=1)
+
+    def daily_review(self, *, local_date, utc_offset_minutes):
+        """返回某个本地自然日写入的 L1；读取不触发整理、提取或迁移。"""
+        start, end = self._local_day_window(local_date, utc_offset_minutes)
         with self._open() as connection:
             store = SQLiteMemoryStore(connection)
             items = store.list_recorded_between(start, end)
@@ -1422,10 +1427,16 @@ class MemoryBackend:
                 "WHERE created_at >= ? AND created_at < ? GROUP BY role",
                 (start.isoformat(), end.isoformat()),
             ).fetchall()
-            message_counts = {"user": 0, "assistant": 0, "total": 0}
+            message_counts = {"user": 0, "assistant": 0, "total": 0, "unlinked_user": 0}
             for row in message_rows:
                 message_counts[row["role"]] = row["count"]
                 message_counts["total"] += row["count"]
+            message_counts["unlinked_user"] = connection.execute(
+                "SELECT count(*) FROM conversation_messages m "
+                "WHERE m.role='user' AND m.created_at >= ? AND m.created_at < ? "
+                "AND NOT EXISTS (SELECT 1 FROM memory_evidence e WHERE e.source_message_id=m.id)",
+                (start.isoformat(), end.isoformat()),
+            ).fetchone()[0]
             return {"local_date":local_date,"utc_offset_minutes":utc_offset_minutes,
                     "items":summaries,"total":len(summaries),"limited":len(summaries)==100,
                     "activity_counts":activity_counts,
@@ -1489,9 +1500,16 @@ class MemoryBackend:
             },
         }
 
-    def list_sources(self, *, query="", role="all", link_state="all", limit=25, offset=0):
+    def list_sources(self, *, query="", role="all", link_state="all", limit=25, offset=0,
+                     local_date=None, utc_offset_minutes=None):
         """分页读取 L0，并明确它是否已经成为任意 L1 的证据。"""
 
+        if (local_date is None) != (utc_offset_minutes is None):
+            raise MemoryAccessError("invalid_daily_review_window", 400)
+        day_window = (
+            self._local_day_window(local_date, utc_offset_minutes)
+            if local_date is not None else None
+        )
         with self._open() as connection:
             clauses, parameters = [], []
             if query:
@@ -1505,6 +1523,10 @@ class MemoryBackend:
                 clauses.append(linked)
             elif link_state == "unlinked":
                 clauses.append("NOT " + linked)
+            if day_window is not None:
+                start, end = day_window
+                clauses.extend(("m.created_at >= ?", "m.created_at < ?"))
+                parameters.extend((start.isoformat(), end.isoformat()))
             where = " WHERE " + " AND ".join(clauses) if clauses else ""
             total = connection.execute(
                 "SELECT count(*) FROM conversation_messages m" + where,

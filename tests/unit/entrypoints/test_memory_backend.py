@@ -61,6 +61,15 @@ def test_l0_browse_distinguishes_linked_and_unlinked_sources(recorded):
     assert "assistant-source" in {item["id"] for item in assistant_items}
     assert all(item["role"] == "assistant" for item in assistant_items)
     assert backend.list_sources(query="只在原始")["items"][0]["id"] == "unlinked-user"
+    dated = backend.list_sources(
+        role="user", link_state="unlinked", local_date="2026-09-06", utc_offset_minutes=0,
+    )
+    assert [item["id"] for item in dated["items"]] == ["unlinked-user"]
+    assert backend.list_sources(
+        role="user", link_state="unlinked", local_date="2026-09-07", utc_offset_minutes=0,
+    )["total"] == 0
+    with pytest.raises(MemoryAccessError, match="invalid_daily_review_window"):
+        backend.list_sources(local_date="2026-09-06")
     linked_detail = backend.get_source(source_id)
     assert linked_detail["content"] == "我养了一只叫豆包的猫。"
     assert linked_detail["derived_memories"][0]["id"] == memory_id
@@ -138,7 +147,7 @@ def test_daily_review_uses_explicit_local_day_window(recorded):
         "added": 1, "corrected": 0, "changed": 0, "deleted": 0,
     }
     assert result["deletions"] == [] and result["deletions_limited"] is False
-    assert result["message_counts"] == {"user": 1, "assistant": 1, "total": 2}
+    assert result["message_counts"] == {"user": 1, "assistant": 1, "total": 2, "unlinked_user": 0}
     with pytest.raises(MemoryAccessError, match="invalid_daily_review_window"):
         backend.daily_review(local_date="not-a-date", utc_offset_minutes=0)
 
@@ -165,7 +174,7 @@ def test_daily_review_distinguishes_add_correction_and_fact_change(recorded):
     assert {item["activity"] for item in result["items"]} == {
         "added", "corrected", "changed",
     }
-    assert result["message_counts"] == {"user": 3, "assistant": 1, "total": 4}
+    assert result["message_counts"] == {"user": 3, "assistant": 1, "total": 4, "unlinked_user": 0}
 
 
 def test_delete_preserves_l0_and_clears_incoming_supersede_link(recorded):

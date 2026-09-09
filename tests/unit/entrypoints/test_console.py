@@ -436,6 +436,10 @@ def test_memory_http_browse_sources_confirmed_delete_and_persistence(tmp_path):
             source_id = details["sources"][0]["source_message_id"]
             l0 = await (await client.get(base + "/api/source-messages?link_state=linked")).json()
             assert l0["total"] >= 1 and any(item["id"] == source_id for item in l0["items"])
+            dated_l0 = await (await client.get(
+                base + f"/api/source-messages?role=user&local_date={day}&utc_offset_minutes=0"
+            )).json()
+            assert any(item["id"] == source_id for item in dated_l0["items"])
             l0_detail = await (await client.get(base + "/api/source-messages/" + source_id)).json()
             assert l0_detail["derived_memories"][0]["id"] == memory_id
             body = {"revision": details["revision"], "confirm_delete": True}
@@ -543,7 +547,10 @@ def test_memory_query_validation(query):
 
 @pytest.mark.parametrize("query", [
     "limit=0", "limit=101", "offset=-1", "role=system", "link_state=unknown",
-    "role=user&role=assistant", "q=" + "x" * 201,
+    "role=user&role=assistant", "q=" + "x" * 201, "local_date=2026-09-09",
+    "utc_offset_minutes=480", "local_date=bad&utc_offset_minutes=480",
+    "local_date=2026-99-99&utc_offset_minutes=480",
+    "local_date=2026-09-09&utc_offset_minutes=9999",
 ])
 def test_source_message_query_validation(query):
     async def run():
