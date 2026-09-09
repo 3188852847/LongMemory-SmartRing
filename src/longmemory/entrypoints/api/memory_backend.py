@@ -95,7 +95,7 @@ from longmemory.application.persona_management.service import PersonaManagementS
 from longmemory.application.persona_management.proposal_service import PersonaProposalService
 from longmemory.application.persona_management.consolidation_service import PersonaConsolidationService
 from longmemory.application.persona_management.profile import build_persona_profile
-from longmemory.core.common.identifiers import MemoryId, PersonaId, ScenarioId
+from longmemory.core.common.identifiers import MemoryId, MessageId, PersonaId, ScenarioId
 from longmemory.core.memory.l1_atomic.models import CURRENT_USER_SUBJECT_ID
 from longmemory.core.memory.l2_scenario.models import ScenarioReviewDecision
 from longmemory.core.memory.l2_scenario.proposals import (
@@ -185,6 +185,7 @@ class MemoryBackend:
                 # 当前两个操作共用同一个显式启动权限，但对前端公开独立能力名，
                 # 以后拆分权限时不需要再改变页面语义。
                 "allow_change": self.allow_correction and self.database is not None,
+                "allow_promote_source": self.allow_correction and self.database is not None,
                 "allow_scenario_management": (
                     self.allow_scenario_management and self.database is not None
                 ),
@@ -1559,35 +1560,69 @@ class MemoryBackend:
         """读取一条 L0 原文及其派生 L1；未关联也必须作为真实状态返回。"""
 
         with self._open() as connection:
-            source = connection.execute(
-                "SELECT id, role, content, created_at FROM conversation_messages WHERE id = ?",
-                (source_id,),
-            ).fetchone()
-            if source is None:
-                raise MemoryAccessError("source_message_not_found", 404)
-            rows = connection.execute(
-                """
-                SELECT a.*, e.source_type, e.linked_at
-                FROM memory_evidence e
-                JOIN atomic_memories a ON a.id = e.memory_id
-                WHERE e.source_message_id = ?
-                ORDER BY e.linked_at DESC, a.id DESC
-                """,
-                (source_id,),
-            ).fetchall()
-            derived = []
-            for row in rows:
-                item = {
-                    "id": row["id"], "subject_id": row["subject_id"], "content": row["content"],
-                    **{key: row[key] for key in ("recorded_at", "valid_from", "valid_to", "retired_at")},
-                    "superseded_by_id": row["superseded_by_id"],
-                    "state": "retired" if row["retired_at"] else "active",
-                }
-                item.update(source_type=row["source_type"], linked_at=row["linked_at"])
-                derived.append(item)
+            return self._source_json(connection, source_id)
+
+    @staticmethod
+    def _source_json(connection, source_id):
+        source = connection.execute(
+            "SELECT id, role, content, created_at FROM conversation_messages WHERE id = ?",
+            (source_id,),
+        ).fetchone()
+        if source is None:
+            raise MemoryAccessError("source_message_not_found", 404)
+        rows = connection.execute(
+            """
+            SELECT a.*, e.source_type, e.linked_at
+            FROM memory_evidence e
+            JOIN atomic_memories a ON a.id = e.memory_id
+            WHERE e.source_message_id = ?
+            ORDER BY e.linked_at DESC, a.id DESC
+            """,
+            (source_id,),
+        ).fetchall()
+        derived = []
+        for row in rows:
+            item = {
+                "id": row["id"], "subject_id": row["subject_id"], "content": row["content"],
+                **{key: row[key] for key in ("recorded_at", "valid_from", "valid_to", "retired_at")},
+                "superseded_by_id": row["superseded_by_id"],
+                "state": "retired" if row["retired_at"] else "active",
+            }
+            item.update(source_type=row["source_type"], linked_at=row["linked_at"])
+            derived.append(item)
+        data = {
+            "id": source["id"], "role": source["role"], "content": source["content"],
+            "created_at": source["created_at"], "derived_memories": derived,
+        }
+        return {**data, "revision": revision(data)}
+
+    def promote_source(self, source_id, content, expected_revision):
+        """把已核对的用户 L0 补成 L1；同内容当前事实只增加证据。"""
+
+        with self._open(write_capability="correction") as connection:
+            current = self._source_json(connection, source_id)
+            if not secrets.compare_digest(current["revision"], expected_revision):
+                raise MemoryAccessError("source_message_changed")
+            try:
+                result = self._service(
+                    connection, commit_changes=False,
+                ).promote_source_to_memory(MessageId(source_id), content)
+            except LookupError:
+                raise MemoryAccessError("source_message_not_found", 404) from None
+            except ValueError as error:
+                code = str(error)
+                status = 400 if code.startswith("promoted_content_") else 409
+                raise MemoryAccessError(code, status) from None
+            except RuntimeError as error:
+                if str(error) == "source_promotion_race":
+                    raise MemoryAccessError("source_message_changed") from None
+                raise
+            connection.commit()
             return {
-                "id": source["id"], "role": source["role"], "content": source["content"],
-                "created_at": source["created_at"], "derived_memories": derived,
+                "promoted": True,
+                "memory_id": str(result.memory.id),
+                "source_message_id": str(result.source_message.id),
+                "created_new_memory": result.created_new_memory,
             }
 
     def get(self, memory_id):

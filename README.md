@@ -46,7 +46,7 @@ P1 网页会话恢复已实现：列表、新建、切换、重命名，同一�
 
 P3 采用四层个人记忆：L0 原始证据、L1 原子记忆、L2 场景、L3 用户画像。P3.1–P3.9 已完成共享 Runtime、可选模型提取、混合召回、明确记住/跳过、纠正/变化/来源/双轮删除、L2/L3 候选与来源追溯、确定性低风险门控、受控回答使用和默认关闭的低频整理调度。L3 对用户呈现一份读取时聚合的统一画像，但底层保留可追溯原子断言。当前未完成任意语义冲突自动发现、L2/L3 语义召回、撤销、跨层重建和隐私级彻底删除；低频整理在个人库中保持默认关闭。见 [ADR-0026](docs/adr/0026-layered-memory-and-knowledge-plane.md)至 [ADR-0057](docs/adr/0057-single-owner-consolidation-scheduler.md)，以及 [ADR-0086](docs/adr/0086-explicit-l1-exclusion-command.md)、[ADR-0087](docs/adr/0087-explicit-l1-inclusion-command.md)。
 
-记忆页已有按本地自然日查看的 L1 回顾：可区分新增、纠正和事实变化，并从当前项直达来源或追加式纠正。SQLite V28 还会为未来真实发生的 L1 删除保存不含正文的最小审计事件；旧删除不回填，且这不等于清除 L0、聊天旁库或备份。见 [ADR-0094](docs/adr/0094-content-free-l1-deletion-audit.md)。
+记忆页已有按本地自然日查看的 L1 回顾：可区分新增、纠正和事实变化，并从当前项直达来源或追加式纠正。回顾还能核对当天未关联用户 L0；确认漏记时可显式填写完整事实补成 L1，复用原来源、不调用模型，也不会把所有未关联原话自动判为应记。SQLite V28 还会为未来真实发生的 L1 删除保存不含正文的最小审计事件；旧删除不回填，且这不等于清除 L0、聊天旁库或备份。见 [ADR-0094](docs/adr/0094-content-free-l1-deletion-audit.md)。
 
 L2 设计已接受：先生成可追溯、需复核的时间化场景候选，确认前不进入回答；稳定习惯仍属于 L3。个人库已在一致性备份和用户明确授权后迁移到 V6，原有 L0/L1/L2 数量不变，生命周期事件从空表开始。可按 [L2 生活场景合成测试指南](docs/guides/L2生活场景测试.md)体验，设计与边界见 [ADR-0035](docs/adr/0035-reviewable-l2-scenario-candidates.md)、[ADR-0038](docs/adr/0038-audited-l2-lifecycle.md)和 [L2 第一版验收](docs/requirements/l2-scenario-memory.md)。
 

@@ -228,6 +228,64 @@ def test_returns_none_when_memory_does_not_exist() -> None:
     assert result is None
 
 
+def test_promotes_existing_user_l0_without_copying_source() -> None:
+    source = make_source_message()
+    conversations = FakeConversationStore((source,))
+    memories = FakeMemoryStore()
+    result = MemoryManagementService(
+        memory_store=memories, conversation_store=conversations,
+    ).promote_source_to_memory(
+        source.id, "用户养了一只叫豆包的猫。", occurred_at=FIXED_TIME,
+    )
+
+    assert result.created_new_memory is True
+    assert result.source_message is source
+    assert conversations.messages == [source]
+    assert result.evidence.source_message_id == source.id
+    assert memories.list_evidence(result.memory.id) == (result.evidence,)
+
+
+def test_promoting_l0_adds_evidence_to_same_active_fact() -> None:
+    original = make_source_message()
+    additional = replace(original, id=MessageId("message-002"), content="我的猫叫豆包。")
+    memory = make_memory(original)
+    initial_evidence = make_evidence(memory, original)
+    memories = FakeMemoryStore((memory,), (initial_evidence,))
+    result = MemoryManagementService(
+        memory_store=memories,
+        conversation_store=FakeConversationStore((original, additional)),
+    ).promote_source_to_memory(
+        additional.id, memory.content, occurred_at=FIXED_TIME,
+    )
+
+    assert result.created_new_memory is False
+    assert result.memory == memory
+    assert len(memories.list_all()) == 1
+    assert {e.source_message_id for e in memories.list_evidence(memory.id)} == {
+        original.id, additional.id,
+    }
+
+
+def test_source_promotion_rejects_non_user_and_already_linked_l0() -> None:
+    source = make_source_message()
+    memory = make_memory(source)
+    evidence = make_evidence(memory, source)
+    service = MemoryManagementService(
+        memory_store=FakeMemoryStore((memory,), (evidence,)),
+        conversation_store=FakeConversationStore((source,)),
+    )
+    with pytest.raises(ValueError, match="source_already_linked"):
+        service.promote_source_to_memory(source.id, "用户养了一只叫豆包的猫。")
+
+    assistant = replace(source, id=MessageId("assistant-001"), role=MessageRole.ASSISTANT)
+    service = MemoryManagementService(
+        memory_store=FakeMemoryStore(),
+        conversation_store=FakeConversationStore((assistant,)),
+    )
+    with pytest.raises(ValueError, match="promoted_source_must_be_user"):
+        service.promote_source_to_memory(assistant.id, "助手说过一句话。")
+
+
 def test_deletes_l1_memory_but_preserves_l0_source() -> None:
     """删除错误记忆时不应连带删除原始消息。"""
 

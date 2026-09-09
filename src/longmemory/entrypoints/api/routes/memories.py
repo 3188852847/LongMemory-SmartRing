@@ -82,6 +82,27 @@ def register_memory_routes(app, backend):
             raise web.HTTPBadRequest()
         return await invoke(backend.get_source, source_id)
 
+    async def promote_source(request):
+        source_id = request.match_info["source_id"]
+        if (not source_id or len(source_id) > 128 or any(ord(c) < 32 for c in source_id)
+                or request.content_type != "application/json"):
+            raise web.HTTPBadRequest()
+        try:
+            body = await request.json()
+        except (ValueError, UnicodeError):
+            raise web.HTTPBadRequest() from None
+        if (not isinstance(body, dict)
+                or set(body) != {"content", "revision", "confirm_promote"}
+                or body["confirm_promote"] is not True
+                or not isinstance(body["content"], str)
+                or not body["content"].strip() or len(body["content"].strip()) > 1000
+                or not isinstance(body["revision"], str)
+                or not re.fullmatch(r"[0-9a-f]{64}", body["revision"])):
+            raise web.HTTPBadRequest()
+        return await invoke(
+            backend.promote_source, source_id, body["content"].strip(), body["revision"],
+        )
+
     async def detail(request):
         memory_id = request.match_info["memory_id"]
         if not memory_id or len(memory_id) > 128 or any(ord(c) < 32 for c in memory_id):
@@ -431,6 +452,7 @@ def register_memory_routes(app, backend):
     app.router.add_get("/api/memories/daily-review", daily_review, allow_head=False)
     app.router.add_get("/api/source-messages", source_listing, allow_head=False)
     app.router.add_get("/api/consolidation-status", consolidation_status, allow_head=False)
+    app.router.add_post("/api/source-messages/{source_id}/promote", promote_source)
     app.router.add_get("/api/source-messages/{source_id}", source_detail, allow_head=False)
     app.router.add_get("/api/memories/{memory_id}", detail, allow_head=False)
     app.router.add_delete("/api/memories/{memory_id}", detail)

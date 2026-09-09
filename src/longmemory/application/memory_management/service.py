@@ -8,12 +8,18 @@ from longmemory.application.memory_management.dto import (
     MemoryEvidenceDetails,
     MemoryChangeResult,
     MemoryCorrectionResult,
+    MemoryPromotionResult,
 )
 from longmemory.core.common.identifiers import MemoryId, MessageId
 from longmemory.core.conversation.contracts import ConversationStore
 from longmemory.core.memory.l1_atomic.contracts import MemoryStore
 from longmemory.core.conversation.models import ConversationMessage, MessageRole
-from longmemory.core.memory.l1_atomic.models import AtomicMemory, MemoryEvidence, MemorySourceType
+from longmemory.core.memory.l1_atomic.models import (
+    CURRENT_USER_SUBJECT_ID,
+    AtomicMemory,
+    MemoryEvidence,
+    MemorySourceType,
+)
 
 
 class MemoryManagementService:
@@ -57,6 +63,63 @@ class MemoryManagementService:
         """
 
         return self._memory_store.delete(memory_id)
+
+    def promote_source_to_memory(
+        self,
+        source_message_id: MessageId,
+        normalized_content: str,
+        *,
+        occurred_at: datetime | None = None,
+    ) -> MemoryPromotionResult:
+        """把用户确认的既有 L0 补成 L1，并保留原始来源身份。
+
+        这不是自动提取器：调用方必须让用户看到原话并显式给出完整 L1。
+        内容重复时只追加证据，避免用同一个事实制造多条当前记忆。
+        """
+
+        content = normalized_content.strip()
+        if not content:
+            raise ValueError("promoted_content_empty")
+        if len(content) > 1000:
+            raise ValueError("promoted_content_too_long")
+        source = self._conversation_store.get(source_message_id)
+        if source is None:
+            raise LookupError("source_message_not_found")
+        if source.role != MessageRole.USER:
+            raise ValueError("promoted_source_must_be_user")
+        if any(
+            evidence.source_message_id == source_message_id
+            for memory in self._memory_store.list_all()
+            for evidence in self._memory_store.list_evidence(memory.id)
+        ):
+            raise ValueError("source_already_linked")
+
+        now = occurred_at or datetime.now(UTC)
+        existing = self._memory_store.find_by_content(
+            content, subject_id=CURRENT_USER_SUBJECT_ID,
+        )
+        memory = existing or AtomicMemory(
+            id=MemoryId(str(uuid4())),
+            subject_id=CURRENT_USER_SUBJECT_ID,
+            content=content,
+            recorded_at=now,
+        )
+        evidence = MemoryEvidence(
+            memory_id=memory.id,
+            source_message_id=source.id,
+            source_type=MemorySourceType.USER_STATED,
+            linked_at=now,
+        )
+        if existing is None:
+            self._memory_store.save(memory, evidence)
+        elif not self._memory_store.add_evidence(evidence):
+            raise RuntimeError("source_promotion_race")
+        return MemoryPromotionResult(
+            memory=memory,
+            source_message=source,
+            evidence=evidence,
+            created_new_memory=existing is None,
+        )
 
     def correct_memory(
         self,

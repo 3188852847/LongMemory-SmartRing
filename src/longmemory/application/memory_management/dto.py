@@ -47,3 +47,13 @@ class MemoryChangeResult:
     source_message: ConversationMessage
     evidence: MemoryEvidence
     effective_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class MemoryPromotionResult:
+    """把既有 L0 显式补为 L1 后的结果，不复制原始消息。"""
+
+    memory: AtomicMemory
+    source_message: ConversationMessage
+    evidence: MemoryEvidence
+    created_new_memory: bool

@@ -9,6 +9,9 @@ describe('记忆管理安全错误说明', () => {
     ['memory_read_only', '删除权限'],
     ['memory_correction_disabled', '纠正与事实变化权限'],
     ['memory_not_found', 'L1 已不存在'],
+    ['source_message_changed', '重复补记'],
+    ['source_already_linked', '不需要再次补记'],
+    ['promoted_source_must_be_user', '用户事实'],
     ['memory_changed', '重新读取'],
     ['invalid_explicit_memory', '关于你自己的完整事实'],
   ])('%s 给出可行动提示', (code, expected) => {
@@ -17,6 +20,7 @@ describe('记忆管理安全错误说明', () => {
 
   test('内容和时间校验类别不会直接展示内部码', () => {
     expect(memoryFailure(new ApiError('corrected_content_same', 400))).toContain('完整且不同');
+    expect(memoryFailure(new ApiError('promoted_content_empty', 400))).toContain('补记内容无效');
     expect(memoryFailure(new ApiError('effective_at_invalid', 400))).toContain('生效时间无效');
   });
 

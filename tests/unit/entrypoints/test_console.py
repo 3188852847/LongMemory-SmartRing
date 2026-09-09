@@ -456,9 +456,43 @@ def test_memory_http_browse_sources_confirmed_delete_and_persistence(tmp_path):
     assert reopened.get_memory(result.saved_memories[0].id) is None
     assert reopened.chat("我的猫叫什么？").retrieved_memories == ()
     reopened.close()
-    import sqlite3
     with sqlite3.connect(database) as connection:
         assert connection.execute("SELECT content FROM conversation_messages WHERE id=?", (str(result.user_message.id),)).fetchone()[0] == "我养了一只叫豆包的猫。"
+
+
+def test_memory_http_promotes_existing_l0_with_csrf_and_explicit_confirmation(tmp_path):
+    from longmemory.bootstrap import build_application
+    database = tmp_path / "promote-source.db"
+    app = build_application(database_path=database)
+    app.close()
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            "INSERT INTO conversation_messages VALUES (?,?,?,?)",
+            ("missed-l0", "user", "我最近开始晨跑。", "2026-09-09T08:00:00+00:00"),
+        )
+
+    async def run():
+        async with console(database, allow_memory_correction=True) as (client, base, _bridge):
+            headers = await login(client, base)
+            detail = await (await client.get(base + "/api/source-messages/missed-l0")).json()
+            body = {"content": "用户最近开始每天晨跑。", "revision": detail["revision"],
+                    "confirm_promote": True}
+            assert (await client.post(
+                base + "/api/source-messages/missed-l0/promote", json=body,
+            )).status == 403
+            assert (await client.post(
+                base + "/api/source-messages/missed-l0/promote", headers=headers,
+                json={**body, "confirm_promote": False},
+            )).status == 400
+            response = await client.post(
+                base + "/api/source-messages/missed-l0/promote", headers=headers, json=body,
+            )
+            result = await response.json()
+            assert response.status == 200 and result["created_new_memory"] is True
+            source = await (await client.get(base + "/api/source-messages/missed-l0")).json()
+            assert source["derived_memories"][0]["content"] == "用户最近开始每天晨跑。"
+
+    asyncio.run(run())
 
 
 def test_memory_http_correction_requires_explicit_semantics_and_confirmation(tmp_path):
@@ -567,6 +601,7 @@ def test_memory_without_config_is_not_a_fake_empty_database():
             config = await (await client.get(base + "/api/memory-config")).json()
             assert config == {"configured": False, "database": None, "allow_delete": False,
                               "allow_correction": False, "allow_change": False,
+                              "allow_promote_source": False,
                               "allow_scenario_management": False,
                               "allow_persona_management": False,
                               "scenario_model_preview_available": False,

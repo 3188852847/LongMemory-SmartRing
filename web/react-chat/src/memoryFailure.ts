@@ -19,6 +19,9 @@ const memoryFailureText: Record<string, string> = {
   memory_correction_disabled: '当前服务未开放纠正与事实变化权限。请在启动面板中启用后重启。',
   memory_not_found: '这条 L1 已不存在，可能已在其他页面处理。请刷新列表。',
   source_message_not_found: '这条 L0 原始记录已不存在。请刷新列表。',
+  source_message_changed: '这条 L0 的关联状态已发生变化。为防止重复补记，本次操作已拒绝；请刷新后重新核对。',
+  source_already_linked: '这条 L0 已经形成或支持一条 L1，不需要再次补记。请刷新详情核对。',
+  promoted_source_must_be_user: '只有用户原话可以人工补成 L1；助手回答不能作为用户事实。',
   memory_changed: '这条记忆已在其他页面发生变化。为防止覆盖较新版本，本次操作已拒绝；请重新读取。',
   invalid_memory_request: '运行期记忆开关请求无效；没有应用任何设置。请刷新后重试。',
   chat_not_enabled: '共享记忆运行时尚未启动，当前不能修改运行期开关。',
@@ -34,6 +37,7 @@ export function memoryFailure(error: unknown, phase: MemoryFailurePhase = 'read'
     if (known) return known;
     if (error.code.startsWith('corrected_content_')) return '纠正后的事实内容无效，请填写一条完整且不同的新事实。';
     if (error.code.startsWith('changed_content_')) return '变化后的事实内容无效，请填写一条完整且不同的新事实。';
+    if (error.code.startsWith('promoted_content_')) return '补记内容无效，请填写一条可独立理解的完整事实。';
     if (error.code.startsWith('effective_at_') || error.code === 'occurred_at_timezone_required') {
       return '事实生效时间无效，请重新选择包含时区的有效时间。';
     }

@@ -13,7 +13,7 @@ describe('每日记忆回顾',()=>{
       recorded_at:'2026-09-09T08:00:00+00:00',subject_id:'user:self'};
     vi.spyOn(ChatApi.prototype,'bootstrap').mockResolvedValue(undefined);
     vi.spyOn(ChatApi.prototype,'request').mockImplementation(async path=>{
-      if(path==='/api/memory-config') return {configured:true,database:'synthetic.db',allow_delete:true,allow_correction:true,allow_change:true} as never;
+      if(path==='/api/memory-config') return {configured:true,database:'synthetic.db',allow_delete:true,allow_correction:true,allow_change:true,allow_promote_source:true} as never;
       if(path==='/api/memory-mode') return {write_enabled:true,use_enabled:true,scenario_use_enabled:false,scenario_available:true,persona_use_enabled:false,persona_available:true,persistent:false,l0_archived_when_write_disabled:true} as never;
       if(path==='/api/consolidation-status') return {background_enabled:false,stages:[]} as never;
       if(path.startsWith('/api/memories/daily-review')) return {local_date:'2026-09-09',utc_offset_minutes:480,items:[item],total:1,limited:false,activity_counts:{added:1,corrected:0,changed:0,deleted:1},message_counts:{user:3,assistant:3,total:6,unlinked_user:1},deletions:[{id:'deletion-1',memory_id:'deleted-memory-1',subject_id:'user:self',deleted_at:'2026-09-09T09:00:00+00:00'}],deletions_limited:false} as never;
@@ -43,5 +43,56 @@ describe('每日记忆回顾',()=>{
     fireEvent.click(correctionButton);
     expect(await screen.findByText('纠正 L1')).toBeTruthy();
     expect(screen.getByText(/新建 L1，并保留旧记录/)).toBeTruthy();
+  });
+
+  test('把未关联的用户 L0 补成 L1 并保留原来源', async () => {
+    const source = {
+      id: 'source-unlinked',
+      role: 'user' as const,
+      content: '我最近开始晨跑。',
+      truncated: false,
+      created_at: '2026-09-09T07:00:00+00:00',
+      linked_memory_count: 0,
+    };
+    const promoted = {
+      id: 'memory-promoted',
+      content: '用户最近开始每天晨跑。',
+      truncated: false,
+      state: 'active' as const,
+      recorded_at: '2026-09-09T08:00:00+00:00',
+      subject_id: 'user:self',
+    };
+    const calls: Array<{path: string; method: string; body: unknown}> = [];
+    vi.spyOn(ChatApi.prototype, 'bootstrap').mockResolvedValue(undefined);
+    vi.spyOn(ChatApi.prototype, 'request').mockImplementation(async (path, method = 'GET', body) => {
+      calls.push({path, method, body});
+      if (path === '/api/memory-config') return {configured: true, database: 'synthetic.db', allow_delete: true, allow_correction: true, allow_change: true, allow_promote_source: true} as never;
+      if (path === '/api/memory-mode') return {write_enabled: true, use_enabled: true, scenario_use_enabled: false, scenario_available: true, persona_use_enabled: false, persona_available: true, persistent: false, l0_archived_when_write_disabled: true} as never;
+      if (path === '/api/consolidation-status') return {background_enabled: false, stages: []} as never;
+      if (path.startsWith('/api/memories/daily-review')) return {local_date: '2026-09-09', utc_offset_minutes: 480, items: [], total: 0, limited: false, activity_counts: {added: 0, corrected: 0, changed: 0, deleted: 0}, message_counts: {user: 1, assistant: 0, total: 1, unlinked_user: 1}, deletions: [], deletions_limited: false} as never;
+      if (path.startsWith('/api/source-messages?')) return {items: [source], total: 1, limit: 25, offset: 0} as never;
+      if (path === '/api/source-messages/source-unlinked') return {...source, revision: 'b'.repeat(64), derived_memories: []} as never;
+      if (path === '/api/source-messages/source-unlinked/promote' && method === 'POST') return {memory_id: promoted.id, created_new_memory: true} as never;
+      if (path === '/api/memories/memory-promoted') return {...promoted, revision: 'c'.repeat(64), valid_from: null, valid_to: null, retired_at: null, superseded_by_id: null, sources: [{source_message_id: source.id, source_type: 'user_stated', linked_at: promoted.recorded_at, message: source}]} as never;
+      if (path.startsWith('/api/memories?')) return {items: method === 'GET' && calls.some(call => call.path.endsWith('/promote') && call.method === 'POST') ? [promoted] : [], total: 0, limit: 25, offset: 0} as never;
+      throw new Error(`unexpected test path: ${path}`);
+    });
+
+    const client = new QueryClient({defaultOptions: {queries: {retry: false}}});
+    render(<QueryClientProvider client={client}><MemoryRouter><MemoryApp/></MemoryRouter></QueryClientProvider>);
+    await screen.findByText(/L1 原子记忆已加载/);
+    fireEvent.click(screen.getByText(/L0 原始记录/));
+    fireEvent.click(await screen.findByText(source.content));
+    fireEvent.click(await screen.findByRole('button', {name: '补成 L1'}));
+    fireEvent.change(screen.getByLabelText('补记后的完整 L1'), {target: {value: promoted.content}});
+    fireEvent.click(screen.getByRole('button', {name: '确认补成 L1'}));
+
+    await waitFor(() => expect(calls).toContainEqual({
+      path: '/api/source-messages/source-unlinked/promote',
+      method: 'POST',
+      body: {content: promoted.content, revision: 'b'.repeat(64), confirm_promote: true},
+    }));
+    expect(await screen.findByText('已从原 L0 补成 L1，并保留原话来源。')).toBeTruthy();
+    expect((await screen.findAllByText(promoted.content)).length).toBeGreaterThanOrEqual(1);
   });
 });

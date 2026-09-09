@@ -8,14 +8,25 @@ import {ManualMemoryAdd} from './ManualMemoryAdd';
 import {memoryFailure, type MemoryFailurePhase} from './memoryFailure';
 import {ConsolidationOverview} from './ConsolidationStatusCard';
 
-type MemoryConfig = {configured: boolean; database: string | null; allow_delete: boolean; allow_correction: boolean; allow_change: boolean};
+type MemoryConfig = {
+  configured: boolean;
+  database: string | null;
+  allow_delete: boolean;
+  allow_correction: boolean;
+  allow_change: boolean;
+  allow_promote_source: boolean;
+};
 type RuntimeMode = {write_enabled: boolean; use_enabled: boolean; scenario_use_enabled: boolean; scenario_available: boolean; persona_use_enabled: boolean; persona_available: boolean; persistent: boolean; l0_archived_when_write_disabled: boolean};
 type L1Summary = {id: string; content: string; truncated: boolean; state: 'active' | 'retired'; recorded_at: string; subject_id: string};
 type Source = {source_message_id: string; source_type: string; linked_at: string; message: null | {role: string; content: string; created_at: string}};
 type L1Detail = L1Summary & {content: string; revision: string; valid_from: string | null; valid_to: string | null; retired_at: string | null; superseded_by_id: string | null; sources: Source[]};
 type L0Summary = {id: string; role: 'user' | 'assistant'; content: string; truncated: boolean; created_at: string; linked_memory_count: number};
 type DerivedMemory = {id: string; content: string; state: 'active' | 'retired'; source_type: string; linked_at: string};
-type L0Detail = {id: string; role: 'user' | 'assistant'; content: string; created_at: string; derived_memories: DerivedMemory[]};
+type L0Detail = L0Summary & {
+  content: string;
+  revision: string;
+  derived_memories: DerivedMemory[];
+};
 type Page<T> = {items: T[]; total: number; limit: number; offset: number};
 type DailyActivity = 'added'|'corrected'|'changed';
 type DailyReviewItem = L1Summary & {activity:DailyActivity};
@@ -54,6 +65,8 @@ export function MemoryApp() {
   const [effectiveLocal, setEffectiveLocal] = useState('');
   const [deleting, setDeleting] = useState(false);
   const [deleteUnderstood, setDeleteUnderstood] = useState(false);
+  const [promoting, setPromoting] = useState(false);
+  const [promotedContent, setPromotedContent] = useState('');
   const locked = useRef(false);
 
   async function fetchL1(offset = 0, search = query, stateFilter = l1State) {
@@ -167,6 +180,31 @@ export function MemoryApp() {
       setNotice(`${reviewDate} 的未关联用户原话已加载；未形成 L1 不等于一定漏记，请逐条核对。`);
     });
   }
+  async function promoteSelectedSource() {
+    if (!selectedL0 || !promotedContent.trim()) return;
+    await guarded(async () => {
+      const result = await api.request<{memory_id: string; created_new_memory: boolean}>(
+        `/api/source-messages/${encodeURIComponent(selectedL0.id)}/promote`, 'POST',
+        {
+          content: promotedContent.trim(),
+          revision: selectedL0.revision,
+          confirm_promote: true,
+        },
+      );
+      setPromoting(false);
+      setPromotedContent('');
+      setSelectedL0(undefined);
+      await fetchDaily();
+      setTab('l1');
+      setQuery('');
+      setL0Date('');
+      await fetchL1(0, '');
+      setSelectedL1(await api.request<L1Detail>(`/api/memories/${encodeURIComponent(result.memory_id)}`));
+      setNotice(result.created_new_memory
+        ? '已从原 L0 补成 L1，并保留原话来源。'
+        : '已有相同 L1；已把原 L0 补为额外来源。');
+    }, 'write');
+  }
   async function saveMode() {
     await guarded(async () => {
       const saved = await api.request<RuntimeMode>('/api/memory-mode', 'PUT', modeDraft);
@@ -262,10 +300,24 @@ export function MemoryApp() {
       {selectedL1 && <><p className="detail-content">{selectedL1.content}</p><Descriptions column={1} size="small" items={[{key:'state',label:'层级与状态',children:<Space><Tag color="magenta">L1</Tag><Tag>{selectedL1.state === 'active' ? '当前' : '已退役'}</Tag></Space>},{key:'id',label:'记忆 ID',children:selectedL1.id},{key:'time',label:'系统记录时间',children:displayTime(selectedL1.recorded_at)},{key:'validFrom',label:'事实开始生效',children:displayTime(selectedL1.valid_from)},{key:'validTo',label:'事实结束生效',children:displayTime(selectedL1.valid_to)},{key:'superseded',label:'取代它的记忆',children:selectedL1.superseded_by_id ?? '无'}]}/>
         <h3>L0 原始来源</h3>{selectedL1.sources.length ? selectedL1.sources.map(source => <Card size="small" className="source-card" key={`${source.source_message_id}:${source.source_type}`} title={<Space><Tag color="blue">L0</Tag><span>{sourceName(source.source_type)}</span></Space>}><p>{source.message?.content ?? '原始来源缺失，无法核对原文。'}</p><small>{source.message ? `${source.message.role === 'user' ? '用户' : '助手'} · ${displayTime(source.message.created_at)}` : source.source_message_id}</small></Card>) : <Empty description="这条 L1 没有可用来源，需要核查"/>}</>}
     </Drawer>
-    <Drawer width={620} title="L0 原始记录" open={Boolean(selectedL0)} onClose={() => setSelectedL0(undefined)}>
+    <Drawer
+      width={620}
+      title="L0 原始记录"
+      open={Boolean(selectedL0)}
+      onClose={() => setSelectedL0(undefined)}
+      extra={<Button
+        disabled={!config?.allow_promote_source || selectedL0?.role !== 'user' || Boolean(selectedL0?.derived_memories.length)}
+        onClick={() => {setPromotedContent(''); setPromoting(true);}}
+      >补成 L1</Button>}
+    >
       {selectedL0 && <><p className="detail-content">{selectedL0.content}</p><Descriptions column={1} size="small" items={[{key:'layer',label:'层级',children:<Tag color="blue">L0</Tag>},{key:'role',label:'说话角色',children:selectedL0.role === 'user' ? '用户' : '助手'},{key:'id',label:'消息 ID',children:selectedL0.id},{key:'time',label:'记录时间',children:displayTime(selectedL0.created_at)}]}/>
         <h3>由此派生的 L1</h3>{selectedL0.derived_memories.length ? selectedL0.derived_memories.map(memory => <Card size="small" className="source-card" key={memory.id} title={<Space><Tag color="magenta">L1</Tag><Tag>{memory.state === 'active' ? '当前' : '已退役'}</Tag></Space>}><p>{memory.content}</p><small>{sourceName(memory.source_type)} · {displayTime(memory.linked_at)}</small></Card>) : <Empty description="这条原始记录没有形成 L1"/>}</>}
     </Drawer>
+    <Modal title="把这条原话补成 L1？" open={promoting} okText="确认补成 L1" cancelText="取消" confirmLoading={busy} okButtonProps={{disabled: !promotedContent.trim()}} onCancel={() => {if (!busy) {setPromoting(false); setPromotedContent('');}}} onOk={() => void promoteSelectedSource()}>
+      <p>系统会继续引用当前 L0 原话，不会复制对话，也不会调用模型。若已有内容完全相同的当前 L1，只增加这条来源。</p>
+      <p className="subtle">请把原话整理为一条可独立理解、以“用户”作主体的完整事实；不要把问题、寒暄或助手推测补成用户事实。</p>
+      <Input.TextArea aria-label="补记后的完整 L1" rows={4} maxLength={1000} showCount value={promotedContent} onChange={event => setPromotedContent(event.target.value)} placeholder="例如：用户最近开始每天晨跑。"/>
+    </Modal>
     <Modal title="纠正 L1" open={correcting} okText="确认旧事实有误并保存" cancelText="取消" confirmLoading={busy} okButtonProps={{disabled: !correction.trim()}} onCancel={() => {setCorrecting(false); setCorrection('');}} onOk={() => void saveCorrection()}>
       <p>纠正会新建 L1，并保留旧记录为已取代历史。只用于旧事实本来就错了，不用于后来发生的变化。</p><Input.TextArea aria-label="纠正后的完整事实" rows={4} maxLength={1000} value={correction} onChange={e => setCorrection(e.target.value)} placeholder="输入可独立理解的完整事实"/>
     </Modal>

@@ -82,6 +82,46 @@ def test_l0_missing_source_is_explicit(recorded):
         MemoryBackend(recorded[0]).get_source("missing")
 
 
+def test_promote_unlinked_l0_reuses_source_and_deduplicates_fact(recorded):
+    path, _, _ = recorded
+    with sqlite3.connect(path) as connection:
+        connection.executemany(
+            "INSERT INTO conversation_messages VALUES (?,?,?,?)",
+            [
+                ("missed-1", "user", "我最近开始晨跑。", "2026-09-06T10:00:00+00:00"),
+                ("missed-2", "user", "我现在每天晨跑。", "2026-09-07T10:00:00+00:00"),
+            ],
+        )
+    readonly = MemoryBackend(path)
+    first_detail = readonly.get_source("missed-1")
+    assert "revision" in first_detail
+    with pytest.raises(MemoryAccessError, match="memory_correction_disabled"):
+        readonly.promote_source("missed-1", "用户最近开始每天晨跑。", first_detail["revision"])
+
+    backend = MemoryBackend(path, allow_correction=True)
+    first = backend.promote_source(
+        "missed-1", "用户最近开始每天晨跑。", first_detail["revision"],
+    )
+    assert first["created_new_memory"] is True
+    with sqlite3.connect(path) as connection:
+        assert connection.execute(
+            "SELECT count(*) FROM conversation_messages WHERE id='missed-1'"
+        ).fetchone()[0] == 1
+    assert backend.get_source("missed-1")["derived_memories"][0]["id"] == first["memory_id"]
+
+    second_detail = backend.get_source("missed-2")
+    second = backend.promote_source(
+        "missed-2", "用户最近开始每天晨跑。", second_detail["revision"],
+    )
+    assert second["created_new_memory"] is False
+    assert second["memory_id"] == first["memory_id"]
+    assert len(backend.get(first["memory_id"])["sources"]) == 2
+    with pytest.raises(MemoryAccessError, match="source_message_changed"):
+        backend.promote_source(
+            "missed-2", "用户最近开始每天晨跑。", second_detail["revision"],
+        )
+
+
 def test_missing_database_is_not_created(tmp_path):
     path = tmp_path / "not-created" / "missing.db"
     with pytest.raises(MemoryAccessError, match="memory_database_missing"):
