@@ -212,7 +212,7 @@ def test_provider_uses_runtime_transport_without_starting_subprocess(provider_cl
     assert completion_body["answer"] == "这是最终回答"
 
 
-def test_launch_wrapper_reports_only_new_top_level_assistant_text():
+def test_launch_wrapper_reports_answer_when_upstream_returns_none():
     wrapper = load_script("launch_with_memory")
     recorded = []
 
@@ -236,11 +236,12 @@ def test_launch_wrapper_reports_only_new_top_level_assistant_text():
                 Message("user", query), Message("assistant", "第一段"),
                 Message("assistant", "第二段"),
             ])
-            return True
+            # 厂商 direct_answer 正常路径在完成回复后返回 None。
+            return None
 
     wrapper.install_answer_completion(Connection)
     connection = Connection()
-    assert connection.chat("合成提问") is True
+    assert connection.chat("合成提问") is None
     assert recorded == ["第一段\n第二段"]
 
 

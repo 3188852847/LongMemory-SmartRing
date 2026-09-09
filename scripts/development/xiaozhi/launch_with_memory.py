@@ -72,7 +72,10 @@ def install_answer_completion(connection_class):
         before = len(connection.dialogue.dialogue)
         result = original(connection, query, depth)
         memory = connection.memory
-        if (depth == 0 and result and query
+        # 上游 chat() 的正常分支并不都返回 True：direct_answer 在已经把
+        # 助手文本写入对话并送入 TTS 队列后会直接返回 None。因此完成依据
+        # 必须是“本次顶层调用新增了助手文本”，不能依赖厂商内部返回值。
+        if (depth == 0 and query
                 and callable(getattr(memory, "record_completed_turn", None))):
             answers = [
                 item.content for item in connection.dialogue.dialogue[before:]
