@@ -1,0 +1,63 @@
+{
+  "schema_version": 1,
+  "captured_on": "2026-09-10",
+  "experiment": "0007-round-wallpaper-gif",
+  "depends_on": "0006-lightweight-round-face-motion",
+  "board": "viewe-smartring-plus",
+  "application_version": "2.2.3",
+  "esp_idf_version": "5.5.4",
+  "contract": {
+    "asset_name": "round_wallpaper.gif",
+    "format": "gif",
+    "width": 360,
+    "height": 360,
+    "frame_rate": 10,
+    "duration_seconds": 5.0,
+    "audio": false,
+    "idle_behavior": "wallpaper_primary",
+    "active_behavior": "existing_geometric_face_overlay",
+    "fallback": "existing_geometric_face"
+  },
+  "source": {
+    "cmake_sha256_before": "8AB8C0D2E91B3C817AD29F8F766D8D3042C6933DBD8580EDC2D474B75F19DACE",
+    "cmake_sha256_after": "E3E6923C9895F9E27244D594920C23BA41862ADCAB8399A70F72415EC252D6C8",
+    "board_cc_sha256_before": "9452015FC756D169511874E9857F6A66BE4BD935262E649FA1577660A5ACB9B5",
+    "board_cc_sha256_after": "BF53A8D9ACCE42CCFAA007B3FA05DEE76E44D56D618737E84810CB1D0B67DB96",
+    "patch_sha256": "2EFC4CB851F5BC4750446D5DF82554A96E4A90EE667401C0B91E89FC6B47951D",
+    "clean_apply": true,
+    "backup_created": true
+  },
+  "wallpaper_sample": {
+    "committed": false,
+    "length_bytes": 2321851,
+    "sha256": "80F3B5336DF2E5F0C6A3C75757644F90D2ED03DD7E623787F789BA4DA29ED9C1"
+  },
+  "application": {
+    "length_bytes": 3968560,
+    "sha256": "DB37BEC321D6F58A6B873D048AE507228B3006CF9C5513054F1FBEA8F916A9B8",
+    "partition_length_bytes": 4128768,
+    "remaining_bytes": 160208,
+    "increase_from_0006_bytes": 1312
+  },
+  "assets": {
+    "length_bytes": 2674063,
+    "sha256": "FE5295DD57D0F6D97CDD1C75B6920645C412FEF84BEB57B3378305924FC35C96",
+    "partition_length_bytes": 8388608,
+    "remaining_bytes": 5714545,
+    "index_contains_wallpaper": true
+  },
+  "flash": {
+    "result": "not_started",
+    "required_offsets": ["0x20000", "0x800000"],
+    "nvs_write_required": false,
+    "partition_table_write_required": false
+  },
+  "runtime": {
+    "gif_decode": "pending_device_validation",
+    "actual_frame_rate": "not_measured",
+    "peak_psram": "not_measured",
+    "voice_coexistence": "not_measured",
+    "state_overlay": "pending_device_validation",
+    "fallback": "pending_device_validation"
+  }
+}
