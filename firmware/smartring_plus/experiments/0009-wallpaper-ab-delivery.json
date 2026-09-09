@@ -52,12 +52,18 @@
     "firmware_build": "passed"
   },
   "flash": {
-    "result": "pending",
+    "result": "verified",
+    "verified_on": "2026-09-10",
+    "port": "COM3",
+    "device_mac_suffix": "6d:38",
     "required_offsets": ["0x8000", "0x20000", "0x800000"],
     "partition_table_migration": true,
     "nvs_write_required": false,
     "ota_data_write_required": false,
-    "readback_digest": "pending"
+    "nvs_written": false,
+    "ota_data_written": false,
+    "independent_verify_flash": "digest_matched",
+    "pre_migration_recovery_point": "local_git_ignored_backup"
   },
   "runtime": {
     "device_status_readback": "pending",
