@@ -51,8 +51,10 @@ export class ChatApi {
 }
 export interface WriteTrace {operation:string; item_id?:string; source_event_ids?:string[] | null}
 export interface RetrievedTrace {item_id:string; content:string; source_event_ids?:string[] | null}
+export type MemoryFeedbackKind = 'memory_ok'|'recall_miss'|'wrong_memory'|'memory_irrelevant';
+export interface MemoryFeedback {kind:MemoryFeedbackKind; revision:number; occurred_at:string}
 export interface Turn {
-  input: string; answer?: string; status: string; writes: WriteTrace[] | null;
+  request_id?:string; input: string; answer?: string; status: string; writes: WriteTrace[] | null;
   answer_source?: 'model' | 'application_command' | null;
   user_saved: boolean; duration_ms: number; memory_processing?: 'completed' | 'source_only' | null;
   memory_warning?: string | null; retrieval_strategy?: string | null;
@@ -60,8 +62,15 @@ export interface Turn {
   persona_retrieved?: Array<{persona_id: string; label: string; statement: string}>;
   scenario_retrieved?: {scenario_id:string; title:string; summary:string; source_memory_ids:string[]; source_message_ids:string[]}[] | null;
   retrieved?: RetrievedTrace[] | null;
+  memory_feedback?:MemoryFeedback|null;
+  memory_feedback_events?:MemoryFeedback[];
   memory_command?: {kind:string; status:string; notice:string; target_memory_ids?:string[]} | null;
   [key: string]: unknown;
+}
+export interface DailyMemoryFeedback {
+  local_date:string;utc_offset_minutes:number;total:number;limited:boolean;
+  action_counts:Record<MemoryFeedbackKind,number>;
+  items:Array<{chat_id:string;chat_title:string;request_id:string;kind:MemoryFeedbackKind;revision:number;occurred_at:string;is_current:boolean}>;
 }
 export interface Snapshot {chat_id: string; title: string; pending: boolean; turns: Turn[]}
 export interface Summary {chat_id: string; title: string; turn_count: number}

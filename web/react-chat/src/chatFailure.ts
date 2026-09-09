@@ -22,6 +22,10 @@ const failureText: Record<string, string> = {
   invalid_chat_message: '消息格式不符合要求，请检查内容后重新输入。',
   chat_request_conflict: '同一个请求标识对应了不同内容。为避免重复写入，本次请求已拒绝。',
   chat_turn_limit: '当前网页会话已达到 40 轮上限。请新建会话；长期记忆会继续保留。',
+  invalid_memory_feedback: '记忆复核格式不符合要求，请刷新后重新选择。',
+  feedback_turn_unavailable: '这条回答不存在、尚未完成或不能复核，请刷新会话。',
+  memory_feedback_conflict: '这条回答的复核已在其他页面更新，请刷新后核对当前标记。',
+  memory_feedback_revision_limit: '这条回答的复核修改次数已达到保护上限，请保留当前判断。',
   http_404: '这个网页会话已不存在，或不属于当前浏览器。请刷新会话列表或新建聊天。',
 };
 

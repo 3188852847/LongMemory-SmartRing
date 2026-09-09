@@ -2,15 +2,16 @@
 
 import asyncio
 from dataclasses import asdict, dataclass, field
+from datetime import UTC, date, datetime, timedelta
 import hashlib
 import secrets
 import re
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from aiohttp import web
 from pydantic import ValidationError
 from ..chat_store import ChatStore
-from ..contracts import ChatMessageRequest
+from ..contracts import ChatMemoryFeedbackRequest, ChatMessageRequest
 
 MAX_TURNS = 40
 MAX_CHATS = 32
@@ -41,6 +42,11 @@ def register_chat_routes(app, backend):
                           duration_ms=0, error='interrupted_write_state_unknown')
             chat.turns.append(result)
             chat.request_ids[result['request_id']] = result
+        # JSON 会把 turns 与 request_ids 中的同一轮反序列化为两个 dict。
+        # 重新绑定到 turns 的对象，确保重启后的反馈、读取和幂等回放看到同一版本。
+        for turn in chat.turns:
+            if isinstance(turn.get('request_id'), str):
+                chat.request_ids[turn['request_id']] = turn
         chat.pending = False
         chat.active_request = None
     tasks = set()
@@ -116,6 +122,94 @@ def register_chat_routes(app, backend):
         chat = selected(request)
         return web.json_response({"chat_id": request.match_info["chat_id"],
                                   "title": chat.title, "turns": chat.turns, "pending": chat.pending, "limit": MAX_TURNS})
+
+    async def memory_feedback(request):
+        """记录人工复核，不修改记忆、不调用模型，也不自动重跑当前回答。"""
+        chat = selected(request)
+        if chat.pending:
+            return web.json_response({"error": "chat_busy"}, status=409)
+        try:
+            request_id = request.match_info["request_id"]
+            # 路径也坚持 canonical UUID，避免旁库中出现同一 ID 的不同文本形式。
+            if str(UUID(request_id)) != request_id:
+                raise ValueError
+            if request.content_type != "application/json":
+                raise ValueError
+            body = ChatMemoryFeedbackRequest.model_validate(await request.json())
+        except (ValidationError, ValueError, TypeError, UnicodeError):
+            return web.json_response({"error": "invalid_memory_feedback"}, status=400)
+        turn = chat.request_ids.get(request_id)
+        if turn is None or turn.get("status") != "completed" or not turn.get("answer"):
+            return web.json_response({"error": "feedback_turn_unavailable"}, status=404)
+        current = turn.get("memory_feedback")
+        revision = current.get("revision", 0) if isinstance(current, dict) else 0
+        if body.expected_revision != revision:
+            return web.json_response({"error": "memory_feedback_conflict", "current": current}, status=409)
+        if revision >= 32:
+            return web.json_response({"error": "memory_feedback_revision_limit"}, status=409)
+        event = {"kind": body.kind, "revision": revision + 1,
+                 "occurred_at": datetime.now(UTC).isoformat()}
+        old_current = current
+        old_events = list(turn.get("memory_feedback_events") or [])
+        turn["memory_feedback"] = event
+        turn["memory_feedback_events"] = old_events + [event]
+        try:
+            persist(request.match_info["chat_id"], chat)
+        except Exception:
+            if old_current is None:
+                turn.pop("memory_feedback", None)
+            else:
+                turn["memory_feedback"] = old_current
+            turn["memory_feedback_events"] = old_events
+            raise
+        return web.json_response({"feedback": event})
+
+    async def memory_feedback_daily(request):
+        """按自然日聚合复核动作；只返回定位信息，不复制私人对话正文。"""
+        try:
+            if set(request.query) != {"local_date", "utc_offset_minutes"}:
+                raise ValueError
+            local_date = date.fromisoformat(request.query["local_date"])
+            offset_minutes = int(request.query["utc_offset_minutes"])
+            if not -720 <= offset_minutes <= 840:
+                raise ValueError
+        except (ValueError, TypeError, KeyError):
+            return web.json_response({"error": "invalid_feedback_daily_query"}, status=400)
+        owner_id = owner(request)
+        counts = {kind: 0 for kind in (
+            "memory_ok", "recall_miss", "wrong_memory", "memory_irrelevant"
+        )}
+        rows = []
+        offset = timedelta(minutes=offset_minutes)
+        for chat_id, chat in chats.items():
+            if chat.owner != owner_id:
+                continue
+            for turn in chat.turns:
+                current = turn.get("memory_feedback")
+                for event in turn.get("memory_feedback_events") or []:
+                    try:
+                        occurred = datetime.fromisoformat(event["occurred_at"])
+                        if occurred.tzinfo is None or (occurred + offset).date() != local_date:
+                            continue
+                        kind = event["kind"]
+                        if kind not in counts:
+                            continue
+                    except (KeyError, TypeError, ValueError):
+                        continue
+                    counts[kind] += 1
+                    rows.append({
+                        "chat_id": chat_id, "chat_title": chat.title,
+                        "request_id": turn.get("request_id"), "kind": kind,
+                        "revision": event.get("revision"),
+                        "occurred_at": event["occurred_at"],
+                        "is_current": isinstance(current, dict)
+                            and current.get("revision") == event.get("revision"),
+                    })
+        rows.sort(key=lambda item: item["occurred_at"], reverse=True)
+        return web.json_response({"local_date": local_date.isoformat(),
+                                  "utc_offset_minutes": offset_minutes,
+                                  "action_counts": counts, "total": len(rows),
+                                  "items": rows[:100], "limited": len(rows) > 100})
 
     async def forget(request):
         chat = selected(request)
@@ -199,5 +293,7 @@ def register_chat_routes(app, backend):
     app.router.add_post('/api/chats/{chat_id}/title', rename)
     app.router.add_get("/api/chats/{chat_id}", get, allow_head=False)
     app.router.add_post("/api/chats/{chat_id}/messages", send)
+    app.router.add_post("/api/chats/{chat_id}/turns/{request_id}/memory-feedback", memory_feedback)
+    app.router.add_get("/api/chat-memory-feedback/daily", memory_feedback_daily, allow_head=False)
     app.router.add_delete("/api/chats/{chat_id}", forget)
     app.on_cleanup.append(cleanup)

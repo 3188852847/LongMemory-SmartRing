@@ -1,7 +1,7 @@
 import {useEffect, useRef, useState} from 'react';
 import {Button, Card, Checkbox, Descriptions, Drawer, Empty, Input, List, Modal, Select, Space, Switch, Tabs, Tag} from 'antd';
-import {useSearchParams} from 'react-router-dom';
-import {ChatApi} from './api';
+import {Link, useSearchParams} from 'react-router-dom';
+import {ChatApi, type DailyMemoryFeedback, type MemoryFeedbackKind} from './api';
 import {AppShell, ConsoleNav} from './AppShell';
 import {PageHeader} from './PageHeader';
 import {ManualMemoryAdd} from './ManualMemoryAdd';
@@ -37,6 +37,24 @@ const api = new ChatApi();
 const displayTime = (value?: string | null) => value ? new Date(value).toLocaleString('zh-CN') : '未记录';
 const sourceName = (value: string) => value === 'user_stated' ? '用户陈述' : value === 'user_corrected' ? '用户纠正' : value;
 const localDateText = (date=new Date()) => `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
+const feedbackLabel:Record<MemoryFeedbackKind,string> = {
+  memory_ok:'记忆使用正常', recall_miss:'没想起已有记忆',
+  wrong_memory:'使用了错误记忆', memory_irrelevant:'回答与记忆无关',
+};
+
+function DailyFeedbackReview({feedback}:{feedback:DailyMemoryFeedback}) {
+  return <section className="daily-feedback-review" aria-label="网页回答记忆复核">
+    <h3>网页回答记忆复核</h3>
+    <p className="subtle">当天共 {feedback.total} 次人工标记；这是内部测试证据，不会自动重答、改写记忆或训练模型。修改标记会保留为新的复核动作。</p>
+    <Space wrap>
+      <Tag color="green">正常 {feedback.action_counts.memory_ok}</Tag>
+      <Tag color="gold">没想起 {feedback.action_counts.recall_miss}</Tag>
+      <Tag color="red">错误记忆 {feedback.action_counts.wrong_memory}</Tag>
+      <Tag>记忆无关 {feedback.action_counts.memory_irrelevant}</Tag>
+    </Space>
+    {feedback.items.length>0&&<details><summary>回看复核轮次（{feedback.items.length}）</summary><List size="small" dataSource={feedback.items} renderItem={item=><List.Item actions={[<Link key="turn" to={`/chat-react?chat_id=${encodeURIComponent(item.chat_id)}&request_id=${encodeURIComponent(item.request_id)}`}>查看回答与证据</Link>]}><Space direction="vertical" size={0}><span>{feedbackLabel[item.kind]}{item.is_current?'':'（已被后续标记取代）'}</span><small className="subtle">{item.chat_title} · {displayTime(item.occurred_at)} · 修订 {item.revision}</small></Space></List.Item>}/>{feedback.limited&&<p className="subtle">这一天超过 100 次复核动作，仅显示最近 100 次。</p>}</details>}
+  </section>;
+}
 
 export function MemoryApp() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -47,6 +65,7 @@ export function MemoryApp() {
   const [l1, setL1] = useState<Page<L1Summary>>({items: [], total: 0, limit: 25, offset: 0});
   const [l0, setL0] = useState<Page<L0Summary>>({items: [], total: 0, limit: 25, offset: 0});
   const [daily,setDaily] = useState<DailyReview>();
+  const [dailyFeedback,setDailyFeedback] = useState<DailyMemoryFeedback>();
   const [reviewDate,setReviewDate] = useState(localDateText());
   const [dailyNotice,setDailyNotice] = useState('');
   const [query, setQuery] = useState('');
@@ -87,9 +106,15 @@ export function MemoryApp() {
     const params=new URLSearchParams({local_date:date,utc_offset_minutes:String(-new Date().getTimezoneOffset())});
     try {
       setDaily(await api.request<DailyReview>(`/api/memories/daily-review?${params}`));
-      setDailyNotice('');
+      try {
+        setDailyFeedback(await api.request<DailyMemoryFeedback>(`/api/chat-memory-feedback/daily?${params}`));
+        setDailyNotice('');
+      } catch {
+        setDailyFeedback(undefined);
+        setDailyNotice('当天记忆写入已读取，但网页回答复核暂时无法读取。');
+      }
     } catch {
-      setDaily(undefined);
+      setDaily(undefined); setDailyFeedback(undefined);
       setDailyNotice('暂时无法读取这一天的回顾；完整 L1 列表仍可正常使用。');
     }
   }
@@ -266,6 +291,7 @@ export function MemoryApp() {
         {daily&&<>
         <p className="subtle">当天归档 L0：用户 {daily.message_counts.user} 条，助手 {daily.message_counts.assistant} 条；其中 {daily.message_counts.unlinked_user} 条用户原话没有形成 L1。这里只是原始记录计数，不代表会话轮数、内容总结或漏记结论。</p>
         <p className="subtle">当天所有者确认漏记 {daily.quality_counts.owner_confirmed_missed_extraction} 条。该数字来自显式“补成 L1”操作，不是模型自评或对未关联原话的推测。</p>
+        {dailyFeedback&&<DailyFeedbackReview feedback={dailyFeedback}/>}
         {daily.message_counts.unlinked_user>0&&<Button size="small" onClick={()=>void inspectDailyUnlinked()}>核对当天未形成 L1 的原话</Button>}
         <Space wrap><Tag>新增 {daily.activity_counts.added}</Tag><Tag color="gold">纠正 {daily.activity_counts.corrected}</Tag><Tag color="blue">事实变化 {daily.activity_counts.changed}</Tag><Tag color="red">删除 {daily.activity_counts.deleted}</Tag></Space>
         {daily.items.length?<List size="small" dataSource={daily.items.slice(0,5)} renderItem={item=><List.Item actions={[<Button type="link" key="review" onClick={()=>void openL1(item.id)}>核对来源</Button>]}>

@@ -5,6 +5,7 @@
 """
 
 from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -33,6 +34,15 @@ class ChatMessageRequest(BaseModel):
         if str(UUID(value)) != value:
             raise ValueError("non-canonical UUID")
         return value
+
+
+class ChatMemoryFeedbackRequest(BaseModel):
+    """所有者对某一轮回答的记忆表现复核；不触发记忆或模型操作。"""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    kind: Literal["memory_ok", "recall_miss", "wrong_memory", "memory_irrelevant"]
+    expected_revision: int = Field(ge=0, le=32)
 
 
 class ExplicitMemoryRequest(BaseModel):

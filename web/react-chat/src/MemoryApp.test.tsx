@@ -17,6 +17,7 @@ describe('每日记忆回顾',()=>{
       if(path==='/api/memory-mode') return {write_enabled:true,use_enabled:true,scenario_use_enabled:false,scenario_available:true,persona_use_enabled:false,persona_available:true,persistent:false,l0_archived_when_write_disabled:true} as never;
       if(path==='/api/consolidation-status') return {background_enabled:false,stages:[]} as never;
       if(path.startsWith('/api/memories/daily-review')) return {local_date:'2026-09-09',utc_offset_minutes:480,items:[item],total:1,limited:false,activity_counts:{added:1,corrected:0,changed:0,deleted:1},message_counts:{user:3,assistant:3,total:6,unlinked_user:1},quality_counts:{owner_confirmed_missed_extraction:0},deletions:[{id:'deletion-1',memory_id:'deleted-memory-1',subject_id:'user:self',deleted_at:'2026-09-09T09:00:00+00:00'}],deletions_limited:false} as never;
+      if(path.startsWith('/api/chat-memory-feedback/daily')) return {local_date:'2026-09-09',utc_offset_minutes:480,total:1,limited:false,action_counts:{memory_ok:0,recall_miss:1,wrong_memory:0,memory_irrelevant:0},items:[{chat_id:'chat-1',chat_title:'猫咪',request_id:'request-1',kind:'recall_miss',revision:1,occurred_at:'2026-09-09T09:30:00+00:00',is_current:true}]} as never;
       if(path.startsWith('/api/source-messages?')) return {items:[{id:'source-unlinked',role:'user',content:'我最近开始晨跑。',truncated:false,created_at:'2026-09-09T07:00:00+00:00',linked_memory_count:0}],total:1,limit:25,offset:0} as never;
       if(path==='/api/memories/memory-1') return {...item,revision:'a'.repeat(64),valid_from:null,valid_to:null,retired_at:null,superseded_by_id:null,sources:[]} as never;
       if(path.startsWith('/api/memories?')) return {items:[item],total:1,limit:25,offset:0} as never;
@@ -31,6 +32,9 @@ describe('每日记忆回顾',()=>{
     expect(screen.getByText(/当天归档 L0：用户 3 条，助手 3 条/)).toBeTruthy();
     expect(screen.getByText(/其中 1 条用户原话没有形成 L1/)).toBeTruthy();
     expect(screen.getByText('删除 1')).toBeTruthy();
+    expect(screen.getByText('没想起 1')).toBeTruthy();
+    fireEvent.click(screen.getByText(/回看复核轮次/));
+    expect(screen.getByRole('link',{name:'查看回答与证据'}).getAttribute('href')).toBe('/chat-react?chat_id=chat-1&request_id=request-1');
     fireEvent.click(screen.getByText(/查看删除审计/));
     expect(screen.getByText('deleted-memory-1')).toBeTruthy();
     expect(screen.getByText(/不保留被删正文/)).toBeTruthy();
@@ -70,6 +74,7 @@ describe('每日记忆回顾',()=>{
       if (path === '/api/memory-mode') return {write_enabled: true, use_enabled: true, scenario_use_enabled: false, scenario_available: true, persona_use_enabled: false, persona_available: true, persistent: false, l0_archived_when_write_disabled: true} as never;
       if (path === '/api/consolidation-status') return {background_enabled: false, stages: []} as never;
       if (path.startsWith('/api/memories/daily-review')) return {local_date: '2026-09-09', utc_offset_minutes: 480, items: [], total: 0, limited: false, activity_counts: {added: 0, corrected: 0, changed: 0, deleted: 0}, message_counts: {user: 1, assistant: 0, total: 1, unlinked_user: 1}, quality_counts: {owner_confirmed_missed_extraction: calls.some(call => call.path.endsWith('/promote') && call.method === 'POST') ? 1 : 0}, deletions: [], deletions_limited: false} as never;
+      if (path.startsWith('/api/chat-memory-feedback/daily')) return {local_date:'2026-09-09',utc_offset_minutes:480,total:0,limited:false,action_counts:{memory_ok:0,recall_miss:0,wrong_memory:0,memory_irrelevant:0},items:[]} as never;
       if (path.startsWith('/api/source-messages?')) return {items: [source], total: 1, limit: 25, offset: 0} as never;
       if (path === '/api/source-messages/source-unlinked') return {...source, revision: 'b'.repeat(64), derived_memories: []} as never;
       if (path === '/api/source-messages/source-unlinked/promote' && method === 'POST') return {memory_id: promoted.id, created_new_memory: true} as never;

@@ -1,6 +1,6 @@
-import {Tag} from 'antd';
+import {Button, Space, Tag} from 'antd';
 import {Link} from 'react-router-dom';
-import type {Config, DeviceStatus, Turn} from './api';
+import type {Config, DeviceStatus, MemoryFeedbackKind, Turn} from './api';
 
 type RailProps = {
   config?:Config;
@@ -49,6 +49,30 @@ export function memoryTraceSummary(turn?:Turn) {
   if (l1 + l2 + l3 > 0) return {kind:'hit', code:'MEM HIT', text:`回答使用 L1 ${l1} · L2 ${l2} · L3 ${l3}`};
   if (writeCount > 0) return {kind:'write', code:'MEM WRITE', text:`本轮产生 ${writeCount} 个记忆操作，但回答未召回旧记忆`};
   return {kind:'miss', code:'NO RECALL', text:'本轮没有召回长期记忆；不等于用户从未说过'};
+}
+
+const feedbackOptions:Array<{kind:MemoryFeedbackKind;label:string}> = [
+  {kind:'memory_ok',label:'记忆使用正常'},
+  {kind:'recall_miss',label:'没想起已有记忆'},
+  {kind:'wrong_memory',label:'使用了错误记忆'},
+  {kind:'memory_irrelevant',label:'回答与记忆无关'},
+];
+
+/** 这是所有者的内部质量标注，不把评价混入 L0–L3，也不触发自动重答。 */
+export function MemoryFeedbackControls({turn,disabled,onSelect}:{
+  turn:Turn;disabled:boolean;onSelect:(kind:MemoryFeedbackKind)=>void;
+}) {
+  if (turn.status !== 'completed' || !turn.answer || !turn.request_id) return null;
+  return <section className="memory-feedback-controls" aria-label="标记本轮记忆表现">
+    <small>这轮记忆表现</small>
+    <Space size={[6,6]} wrap>{feedbackOptions.map(option => <Button
+      key={option.kind} size="small" disabled={disabled}
+      type={turn.memory_feedback?.kind === option.kind ? 'primary' : 'default'}
+      aria-pressed={turn.memory_feedback?.kind === option.kind}
+      onClick={() => onSelect(option.kind)}
+    >{option.label}</Button>)}</Space>
+    <em>{turn.memory_feedback ? `已复核 · 修订 ${turn.memory_feedback.revision}` : '仅记录标记，不会重答或修改记忆'}</em>
+  </section>;
 }
 
 /** 把调试 JSON 中最重要的记忆事实提升为人能直接阅读的证据面板。 */

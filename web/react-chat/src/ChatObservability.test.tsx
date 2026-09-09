@@ -1,7 +1,7 @@
-import {render, screen} from '@testing-library/react';
+import {fireEvent, render, screen} from '@testing-library/react';
 import {describe, expect, it} from 'vitest';
 import {MemoryRouter} from 'react-router-dom';
-import {ConsoleStatusRail, TurnMemoryEvidence, memoryTraceSummary} from './ChatObservability';
+import {ConsoleStatusRail, MemoryFeedbackControls, TurnMemoryEvidence, memoryTraceSummary} from './ChatObservability';
 import type {Config, Turn} from './api';
 
 const config:Config = {enabled:true,database:'synthetic.db',model:'Synthetic-Model',role:'助手',provider:'openai_compatible',method:'longmemory_daily_llm_v2',retrieval:'keyword_dense_rrf_v1',model_health:{state:'available',code:null,checked_at:'2026-09-09T00:00:00Z'}};
@@ -42,5 +42,17 @@ describe('TurnMemoryEvidence', () => {
     expect(memoryTraceSummary(turn).code).toBe('NO RECALL');
     render(<MemoryRouter><TurnMemoryEvidence turn={turn}/></MemoryRouter>);
     expect(screen.getByText('本轮没有召回长期记忆；不等于用户从未说过')).toBeTruthy();
+  });
+});
+
+describe('MemoryFeedbackControls', () => {
+  it('显示当前人工复核并允许改标，但不声称会自动修改记忆', () => {
+    const selected:string[] = [];
+    const turn:Turn = {request_id:'550e8400-e29b-41d4-a716-446655440000',input:'我的猫叫什么',answer:'豆包',status:'completed',user_saved:true,duration_ms:12,writes:[],retrieved:[],memory_feedback:{kind:'memory_ok',revision:2,occurred_at:'2026-09-09T10:00:00Z'}};
+    render(<MemoryFeedbackControls turn={turn} disabled={false} onSelect={kind=>selected.push(kind)}/>);
+    expect(screen.getByRole('button',{name:'记忆使用正常'}).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByText('已复核 · 修订 2')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button',{name:'没想起已有记忆'}));
+    expect(selected).toEqual(['recall_miss']);
   });
 });

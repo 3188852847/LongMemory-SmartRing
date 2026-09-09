@@ -2,8 +2,8 @@ import {lazy, Suspense, useEffect, useRef, useState} from 'react';
 import {createRoot} from 'react-dom/client';
 import {Alert, Button, Input, Modal, Select} from 'antd';
 import {QueryClientProvider, useQuery} from '@tanstack/react-query';
-import {BrowserRouter, Navigate, Route, Routes} from 'react-router-dom';
-import {ApiError, ChatApi, type Config, type DeviceStatus, type MemoryPageSummary, type Snapshot, type Summary, type Turn} from './api';
+import {BrowserRouter, Navigate, Route, Routes, useSearchParams} from 'react-router-dom';
+import {ApiError, ChatApi, type Config, type DeviceStatus, type MemoryFeedbackKind, type MemoryPageSummary, type Snapshot, type Summary, type Turn} from './api';
 import {turnSummary} from '../../assets/chat-view.mjs';
 import './style.css';
 import {AppearanceProvider} from './AppearanceProvider';
@@ -15,7 +15,7 @@ import {modelFailure} from './modelHealth';
 import {MemoryCommandHelp} from './MemoryCommandHelp';
 import {loadSendShortcut, saveSendShortcut, shouldSendFromKeyboard, type SendShortcut} from './chatInput';
 import {organizeChats, readPinnedChats, togglePinnedChat, writePinnedChats} from './chatSessions';
-import {ConsoleStatusRail, TurnMemoryEvidence} from './ChatObservability';
+import {ConsoleStatusRail, MemoryFeedbackControls, TurnMemoryEvidence} from './ChatObservability';
 import {chatFailure} from './chatFailure';
 
 const DeviceApp = lazy(() => import('./DeviceApp').then(module => ({default: module.DeviceApp})));
@@ -39,6 +39,7 @@ function memoryCommandAlert(status: string) {
   return 'info' as const;
 }
 function ChatApp() {
+  const [searchParams] = useSearchParams();
   const [config, setConfig] = useState<Config>();
   const [chats, setChats] = useState<Summary[]>([]);
   const [chat, setChat] = useState<Snapshot>();
@@ -61,7 +62,11 @@ function ChatApp() {
     queryFn:() => api.request<DeviceStatus>('/api/device'), refetchInterval:5000});
   const memoryCount = useQuery({queryKey:['chat-active-memory-count'], enabled:Boolean(config?.enabled), retry:false,
     queryFn:() => api.request<MemoryPageSummary>('/api/memories?q=&state=active&offset=0&limit=1'), staleTime:30000});
-  useEffect(() => {turnsEnd.current?.scrollIntoView({block: 'nearest'});}, [chat?.turns.length]);
+  const focusedRequestId = searchParams.get('request_id');
+  useEffect(() => {
+    const focused = focusedRequestId ? document.getElementById(`turn-${focusedRequestId}`) : null;
+    (focused ?? turnsEnd.current)?.scrollIntoView({block: 'nearest'});
+  }, [chat?.turns.length, focusedRequestId]);
   async function list() {
     const data = await api.request<{chats: Summary[]}>('/api/chats'); setChats(data.chats); return data.chats;
   }
@@ -84,7 +89,8 @@ function ChatApp() {
         try {setPinnedChats(readPinnedChats(localStorage, pinnedKey.current));} catch { /* 会话列表仍可正常使用。 */ }
         const rows = await list(); let previous: string | null = null;
         try {previous = localStorage.getItem(selectionKey.current);} catch { /* 默认最近会话。 */ }
-        if (rows.length) {const loaded = await load(rows.find(c => c.chat_id === previous)?.chat_id ?? rows[0].chat_id); setNotice(loaded.pending ? '消息仍在处理，请只查询结果。' : '会话已恢复，可以继续聊。');}
+        const linkedChat = searchParams.get('chat_id');
+        if (rows.length) {const loaded = await load(rows.find(c => c.chat_id === linkedChat)?.chat_id ?? rows.find(c => c.chat_id === previous)?.chat_id ?? rows[0].chat_id); setNotice(loaded.pending ? '消息仍在处理，请只查询结果。' : linkedChat ? '已打开质量复核对应的聊天轮次。' : '会话已恢复，可以继续聊。');}
         else {await create(); setNotice('新聊天已就绪。');}
       } catch (error) {setNotice(chatFailure(error, 'read'));} finally {setBusy(false);}
     })();
@@ -128,6 +134,18 @@ function ChatApp() {
       const problem = error instanceof ApiError ? modelFailure(error.code) : undefined;
       setNotice(problem ?? chatFailure(error, 'read'));
     }finally{setCheckingModel(false);}}
+  async function setMemoryFeedback(turn:Turn, kind:MemoryFeedbackKind) {
+    if (!chat || !turn.request_id) return;
+    await action(async () => {
+      const result = await api.request<{feedback:NonNullable<Turn['memory_feedback']>}>(
+        `/api/chats/${chat.chat_id}/turns/${turn.request_id}/memory-feedback`, 'POST',
+        {kind, expected_revision:turn.memory_feedback?.revision ?? 0},
+      );
+      setChat(current => current ? {...current, turns:current.turns.map(item =>
+        item.request_id === turn.request_id ? {...item,memory_feedback:result.feedback} : item)} : current);
+      setNotice('本轮记忆表现已记录；没有重答，也没有修改 L0–L3。');
+    });
+  }
   const disabled = busy || unknown || !chat;
   const visibleChats = organizeChats(chats, pinnedChats, chatSearch);
   function toggleCurrentPin() {
@@ -156,7 +174,7 @@ function ChatApp() {
         description={config.model_health?.state==='unavailable'?(modelFailure(config.model_health.code)??'模型调用失败。'):'检测只发送固定合成短句，不读取或写入个人记忆，也不自动重试。'}
         action={<Button loading={checkingModel} disabled={busy||unknown}
           onClick={()=>void checkModel()}>检测模型连接</Button>}/>}<div className="chat-workspace"><section className="messages" aria-label="聊天记录">{!chat?.turns.length && <div className="empty"><h2>今天想聊些什么？</h2><p>可以说说今天的事，也可以继续上次的话题。</p></div>}
-        {chat?.turns.map((turn, i) => <article key={i}><div className="bubble user"><strong>你</strong><p>{turn.input}</p></div><div className="bubble assistant"><strong>助手</strong><p>{turn.answer ?? '未获得完整回答。'}</p>{turn.answer&&<SpeechPlayer api={api} text={turn.answer}/>}</div>
+        {chat?.turns.map((turn, i) => <article id={turn.request_id ? `turn-${turn.request_id}` : undefined} className={turn.request_id === focusedRequestId ? 'focused-chat-turn' : undefined} key={turn.request_id ?? i}><div className="bubble user"><strong>你</strong><p>{turn.input}</p></div><div className="bubble assistant"><strong>助手</strong><p>{turn.answer ?? '未获得完整回答。'}</p>{turn.answer&&<SpeechPlayer api={api} text={turn.answer}/>}<MemoryFeedbackControls turn={turn} disabled={busy || unknown} onSelect={kind => void setMemoryFeedback(turn,kind)}/></div>
           {turn.memory_command && <Alert className="memory-command-result" showIcon type={memoryCommandAlert(turn.memory_command.status)} title="实际记忆操作结果" description={turn.memory_command.notice}/>}
           {turn.memory_processing === 'source_only' && <p className="memory-warning">{memoryWarning(turn)} 可继续聊天，之后需要重新整理这条来源。</p>}
           {turn.retrieval_warning === 'dense_retrieval_failed' && <p className="memory-warning">本轮本地 BGE 检索失败，已使用关键词结果继续回答；展开过程可查看实际策略。</p>}
