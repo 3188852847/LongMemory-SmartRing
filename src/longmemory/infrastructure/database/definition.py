@@ -1,6 +1,6 @@
-"""当前 SQLite V27 的完整结构定义；不包含历史迁移步骤。"""
+"""当前 SQLite V28 的完整结构定义；不包含历史迁移步骤。"""
 
-SCHEMA_VERSION = 27
+SCHEMA_VERSION = 28
 
 LATEST_SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS conversation_messages (
@@ -33,6 +33,15 @@ CREATE TABLE IF NOT EXISTS memory_evidence (
 );
 CREATE INDEX IF NOT EXISTS idx_memory_evidence_source_message
     ON memory_evidence (source_message_id);
+
+CREATE TABLE IF NOT EXISTS l1_deletion_events (
+    id TEXT PRIMARY KEY,
+    memory_id TEXT NOT NULL,
+    subject_id TEXT NOT NULL,
+    deleted_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_l1_deletion_events_subject_time
+    ON l1_deletion_events (subject_id, deleted_at DESC, id DESC);
 
 CREATE TABLE IF NOT EXISTS scenario_memories (
     id TEXT PRIMARY KEY,
@@ -583,6 +592,16 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_proactive_schedule_override_one_armed
     ON proactive_schedule_overrides (subject_id) WHERE status='armed';
 CREATE INDEX IF NOT EXISTS idx_proactive_schedule_override_recent
     ON proactive_schedule_overrides (subject_id, created_at DESC, id DESC);
+
+CREATE TRIGGER IF NOT EXISTS trg_audit_l1_delete
+BEFORE DELETE ON atomic_memories
+BEGIN
+    INSERT INTO l1_deletion_events (id, memory_id, subject_id, deleted_at)
+    VALUES (
+        lower(hex(randomblob(16))), OLD.id, OLD.subject_id,
+        strftime('%Y-%m-%dT%H:%M:%f+00:00', 'now')
+    );
+END;
 
 CREATE TRIGGER IF NOT EXISTS trg_scenario_stale_on_l1_retire
 AFTER UPDATE OF retired_at ON atomic_memories

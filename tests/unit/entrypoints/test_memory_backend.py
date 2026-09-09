@@ -134,7 +134,10 @@ def test_daily_review_uses_explicit_local_day_window(recorded):
     result = backend.daily_review(local_date=day, utc_offset_minutes=0)
     assert result["total"] == 1 and result["items"][0]["id"] == memory_id
     assert result["items"][0]["activity"] == "added"
-    assert result["activity_counts"] == {"added": 1, "corrected": 0, "changed": 0}
+    assert result["activity_counts"] == {
+        "added": 1, "corrected": 0, "changed": 0, "deleted": 0,
+    }
+    assert result["deletions"] == [] and result["deletions_limited"] is False
     with pytest.raises(MemoryAccessError, match="invalid_daily_review_window"):
         backend.daily_review(local_date="not-a-date", utc_offset_minutes=0)
 
@@ -155,7 +158,9 @@ def test_daily_review_distinguishes_add_correction_and_fact_change(recorded):
 
     day = backend.get(original_id)["recorded_at"][:10]
     result = backend.daily_review(local_date=day, utc_offset_minutes=0)
-    assert result["activity_counts"] == {"added": 1, "corrected": 1, "changed": 1}
+    assert result["activity_counts"] == {
+        "added": 1, "corrected": 1, "changed": 1, "deleted": 0,
+    }
     assert {item["activity"] for item in result["items"]} == {
         "added", "corrected", "changed",
     }
@@ -174,6 +179,13 @@ def test_delete_preserves_l0_and_clears_incoming_supersede_link(recorded):
         assert conn.execute("SELECT COUNT(*) FROM memory_evidence WHERE memory_id=?", (memory_id,)).fetchone()[0] == 0
         assert conn.execute("SELECT COUNT(*) FROM conversation_messages WHERE id=?", (source_id,)).fetchone()[0] == 1
         assert conn.execute("SELECT superseded_by_id FROM atomic_memories WHERE id='synthetic-old'").fetchone()[0] is None
+        deletion = conn.execute(
+            "SELECT memory_id,subject_id,deleted_at FROM l1_deletion_events"
+        ).fetchone()
+    assert deletion[0:2] == (memory_id, "user:self")
+    review = backend.daily_review(local_date=deletion[2][:10], utc_offset_minutes=0)
+    assert review["activity_counts"]["deleted"] == 1
+    assert review["deletions"][0]["memory_id"] == memory_id
 
 
 def test_markup_is_returned_as_data_not_rewritten_as_fact(recorded):

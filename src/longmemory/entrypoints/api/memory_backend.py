@@ -1385,7 +1385,7 @@ class MemoryBackend:
             store = SQLiteMemoryStore(connection)
             items = store.list_recorded_between(start, end)
             summaries = []
-            activity_counts = {"added": 0, "corrected": 0, "changed": 0}
+            activity_counts = {"added": 0, "corrected": 0, "changed": 0, "deleted": 0}
             for item in items:
                 row = memory_json(item)
                 row["content"] = item.content[:240]
@@ -1405,9 +1405,23 @@ class MemoryBackend:
                 row["activity"] = activity
                 activity_counts[activity] += 1
                 summaries.append(row)
+            deletion_total = connection.execute(
+                "SELECT count(*) FROM l1_deletion_events "
+                "WHERE deleted_at >= ? AND deleted_at < ?",
+                (start.isoformat(), end.isoformat()),
+            ).fetchone()[0]
+            deletion_rows = connection.execute(
+                "SELECT id,memory_id,subject_id,deleted_at FROM l1_deletion_events "
+                "WHERE deleted_at >= ? AND deleted_at < ? "
+                "ORDER BY deleted_at DESC,id DESC LIMIT 100",
+                (start.isoformat(), end.isoformat()),
+            ).fetchall()
+            activity_counts["deleted"] = deletion_total
             return {"local_date":local_date,"utc_offset_minutes":utc_offset_minutes,
                     "items":summaries,"total":len(summaries),"limited":len(summaries)==100,
-                    "activity_counts":activity_counts}
+                    "activity_counts":activity_counts,
+                    "deletions":[dict(row) for row in deletion_rows],
+                    "deletions_limited":deletion_total > len(deletion_rows)}
 
     def consolidation_status(self):
         """只读呈现自动整理门槛和账本；不会借查询触发模型或迁移。"""
