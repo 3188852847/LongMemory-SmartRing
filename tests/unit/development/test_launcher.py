@@ -493,6 +493,21 @@ def test_daily_summary_uses_human_labels_instead_of_internal_enums(monkeypatch):
     assert not {"elysia_v1", "llm", "hybrid", "voxcpm2"}.intersection(summary.split())
 
 
+def test_launcher_failure_hint_is_actionable_without_copying_process_output(monkeypatch):
+    monkeypatch.syspath_prepend(str(DIRECTORY))
+    spec = importlib.util.spec_from_file_location("launcher_app_failure_test", DIRECTORY / "app.py")
+    app = importlib.util.module_from_spec(spec)
+    monkeypatch.setitem(sys.modules, "runtime", runtime)
+    spec.loader.exec_module(app)
+
+    assert "数据库、模型配置和高级设置" in app._failure_hint([("console", 2)])
+    assert "共享路径或配置" in app._failure_hint([("voice", 3)])
+    assert "CUDA 和 18768 端口" in app._failure_hint([("voice", 4)])
+    combined = app._failure_hint([("console", 2), ("voice", 3)])
+    assert "控制台参数" in combined and "圆屏语音" in combined
+    assert "stdout" not in combined and "traceback" not in combined
+
+
 def test_network_sync_preserves_other_configuration_and_backups(tmp_path, monkeypatch):
     monkeypatch.syspath_prepend(str(DIRECTORY))
     from sync_network import sync

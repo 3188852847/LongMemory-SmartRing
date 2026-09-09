@@ -60,6 +60,34 @@ def _summary_text(voice, start_page, role, extraction, retrieval, tts, allow_del
     )
 
 
+def _failure_hint(exited):
+    """把受管进程退出码翻译成不含原始输出的本机排障提示。
+
+    启动面板有意不复制子进程 stdout/stderr，因为上游语音日志可能包含识别
+    文本。这里仅使用组件名和稳定退出码，既能给出下一步，也不会把日志或
+    私有配置带进新的持久文件。
+    """
+    hints = []
+    for name, code in exited:
+        if name == "console" and code == 2:
+            hint = "控制台参数或本机配置未通过检查；先核对数据库、模型配置和高级设置"
+        elif name == "voice" and code == 3:
+            hint = "圆屏语音的共享路径或配置未通过检查；先核对小智目录、数据库和所选模型"
+        elif name == "voice" and code == 4:
+            hint = "VoxCPM2 在限定时间内未就绪；先核对声音环境、模型文件、CUDA 和 18768 端口"
+        elif name == "voxcpm2":
+            hint = "本地声音服务已退出；先核对声音环境、模型文件、CUDA 和 18768 端口"
+        elif name == "voice":
+            hint = "圆屏语音进程意外退出；先核对小智配置、网络地址和 8000/8003/8766 端口"
+        elif name == "console":
+            hint = "网页控制台意外退出；先核对数据库、模型配置和 8767 端口"
+        else:
+            hint = f"{name} 组件意外退出；请打开使用指南核对该组件的本机配置"
+        if hint not in hints:
+            hints.append(hint)
+    return "；".join(hints) + "。" if hints else "请打开使用指南核对本机配置。"
+
+
 def _scrollable_tab(parent):
     """创建可随窗口缩放并支持纵向滚动的页签内容区。
 
@@ -603,12 +631,14 @@ def main():
                 stopped = stop(False)
                 state["failed"] = True
                 if stopped:
-                    hint = "语音代码 3 表示共享路径或配置检查失败。" if ("voice", 3) in exited else ""
                     set_component("console", "启动失败", "error")
                     set_component("voice", "进程已停止", "error")
                     set_component("speech", "进程已停止", "error")
                     set_component("browser", "未打开", "error")
-                    set_status(f"服务已退出：{details}。已停止其他受管服务。{hint}请按指南核对环境、配置和端口。", "error")
+                    set_status(
+                        f"服务已退出：{details}。已停止其他受管服务。{_failure_hint(exited)}",
+                        "error",
+                    )
             elif manager.ready():
                 if not state["opened"]:
                     state["opened"] = True
