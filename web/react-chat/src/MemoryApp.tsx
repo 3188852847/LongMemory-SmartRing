@@ -6,6 +6,7 @@ import {AppShell, ConsoleNav} from './AppShell';
 import {PageHeader} from './PageHeader';
 import {ManualMemoryAdd} from './ManualMemoryAdd';
 import {memoryFailure, type MemoryFailurePhase} from './memoryFailure';
+import {ConsolidationOverview} from './ConsolidationStatusCard';
 
 type MemoryConfig = {configured: boolean; database: string | null; allow_delete: boolean; allow_correction: boolean; allow_change: boolean};
 type RuntimeMode = {write_enabled: boolean; use_enabled: boolean; scenario_use_enabled: boolean; scenario_available: boolean; persona_use_enabled: boolean; persona_available: boolean; persistent: boolean; l0_archived_when_write_disabled: boolean};
@@ -222,6 +223,7 @@ export function MemoryApp() {
         {daily.deletions.length>0&&<details><summary>查看删除审计（{daily.deletions.length}）</summary><List size="small" dataSource={daily.deletions} renderItem={event=><List.Item><Space direction="vertical" size={0}><span>已删除 L1：<code>{event.memory_id}</code></span><small className="subtle">{displayTime(event.deleted_at)} · 不保留被删正文</small></Space></List.Item>}/>{daily.deletions_limited&&<p className="subtle">删除审计超过 100 条，这里只显示最近记录。</p>}</details>}
         </>}
       </Card>
+      <ConsolidationOverview enabled={config?.configured === true}/>
       {mode && <Card className="mode-card" title={<span>本次运行的记忆模式 <Tag>临时设置</Tag></span>} extra={<Button type="primary" disabled={busy || (mode.write_enabled === modeDraft.write_enabled && mode.use_enabled === modeDraft.use_enabled && mode.scenario_use_enabled === modeDraft.scenario_use_enabled && mode.persona_use_enabled === modeDraft.persona_use_enabled)} onClick={() => void saveMode()}>应用到网页与圆屏</Button>}>
         <div className="memory-mode-grid">
           <label><Switch checked={modeDraft.write_enabled} disabled={busy} onChange={value => setModeDraft({...modeDraft, write_enabled: value})}/><span><strong>生成 L1</strong><small>从新对话提取原子记忆</small></span></label>

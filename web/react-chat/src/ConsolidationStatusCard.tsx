@@ -1,5 +1,6 @@
 import {useQuery} from '@tanstack/react-query';
-import {Alert, Card, Descriptions, Tag} from 'antd';
+import {Alert, Button, Card, Descriptions, Space, Tag} from 'antd';
+import {Link} from 'react-router-dom';
 import {ApiError, ChatApi} from './api';
 
 type StageName = 'l1_to_l2' | 'l2_to_l3';
@@ -27,6 +28,20 @@ const outcomeName:Record<string,string> = {
   model_request_failed:'模型请求失败，未写入', process_interrupted:'上次进程中断，未完成',
 };
 
+function useConsolidationStatus(enabled:boolean) {
+  return useQuery({queryKey:['consolidation-status'],enabled,
+    queryFn:()=>api.request<StatusResponse>('/api/consolidation-status'),refetchInterval:30_000});
+}
+
+function stageItems(item:StageStatus) {
+  return [
+    {key:'reason',label:'当前判断',children:reasonName[item.trigger_reason]??'状态原因暂未识别'},
+    {key:'pending',label:'新来源',children:`${item.pending_new_source_count} / 门槛 ${item.minimum_new_sources}`},
+    {key:'budget',label:'今日模型预算',children:`剩余 ${item.remaining_model_calls_today} / ${item.daily_model_call_budget}`},
+    {key:'latest',label:'最近结果',children:item.latest_run?.outcome_code ? (outcomeName[item.latest_run.outcome_code]??'整理已结束，结果类别暂未识别') : '尚无运行记录'},
+  ];
+}
+
 export function consolidationStatusFailure(error: unknown) {
   if (error instanceof ApiError && error.status === 404) return '当前控制台版本没有提供自动整理状态接口。请核对启动服务与页面版本。';
   if (error instanceof ApiError && ['database_missing', 'memory_database_missing'].includes(error.code)) {
@@ -37,18 +52,39 @@ export function consolidationStatusFailure(error: unknown) {
 
 /** 只展示持久账本，不提供绕过风险门控的“立即执行”按钮。 */
 export function ConsolidationStatusCard({stage,enabled}:{stage:StageName;enabled:boolean}) {
-  const query = useQuery({queryKey:['consolidation-status'],enabled,
-    queryFn:()=>api.request<StatusResponse>('/api/consolidation-status'),refetchInterval:30_000});
+  const query = useConsolidationStatus(enabled);
   if(query.error) return <Alert type="warning" showIcon title="暂时无法读取自动整理状态" description={consolidationStatusFailure(query.error)}/>;
   const item = query.data?.stages.find(value=>value.stage===stage);
   return <Card className="mode-card" size="small" title={stageName[stage]}
     extra={<Tag color={query.data?.background_enabled?'green':'default'}>{query.data?.background_enabled?'后台已启用':'后台尚未启用'}</Tag>}>
-    {!item?<p>{query.isFetching?'正在读取整理账本…':'没有该阶段的状态记录。'}</p>:<Descriptions size="small" column={{xs:1,sm:2,md:4}} items={[
-      {key:'reason',label:'当前判断',children:reasonName[item.trigger_reason]??'状态原因暂未识别'},
-      {key:'pending',label:'新来源',children:`${item.pending_new_source_count} / 门槛 ${item.minimum_new_sources}`},
-      {key:'budget',label:'今日模型预算',children:`剩余 ${item.remaining_model_calls_today} / ${item.daily_model_call_budget}`},
-      {key:'latest',label:'最近结果',children:item.latest_run?.outcome_code ? (outcomeName[item.latest_run.outcome_code]??'整理已结束，结果类别暂未识别') : '尚无运行记录'},
-    ]}/>}
+    {!item?<p>{query.isFetching?'正在读取整理账本…':'没有该阶段的状态记录。'}</p>:<Descriptions size="small" column={{xs:1,sm:2,md:4}} items={stageItems(item)}/>}
     {!query.data?.background_enabled&&<small>达到门槛只表示“可以评估是否运行”；当前不会自动调用模型或改写记忆。</small>}
+  </Card>;
+}
+
+/**
+ * 把两级低频整理放在日常回顾旁统一解释。
+ * 这里仍然只读：真正生成候选与接受候选继续留在各层级页面，避免把“达到门槛”误解成自动写入。
+ */
+export function ConsolidationOverview({enabled}:{enabled:boolean}) {
+  const query=useConsolidationStatus(enabled);
+  if(query.error) return <Alert type="warning" showIcon title="暂时无法读取低频整理状态" description={consolidationStatusFailure(query.error)}/>;
+  return <Card className="mode-card" title="低频记忆整理"
+    extra={<Tag color={query.data?.background_enabled?'green':'default'}>{query.data?.background_enabled?'后台已启用':'后台尚未启用'}</Tag>}>
+    <p className="subtle">这里只查看 L1 → L2 → L3 的整理条件与模型调用预算，不会因为打开页面而调用模型或改写记忆。达到门槛只表示具备评估条件，不代表正在运行。</p>
+    {query.isFetching&&!query.data&&<p>正在读取整理账本…</p>}
+    <div className="consolidation-overview-grid">
+      {(['l1_to_l2','l2_to_l3'] as StageName[]).map(stage=>{
+        const item=query.data?.stages.find(value=>value.stage===stage);
+        return <section key={stage} className="consolidation-stage" aria-label={stageName[stage]}>
+          <h3>{stageName[stage]}</h3>
+          {item?<Descriptions size="small" column={1} items={stageItems(item)}/>:<p className="subtle">{query.data?'没有该阶段的状态记录。':'等待整理账本。'}</p>}
+        </section>;
+      })}
+    </div>
+    <Space wrap>
+      <Link to="/scenarios"><Button>查看与复核 L2</Button></Link>
+      <Link to="/personas"><Button>查看与复核 L3</Button></Link>
+    </Space>
   </Card>;
 }
