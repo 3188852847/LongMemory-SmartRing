@@ -1,7 +1,7 @@
 import {fireEvent, render, screen, waitFor} from '@testing-library/react';
 import {describe, expect, test, vi} from 'vitest';
-import type {ChatApi, MemoryBackends} from './api';
-import {MemoryBackendSettings} from './MemoryBackendSettings';
+import {ApiError, type ChatApi, type MemoryBackends} from './api';
+import {memoryBackendFailure, MemoryBackendSettings} from './MemoryBackendSettings';
 
 
 const initial: MemoryBackends = {
@@ -20,6 +20,12 @@ const initial: MemoryBackends = {
 
 
 describe('圆屏记忆后端设置', () => {
+  test('不向页面泄露内部异常，并区分读取与保存结果未知', () => {
+    expect(memoryBackendFailure(new Error('secret path'), 'read')).not.toContain('secret path');
+    expect(memoryBackendFailure(new Error('secret path'), 'write')).toContain('未确认保存');
+    expect(memoryBackendFailure(new ApiError('memory_backends_disabled', 403), 'read')).toContain('未启用记忆后端切换');
+  });
+
   test('明确区分固件与服务端后端，并把选择延迟到下次启动', async () => {
     const request = vi.fn(async (path:string, method?:string, body?:unknown) => {
       if (method === 'PUT') {

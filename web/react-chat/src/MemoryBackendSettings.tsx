@@ -1,7 +1,16 @@
 import {useEffect, useMemo, useState} from 'react';
 import {Alert, Button, Descriptions, Select, Space, Tag} from 'antd';
-import {type ChatApi, type MemoryBackends, type MemoryBackendOption} from './api';
+import {ApiError, type ChatApi, type MemoryBackends, type MemoryBackendOption} from './api';
 
+export function memoryBackendFailure(error: unknown, phase: 'read'|'write') {
+  if (error instanceof ApiError) {
+    if (error.code === 'memory_backends_disabled') return '当前进程未启用记忆后端切换。请通过统一启动面板启动完整控制台。';
+    if (error.code === 'invalid_memory_backend') return '选择的记忆后端无效。请重新读取可用选项后再保存。';
+  }
+  return phase === 'write'
+    ? '记忆后端选择未确认保存。请重新读取当前选择后再决定是否重试。'
+    : '暂时无法读取记忆后端状态。请检查控制台服务；没有自动重试写操作。';
+}
 
 /** 只选择圆屏下次启动的后端；不热切换，也不复制或清空任何记忆库。 */
 export function MemoryBackendSettings({api, disabled}: {api:ChatApi; disabled:boolean}) {
@@ -16,7 +25,7 @@ export function MemoryBackendSettings({api, disabled}: {api:ChatApi; disabled:bo
       if (!active) return;
       setData(value);
       setSelected(value.next_start_backend ?? 'longmemory');
-    }).catch(reason => active && setError(String(reason)));
+    }).catch(reason => active && setError(memoryBackendFailure(reason, 'read')));
     return () => {active = false;};
   }, [api, disabled]);
   const option = useMemo(() => data?.backends?.find(item => item.id === selected), [data, selected]);
@@ -24,7 +33,7 @@ export function MemoryBackendSettings({api, disabled}: {api:ChatApi; disabled:bo
     setSaving(true); setError('');
     try {
       setData(await api.request<MemoryBackends>('/api/memory-backends/selection', 'PUT', {backend:selected}));
-    } catch (reason) {setError(String(reason));}
+    } catch (reason) {setError(memoryBackendFailure(reason, 'write'));}
     finally {setSaving(false);}
   }
   return <>

@@ -17,6 +17,21 @@ export function speechFailure(error:unknown) {
   return {text:messages[error.code]??messages.speech_failed, settings:error.code!=='speech_busy'};
 }
 
+/** 浏览器返回的 DOMException 文案会因浏览器和系统语言变化，不应直接成为产品提示。 */
+export function microphoneFailure(error: unknown) {
+  const name = error instanceof DOMException ? error.name : '';
+  const messages: Record<string, string> = {
+    NotAllowedError: '麦克风权限未授予。请在浏览器地址栏的网站权限中允许麦克风后再开启说话打断。',
+    SecurityError: '浏览器因安全策略阻止了麦克风访问。请核对当前页面权限后再试。',
+    NotFoundError: '没有找到可用麦克风。请连接或启用麦克风后再开启说话打断。',
+    DevicesNotFoundError: '没有找到可用麦克风。请连接或启用麦克风后再开启说话打断。',
+    NotReadableError: '麦克风当前不可用，可能正被其他程序独占。关闭占用程序后再试。',
+    TrackStartError: '麦克风当前不可用，可能正被其他程序独占。关闭占用程序后再试。',
+    AbortError: '麦克风启动被系统中断。请确认设备仍已连接后手动重试。',
+  };
+  return messages[name] ?? '无法启用麦克风打断。请检查浏览器权限和系统输入设备后手动重试。';
+}
+
 /** 网页朗读只在电脑播放；麦克风仅在播放监听期间用于本地音量判断，不上传录音。 */
 export function SpeechPlayer({api, text}: {api: ChatApi; text: string}) {
   const audio = useRef<HTMLAudioElement | undefined>(undefined);
@@ -160,7 +175,7 @@ export function SpeechPlayer({api, text}: {api: ChatApi; text: string}) {
       if (speechInterrupt) {
         void monitor().catch(error => {
           releaseMicrophone();
-          setNotice(error instanceof Error ? error.message : String(error));
+          setNotice(microphoneFailure(error));
         });
       }
     } catch (error) {
@@ -186,7 +201,7 @@ export function SpeechPlayer({api, text}: {api: ChatApi; text: string}) {
       setNotice('说话打断已开启；麦克风只会在朗读期间启用。');
     } catch (error) {
       releaseMicrophone();
-      setNotice(error instanceof Error ? error.message : String(error));
+      setNotice(microphoneFailure(error));
     }
   }
 

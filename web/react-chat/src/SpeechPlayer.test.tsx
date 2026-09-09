@@ -1,7 +1,7 @@
 import {fireEvent, render, screen, waitFor} from '@testing-library/react';
 import {afterEach, describe, expect, test, vi} from 'vitest';
 import {MemoryRouter} from 'react-router-dom';
-import {SpeechPlayer} from './SpeechPlayer';
+import {microphoneFailure, SpeechPlayer} from './SpeechPlayer';
 import {ApiError} from './api';
 
 const originalAudio = globalThis.Audio;
@@ -36,8 +36,16 @@ describe('网页朗读的麦克风生命周期', () => {
     render(<SpeechPlayer api={api} text="合成测试文本"/>);
     fireEvent.click(screen.getByRole('switch'));
 
-    await waitFor(() => expect(screen.getByText('当前浏览器不支持麦克风打断测试。')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText(/无法启用麦克风打断/)).toBeTruthy());
     expect(screen.getByRole('switch').getAttribute('aria-checked')).toBe('false');
+  });
+
+  test('不向页面泄露浏览器麦克风异常原文', () => {
+    expect(microphoneFailure(new DOMException('Permission denied by browser internals', 'NotAllowedError')))
+      .toContain('麦克风权限未授予');
+    expect(microphoneFailure(new DOMException('Raw device failure', 'NotReadableError')))
+      .toContain('可能正被其他程序独占');
+    expect(microphoneFailure(new Error('secret browser detail'))).not.toContain('secret browser detail');
   });
 
   test('生成期间点击停止后不播放迟到的音频', async () => {

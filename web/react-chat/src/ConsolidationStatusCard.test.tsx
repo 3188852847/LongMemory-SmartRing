@@ -1,12 +1,17 @@
 import {render,screen,waitFor} from '@testing-library/react';
 import {QueryClient,QueryClientProvider} from '@tanstack/react-query';
 import {afterEach,describe,expect,it,vi} from 'vitest';
-import {ChatApi} from './api';
-import {ConsolidationStatusCard} from './ConsolidationStatusCard';
+import {ApiError,ChatApi} from './api';
+import {consolidationStatusFailure,ConsolidationStatusCard} from './ConsolidationStatusCard';
 
 afterEach(()=>vi.restoreAllMocks());
 
 describe('ConsolidationStatusCard',()=>{
+  it('does not expose raw status request failures',()=>{
+    expect(consolidationStatusFailure(new Error('private database path'))).not.toContain('private database path');
+    expect(consolidationStatusFailure(new ApiError('http_404',404))).toContain('没有提供自动整理状态接口');
+  });
+
   it('explains that readiness does not mean background execution',async()=>{
     vi.spyOn(ChatApi.prototype,'request').mockResolvedValue({background_enabled:false,stages:[{
       stage:'l1_to_l2',pending_new_source_count:5,trigger_action:'run',trigger_reason:'ready',
