@@ -12,12 +12,17 @@ from longmemory.methods.contracts import (
     MemoryMethod,
     MemorySupport,
     ObservationResult,
+    RetrievedTrace,
 )
 from longmemory.application.scenario_recall import ScenarioRecallItem, ScenarioRecallResult
 from longmemory.application.persona_recall import PersonaRecallItem, PersonaRecallResult
 from longmemory.application.natural_memory_commands import NaturalMemoryCommandResult
 from longmemory.application.natural_companion_commands import NaturalCompanionCommandResult
 from longmemory.application.follow_up_suggestions import FollowUpSuggestionResult
+from longmemory.application.temporary_interaction import (
+    TemporaryInteractionDirective,
+    TemporaryInteractionProvider,
+)
 from longmemory.application.consolidation.scheduler import (
     LowFrequencyConsolidationScheduler,
 )
@@ -53,6 +58,7 @@ class PreparedMemoryTurn:
     # 字段名为兼容既有 API 保留；它现在也可承载明确的陪伴控制命令。
     memory_command: NaturalMemoryCommandResult | NaturalCompanionCommandResult | None
     follow_up_suggestion: FollowUpSuggestionResult | None = None
+    temporary_interaction: TemporaryInteractionDirective | None = None
 
 
 class MemoryRuntime:
@@ -65,6 +71,7 @@ class MemoryRuntime:
 
     def __init__(self, database: Path, *, method: MemoryMethod, scenario_provider=None,
                  persona_provider=None, memory_command_handler=None,
+                 temporary_interaction_provider: TemporaryInteractionProvider | None = None,
                  consolidation_scheduler: LowFrequencyConsolidationScheduler | None = None,
                  clock=None) -> None:
         self.database = database.resolve()
@@ -81,6 +88,7 @@ class MemoryRuntime:
         self._persona_provider = persona_provider
         self._persona_use_enabled = False
         self._memory_command_handler = memory_command_handler
+        self._temporary_interaction_provider = temporary_interaction_provider
         self._consolidation_scheduler = consolidation_scheduler
         self._clock = clock or (lambda: datetime.now(UTC))
 
@@ -162,6 +170,32 @@ class MemoryRuntime:
                         strategy, support.warning_code,
                     )
             persona_finished = perf_counter()
+            temporary_interaction = None
+            if self._use_enabled and self._temporary_interaction_provider is not None:
+                temporary_interaction = self._temporary_interaction_provider.current(
+                    at=event.occurred_at,
+                )
+                if temporary_interaction is not None:
+                    combined = "\n\n".join(value for value in (
+                        support.context, temporary_interaction.context,
+                    ) if value)
+                    retrieved = tuple(support.retrieved or ())
+                    if not any(
+                        item.item_id == temporary_interaction.source_memory_id
+                        for item in retrieved
+                    ):
+                        retrieved += (RetrievedTrace(
+                            temporary_interaction.source_memory_id,
+                            temporary_interaction.source_content,
+                            (temporary_interaction.source_message_id,),
+                        ),)
+                    strategy = "+".join(value for value in (
+                        support.retrieval_strategy, "temporary_interaction_v1",
+                    ) if value)
+                    support = MemorySupport(
+                        support.call_id, combined, retrieved,
+                        strategy, support.warning_code,
+                    )
             if command is not None:
                 label = (
                     "[陪伴设置结果]"
@@ -197,7 +231,7 @@ class MemoryRuntime:
             event, observation, support, write_enabled, use_enabled,
             scenario_use_enabled, scenario_result.items,
             persona_use_enabled, persona_result.items, timings, command,
-            follow_up_suggestion,
+            follow_up_suggestion, temporary_interaction,
         )
 
     def record_assistant(self, text: str) -> ObservationResult:
@@ -222,6 +256,9 @@ class MemoryRuntime:
                 "scenario_available": self._scenario_provider is not None,
                 "persona_use_enabled": self._persona_use_enabled,
                 "persona_available": self._persona_provider is not None,
+                "temporary_interaction_available": (
+                    self._temporary_interaction_provider is not None
+                ),
                 "settings_persistent": False,
                 "consolidation_scheduler": (
                     self._consolidation_scheduler.status().to_dict()

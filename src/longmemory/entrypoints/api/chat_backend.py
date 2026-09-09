@@ -165,7 +165,7 @@ class ChatBackend:
                   "retrieval_warning": None, "scenario_retrieved": None,
                   "scenario_use_enabled": False, "persona_retrieved": None,
                   "persona_use_enabled": False, "memory_command": None,
-                  "follow_up_suggestion": None}
+                  "follow_up_suggestion": None, "temporary_interaction": None}
         try:
             runtime = self.memory_runtime()
             runtime_status = runtime.status()
@@ -193,6 +193,10 @@ class ChatBackend:
             result["follow_up_suggestion"] = (
                 asdict(prepared.follow_up_suggestion)
                 if prepared.follow_up_suggestion is not None else None
+            )
+            result["temporary_interaction"] = (
+                asdict(prepared.temporary_interaction)
+                if prepared.temporary_interaction is not None else None
             )
             result.update(user_saved=True, event_id=event.event_id,
                           writes=[asdict(item) for item in observed.writes],

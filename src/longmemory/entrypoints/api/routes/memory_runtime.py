@@ -112,6 +112,10 @@ def register_memory_runtime_routes(app, backend):
                 asdict(prepared.follow_up_suggestion)
                 if prepared.follow_up_suggestion is not None else None
             ),
+            "temporary_interaction": (
+                asdict(prepared.temporary_interaction)
+                if prepared.temporary_interaction is not None else None
+            ),
             "round_screen_feedback": (
                 asdict(feedback) if feedback is not None else None
             ),

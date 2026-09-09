@@ -145,3 +145,21 @@ def test_daily_llm_scopes_explicit_today_state_and_allows_next_day_recurrence(tm
         ("2026-09-06T00:00:00+08:00", "2026-09-07T00:00:00+08:00"),
         ("2026-09-07T00:00:00+08:00", "2026-09-08T00:00:00+08:00"),
     ]
+
+
+def test_daily_llm_scopes_supported_temporary_interaction_wording(tmp_path):
+    path = existing_database(tmp_path)
+    producer = Stub(proposal(
+        "用户希望助手今天只倾听，不主动给建议。",
+        "我今天只想让你听我说",
+    ))
+    method = DailyLLMMemory(path, producer=producer)
+
+    method.observe(event("listen-today", "我今天只想让你听我说"))
+    method.close()
+
+    with sqlite3.connect(path) as connection:
+        valid_to = connection.execute(
+            "SELECT valid_to FROM atomic_memories"
+        ).fetchone()[0]
+    assert valid_to == "2026-09-07T00:00:00+08:00"

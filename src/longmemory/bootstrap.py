@@ -15,6 +15,9 @@ from longmemory.application.memory_management.service import (
 from longmemory.application.memory_runtime import MemoryRuntime
 from longmemory.adapters.storage.sqlite_scenario_recall import SQLiteScenarioRecallProvider
 from longmemory.adapters.storage.sqlite_natural_memory_commands import SQLiteNaturalMemoryCommandHandler
+from longmemory.adapters.storage.sqlite_temporary_interaction import (
+    SQLiteTemporaryInteractionProvider,
+)
 from longmemory.core.common.identifiers import MemoryId
 from longmemory.infrastructure.logging.setup import log_event
 from longmemory.methods.factory import create_method
@@ -50,6 +53,9 @@ def build_memory_runtime(database_path: Path, *, clock=None) -> MemoryRuntime:
     return MemoryRuntime(database_path, method=method,
                          scenario_provider=SQLiteScenarioRecallProvider(database_path),
                          memory_command_handler=SQLiteNaturalMemoryCommandHandler(database_path),
+                         temporary_interaction_provider=(
+                             SQLiteTemporaryInteractionProvider(database_path)
+                         ),
                          clock=clock)
 
 
