@@ -47,10 +47,18 @@
     "index_contains_wallpaper": true
   },
   "flash": {
-    "result": "not_started",
+    "result": "verified",
+    "verified_on": "2026-09-10",
+    "port": "COM3",
+    "device_mac_suffix": "6d:38",
     "required_offsets": ["0x20000", "0x800000"],
+    "application_and_assets_written_as_pair": true,
+    "independent_verify_flash": "digest_matched",
     "nvs_write_required": false,
-    "partition_table_write_required": false
+    "partition_table_write_required": false,
+    "nvs_written": false,
+    "partition_table_written": false,
+    "ota_data_written": false
   },
   "runtime": {
     "gif_decode": "pending_device_validation",
