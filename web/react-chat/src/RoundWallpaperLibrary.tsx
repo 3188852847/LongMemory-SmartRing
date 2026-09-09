@@ -35,7 +35,7 @@ export function RoundWallpaperLibrary({api,sessionReady}:{api:ChatApi;sessionRea
       <label><span>颜色数</span><Select aria-label="壁纸颜色数" value={options.colors} options={[64,96,128].map(value=>({value,label:String(value)}))} onChange={value=>setOptions(current=>({...current,colors:value}))}/></label>
     </div>
     <Space wrap className="wallpaper-actions"><Button type="primary" disabled={!file||!library.data?.enabled} loading={upload.isPending} onClick={()=>upload.mutate()}>导入并生成预览</Button><span className="subtle">{upload.isPending?'正在上传和转码，大文件需要等待…':'当前仅生成预览，不会改动真机。'}</span></Space>
-    {upload.isError&&<Alert className="settings-model-alert" type="error" showIcon title="素材没有导入" description={error}/>} 
+    {upload.isError&&<Alert className="settings-model-alert" type="error" showIcon title="素材没有导入" description={error}/>}
     {upload.isSuccess&&<Alert className="settings-model-alert" type="success" showIcon title="素材已导入" description="预览已通过尺寸、时长和哈希校验；尚未发布到圆屏。"/>}
     <div className="wallpaper-library-list">{library.data?.items.length===0&&<p className="subtle">还没有本机动态壁纸素材。</p>}{library.data?.items.map(item=><article key={item.id} className="wallpaper-library-item">
       <img src={`/api/round-wallpapers/${item.id}/preview`} alt={`${item.source.display_name} 圆屏预览`}/><div><h3>{item.source.display_name}</h3><Descriptions size="small" column={1} items={[
