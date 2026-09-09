@@ -173,6 +173,7 @@ export function PersonaApp() {
   </AppShell>
 
   <Drawer title="L3 画像详情" size="large" open={Boolean(selectedId)} onClose={closeDetail} loading={detail.isFetching}>
+    {detail.isError&&<Alert type="error" showIcon title="无法打开这条 L3 画像" description="记录可能已经失效、被移除，或记忆服务暂不可用。关闭详情后可刷新画像列表；页面没有自动重试或修改数据。"/>}
     {detail.data&&<><Space wrap><h2>{detail.data.label}</h2><Tag>{kindName[detail.data.kind]}</Tag><Tag color={detail.data.basis==='user_declared'?'blue':'purple'}>{basisName[detail.data.basis]}</Tag><Tag color={stateColor[detail.data.status]}>{stateName[detail.data.status]}</Tag></Space>
       <p className="detail-content">{detail.data.statement}</p>
       <Descriptions column={1} size="small" bordered items={[
