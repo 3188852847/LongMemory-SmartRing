@@ -51,7 +51,7 @@ export function SettingsApp() {
       {key:'appearance', label:'外观与阅读', children:<Card title="外观与阅读" extra={<span className="setting-scope">当前浏览器</span>}>
         <p>只保存主题、字号和动画偏好，不保存聊天正文或个人记忆。</p>
         <Space orientation="vertical" style={{width:'100%'}}>
-          <label>主题</label><Select className="wide" aria-label="主题" value={prefs.theme} onChange={theme => update({...prefs, theme})} options={[{value:'system',label:'跟随系统'},{value:'light',label:'浅色'},{value:'dark',label:'深色'}]}/>
+          <label>主题</label><Select className="wide" aria-label="主题" value={prefs.theme} onChange={theme => update({...prefs, theme})} options={[{value:'future',label:'未来控制台（推荐）'},{value:'system',label:'跟随系统'},{value:'light',label:'平静浅色'},{value:'dark',label:'经典深色'}]}/>
           <label>字号</label><Select className="wide" aria-label="字号" value={prefs.size} onChange={size => update({...prefs, size})} options={[{value:'normal',label:'标准'},{value:'large',label:'大'},{value:'larger',label:'更大'}]}/>
           <label>界面动画</label><Select className="wide" aria-label="界面动画" value={prefs.motion} onChange={motion => update({...prefs, motion})} options={[{value:'system',label:'跟随系统'},{value:'reduce',label:'减少动画'},{value:'full',label:'完整动画'}]}/>
           <Button onClick={() => reset()}>恢复默认</Button>

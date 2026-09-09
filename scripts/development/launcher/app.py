@@ -22,12 +22,19 @@ from firewall_panel import open_panel
 from tts import config_action as tts_config_action
 
 
-APP_BACKGROUND = "#f5f6fa"
-CARD_BACKGROUND = "#ffffff"
-ACCENT = "#a72760"
-TEXT_STRONG = "#18202f"
-TEXT_MUTED = "#667085"
-BORDER = "#dfe3ea"
+# 启动器与网页控制台共享“克制未来科技”语义；Tk 不支持网页的渐变和
+# 切角，因此只复用深海军蓝、青色主操作、琥珀警告和红色故障。
+APP_BACKGROUND = "#050f1f"
+CARD_BACKGROUND = "#09192c"
+SURFACE_MUTED = "#0c2036"
+ACCENT = "#28d7f2"
+ACCENT_HOVER = "#66e8fa"
+TEXT_STRONG = "#e8f7ff"
+TEXT_MUTED = "#7fa5bb"
+BORDER = "#1c4b69"
+SUCCESS = "#38e5a3"
+WARNING = "#ffbd4a"
+DANGER = "#ff647c"
 
 
 def _summary_text(voice, start_page, role, extraction, retrieval, tts, allow_delete,
@@ -110,28 +117,44 @@ def main():
     style.configure("Subtitle.TLabel", foreground=TEXT_MUTED)
     style.configure("Hint.TLabel", foreground=TEXT_MUTED, font=("Microsoft YaHei UI", 9))
     style.configure("Summary.TLabel", font=("Microsoft YaHei UI", 10), foreground=TEXT_STRONG)
-    style.configure("Meta.TLabel", foreground=TEXT_MUTED, background="#eef0f4",
+    style.configure("Meta.TLabel", foreground=TEXT_MUTED, background=SURFACE_MUTED,
                     font=("Microsoft YaHei UI", 8), padding=(10, 5))
-    style.configure("StatusIdle.TLabel", foreground="#98a2b3", font=("Microsoft YaHei UI", 12))
-    style.configure("StatusBusy.TLabel", foreground="#d48806", font=("Microsoft YaHei UI", 12))
-    style.configure("StatusGood.TLabel", foreground="#389e0d", font=("Microsoft YaHei UI", 12))
-    style.configure("StatusError.TLabel", foreground="#cf1322", font=("Microsoft YaHei UI", 12))
-    style.configure("Primary.TButton", background=ACCENT, foreground="#ffffff",
+    style.configure("StatusIdle.TLabel", foreground=TEXT_MUTED, font=("Microsoft YaHei UI", 12))
+    style.configure("StatusBusy.TLabel", foreground=WARNING, font=("Microsoft YaHei UI", 12))
+    style.configure("StatusGood.TLabel", foreground=SUCCESS, font=("Microsoft YaHei UI", 12))
+    style.configure("StatusError.TLabel", foreground=DANGER, font=("Microsoft YaHei UI", 12))
+    style.configure("Primary.TButton", background=ACCENT, foreground="#03101d",
                     bordercolor=ACCENT, font=("Microsoft YaHei UI", 10, "bold"), padding=(18, 10))
-    style.map("Primary.TButton", background=[("active", "#8f2051"), ("disabled", "#d7a7bd")],
-              foreground=[("disabled", "#ffffff")])
+    style.map("Primary.TButton", background=[("active", ACCENT_HOVER), ("disabled", "#174052")],
+              foreground=[("disabled", TEXT_MUTED)])
     style.configure("Secondary.TButton", background=CARD_BACKGROUND, foreground=TEXT_STRONG,
                     bordercolor=BORDER, padding=(12, 9))
-    style.map("Secondary.TButton", background=[("active", "#f0f2f6")])
+    style.map("Secondary.TButton", background=[("active", SURFACE_MUTED)])
+    style.configure("TEntry", fieldbackground=SURFACE_MUTED, foreground=TEXT_STRONG,
+                    bordercolor=BORDER, lightcolor=BORDER, darkcolor=BORDER)
+    style.configure("TCombobox", fieldbackground=SURFACE_MUTED, background=SURFACE_MUTED,
+                    foreground=TEXT_STRONG, bordercolor=BORDER, arrowcolor=ACCENT)
+    style.map("TCombobox", fieldbackground=[("readonly", SURFACE_MUTED)],
+              foreground=[("readonly", TEXT_STRONG)],
+              selectbackground=[("readonly", SURFACE_MUTED)],
+              selectforeground=[("readonly", TEXT_STRONG)])
+    style.configure("TRadiobutton", background=APP_BACKGROUND, foreground=TEXT_STRONG,
+                    indicatorcolor=SURFACE_MUTED, focuscolor=ACCENT)
+    style.configure("TCheckbutton", background=APP_BACKGROUND, foreground=TEXT_STRONG,
+                    indicatorcolor=SURFACE_MUTED, focuscolor=ACCENT)
+    style.map("TRadiobutton", indicatorcolor=[("selected", ACCENT)])
+    style.map("TCheckbutton", indicatorcolor=[("selected", ACCENT)])
+    style.configure("TScrollbar", background=SURFACE_MUTED, troughcolor=APP_BACKGROUND,
+                    bordercolor=BORDER, arrowcolor=TEXT_MUTED)
     style.configure("Section.TLabelframe", padding=16, background=CARD_BACKGROUND,
                     bordercolor=BORDER, relief="solid", borderwidth=1)
     style.configure("Section.TLabelframe.Label", background=APP_BACKGROUND,
                     foreground=TEXT_STRONG, font=("Microsoft YaHei UI", 10, "bold"))
     style.configure("TNotebook", background=APP_BACKGROUND, borderwidth=0, tabmargins=(0, 0, 0, 10))
-    style.configure("TNotebook.Tab", background="#e9ecf2", foreground=TEXT_MUTED,
+    style.configure("TNotebook.Tab", background=SURFACE_MUTED, foreground=TEXT_MUTED,
                     font=("Microsoft YaHei UI", 9), padding=(18, 9))
-    style.map("TNotebook.Tab", background=[("selected", CARD_BACKGROUND), ("active", "#f0f2f6")],
-              foreground=[("selected", TEXT_STRONG)])
+    style.map("TNotebook.Tab", background=[("selected", CARD_BACKGROUND), ("active", "#10304a")],
+              foreground=[("selected", ACCENT)])
     try:
         lock = Singleton()
     except ValueError as error:

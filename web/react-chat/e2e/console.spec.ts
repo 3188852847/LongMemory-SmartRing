@@ -46,7 +46,11 @@ test('文字聊天可保存并在刷新后恢复，React 页面可统一导航',
   await expect(page.getByText(/已保存版本 1/)).toBeVisible();
   await page.locator('.ant-modal-close').click();
   await page.getByRole('tab', {name:'外观与阅读'}).click();
-  await expect(page.getByRole('combobox', {name:'主题'})).toBeVisible();
+  const themeSelect = page.getByRole('combobox', {name:'主题'});
+  await expect(themeSelect).toBeVisible();
+  await themeSelect.click();
+  await page.locator('.ant-select-dropdown:visible').getByText('未来控制台（推荐）', {exact:true}).click();
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'future');
   await page.getByRole('link', {name:'原始与原子记忆'}).click();
   await expect(page.getByRole('heading', {name:'原始与原子记忆'})).toBeVisible();
   await page.getByText('用户养了一只叫豆包的猫。', {exact:true}).click();

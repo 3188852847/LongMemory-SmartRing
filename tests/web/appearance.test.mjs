@@ -6,6 +6,7 @@ test('appearance accepts only enumerated presentation values', () => {
   assert.deepEqual(normalize({theme:'<script>',size:999,motion:'spin'}),
     {theme:'system',size:'normal',motion:'system'});
   assert.deepEqual(normalize(null),{theme:'system',size:'normal',motion:'system'});
+  assert.equal(normalize({theme:'future'}).theme,'future');
 });
 test('save/reload restores only display settings', () => {
   let raw;

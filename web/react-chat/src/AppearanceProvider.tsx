@@ -2,7 +2,7 @@ import {createContext, type ReactNode, useContext, useEffect, useMemo, useState}
 import {ConfigProvider, theme} from 'antd';
 import {KEY, normalize, read, save, apply} from '../../assets/appearance.mjs';
 
-type ThemePreference = 'system' | 'light' | 'dark';
+type ThemePreference = 'system' | 'light' | 'dark' | 'future';
 type ReadingSize = 'normal' | 'large' | 'larger';
 type MotionPreference = 'system' | 'reduce' | 'full';
 export type AppearancePreferences = {theme: ThemePreference; size: ReadingSize; motion: MotionPreference};
@@ -64,34 +64,35 @@ export function AppearanceProvider({children}: {children: ReactNode}) {
     },
   }), [prefs]);
 
-  const dark = prefs.theme === 'dark' || (prefs.theme === 'system' && systemDark);
+  const future = prefs.theme === 'future';
+  const dark = future || prefs.theme === 'dark' || (prefs.theme === 'system' && systemDark);
   const fontSize = prefs.size === 'larger' ? 20 : prefs.size === 'large' ? 18 : 16;
   return <AppearanceContext.Provider value={value}>
     <ConfigProvider csp={{nonce}} theme={{algorithm: dark ? theme.darkAlgorithm : theme.defaultAlgorithm,
       token: {
-        colorPrimary: dark ? '#e16e9e' : '#a72a5f',
-        colorInfo: dark ? '#74a0df' : '#3769b0',
-        colorSuccess: dark ? '#55b889' : '#198754',
-        colorWarning: dark ? '#d6a94e' : '#b7791f',
-        colorError: dark ? '#e06b75' : '#c43d4b',
-        colorBgLayout: dark ? '#101217' : '#f5f6f8',
-        colorBgContainer: dark ? '#171a21' : '#ffffff',
-        colorBgElevated: dark ? '#1b1f27' : '#ffffff',
-        colorBorderSecondary: dark ? '#2a2f39' : '#e3e6eb',
-        colorText: dark ? '#e7eaf0' : '#20232b',
-        colorTextSecondary: dark ? '#9da5b3' : '#6b7280',
+        colorPrimary: future ? '#28d7f2' : dark ? '#e16e9e' : '#a72a5f',
+        colorInfo: future ? '#55a7ff' : dark ? '#74a0df' : '#3769b0',
+        colorSuccess: future ? '#38e5a3' : dark ? '#55b889' : '#198754',
+        colorWarning: future ? '#ffbd4a' : dark ? '#d6a94e' : '#b7791f',
+        colorError: future ? '#ff647c' : dark ? '#e06b75' : '#c43d4b',
+        colorBgLayout: future ? '#050f1f' : dark ? '#101217' : '#f5f6f8',
+        colorBgContainer: future ? '#09192c' : dark ? '#171a21' : '#ffffff',
+        colorBgElevated: future ? '#0c2036' : dark ? '#1b1f27' : '#ffffff',
+        colorBorderSecondary: future ? '#173b58' : dark ? '#2a2f39' : '#e3e6eb',
+        colorText: future ? '#d9ecf7' : dark ? '#e7eaf0' : '#20232b',
+        colorTextSecondary: future ? '#7fa5bb' : dark ? '#9da5b3' : '#6b7280',
         fontFamily: 'Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif',
         fontSize,
-        borderRadius: 8,
-        borderRadiusLG: 12,
+        borderRadius: future ? 4 : 8,
+        borderRadiusLG: future ? 6 : 12,
         controlHeight: 36,
-        boxShadow: dark ? '0 12px 32px rgba(0,0,0,.2)' : '0 8px 28px rgba(17,24,39,.055)',
+        boxShadow: future ? '0 18px 42px rgba(0,0,0,.28)' : dark ? '0 12px 32px rgba(0,0,0,.2)' : '0 8px 28px rgba(17,24,39,.055)',
       },
       components: {
         Button: {primaryShadow: 'none', defaultShadow: 'none', dangerShadow: 'none'},
         Card: {headerBg: 'transparent'},
-        Drawer: {colorBgElevated: dark ? '#171a21' : '#ffffff'},
-        Modal: {contentBg: dark ? '#171a21' : '#ffffff', headerBg: dark ? '#171a21' : '#ffffff'},
+        Drawer: {colorBgElevated: future ? '#09192c' : dark ? '#171a21' : '#ffffff'},
+        Modal: {contentBg: future ? '#09192c' : dark ? '#171a21' : '#ffffff', headerBg: future ? '#09192c' : dark ? '#171a21' : '#ffffff'},
       },
     }}>
       {children}
