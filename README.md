@@ -12,7 +12,7 @@
 
 学校模型与官方 DeepSeek 使用两个独立且不提交的本机配置档。可在“设置中心 → 模型与服务”编辑安全摘要、覆盖新 Key，并分别选择网页与圆屏下次启动档案；当前进程不会热切换，启动器会在语音启动前备份并同步小智私有配置。见[模型配置分流指南](docs/guides/模型配置分流.md)、[ADR-0089](docs/adr/0089-editable-local-model-profiles.md)与[ADR-0091](docs/adr/0091-independent-web-and-round-screen-model-profiles.md)。
 
-**产品自定义候选：[自定义功能清单](docs/requirements/自定义功能清单.md)**。区分已有能力、候选新增与需验证能力，不代表全部承诺开发。
+**完整产品方向：[产品能力地图](docs/requirements/product-capability-map.md)**；**具体自定义候选：[自定义功能清单](docs/requirements/自定义功能清单.md)**。两者区分已有基础、正在完善、候选新增、需验证与研究保留，不代表全部承诺开发。
 
 ## 当前状态
 
@@ -52,6 +52,7 @@ L3 采用“一条记录一个画像断言”，并区分用户明确声明和�
 
 - [路线图](ROADMAP.md)：先后顺序与历史记录。
 - [产品范围与验收](docs/requirements/companion-product.md)：各阶段做什么、怎样算完成。
+- [产品能力地图](docs/requirements/product-capability-map.md)：未来功能、当前状态、产品平面与执行优先级。
 - [系统架构](docs/architecture/overview.md)：模块、进程与数据归属。
 - [技术策略与技术雷达](docs/architecture/technology-strategy.md)：当前技术栈、近期采用项、触发式候选与暂不采用项。
 - [运行流程](docs/architecture/workflows.md)：当前步骤、失败行为和未来流程。
