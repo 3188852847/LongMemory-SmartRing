@@ -1438,10 +1438,17 @@ class MemoryBackend:
                 "AND NOT EXISTS (SELECT 1 FROM memory_evidence e WHERE e.source_message_id=m.id)",
                 (start.isoformat(), end.isoformat()),
             ).fetchone()[0]
+            confirmed_missed = connection.execute(
+                "SELECT count(*) FROM memory_quality_events "
+                "WHERE event_kind='owner_confirmed_missed_extraction' "
+                "AND occurred_at >= ? AND occurred_at < ?",
+                (start.isoformat(), end.isoformat()),
+            ).fetchone()[0]
             return {"local_date":local_date,"utc_offset_minutes":utc_offset_minutes,
                     "items":summaries,"total":len(summaries),"limited":len(summaries)==100,
                     "activity_counts":activity_counts,
                     "message_counts":message_counts,
+                    "quality_counts":{"owner_confirmed_missed_extraction":confirmed_missed},
                     "deletions":[dict(row) for row in deletion_rows],
                     "deletions_limited":deletion_total > len(deletion_rows)}
 
@@ -1603,10 +1610,13 @@ class MemoryBackend:
             current = self._source_json(connection, source_id)
             if not secrets.compare_digest(current["revision"], expected_revision):
                 raise MemoryAccessError("source_message_changed")
+            occurred_at = self.clock()
             try:
                 result = self._service(
                     connection, commit_changes=False,
-                ).promote_source_to_memory(MessageId(source_id), content)
+                ).promote_source_to_memory(
+                    MessageId(source_id), content, occurred_at=occurred_at,
+                )
             except LookupError:
                 raise MemoryAccessError("source_message_not_found", 404) from None
             except ValueError as error:
@@ -1617,6 +1627,20 @@ class MemoryBackend:
                 if str(error) == "source_promotion_race":
                     raise MemoryAccessError("source_message_changed") from None
                 raise
+            # 这是所有者显式确认的“漏记”质量信号，与 L1 写入同事务。
+            # 只存身份、解决方式和时间，避免再复制一份个人正文。
+            connection.execute(
+                "INSERT INTO memory_quality_events "
+                "(id,event_kind,source_message_id,memory_id,resolution,occurred_at) "
+                "VALUES (lower(hex(randomblob(16))),?,?,?,?,?)",
+                (
+                    "owner_confirmed_missed_extraction",
+                    str(result.source_message.id),
+                    str(result.memory.id),
+                    "created" if result.created_new_memory else "evidence_added",
+                    occurred_at.isoformat(),
+                ),
+            )
             connection.commit()
             return {
                 "promoted": True,

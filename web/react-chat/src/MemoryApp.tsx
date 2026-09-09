@@ -31,7 +31,7 @@ type Page<T> = {items: T[]; total: number; limit: number; offset: number};
 type DailyActivity = 'added'|'corrected'|'changed';
 type DailyReviewItem = L1Summary & {activity:DailyActivity};
 type DailyDeletion = {id:string;memory_id:string;subject_id:string;deleted_at:string};
-type DailyReview = {local_date:string;utc_offset_minutes:number;items:DailyReviewItem[];total:number;limited:boolean;activity_counts:Record<DailyActivity|'deleted',number>;message_counts:{user:number;assistant:number;total:number;unlinked_user:number};deletions:DailyDeletion[];deletions_limited:boolean};
+type DailyReview = {local_date:string;utc_offset_minutes:number;items:DailyReviewItem[];total:number;limited:boolean;activity_counts:Record<DailyActivity|'deleted',number>;message_counts:{user:number;assistant:number;total:number;unlinked_user:number};quality_counts:{owner_confirmed_missed_extraction:number};deletions:DailyDeletion[];deletions_limited:boolean};
 
 const api = new ChatApi();
 const displayTime = (value?: string | null) => value ? new Date(value).toLocaleString('zh-CN') : '未记录';
@@ -265,6 +265,7 @@ export function MemoryApp() {
         {dailyNotice&&<p role="status" className="subtle">{dailyNotice}</p>}
         {daily&&<>
         <p className="subtle">当天归档 L0：用户 {daily.message_counts.user} 条，助手 {daily.message_counts.assistant} 条；其中 {daily.message_counts.unlinked_user} 条用户原话没有形成 L1。这里只是原始记录计数，不代表会话轮数、内容总结或漏记结论。</p>
+        <p className="subtle">当天所有者确认漏记 {daily.quality_counts.owner_confirmed_missed_extraction} 条。该数字来自显式“补成 L1”操作，不是模型自评或对未关联原话的推测。</p>
         {daily.message_counts.unlinked_user>0&&<Button size="small" onClick={()=>void inspectDailyUnlinked()}>核对当天未形成 L1 的原话</Button>}
         <Space wrap><Tag>新增 {daily.activity_counts.added}</Tag><Tag color="gold">纠正 {daily.activity_counts.corrected}</Tag><Tag color="blue">事实变化 {daily.activity_counts.changed}</Tag><Tag color="red">删除 {daily.activity_counts.deleted}</Tag></Space>
         {daily.items.length?<List size="small" dataSource={daily.items.slice(0,5)} renderItem={item=><List.Item actions={[<Button type="link" key="review" onClick={()=>void openL1(item.id)}>核对来源</Button>]}>

@@ -107,6 +107,13 @@ def test_promote_unlinked_l0_reuses_source_and_deduplicates_fact(recorded):
         assert connection.execute(
             "SELECT count(*) FROM conversation_messages WHERE id='missed-1'"
         ).fetchone()[0] == 1
+        event = connection.execute(
+            "SELECT event_kind,source_message_id,memory_id,resolution "
+            "FROM memory_quality_events"
+        ).fetchone()
+        assert event == (
+            "owner_confirmed_missed_extraction", "missed-1", first["memory_id"], "created",
+        )
     assert backend.get_source("missed-1")["derived_memories"][0]["id"] == first["memory_id"]
 
     second_detail = backend.get_source("missed-2")
@@ -116,6 +123,9 @@ def test_promote_unlinked_l0_reuses_source_and_deduplicates_fact(recorded):
     assert second["created_new_memory"] is False
     assert second["memory_id"] == first["memory_id"]
     assert len(backend.get(first["memory_id"])["sources"]) == 2
+    assert backend.daily_review(
+        local_date="2026-09-09", utc_offset_minutes=0,
+    )["quality_counts"]["owner_confirmed_missed_extraction"] == 2
     with pytest.raises(MemoryAccessError, match="source_message_changed"):
         backend.promote_source(
             "missed-2", "用户最近开始每天晨跑。", second_detail["revision"],

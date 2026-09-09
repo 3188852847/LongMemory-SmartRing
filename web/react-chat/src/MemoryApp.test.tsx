@@ -16,7 +16,7 @@ describe('每日记忆回顾',()=>{
       if(path==='/api/memory-config') return {configured:true,database:'synthetic.db',allow_delete:true,allow_correction:true,allow_change:true,allow_promote_source:true} as never;
       if(path==='/api/memory-mode') return {write_enabled:true,use_enabled:true,scenario_use_enabled:false,scenario_available:true,persona_use_enabled:false,persona_available:true,persistent:false,l0_archived_when_write_disabled:true} as never;
       if(path==='/api/consolidation-status') return {background_enabled:false,stages:[]} as never;
-      if(path.startsWith('/api/memories/daily-review')) return {local_date:'2026-09-09',utc_offset_minutes:480,items:[item],total:1,limited:false,activity_counts:{added:1,corrected:0,changed:0,deleted:1},message_counts:{user:3,assistant:3,total:6,unlinked_user:1},deletions:[{id:'deletion-1',memory_id:'deleted-memory-1',subject_id:'user:self',deleted_at:'2026-09-09T09:00:00+00:00'}],deletions_limited:false} as never;
+      if(path.startsWith('/api/memories/daily-review')) return {local_date:'2026-09-09',utc_offset_minutes:480,items:[item],total:1,limited:false,activity_counts:{added:1,corrected:0,changed:0,deleted:1},message_counts:{user:3,assistant:3,total:6,unlinked_user:1},quality_counts:{owner_confirmed_missed_extraction:0},deletions:[{id:'deletion-1',memory_id:'deleted-memory-1',subject_id:'user:self',deleted_at:'2026-09-09T09:00:00+00:00'}],deletions_limited:false} as never;
       if(path.startsWith('/api/source-messages?')) return {items:[{id:'source-unlinked',role:'user',content:'我最近开始晨跑。',truncated:false,created_at:'2026-09-09T07:00:00+00:00',linked_memory_count:0}],total:1,limit:25,offset:0} as never;
       if(path==='/api/memories/memory-1') return {...item,revision:'a'.repeat(64),valid_from:null,valid_to:null,retired_at:null,superseded_by_id:null,sources:[]} as never;
       if(path.startsWith('/api/memories?')) return {items:[item],total:1,limit:25,offset:0} as never;
@@ -69,7 +69,7 @@ describe('每日记忆回顾',()=>{
       if (path === '/api/memory-config') return {configured: true, database: 'synthetic.db', allow_delete: true, allow_correction: true, allow_change: true, allow_promote_source: true} as never;
       if (path === '/api/memory-mode') return {write_enabled: true, use_enabled: true, scenario_use_enabled: false, scenario_available: true, persona_use_enabled: false, persona_available: true, persistent: false, l0_archived_when_write_disabled: true} as never;
       if (path === '/api/consolidation-status') return {background_enabled: false, stages: []} as never;
-      if (path.startsWith('/api/memories/daily-review')) return {local_date: '2026-09-09', utc_offset_minutes: 480, items: [], total: 0, limited: false, activity_counts: {added: 0, corrected: 0, changed: 0, deleted: 0}, message_counts: {user: 1, assistant: 0, total: 1, unlinked_user: 1}, deletions: [], deletions_limited: false} as never;
+      if (path.startsWith('/api/memories/daily-review')) return {local_date: '2026-09-09', utc_offset_minutes: 480, items: [], total: 0, limited: false, activity_counts: {added: 0, corrected: 0, changed: 0, deleted: 0}, message_counts: {user: 1, assistant: 0, total: 1, unlinked_user: 1}, quality_counts: {owner_confirmed_missed_extraction: calls.some(call => call.path.endsWith('/promote') && call.method === 'POST') ? 1 : 0}, deletions: [], deletions_limited: false} as never;
       if (path.startsWith('/api/source-messages?')) return {items: [source], total: 1, limit: 25, offset: 0} as never;
       if (path === '/api/source-messages/source-unlinked') return {...source, revision: 'b'.repeat(64), derived_memories: []} as never;
       if (path === '/api/source-messages/source-unlinked/promote' && method === 'POST') return {memory_id: promoted.id, created_new_memory: true} as never;
@@ -93,6 +93,7 @@ describe('每日记忆回顾',()=>{
       body: {content: promoted.content, revision: 'b'.repeat(64), confirm_promote: true},
     }));
     expect(await screen.findByText('已从原 L0 补成 L1，并保留原话来源。')).toBeTruthy();
+    expect(await screen.findByText(/当天所有者确认漏记 1 条/)).toBeTruthy();
     expect((await screen.findAllByText(promoted.content)).length).toBeGreaterThanOrEqual(1);
   });
 });

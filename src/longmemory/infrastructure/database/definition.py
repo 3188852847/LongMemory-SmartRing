@@ -1,6 +1,6 @@
-"""当前 SQLite V28 的完整结构定义；不包含历史迁移步骤。"""
+"""当前 SQLite V29 的完整结构定义；不包含历史迁移步骤。"""
 
-SCHEMA_VERSION = 28
+SCHEMA_VERSION = 29
 
 LATEST_SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS conversation_messages (
@@ -42,6 +42,19 @@ CREATE TABLE IF NOT EXISTS l1_deletion_events (
 );
 CREATE INDEX IF NOT EXISTS idx_l1_deletion_events_subject_time
     ON l1_deletion_events (subject_id, deleted_at DESC, id DESC);
+
+CREATE TABLE IF NOT EXISTS memory_quality_events (
+    id TEXT PRIMARY KEY,
+    event_kind TEXT NOT NULL CHECK (event_kind = 'owner_confirmed_missed_extraction'),
+    source_message_id TEXT NOT NULL,
+    memory_id TEXT NOT NULL,
+    resolution TEXT NOT NULL CHECK (resolution IN ('created', 'evidence_added')),
+    occurred_at TEXT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_memory_quality_event_source_kind
+    ON memory_quality_events (source_message_id, event_kind);
+CREATE INDEX IF NOT EXISTS idx_memory_quality_events_time
+    ON memory_quality_events (occurred_at DESC, id DESC);
 
 CREATE TABLE IF NOT EXISTS scenario_memories (
     id TEXT PRIMARY KEY,
