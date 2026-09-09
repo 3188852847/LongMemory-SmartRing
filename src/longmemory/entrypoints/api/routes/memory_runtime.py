@@ -66,9 +66,19 @@ def register_memory_runtime_routes(app, backend):
                     "这条记录只用于后续复核，尚未自动修改长期记忆。"
                 ),
             }[feedback.kind]
+        follow_up_notice = None
+        if (
+            prepared.follow_up_suggestion is not None
+            and prepared.follow_up_suggestion.status == "candidate_created"
+        ):
+            follow_up_notice = (
+                "已经按你说的时间形成一条跟进候选，但目前还没有启用主动联系。"
+                "请稍后在控制台的主动交流设置中核对并启用。"
+            )
         command_reply = (
             prepared.memory_command.notice
-            if prepared.memory_command is not None else feedback_notice
+            if prepared.memory_command is not None
+            else feedback_notice or follow_up_notice
         )
         return web.json_response({
             "version": 1,
@@ -91,6 +101,10 @@ def register_memory_runtime_routes(app, backend):
             "timings_ms": asdict(prepared.timings),
             "memory_command": (asdict(prepared.memory_command)
                                if prepared.memory_command is not None else None),
+            "follow_up_suggestion": (
+                asdict(prepared.follow_up_suggestion)
+                if prepared.follow_up_suggestion is not None else None
+            ),
             "round_screen_feedback": (
                 asdict(feedback) if feedback is not None else None
             ),

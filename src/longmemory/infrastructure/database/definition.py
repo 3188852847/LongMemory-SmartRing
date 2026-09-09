@@ -1,6 +1,6 @@
-"""当前 SQLite V35 的完整结构定义；不包含历史迁移步骤。"""
+"""当前 SQLite V36 的完整结构定义；不包含历史迁移步骤。"""
 
-SCHEMA_VERSION = 35
+SCHEMA_VERSION = 36
 
 LATEST_SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS conversation_messages (
@@ -681,10 +681,18 @@ CREATE TABLE IF NOT EXISTS companion_follow_up_candidates (
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     revision INTEGER NOT NULL DEFAULT 1 CHECK (revision >= 1),
-    FOREIGN KEY (source_memory_id) REFERENCES atomic_memories (id) ON DELETE CASCADE
+    creation_kind TEXT NOT NULL DEFAULT 'owner_created' CHECK (
+        creation_kind IN ('owner_created', 'explicit_conversation_request')
+    ),
+    source_message_id TEXT,
+    FOREIGN KEY (source_memory_id) REFERENCES atomic_memories (id) ON DELETE CASCADE,
+    FOREIGN KEY (source_message_id) REFERENCES conversation_messages (id) ON DELETE SET NULL
 );
 CREATE INDEX IF NOT EXISTS idx_companion_follow_up_subject_due
     ON companion_follow_up_candidates (subject_id, status, follow_up_at, id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_companion_follow_up_source_message
+    ON companion_follow_up_candidates (source_message_id)
+    WHERE source_message_id IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS proactive_schedule_overrides (
     id TEXT PRIMARY KEY,

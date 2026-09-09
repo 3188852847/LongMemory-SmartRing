@@ -65,6 +65,11 @@ export interface Turn {
   memory_feedback?:MemoryFeedback|null;
   memory_feedback_events?:MemoryFeedback[];
   memory_command?: {kind:string; status:string; notice:string; target_memory_ids?:string[]} | null;
+  follow_up_suggestion?: {
+    status:'candidate_created'|'replayed'|'not_created'; candidate_id:string|null;
+    source_memory_id:string|null; prompt_text:string|null; follow_up_at:string|null;
+    warning_code:string|null;
+  } | null;
   [key: string]: unknown;
 }
 export interface DailyMemoryFeedback {
@@ -217,6 +222,8 @@ export interface FollowUpCandidate {
   id:string; subject_id:string; source_memory_id:string; prompt_text:string;
   follow_up_at:string; status:'candidate'|'cancelled'; created_at:string;
   updated_at:string; revision:number; due:boolean; ready_for_activation:boolean;
+  creation_kind:'owner_created'|'explicit_conversation_request';
+  source_message_id:string|null;
   blocked_reason:null|'cancelled'|'already_activated'|'source_changed'|'time_reached';
   source:{layer:'l1'; content:string; state:'active'|'retired'; superseded_by_id:string|null};
   activation:null|{outreach_id:string;state:string;revision:number;expires_at:string};

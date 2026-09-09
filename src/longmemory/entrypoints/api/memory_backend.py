@@ -431,6 +431,8 @@ class MemoryBackend:
             "prompt_text": row["prompt_text"], "follow_up_at": row["follow_up_at"],
             "status": row["status"], "created_at": row["created_at"],
             "updated_at": row["updated_at"], "revision": row["revision"],
+            "creation_kind": row["creation_kind"],
+            "source_message_id": row["source_message_id"],
             "source": {
                 "layer": "l1", "content": row["source_content"],
                 "state": "retired" if row["source_retired_at"] else "active",

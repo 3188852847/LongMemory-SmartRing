@@ -29,13 +29,15 @@ class SQLiteFollowUpCandidateStore:
         self._connection.execute(
             "INSERT INTO companion_follow_up_candidates "
             "(id,subject_id,source_memory_id,source_content_sha256,prompt_text,"
-            "follow_up_at,status,created_at,updated_at,revision) VALUES (?,?,?,?,?,?,?,?,?,?)",
+            "follow_up_at,status,created_at,updated_at,revision,creation_kind,"
+            "source_message_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
             (
                 candidate.id, candidate.subject_id, candidate.source_memory_id,
                 candidate.source_content_sha256, candidate.prompt_text,
                 candidate.follow_up_at.isoformat(), candidate.status.value,
                 candidate.created_at.isoformat(), candidate.updated_at.isoformat(),
-                candidate.revision,
+                candidate.revision, candidate.creation_kind,
+                candidate.source_message_id,
             ),
         )
         if self._commit_changes:

@@ -1,7 +1,7 @@
 """由明确 L1 事实派生的一次性跟进候选。
 
 候选只表达“未来值得再问一次”，不是提醒已经启用，也不会绕过主动联系策略。
-第一版要求所有者在控制台明确创建，后续自动提取只能复用同一审计结构。
+候选可由所有者在控制台创建，也可来自时间明确的对话请求；两者都不等于投递许可。
 """
 
 from dataclasses import dataclass
@@ -26,6 +26,8 @@ class FollowUpCandidate:
     created_at: datetime
     updated_at: datetime
     revision: int = 1
+    creation_kind: str = "owner_created"
+    source_message_id: str | None = None
 
     def __post_init__(self) -> None:
         for value, name, maximum in (
@@ -56,3 +58,9 @@ class FollowUpCandidate:
             raise ValueError("follow_up_time_not_future")
         if self.updated_at < self.created_at or self.revision < 1:
             raise ValueError("follow_up_revision_invalid")
+        if self.creation_kind not in {"owner_created", "explicit_conversation_request"}:
+            raise ValueError("follow_up_creation_kind_invalid")
+        if self.source_message_id is not None and (
+            not self.source_message_id.strip() or len(self.source_message_id) > 128
+        ):
+            raise ValueError("follow_up_source_message_invalid")

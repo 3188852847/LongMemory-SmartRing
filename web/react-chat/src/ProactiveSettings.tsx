@@ -474,6 +474,7 @@ export function ProactiveSettings({api, ready}:{api:ChatApi; ready:boolean}) {
           disabled={cancelFollowUp.isPending || armFollowUp.isPending || Boolean(item.activation && item.activation.state !== 'candidate')}
           onClick={() => cancelFollowUp.mutate(item)}>{item.activation ? '取消未执行跟进' : '取消候选'}</Button></Space>}>
         <p>计划时间：{new Date(item.follow_up_at).toLocaleString('zh-CN')}</p>
+        <p className="subtle">形成方式：{item.creation_kind === 'explicit_conversation_request' ? '来自明确对话请求' : '控制台手动创建'}</p>
         <p className="subtle">依据 L1：{item.source.content}</p>
         {item.activation && <p className="subtle">一次性账本：{item.activation.state} · 过期时间 {new Date(item.activation.expires_at).toLocaleString('zh-CN')}</p>}
         {!item.ready_for_activation && !item.activation && item.status === 'candidate' && <p className="subtle">当前不可启用：{item.blocked_reason === 'source_changed' ? '来源已变化或退役' : item.blocked_reason === 'time_reached' ? '计划时间已经到达' : item.blocked_reason}</p>}

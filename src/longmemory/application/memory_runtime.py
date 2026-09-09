@@ -17,6 +17,7 @@ from longmemory.application.scenario_recall import ScenarioRecallItem, ScenarioR
 from longmemory.application.persona_recall import PersonaRecallItem, PersonaRecallResult
 from longmemory.application.natural_memory_commands import NaturalMemoryCommandResult
 from longmemory.application.natural_companion_commands import NaturalCompanionCommandResult
+from longmemory.application.follow_up_suggestions import FollowUpSuggestionResult
 from longmemory.application.consolidation.scheduler import (
     LowFrequencyConsolidationScheduler,
 )
@@ -51,6 +52,7 @@ class PreparedMemoryTurn:
     timings: MemoryPreparationTimings
     # 字段名为兼容既有 API 保留；它现在也可承载明确的陪伴控制命令。
     memory_command: NaturalMemoryCommandResult | NaturalCompanionCommandResult | None
+    follow_up_suggestion: FollowUpSuggestionResult | None = None
 
 
 class MemoryRuntime:
@@ -116,6 +118,13 @@ class MemoryRuntime:
                 observation = (self._method.observe(event) if self._write_enabled
                                else self._method.archive(event))
             observe_finished = perf_counter()
+            follow_up_suggestion = None
+            if command is None and observation.writes:
+                suggester = getattr(
+                    self._memory_command_handler, "suggest_follow_up", None,
+                )
+                if suggester is not None:
+                    follow_up_suggestion = suggester(event, observation.writes)
             recall_started = perf_counter()
             support = (
                 self._method.recall(text)
@@ -188,6 +197,7 @@ class MemoryRuntime:
             event, observation, support, write_enabled, use_enabled,
             scenario_use_enabled, scenario_result.items,
             persona_use_enabled, persona_result.items, timings, command,
+            follow_up_suggestion,
         )
 
     def record_assistant(self, text: str) -> ObservationResult:
