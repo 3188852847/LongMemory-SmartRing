@@ -187,6 +187,9 @@ export interface ProactiveOutreachSummary {
   outreach_id:string; trigger:string; content:string; created_at:string; expires_at:string;
   state:string; revision:number; reason:string; event_count:number; failure_reason:string | null;
   topic_seed_id:string | null; topic_seed_revision:number | null;
+  follow_up_source?:null | {
+    candidate_id:string; candidate_revision:number; scheduled_for:string;
+  };
   strategy_source:null | {
     version_id:string; selection_revision:number; evaluated_local_date:string;
     source_candidate_id:string; source_candidate_revision:number;
@@ -214,8 +217,9 @@ export interface FollowUpCandidate {
   id:string; subject_id:string; source_memory_id:string; prompt_text:string;
   follow_up_at:string; status:'candidate'|'cancelled'; created_at:string;
   updated_at:string; revision:number; due:boolean; ready_for_activation:boolean;
-  blocked_reason:null|'cancelled'|'source_changed'|'time_reached';
+  blocked_reason:null|'cancelled'|'already_activated'|'source_changed'|'time_reached';
   source:{layer:'l1'; content:string; state:'active'|'retired'; superseded_by_id:string|null};
+  activation:null|{outreach_id:string;state:string;revision:number;expires_at:string};
 }
 export interface CompanionStrategyCandidate {
   id:string; subject_id:string; status:'candidate'|'dismissed';

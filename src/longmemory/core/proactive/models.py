@@ -100,6 +100,8 @@ class ProactiveOutreach:
     policy_version: str | None = None
     topic_seed_id: str | None = None
     topic_seed_revision: int | None = None
+    follow_up_candidate_id: str | None = None
+    follow_up_candidate_revision: int | None = None
     strategy_version_id: str | None = None
     strategy_selection_revision: int | None = None
     strategy_evaluated_local_date: str | None = None
@@ -131,6 +133,17 @@ class ProactiveOutreach:
             _bounded(self.topic_seed_id, "outreach_topic_seed_id", 120)
             if self.topic_seed_revision < 1:
                 raise ValueError("outreach_topic_seed_revision_invalid")
+        if ((self.follow_up_candidate_id is None)
+                != (self.follow_up_candidate_revision is None)):
+            raise ValueError("outreach_follow_up_source_mismatch")
+        if self.follow_up_candidate_id is not None:
+            _bounded(
+                self.follow_up_candidate_id, "outreach_follow_up_candidate_id", 120,
+            )
+            if self.follow_up_candidate_revision < 1:
+                raise ValueError("outreach_follow_up_candidate_revision_invalid")
+            if self.trigger != OutreachTrigger.EXPLICIT_SCHEDULE:
+                raise ValueError("outreach_follow_up_trigger_invalid")
         strategy_source = (
             self.strategy_version_id,
             self.strategy_selection_revision,

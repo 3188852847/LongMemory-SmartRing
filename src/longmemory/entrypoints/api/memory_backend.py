@@ -424,6 +424,7 @@ class MemoryBackend:
             row["source_retired_at"] is None
             and source_digest == row["source_content_sha256"]
         )
+        outreach_id = row.get("outreach_id")
         return {
             "id": row["id"], "subject_id": row["subject_id"],
             "source_memory_id": row["source_memory_id"],
@@ -435,12 +436,20 @@ class MemoryBackend:
                 "state": "retired" if row["source_retired_at"] else "active",
                 "superseded_by_id": row["source_superseded_by_id"],
             },
+            "activation": None if outreach_id is None else {
+                "outreach_id": outreach_id,
+                "state": row["outreach_state"],
+                "revision": row["outreach_revision"],
+                "expires_at": row["outreach_expires_at"],
+            },
             "due": follow_up_at <= now,
             "ready_for_activation": (
-                row["status"] == "candidate" and source_current and follow_up_at > now
+                row["status"] == "candidate" and source_current
+                and follow_up_at > now and outreach_id is None
             ),
             "blocked_reason": (
                 "cancelled" if row["status"] == "cancelled"
+                else "already_activated" if outreach_id is not None
                 else "source_changed" if not source_current
                 else "time_reached" if follow_up_at <= now
                 else None
@@ -514,12 +523,87 @@ class MemoryBackend:
                     return {"id": candidate_id, "status": "cancelled",
                             "revision": row["revision"], "replayed": True}
                 raise MemoryAccessError("follow_up_conflict", 409)
-            if not SQLiteFollowUpCandidateStore(connection).cancel(
+            outreach_store = SQLiteProactiveOutreachStore(
+                connection, commit_changes=False,
+            )
+            outreach_row = connection.execute(
+                "SELECT id FROM proactive_outreach WHERE follow_up_candidate_id=?",
+                (candidate_id,),
+            ).fetchone()
+            if outreach_row is not None:
+                ledger = ProactiveOutreachLedger(outreach_store, clock=lambda: now)
+                outreach = ledger.get(outreach_row["id"])
+                if outreach is None or outreach.state != OutreachState.CANDIDATE:
+                    raise MemoryAccessError("follow_up_already_attempted", 409)
+                ledger.record_transition(
+                    outreach.id, expected_revision=outreach.revision,
+                    new_state=OutreachState.CANCELLED,
+                    reason_code="owner_cancelled_follow_up",
+                    evidence=OutreachEvidence.POLICY_DECISION,
+                )
+            if not SQLiteFollowUpCandidateStore(
+                connection, commit_changes=False,
+            ).cancel(
                 candidate_id, expected_revision=expected_revision, now=now,
             ):
                 raise MemoryAccessError("follow_up_conflict", 409)
+            connection.commit()
             return {"id": candidate_id, "status": "cancelled",
                     "revision": expected_revision + 1, "replayed": False}
+
+    def arm_follow_up_candidate(
+        self, candidate_id, *, expected_revision, expected_policy_revision,
+    ):
+        """显式建立未来账本；这里不探测设备，也不产生任何即时播报。"""
+
+        now = self.clock()
+        with self._open(write_capability="proactive") as connection:
+            store = SQLiteFollowUpCandidateStore(connection)
+            row = next(
+                (item for item in store.list("user:self") if item["id"] == candidate_id),
+                None,
+            )
+            if row is None:
+                raise MemoryAccessError("follow_up_not_found", 404)
+            if row["revision"] != expected_revision:
+                raise MemoryAccessError("follow_up_conflict", 409)
+            current = self._follow_up_json(row, now=now)
+            if row["outreach_id"] is not None:
+                return {**current, "replayed": True}
+            if not current["ready_for_activation"]:
+                raise MemoryAccessError(
+                    f"follow_up_{current['blocked_reason'] or 'not_ready'}", 409,
+                )
+            settings = SQLiteProactivePolicyStore(connection).get("user:self")
+            if settings.revision != expected_policy_revision:
+                raise MemoryAccessError("proactive_settings_conflict", 409)
+            if not settings.config.enabled:
+                raise MemoryAccessError("follow_up_requires_proactive_enabled", 409)
+            scheduled_for = datetime.fromisoformat(row["follow_up_at"])
+            ledger = ProactiveOutreachLedger(
+                SQLiteProactiveOutreachStore(connection), clock=lambda: now,
+            )
+            try:
+                ledger.create_candidate(
+                    subject_id="user:self",
+                    trigger=OutreachTrigger.EXPLICIT_SCHEDULE,
+                    trigger_reason_code="owner_approved_l1_follow_up",
+                    content=row["prompt_text"],
+                    scheduled_for=scheduled_for,
+                    expires_at=(
+                        scheduled_for + settings.config.maximum_lifetime
+                    ),
+                    idempotency_key=f"follow-up:{candidate_id}",
+                    policy_version=settings.config.policy_version,
+                    follow_up_candidate_id=candidate_id,
+                    follow_up_candidate_revision=row["revision"],
+                )
+            except ValueError:
+                raise MemoryAccessError("follow_up_activation_conflict", 409) from None
+            refreshed = next(
+                item for item in store.list("user:self") if item["id"] == candidate_id
+            )
+            return {**self._follow_up_json(refreshed, now=now), "replayed": False}
 
     def update_proactive_policy(self, request):
         # 在取得写锁前完成纯配置验证；非法输入不能被误报成数据库损坏。
@@ -983,8 +1067,130 @@ class MemoryBackend:
                 delivery=result.delivery, device=device,
             )
 
+    async def proactive_follow_up_tick(self, client):
+        """执行最早一条已到时间的已启用事项；终止后绝不补发。"""
+
+        subject_id = "user:self"
+        now = self.clock()
+        with self._open() as connection:
+            due_store = SQLiteProactiveOutreachStore(
+                connection, commit_changes=False,
+            )
+            due = due_store.next_due_follow_up(subject_id, now=now)
+            handled_this_minute = due_store.follow_up_handled_in_current_minute(
+                subject_id, now=now,
+            )
+        if due is None:
+            return {
+                "action": "skip",
+                "reason": (
+                    "follow_up_already_handled_this_minute"
+                    if handled_this_minute else "no_due_follow_up"
+                ),
+                "suppress_lower_priority": handled_this_minute,
+            }
+
+        # 已过期无需访问设备；账本用系统恢复证据明确结束。
+        if now >= due.expires_at:
+            with self._open(write_capability="proactive") as connection:
+                ledger = ProactiveOutreachLedger(
+                    SQLiteProactiveOutreachStore(connection), clock=lambda: now,
+                )
+                current = ledger.get(due.id)
+                if current is None or current.state != OutreachState.CANDIDATE:
+                    return {"action": "skip", "reason": "follow_up_already_finished"}
+                expired = ledger.record_transition(
+                    current.id, expected_revision=current.revision,
+                    new_state=OutreachState.EXPIRED,
+                    reason_code="follow_up_delivery_window_missed",
+                    evidence=OutreachEvidence.SYSTEM_RECOVERY,
+                )
+                return self._outreach_result(expired, replayed=False)
+
+        device = await XiaozhiRuntimeStateProbe(client).probe()
+        now = self.clock()
+        with self._open(write_capability="proactive") as connection:
+            ledger = ProactiveOutreachLedger(
+                SQLiteProactiveOutreachStore(connection), clock=lambda: now,
+            )
+            current = ledger.get(due.id)
+            if current is None or current.state != OutreachState.CANDIDATE:
+                return {"action": "skip", "reason": "follow_up_already_finished"}
+            if now < current.scheduled_for:
+                return {"action": "wait", "reason": "follow_up_not_due"}
+            if now >= current.expires_at:
+                expired = ledger.record_transition(
+                    current.id, expected_revision=current.revision,
+                    new_state=OutreachState.EXPIRED,
+                    reason_code="follow_up_delivery_window_missed",
+                    evidence=OutreachEvidence.SYSTEM_RECOVERY,
+                )
+                return self._outreach_result(expired, replayed=False)
+            source = connection.execute(
+                "SELECT f.status,f.revision,m.content,m.retired_at "
+                "FROM companion_follow_up_candidates f "
+                "JOIN atomic_memories m ON m.id=f.source_memory_id WHERE f.id=?",
+                (current.follow_up_candidate_id,),
+            ).fetchone()
+            source_valid = (
+                source is not None
+                and source["status"] == "candidate"
+                and source["revision"] == current.follow_up_candidate_revision
+                and source["retired_at"] is None
+            )
+            if source_valid:
+                expected_digest = connection.execute(
+                    "SELECT source_content_sha256 FROM companion_follow_up_candidates "
+                    "WHERE id=?", (current.follow_up_candidate_id,),
+                ).fetchone()[0]
+                source_valid = hashlib.sha256(
+                    source["content"].encode("utf-8")
+                ).hexdigest() == expected_digest
+            if not source_valid:
+                cancelled = ledger.record_transition(
+                    current.id, expected_revision=current.revision,
+                    new_state=OutreachState.CANCELLED,
+                    reason_code="follow_up_source_no_longer_current",
+                    evidence=OutreachEvidence.POLICY_DECISION,
+                )
+                return self._outreach_result(cancelled, replayed=False)
+            if not device.ready:
+                blocked = ledger.record_transition(
+                    current.id, expected_revision=current.revision,
+                    new_state=OutreachState.BLOCKED,
+                    reason_code=device.reason_code or "device_offline",
+                    evidence=OutreachEvidence.POLICY_DECISION,
+                )
+                return self._outreach_result(
+                    blocked, replayed=False, device=device,
+                )
+            settings = SQLiteProactivePolicyStore(connection).get(subject_id)
+            history = SQLiteProactiveHistoryReader(connection).read(subject_id, now=now)
+            runtime = OutreachPolicyState(
+                attempted_at=history.attempted_at,
+                awaiting_user_response=history.awaiting_user_response,
+                user_session_active=device.user_session_active,
+                quiet_until=settings.quiet_until,
+            )
+            result = await ProactiveOutreachDispatcher(
+                ledger,
+                delivery_queue=XiaozhiProactiveDelivery(client).queue,
+                clock=lambda: now,
+            ).dispatch(
+                current.id, expected_revision=current.revision,
+                settings=settings, runtime_state=runtime,
+            )
+            return self._outreach_result(
+                result.outreach, replayed=False, decision=result.decision,
+                delivery=result.delivery, device=device,
+            )
+
     async def proactive_background_tick(self, client):
-        """组合两类定时来源；显式定时在同一分钟拥有唯一优先权。"""
+        """按明确事项、固定定时、习惯缺席的优先级组合三类来源。"""
+
+        follow_up = await self.proactive_follow_up_tick(client)
+        if "outreach_id" in follow_up or follow_up.get("suppress_lower_priority"):
+            return {"source": "follow_up", "result": follow_up}
 
         explicit = await self.proactive_scheduled_tick(client)
         if "outreach_id" in explicit:
@@ -1069,6 +1275,11 @@ class MemoryBackend:
                     "failure_reason": outreach.failure_reason,
                     "topic_seed_id": outreach.topic_seed_id,
                     "topic_seed_revision": outreach.topic_seed_revision,
+                    "follow_up_source": None if outreach.follow_up_candidate_id is None else {
+                        "candidate_id": outreach.follow_up_candidate_id,
+                        "candidate_revision": outreach.follow_up_candidate_revision,
+                        "scheduled_for": outreach.scheduled_for.isoformat(),
+                    },
                     "strategy_source": strategy_source,
                     "outcome_observation_state": observation_state,
                     "delivery_evidence_level": delivery_evidence,

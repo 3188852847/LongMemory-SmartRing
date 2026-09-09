@@ -1,6 +1,6 @@
 """主动交流当前投影与只追加事件的 SQLite 原子存储。"""
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from sqlite3 import Connection, IntegrityError, Row
 
 from longmemory.core.proactive import (
@@ -27,9 +27,10 @@ class SQLiteProactiveOutreachStore:
                 "(id,subject_id,trigger_kind,trigger_reason_code,content,created_at,"
                 "scheduled_for,expires_at,state,state_changed_at,idempotency_key,"
                 "policy_version,topic_seed_id,topic_seed_revision,"
+                "follow_up_candidate_id,follow_up_candidate_revision,"
                 "strategy_version_id,strategy_selection_revision,"
                 "strategy_evaluated_local_date,revision,failure_reason) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 self._outreach_values(outreach),
             )
             self._insert_event(event)
@@ -109,6 +110,36 @@ class SQLiteProactiveOutreachStore:
         ).fetchall()
         return tuple(self._row_to_outreach(row) for row in rows)
 
+    def next_due_follow_up(
+        self, subject_id: str, *, now: datetime,
+    ) -> ProactiveOutreach | None:
+        """每个 tick 只取最早一条已到时间的一次性跟进。"""
+
+        row = self._connection.execute(
+            "SELECT * FROM proactive_outreach WHERE subject_id=? "
+            "AND state='candidate' AND follow_up_candidate_id IS NOT NULL "
+            "AND julianday(scheduled_for)<=julianday(?) "
+            "ORDER BY julianday(scheduled_for),created_at,id LIMIT 1",
+            (subject_id, now.isoformat()),
+        ).fetchone()
+        return self._row_to_outreach(row) if row is not None else None
+
+    def follow_up_handled_in_current_minute(
+        self, subject_id: str, *, now: datetime,
+    ) -> bool:
+        """阻止较低优先级定时源在后续 tick 的同一分钟再次联系。"""
+
+        minute_start = now.replace(second=0, microsecond=0)
+        minute_end = minute_start + timedelta(minutes=1)
+        row = self._connection.execute(
+            "SELECT EXISTS(SELECT 1 FROM proactive_outreach WHERE subject_id=? "
+            "AND follow_up_candidate_id IS NOT NULL AND state<>'candidate' "
+            "AND julianday(state_changed_at)>=julianday(?) "
+            "AND julianday(state_changed_at)<julianday(?))",
+            (subject_id, minute_start.isoformat(), minute_end.isoformat()),
+        ).fetchone()
+        return bool(row[0])
+
     def list_events(self, outreach_id: str) -> tuple[OutreachEvent, ...]:
         rows = self._connection.execute(
             "SELECT * FROM proactive_outreach_events WHERE outreach_id=? "
@@ -150,6 +181,8 @@ class SQLiteProactiveOutreachStore:
             outreach.policy_version,
             outreach.topic_seed_id,
             outreach.topic_seed_revision,
+            outreach.follow_up_candidate_id,
+            outreach.follow_up_candidate_revision,
             outreach.strategy_version_id,
             outreach.strategy_selection_revision,
             outreach.strategy_evaluated_local_date,
@@ -174,6 +207,8 @@ class SQLiteProactiveOutreachStore:
             policy_version=row["policy_version"],
             topic_seed_id=row["topic_seed_id"],
             topic_seed_revision=row["topic_seed_revision"],
+            follow_up_candidate_id=row["follow_up_candidate_id"],
+            follow_up_candidate_revision=row["follow_up_candidate_revision"],
             strategy_version_id=row["strategy_version_id"],
             strategy_selection_revision=row["strategy_selection_revision"],
             strategy_evaluated_local_date=row["strategy_evaluated_local_date"],

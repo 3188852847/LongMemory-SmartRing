@@ -204,6 +204,28 @@ export function ProactiveSettings({api, ready}:{api:ChatApi; ready:boolean}) {
       void client.invalidateQueries({queryKey:['companion-follow-ups']});
     },
   });
+  const armFollowUp = useMutation({
+    mutationFn:(item:FollowUpCandidate) => api.request<FollowUpCandidate>(
+      `/api/companion-follow-ups/${item.id}/arm`, 'POST', {
+        expected_revision:item.revision,
+        expected_policy_revision:draft!.revision,
+      },
+    ),
+    onSuccess:() => {
+      setFollowUpNotice('跟进已启用为一次性未来任务；到点仍会经过全部主动交流护栏。');
+      void client.invalidateQueries({queryKey:['companion-follow-ups']});
+      void client.invalidateQueries({queryKey:['proactive-outreach']});
+    },
+    onError:error => {
+      setFollowUpNotice(error instanceof ApiError && error.code === 'follow_up_requires_proactive_enabled'
+        ? '请先打开并保存主动交流总许可，再启用跟进。'
+        : error instanceof ApiError && error.code === 'proactive_settings_conflict'
+        ? '主动交流设置已经变化，请刷新后再启用。'
+        : '跟进未启用；来源、时间或候选状态可能已经变化。');
+      void client.invalidateQueries({queryKey:['companion-follow-ups']});
+      void client.invalidateQueries({queryKey:['proactive-policy']});
+    },
+  });
   const analyzeStrategy = useMutation({
     mutationFn:() => api.request<{
       outcome:string; eligible_observation_count:number; distinct_local_dates:number;
@@ -443,14 +465,19 @@ export function ProactiveSettings({api, ready}:{api:ChatApi; ready:boolean}) {
       {followUpNotice && <p role="status">{followUpNotice}</p>}
       {followUps.isError && <Alert type="error" showIcon title="跟进候选读取失败"/>}
       <div className="proactive-history">{followUps.data?.items?.map(item => <Card size="small" key={item.id}
-        title={<Space wrap><Tag color={item.ready_for_activation ? 'gold' : 'default'}>{item.status === 'cancelled' ? '已取消' : item.due ? '已到时间' : '候选'}</Tag><strong>{item.prompt_text}</strong><Tag>未启用</Tag></Space>}
-        extra={item.status === 'candidate' && <Button size="small" danger
+        title={<Space wrap><Tag color={item.activation ? 'blue' : item.ready_for_activation ? 'gold' : 'default'}>{item.status === 'cancelled' ? '已取消' : item.activation ? '已启用' : item.due ? '已到时间' : '候选'}</Tag><strong>{item.prompt_text}</strong>{!item.activation && <Tag>未启用</Tag>}</Space>}
+        extra={item.status === 'candidate' && <Space>{item.ready_for_activation && <Button size="small" type="primary"
+          loading={armFollowUp.isPending && armFollowUp.variables?.id === item.id}
+          disabled={!draft.enabled || dirty || armFollowUp.isPending || cancelFollowUp.isPending}
+          onClick={() => armFollowUp.mutate(item)}>启用一次跟进</Button>}<Button size="small" danger
           loading={cancelFollowUp.isPending && cancelFollowUp.variables?.id === item.id}
-          disabled={cancelFollowUp.isPending}
-          onClick={() => cancelFollowUp.mutate(item)}>取消候选</Button>}>
+          disabled={cancelFollowUp.isPending || armFollowUp.isPending || Boolean(item.activation && item.activation.state !== 'candidate')}
+          onClick={() => cancelFollowUp.mutate(item)}>{item.activation ? '取消未执行跟进' : '取消候选'}</Button></Space>}>
         <p>计划时间：{new Date(item.follow_up_at).toLocaleString('zh-CN')}</p>
         <p className="subtle">依据 L1：{item.source.content}</p>
-        {!item.ready_for_activation && item.status === 'candidate' && <p className="subtle">当前不可启用：{item.blocked_reason === 'source_changed' ? '来源已变化或退役' : item.blocked_reason === 'time_reached' ? '计划时间已经到达' : item.blocked_reason}</p>}
+        {item.activation && <p className="subtle">一次性账本：{item.activation.state} · 过期时间 {new Date(item.activation.expires_at).toLocaleString('zh-CN')}</p>}
+        {!item.ready_for_activation && !item.activation && item.status === 'candidate' && <p className="subtle">当前不可启用：{item.blocked_reason === 'source_changed' ? '来源已变化或退役' : item.blocked_reason === 'time_reached' ? '计划时间已经到达' : item.blocked_reason}</p>}
+        {!draft.enabled && item.ready_for_activation && <p className="subtle">启用前需先打开并保存上方主动交流总许可。</p>}
         <small>候选 ID：{item.id} · 来源 ID：{item.source_memory_id} · 修订 {item.revision}</small>
       </Card>)}</div>
       {followUps.isSuccess && (followUps.data?.items?.length ?? 0) === 0 && <p className="subtle">尚无跟进候选。</p>}
@@ -546,6 +573,7 @@ export function ProactiveSettings({api, ready}:{api:ChatApi; ready:boolean}) {
         </div>
         <p className="subtle">{new Date(item.created_at).toLocaleString()} · 原因 {item.reason} · {item.event_count} 个事件</p>
         {item.topic_seed_id && <p className="subtle">记忆话题来源：{item.topic_seed_id} · 素材修订 {item.topic_seed_revision}</p>}
+        {item.follow_up_source && <p className="subtle">长期事项来源：候选 {item.follow_up_source.candidate_id} · 修订 {item.follow_up_source.candidate_revision} · 计划 {new Date(item.follow_up_source.scheduled_for).toLocaleString('zh-CN')}</p>}
         {item.strategy_source && <p className="subtle">
           习惯策略来源：版本 {item.strategy_source.version_id} · 激活修订 {item.strategy_source.selection_revision} · 来源候选 {item.strategy_source.source_candidate_id} 修订 {item.strategy_source.source_candidate_revision}<br/>
           {item.strategy_source.evaluated_local_date} 在 {String(Math.floor((item.strategy_source.expected_minute + item.strategy_source.grace_minutes) / 60)).padStart(2,'0')}:{String((item.strategy_source.expected_minute + item.strategy_source.grace_minutes) % 60).padStart(2,'0')} 检查 · 触发器 {item.strategy_source.trigger_policy_version}

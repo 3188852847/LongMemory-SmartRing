@@ -1,6 +1,6 @@
-"""当前 SQLite V34 的完整结构定义；不包含历史迁移步骤。"""
+"""当前 SQLite V35 的完整结构定义；不包含历史迁移步骤。"""
 
-SCHEMA_VERSION = 34
+SCHEMA_VERSION = 35
 
 LATEST_SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS conversation_messages (
@@ -352,6 +352,10 @@ CREATE TABLE IF NOT EXISTS proactive_outreach (
     topic_seed_revision INTEGER CHECK (
         topic_seed_revision IS NULL OR topic_seed_revision >= 1
     ),
+    follow_up_candidate_id TEXT,
+    follow_up_candidate_revision INTEGER CHECK (
+        follow_up_candidate_revision IS NULL OR follow_up_candidate_revision >= 1
+    ),
     strategy_version_id TEXT,
     strategy_selection_revision INTEGER CHECK (
         strategy_selection_revision IS NULL OR strategy_selection_revision >= 1
@@ -368,6 +372,9 @@ CREATE TABLE IF NOT EXISTS proactive_outreach (
     UNIQUE (subject_id, idempotency_key),
     CHECK ((topic_seed_id IS NULL) = (topic_seed_revision IS NULL)),
     CHECK (
+        (follow_up_candidate_id IS NULL) = (follow_up_candidate_revision IS NULL)
+    ),
+    CHECK (
         (strategy_version_id IS NULL AND strategy_selection_revision IS NULL
             AND strategy_evaluated_local_date IS NULL)
         OR
@@ -376,6 +383,8 @@ CREATE TABLE IF NOT EXISTS proactive_outreach (
             AND length(strategy_evaluated_local_date) = 10)
     ),
     FOREIGN KEY (topic_seed_id) REFERENCES proactive_topic_seeds (id) ON DELETE RESTRICT,
+    FOREIGN KEY (follow_up_candidate_id)
+        REFERENCES companion_follow_up_candidates (id) ON DELETE CASCADE,
     FOREIGN KEY (strategy_version_id)
         REFERENCES companion_absence_strategy_versions (id)
 );
@@ -383,6 +392,9 @@ CREATE INDEX IF NOT EXISTS idx_proactive_outreach_recent
     ON proactive_outreach (subject_id, created_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_proactive_outreach_due
     ON proactive_outreach (state, scheduled_for, expires_at);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_proactive_outreach_follow_up
+    ON proactive_outreach (follow_up_candidate_id)
+    WHERE follow_up_candidate_id IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS proactive_outreach_events (
     id TEXT PRIMARY KEY,

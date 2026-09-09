@@ -410,4 +410,45 @@ describe('主动交流设置', () => {
     expect(request.mock.calls.some(([path]) => path === '/api/proactive-outreach/test')).toBe(false);
     view.unmount(); client.clear();
   });
+
+  test('显式启用才为跟进建立一次性账本', async () => {
+    const policy = {
+      subject_id:'user:self', enabled:true, utc_offset_minutes:480,
+      allowed_weekdays:[0,1,2,3,4,5,6], allowed_start_minute:0, allowed_end_minute:1439,
+      daily_limit:2, minimum_interval_seconds:0, maximum_lifetime_seconds:300,
+      quiet_until:null, policy_version:'proactive-contact-policy-v1', revision:3, updated_at:null,
+      automatic_enabled:false, scheduled_minute:780, greeting_text:'下午好。', topic_enabled:false,
+    };
+    const candidate = {
+      id:'c'.repeat(32), subject_id:'user:self', source_memory_id:'memory-1',
+      prompt_text:'毕业设计汇报准备得怎么样了？', follow_up_at:'2030-01-01T04:00:00Z',
+      status:'candidate', created_at:'2026-09-10T01:00:00Z', updated_at:'2026-09-10T01:00:00Z',
+      revision:1, due:false, ready_for_activation:true, blocked_reason:null, activation:null,
+      source:{layer:'l1',content:'用户计划完善毕业设计汇报。',state:'active',superseded_by_id:null},
+    };
+    const request = vi.spyOn(ChatApi.prototype, 'request').mockImplementation(async (path, method) => {
+      if (path === '/api/proactive-policy') return policy;
+      if (path === '/api/proactive-schedule-status') return scheduleStatus;
+      if (path.startsWith('/api/proactive-outreach?')) return {items:[]};
+      if (path === '/api/companion-follow-ups' && method !== 'POST') return {items:[candidate]};
+      if (path.endsWith('/arm')) return {...candidate,ready_for_activation:false,
+        blocked_reason:'already_activated',activation:{outreach_id:'d'.repeat(32),state:'candidate',revision:1,expires_at:'2030-01-01T04:05:00Z'}};
+      if (path.startsWith('/api/scenarios?') || path === '/api/proactive-topic-seeds'
+          || path.startsWith('/api/memories?') || path === '/api/companion-strategy-candidates'
+          || path.startsWith('/api/companion-user-initiated-interactions')
+          || path === '/api/companion-routine-candidates'
+          || path === '/api/companion-absence-strategy-versions') return {items:[],events:[]};
+      throw new Error(`unexpected path: ${path}`);
+    });
+    const client = createConsoleQueryClient();
+    const view = render(<QueryClientProvider client={client}><ProactiveSettings api={new ChatApi()} ready={true}/></QueryClientProvider>);
+    fireEvent.click(await screen.findByRole('button', {name:'启用一次跟进'}));
+    expect(await screen.findByText(/跟进已启用为一次性未来任务/)).toBeTruthy();
+    expect(request).toHaveBeenCalledWith(
+      `/api/companion-follow-ups/${candidate.id}/arm`, 'POST',
+      {expected_revision:1,expected_policy_revision:3},
+    );
+    expect(request.mock.calls.some(([path]) => path === '/api/proactive-outreach/test')).toBe(false);
+    view.unmount(); client.clear();
+  });
 });

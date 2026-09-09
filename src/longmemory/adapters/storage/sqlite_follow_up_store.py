@@ -8,8 +8,9 @@ from longmemory.core.proactive import FollowUpCandidate
 
 
 class SQLiteFollowUpCandidateStore:
-    def __init__(self, connection: Connection) -> None:
+    def __init__(self, connection: Connection, *, commit_changes: bool = True) -> None:
         self._connection = connection
+        self._commit_changes = commit_changes
 
     def create(self, candidate: FollowUpCandidate) -> FollowUpCandidate:
         source = self._connection.execute(
@@ -37,15 +38,19 @@ class SQLiteFollowUpCandidateStore:
                 candidate.revision,
             ),
         )
-        self._connection.commit()
+        if self._commit_changes:
+            self._connection.commit()
         return candidate
 
     def list(self, subject_id: str) -> tuple[dict, ...]:
         rows = self._connection.execute(
             "SELECT f.*,m.content AS source_content,m.retired_at AS source_retired_at,"
-            "m.superseded_by_id AS source_superseded_by_id "
+            "m.superseded_by_id AS source_superseded_by_id,"
+            "o.id AS outreach_id,o.state AS outreach_state,o.revision AS outreach_revision,"
+            "o.expires_at AS outreach_expires_at "
             "FROM companion_follow_up_candidates f "
             "JOIN atomic_memories m ON m.id=f.source_memory_id "
+            "LEFT JOIN proactive_outreach o ON o.follow_up_candidate_id=f.id "
             "WHERE f.subject_id=? ORDER BY f.follow_up_at,f.created_at DESC,f.id DESC",
             (subject_id,),
         ).fetchall()
@@ -59,5 +64,6 @@ class SQLiteFollowUpCandidateStore:
             "revision=revision+1 WHERE id=? AND status='candidate' AND revision=?",
             (now.isoformat(), candidate_id, expected_revision),
         ).rowcount
-        self._connection.commit()
+        if self._commit_changes:
+            self._connection.commit()
         return changed == 1

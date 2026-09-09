@@ -269,6 +269,15 @@ class FollowUpCandidateCancelRequest(BaseModel):
     expected_revision: int = Field(ge=1)
 
 
+class FollowUpCandidateArmRequest(BaseModel):
+    """把已核对候选转换为未来一次性账本；仍受 P4 总许可约束。"""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    expected_revision: int = Field(ge=1)
+    expected_policy_revision: int = Field(ge=0)
+
+
 class CompanionStrategyDismissRequest(BaseModel):
     """忽略一个尚未生效的策略候选；不会修改当前主动联系设置。"""
 

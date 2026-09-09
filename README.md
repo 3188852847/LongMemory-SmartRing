@@ -48,7 +48,7 @@ P3 采用四层个人记忆：L0 原始证据、L1 原子记忆、L2 场景、L3
 
 记忆页已有按本地自然日查看的 L1 回顾：可区分新增、纠正和事实变化，并从当前项直达来源或追加式纠正。回顾还能核对当天未关联用户 L0；确认漏记时可显式填写完整事实补成 L1，复用原来源、不调用模型，也不会把所有未关联原话自动判为应记。V29 以不含正文的事件保留这个所有者质量信号，但不把它解释为自动错误率。SQLite V28 起还会为真实发生的 L1 删除保存不含正文的最小审计事件；旧删除不回填，且这不等于清除 L0、聊天旁库或备份。见 [ADR-0094](docs/adr/0094-content-free-l1-deletion-audit.md)和 [ADR-0095](docs/adr/0095-content-free-owner-memory-quality-events.md)。
 
-圆屏回答完成回执从 SQLite V30 开始保存：实际助手文本与本轮用户 L0、L1/L2/L3 召回数量建立关联。V31–V33 逐步增加明确质量反馈、实际召回证据索引和只追加问题处理状态；它们不自动修改记忆或学习。V34 新增长期事项跟进候选：所有者可把当前 L1 绑定到未来时间和安全短句，但候选尚不启用，即使到点也不会投递。见 [ADR-0097](docs/adr/0097-round-screen-answer-completion-receipt.md)至 [ADR-0101](docs/adr/0101-l1-backed-follow-up-candidates.md)。
+圆屏回答完成回执从 SQLite V30 开始保存：实际助手文本与本轮用户 L0、L1/L2/L3 召回数量建立关联。V31–V33 逐步增加明确质量反馈、实际召回证据索引和只追加问题处理状态；它们不自动修改记忆或学习。V34/V35 新增长期事项跟进：所有者可把当前 L1 建成候选并显式启用一次未来联系；到点仍经过 P4 全部护栏，来源变化、错过、离线或阻止都不补发。见 [ADR-0097](docs/adr/0097-round-screen-answer-completion-receipt.md)至 [ADR-0102](docs/adr/0102-one-shot-follow-up-outreach.md)。
 
 L2 设计已接受：先生成可追溯、需复核的时间化场景候选，确认前不进入回答；稳定习惯仍属于 L3。个人库已在一致性备份和用户明确授权后迁移到 V6，原有 L0/L1/L2 数量不变，生命周期事件从空表开始。可按 [L2 生活场景合成测试指南](docs/guides/L2生活场景测试.md)体验，设计与边界见 [ADR-0035](docs/adr/0035-reviewable-l2-scenario-candidates.md)、[ADR-0038](docs/adr/0038-audited-l2-lifecycle.md)和 [L2 第一版验收](docs/requirements/l2-scenario-memory.md)。
 

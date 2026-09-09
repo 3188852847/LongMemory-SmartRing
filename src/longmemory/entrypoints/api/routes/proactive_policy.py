@@ -19,6 +19,7 @@ from ..contracts import (
     ProactiveTopicSeedRequest,
     FollowUpCandidateRequest,
     FollowUpCandidateCancelRequest,
+    FollowUpCandidateArmRequest,
 )
 from ..memory_backend import MemoryAccessError
 
@@ -207,6 +208,24 @@ def register_proactive_policy_routes(app, backend, client, operation_lock):
         except MemoryAccessError as error:
             return web.json_response({"error": error.code}, status=error.status)
 
+    async def arm_follow_up_candidate(request):
+        if request.content_type != "application/json":
+            raise web.HTTPBadRequest()
+        try:
+            body = FollowUpCandidateArmRequest.model_validate(await request.json())
+        except (ValidationError, ValueError, UnicodeError):
+            raise web.HTTPBadRequest() from None
+        try:
+            result = await asyncio.to_thread(
+                backend.arm_follow_up_candidate,
+                request.match_info["candidate_id"],
+                expected_revision=body.expected_revision,
+                expected_policy_revision=body.expected_policy_revision,
+            )
+            return web.json_response(result)
+        except MemoryAccessError as error:
+            return web.json_response({"error": error.code}, status=error.status)
+
     app.router.add_get(
         "/api/companion-follow-ups", follow_up_candidates, allow_head=False,
     )
@@ -214,6 +233,10 @@ def register_proactive_policy_routes(app, backend, client, operation_lock):
     app.router.add_post(
         r"/api/companion-follow-ups/{candidate_id:[0-9a-f]{32}}/cancel",
         cancel_follow_up_candidate,
+    )
+    app.router.add_post(
+        r"/api/companion-follow-ups/{candidate_id:[0-9a-f]{32}}/arm",
+        arm_follow_up_candidate,
     )
 
     async def confirm_played(request):
