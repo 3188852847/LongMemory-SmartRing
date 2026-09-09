@@ -18,6 +18,9 @@ from longmemory.adapters.storage.sqlite_round_screen_memory_feedback_store impor
     RoundScreenMemoryFeedbackResult,
     SQLiteRoundScreenMemoryFeedbackStore,
 )
+from longmemory.adapters.storage.sqlite_memory_feedback_review_store import (
+    SQLiteMemoryFeedbackReviewStore,
+)
 from longmemory.application.round_screen_memory_feedback import (
     classify_explicit_round_screen_feedback,
 )
@@ -115,6 +118,16 @@ class ChatBackend:
         """按需读取一条圆屏问题的原始问答与召回证据。"""
 
         return SQLiteRoundScreenMemoryFeedbackStore(self.database).get_event(event_id)
+
+    def memory_feedback_review_states(self, targets):
+        """读取质量样本当前复核状态；目标中不包含聊天正文。"""
+
+        return SQLiteMemoryFeedbackReviewStore(self.database).current(tuple(targets))
+
+    def record_memory_feedback_review(self, **values):
+        """追加一次质量复核事件，不修改任何长期记忆。"""
+
+        return SQLiteMemoryFeedbackReviewStore(self.database).record(**values)
 
     def info(self):
         role = self.roles.current()

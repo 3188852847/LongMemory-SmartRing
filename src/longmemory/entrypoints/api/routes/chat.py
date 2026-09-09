@@ -11,7 +11,11 @@ from uuid import UUID, uuid4
 from aiohttp import web
 from pydantic import ValidationError
 from ..chat_store import ChatStore
-from ..contracts import ChatMemoryFeedbackRequest, ChatMessageRequest
+from ..contracts import (
+    ChatMemoryFeedbackRequest,
+    ChatMessageRequest,
+    MemoryFeedbackReviewRequest,
+)
 
 MAX_TURNS = 40
 MAX_CHATS = 32
@@ -243,7 +247,7 @@ def register_chat_routes(app, backend):
             kind_filter = request.query["kind"]
             if kind_filter not in {
                 "issues", "all", "memory_ok", "recall_miss",
-                "wrong_memory", "memory_irrelevant",
+                "wrong_memory", "memory_irrelevant", "resolved", "dismissed",
             }:
                 raise ValueError
             offset = int(request.query["offset"])
@@ -266,9 +270,6 @@ def register_chat_routes(app, backend):
                     continue
                 kind = current["kind"]
                 counts[kind] += 1
-                if (kind_filter == "issues" and kind not in {"recall_miss", "wrong_memory"}) \
-                        or (kind_filter not in {"issues", "all"} and kind != kind_filter):
-                    continue
                 layer_counts = {
                     "l1": len(turn.get("retrieved") or []),
                     "l2": len(turn.get("scenario_retrieved") or []),
@@ -288,6 +289,7 @@ def register_chat_routes(app, backend):
                     "source": "web_chat",
                     "chat_id": chat_id, "chat_title": chat.title,
                     "request_id": turn.get("request_id"), "kind": kind,
+                    "feedback_target_id": turn.get("request_id"),
                     "revision": current.get("revision"),
                     "occurred_at": current.get("occurred_at"),
                     "retrieved_counts": layer_counts,
@@ -298,9 +300,6 @@ def register_chat_routes(app, backend):
         for event in await asyncio.to_thread(backend.round_screen_memory_feedback):
             kind = event["event_kind"]
             counts[kind] += 1
-            if (kind_filter == "issues" and kind not in {"recall_miss", "wrong_memory"}) \
-                    or (kind_filter not in {"issues", "all"} and kind != kind_filter):
-                continue
             layer_counts = {
                 "l1": event["retrieved_l1_count"],
                 "l2": event["retrieved_l2_count"],
@@ -319,6 +318,7 @@ def register_chat_routes(app, backend):
                 "chat_title": "圆屏语音",
                 "request_id": event["target_user_message_id"],
                 "feedback_event_id": event["feedback_event_id"],
+                "feedback_target_id": event["feedback_event_id"],
                 "feedback_message_id": event["feedback_message_id"],
                 "assistant_message_id": event["assistant_message_id"],
                 "kind": kind,
@@ -331,10 +331,84 @@ def register_chat_routes(app, backend):
                 ),
                 "diagnostic_focus": focus,
             })
+        review_targets = tuple(
+            (item["source"], item["feedback_target_id"], item["revision"])
+            for item in rows if item["kind"] in {"recall_miss", "wrong_memory"}
+        )
+        review_states = await asyncio.to_thread(
+            backend.memory_feedback_review_states, review_targets,
+        )
+        review_counts = {"open": 0, "resolved": 0, "dismissed": 0}
+        for item in rows:
+            state = review_states.get(
+                (item["source"], item["feedback_target_id"], item["revision"]),
+                {"state": "not_applicable", "reason_code": None,
+                 "review_revision": 0, "occurred_at": None},
+            ) if item["kind"] in {"recall_miss", "wrong_memory"} else {
+                "state": "not_applicable", "reason_code": None,
+                "review_revision": 0, "occurred_at": None,
+            }
+            item["review"] = state
+            if state["state"] in review_counts:
+                review_counts[state["state"]] += 1
+        if kind_filter == "issues":
+            rows = [item for item in rows if item["kind"] in {"recall_miss", "wrong_memory"}
+                    and item["review"]["state"] == "open"]
+        elif kind_filter in {"resolved", "dismissed"}:
+            rows = [item for item in rows if item["review"]["state"] == kind_filter]
+        elif kind_filter != "all":
+            rows = [item for item in rows if item["kind"] == kind_filter]
         rows.sort(key=lambda item: item["occurred_at"] or "", reverse=True)
         return web.json_response({"kind": kind_filter, "counts": counts,
+                                  "review_counts": review_counts,
                                   "total": len(rows), "offset": offset, "limit": limit,
                                   "items": rows[offset:offset + limit]})
+
+    async def memory_feedback_review(request):
+        """追加所有者复核结论；先核实目标仍是当前问题样本。"""
+
+        if request.content_type != "application/json":
+            return web.json_response({"error": "invalid_memory_feedback_review"}, status=400)
+        try:
+            payload = MemoryFeedbackReviewRequest.model_validate(await request.json())
+        except (ValidationError, ValueError, TypeError):
+            return web.json_response({"error": "invalid_memory_feedback_review"}, status=400)
+        target_exists = False
+        if payload.source == "web_chat":
+            owner_id = owner(request)
+            for chat in chats.values():
+                if chat.owner != owner_id:
+                    continue
+                turn = chat.request_ids.get(payload.target_id)
+                current = turn.get("memory_feedback") if isinstance(turn, dict) else None
+                if (isinstance(current, dict)
+                        and current.get("kind") in {"recall_miss", "wrong_memory"}
+                        and current.get("revision") == payload.feedback_revision):
+                    target_exists = True
+                    break
+        else:
+            detail = await asyncio.to_thread(
+                backend.round_screen_memory_feedback_detail, payload.target_id,
+            )
+            target_exists = detail is not None and payload.feedback_revision == 1
+        if not target_exists:
+            return web.json_response({"error": "memory_feedback_review_target_stale"}, status=409)
+        try:
+            result = await asyncio.to_thread(
+                backend.record_memory_feedback_review,
+                source=payload.source, target_id=payload.target_id,
+                feedback_revision=payload.feedback_revision, action=payload.action,
+                reason_code=payload.reason_code,
+                expected_review_revision=payload.expected_review_revision,
+            )
+        except ValueError as exc:
+            code = str(exc)
+            status = 409 if code in {
+                "memory_feedback_review_conflict",
+                "memory_feedback_review_transition_invalid",
+            } else 400
+            return web.json_response({"error": code}, status=status)
+        return web.json_response(result)
 
     async def forget(request):
         chat = selected(request)
@@ -435,6 +509,7 @@ def register_chat_routes(app, backend):
     app.router.add_post("/api/chats/{chat_id}/turns/{request_id}/memory-feedback", memory_feedback)
     app.router.add_get("/api/chat-memory-feedback/daily", memory_feedback_daily, allow_head=False)
     app.router.add_get("/api/chat-memory-feedback", memory_feedback_index, allow_head=False)
+    app.router.add_post("/api/chat-memory-feedback/reviews", memory_feedback_review)
     app.router.add_get(
         "/api/round-screen-memory-feedback/{event_id}",
         round_screen_feedback_detail, allow_head=False,

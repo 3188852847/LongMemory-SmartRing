@@ -712,7 +712,7 @@ def test_internal_runtime_requires_token_and_is_immediately_shared_with_web(tmp_
             assert turn_row == (written["retrieved"], 0, 0)
             assert feedback_rows == [(written["turn_id"], "recall_miss")]
 
-            await login(client, base)
+            console_headers = await login(client, base)
             quality = await client.get(
                 base + "/api/chat-memory-feedback?kind=issues&offset=0&limit=25"
             )
@@ -738,6 +738,34 @@ def test_internal_runtime_requires_token_and_is_immediately_shared_with_web(tmp_
             assert detail["feedback"] == "你刚才没想起来我告诉过你的事情"
             assert detail["retrieval_evidence"][0]["matches_receipt"] is True
             assert "豆包" in detail["retrieval_evidence"][0]["current_content"]
+
+            review_response = await client.post(
+                base + "/api/chat-memory-feedback/reviews",
+                headers=console_headers,
+                json={
+                    "source": "round_screen",
+                    "target_id": round_item["feedback_event_id"],
+                    "feedback_revision": 1,
+                    "action": "resolve",
+                    "reason_code": "memory_corrected",
+                    "expected_review_revision": 0,
+                },
+            )
+            assert review_response.status == 200
+            assert (await review_response.json())["state"] == "resolved"
+            open_issues = await (await client.get(
+                base + "/api/chat-memory-feedback?kind=issues&offset=0&limit=25"
+            )).json()
+            assert open_issues["review_counts"] == {
+                "open": 0, "resolved": 1, "dismissed": 0,
+            }
+            assert not any(
+                item["source"] == "round_screen" for item in open_issues["items"]
+            )
+            resolved_issues = await (await client.get(
+                base + "/api/chat-memory-feedback?kind=resolved&offset=0&limit=25"
+            )).json()
+            assert resolved_issues["items"][0]["review"]["reason_code"] == "memory_corrected"
 
             corrected_response = await client.post(
                 endpoint,

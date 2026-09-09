@@ -1,6 +1,6 @@
-"""当前 SQLite V32 的完整结构定义；不包含历史迁移步骤。"""
+"""当前 SQLite V33 的完整结构定义；不包含历史迁移步骤。"""
 
-SCHEMA_VERSION = 32
+SCHEMA_VERSION = 33
 
 LATEST_SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS conversation_messages (
@@ -108,6 +108,24 @@ CREATE TABLE IF NOT EXISTS round_screen_memory_feedback_events (
 CREATE INDEX IF NOT EXISTS idx_round_screen_memory_feedback_target
     ON round_screen_memory_feedback_events
         (target_user_message_id, occurred_at DESC, id DESC);
+
+CREATE TABLE IF NOT EXISTS memory_feedback_review_events (
+    id TEXT PRIMARY KEY,
+    feedback_source TEXT NOT NULL CHECK (feedback_source IN ('web_chat', 'round_screen')),
+    feedback_target_id TEXT NOT NULL CHECK (length(trim(feedback_target_id)) BETWEEN 1 AND 200),
+    feedback_revision INTEGER NOT NULL CHECK (feedback_revision >= 1),
+    action TEXT NOT NULL CHECK (action IN ('resolve', 'dismiss', 'reopen')),
+    reason_code TEXT NOT NULL CHECK (reason_code IN (
+        'memory_corrected', 'retrieval_fixed', 'answer_behavior_fixed',
+        'false_positive', 'not_memory_issue', 'other', 'needs_follow_up'
+    )),
+    review_revision INTEGER NOT NULL CHECK (review_revision >= 1),
+    occurred_at TEXT NOT NULL,
+    UNIQUE (feedback_source, feedback_target_id, feedback_revision, review_revision)
+);
+CREATE INDEX IF NOT EXISTS idx_memory_feedback_review_target
+    ON memory_feedback_review_events
+        (feedback_source, feedback_target_id, feedback_revision, review_revision DESC);
 
 CREATE TABLE IF NOT EXISTS scenario_memories (
     id TEXT PRIMARY KEY,

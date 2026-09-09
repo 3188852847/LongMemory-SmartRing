@@ -45,6 +45,29 @@ class ChatMemoryFeedbackRequest(BaseModel):
     expected_revision: int = Field(ge=0, le=32)
 
 
+class MemoryFeedbackReviewRequest(BaseModel):
+    """所有者管理诊断队列；只提交固定动作和原因，不携带对话正文。"""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    source: Literal["web_chat", "round_screen"]
+    target_id: str = Field(min_length=1, max_length=200)
+    feedback_revision: int = Field(ge=1, le=32)
+    action: Literal["resolve", "dismiss", "reopen"]
+    reason_code: Literal[
+        "memory_corrected", "retrieval_fixed", "answer_behavior_fixed",
+        "false_positive", "not_memory_issue", "other", "needs_follow_up",
+    ]
+    expected_review_revision: int = Field(ge=0)
+
+    @field_validator("target_id")
+    @classmethod
+    def clean_target_id(cls, value: str) -> str:
+        if value != value.strip() or any(ord(character) < 32 for character in value):
+            raise ValueError("invalid target id")
+        return value
+
+
 class ExplicitMemoryRequest(BaseModel):
     """控制台手工声明的一条自指事实；仍交由统一记忆命令处理。"""
 

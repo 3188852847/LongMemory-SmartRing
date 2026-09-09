@@ -1,5 +1,5 @@
 import {afterEach,describe,expect,test,vi} from 'vitest';
-import {fireEvent,render,screen} from '@testing-library/react';
+import {fireEvent,render,screen,waitFor} from '@testing-library/react';
 import {MemoryRouter} from 'react-router-dom';
 import {ChatApi, type MemoryFeedbackIndex} from './api';
 import {MemoryQualityApp} from './MemoryQualityApp';
@@ -11,23 +11,32 @@ describe('记忆质量样本工作台',()=>{
     const response:MemoryFeedbackIndex={
       kind:'issues',offset:0,limit:25,total:1,
       counts:{memory_ok:2,recall_miss:1,wrong_memory:0,memory_irrelevant:3},
-      items:[{source:'web_chat',chat_id:'chat-a',chat_title:'关于豆包',request_id:'request-a',kind:'recall_miss',revision:1,occurred_at:'2026-09-09T12:00:00Z',retrieved_counts:{l1:0,l2:0,l3:0},diagnostic_focus:'retrieval'}],
+      review_counts:{open:1,resolved:0,dismissed:0},
+      items:[{source:'web_chat',chat_id:'chat-a',chat_title:'关于豆包',request_id:'request-a',feedback_target_id:'request-a',kind:'recall_miss',revision:1,occurred_at:'2026-09-09T12:00:00Z',retrieved_counts:{l1:0,l2:0,l3:0},diagnostic_focus:'retrieval',review:{state:'open',reason_code:null,review_revision:0,occurred_at:null}}],
     };
     vi.spyOn(ChatApi.prototype,'bootstrap').mockResolvedValue(undefined);
-    vi.spyOn(ChatApi.prototype,'request').mockResolvedValue(response as never);
+    const request=vi.spyOn(ChatApi.prototype,'request').mockResolvedValue(response as never);
     render(<MemoryRouter><MemoryQualityApp/></MemoryRouter>);
     expect(await screen.findByText('关于豆包')).toBeTruthy();
     expect(screen.getByText('没有召回 L1/L2/L3，优先核对检索查询和候选覆盖。')).toBeTruthy();
-    expect(screen.getByText('2')).toBeTruthy();
+    expect(screen.getByText('待处理')).toBeTruthy();
     expect(screen.getByRole('link',{name:'核对回答与证据'}).getAttribute('href')).toBe('/chat-react?chat_id=chat-a&request_id=request-a');
     expect(screen.queryByText(/用户说过/)).toBeNull();
+    fireEvent.click(screen.getByRole('button',{name:'标为已处理'}));
+    expect(screen.getByText('这只管理诊断队列，不会自动修改、删除或重新生成长期记忆。')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button',{name:'保存复核状态'}));
+    await waitFor(()=>expect(request).toHaveBeenCalledWith('/api/chat-memory-feedback/reviews','POST',{
+      source:'web_chat',target_id:'request-a',feedback_revision:1,action:'resolve',
+      reason_code:'memory_corrected',expected_review_revision:0,
+    }));
   });
 
   test('圆屏反馈使用独立来源标签并跳到用户 L0',async()=>{
     const response:MemoryFeedbackIndex={
       kind:'issues',offset:0,limit:25,total:1,
       counts:{memory_ok:0,recall_miss:0,wrong_memory:1,memory_irrelevant:0},
-      items:[{source:'round_screen',chat_id:null,chat_title:'圆屏语音',request_id:'l0-user',feedback_event_id:'event-a',feedback_message_id:'l0-feedback',assistant_message_id:'l0-assistant',kind:'wrong_memory',revision:1,occurred_at:'2026-09-10T01:00:00Z',retrieved_counts:{l1:1,l2:0,l3:0},retrieval_evidence_recorded:true,retrieval_evidence:[{layer:'l1',item_id:'memory-a',rank:1,content_sha256:'a'.repeat(64)}],diagnostic_focus:'memory_content_freshness_subject_or_ranking'}],
+      review_counts:{open:1,resolved:0,dismissed:0},
+      items:[{source:'round_screen',chat_id:null,chat_title:'圆屏语音',request_id:'l0-user',feedback_target_id:'event-a',feedback_event_id:'event-a',feedback_message_id:'l0-feedback',assistant_message_id:'l0-assistant',kind:'wrong_memory',revision:1,occurred_at:'2026-09-10T01:00:00Z',retrieved_counts:{l1:1,l2:0,l3:0},retrieval_evidence_recorded:true,retrieval_evidence:[{layer:'l1',item_id:'memory-a',rank:1,content_sha256:'a'.repeat(64)}],diagnostic_focus:'memory_content_freshness_subject_or_ranking',review:{state:'open',reason_code:null,review_revision:0,occurred_at:null}}],
     };
     vi.spyOn(ChatApi.prototype,'bootstrap').mockResolvedValue(undefined);
     vi.spyOn(ChatApi.prototype,'request').mockImplementation(async path=>path.startsWith('/api/round-screen-memory-feedback/')?{

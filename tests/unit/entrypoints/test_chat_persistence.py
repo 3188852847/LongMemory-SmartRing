@@ -49,9 +49,26 @@ def test_restart_list_rename_history_and_replay(backend):
                 base + '/api/chat-memory-feedback?kind=issues&offset=0&limit=25'
             )).json()
             assert issue_index['total'] == 1
+            assert issue_index['review_counts'] == {'open': 1, 'resolved': 0, 'dismissed': 0}
+            assert issue_index['items'][0]['review']['state'] == 'open'
             assert issue_index['items'][0]['diagnostic_focus'] == 'retrieval'
             assert issue_index['items'][0]['retrieved_counts'] == {'l1': 0, 'l2': 0, 'l3': 0}
             assert 'input' not in issue_index['items'][0] and 'answer' not in issue_index['items'][0]
+            review = await client.post(
+                base + '/api/chat-memory-feedback/reviews', headers=headers,
+                json={'source':'web_chat','target_id':body['request_id'],
+                      'feedback_revision':1,'action':'dismiss',
+                      'reason_code':'not_memory_issue','expected_review_revision':0},
+            )
+            assert review.status == 200
+            assert (await review.json())['state'] == 'dismissed'
+            assert (await (await client.get(
+                base + '/api/chat-memory-feedback?kind=issues&offset=0&limit=25'
+            )).json())['total'] == 0
+            dismissed = await (await client.get(
+                base + '/api/chat-memory-feedback?kind=dismissed&offset=0&limit=25'
+            )).json()
+            assert dismissed['items'][0]['review']['reason_code'] == 'not_memory_issue'
             assert (await client.post(base+f'/api/chats/{key}/title', json={'title':'昨天的聊天'}, headers=headers)).status == 200
             cookie = next(c.value for c in client.cookie_jar if c.key == OWNER_COOKIE)
         async with console(chat_backend=backend) as (client, base, _):
