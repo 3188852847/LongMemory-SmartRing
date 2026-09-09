@@ -6,6 +6,7 @@ import {ChatApi} from './api';
 import {AppShell, ConsoleNav} from './AppShell';
 import {PageHeader} from './PageHeader';
 import {ConsolidationStatusCard} from './ConsolidationStatusCard';
+import {derivedMemoryFailure} from './derivedMemoryFailure';
 
 type PersonaState = 'candidate' | 'active' | 'rejected' | 'stale';
 type PersonaKind = 'preference' | 'habit' | 'interaction_style' | 'behavior_pattern';
@@ -67,7 +68,7 @@ export function PersonaApp() {
   const [validTo,setValidTo] = useState('');
   const [replacementIds,setReplacementIds] = useState<string[]>([]);
 
-  useEffect(() => {void api.bootstrap().then(() => setReady(true)).catch(error => setNotice(String(error)));},[]);
+  useEffect(() => {void api.bootstrap().then(() => setReady(true)).catch(error => setNotice(derivedMemoryFailure(error, 'read')));},[]);
   const config = useQuery({queryKey:['memory-config'],enabled:ready,queryFn:() => api.request<MemoryConfig>('/api/memory-config')});
   const personas = useQuery({queryKey:['personas',filter],enabled:ready&&config.data?.configured===true,
     queryFn:() => api.request<Page<Persona>>(`/api/personas?state=${filter}&offset=0&limit=100`)});
@@ -91,7 +92,7 @@ export function PersonaApp() {
     }),
     onSuccess:async result => {setCreating(false);setSelectedId(result.id);setLabel('');setStatement('');setSources([]);setValidFrom('');setValidTo('');setReplacementIds([]);
       await queryClient.invalidateQueries({queryKey:['personas']});setNotice('L3 画像候选已创建，尚未成为有效画像。');},
-    onError:error => setNotice(String(error)),
+    onError:error => setNotice(derivedMemoryFailure(error, 'write')),
   });
   const previewCandidate = useMutation({
     mutationFn:() => api.request<PersonaConsolidationProposal>('/api/persona-consolidation-proposals','POST',{
@@ -109,7 +110,7 @@ export function PersonaApp() {
       setDraftOrigin('model_consolidation');
       setNotice(`整理器建议 ${proposal.operation}（${proposal.model??'未标记模型'}），尚未写入数据库；请核对、编辑后再创建候选。`);
     },
-    onError:error => {setConfirmingModel(false);setNotice(String(error));},
+    onError:error => {setConfirmingModel(false);setNotice(derivedMemoryFailure(error, 'preview'));},
   });
   const review = useMutation({
     mutationFn:(decision:'accepted'|'rejected') => api.request(`/api/personas/${encodeURIComponent(selectedId!)}/reviews`,'POST',{
@@ -119,7 +120,7 @@ export function PersonaApp() {
       queryClient.invalidateQueries({queryKey:['personas']}),queryClient.invalidateQueries({queryKey:['persona',selectedId]}),
       queryClient.invalidateQueries({queryKey:['persona-profile']}),
     ]);setNotice('画像复核结果已保存；当前版本仍不会把 L3 注入聊天回答。');},
-    onError:error => setNotice(String(error)),
+    onError:error => setNotice(derivedMemoryFailure(error, 'write')),
   });
   const canManage = config.data?.allow_persona_management===true;
   const options = [...(sourceOptions.data?.l1??[]),...(sourceOptions.data?.l2??[])].map(item => ({
@@ -169,7 +170,7 @@ export function PersonaApp() {
       {key:'profile',label:'统一画像',children:profilePane},
       {key:'evidence',label:`画像依据与候选（${personas.data?.total??0}）`,children:evidencePane},
     ]}/>
-    <p role="status">{config.error?String(config.error):profile.error?String(profile.error):personas.error?String(personas.error):notice}</p>
+    <p role="status">{config.error?derivedMemoryFailure(config.error,'read'):profile.error?derivedMemoryFailure(profile.error,'read'):personas.error?derivedMemoryFailure(personas.error,'read'):notice}</p>
   </AppShell>
 
   <Drawer title="L3 画像详情" size="large" open={Boolean(selectedId)} onClose={closeDetail} loading={detail.isFetching}>

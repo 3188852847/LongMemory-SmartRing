@@ -6,6 +6,7 @@ import {ChatApi} from './api';
 import {AppShell, ConsoleNav} from './AppShell';
 import {PageHeader} from './PageHeader';
 import {ConsolidationStatusCard} from './ConsolidationStatusCard';
+import {derivedMemoryFailure} from './derivedMemoryFailure';
 
 type ScenarioState = 'candidate' | 'active' | 'rejected' | 'stale';
 type MemoryConfig = {configured: boolean; database: string | null; allow_scenario_management: boolean;
@@ -58,7 +59,7 @@ export function ScenarioApp() {
   const [ending, setEnding] = useState(false);
   const [inboxOnly, setInboxOnly] = useState(false);
 
-  useEffect(() => {void api.bootstrap().then(() => setReady(true)).catch(error => setNotice(String(error)));}, []);
+  useEffect(() => {void api.bootstrap().then(() => setReady(true)).catch(error => setNotice(derivedMemoryFailure(error, 'read')));}, []);
   const config = useQuery({queryKey: ['memory-config'], enabled: ready,
     queryFn: () => api.request<MemoryConfig>('/api/memory-config')});
   const scenarios = useQuery({queryKey: ['scenarios', filter], enabled: ready && config.data?.configured === true,
@@ -89,7 +90,7 @@ export function ScenarioApp() {
       await queryClient.invalidateQueries({queryKey: ['scenario-source-inbox']});
       setNotice('L2 候选已创建，尚未进入已接受状态。');
     },
-    onError: error => setNotice(String(error)),
+    onError: error => setNotice(derivedMemoryFailure(error, 'write')),
   });
   const previewCandidate = useMutation({
     mutationFn: () => api.request<ScenarioProposal>('/api/scenario-proposals', 'POST', {
@@ -101,7 +102,7 @@ export function ScenarioApp() {
       setSourceIds(proposal.source_memory_ids); setDraftOrigin('model_assisted');
       setNotice(`模型草稿已返回（${proposal.model ?? '未标记模型'}），尚未写入数据库；请核对和修改后再创建候选。`);
     },
-    onError: error => {setConfirmingModel(false); setNotice(String(error));},
+    onError: error => {setConfirmingModel(false); setNotice(derivedMemoryFailure(error, 'preview'));},
   });
   const review = useMutation({
     mutationFn: (decision: 'accepted' | 'rejected') => api.request(`/api/scenarios/${encodeURIComponent(selectedId!)}/reviews`, 'POST', {
@@ -115,7 +116,7 @@ export function ScenarioApp() {
       ]);
       setNotice('复核结果已保存；只有另行开启 L2 使用且问题相关时才会参与回答。');
     },
-    onError: error => setNotice(String(error)),
+    onError: error => setNotice(derivedMemoryFailure(error, 'write')),
   });
   const endScenario = useMutation({
     mutationFn: () => api.request(`/api/scenarios/${encodeURIComponent(selectedId!)}/lifecycle`, 'POST', {
@@ -129,7 +130,7 @@ export function ScenarioApp() {
       ]);
       setNotice('场景已结束并保留生命周期记录；后续回答不会再召回它。');
     },
-    onError: error => {setEnding(false); setNotice(String(error));},
+    onError: error => {setEnding(false); setNotice(derivedMemoryFailure(error, 'write'));},
   });
   const busy = config.isFetching || scenarios.isFetching || memories.isFetching || sourceInbox.isFetching || detail.isFetching || createCandidate.isPending || previewCandidate.isPending || review.isPending || endScenario.isPending;
   const canManage = config.data?.allow_scenario_management === true;
@@ -165,7 +166,7 @@ export function ScenarioApp() {
       renderItem={item => <List.Item className="memory-item" onClick={() => setSelectedId(item.id)} actions={[<Button key="open" type="link">查看来源</Button>]}
         ><List.Item.Meta title={<Space wrap><span>{item.title}</span><Tag color={stateColor[item.status]}>{stateName[item.status]}</Tag></Space>}
           description={<><p className="scenario-summary">{item.summary}</p><small>{displayTime(item.generated_at)} · 修订 {item.revision}</small></>}/></List.Item>}/>
-    <p role="status">{config.error ? String(config.error) : scenarios.error ? String(scenarios.error) : notice}</p>
+    <p role="status">{config.error ? derivedMemoryFailure(config.error, 'read') : scenarios.error ? derivedMemoryFailure(scenarios.error, 'read') : notice}</p>
   </AppShell>
 
   <Drawer title="L2 场景详情" size="large" open={Boolean(selectedId)} onClose={closeDetail} loading={detail.isFetching}>
