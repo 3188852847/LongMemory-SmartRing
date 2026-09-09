@@ -71,5 +71,27 @@ def test_bootstrapped_runtime_keeps_today_mode_across_following_turns(tmp_path):
             item.item_id == selected.temporary_interaction.source_memory_id
             for item in following.support.retrieved
         )
+
+        restored = runtime.prepare_user("我今天恢复默认互动方式")
+        assert restored.temporary_interaction is None
+        assert runtime.prepare_user("继续聊项目").temporary_interaction is None
     finally:
         runtime.close()
+
+
+def test_latest_explicit_default_stops_mode_without_resurrecting_old_choice(tmp_path):
+    path = tmp_path / "temporary-default.db"
+    connection = open_database(path)
+    initialize_schema(connection)
+    insert_mode(
+        connection, "listen", "我今天只想让你听我说",
+        recorded_at=NOW - timedelta(hours=1), valid_to=NOW + timedelta(hours=8),
+    )
+    insert_mode(
+        connection, "default", "我今天恢复默认互动方式",
+        recorded_at=NOW, valid_to=NOW + timedelta(hours=8),
+    )
+    connection.commit()
+    connection.close()
+
+    assert SQLiteTemporaryInteractionProvider(path).current(at=NOW) is None

@@ -140,6 +140,15 @@ def test_explicit_today_interaction_mode_gets_the_same_validity_window() -> None
     assert memory.valid_to == datetime(2026, 9, 3, 16, 0, tzinfo=UTC)
 
 
+def test_explicit_today_default_restore_is_temporary_too() -> None:
+    memory = make_extraction_service().extract(
+        make_message("我今天恢复默认互动方式")
+    )[0]
+
+    assert memory.valid_from == datetime(2026, 9, 2, 16, 0, tzinfo=UTC)
+    assert memory.valid_to == datetime(2026, 9, 3, 16, 0, tzinfo=UTC)
+
+
 @pytest.mark.parametrize(
     "content",
     [

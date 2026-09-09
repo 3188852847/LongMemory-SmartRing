@@ -44,6 +44,8 @@ class SQLiteTemporaryInteractionProvider:
                 # 临时选择在新选择结束后意外“复活”。
                 if datetime.fromisoformat(row["valid_to"]) <= at:
                     return None
+                if mode == "default":
+                    return None
                 return TemporaryInteractionDirective(
                     mode=mode,
                     source_memory_id=row["memory_id"],

@@ -8,6 +8,9 @@ from typing import Literal, Protocol
 TemporaryInteractionMode = Literal[
     "listen_only", "ask_before_advice", "direct_advice",
 ]
+TemporaryInteractionSelection = Literal[
+    "listen_only", "ask_before_advice", "direct_advice", "default",
+]
 
 
 @dataclass(frozen=True, slots=True)
@@ -26,13 +29,15 @@ class TemporaryInteractionProvider(Protocol):
     def current(self, *, at: datetime) -> TemporaryInteractionDirective | None: ...
 
 
-_PHRASES: dict[str, TemporaryInteractionMode] = {
+_PHRASES: dict[str, TemporaryInteractionSelection] = {
     "我今天只想让你听我说": "listen_only",
     "我今天只想让你听着": "listen_only",
     "我今天只想倾诉": "listen_only",
     "我今天想让你先听我说，再问我要不要建议": "ask_before_advice",
     "我今天想直接听建议": "direct_advice",
     "我今天希望你直接给我建议": "direct_advice",
+    "我今天恢复默认互动方式": "default",
+    "我今天按平时的方式聊": "default",
 }
 
 _CONTEXT: dict[TemporaryInteractionMode, str] = {
@@ -54,7 +59,7 @@ _CONTEXT: dict[TemporaryInteractionMode, str] = {
 }
 
 
-def classify_temporary_interaction(text: str) -> TemporaryInteractionMode | None:
+def classify_temporary_interaction(text: str) -> TemporaryInteractionSelection | None:
     """只接受固定完整表达；附加文字不能借此进入高优先级行为指令。"""
 
     normalized = text.strip().rstrip("。.!！").strip()
