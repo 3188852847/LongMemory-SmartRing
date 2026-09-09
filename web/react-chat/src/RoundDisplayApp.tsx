@@ -1,9 +1,10 @@
 import {useEffect, useMemo, useState, type CSSProperties} from 'react';
 import {useMutation, useQuery} from '@tanstack/react-query';
-import {Alert, Button, Card, Checkbox, Descriptions, InputNumber, Segmented, Select, Space, Tag} from 'antd';
+import {Alert, Button, Card, Checkbox, Descriptions, Input, InputNumber, Segmented, Select, Space, Tag} from 'antd';
 import {AppShell, ConsoleNav} from './AppShell';
 import {PageHeader} from './PageHeader';
 import {ChatApi, type RoundDeviceSkin, type RoundSkin, type RoundSkinApply, type RoundSkins} from './api';
+import {readRoundObservations, roundObservationKey, roundObservationStates, type RoundObservations, type RoundObservationState, writeRoundObservations} from './roundDisplayObservations';
 
 export type InteractionState = 'booting' | 'idle' | 'wake_acknowledged' | 'listening' | 'thinking' | 'speaking' | 'interrupted' | 'no_speech' | 'error';
 export type EmotionState = 'neutral' | 'warm' | 'happy' | 'concerned';
@@ -55,6 +56,9 @@ const emotionOptions = [
   {value: 'neutral', label: '平静'}, {value: 'warm', label: '温柔'},
   {value: 'happy', label: '开心'}, {value: 'concerned', label: '关切'},
 ];
+const observationNames:Record<RoundObservationState,string> = {
+  idle:'待机', listening:'聆听', thinking:'思考', speaking:'说话', error:'错误',
+};
 
 const api = new ChatApi();
 
@@ -107,6 +111,8 @@ export function RoundDisplayApp() {
   const [showSafeArea, setShowSafeArea] = useState(false);
   const [selectedSkin, setSelectedSkin] = useState('rose-night-v1');
   const [draft, setDraft] = useState<SkinDraft>();
+  const [observations,setObservations] = useState<RoundObservations>({});
+  const [observationNotice,setObservationNotice] = useState('');
   const session = useQuery({queryKey:['round-skin-session'], queryFn:async () => {await api.bootstrap(); return true;}, staleTime:Infinity});
   const skins = useQuery({queryKey:['round-skins'], queryFn:() => api.request<RoundSkins>('/api/round-skins'), enabled:session.isSuccess});
   useEffect(() => {if (skins.data?.selected_skin) setSelectedSkin(skins.data.selected_skin);}, [skins.data?.selected_skin]);
@@ -133,6 +139,25 @@ export function RoundDisplayApp() {
   });
   const view = useMemo(() => resolveRoundDisplay(interaction, system), [interaction, system]);
   const skin = skins.data?.skins.find(item => item.id === selectedSkin);
+  const observationKey = deviceSkin.data
+    ? roundObservationKey(deviceSkin.data.skin_id, deviceSkin.data.manifest_sha256)
+    : '';
+  useEffect(() => {
+    setObservations(observationKey ? readRoundObservations(localStorage, observationKey) : {});
+    setObservationNotice('');
+  }, [observationKey]);
+
+  function updateObservation(state:RoundObservationState, observed?:boolean, note?:string) {
+    if (!observationKey) return;
+    const current=observations[state];
+    const next={...observations};
+    if (observed === false) delete next[state];
+    else next[state]={observed_at:current?.observed_at ?? new Date().toISOString(),note:(note ?? current?.note ?? '').slice(0,160)};
+    if (!writeRoundObservations(localStorage,observationKey,next)) {
+      setObservationNotice('当前浏览器无法保存观察记录；页面上的勾选只在本次打开期间保留。');
+    } else setObservationNotice('观察记录已保存在当前浏览器，不会写入个人记忆库。');
+    setObservations(next);
+  }
   const previewSkin = draft && skin ? {
     ...skin, palette:{...skin.palette, ...draft.palette}, face:draft.face,
   } : skin;
@@ -237,6 +262,22 @@ export function RoundDisplayApp() {
           </div>}
           <Alert className="settings-model-alert" type="warning" showIcon title="没有改写 assets 分区"
             description="首版只修改固定 LVGL 参数并保留内置默认值；图片资源、浏览器动画和背景边缘渐变仍不下发。"/>
+        </Card>
+        <Card title="5. 真机五态观察" extra={<Tag color={roundObservationStates.every(state=>observations[state])?'success':'default'}>
+          {roundObservationStates.filter(state=>observations[state]).length} / {roundObservationStates.length}
+        </Tag>}>
+          <p className="subtle">这里只记录你亲眼看到的真机表现，不从网页预览或设备在线状态自动判定。记录按真机皮肤 ID 和清单指纹隔离，只保存在当前浏览器。</p>
+          {!deviceSkin.isSuccess && <Alert type="info" showIcon title="先检测真机皮肤能力" description="取得真机回读的皮肤 ID 与清单指纹后，才能记录对应版本的观察结果。"/>}
+          {deviceSkin.isSuccess && <div className="round-observation-list">
+            {roundObservationStates.map(state=><div className="round-observation-row" key={state}>
+              <Checkbox checked={Boolean(observations[state])} onChange={event=>updateObservation(state,event.target.checked)}>{observationNames[state]}</Checkbox>
+              <Input aria-label={`${observationNames[state]}观察备注`} maxLength={160} disabled={!observations[state]}
+                placeholder="可选：记录裁切、文字或动画问题" value={observations[state]?.note ?? ''}
+                onChange={event=>updateObservation(state,true,event.target.value)}/>
+              <small>{observations[state]?.observed_at ? new Date(observations[state]!.observed_at).toLocaleString('zh-CN') : '尚未观察'}</small>
+            </div>)}
+          </div>}
+          {observationNotice&&<Alert className="settings-model-alert" type="info" showIcon title={observationNotice}/>}
         </Card>
       </section>
     </div>

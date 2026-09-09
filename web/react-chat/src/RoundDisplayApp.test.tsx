@@ -18,8 +18,9 @@ describe('圆屏状态协议与模拟器', () => {
   });
 
   test('默认页面明确模拟边界并提供受限的本机皮肤编辑器', async () => {
+    localStorage.clear();
     vi.spyOn(ChatApi.prototype, 'bootstrap').mockResolvedValue(undefined);
-    vi.spyOn(ChatApi.prototype, 'request').mockResolvedValue({
+    const request=vi.spyOn(ChatApi.prototype, 'request').mockResolvedValue({
       enabled:true, selected_skin:'rose-night-v1', custom_skin_id:'local-custom-v1', skins:[{
         schema_version:1, id:'rose-night-v1', name:'蔷薇夜色', description:'测试皮肤',
         target:{board:'viewe-smartring-plus', width:360, height:360, color_format:'RGB565', skin_api:1},
@@ -38,6 +39,8 @@ describe('圆屏状态协议与模拟器', () => {
     expect(screen.getByText('2. 情绪表达')).toBeTruthy();
     expect(screen.getByText('3. 系统覆盖')).toBeTruthy();
     expect(screen.getByText('4. 皮肤档案')).toBeTruthy();
+    expect(screen.getByText('5. 真机五态观察')).toBeTruthy();
+    expect(screen.getByText('先检测真机皮肤能力')).toBeTruthy();
     expect(screen.getByRole('button', {name:'检测真机皮肤能力'})).toBeTruthy();
     expect((screen.getByRole('button', {name:'应用到真机'}) as HTMLButtonElement).disabled).toBe(true);
     const edit = screen.getByRole('button', {name:'从当前皮肤开始编辑'}) as HTMLButtonElement;
@@ -46,5 +49,12 @@ describe('圆屏状态协议与模拟器', () => {
     expect(screen.getByRole('region', {name:'本机自定义皮肤编辑器'})).toBeTruthy();
     expect(screen.getByLabelText('皮肤颜色：聆听')).toBeTruthy();
     expect(screen.getByRole('button', {name:'保存为“我的自定义皮肤”'})).toBeTruthy();
+
+    request.mockResolvedValueOnce({skin_api:1,skin_id:'rose-night-v1',manifest_sha256:'a'.repeat(64)});
+    fireEvent.click(screen.getByRole('button',{name:'检测真机皮肤能力'}));
+    await screen.findByText(/真机支持皮肤协议/);
+    fireEvent.click(screen.getByRole('checkbox',{name:'待机'}));
+    expect(await screen.findByText(/观察记录已保存在当前浏览器/)).toBeTruthy();
+    expect(localStorage.getItem(`longmemory:round-display-observations:v1:rose-night-v1:${'a'.repeat(64)}`)).toContain('idle');
   });
 });
