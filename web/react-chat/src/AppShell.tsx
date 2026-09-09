@@ -1,7 +1,7 @@
 import type {ReactNode} from 'react';
 import {Link} from 'react-router-dom';
 
-type Page = 'device' | 'display' | 'chat' | 'memories' | 'scenarios' | 'personas' | 'settings' | 'experiments';
+type Page = 'device' | 'display' | 'chat' | 'memories' | 'quality' | 'scenarios' | 'personas' | 'settings' | 'experiments';
 
 const NAV_GROUPS: Array<{label: string; items: Array<{
   page: Page; icon: string; label: string; description: string; to: string;
@@ -13,6 +13,7 @@ const NAV_GROUPS: Array<{label: string; items: Array<{
   ]},
   {label: '长期记忆', items: [
     {page: 'memories', icon: 'L1', label: '原始与原子记忆', description: 'L0 来源与 L1 事实', to: '/memories'},
+    {page: 'quality', icon: '质', label: '记忆质量', description: '跨日问题样本与诊断', to: '/memory-quality'},
     {page: 'scenarios', icon: 'L2', label: '生活场景', description: 'L2 情境整理', to: '/scenarios'},
     {page: 'personas', icon: 'L3', label: '用户画像', description: 'L3 长期认识', to: '/personas'},
   ]},

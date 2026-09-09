@@ -20,6 +20,7 @@ import {chatFailure} from './chatFailure';
 
 const DeviceApp = lazy(() => import('./DeviceApp').then(module => ({default: module.DeviceApp})));
 const MemoryApp = lazy(() => import('./MemoryApp').then(module => ({default: module.MemoryApp})));
+const MemoryQualityApp = lazy(() => import('./MemoryQualityApp').then(module => ({default: module.MemoryQualityApp})));
 const ScenarioApp = lazy(() => import('./ScenarioApp').then(module => ({default: module.ScenarioApp})));
 const PersonaApp = lazy(() => import('./PersonaApp').then(module => ({default: module.PersonaApp})));
 const SettingsApp = lazy(() => import('./SettingsApp').then(module => ({default: module.SettingsApp})));
@@ -201,6 +202,7 @@ function ConsoleApp() {
     <Route path="/display-preview" element={<Suspense fallback={<p className="page-loading">正在加载圆屏预览…</p>}><RoundDisplayApp/></Suspense>}/>
     <Route path="/chat-react" element={<ChatApp/>}/>
     <Route path="/memories" element={<Suspense fallback={<p className="page-loading">正在加载记忆管理…</p>}><MemoryApp/></Suspense>}/>
+    <Route path="/memory-quality" element={<Suspense fallback={<p className="page-loading">正在加载记忆质量样本…</p>}><MemoryQualityApp/></Suspense>}/>
     <Route path="/scenarios" element={<Suspense fallback={<p className="page-loading">正在加载生活场景…</p>}><ScenarioApp/></Suspense>}/>
     <Route path="/personas" element={<Suspense fallback={<p className="page-loading">正在加载用户画像…</p>}><PersonaApp/></Suspense>}/>
     <Route path="/settings" element={<Suspense fallback={<p className="page-loading">正在加载个性化设置…</p>}><SettingsApp/></Suspense>}/>

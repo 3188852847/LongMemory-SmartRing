@@ -235,6 +235,68 @@ def register_chat_routes(app, backend):
                                   "current_items": current_rows[:100],
                                   "current_limited": len(current_rows) > 100})
 
+    async def memory_feedback_index(request):
+        """跨日期读取每轮当前判断；只提供诊断定位元数据，不复制正文。"""
+        try:
+            if set(request.query) != {"kind", "offset", "limit"}:
+                raise ValueError
+            kind_filter = request.query["kind"]
+            if kind_filter not in {
+                "issues", "all", "memory_ok", "recall_miss",
+                "wrong_memory", "memory_irrelevant",
+            }:
+                raise ValueError
+            offset = int(request.query["offset"])
+            limit = int(request.query["limit"])
+            if offset < 0 or not 1 <= limit <= 100:
+                raise ValueError
+        except (ValueError, TypeError, KeyError):
+            return web.json_response({"error": "invalid_feedback_index_query"}, status=400)
+        owner_id = owner(request)
+        counts = {kind: 0 for kind in (
+            "memory_ok", "recall_miss", "wrong_memory", "memory_irrelevant"
+        )}
+        rows = []
+        for chat_id, chat in chats.items():
+            if chat.owner != owner_id:
+                continue
+            for turn in chat.turns:
+                current = turn.get("memory_feedback")
+                if not isinstance(current, dict) or current.get("kind") not in counts:
+                    continue
+                kind = current["kind"]
+                counts[kind] += 1
+                if (kind_filter == "issues" and kind not in {"recall_miss", "wrong_memory"}) \
+                        or (kind_filter not in {"issues", "all"} and kind != kind_filter):
+                    continue
+                layer_counts = {
+                    "l1": len(turn.get("retrieved") or []),
+                    "l2": len(turn.get("scenario_retrieved") or []),
+                    "l3": len(turn.get("persona_retrieved") or []),
+                }
+                recalled = sum(layer_counts.values())
+                focus = {
+                    "memory_ok": "normal_control",
+                    "memory_irrelevant": "negative_control",
+                    "recall_miss": "context_or_answer_use" if recalled else "retrieval",
+                    "wrong_memory": (
+                        "memory_content_freshness_subject_or_ranking"
+                        if recalled else "short_term_or_answer_model"
+                    ),
+                }[kind]
+                rows.append({
+                    "chat_id": chat_id, "chat_title": chat.title,
+                    "request_id": turn.get("request_id"), "kind": kind,
+                    "revision": current.get("revision"),
+                    "occurred_at": current.get("occurred_at"),
+                    "retrieved_counts": layer_counts,
+                    "diagnostic_focus": focus,
+                })
+        rows.sort(key=lambda item: item["occurred_at"] or "", reverse=True)
+        return web.json_response({"kind": kind_filter, "counts": counts,
+                                  "total": len(rows), "offset": offset, "limit": limit,
+                                  "items": rows[offset:offset + limit]})
+
     async def forget(request):
         chat = selected(request)
         if chat.pending:
@@ -319,5 +381,6 @@ def register_chat_routes(app, backend):
     app.router.add_post("/api/chats/{chat_id}/messages", send)
     app.router.add_post("/api/chats/{chat_id}/turns/{request_id}/memory-feedback", memory_feedback)
     app.router.add_get("/api/chat-memory-feedback/daily", memory_feedback_daily, allow_head=False)
+    app.router.add_get("/api/chat-memory-feedback", memory_feedback_index, allow_head=False)
     app.router.add_delete("/api/chats/{chat_id}", forget)
     app.on_cleanup.append(cleanup)

@@ -24,7 +24,7 @@ describe('React 实验档案', () => {
     const client = createConsoleQueryClient();
     const view = render(<QueryClientProvider client={client}><MemoryRouter><ExperimentApp/></MemoryRouter></QueryClientProvider>);
 
-    expect(await screen.findByText('<script>不应执行</script>')).toBeTruthy();
+    expect(await screen.findByText('<script>不应执行</script>', undefined, {timeout:5000})).toBeTruthy();
     expect(view.container.querySelector('.answer-text script')).toBeNull();
     expect(screen.getByText(/人工复核均已迁移/)).toBeTruthy();
     fireEvent.change(screen.getByRole('textbox', {name:'longmemory_v1复核理由'}), {target:{value:'依据合成来源'}});

@@ -74,6 +74,12 @@ export interface DailyMemoryFeedback {
   current_total:number;current_limited:boolean;current_counts:Record<MemoryFeedbackKind,number>;
   current_items:Array<{chat_id:string;chat_title:string;request_id:string;kind:MemoryFeedbackKind;revision:number;occurred_at:string}>;
 }
+export type MemoryFeedbackDiagnosticFocus = 'normal_control'|'negative_control'|'retrieval'|'context_or_answer_use'|'memory_content_freshness_subject_or_ranking'|'short_term_or_answer_model';
+export interface MemoryFeedbackIndex {
+  kind:'issues'|'all'|MemoryFeedbackKind;counts:Record<MemoryFeedbackKind,number>;
+  total:number;offset:number;limit:number;
+  items:Array<{chat_id:string;chat_title:string;request_id:string;kind:MemoryFeedbackKind;revision:number;occurred_at:string;retrieved_counts:{l1:number;l2:number;l3:number};diagnostic_focus:MemoryFeedbackDiagnosticFocus}>;
+}
 export interface Snapshot {chat_id: string; title: string; pending: boolean; turns: Turn[]}
 export interface Summary {chat_id: string; title: string; turn_count: number}
 export interface ModelHealth {state:'unchecked'|'available'|'unavailable'|'not_applicable'; code:string|null; checked_at:string|null}

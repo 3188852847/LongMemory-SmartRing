@@ -45,6 +45,13 @@ def test_restart_list_rename_history_and_replay(backend):
             assert summary['current_total'] == 1
             assert summary['items'][0]['request_id'] == body['request_id']
             assert 'input' not in summary['items'][0] and 'answer' not in summary['items'][0]
+            issue_index = await (await client.get(
+                base + '/api/chat-memory-feedback?kind=issues&offset=0&limit=25'
+            )).json()
+            assert issue_index['total'] == 1
+            assert issue_index['items'][0]['diagnostic_focus'] == 'retrieval'
+            assert issue_index['items'][0]['retrieved_counts'] == {'l1': 0, 'l2': 0, 'l3': 0}
+            assert 'input' not in issue_index['items'][0] and 'answer' not in issue_index['items'][0]
             assert (await client.post(base+f'/api/chats/{key}/title', json={'title':'昨天的聊天'}, headers=headers)).status == 200
             cookie = next(c.value for c in client.cookie_jar if c.key == OWNER_COOKIE)
         async with console(chat_backend=backend) as (client, base, _):
@@ -72,6 +79,14 @@ def test_restart_list_rename_history_and_replay(backend):
             assert changed_summary['action_counts']['memory_ok'] == 1
             assert changed_summary['current_counts']['memory_ok'] == 1
             assert changed_summary['current_counts']['recall_miss'] == 0
+            assert (await (await client.get(
+                base + '/api/chat-memory-feedback?kind=issues&offset=0&limit=25'
+            )).json())['total'] == 0
+            all_index = await (await client.get(
+                base + '/api/chat-memory-feedback?kind=all&offset=0&limit=25'
+            )).json()
+            assert all_index['total'] == 1
+            assert all_index['counts']['memory_ok'] == 1
             replay = await (await client.post(base+f'/api/chats/{key}/messages', json=body, headers=headers)).json()
             assert replay['memory_feedback']['kind'] == 'memory_ok' and len(histories) == 1
             await client.post(base+f'/api/chats/{key}/messages', json={'text':'继续', 'request_id':str(uuid4())}, headers=headers)
