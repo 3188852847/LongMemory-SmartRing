@@ -28,9 +28,16 @@
     "increase_from_0005_bytes": 160
   },
   "flash": {
-    "result": "not_started",
+    "result": "verified",
+    "verified_on": "2026-09-09",
+    "port": "COM3",
+    "device_mac_suffix": "6d:38",
     "application_offset": "0x20000",
-    "application_only_planned": true
+    "application_only": true,
+    "erased_range": "0x00020000-0x003e8fff",
+    "independent_verify_flash": "digest_matched",
+    "nvs_written": false,
+    "assets_partition_written": false
   },
   "runtime": {
     "core_state_visuals": "pending_user_validation"
