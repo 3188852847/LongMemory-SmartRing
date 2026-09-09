@@ -61,3 +61,5 @@ web/react-chat/test-results/
 *.bak
 Thumbs.db
 .DS_Store
+# 用户上传的圆屏原片、缩略图与派生资源只保存在本机，不进入版本库。
+data/round-screen/
