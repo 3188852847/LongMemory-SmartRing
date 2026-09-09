@@ -218,21 +218,36 @@ class Manager:
                 require_free(host, port)
             if options.tts_backend == "voxcpm2":
                 require_no_listener("127.0.0.1", VOXCPM_PORT)
-            # 端口均空闲后才修改小智私有配置，避免给外部正在运行的语音服务
-            # 换掉模型。档案选择是显式意图，写入只触及三个模型字段并保留备份。
+            # 端口均空闲后才检查并同步小智私有配置，避免给外部正在运行的
+            # 语音服务换地址、声音、模型或记忆后端。先完成四项只读检查，
+            # 再逐项备份写入；格式错误不会造成“改了一半才发现无法检查”。
+            from network import config_action as network_config_action
+            from tts import config_action as tts_config_action
             from model import config_action as model_config_action
-            checked = model_config_action(options.voice_root, options.root,
-                                          options.voice_model_profile)
-            if not checked["config_matches"]:
-                model_config_action(options.voice_root, options.root,
-                                    options.voice_model_profile, apply=True,
-                                    expected_digest=checked["digest"])
-            # 记忆后端与模型/TTS 一样只在端口空闲后同步。切换只改变提供器
-            # 指针及缺失的内置配置，不读取、迁移或删除任何后端数据。
             from memory import config_action as memory_config_action
+            network_checked = network_config_action(options.voice_root, options.lan_ip)
+            tts_checked = tts_config_action(
+                options.voice_root, options.root, options.tts_backend
+            )
+            model_checked = model_config_action(
+                options.voice_root, options.root, options.voice_model_profile
+            )
             memory_checked = memory_config_action(
                 options.voice_root, options.root, options.memory_backend
             )
+            if network_checked["changed"]:
+                network_config_action(options.voice_root, options.lan_ip, apply=True)
+            if not tts_checked["config_matches"]:
+                tts_config_action(
+                    options.voice_root, options.root, options.tts_backend,
+                    apply=True, expected_digest=tts_checked["digest"],
+                )
+            if not model_checked["config_matches"]:
+                model_config_action(options.voice_root, options.root,
+                                    options.voice_model_profile, apply=True,
+                                    expected_digest=model_checked["digest"])
+            # 记忆后端与模型/TTS 一样只在端口空闲后同步。切换只改变提供器
+            # 指针及缺失的内置配置，不读取、迁移或删除任何后端数据。
             if not memory_checked["config_matches"]:
                 memory_config_action(
                     options.voice_root, options.root, options.memory_backend,

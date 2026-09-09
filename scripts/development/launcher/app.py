@@ -123,6 +123,16 @@ def main():
     style.configure("StatusBusy.TLabel", foreground=WARNING, font=("Microsoft YaHei UI", 12))
     style.configure("StatusGood.TLabel", foreground=SUCCESS, font=("Microsoft YaHei UI", 12))
     style.configure("StatusError.TLabel", foreground=DANGER, font=("Microsoft YaHei UI", 12))
+    style.configure("StatusCell.TFrame", background=SURFACE_MUTED, borderwidth=1,
+                    relief="solid")
+    style.configure("StatusCellTitle.TLabel", background=SURFACE_MUTED,
+                    foreground=TEXT_MUTED, font=("Microsoft YaHei UI", 8))
+    style.configure("StatusCellValue.TLabel", background=SURFACE_MUTED,
+                    foreground=TEXT_STRONG, font=("Microsoft YaHei UI", 9, "bold"))
+    for name, color in (("Idle", TEXT_MUTED), ("Busy", WARNING),
+                        ("Good", SUCCESS), ("Error", DANGER)):
+        style.configure(f"StatusCell{name}.TLabel", background=SURFACE_MUTED,
+                        foreground=color, font=("Microsoft YaHei UI", 11))
     style.configure("Primary.TButton", background=ACCENT, foreground="#03101d",
                     bordercolor=ACCENT, font=("Microsoft YaHei UI", 10, "bold"), padding=(18, 10))
     style.map("Primary.TButton", background=[("active", ACCENT_HOVER), ("disabled", "#174052")],
@@ -283,7 +293,7 @@ def main():
     ttk.Radiobutton(mode_box, text="文字聊天", variable=voice, value=False).pack(anchor="w", pady=(2, 1))
     ttk.Label(mode_box, text="只启动网页控制台，不启动小智语音服务。", style="Hint.TLabel").pack(anchor="w", padx=(24, 0), pady=(0, 8))
     ttk.Radiobutton(mode_box, text="文字聊天＋圆屏语音", variable=voice, value=True).pack(anchor="w", pady=(1, 1))
-    ttk.Label(mode_box, text="同时启动小智；圆屏在线状态仍在网页内查看。", style="Hint.TLabel").pack(anchor="w", padx=(24, 0), pady=(0, 2))
+    ttk.Label(mode_box, text="同时启动小智；启动前自动核对并备份同步网络、声音、模型和记忆后端。", style="Hint.TLabel").pack(anchor="w", padx=(24, 0), pady=(0, 2))
     open_row = ttk.Frame(mode_box)
     open_row.pack(fill="x", pady=(12, 2))
     ttk.Label(open_row, text="启动后打开：").pack(side="left")
@@ -467,12 +477,45 @@ def main():
     status_indicator.pack(side="left", anchor="n", padx=(0, 9))
     ttk.Label(status_row, textvariable=status, wraplength=720).pack(side="left", fill="x", expand=True)
 
+    # 启动器只能证明自己拥有的进程和本机网页状态，不能证明圆屏已经连入。
+    # 四项短状态便于扫读，下面的完整文字继续解释错误边界和下一步。
+    component_values = {
+        "console": tk.StringVar(value="已停止"),
+        "voice": tk.StringVar(value="未启动"),
+        "speech": tk.StringVar(value="未启动"),
+        "browser": tk.StringVar(value="未打开"),
+    }
+    component_dots = {}
+    service_grid = ttk.Frame(status_box)
+    service_grid.pack(fill="x", pady=(14, 0))
+    for index, (key, title) in enumerate((
+        ("console", "网页控制台"), ("voice", "小智语音"),
+        ("speech", "声音服务"), ("browser", "网页入口"),
+    )):
+        cell = ttk.Frame(service_grid, padding=(12, 9), style="StatusCell.TFrame")
+        cell.pack(side="left", fill="x", expand=True,
+                  padx=(0 if index == 0 else 4, 0 if index == 3 else 4))
+        heading = ttk.Frame(cell, style="StatusCell.TFrame")
+        heading.pack(fill="x")
+        dot = ttk.Label(heading, text="●", style="StatusCellIdle.TLabel")
+        dot.pack(side="left", padx=(0, 6))
+        ttk.Label(heading, text=title, style="StatusCellTitle.TLabel").pack(side="left")
+        ttk.Label(cell, textvariable=component_values[key],
+                  style="StatusCellValue.TLabel").pack(anchor="w", pady=(4, 0))
+        component_dots[key] = dot
+
     def set_status(message, tone="idle"):
         """状态颜色只帮助扫读；完整文字仍是故障判断的唯一依据。"""
         styles = {"idle": "StatusIdle.TLabel", "busy": "StatusBusy.TLabel",
                   "good": "StatusGood.TLabel", "error": "StatusError.TLabel"}
         status.set(message)
         status_indicator.configure(style=styles.get(tone, "StatusIdle.TLabel"))
+
+    def set_component(key, message, tone="idle"):
+        styles = {"idle": "StatusCellIdle.TLabel", "busy": "StatusCellBusy.TLabel",
+                  "good": "StatusCellGood.TLabel", "error": "StatusCellError.TLabel"}
+        component_values[key].set(message)
+        component_dots[key].configure(style=styles.get(tone, "StatusCellIdle.TLabel"))
     buttons = ttk.Frame(footer, style="Footer.TFrame")
     buttons.pack(fill="x")
     state = {"opened": False, "started": 0.0, "failed": False}
@@ -480,6 +523,7 @@ def main():
     def open_page():
         if manager.ready():
             webbrowser.open(console_url(manager.options.port, start_page_labels[start_page.get()]))
+            set_component("browser", "已请求打开", "good")
         else:
             messagebox.showinfo("尚未就绪", "请先启动并等待控制台就绪。")
 
@@ -502,18 +546,15 @@ def main():
         if panel_unchanged:
             set_memory_backend(load_memory_backend(memory_backend_path))
         start_button.config(state="normal")
+        set_component("console", "已停止")
+        set_component("voice", "未启动")
+        set_component("speech", "未启动")
+        set_component("browser", "未打开")
         set_status("已停止本面板启动的服务；其他终端启动的程序未被停止。")
         return True
 
     def start():
         try:
-            if voice.get():
-                info = config_action(Path(server.get()), ip.get().strip())
-                if info['changed']:
-                    raise ValueError(f"小智配置仍为 {info['old_ip']}，请先点击同步小智地址。")
-                voice_config = tts_config_action(Path(server.get()), ROOT, selected_tts())
-                if not voice_config["config_matches"]:
-                    raise ValueError("小智 TTS 配置与所选声音不一致，请先点击“检查并同步”。")
             options = Options(database=Path(database.get()), voice=voice.get(), voice_root=Path(server.get()),
                               lan_ip=ip.get().strip(), role=role.get(), consent=consent.get(),
                               tts_backend=selected_tts(),
@@ -535,12 +576,19 @@ def main():
                 settings_status.set("服务已启动，但本机首选项未保存；下次仍可手动选择。")
             state.update(started=time.monotonic(), opened=False, failed=False)
             start_button.config(state="disabled")
+            set_component("console", "启动中", "busy")
+            set_component("voice", "启动中" if voice.get() else "本次未启用",
+                          "busy" if voice.get() else "idle")
+            set_component("speech", ("VoxCPM2 加载中" if selected_tts() == "voxcpm2"
+                                      else "EdgeTTS 已选择") if voice.get() else "本次未启用",
+                          "busy" if voice.get() else "idle")
+            set_component("browser", "等待控制台", "busy")
             model_label = "官方 DeepSeek" if selected_model_profile() == "official" else "学校模型"
             voice_model_label = "官方 DeepSeek" if selected_voice_model_profile() == "official" else "学校模型"
             memory_label = {"longmemory": "LongMemory", "xiaozhi_local": "小智本地摘要", "none": "无长期记忆"}[selected_memory_backend()]
             set_status(f"正在启动；网页使用 {model_label}" +
                        (f"，圆屏使用 {voice_model_label} / {memory_label}。" if voice.get() else "。") +
-                       "首次加载语音模型可能较慢，可在设置中心查看状态。", "busy")
+                       "语音模式已自动核对并备份同步配置；首次加载语音模型可能较慢。", "busy")
         except ValueError as error:
             messagebox.showerror("无法启动", str(error))
         except Exception:
@@ -556,21 +604,44 @@ def main():
                 state["failed"] = True
                 if stopped:
                     hint = "语音代码 3 表示共享路径或配置检查失败。" if ("voice", 3) in exited else ""
+                    set_component("console", "启动失败", "error")
+                    set_component("voice", "进程已停止", "error")
+                    set_component("speech", "进程已停止", "error")
+                    set_component("browser", "未打开", "error")
                     set_status(f"服务已退出：{details}。已停止其他受管服务。{hint}请按指南核对环境、配置和端口。", "error")
             elif manager.ready():
                 if not state["opened"]:
                     state["opened"] = True
                     open_page()
+                voxcpm_is_ready = (manager.voxcpm_ready()
+                                    if manager.options.voice
+                                    and manager.options.tts_backend == "voxcpm2" else False)
                 if manager.options.voice and manager.options.tts_backend == "voxcpm2":
-                    suffix = ("；VoxCPM2 与语音进程运行中" if manager.voxcpm_ready()
+                    suffix = ("；VoxCPM2 与语音进程运行中" if voxcpm_is_ready
                               else "；VoxCPM2 正在加载，圆屏语音尚未就绪")
                 else:
                     suffix = "；语音进程运行中，设备连接请在网页查看" if manager.options.voice else ""
+                set_component("console", "已就绪", "good")
+                set_component("voice", "小智进程运行" if manager.options.voice else "本次未启用",
+                              "good" if manager.options.voice else "idle")
+                if manager.options.voice and manager.options.tts_backend == "voxcpm2":
+                    set_component("speech", "VoxCPM2 已就绪" if voxcpm_is_ready else "VoxCPM2 加载中",
+                                  "good" if voxcpm_is_ready else "busy")
+                elif manager.options.voice:
+                    set_component("speech", "EdgeTTS 已选择", "good")
+                else:
+                    set_component("speech", "本次未启用")
+                set_component("browser", "已请求打开" if state["opened"] else "尚未打开",
+                              "good" if state["opened"] else "busy")
                 set_status("控制台已就绪" + suffix + "。请在聊天页查看或检测模型状态；关闭网页不会停止服务。", "good")
             elif time.monotonic() - state["started"] > 90:
                 stopped = stop(False)
                 state["failed"] = True
                 if stopped:
+                    set_component("console", "就绪超时", "error")
+                    set_component("voice", "进程已停止", "error")
+                    set_component("speech", "进程已停止", "error")
+                    set_component("browser", "未打开", "error")
                     set_status("90 秒内未确认控制台就绪，已停止受管服务；未停止其他程序。请查看指南。", "error")
         window.after(1000, tick)
 

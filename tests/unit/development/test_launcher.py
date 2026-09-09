@@ -309,6 +309,9 @@ def test_manager_syncs_selected_voice_model_and_memory_after_ports_are_free(opti
 
     calls = []
     memory_calls = []
+    network_calls = []
+    tts_calls = []
+    ordering = []
     voice_root = options.root / "voice"
     (voice_root / ".venv/Scripts").mkdir(parents=True)
     (voice_root / ".venv/Scripts/python.exe").touch()
@@ -318,12 +321,24 @@ def test_manager_syncs_selected_voice_model_and_memory_after_ports_are_free(opti
                        lan_ip="192.168.1.9", voice_model_profile="official")
 
     def model_action(server, project, profile, **kwargs):
+        ordering.append("model_apply" if kwargs.get("apply") else "model_check")
         calls.append((server, project, profile, kwargs))
         return {"config_matches": bool(kwargs.get("apply")), "digest": "a" * 64}
 
     def memory_action(server, project, profile, **kwargs):
+        ordering.append("memory_apply" if kwargs.get("apply") else "memory_check")
         memory_calls.append((server, project, profile, kwargs))
         return {"config_matches": bool(kwargs.get("apply")), "digest": "b" * 64}
+
+    def network_action(server, address, apply=False):
+        ordering.append("network_apply" if apply else "network_check")
+        network_calls.append((server, address, apply))
+        return {"changed": not apply, "old_ip": "192.168.1.8"}
+
+    def tts_action(server, project, backend, **kwargs):
+        ordering.append("tts_apply" if kwargs.get("apply") else "tts_check")
+        tts_calls.append((server, project, backend, kwargs))
+        return {"config_matches": bool(kwargs.get("apply")), "digest": "c" * 64}
 
     class Owned:
         def __init__(self, command, cwd, env): pass
@@ -331,8 +346,10 @@ def test_manager_syncs_selected_voice_model_and_memory_after_ports_are_free(opti
 
     monkeypatch.setitem(sys.modules, "model", SimpleNamespace(config_action=model_action))
     monkeypatch.setitem(sys.modules, "memory", SimpleNamespace(config_action=memory_action))
+    monkeypatch.setitem(sys.modules, "network", SimpleNamespace(config_action=network_action))
+    monkeypatch.setitem(sys.modules, "tts", SimpleNamespace(config_action=tts_action))
     monkeypatch.setattr(runtime, "build_commands", lambda _: [("console", [], options.root)])
-    monkeypatch.setattr(runtime, "require_free", lambda *args: None)
+    monkeypatch.setattr(runtime, "require_free", lambda *args: ordering.append("port"))
     monkeypatch.setattr(runtime, "OwnedService", Owned)
     manager = runtime.Manager()
     try:
@@ -343,6 +360,19 @@ def test_manager_syncs_selected_voice_model_and_memory_after_ports_are_free(opti
         assert memory_calls[0][2:] == ("longmemory", {})
         assert memory_calls[1][2] == "longmemory"
         assert memory_calls[1][3] == {"apply": True, "expected_digest": "b" * 64}
+        assert network_calls == [
+            (voice_root, "192.168.1.9", False),
+            (voice_root, "192.168.1.9", True),
+        ]
+        assert tts_calls[0][2:] == ("edge", {})
+        assert tts_calls[1][2] == "edge"
+        assert tts_calls[1][3] == {"apply": True, "expected_digest": "c" * 64}
+        # console、8000、8003、8766 四个监听位都通过后，才允许第一次配置检查。
+        assert ordering[:4] == ["port"] * 4
+        assert ordering[4:] == [
+            "network_check", "tts_check", "model_check", "memory_check",
+            "network_apply", "tts_apply", "model_apply", "memory_apply",
+        ]
     finally:
         manager.stop()
 
