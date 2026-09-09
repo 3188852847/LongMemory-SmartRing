@@ -93,7 +93,7 @@ async def console(database=None, allow_memory_delete=False, chat_backend=None,
                   persona_producer=None, persona_model=None,
                   proactive_clock=None, model_profile_store=None, voice_model_profiles=None,
                   memory_backend_store=None, xiaozhi_memory_backends=None,
-                  round_skin_store=None):
+                  round_skin_store=None, round_wallpaper_library=None):
     # 先占用随机回环端口，再把精确 Host 交给应用，避免探测后抢占端口。
     sock = socket.socket()
     sock.bind(("127.0.0.1", 0))
@@ -115,7 +115,8 @@ async def console(database=None, allow_memory_delete=False, chat_backend=None,
                                      voice_model_profiles=voice_model_profiles,
                                      memory_backend_store=memory_backend_store,
                                      xiaozhi_memory_backends=xiaozhi_memory_backends,
-                                     round_skin_store=round_skin_store), access_log=None)
+                                     round_skin_store=round_skin_store,
+                                     round_wallpaper_library=round_wallpaper_library), access_log=None)
     await runner.setup()
     await web.SockSite(runner, sock).start()
     try:
@@ -132,6 +133,70 @@ async def login(client, base):
     cookie = response.headers["Set-Cookie"]
     assert "HttpOnly" in cookie and "SameSite=Strict" in cookie
     return {"Origin": base, "X-Console-CSRF": (await response.json())["csrf"]}
+
+
+class FakeWallpaperLibrary:
+    def __init__(self, root):
+        self.root = root
+        self.root.mkdir()
+        self.received = b""
+        self.preview = self.root / "preview.gif"
+        self.preview.write_bytes(b"GIF89a")
+
+    def describe(self):
+        return {"enabled": True, "tool_state": "ready", "max_upload_bytes": 768 * 1024 * 1024,
+                "items": []}
+
+    def create_staging(self):
+        directory = self.root / "upload"
+        directory.mkdir()
+        return directory, directory / "source.media"
+
+    def import_staging(self, directory, *, original_filename, spec):
+        self.received = (directory / "source.media").read_bytes()
+        assert original_filename == "wallpaper.mp4"
+        assert spec.start_seconds == 2 and spec.duration_seconds == 3
+        directory.rename(self.root / "committed")
+        return {"id": "wallpaper-" + "a" * 20, "state": "ready"}
+
+    def discard_staging(self, directory):
+        if directory.exists():
+            directory.rmdir()
+
+    def preview_path(self, item_id):
+        assert item_id == "wallpaper-" + "a" * 20
+        return self.preview
+
+
+def test_round_wallpaper_upload_and_preview_are_csrf_protected(tmp_path):
+    async def run():
+        library = FakeWallpaperLibrary(tmp_path / "wallpapers")
+        async with console(round_wallpaper_library=library) as (client, base, _bridge):
+            headers = await login(client, base)
+            listing = await client.get(base + "/api/round-wallpapers")
+            assert listing.status == 200 and (await listing.json())["tool_state"] == "ready"
+            form = aiohttp.FormData()
+            form.add_field("file", b"synthetic-video", filename="wallpaper.mp4",
+                           content_type="video/mp4")
+            rejected = await client.post(
+                base + "/api/round-wallpapers?start_seconds=2&duration_seconds=3&frame_rate=8&colors=64",
+                data=form,
+            )
+            assert rejected.status == 403
+
+            form = aiohttp.FormData()
+            form.add_field("file", b"synthetic-video", filename="wallpaper.mp4",
+                           content_type="video/mp4")
+            accepted = await client.post(
+                base + "/api/round-wallpapers?start_seconds=2&duration_seconds=3&frame_rate=8&colors=64",
+                data=form, headers=headers,
+            )
+            assert accepted.status == 201
+            assert library.received == b"synthetic-video"
+            preview = await client.get(base + "/api/round-wallpapers/wallpaper-" + "a" * 20 + "/preview")
+            assert preview.status == 200 and preview.content_type == "image/gif"
+            assert await preview.read() == b"GIF89a"
+    asyncio.run(run())
 
 
 def test_console_serves_only_local_assets_and_protected_device_actions():

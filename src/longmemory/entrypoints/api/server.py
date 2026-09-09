@@ -28,6 +28,8 @@ from .routes.memory_backends import register_memory_backend_routes
 from .xiaozhi_memory_backends import XiaozhiMemoryBackends
 from .routes.round_skins import register_round_skin_routes
 from longmemory.infrastructure.config.round_skins import RoundSkinStore
+from .routes.round_wallpapers import register_round_wallpaper_routes
+from longmemory.infrastructure.media.round_wallpaper_library import RoundWallpaperLibrary
 from .routes.proactive_policy import register_proactive_policy_routes
 from .device_role import DeviceRole
 from .voice_settings import VoiceSettings, register_voice_routes
@@ -67,7 +69,7 @@ def create_app(*, port=8765, bridge=None, web_root=None, database=None, allow_me
                consolidation_background_enabled=False, proactive_clock=None,
                model_profile_store=None, voice_model_profiles=None,
                memory_backend_store=None, xiaozhi_memory_backends=None,
-               round_skin_store=None):
+               round_skin_store=None, round_wallpaper_library=None):
     sessions = Sessions()
     assets = web_root or ROOT / "web"
     client = bridge if bridge is not None else XiaozhiControlClient(ROOT / "data/control/device-control.token")
@@ -224,6 +226,10 @@ def create_app(*, port=8765, bridge=None, web_root=None, database=None, allow_me
     register_round_skin_routes(
         app, round_skin_store or RoundSkinStore(ROOT), client, operation_lock,
     )
+    register_round_wallpaper_routes(
+        app,
+        round_wallpaper_library or RoundWallpaperLibrary(ROOT / "data" / "round-screen" / "wallpapers"),
+    )
     experiments = experiment_backend if experiment_backend is not None else ExperimentBackend(ROOT / "experiments")
     register_experiment_routes(app, experiments)
     register_job_routes(app, job_backend if job_backend is not None else ExperimentJobs(experiments))
@@ -259,6 +265,8 @@ def main():
                         help="标记本进程实际加载的本机模型配置档")
     parser.add_argument("--memory-backend", choices=("longmemory", "xiaozhi_local", "none"),
                         default="longmemory", help="标记本次圆屏进程实际选择的记忆后端")
+    parser.add_argument("--ffmpeg-dir", type=Path,
+                        help="已安装的 ffmpeg/ffprobe 目录；只用于本机动态壁纸转码")
     args = parser.parse_args()
     if not 1024 <= args.port <= 65535:
         parser.error("port 必须在 1024–65535 之间")
@@ -449,7 +457,11 @@ def main():
                                persona_producer=persona_producer, persona_model=persona_model,
                                consolidation_background_enabled=args.enable_memory_consolidation,
                                model_profile_store=ModelProfileStore(ROOT, current_profile=args.model_profile),
-                               memory_backend_store=MemoryBackendStore(ROOT, current_backend=args.memory_backend)),
+                               memory_backend_store=MemoryBackendStore(ROOT, current_backend=args.memory_backend),
+                               round_wallpaper_library=RoundWallpaperLibrary(
+                                   ROOT / "data" / "round-screen" / "wallpapers",
+                                   ffmpeg_dir=args.ffmpeg_dir,
+                               )),
                     host="127.0.0.1", port=args.port, access_log=None, print=None)
     except OSError:
         parser.exit(1, f"控制台未能绑定 127.0.0.1:{args.port}。请检查旧控制台是否仍在运行或端口权限；未自动停止其他进程、未换端口。\n")

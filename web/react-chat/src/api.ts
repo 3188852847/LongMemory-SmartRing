@@ -48,6 +48,22 @@ export class ChatApi {
     }
     return await response.json() as T;
   }
+  async uploadRoundWallpaper(file: File, options: RoundWallpaperUploadOptions): Promise<{item:RoundWallpaperItem}> {
+    const query = new URLSearchParams(Object.entries(options).map(([key, value]) => [key, String(value)]));
+    const form = new FormData();
+    form.append('file', file, file.name);
+    // 不手动设置 Content-Type：浏览器需要为 multipart 生成 boundary。
+    const response = await fetch(`/api/round-wallpapers?${query}`, {
+      method:'POST', credentials:'same-origin', cache:'no-store',
+      headers:{'X-Console-CSRF':this.csrf}, body:form,
+    });
+    if (!response.ok) {
+      let code = `http_${response.status}`;
+      try {const body = await response.json() as {error?:unknown}; if (typeof body.error === 'string') code = body.error;} catch { /* 保持安全错误码。 */ }
+      throw new ApiError(code, response.status);
+    }
+    return await response.json() as {item:RoundWallpaperItem};
+  }
 }
 export interface WriteTrace {operation:string; item_id?:string; source_event_ids?:string[] | null}
 export interface RetrievedTrace {item_id:string; content:string; source_event_ids?:string[] | null}
@@ -161,6 +177,19 @@ export interface RoundDeviceSkin {
 export interface RoundSkinApply {
   requested_skin_id:string; requested_manifest_sha256:string; acknowledged:true;
   verified:boolean; device_skin?:RoundDeviceSkin; reason?:string;
+}
+export interface RoundWallpaperUploadOptions {
+  start_seconds:number; duration_seconds:number; frame_rate:number; colors:number;
+}
+export interface RoundWallpaperItem {
+  schema_version:1; id:string; created_at:string; state:'ready';
+  source:{display_name:string;size_bytes:number;sha256:string;container:string;video_codec:string;width:number;height:number;duration_seconds:number;frame_rate:number;has_audio:boolean};
+  clip:RoundWallpaperUploadOptions;
+  preview:{file_name:'preview.gif';size_bytes:number;sha256:string;width:360;height:360;format:'gif';has_audio:false};
+  delivery:{device_published:false;reason:'preview_only'};
+}
+export interface RoundWallpaperLibrary {
+  enabled:boolean; tool_state:'ready'|'unavailable'; max_upload_bytes:number; items:RoundWallpaperItem[];
 }
 export interface ProactivePolicy {
   subject_id: string; enabled: boolean; utc_offset_minutes: number;

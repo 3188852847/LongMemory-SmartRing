@@ -19,6 +19,7 @@ VOXCPM_PORT = 18768
 DEFAULT_CHAT_PATH = "/chat-react"
 CONSOLE_PATHS = {"chat": DEFAULT_CHAT_PATH, "device": "/device", "memories": "/memories", "settings": "/settings"}
 DEFAULT_BGE_MODEL = ROOT / "data/models/bge-small-zh-v1.5/7999e1d3359715c523056ef9478215996d62a620"
+DEFAULT_FFMPEG_DIR = Path(r"D:\Tools\ffmpeg\bin")
 
 
 def console_url(port: int, page: str = "chat") -> str:
@@ -47,6 +48,7 @@ class Options:
     model_profile: str = "campus"
     voice_model_profile: str = "campus"
     memory_backend: str = "longmemory"
+    ffmpeg_dir: Path | None = None
 
 
 def require_free(host, port):
@@ -114,6 +116,11 @@ def build_commands(options, uv=None):
                "--memory-audit-log", str(root / "data/logs/xiaozhi-demo-v1.jsonl")]
     console.extend(["--model-profile", options.model_profile])
     console.extend(["--memory-backend", options.memory_backend])
+    # 媒体工具是用户已安装的本地依赖。启动器只发现并传递路径，
+    # 不下载、不改 PATH；找不到时其他控制台功能仍可启动。
+    ffmpeg_dir = options.ffmpeg_dir or DEFAULT_FFMPEG_DIR
+    if (ffmpeg_dir / "ffmpeg.exe").is_file() and (ffmpeg_dir / "ffprobe.exe").is_file():
+        console.extend(["--ffmpeg-dir", str(ffmpeg_dir.resolve())])
     # 人工纠正每次都需要在网页中核对旧内容并再次确认；日常入口默认开放这一
     # 可追溯写入能力。不可恢复的硬删除仍保持关闭。
     console.append("--allow-memory-correction")

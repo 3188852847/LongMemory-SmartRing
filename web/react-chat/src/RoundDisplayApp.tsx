@@ -5,6 +5,7 @@ import {AppShell, ConsoleNav} from './AppShell';
 import {PageHeader} from './PageHeader';
 import {ChatApi, type RoundDeviceSkin, type RoundSkin, type RoundSkinApply, type RoundSkins} from './api';
 import {readRoundObservations, roundObservationKey, roundObservationStates, type RoundObservations, type RoundObservationState, writeRoundObservations} from './roundDisplayObservations';
+import {RoundWallpaperLibrary} from './RoundWallpaperLibrary';
 
 export type InteractionState = 'booting' | 'idle' | 'wake_acknowledged' | 'listening' | 'thinking' | 'speaking' | 'interrupted' | 'no_speech' | 'error';
 export type EmotionState = 'neutral' | 'warm' | 'happy' | 'concerned';
@@ -279,6 +280,7 @@ export function RoundDisplayApp() {
           </div>}
           {observationNotice&&<Alert className="settings-model-alert" type="info" showIcon title={observationNotice}/>}
         </Card>
+        <RoundWallpaperLibrary api={api} sessionReady={session.isSuccess}/>
       </section>
     </div>
   </AppShell>;

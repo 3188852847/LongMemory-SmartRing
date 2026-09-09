@@ -20,7 +20,7 @@ describe('圆屏状态协议与模拟器', () => {
   test('默认页面明确模拟边界并提供受限的本机皮肤编辑器', async () => {
     localStorage.clear();
     vi.spyOn(ChatApi.prototype, 'bootstrap').mockResolvedValue(undefined);
-    const request=vi.spyOn(ChatApi.prototype, 'request').mockResolvedValue({
+    const skinPayload={
       enabled:true, selected_skin:'rose-night-v1', custom_skin_id:'local-custom-v1', skins:[{
         schema_version:1, id:'rose-night-v1', name:'蔷薇夜色', description:'测试皮肤',
         target:{board:'viewe-smartring-plus', width:360, height:360, color_format:'RGB565', skin_api:1},
@@ -29,7 +29,12 @@ describe('圆屏状态协议与模拟器', () => {
       }],
       delivery:{console_preview:true, upstream_assets_ota_detected:true, device_apply_supported:false,
         device_delivery_implemented:true, reason:'device_capability_probe_required', known_firmware_baseline:'round-face-0004'},
-    });
+    };
+    const request=vi.spyOn(ChatApi.prototype, 'request').mockImplementation(async path =>
+      path==='/api/round-wallpapers'
+        ? {enabled:true,tool_state:'ready',max_upload_bytes:805306368,items:[]}
+        : skinPayload
+    );
     render(<QueryClientProvider client={createConsoleQueryClient()}><MemoryRouter><RoundDisplayApp/></MemoryRouter></QueryClientProvider>);
     expect(screen.getByRole('heading', {name: '圆屏状态预览'})).toBeTruthy();
     expect(screen.getByText(/画布：360 × 360 px/)).toBeTruthy();
@@ -40,6 +45,7 @@ describe('圆屏状态协议与模拟器', () => {
     expect(screen.getByText('3. 系统覆盖')).toBeTruthy();
     expect(screen.getByText('4. 皮肤档案')).toBeTruthy();
     expect(screen.getByText('5. 真机五态观察')).toBeTruthy();
+    expect(screen.getByText('6. 动态壁纸素材库')).toBeTruthy();
     expect(screen.getByText('先检测真机皮肤能力')).toBeTruthy();
     expect(screen.getByRole('button', {name:'检测真机皮肤能力'})).toBeTruthy();
     expect((screen.getByRole('button', {name:'应用到真机'}) as HTMLButtonElement).disabled).toBe(true);
