@@ -13,6 +13,9 @@ from longmemory.core.memory.consolidation.sources import (
 
 _ELIGIBLE = (
     "a.subject_id=? AND a.retired_at IS NULL "
+    # 第一版不把有明确结束时间的临时 L1 提炼成长期场景；否则 L1 到期后，
+    # 派生 L2 仍可能继续影响回答。未来若要总结短期状态，应设计传播期限。
+    "AND a.valid_to IS NULL "
     "AND EXISTS (SELECT 1 FROM memory_evidence e "
     "JOIN conversation_messages m ON m.id=e.source_message_id "
     "WHERE e.memory_id=a.id AND m.role='user') "
@@ -105,4 +108,3 @@ class SQLiteL1ConsolidationSourceReader:
             datetime.fromisoformat(row["recorded_at"]),
             tuple(message["id"] for message in messages),
         )
-

@@ -142,6 +142,27 @@ def test_changed_source_is_cancelled_at_due_without_device_delivery(tmp_path):
     assert bridge.announcements == []
 
 
+def test_source_that_expires_at_due_is_cancelled_without_device_delivery(tmp_path):
+    path = tmp_path / "follow-up-expired-source.db"
+    prepare(path)
+    create_and_arm(path)
+    connection = open_database(path)
+    connection.execute(
+        "UPDATE atomic_memories SET valid_to=? WHERE id='memory-follow-up'",
+        (DUE.isoformat(),),
+    )
+    connection.commit()
+    connection.close()
+
+    bridge = ReadyBridge()
+    result = asyncio.run(
+        MemoryBackend(path, clock=lambda: DUE).proactive_follow_up_tick(bridge)
+    )
+
+    assert result["state"] == "cancelled"
+    assert bridge.announcements == []
+
+
 def test_deleting_source_cascades_armed_follow_up_and_its_events(tmp_path):
     path = tmp_path / "follow-up-delete.db"
     prepare(path)

@@ -121,3 +121,25 @@ def test_does_not_extract_user_memory_from_assistant_message() -> None:
     )
 
     assert service.extract(assistant_message) == ()
+
+
+def test_explicit_today_state_gets_a_local_day_validity_window() -> None:
+    memory = make_extraction_service().extract(make_message("我今天心情不好"))[0]
+
+    assert memory.content == "用户今天心情不好。"
+    assert memory.valid_from == datetime(2026, 9, 2, 16, 0, tzinfo=UTC)
+    assert memory.valid_to == datetime(2026, 9, 3, 16, 0, tzinfo=UTC)
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        "我今天决定以后每天跑步",
+        "我今天提交毕业设计",
+        "我一直很容易焦虑",
+    ],
+)
+def test_non_temporary_statements_do_not_get_invented_expiry(content) -> None:
+    memory = make_extraction_service().extract(make_message(content))[0]
+    assert memory.valid_from is None
+    assert memory.valid_to is None

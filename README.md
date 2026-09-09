@@ -46,6 +46,8 @@ P1 网页会话恢复已实现：列表、新建、切换、重命名，同一�
 
 P3 采用四层个人记忆：L0 原始证据、L1 原子记忆、L2 场景、L3 用户画像。P3.1–P3.9 已完成共享 Runtime、可选模型提取、混合召回、明确记住/跳过、纠正/变化/来源/双轮删除、L2/L3 候选与来源追溯、确定性低风险门控、受控回答使用和默认关闭的低频整理调度。L3 对用户呈现一份读取时聚合的统一画像，但底层保留可追溯原子断言。当前未完成任意语义冲突自动发现、L2/L3 语义召回、撤销、跨层重建和隐私级彻底删除；低频整理在个人库中保持默认关闭。见 [ADR-0026](docs/adr/0026-layered-memory-and-knowledge-plane.md)至 [ADR-0057](docs/adr/0057-single-owner-consolidation-scheduler.md)，以及 [ADR-0086](docs/adr/0086-explicit-l1-exclusion-command.md)、[ADR-0087](docs/adr/0087-explicit-l1-inclusion-command.md)。
 
+G3.2 开始复用 L1 双时间字段表达明确临时状态：严格的“我今天/我这两天＋状态词”会获得 UTC+8 自然日有效期；到期后停止参与关键词和本地 BGE 召回，但 L0/L1 证据仍保留并在管理页显示“已到期”。有限期 L1 暂不自动整理为 L2/L3，防止短期状态污染长期画像。当前只是保守第一版，不代表已经理解任意时间表达。见 [ADR-0105](docs/adr/0105-explicit-temporary-state-validity.md)。
+
 记忆页已有按本地自然日查看的 L1 回顾：可区分新增、纠正和事实变化，并从当前项直达来源或追加式纠正。回顾还能核对当天未关联用户 L0；确认漏记时可显式填写完整事实补成 L1，复用原来源、不调用模型，也不会把所有未关联原话自动判为应记。V29 以不含正文的事件保留这个所有者质量信号，但不把它解释为自动错误率。SQLite V28 起还会为真实发生的 L1 删除保存不含正文的最小审计事件；旧删除不回填，且这不等于清除 L0、聊天旁库或备份。见 [ADR-0094](docs/adr/0094-content-free-l1-deletion-audit.md)和 [ADR-0095](docs/adr/0095-content-free-owner-memory-quality-events.md)。
 
 圆屏回答完成回执从 SQLite V30 开始保存：实际助手文本与本轮用户 L0、L1/L2/L3 召回数量建立关联。V31–V33 逐步增加明确质量反馈、实际召回证据索引和只追加问题处理状态；它们不自动修改记忆或学习。V34–V36 新增长期事项跟进：所有者可手工建立候选；带明确时间的“到时候问我……”在主动交流总开关开启时可原子建立一次未来联系，总开关关闭时只保留候选。到点仍经过 P4 全部护栏，来源变化、错过、离线或阻止都不补发。见 [ADR-0097](docs/adr/0097-round-screen-answer-completion-receipt.md)至 [ADR-0104](docs/adr/0104-conversation-authorized-one-shot-follow-up.md)。

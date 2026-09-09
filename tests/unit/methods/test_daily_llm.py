@@ -121,3 +121,27 @@ def test_duplicate_fact_keeps_two_sources(tmp_path):
     with sqlite3.connect(path) as connection:
         assert connection.execute("SELECT count(*) FROM atomic_memories").fetchone()[0] == 1
         assert connection.execute("SELECT count(*) FROM memory_evidence").fetchone()[0] == 2
+
+
+def test_daily_llm_scopes_explicit_today_state_and_allows_next_day_recurrence(tmp_path):
+    path = existing_database(tmp_path)
+    producer = Stub(proposal("用户今天心情不好。", "我今天心情不好"))
+    method = DailyLLMMemory(path, producer=producer)
+    first = event("mood-day-1", "我今天心情不好")
+    second = MemoryEvent(
+        "mood-day-2", "user", "我今天心情不好",
+        datetime(2026, 9, 7, tzinfo=UTC),
+    )
+
+    assert method.observe(first).writes[0].operation == "add"
+    assert method.observe(second).writes[0].operation == "add"
+    method.close()
+
+    with sqlite3.connect(path) as connection:
+        rows = connection.execute(
+            "SELECT valid_from,valid_to FROM atomic_memories ORDER BY valid_from"
+        ).fetchall()
+    assert rows == [
+        ("2026-09-06T00:00:00+08:00", "2026-09-07T00:00:00+08:00"),
+        ("2026-09-07T00:00:00+08:00", "2026-09-08T00:00:00+08:00"),
+    ]

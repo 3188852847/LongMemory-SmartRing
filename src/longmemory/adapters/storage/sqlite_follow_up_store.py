@@ -14,7 +14,8 @@ class SQLiteFollowUpCandidateStore:
 
     def create(self, candidate: FollowUpCandidate) -> FollowUpCandidate:
         source = self._connection.execute(
-            "SELECT subject_id,content,retired_at FROM atomic_memories WHERE id=?",
+            "SELECT subject_id,content,valid_from,valid_to,retired_at "
+            "FROM atomic_memories WHERE id=?",
             (candidate.source_memory_id,),
         ).fetchone()
         if source is None:
@@ -22,6 +23,14 @@ class SQLiteFollowUpCandidateStore:
         if source["subject_id"] != candidate.subject_id:
             raise ValueError("follow_up_subject_mismatch")
         if source["retired_at"] is not None:
+            raise ValueError("follow_up_source_not_current")
+        if (
+            source["valid_from"] is not None
+            and candidate.follow_up_at < datetime.fromisoformat(source["valid_from"])
+        ) or (
+            source["valid_to"] is not None
+            and candidate.follow_up_at >= datetime.fromisoformat(source["valid_to"])
+        ):
             raise ValueError("follow_up_source_not_current")
         digest = hashlib.sha256(source["content"].encode("utf-8")).hexdigest()
         if digest != candidate.source_content_sha256:
@@ -47,6 +56,7 @@ class SQLiteFollowUpCandidateStore:
     def list(self, subject_id: str) -> tuple[dict, ...]:
         rows = self._connection.execute(
             "SELECT f.*,m.content AS source_content,m.retired_at AS source_retired_at,"
+            "m.valid_from AS source_valid_from,m.valid_to AS source_valid_to,"
             "m.superseded_by_id AS source_superseded_by_id,"
             "o.id AS outreach_id,o.state AS outreach_state,o.revision AS outreach_revision,"
             "o.expires_at AS outreach_expires_at "

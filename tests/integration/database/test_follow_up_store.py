@@ -18,12 +18,14 @@ NOW = datetime(2026, 9, 10, 1, 0, tzinfo=UTC)
 CONTENT = "用户计划在周五晚上完善毕业设计汇报。"
 
 
-def insert_memory(connection, *, retired_at=None):
+def insert_memory(connection, *, retired_at=None, valid_from=None, valid_to=None):
     connection.execute(
         "INSERT INTO atomic_memories "
         "(id,subject_id,content,recorded_at,valid_from,valid_to,retired_at,superseded_by_id) "
         "VALUES (?,?,?,?,?,?,?,?)",
-        ("memory-1", "user:self", CONTENT, NOW.isoformat(), None, None,
+        ("memory-1", "user:self", CONTENT, NOW.isoformat(),
+         valid_from.isoformat() if valid_from else None,
+         valid_to.isoformat() if valid_to else None,
          retired_at.isoformat() if retired_at else None, None),
     )
     connection.commit()
@@ -74,6 +76,26 @@ def test_follow_up_rejects_retired_or_changed_l1_and_cascades_owner_deletion(tmp
     assert connection.execute(
         "SELECT count(*) FROM companion_follow_up_candidates"
     ).fetchone()[0] == 0
+    connection.close()
+
+
+@pytest.mark.parametrize(
+    ("valid_from", "valid_to"),
+    [
+        (NOW + timedelta(days=1, minutes=1), None),
+        (None, NOW + timedelta(days=1)),
+    ],
+)
+def test_follow_up_rejects_l1_outside_its_valid_time(
+    tmp_path, valid_from, valid_to,
+):
+    connection = open_database(tmp_path / "follow-up-validity.db")
+    initialize_schema(connection)
+    insert_memory(connection, valid_from=valid_from, valid_to=valid_to)
+
+    with pytest.raises(ValueError, match="follow_up_source_not_current"):
+        SQLiteFollowUpCandidateStore(connection).create(candidate())
+
     connection.close()
 
 

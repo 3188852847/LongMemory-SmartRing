@@ -103,3 +103,22 @@ def test_no_new_sources_does_not_reprocess_old_context_by_itself(tmp_path):
     assert batch.sources == () and batch.pending_new_source_count == 0
     assert batch.next_cursor is None
     connection.close()
+
+
+def test_finite_l1_is_not_promoted_into_long_lived_scenario(tmp_path):
+    connection = open_database(tmp_path / "temporary.db")
+    initialize_schema(connection)
+    memory_id = add_l1(connection, 1)
+    connection.execute(
+        "UPDATE atomic_memories SET valid_to=? WHERE id=?",
+        ((BASE + timedelta(days=2)).isoformat(), memory_id),
+    )
+    connection.commit()
+
+    batch = SQLiteL1ConsolidationSourceReader(connection).read_batch(
+        "user:self", after=None, limit=20,
+    )
+
+    assert batch.sources == ()
+    assert batch.pending_new_source_count == 0
+    connection.close()

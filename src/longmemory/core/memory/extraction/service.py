@@ -14,6 +14,9 @@ from longmemory.core.memory.l1_atomic.models import (
     CURRENT_USER_SUBJECT_ID,
     AtomicMemory,
 )
+from longmemory.core.memory.extraction.temporary_scope import (
+    explicit_temporary_window,
+)
 
 
 def _new_memory_id() -> MemoryId:
@@ -60,12 +63,17 @@ class MemoryExtractionService:
 
         candidate_contents = self._policy.extract_contents(message.content)
 
-        return tuple(
-            AtomicMemory(
+        memories = []
+        for content in candidate_contents:
+            window = explicit_temporary_window(
+                message.content, content, occurred_at=message.created_at,
+            )
+            memories.append(AtomicMemory(
                 id=self._id_factory(),
                 subject_id=self._subject_id,
                 content=content,
                 recorded_at=self._clock(),
-            )
-            for content in candidate_contents
-        )
+                valid_from=(window[0] if window else None),
+                valid_to=(window[1] if window else None),
+            ))
+        return tuple(memories)

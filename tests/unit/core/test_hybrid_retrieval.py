@@ -95,3 +95,19 @@ def test_empty_memory_corpus_does_not_encode_query():
     retriever = HybridMemoryRetriever(Store([]), encoder)
     assert retriever.retrieve("我的名字是什么") == ()
     assert encoder.document_batches == []
+
+
+def test_expired_memory_is_removed_from_dense_corpus():
+    now = datetime(2026, 9, 6, 12, tzinfo=UTC)
+    expired = AtomicMemory(
+        MemoryId("mood"), MemorySubjectId("user:self"), "用户今天心情不好。",
+        datetime(2026, 9, 6, tzinfo=UTC), valid_to=now,
+    )
+    encoder = Encoder()
+    retriever = HybridMemoryRetriever(
+        Store([expired, memory("cat", "用户养猫。")]), encoder,
+        clock=lambda: now,
+    )
+
+    assert "mood" not in tuple(item.id for item in retriever.retrieve("心情"))
+    assert encoder.document_batches == [["用户养猫。"]]

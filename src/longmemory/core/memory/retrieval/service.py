@@ -1,5 +1,7 @@
 """根据当前问题召回并排序相关 L1 记忆。"""
 
+from collections.abc import Callable
+from datetime import UTC, datetime
 import re
 
 from longmemory.core.memory.l1_atomic.contracts import MemoryStore
@@ -36,6 +38,15 @@ def keyword_overlap_score(query: str, content: str) -> int:
     return len(_extract_terms(query) & _extract_terms(content))
 
 
+def is_memory_effective(memory: AtomicMemory, at: datetime) -> bool:
+    """有效区间采用左闭右开；退役状态仍由存储层过滤。"""
+
+    return (
+        (memory.valid_from is None or memory.valid_from <= at)
+        and (memory.valid_to is None or memory.valid_to > at)
+    )
+
+
 class KeywordMemoryRetriever:
     """使用词项重合数量进行排序的基础检索器。
 
@@ -43,8 +54,12 @@ class KeywordMemoryRetriever:
     数据规模扩大后，应重新评估全文索引或向量检索。
     """
 
-    def __init__(self, memory_store: MemoryStore) -> None:
+    def __init__(
+        self, memory_store: MemoryStore,
+        *, clock: Callable[[], datetime] = lambda: datetime.now(UTC),
+    ) -> None:
         self._memory_store = memory_store
+        self._clock = clock
 
     def retrieve(
         self,
@@ -66,7 +81,10 @@ class KeywordMemoryRetriever:
 
         # 已被未来冲突更新流程退役的历史记忆仍可供审计，
         # 但不能继续参与当前回答。
+        now = self._clock()
         for memory in self._memory_store.list_active():
+            if not is_memory_effective(memory, now):
+                continue
             overlap_count = keyword_overlap_score(query, memory.content)
 
             # 没有任何有效词项重合时，不返回该记忆。
@@ -98,9 +116,13 @@ class HybridMemoryRetriever:
 
     name = "keyword_dense_rrf_v1"
 
-    def __init__(self, memory_store: MemoryStore, encoder) -> None:
+    def __init__(
+        self, memory_store: MemoryStore, encoder,
+        *, clock: Callable[[], datetime] = lambda: datetime.now(UTC),
+    ) -> None:
         self._memory_store = memory_store
-        self._keyword = KeywordMemoryRetriever(memory_store)
+        self._clock = clock
+        self._keyword = KeywordMemoryRetriever(memory_store, clock=clock)
         self._encoder = encoder
         self._index = ExactVectorIndex((), (), encoder_id=encoder.identity)
         self._signature: tuple[tuple[str, str], ...] = ()
@@ -142,7 +164,11 @@ class HybridMemoryRetriever:
         if limit <= 0:
             return ()
         keyword = self._keyword.retrieve(query, limit=max(20, limit * 4))
-        memories = self._memory_store.list_active()
+        now = self._clock()
+        memories = tuple(
+            memory for memory in self._memory_store.list_active()
+            if is_memory_effective(memory, now)
+        )
         if not memories:
             # 空库没有候选，不能为了“执行过语义模型”而制造一次无意义编码。
             return ()

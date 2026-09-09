@@ -12,6 +12,7 @@ from longmemory.core.memory.extraction.candidates import (
     CandidateExtractionService,
 )
 from longmemory.core.memory.l1_atomic.models import AtomicMemory, CURRENT_USER_SUBJECT_ID
+from longmemory.core.memory.extraction.temporary_scope import explicit_temporary_window
 from longmemory.methods.contracts import (
     MemoryEvent,
     ObservationResult,
@@ -81,15 +82,19 @@ class DailyLLMMemory:
             )
 
         recorded_at = datetime.now(UTC)
-        memories = tuple(
-            AtomicMemory(
-                MemoryId(str(uuid4())),
-                CURRENT_USER_SUBJECT_ID,
-                candidate.content,
-                recorded_at,
+        memories = []
+        for candidate in proposal.candidates:
+            window = explicit_temporary_window(
+                message.content, candidate.content,
+                occurred_at=message.created_at,
             )
-            for candidate in proposal.candidates
-        )
+            memories.append(AtomicMemory(
+                MemoryId(str(uuid4())), CURRENT_USER_SUBJECT_ID,
+                candidate.content, recorded_at,
+                valid_from=(window[0] if window else None),
+                valid_to=(window[1] if window else None),
+            ))
+        memories = tuple(memories)
         try:
             operations = self._base.turn_service.persist_extracted(message, memories)
         except sqlite3.Error:

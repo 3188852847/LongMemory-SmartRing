@@ -132,12 +132,20 @@ class MemoryAccessError(Exception):
 
 
 def memory_json(memory):
+    now = datetime.now(UTC)
+    effective_state = (
+        "retired" if memory.retired_at
+        else "not_started" if memory.valid_from is not None and memory.valid_from > now
+        else "expired" if memory.valid_to is not None and memory.valid_to <= now
+        else "current"
+    )
     return {
         "id": str(memory.id), "subject_id": str(memory.subject_id), "content": memory.content,
         **{key: getattr(memory, key).isoformat() if getattr(memory, key) else None
            for key in ("recorded_at", "valid_from", "valid_to", "retired_at")},
         "superseded_by_id": str(memory.superseded_by_id) if memory.superseded_by_id else None,
         "state": "retired" if memory.retired_at else "active",
+        "effective_state": effective_state,
     }
 
 
@@ -422,6 +430,14 @@ class MemoryBackend:
         follow_up_at = datetime.fromisoformat(row["follow_up_at"])
         source_current = (
             row["source_retired_at"] is None
+            and (
+                row["source_valid_from"] is None
+                or datetime.fromisoformat(row["source_valid_from"]) <= follow_up_at
+            )
+            and (
+                row["source_valid_to"] is None
+                or datetime.fromisoformat(row["source_valid_to"]) > follow_up_at
+            )
             and source_digest == row["source_content_sha256"]
         )
         outreach_id = row.get("outreach_id")
@@ -1129,7 +1145,8 @@ class MemoryBackend:
                 )
                 return self._outreach_result(expired, replayed=False)
             source = connection.execute(
-                "SELECT f.status,f.revision,m.content,m.retired_at "
+                "SELECT f.status,f.revision,m.content,m.valid_from,m.valid_to,"
+                "m.retired_at "
                 "FROM companion_follow_up_candidates f "
                 "JOIN atomic_memories m ON m.id=f.source_memory_id WHERE f.id=?",
                 (current.follow_up_candidate_id,),
@@ -1139,6 +1156,14 @@ class MemoryBackend:
                 and source["status"] == "candidate"
                 and source["revision"] == current.follow_up_candidate_revision
                 and source["retired_at"] is None
+                and (
+                    source["valid_from"] is None
+                    or datetime.fromisoformat(source["valid_from"]) <= now
+                )
+                and (
+                    source["valid_to"] is None
+                    or datetime.fromisoformat(source["valid_to"]) > now
+                )
             )
             if source_valid:
                 expected_digest = connection.execute(

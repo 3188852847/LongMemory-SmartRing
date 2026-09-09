@@ -162,6 +162,27 @@ def test_does_not_retrieve_retired_memory() -> None:
     assert retriever.retrieve("我的猫叫什么？") == ()
 
 
+def test_does_not_retrieve_memory_outside_its_valid_time() -> None:
+    temporary = AtomicMemory(
+        id=MemoryId("memory-temporary"),
+        subject_id=CURRENT_USER_SUBJECT_ID,
+        content="用户今天心情不好。",
+        recorded_at=FIXED_TIME,
+        valid_from=FIXED_TIME,
+        valid_to=FIXED_TIME.replace(hour=14),
+    )
+
+    active = KeywordMemoryRetriever(
+        FakeMemoryStore((temporary,)), clock=lambda: FIXED_TIME.replace(hour=13, minute=30),
+    )
+    expired = KeywordMemoryRetriever(
+        FakeMemoryStore((temporary,)), clock=lambda: FIXED_TIME.replace(hour=14),
+    )
+
+    assert active.retrieve("我今天心情好吗") == (temporary,)
+    assert expired.retrieve("我今天心情好吗") == ()
+
+
 def test_builds_inspectable_context_from_retrieved_memories() -> None:
     """检索结果应被构造成稳定、可检查的上下文文本。"""
 
