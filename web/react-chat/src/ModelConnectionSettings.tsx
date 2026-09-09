@@ -2,6 +2,7 @@ import {useEffect, useMemo, useState} from 'react';
 import {Alert, Button, Descriptions, Divider, Form, Input, InputNumber, Select, Space, Switch, Tag} from 'antd';
 import {type ChatApi, type Config, type ModelHealth, type ModelProfile, type ModelProfiles, type VoiceModelHealth} from './api';
 import {modelFailure} from './modelHealth';
+import {settingsFailure} from './settingsFailure';
 
 function healthLabel(health: ModelHealth | undefined) {
   if (health?.state === 'available') return <Tag color="success">最近验证可用</Tag>;
@@ -38,7 +39,7 @@ export function ModelConnectionSettings({api, config, disabled, onHealth}: {
       const choice = result.next_start_profile ?? 'official';
       setSelected(choice);
       setVoiceSelected(result.voice_next_start_profile ?? result.voice?.selected_profile ?? choice);
-    }).catch(error => active && setRequestError(String(error)));
+    }).catch(error => active && setRequestError(settingsFailure(error, 'read')));
     return () => {active = false;};
   }, [api, disabled]);
 
@@ -51,7 +52,7 @@ export function ModelConnectionSettings({api, config, disabled, onHealth}: {
     if (checking || config?.provider !== 'openai_compatible') return;
     setChecking(true); setRequestError('');
     try {onHealth(await api.request<ModelHealth>('/api/chat-model/check', 'POST', {}));}
-    catch (error) {setRequestError(String(error));}
+    catch (error) {setRequestError(settingsFailure(error, 'read'));}
     finally {setChecking(false);}
   }
   async function save(values: {base_url:string; model:string; api_key?:string; timeout_seconds:number; max_tokens:number; allow_http:boolean}) {
@@ -59,7 +60,7 @@ export function ModelConnectionSettings({api, config, disabled, onHealth}: {
     try {
       const result = await api.request<ModelProfiles>(`/api/model-profiles/${selected}`, 'PUT', {...values, activate:true});
       setProfiles(result); form.setFieldValue('api_key', ''); setSaved(true);
-    } catch (error) {setRequestError(String(error));}
+    } catch (error) {setRequestError(settingsFailure(error, 'write'));}
     finally {setSaving(false);}
   }
   async function saveVoiceSelection() {
@@ -67,13 +68,13 @@ export function ModelConnectionSettings({api, config, disabled, onHealth}: {
     try {
       const voice = await api.request<NonNullable<ModelProfiles['voice']>>('/api/model-profiles/voice/selection', 'PUT', {profile:voiceSelected});
       setProfiles(current => current ? {...current, voice_next_start_profile:voice.selected_profile, voice} : current);
-    } catch (error) {setRequestError(String(error));}
+    } catch (error) {setRequestError(settingsFailure(error, 'write'));}
     finally {setVoiceSaving(false);}
   }
   async function checkVoice() {
     setVoiceChecking(true); setRequestError('');
     try {setVoiceHealth(await api.request<VoiceModelHealth>('/api/model-profiles/voice/check', 'POST', {}));}
-    catch (error) {setRequestError(String(error));}
+    catch (error) {setRequestError(settingsFailure(error, 'read'));}
     finally {setVoiceChecking(false);}
   }
   return <>
@@ -87,7 +88,7 @@ export function ModelConnectionSettings({api, config, disabled, onHealth}: {
     ]}/>
     {health?.state === 'unavailable' && <Alert className="settings-model-alert" type="error" showIcon
       title="当前模型连接不可用" description={modelFailure(health.code) ?? '模型调用失败；未返回供应商正文或密钥。'}/>} 
-    {requestError && <Alert className="settings-model-alert" type="error" showIcon title="检测请求未完成" description={requestError}/>} 
+    {requestError && <Alert className="settings-model-alert" type="error" showIcon title="模型设置操作未完成" description={requestError}/>}
     {config?.insecure_model_transport && <Alert className="settings-model-alert" type="warning" showIcon
       title="当前配置使用 HTTP 明文传输" description="凭据、问题和检索证据可能被链路观察；只在你已接受风险的校园网使用。"/>}
     <Button type="primary" loading={checking} disabled={disabled || config?.provider !== 'openai_compatible'} onClick={() => void check()}>

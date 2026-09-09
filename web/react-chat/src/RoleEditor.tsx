@@ -3,6 +3,7 @@ import {Button, Collapse, Input, Modal, Select, Space, Switch} from 'antd';
 import {ChatApi} from './api';
 import {DeviceRoleSync} from './DeviceRoleSync';
 import {applyRolePreferences, DEFAULT_ROLE_PREFERENCES, readRolePreferences, type RolePreferences} from './rolePreferences';
+import {settingsFailure} from './settingsFailure';
 
 interface Role {revision: number; name: string; prompt: string; saved_at: string | null}
 interface Settings {current: Role; presets: {name: string; prompt: string}[]; web: string; device: string}
@@ -26,7 +27,7 @@ export function RoleEditor({api, disabled, onSaved}: {api: ChatApi; disabled: bo
       setSettings(data); setName(data.current.name); setPrompt(data.current.prompt);
       setGuided(structured.enabled); setPreferences(structured.preferences); setUnknown(false);
       setNotice('已读取当前版本。编辑内容只有点击保存后才生效。');
-    } catch (error) {setNotice(String(error));} finally {lock.current = false; setBusy(false);}
+    } catch (error) {setNotice(settingsFailure(error, 'read'));} finally {lock.current = false; setBusy(false);}
   }
   async function save() {
     if (lock.current || !settings || unknown) return;
@@ -40,7 +41,7 @@ export function RoleEditor({api, disabled, onSaved}: {api: ChatApi; disabled: bo
       const result = await api.request<Omit<Settings, 'presets'>>('/api/assistant-role', 'POST', {expected_revision: settings.current.revision, name, prompt:savedPrompt});
       setSettings({...settings, ...result}); setName(result.current.name); setPrompt(result.current.prompt);
       setNotice(`已保存版本 ${result.current.revision}。网页下一轮使用；正在回答的轮次不变。未自动同步圆屏，请在下方检查。`); onSaved();
-    } catch (error) {setUnknown(true); setNotice(`${String(error)} 请先重新读取，勿重复保存；草稿仍保留在编辑框。`);}
+    } catch (error) {setUnknown(true); setNotice(`${settingsFailure(error, 'write')} 草稿仍保留在编辑框。`);}
     finally {lock.current = false; setBusy(false);}
   }
   function close() {
