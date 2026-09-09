@@ -1,9 +1,9 @@
 import {lazy, Suspense, useEffect, useRef, useState} from 'react';
 import {createRoot} from 'react-dom/client';
 import {Alert, Button, Input, Modal, Select} from 'antd';
-import {QueryClientProvider} from '@tanstack/react-query';
+import {QueryClientProvider, useQuery} from '@tanstack/react-query';
 import {BrowserRouter, Navigate, Route, Routes} from 'react-router-dom';
-import {ChatApi, type Config, type Snapshot, type Summary, type Turn} from './api';
+import {ChatApi, type Config, type DeviceStatus, type MemoryPageSummary, type Snapshot, type Summary, type Turn} from './api';
 import {turnSummary} from '../../assets/chat-view.mjs';
 import './style.css';
 import {AppearanceProvider} from './AppearanceProvider';
@@ -15,6 +15,7 @@ import {modelFailure} from './modelHealth';
 import {MemoryCommandHelp} from './MemoryCommandHelp';
 import {loadSendShortcut, saveSendShortcut, shouldSendFromKeyboard, type SendShortcut} from './chatInput';
 import {organizeChats, readPinnedChats, togglePinnedChat, writePinnedChats} from './chatSessions';
+import {ConsoleStatusRail, TurnMemoryEvidence} from './ChatObservability';
 
 const DeviceApp = lazy(() => import('./DeviceApp').then(module => ({default: module.DeviceApp})));
 const MemoryApp = lazy(() => import('./MemoryApp').then(module => ({default: module.MemoryApp})));
@@ -55,6 +56,10 @@ function ChatApp() {
   const selectionKey = useRef('');
   const pinnedKey = useRef('');
   const turnsEnd = useRef<HTMLDivElement>(null);
+  const deviceStatus = useQuery({queryKey:['device-status'], enabled:Boolean(config?.enabled), retry:false,
+    queryFn:() => api.request<DeviceStatus>('/api/device'), refetchInterval:5000});
+  const memoryCount = useQuery({queryKey:['chat-active-memory-count'], enabled:Boolean(config?.enabled), retry:false,
+    queryFn:() => api.request<MemoryPageSummary>('/api/memories?q=&state=active&offset=0&limit=1'), staleTime:30000});
   useEffect(() => {turnsEnd.current?.scrollIntoView({block: 'nearest'});}, [chat?.turns.length]);
   async function list() {
     const data = await api.request<{chats: Summary[]}>('/api/chats'); setChats(data.chats); return data.chats;
@@ -99,6 +104,10 @@ function ChatApp() {
         const turn = await api.request<Turn>(`/api/chats/${chat.chat_id}/messages`, 'POST', {text: draft, request_id: crypto.randomUUID()});
         setChat({...chat, turns: [...chat.turns, turn]}); setDraft('');
         setChats(rows => rows.map(row => row.chat_id === chat.chat_id ? {...row, turn_count: chat.turns.length + 1} : row));
+        if (turn.writes?.some(item => item.operation !== 'noop')) {
+          // 只在服务明确报告实际变更后刷新数量；NOOP 只是增加来源，不增加有效 L1。
+          void queryClient.invalidateQueries({queryKey:['chat-active-memory-count']});
+        }
         const modelProblem=modelFailure(turn.error);
         if(modelProblem)setConfig(current=>current?{...current,model_health:{state:'unavailable',code:String(turn.error),checked_at:new Date().toISOString()}}:current);
         setNotice(modelProblem
@@ -136,19 +145,20 @@ function ChatApp() {
           <Button size="small" disabled={disabled} onClick={toggleCurrentPin}>{chat && pinnedChats.includes(chat.chat_id) ? '取消置顶' : '置顶'}</Button></div>
       </section>
     </>;
-  return <><AppShell subtitle="你的日常聊天空间" className="chat-shell" sidebar={sidebar}><PageHeader eyebrow="日常使用" title="聊聊今天" description="在这里用文字继续日常对话；新事实是否进入长期记忆，可以在每轮回答下方核对。" action={<div className="page-header-actions"><span>{chat?.turns.length ?? 0} / 40 轮</span><MemoryCommandHelp/></div>}/>
+  const latestTurn = chat?.turns.at(-1);
+  return <><AppShell subtitle="你的日常聊天空间" className="chat-shell" sidebar={sidebar}><ConsoleStatusRail config={config} device={deviceStatus.data} deviceFailed={deviceStatus.isError} activeMemoryCount={memoryCount.data?.total}/><PageHeader eyebrow="日常使用" title="聊聊今天" description="在这里用文字继续日常对话；新事实是否进入长期记忆，可以在本轮证据中核对。" action={<div className="page-header-actions"><span>{chat?.turns.length ?? 0} / 40 轮</span><MemoryCommandHelp/></div>}/>
       {config?.provider==='openai_compatible'&&<Alert showIcon type={config.model_health?.state==='available'?'success':config.model_health?.state==='unavailable'?'error':'info'}
         title={config.model_health?.state==='available'?'模型服务最近验证可用':config.model_health?.state==='unavailable'?'模型服务最近验证失败':'模型服务尚未验证'}
         description={config.model_health?.state==='unavailable'?(modelFailure(config.model_health.code)??'模型调用失败。'):'检测只发送固定合成短句，不读取或写入个人记忆，也不自动重试。'}
         action={<Button loading={checkingModel} disabled={busy||unknown}
-          onClick={()=>void checkModel()}>检测模型连接</Button>}/>}<section className="messages" aria-label="聊天记录">{!chat?.turns.length && <div className="empty"><h2>今天想聊些什么？</h2><p>可以说说今天的事，也可以继续上次的话题。</p></div>}
+          onClick={()=>void checkModel()}>检测模型连接</Button>}/>}<div className="chat-workspace"><section className="messages" aria-label="聊天记录">{!chat?.turns.length && <div className="empty"><h2>今天想聊些什么？</h2><p>可以说说今天的事，也可以继续上次的话题。</p></div>}
         {chat?.turns.map((turn, i) => <article key={i}><div className="bubble user"><strong>你</strong><p>{turn.input}</p></div><div className="bubble assistant"><strong>助手</strong><p>{turn.answer ?? '未获得完整回答。'}</p>{turn.answer&&<SpeechPlayer api={api} text={turn.answer}/>}</div>
           {turn.memory_command && <Alert className="memory-command-result" showIcon type={memoryCommandAlert(turn.memory_command.status)} title="实际记忆操作结果" description={turn.memory_command.notice}/>}
           {turn.memory_processing === 'source_only' && <p className="memory-warning">{memoryWarning(turn)} 可继续聊天，之后需要重新整理这条来源。</p>}
           {turn.retrieval_warning === 'dense_retrieval_failed' && <p className="memory-warning">本轮本地 BGE 检索失败，已使用关键词结果继续回答；展开过程可查看实际策略。</p>}
           {Boolean(turn.scenario_retrieved?.length) && <p className="scenario-trace">本轮使用 L2：{turn.scenario_retrieved!.map(item => item.title).join('、')}</p>}
           {Boolean(turn.persona_retrieved?.length) && <p className="scenario-trace">本轮使用 L3：{turn.persona_retrieved!.map(item => item.label).join('、')}</p>}
-          <details><summary>{turnSummary(turn)}</summary><pre>{JSON.stringify(turn, null, 2)}</pre></details></article>)}<div ref={turnsEnd}/></section>
+          <details className="turn-summary"><summary>{turnSummary(turn)}</summary><p>右侧“本轮记忆证据”展示最近一轮；完整过程仍可在那里展开。</p></details></article>)}<div ref={turnsEnd}/></section><aside className="chat-evidence-column"><h2>本轮记忆证据</h2><TurnMemoryEvidence turn={latestTurn}/></aside></div>
       <form className="chat-composer" onSubmit={event => {event.preventDefault(); void send();}}><Input.TextArea aria-label="消息" value={draft} maxLength={1000} rows={3} disabled={disabled || (chat?.turns.length ?? 0) >= 40} onChange={event => setDraft(event.target.value)}
         onKeyDown={event => {if (shouldSendFromKeyboard({...event, isComposing: event.nativeEvent.isComposing}, sendShortcut)) {event.preventDefault(); void send();}}}
         placeholder="写下想说的话…"/>

@@ -1,0 +1,40 @@
+import {render, screen} from '@testing-library/react';
+import {describe, expect, it} from 'vitest';
+import {ConsoleStatusRail, TurnMemoryEvidence, memoryTraceSummary} from './ChatObservability';
+import type {Config, Turn} from './api';
+
+const config:Config = {enabled:true,database:'synthetic.db',model:'Synthetic-Model',role:'助手',provider:'openai_compatible',method:'longmemory_daily_llm_v2',retrieval:'keyword_dense_rrf_v1',model_health:{state:'available',code:null,checked_at:'2026-09-09T00:00:00Z'}};
+
+describe('ConsoleStatusRail', () => {
+  it('只按真实探测值呈现状态和有效记忆数', () => {
+    render(<ConsoleStatusRail config={config} device={{connection_count:1,ready:true,read_volume_supported:true,set_volume_supported:true,read_status_supported:true,set_brightness_supported:true,set_theme_supported:true}} deviceFailed={false} activeMemoryCount={128}/>);
+    expect(screen.getByText('已连接')).toBeTruthy();
+    expect(screen.getByText('128 条有效 L1')).toBeTruthy();
+    expect(screen.getByText('Synthetic-Model')).toBeTruthy();
+    expect(screen.getByText('关键词＋向量')).toBeTruthy();
+  });
+
+  it('探测失败时不把旧状态冒充在线', () => {
+    render(<ConsoleStatusRail config={config} device={undefined} deviceFailed activeMemoryCount={undefined}/>);
+    expect(screen.getByText('状态未知')).toBeTruthy();
+    expect(screen.getByText('L1 数量未知')).toBeTruthy();
+  });
+});
+
+describe('TurnMemoryEvidence', () => {
+  it('分层呈现实际召回与写入', () => {
+    const turn:Turn = {input:'我的猫叫什么',answer:'豆包',status:'completed',user_saved:true,duration_ms:12,writes:[{operation:'noop',item_id:'l1-a'}],retrieved:[{item_id:'l1-a',content:'用户养了一只叫豆包的猫。',source_event_ids:['l0-a']}],scenario_retrieved:[{scenario_id:'l2-a',title:'养猫',summary:'用户与豆包一起生活。',source_memory_ids:['l1-a'],source_message_ids:['l0-a']}],persona_retrieved:[{persona_id:'l3-a',label:'宠物偏好',statement:'用户喜欢猫。'}]};
+    render(<TurnMemoryEvidence turn={turn}/>);
+    expect(screen.getByText('[ MEM HIT ]')).toBeTruthy();
+    expect(screen.getByText('回答使用 L1 1 · L2 1 · L3 1')).toBeTruthy();
+    expect(screen.getByText('用户养了一只叫豆包的猫。')).toBeTruthy();
+    expect(screen.getByText('重复证据')).toBeTruthy();
+  });
+
+  it('无召回只陈述本轮事实，不声称用户从未说过', () => {
+    const turn:Turn = {input:'问题',answer:'不知道',status:'completed',user_saved:true,duration_ms:2,writes:[],retrieved:[]};
+    expect(memoryTraceSummary(turn).code).toBe('NO RECALL');
+    render(<TurnMemoryEvidence turn={turn}/>);
+    expect(screen.getByText('本轮没有召回长期记忆；不等于用户从未说过')).toBeTruthy();
+  });
+});

@@ -34,14 +34,17 @@ export class ChatApi {
     return data;
   }
 }
+export interface WriteTrace {operation:string; item_id?:string; source_event_ids?:string[] | null}
+export interface RetrievedTrace {item_id:string; content:string; source_event_ids?:string[] | null}
 export interface Turn {
-  input: string; answer?: string; status: string; writes: {operation: string}[] | null;
+  input: string; answer?: string; status: string; writes: WriteTrace[] | null;
   answer_source?: 'model' | 'application_command' | null;
   user_saved: boolean; duration_ms: number; memory_processing?: 'completed' | 'source_only' | null;
   memory_warning?: string | null; retrieval_strategy?: string | null;
   retrieval_warning?: string | null; scenario_use_enabled?: boolean; persona_use_enabled?: boolean;
   persona_retrieved?: Array<{persona_id: string; label: string; statement: string}>;
   scenario_retrieved?: {scenario_id:string; title:string; summary:string; source_memory_ids:string[]; source_message_ids:string[]}[] | null;
+  retrieved?: RetrievedTrace[] | null;
   memory_command?: {kind:string; status:string; notice:string; target_memory_ids?:string[]} | null;
   [key: string]: unknown;
 }
@@ -49,6 +52,12 @@ export interface Snapshot {chat_id: string; title: string; pending: boolean; tur
 export interface Summary {chat_id: string; title: string; turn_count: number}
 export interface ModelHealth {state:'unchecked'|'available'|'unavailable'|'not_applicable'; code:string|null; checked_at:string|null}
 export interface Config {enabled: boolean; database: string; model: string; role: string; provider: string; method: string; retrieval: string; model_health?:ModelHealth; model_endpoint?:string|null; insecure_model_transport?:boolean}
+export interface DeviceStatus {
+  connection_count:number; ready:boolean; read_volume_supported:boolean; set_volume_supported:boolean;
+  read_status_supported:boolean; set_brightness_supported:boolean; set_theme_supported:boolean;
+  aec_advertised?:boolean; allowed_volume?:{minimum:number; maximum:number};
+}
+export interface MemoryPageSummary {total:number; limit:number; offset:number; items:unknown[]}
 export interface ModelProfile {
   id:'campus'|'official'; label:string; file_exists:boolean; base_url:string; model:string;
   timeout_seconds:number; max_tokens:number; allow_http:boolean; api_key_configured:boolean;

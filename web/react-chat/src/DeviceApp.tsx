@@ -1,22 +1,11 @@
 import {useEffect, useState} from 'react';
 import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {Alert, Button, Card, Descriptions, InputNumber, Select, Slider, Space, Tag} from 'antd';
-import {ApiError, ChatApi} from './api';
+import {ApiError, ChatApi, type DeviceStatus} from './api';
 import {AppShell, ConsoleNav} from './AppShell';
 import {PageHeader} from './PageHeader';
 import {errorMessage, resultView, statusView, validTarget} from '../../assets/state.mjs';
 
-type DeviceStatus = {
-  connection_count: number;
-  ready: boolean;
-  read_volume_supported: boolean;
-  set_volume_supported: boolean;
-  read_status_supported: boolean;
-  set_brightness_supported: boolean;
-  set_theme_supported: boolean;
-  aec_advertised?: boolean;
-  allowed_volume?: {minimum: number; maximum: number};
-};
 type VolumeRead = {volume: number};
 type VolumeWrite = {requested_volume: number; previous_volume?: number; acknowledged: boolean; readback_volume?: number; verified?: boolean};
 type DeviceSnapshot = {volume?:number; brightness?:number; theme?:'light'|'dark'; battery?:{level:number;charging:boolean}; network?:{signal:'strong'|'medium'|'weak'}; chip?:{temperature:number}};
