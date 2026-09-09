@@ -12,6 +12,19 @@ from aiohttp import web
 PROFILE_DEFAULT = {"version": 1, "reference": None, "style": "", "cfg_value": 2.0,
                    "quality": "balanced"}
 
+# 只把可执行的故障类别交给页面，不返回子进程输出、路径或供应商正文。
+SPEECH_FAILURES = {
+    'busy': ('speech_busy', 409),
+    'synthesis_failed': ('tts_service_unavailable', 503),
+    'unsupported': ('tts_backend_unsupported', 409),
+    'unavailable': ('voice_environment_unavailable', 503),
+    'voice_operation_failed': ('tts_config_unavailable', 503),
+}
+
+
+def speech_failure(error):
+    return SPEECH_FAILURES.get(str(error), ('speech_failed', 409))
+
 
 class VoiceSettings:
     def __init__(self, server, database, project):
@@ -188,8 +201,11 @@ def register_voice_routes(app, backend):
             audio, content_type = await backend.speech(body['text'].strip())
             return web.Response(body=audio, content_type=content_type,
                                 headers={'Cache-Control':'no-store'})
-        except (ValueError, OSError):
-            return web.json_response({'error':'speech_failed'}, status=409)
+        except ValueError as error:
+            code, status = speech_failure(error)
+            return web.json_response({'error':code}, status=status)
+        except OSError:
+            return web.json_response({'error':'voice_environment_unavailable'}, status=503)
     app.router.add_get('/api/voice-settings', settings, allow_head=False)
     app.router.add_post('/api/voice-settings', settings)
     app.router.add_post('/api/voice-settings/preview', settings)

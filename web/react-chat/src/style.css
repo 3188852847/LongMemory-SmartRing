@@ -73,3 +73,4 @@
 .console-status-rail .rail-cell{color:inherit;text-decoration:none;transition:border-color .15s ease,background .15s ease}
 .console-status-rail .rail-cell:hover{background:var(--surface-soft);box-shadow:inset 0 -2px 0 color-mix(in srgb,var(--accent) 55%,transparent)}
 .console-status-rail .rail-cell:focus-visible{position:relative;z-index:1;outline:2px solid var(--accent);outline-offset:-2px}
+.speech-player small a{margin-left:6px;color:var(--accent);font-weight:650;text-decoration:none}.speech-player small a:hover{text-decoration:underline}

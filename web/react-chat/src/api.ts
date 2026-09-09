@@ -17,7 +17,11 @@ export class ChatApi {
   async speech(text: string): Promise<Blob> {
     const response = await fetch('/api/speech', {method:'POST', credentials:'same-origin', cache:'no-store',
       headers:{'Content-Type':'application/json','X-Console-CSRF':this.csrf}, body:JSON.stringify({text})});
-    if (!response.ok) throw new Error('朗读生成失败。请检查当前 TTS 服务，未自动重试。');
+    if (!response.ok) {
+      let code = 'speech_failed';
+      try {const body = await response.json() as {error?:unknown}; if (typeof body.error === 'string') code = body.error;} catch { /* 保持安全通用错误。 */ }
+      throw new ApiError(code, response.status);
+    }
     return response.blob();
   }
   async bootstrap() {

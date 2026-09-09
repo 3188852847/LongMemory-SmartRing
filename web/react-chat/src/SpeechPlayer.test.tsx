@@ -1,6 +1,8 @@
 import {fireEvent, render, screen, waitFor} from '@testing-library/react';
 import {afterEach, describe, expect, test, vi} from 'vitest';
+import {MemoryRouter} from 'react-router-dom';
 import {SpeechPlayer} from './SpeechPlayer';
+import {ApiError} from './api';
 
 const originalAudio = globalThis.Audio;
 const originalMediaDevices = Object.getOwnPropertyDescriptor(navigator, 'mediaDevices');
@@ -53,5 +55,13 @@ describe('网页朗读的麦克风生命周期', () => {
 
     await waitFor(() => expect(screen.getByText('已停止网页朗读，麦克风已释放。')).toBeTruthy());
     expect(audioConstructor).not.toHaveBeenCalled();
+  });
+
+  test('TTS 未就绪时解释原因并直达声音设置', async () => {
+    const api = {speech:vi.fn().mockRejectedValue(new ApiError('tts_service_unavailable',503))} as never;
+    render(<MemoryRouter><SpeechPlayer api={api} text="合成测试文本"/></MemoryRouter>);
+    fireEvent.click(screen.getByRole('button',{name:'网页朗读'}));
+    expect(await screen.findByText(/当前 TTS 服务没有就绪/)).toBeTruthy();
+    expect(screen.getByRole('link',{name:'打开声音设置'}).getAttribute('href')).toBe('/settings?tab=voice');
   });
 });

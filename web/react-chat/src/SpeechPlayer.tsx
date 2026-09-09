@@ -1,7 +1,21 @@
 import {useEffect, useRef, useState} from 'react';
 import {Button, Space, Switch} from 'antd';
-import {ChatApi} from './api';
+import {Link} from 'react-router-dom';
+import {ApiError, ChatApi} from './api';
 import {claimSpeechPlayback} from './speechPlaybackCoordinator';
+
+export function speechFailure(error:unknown) {
+  if (!(error instanceof ApiError)) return {text:'朗读请求未完成。请检查本机网页服务，未自动重试。', settings:false};
+  const messages:Record<string,string> = {
+    speech_busy:'已有一条语音正在生成，请稍后手动重试。',
+    tts_service_unavailable:'当前 TTS 服务没有就绪或本次合成失败。请核对声音设置和统一启动面板。',
+    tts_backend_unsupported:'当前 TTS 配置不受网页朗读支持，请在声音设置中核对后端。',
+    voice_environment_unavailable:'小智声音环境不完整或不可访问，请核对声音设置中的环境状态。',
+    tts_config_unavailable:'无法读取当前小智 TTS 配置，请核对共享路径和声音设置。',
+    speech_failed:'朗读生成失败，服务没有返回可播放音频。未自动重试。',
+  };
+  return {text:messages[error.code]??messages.speech_failed, settings:error.code!=='speech_busy'};
+}
 
 /** 网页朗读只在电脑播放；麦克风仅在播放监听期间用于本地音量判断，不上传录音。 */
 export function SpeechPlayer({api, text}: {api: ChatApi; text: string}) {
@@ -14,6 +28,7 @@ export function SpeechPlayer({api, text}: {api: ChatApi; text: string}) {
   const releasePlaybackLease = useRef<() => void>(() => undefined);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
+  const [settingsHint,setSettingsHint] = useState(false);
   const [speechInterrupt, setSpeechInterrupt] = useState(false);
 
   const releaseAudioUrl = () => {
@@ -47,6 +62,7 @@ export function SpeechPlayer({api, text}: {api: ChatApi; text: string}) {
     // 即使音频还在服务端生成，也要使这次结果失效，避免稍后突然开始播放。
     requestGeneration.current += 1;
     stopPlayback();
+    setSettingsHint(false);
     setNotice('已停止网页朗读，麦克风已释放。');
   };
 
@@ -109,6 +125,7 @@ export function SpeechPlayer({api, text}: {api: ChatApi; text: string}) {
     if (busy) return;
     const request = ++requestGeneration.current;
     setBusy(true);
+    setSettingsHint(false);
     setNotice('正在生成朗读…');
     try {
       const blob = await api.speech(text);
@@ -149,13 +166,14 @@ export function SpeechPlayer({api, text}: {api: ChatApi; text: string}) {
     } catch (error) {
       if (request !== requestGeneration.current) return;
       stopPlayback();
-      setNotice(error instanceof Error ? error.message : '朗读失败。');
+      const failure=speechFailure(error);setNotice(failure.text);setSettingsHint(failure.settings);
     } finally {
       setBusy(false);
     }
   }
 
   async function changeSpeechInterrupt(value: boolean) {
+    setSettingsHint(false);
     if (!value) {
       setSpeechInterrupt(false);
       releaseMicrophone();
@@ -179,6 +197,6 @@ export function SpeechPlayer({api, text}: {api: ChatApi; text: string}) {
       <span>说话打断</span>
       <Switch size="small" checked={speechInterrupt} onChange={value => void changeSpeechInterrupt(value)}/>
     </Space>
-    {notice && <small role="status">{notice}</small>}
+    {notice && <small role="status">{notice}{settingsHint&&<> <Link to="/settings?tab=voice">打开声音设置</Link></>}</small>}
   </div>;
 }
