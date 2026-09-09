@@ -17,6 +17,8 @@ from ..contracts import (
     ProactiveTestRequest,
     ProactiveTopicDisableRequest,
     ProactiveTopicSeedRequest,
+    FollowUpCandidateRequest,
+    FollowUpCandidateCancelRequest,
 )
 from ..memory_backend import MemoryAccessError
 
@@ -168,6 +170,50 @@ def register_proactive_policy_routes(app, backend, client, operation_lock):
     app.router.add_post(
         r"/api/proactive-topic-seeds/{seed_id:[0-9a-f]{32}}/disable",
         disable_topic_seed,
+    )
+
+    async def follow_up_candidates(request):
+        try:
+            if request.method == "GET":
+                result = await asyncio.to_thread(backend.list_follow_up_candidates)
+            else:
+                if request.content_type != "application/json":
+                    raise web.HTTPBadRequest()
+                try:
+                    body = FollowUpCandidateRequest.model_validate(await request.json())
+                except (ValidationError, ValueError, UnicodeError):
+                    raise web.HTTPBadRequest() from None
+                result = await asyncio.to_thread(
+                    backend.create_follow_up_candidate, body,
+                )
+            return web.json_response(result)
+        except MemoryAccessError as error:
+            return web.json_response({"error": error.code}, status=error.status)
+
+    async def cancel_follow_up_candidate(request):
+        if request.content_type != "application/json":
+            raise web.HTTPBadRequest()
+        try:
+            body = FollowUpCandidateCancelRequest.model_validate(await request.json())
+        except (ValidationError, ValueError, UnicodeError):
+            raise web.HTTPBadRequest() from None
+        try:
+            result = await asyncio.to_thread(
+                backend.cancel_follow_up_candidate,
+                request.match_info["candidate_id"],
+                expected_revision=body.expected_revision,
+            )
+            return web.json_response(result)
+        except MemoryAccessError as error:
+            return web.json_response({"error": error.code}, status=error.status)
+
+    app.router.add_get(
+        "/api/companion-follow-ups", follow_up_candidates, allow_head=False,
+    )
+    app.router.add_post("/api/companion-follow-ups", follow_up_candidates)
+    app.router.add_post(
+        r"/api/companion-follow-ups/{candidate_id:[0-9a-f]{32}}/cancel",
+        cancel_follow_up_candidate,
     )
 
     async def confirm_played(request):

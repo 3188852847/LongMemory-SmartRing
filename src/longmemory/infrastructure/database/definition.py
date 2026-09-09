@@ -1,6 +1,6 @@
-"""当前 SQLite V33 的完整结构定义；不包含历史迁移步骤。"""
+"""当前 SQLite V34 的完整结构定义；不包含历史迁移步骤。"""
 
-SCHEMA_VERSION = 33
+SCHEMA_VERSION = 34
 
 LATEST_SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS conversation_messages (
@@ -653,6 +653,26 @@ CREATE TABLE IF NOT EXISTS proactive_topic_seeds (
 );
 CREATE INDEX IF NOT EXISTS idx_proactive_topic_seeds_subject
     ON proactive_topic_seeds (subject_id, status, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS companion_follow_up_candidates (
+    id TEXT PRIMARY KEY,
+    subject_id TEXT NOT NULL CHECK (length(trim(subject_id)) BETWEEN 1 AND 120),
+    source_memory_id TEXT NOT NULL,
+    source_content_sha256 TEXT NOT NULL CHECK (
+        length(source_content_sha256) = 64
+        AND source_content_sha256 = lower(source_content_sha256)
+        AND source_content_sha256 NOT GLOB '*[^0-9a-f]*'
+    ),
+    prompt_text TEXT NOT NULL CHECK (length(trim(prompt_text)) BETWEEN 1 AND 160),
+    follow_up_at TEXT NOT NULL,
+    status TEXT NOT NULL CHECK (status IN ('candidate', 'cancelled')),
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    revision INTEGER NOT NULL DEFAULT 1 CHECK (revision >= 1),
+    FOREIGN KEY (source_memory_id) REFERENCES atomic_memories (id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_companion_follow_up_subject_due
+    ON companion_follow_up_candidates (subject_id, status, follow_up_at, id);
 
 CREATE TABLE IF NOT EXISTS proactive_schedule_overrides (
     id TEXT PRIMARY KEY,

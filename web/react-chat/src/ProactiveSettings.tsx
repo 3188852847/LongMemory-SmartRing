@@ -1,7 +1,7 @@
 import {useEffect, useMemo, useState} from 'react';
 import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {Alert, Button, Card, Checkbox, Input, InputNumber, Select, Space, Switch, Tag} from 'antd';
-import {ApiError, ChatApi, type CompanionAbsenceStrategyVersion, type CompanionAbsenceStrategyVersionList, type CompanionRoutineCandidate, type CompanionStrategyCandidate, type ProactiveOutreachSummary, type ProactivePolicy, type ProactiveScheduleStatus, type ProactiveTestResult, type ProactiveTopicSeed, type UserInitiatedInteraction} from './api';
+import {ApiError, ChatApi, type CompanionAbsenceStrategyVersion, type CompanionAbsenceStrategyVersionList, type CompanionRoutineCandidate, type CompanionStrategyCandidate, type FollowUpCandidate, type ProactiveOutreachSummary, type ProactivePolicy, type ProactiveScheduleStatus, type ProactiveTestResult, type ProactiveTopicSeed, type UserInitiatedInteraction} from './api';
 
 const DAYS = ['周一','周二','周三','周四','周五','周六','周日'].map((label, value) => ({label, value}));
 const minuteText = (value:number) => `${String(Math.floor(value / 60)).padStart(2,'0')}:${String(value % 60).padStart(2,'0')}`;
@@ -27,6 +27,8 @@ export function ProactiveSettings({api, ready}:{api:ChatApi; ready:boolean}) {
   const history = useQuery({queryKey:['proactive-outreach'], queryFn:() => api.request<{items:ProactiveOutreachSummary[]}>('/api/proactive-outreach?limit=10'), enabled:ready});
   const scenarios = useQuery({queryKey:['proactive-topic-scenarios'], queryFn:() => api.request<{items:Array<{id:string;title:string;summary:string;revision:number}>}>('/api/scenarios?state=active&offset=0&limit=100'), enabled:ready});
   const topicSeeds = useQuery({queryKey:['proactive-topic-seeds'], queryFn:() => api.request<{items:ProactiveTopicSeed[]}>('/api/proactive-topic-seeds'), enabled:ready});
+  const followUpSources = useQuery({queryKey:['follow-up-l1-sources'], queryFn:() => api.request<{items:Array<{id:string;content:string;state:string}>}>('/api/memories?state=active&offset=0&limit=100&q='), enabled:ready});
+  const followUps = useQuery({queryKey:['companion-follow-ups'], queryFn:() => api.request<{items:FollowUpCandidate[]}>('/api/companion-follow-ups'), enabled:ready});
   const strategyCandidates = useQuery({queryKey:['companion-strategy-candidates'], queryFn:() => api.request<{items:CompanionStrategyCandidate[]}>('/api/companion-strategy-candidates'), enabled:ready});
   const userInitiated = useQuery({queryKey:['companion-user-initiated-interactions'], queryFn:() => api.request<{items:UserInitiatedInteraction[]}>('/api/companion-user-initiated-interactions?limit=10'), enabled:ready});
   const routineCandidates = useQuery({queryKey:['companion-routine-candidates'], queryFn:() => api.request<{items:CompanionRoutineCandidate[]}>('/api/companion-routine-candidates'), enabled:ready});
@@ -38,6 +40,10 @@ export function ProactiveSettings({api, ready}:{api:ChatApi; ready:boolean}) {
   const [topicScenarioId, setTopicScenarioId] = useState<string>();
   const [topicText, setTopicText] = useState('');
   const [topicNotice, setTopicNotice] = useState('');
+  const [followUpSourceId, setFollowUpSourceId] = useState<string>();
+  const [followUpText, setFollowUpText] = useState('');
+  const [followUpLocal, setFollowUpLocal] = useState('');
+  const [followUpNotice, setFollowUpNotice] = useState('');
   const [strategyNotice, setStrategyNotice] = useState('');
   const [routineNotice, setRoutineNotice] = useState('');
   const [absenceVersionNotice, setAbsenceVersionNotice] = useState('');
@@ -154,6 +160,48 @@ export function ProactiveSettings({api, ready}:{api:ChatApi; ready:boolean}) {
     onError:() => {
       setTopicNotice('停用失败，页面将重新读取最新状态。');
       void client.invalidateQueries({queryKey:['proactive-topic-seeds']});
+    },
+  });
+  const createFollowUp = useMutation({
+    mutationFn:async() => {
+      const detail = await api.request<{revision:string}>(
+        `/api/memories/${encodeURIComponent(followUpSourceId!)}`,
+      );
+      return api.request<FollowUpCandidate>('/api/companion-follow-ups', 'POST', {
+        source_memory_id:followUpSourceId,
+        expected_memory_revision:detail.revision,
+        prompt_text:followUpText,
+        follow_up_at:new Date(followUpLocal).toISOString(),
+        request_id:crypto.randomUUID(),
+      });
+    },
+    onSuccess:() => {
+      setFollowUpSourceId(undefined); setFollowUpText(''); setFollowUpLocal('');
+      setFollowUpNotice('跟进候选已保存并绑定 L1 来源；当前版本不会自动发送。');
+      void client.invalidateQueries({queryKey:['companion-follow-ups']});
+    },
+    onError:error => {
+      setFollowUpNotice(error instanceof ApiError && error.code === 'follow_up_source_conflict'
+        ? '来源 L1 已变化，请重新选择并核对。'
+        : error instanceof ApiError && error.code === 'follow_up_time_not_future'
+        ? '跟进时间必须晚于现在。'
+        : '跟进候选没有保存，请核对来源、短句和时间。');
+      void client.invalidateQueries({queryKey:['follow-up-l1-sources']});
+      void client.invalidateQueries({queryKey:['companion-follow-ups']});
+    },
+  });
+  const cancelFollowUp = useMutation({
+    mutationFn:(item:FollowUpCandidate) => api.request(
+      `/api/companion-follow-ups/${item.id}/cancel`, 'POST',
+      {expected_revision:item.revision},
+    ),
+    onSuccess:() => {
+      setFollowUpNotice('跟进候选已取消；没有创建或投递主动消息。');
+      void client.invalidateQueries({queryKey:['companion-follow-ups']});
+    },
+    onError:() => {
+      setFollowUpNotice('候选状态已经变化或取消失败；正在重新读取。');
+      void client.invalidateQueries({queryKey:['companion-follow-ups']});
     },
   });
   const analyzeStrategy = useMutation({
@@ -372,6 +420,40 @@ export function ProactiveSettings({api, ready}:{api:ChatApi; ready:boolean}) {
         aria-label="优先使用记忆话题" disabled={!draft.enabled || !draft.automatic_enabled}
         checked={draft.topic_enabled} onChange={topic_enabled => change({topic_enabled})}/></div>
       <p className="subtle">此开关默认关闭。开启并保存后，定时点会从可用素材中优先选择最久未使用的一条；没有可用素材时仍使用上方固定问候。</p>
+    </section>
+    <section className="settings-section">
+      <h3>长期事项跟进候选</h3>
+      <Alert type="info" showIcon title="这里只建立可追溯候选，不会自动联系圆屏"
+        description="选择一条当前 L1 作为依据，并明确写下未来适合追问的短句。下一阶段才会增加启用与一次性投递；在此之前，到达时间也不会发送。"/>
+      <label htmlFor="follow-up-source">依据的 L1 原子记忆</label>
+      <Select id="follow-up-source" aria-label="跟进来源 L1" className="wide"
+        value={followUpSourceId} placeholder="选择一条明确计划或待办"
+        onChange={setFollowUpSourceId}
+        options={(followUpSources.data?.items ?? []).map(item => ({value:item.id,label:item.content}))}/>
+      <label htmlFor="follow-up-text">以后适合问的一句话</label>
+      <Input id="follow-up-text" maxLength={160} showCount value={followUpText}
+        placeholder="例如：毕业设计汇报准备得怎么样了？"
+        onChange={event => setFollowUpText(event.target.value)}/>
+      <label htmlFor="follow-up-time">计划跟进时间</label>
+      <Input id="follow-up-time" type="datetime-local" value={followUpLocal}
+        onChange={event => setFollowUpLocal(event.target.value)}/>
+      <Button loading={createFollowUp.isPending}
+        disabled={!followUpSourceId || !followUpText.trim() || followUpText !== followUpText.trim() || !followUpLocal || Number.isNaN(new Date(followUpLocal).getTime()) || new Date(followUpLocal).getTime() <= Date.now() || createFollowUp.isPending}
+        onClick={() => createFollowUp.mutate()}>建立跟进候选</Button>
+      {followUpNotice && <p role="status">{followUpNotice}</p>}
+      {followUps.isError && <Alert type="error" showIcon title="跟进候选读取失败"/>}
+      <div className="proactive-history">{followUps.data?.items?.map(item => <Card size="small" key={item.id}
+        title={<Space wrap><Tag color={item.ready_for_activation ? 'gold' : 'default'}>{item.status === 'cancelled' ? '已取消' : item.due ? '已到时间' : '候选'}</Tag><strong>{item.prompt_text}</strong><Tag>未启用</Tag></Space>}
+        extra={item.status === 'candidate' && <Button size="small" danger
+          loading={cancelFollowUp.isPending && cancelFollowUp.variables?.id === item.id}
+          disabled={cancelFollowUp.isPending}
+          onClick={() => cancelFollowUp.mutate(item)}>取消候选</Button>}>
+        <p>计划时间：{new Date(item.follow_up_at).toLocaleString('zh-CN')}</p>
+        <p className="subtle">依据 L1：{item.source.content}</p>
+        {!item.ready_for_activation && item.status === 'candidate' && <p className="subtle">当前不可启用：{item.blocked_reason === 'source_changed' ? '来源已变化或退役' : item.blocked_reason === 'time_reached' ? '计划时间已经到达' : item.blocked_reason}</p>}
+        <small>候选 ID：{item.id} · 来源 ID：{item.source_memory_id} · 修订 {item.revision}</small>
+      </Card>)}</div>
+      {followUps.isSuccess && (followUps.data?.items?.length ?? 0) === 0 && <p className="subtle">尚无跟进候选。</p>}
     </section>
     <section className="settings-section">
       <h3>联系时段观察候选</h3>

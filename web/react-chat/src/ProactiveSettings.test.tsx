@@ -363,4 +363,51 @@ describe('主动交流设置', () => {
     expect(request.mock.calls.some(([path]) => path === '/api/proactive-policy' && request.mock.calls.some(call => call[1] === 'PUT'))).toBe(false);
     view.unmount(); client.clear();
   });
+
+  test('从当前 L1 建立跟进候选但不创建主动消息', async () => {
+    const policy = {
+      subject_id:'user:self', enabled:false, utc_offset_minutes:480,
+      allowed_weekdays:[0,1,2,3,4,5,6], allowed_start_minute:540, allowed_end_minute:1260,
+      daily_limit:1, minimum_interval_seconds:21600, maximum_lifetime_seconds:300,
+      quiet_until:null, policy_version:'proactive-contact-policy-v1', revision:0, updated_at:null,
+      automatic_enabled:false, scheduled_minute:780, greeting_text:'下午好。', topic_enabled:false,
+    };
+    const request = vi.spyOn(ChatApi.prototype, 'request').mockImplementation(async (path, method, body) => {
+      if (path === '/api/proactive-policy') return policy;
+      if (path === '/api/proactive-schedule-status') return scheduleStatus;
+      if (path.startsWith('/api/proactive-outreach?')) return {items:[]};
+      if (path === '/api/memories?state=active&offset=0&limit=100&q=') return {items:[{id:'memory-1',content:'用户计划周五完善毕业设计汇报。',state:'active'}]};
+      if (path === '/api/memories/memory-1') return {revision:'a'.repeat(64)};
+      if (path === '/api/companion-follow-ups' && method === 'POST') return {
+        id:'b'.repeat(32), subject_id:'user:self', source_memory_id:'memory-1',
+        prompt_text:(body as {prompt_text:string}).prompt_text,
+        follow_up_at:(body as {follow_up_at:string}).follow_up_at,
+        status:'candidate', created_at:'2026-09-10T01:00:00Z', updated_at:'2026-09-10T01:00:00Z',
+        revision:1, due:false, ready_for_activation:true, blocked_reason:null,
+        source:{layer:'l1',content:'用户计划周五完善毕业设计汇报。',state:'active',superseded_by_id:null},
+      };
+      if (path === '/api/companion-follow-ups') return {items:[]};
+      if (path.startsWith('/api/scenarios?') || path === '/api/proactive-topic-seeds'
+          || path === '/api/companion-strategy-candidates'
+          || path.startsWith('/api/companion-user-initiated-interactions')
+          || path === '/api/companion-routine-candidates'
+          || path === '/api/companion-absence-strategy-versions') return {items:[],events:[]};
+      throw new Error(`unexpected path: ${path}`);
+    });
+    vi.spyOn(crypto, 'randomUUID').mockReturnValue('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb');
+    const client = createConsoleQueryClient();
+    const view = render(<QueryClientProvider client={client}><ProactiveSettings api={new ChatApi()} ready={true}/></QueryClientProvider>);
+    fireEvent.mouseDown(await screen.findByLabelText('跟进来源 L1'));
+    fireEvent.click(await screen.findByText('用户计划周五完善毕业设计汇报。'));
+    fireEvent.change(screen.getByLabelText('以后适合问的一句话'), {target:{value:'毕业设计汇报准备得怎么样了？'}});
+    fireEvent.change(screen.getByLabelText('计划跟进时间'), {target:{value:'2030-01-01T12:00'}});
+    fireEvent.click(screen.getByRole('button', {name:'建立跟进候选'}));
+    expect(await screen.findByText(/跟进候选已保存并绑定 L1 来源/)).toBeTruthy();
+    expect(request).toHaveBeenCalledWith('/api/companion-follow-ups', 'POST', expect.objectContaining({
+      source_memory_id:'memory-1', expected_memory_revision:'a'.repeat(64),
+      prompt_text:'毕业设计汇报准备得怎么样了？',
+    }));
+    expect(request.mock.calls.some(([path]) => path === '/api/proactive-outreach/test')).toBe(false);
+    view.unmount(); client.clear();
+  });
 });

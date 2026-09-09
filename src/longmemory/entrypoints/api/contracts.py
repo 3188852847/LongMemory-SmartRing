@@ -226,6 +226,49 @@ class ProactiveTopicDisableRequest(BaseModel):
     expected_revision: int = Field(ge=1)
 
 
+class FollowUpCandidateRequest(BaseModel):
+    """从当前 L1 建立一次性跟进候选；保存本身不授权投递。"""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    source_memory_id: str = Field(min_length=1, max_length=128)
+    expected_memory_revision: str = Field(pattern=r"^[0-9a-f]{64}$")
+    prompt_text: str = Field(min_length=1, max_length=160)
+    follow_up_at: datetime
+    request_id: str
+
+    @field_validator("source_memory_id", "prompt_text")
+    @classmethod
+    def clean_follow_up_text(cls, value: str) -> str:
+        if value != value.strip() or any(ord(character) < 32 for character in value):
+            raise ValueError("invalid follow-up text")
+        return value
+
+    @field_validator("follow_up_at", mode="before")
+    @classmethod
+    def follow_up_time_is_aware(cls, value) -> datetime:
+        if isinstance(value, str):
+            value = datetime.fromisoformat(value)
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("timezone required")
+        return value
+
+    @field_validator("request_id")
+    @classmethod
+    def canonical_follow_up_request_id(cls, value: str) -> str:
+        if str(UUID(value)) != value:
+            raise ValueError("non-canonical UUID")
+        return value
+
+
+class FollowUpCandidateCancelRequest(BaseModel):
+    """取消尚未生效的跟进候选。"""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    expected_revision: int = Field(ge=1)
+
+
 class CompanionStrategyDismissRequest(BaseModel):
     """忽略一个尚未生效的策略候选；不会修改当前主动联系设置。"""
 

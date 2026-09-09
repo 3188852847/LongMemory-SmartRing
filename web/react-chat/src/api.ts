@@ -210,6 +210,13 @@ export interface ProactiveTopicSeed {
   revision:number; usable:boolean;
   source:{layer:'l2'; title:string; summary:string; status:string};
 }
+export interface FollowUpCandidate {
+  id:string; subject_id:string; source_memory_id:string; prompt_text:string;
+  follow_up_at:string; status:'candidate'|'cancelled'; created_at:string;
+  updated_at:string; revision:number; due:boolean; ready_for_activation:boolean;
+  blocked_reason:null|'cancelled'|'source_changed'|'time_reached';
+  source:{layer:'l1'; content:string; state:'active'|'retired'; superseded_by_id:string|null};
+}
 export interface CompanionStrategyCandidate {
   id:string; subject_id:string; status:'candidate'|'dismissed';
   suggested_minute:number; utc_offset_minutes:number;

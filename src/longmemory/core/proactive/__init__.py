@@ -19,6 +19,7 @@ from .policy import (
 )
 from .settings import ProactivePolicySettings
 from .topic_seed import ProactiveTopicSeed, TopicSeedStatus
+from .follow_up import FollowUpCandidate, FollowUpCandidateStatus
 from .schedule import (
     ScheduledTriggerAction,
     ScheduledTriggerDecision,
@@ -36,6 +37,8 @@ __all__ = [
     "ProactivePolicySettings",
     "ProactiveTopicSeed",
     "TopicSeedStatus",
+    "FollowUpCandidate",
+    "FollowUpCandidateStatus",
     "ScheduledTriggerAction",
     "ScheduledTriggerDecision",
     "ScheduledTriggerReason",

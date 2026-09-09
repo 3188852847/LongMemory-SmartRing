@@ -37,6 +37,7 @@ from longmemory.adapters.storage.sqlite_user_initiated_interaction_store import 
 )
 from longmemory.adapters.storage.sqlite_proactive_runtime_state import SQLiteProactiveHistoryReader
 from longmemory.adapters.storage.sqlite_proactive_topic_store import SQLiteProactiveTopicStore
+from longmemory.adapters.storage.sqlite_follow_up_store import SQLiteFollowUpCandidateStore
 from longmemory.adapters.storage.sqlite_proactive_schedule_override_store import (
     SQLiteProactiveScheduleOverrideStore,
 )
@@ -76,6 +77,8 @@ from longmemory.core.proactive import (
     OutreachTrigger,
     ProactivePolicySettings,
     ProactiveTopicSeed,
+    FollowUpCandidate,
+    FollowUpCandidateStatus,
     ScheduledTriggerAction,
     TopicSeedStatus,
     decide_scheduled_trigger,
@@ -409,6 +412,113 @@ class MemoryBackend:
             ):
                 raise MemoryAccessError("topic_seed_conflict", 409)
             return {"id": seed_id, "status": "disabled",
+                    "revision": expected_revision + 1, "replayed": False}
+
+    @staticmethod
+    def _follow_up_json(row, *, now):
+        source_digest = hashlib.sha256(
+            row["source_content"].encode("utf-8")
+        ).hexdigest()
+        follow_up_at = datetime.fromisoformat(row["follow_up_at"])
+        source_current = (
+            row["source_retired_at"] is None
+            and source_digest == row["source_content_sha256"]
+        )
+        return {
+            "id": row["id"], "subject_id": row["subject_id"],
+            "source_memory_id": row["source_memory_id"],
+            "prompt_text": row["prompt_text"], "follow_up_at": row["follow_up_at"],
+            "status": row["status"], "created_at": row["created_at"],
+            "updated_at": row["updated_at"], "revision": row["revision"],
+            "source": {
+                "layer": "l1", "content": row["source_content"],
+                "state": "retired" if row["source_retired_at"] else "active",
+                "superseded_by_id": row["source_superseded_by_id"],
+            },
+            "due": follow_up_at <= now,
+            "ready_for_activation": (
+                row["status"] == "candidate" and source_current and follow_up_at > now
+            ),
+            "blocked_reason": (
+                "cancelled" if row["status"] == "cancelled"
+                else "source_changed" if not source_current
+                else "time_reached" if follow_up_at <= now
+                else None
+            ),
+        }
+
+    def list_follow_up_candidates(self):
+        now = self.clock()
+        with self._open() as connection:
+            rows = SQLiteFollowUpCandidateStore(connection).list("user:self")
+            return {"items": [self._follow_up_json(row, now=now) for row in rows]}
+
+    def create_follow_up_candidate(self, request):
+        now = self.clock()
+        if request.follow_up_at <= now:
+            raise MemoryAccessError("follow_up_time_not_future", 400)
+        with self._open(write_capability="proactive") as connection:
+            details = self._service(connection).get_memory(
+                MemoryId(request.source_memory_id)
+            )
+            if details is None:
+                raise MemoryAccessError("follow_up_source_not_found", 404)
+            details_data = details_json(details)
+            if not secrets.compare_digest(
+                revision(details_data), request.expected_memory_revision,
+            ):
+                raise MemoryAccessError("follow_up_source_conflict", 409)
+            if details.memory.retired_at is not None:
+                raise MemoryAccessError("follow_up_source_not_current", 409)
+            candidate = FollowUpCandidate(
+                id=request.request_id.replace("-", ""), subject_id="user:self",
+                source_memory_id=request.source_memory_id,
+                source_content_sha256=hashlib.sha256(
+                    details.memory.content.encode("utf-8")
+                ).hexdigest(),
+                prompt_text=request.prompt_text,
+                follow_up_at=request.follow_up_at,
+                status=FollowUpCandidateStatus.CANDIDATE,
+                created_at=now, updated_at=now,
+            )
+            store = SQLiteFollowUpCandidateStore(connection)
+            try:
+                store.create(candidate)
+            except sqlite3.IntegrityError:
+                existing = connection.execute(
+                    "SELECT id FROM companion_follow_up_candidates WHERE id=?",
+                    (candidate.id,),
+                ).fetchone()
+                code = "follow_up_request_replayed" if existing else "follow_up_conflict"
+                raise MemoryAccessError(code, 409) from None
+            except ValueError as error:
+                code = str(error)
+                status = 404 if code == "follow_up_source_not_found" else 409
+                raise MemoryAccessError(code, status) from None
+            row = next(
+                item for item in store.list("user:self") if item["id"] == candidate.id
+            )
+            return self._follow_up_json(row, now=now)
+
+    def cancel_follow_up_candidate(self, candidate_id, *, expected_revision):
+        now = self.clock()
+        with self._open(write_capability="proactive") as connection:
+            row = connection.execute(
+                "SELECT subject_id,status,revision FROM companion_follow_up_candidates "
+                "WHERE id=?", (candidate_id,),
+            ).fetchone()
+            if row is None or row["subject_id"] != "user:self":
+                raise MemoryAccessError("follow_up_not_found", 404)
+            if row["status"] == "cancelled":
+                if row["revision"] == expected_revision + 1:
+                    return {"id": candidate_id, "status": "cancelled",
+                            "revision": row["revision"], "replayed": True}
+                raise MemoryAccessError("follow_up_conflict", 409)
+            if not SQLiteFollowUpCandidateStore(connection).cancel(
+                candidate_id, expected_revision=expected_revision, now=now,
+            ):
+                raise MemoryAccessError("follow_up_conflict", 409)
+            return {"id": candidate_id, "status": "cancelled",
                     "revision": expected_revision + 1, "replayed": False}
 
     def update_proactive_policy(self, request):
