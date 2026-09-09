@@ -1,6 +1,7 @@
 import {useEffect, useState} from 'react';
 import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {Alert, Button, Card, Descriptions, Drawer, Empty, Input, List, Modal, Select, Space, Tabs, Tag} from 'antd';
+import {useSearchParams} from 'react-router-dom';
 import {ChatApi} from './api';
 import {AppShell, ConsoleNav} from './AppShell';
 import {PageHeader} from './PageHeader';
@@ -44,11 +45,15 @@ const parseSource = (value:string) => {const [layer,id] = JSON.parse(value) as [
 
 /** L3 先保存可核对候选；助手角色、单次印象和未复核推断都不能成为用户画像。 */
 export function PersonaApp() {
+  const [searchParams,setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const [ready,setReady] = useState(false);
   const [notice,setNotice] = useState('正在连接本机记忆服务…');
   const [filter,setFilter] = useState<'all'|PersonaState>('all');
-  const [selectedId,setSelectedId] = useState<string>();
+  const [selectedId,setSelectedId] = useState<string|undefined>(() => {
+    const value=searchParams.get('persona_id')?.trim();
+    return value&&value.length<=128&&!/[\u0000-\u001f\u007f]/.test(value)?value:undefined;
+  });
   const [creating,setCreating] = useState(false);
   const [confirmingModel,setConfirmingModel] = useState(false);
   const [draftOrigin,setDraftOrigin] = useState<'manual'|'model_assisted'|'model_consolidation'>('manual');
@@ -72,6 +77,10 @@ export function PersonaApp() {
     queryFn:() => api.request<SourceOptions>('/api/persona-source-options')});
   const detail = useQuery({queryKey:['persona',selectedId],enabled:ready&&Boolean(selectedId),
     queryFn:() => api.request<PersonaDetail>(`/api/personas/${encodeURIComponent(selectedId!)}`)});
+  const closeDetail=()=>{
+    setSelectedId(undefined);
+    if(searchParams.has('persona_id')){const next=new URLSearchParams(searchParams);next.delete('persona_id');setSearchParams(next,{replace:true});}
+  };
 
   const createCandidate = useMutation({
     mutationFn:() => api.request<{id:string}>('/api/personas','POST',{
@@ -163,7 +172,7 @@ export function PersonaApp() {
     <p role="status">{config.error?String(config.error):profile.error?String(profile.error):personas.error?String(personas.error):notice}</p>
   </AppShell>
 
-  <Drawer title="L3 画像详情" size="large" open={Boolean(selectedId)} onClose={() => setSelectedId(undefined)} loading={detail.isFetching}>
+  <Drawer title="L3 画像详情" size="large" open={Boolean(selectedId)} onClose={closeDetail} loading={detail.isFetching}>
     {detail.data&&<><Space wrap><h2>{detail.data.label}</h2><Tag>{kindName[detail.data.kind]}</Tag><Tag color={detail.data.basis==='user_declared'?'blue':'purple'}>{basisName[detail.data.basis]}</Tag><Tag color={stateColor[detail.data.status]}>{stateName[detail.data.status]}</Tag></Space>
       <p className="detail-content">{detail.data.statement}</p>
       <Descriptions column={1} size="small" bordered items={[

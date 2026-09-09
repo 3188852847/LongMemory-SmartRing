@@ -31,6 +31,8 @@ describe('TurnMemoryEvidence', () => {
     expect(screen.getByText('用户养了一只叫豆包的猫。')).toBeTruthy();
     expect(screen.getByText('重复证据')).toBeTruthy();
     expect(screen.getByRole('link', {name:'核对 L0 原话'}).getAttribute('href')).toBe('/memories?memory_id=l1-a');
+    expect(screen.getByRole('link', {name:'核对场景依据'}).getAttribute('href')).toBe('/scenarios?scenario_id=l2-a');
+    expect(screen.getByRole('link', {name:'核对画像依据'}).getAttribute('href')).toBe('/personas?persona_id=l3-a');
   });
 
   it('无召回只陈述本轮事实，不声称用户从未说过', () => {

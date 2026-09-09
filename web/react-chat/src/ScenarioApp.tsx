@@ -1,6 +1,7 @@
 import {useEffect, useState} from 'react';
 import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {Alert, Button, Card, Checkbox, Descriptions, Drawer, Empty, Input, List, Modal, Select, Space, Tag} from 'antd';
+import {useSearchParams} from 'react-router-dom';
 import {ChatApi} from './api';
 import {AppShell, ConsoleNav} from './AppShell';
 import {PageHeader} from './PageHeader';
@@ -35,11 +36,15 @@ const displayTime = (value?: string | null) => value ? new Date(value).toLocaleS
 
 /** L2 是多条 L1 汇总出的生活场景；候选可带现实有效期，回答使用由独立开关控制。 */
 export function ScenarioApp() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const [ready, setReady] = useState(false);
   const [notice, setNotice] = useState('正在连接本机记忆服务…');
   const [filter, setFilter] = useState<'all' | ScenarioState>('all');
-  const [selectedId, setSelectedId] = useState<string>();
+  const [selectedId, setSelectedId] = useState<string|undefined>(() => {
+    const value = searchParams.get('scenario_id')?.trim();
+    return value && value.length <= 128 && !/[\u0000-\u001f\u007f]/.test(value) ? value : undefined;
+  });
   const [creating, setCreating] = useState(false);
   const [title, setTitle] = useState('');
   const [summary, setSummary] = useState('');
@@ -64,6 +69,12 @@ export function ScenarioApp() {
     queryFn: () => api.request<SourceInbox>('/api/scenario-source-inbox')});
   const detail = useQuery({queryKey: ['scenario', selectedId], enabled: ready && Boolean(selectedId),
     queryFn: () => api.request<ScenarioDetail>(`/api/scenarios/${encodeURIComponent(selectedId!)}`)});
+  const closeDetail = () => {
+    setSelectedId(undefined);
+    if (searchParams.has('scenario_id')) {
+      const next = new URLSearchParams(searchParams); next.delete('scenario_id'); setSearchParams(next, {replace:true});
+    }
+  };
 
   const createCandidate = useMutation({
     mutationFn: () => api.request<{id: string}>('/api/scenarios', 'POST', {
@@ -157,7 +168,7 @@ export function ScenarioApp() {
     <p role="status">{config.error ? String(config.error) : scenarios.error ? String(scenarios.error) : notice}</p>
   </AppShell>
 
-  <Drawer title="L2 场景详情" size="large" open={Boolean(selectedId)} onClose={() => setSelectedId(undefined)} loading={detail.isFetching}>
+  <Drawer title="L2 场景详情" size="large" open={Boolean(selectedId)} onClose={closeDetail} loading={detail.isFetching}>
     {detail.data && <><Space wrap><h2>{detail.data.title}</h2><Tag color={stateColor[detail.data.status]}>{stateName[detail.data.status]}</Tag></Space>
       <p className="detail-content">{detail.data.summary}</p>
       <Descriptions column={1} size="small" bordered items={[

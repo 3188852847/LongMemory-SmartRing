@@ -125,7 +125,7 @@ describe('L2 生活场景页', () => {
     view.unmount(); client.clear();
   });
 
-  test('结束已接受场景先确认，随后留下生命周期操作请求', async () => {
+  test('深链接打开已接受场景，结束前确认并留下生命周期操作请求', async () => {
     vi.spyOn(ChatApi.prototype, 'bootstrap').mockResolvedValue(undefined);
     const calls: Array<[string, string | undefined, unknown]> = [];
     const scenario = {id:'scenario-1',subject_id:'user:self',title:'准备答辩',summary:'用户本周正在准备答辩。',generated_at:'2026-09-06T10:00:00Z',valid_from:null,valid_to:null,status:'active',generator_name:'manual_console',generator_version:'1',revision:2};
@@ -140,9 +140,8 @@ describe('L2 生活场景页', () => {
       throw new Error(`unexpected ${method ?? 'GET'} ${path}`);
     });
     const client = createConsoleQueryClient();
-    const view = render(<QueryClientProvider client={client}><MemoryRouter><ScenarioApp/></MemoryRouter></QueryClientProvider>);
+    const view = render(<QueryClientProvider client={client}><MemoryRouter initialEntries={['/scenarios?scenario_id=scenario-1']}><ScenarioApp/></MemoryRouter></QueryClientProvider>);
 
-    fireEvent.click(await screen.findByRole('button',{name:'查看来源'}));
     await screen.findByText('生命周期记录');
     fireEvent.click(await screen.findByRole('button',{name:'结束场景'}));
     expect(await screen.findByText('确认结束这个 L2 场景')).toBeTruthy();

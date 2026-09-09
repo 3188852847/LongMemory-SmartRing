@@ -70,7 +70,7 @@ describe('L3 用户画像页', () => {
     view.unmount();client.clear();
   });
 
-  test('统一画像只在主视图汇总已接受断言并保留查看依据入口', async () => {
+  test('统一画像汇总已接受断言，深链接可直接打开依据', async () => {
     vi.spyOn(ChatApi.prototype,'bootstrap').mockResolvedValue(undefined);
     const calls:Array<[string,string|undefined,unknown]> = [];
     vi.spyOn(ChatApi.prototype,'request').mockImplementation(async(path:string,method?:string,body?:unknown) => {
@@ -85,10 +85,9 @@ describe('L3 用户画像页', () => {
       throw new Error(`unexpected ${method??'GET'} ${path}`);
     });
     const client=createConsoleQueryClient();
-    const view=render(<QueryClientProvider client={client}><MemoryRouter><PersonaApp/></MemoryRouter></QueryClientProvider>);
-    expect(await screen.findByText('用户喜欢喝乌龙茶。')).toBeTruthy();
-    expect(screen.getByText('1 项已接受认识')).toBeTruthy();
-    fireEvent.click(screen.getByText('查看依据'));
+    const view=render(<QueryClientProvider client={client}><MemoryRouter initialEntries={['/personas?persona_id=active-1']}><PersonaApp/></MemoryRouter></QueryClientProvider>);
+    expect((await screen.findAllByText('用户喜欢喝乌龙茶。')).length).toBeGreaterThanOrEqual(2);
+    expect(await screen.findByText('1 项已接受认识')).toBeTruthy();
     expect(await screen.findByText(/^自动策略 ·/)).toBeTruthy();
     expect(screen.getByText(/persona-activation-v1/)).toBeTruthy();
     fireEvent.click(await screen.findByText('更新这项画像'));
