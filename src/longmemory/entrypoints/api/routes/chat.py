@@ -318,6 +318,7 @@ def register_chat_routes(app, backend):
                 "chat_id": None,
                 "chat_title": "圆屏语音",
                 "request_id": event["target_user_message_id"],
+                "feedback_event_id": event["feedback_event_id"],
                 "feedback_message_id": event["feedback_message_id"],
                 "assistant_message_id": event["assistant_message_id"],
                 "kind": kind,
@@ -343,6 +344,20 @@ def register_chat_routes(app, backend):
         store.remove(request.match_info['chat_id'])
         del chats[request.match_info["chat_id"]]
         return web.json_response({"forgotten": True, "long_term_memory_preserved": True})
+
+    async def round_screen_feedback_detail(request):
+        try:
+            event_id = request.match_info["event_id"]
+            if str(UUID(event_id)) != event_id:
+                raise ValueError
+        except (ValueError, TypeError):
+            return web.json_response({"error": "invalid_feedback_event_id"}, status=400)
+        item = await asyncio.to_thread(
+            backend.round_screen_memory_feedback_detail, event_id,
+        )
+        if item is None:
+            return web.json_response({"error": "feedback_event_not_found"}, status=404)
+        return web.json_response(item)
 
     async def finish(key, chat, request_id, text, history):
         try:
@@ -420,5 +435,9 @@ def register_chat_routes(app, backend):
     app.router.add_post("/api/chats/{chat_id}/turns/{request_id}/memory-feedback", memory_feedback)
     app.router.add_get("/api/chat-memory-feedback/daily", memory_feedback_daily, allow_head=False)
     app.router.add_get("/api/chat-memory-feedback", memory_feedback_index, allow_head=False)
+    app.router.add_get(
+        "/api/round-screen-memory-feedback/{event_id}",
+        round_screen_feedback_detail, allow_head=False,
+    )
     app.router.add_delete("/api/chats/{chat_id}", forget)
     app.on_cleanup.append(cleanup)

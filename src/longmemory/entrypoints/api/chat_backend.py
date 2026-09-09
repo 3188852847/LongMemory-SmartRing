@@ -111,6 +111,11 @@ class ChatBackend:
 
         return SQLiteRoundScreenMemoryFeedbackStore(self.database).list_events()
 
+    def round_screen_memory_feedback_detail(self, event_id):
+        """按需读取一条圆屏问题的原始问答与召回证据。"""
+
+        return SQLiteRoundScreenMemoryFeedbackStore(self.database).get_event(event_id)
+
     def info(self):
         role = self.roles.current()
         runtime = self.memory_runtime().status()

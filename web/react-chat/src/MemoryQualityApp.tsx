@@ -1,7 +1,7 @@
 import {useEffect, useState} from 'react';
-import {Alert, Button, Card, Empty, List, Select, Space, Statistic, Tag} from 'antd';
+import {Alert, Button, Card, Descriptions, Drawer, Empty, List, Select, Space, Statistic, Tag} from 'antd';
 import {Link} from 'react-router-dom';
-import {ChatApi, type MemoryFeedbackDiagnosticFocus, type MemoryFeedbackIndex, type MemoryFeedbackKind} from './api';
+import {ChatApi, type MemoryFeedbackDiagnosticFocus, type MemoryFeedbackIndex, type MemoryFeedbackKind, type RoundScreenFeedbackDetail} from './api';
 import {AppShell, ConsoleNav} from './AppShell';
 import {PageHeader} from './PageHeader';
 
@@ -34,6 +34,9 @@ export function MemoryQualityApp() {
   const [page,setPage] = useState<MemoryFeedbackIndex>({kind:'issues',counts:emptyCounts,total:0,offset:0,limit:25,items:[]});
   const [busy,setBusy] = useState(true);
   const [notice,setNotice] = useState('正在读取当前有效判断…');
+  const [detail,setDetail] = useState<RoundScreenFeedbackDetail|null>(null);
+  const [detailOpen,setDetailOpen] = useState(false);
+  const [detailBusy,setDetailBusy] = useState(false);
 
   async function load(nextFilter=filter,offset=0) {
     setBusy(true);
@@ -51,6 +54,13 @@ export function MemoryQualityApp() {
     catch {setNotice('无法建立本机控制台会话，请刷新页面。');setBusy(false);}
   })();},[]);
 
+  async function inspectRoundScreen(eventId:string) {
+    setDetailOpen(true);setDetailBusy(true);setDetail(null);
+    try {setDetail(await api.request<RoundScreenFeedbackDetail>(`/api/round-screen-memory-feedback/${encodeURIComponent(eventId)}`));}
+    catch {setNotice('无法读取这条圆屏诊断详情。请确认控制台仍在运行后重试。');}
+    finally {setDetailBusy(false);}
+  }
+
   const sidebar = <ConsoleNav active="quality" legacyPath="/memories"/>;
   return <AppShell subtitle="跨日期的记忆诊断样本" className="quality-shell" sidebar={sidebar}>
     <PageHeader eyebrow="长期记忆" title="记忆质量样本" description="集中查看网页人工复核和圆屏明确反馈，并回到原始证据核对实际召回情况。" action={<Button loading={busy} onClick={()=>void load(filter,page.offset)}>刷新</Button>}/>
@@ -67,6 +77,7 @@ export function MemoryQualityApp() {
       {value:'memory_irrelevant',label:'记忆无关负例'}, {value:'all',label:'全部当前判断'},
     ]} onChange={(value:Filter)=>{setFilter(value);void load(value,0);}}/>}>
       <List loading={busy} dataSource={page.items} locale={{emptyText:<Empty description={filter==='issues'?'目前没有待核对问题':'没有符合筛选的当前判断'}/>}} renderItem={item=><List.Item actions={item.source==='round_screen' ? [
+        item.feedback_event_id&&<Button key="detail" type="link" onClick={()=>void inspectRoundScreen(item.feedback_event_id!)}>在此核对</Button>,
         <Link key="question" to={`/memories?l0_message_id=${encodeURIComponent(item.request_id)}`}>问题 L0</Link>,
         item.assistant_message_id&&<Link key="answer" to={`/memories?l0_message_id=${encodeURIComponent(item.assistant_message_id)}`}>回答 L0</Link>,
         item.feedback_message_id&&<Link key="feedback" to={`/memories?l0_message_id=${encodeURIComponent(item.feedback_message_id)}`}>反馈 L0</Link>,
@@ -75,6 +86,24 @@ export function MemoryQualityApp() {
       </List.Item>}/>
       <div className="pagination"><Button disabled={busy||page.offset===0} onClick={()=>void load(filter,Math.max(0,page.offset-page.limit))}>上一页</Button><span>{page.total?`${page.offset+1}–${Math.min(page.offset+page.limit,page.total)} / ${page.total}`:'0 条'}</span><Button disabled={busy||page.offset+page.limit>=page.total} onClick={()=>void load(filter,page.offset+page.limit)}>下一页</Button></div>
     </Card>
+    <Drawer width={640} title="圆屏记忆质量详情" open={detailOpen} onClose={()=>setDetailOpen(false)}>
+      {detailBusy?<p>正在读取原始证据…</p>:detail?<>
+        <Alert showIcon type="info" title="正文只在打开详情后读取" description="这里只比较回答当时的召回指纹和条目当前内容；内容变化不自动等于错误根因。"/>
+        <Descriptions column={1} bordered size="small" items={[
+          {key:'question',label:'用户问题',children:detail.question},
+          {key:'answer',label:'助手回答',children:detail.answer},
+          {key:'feedback',label:'用户反馈',children:detail.feedback},
+        ]}/>
+        <Card title="回答当时的召回证据" size="small">
+          {!detail.retrieval_evidence_recorded
+            ? <Alert type="warning" showIcon title="旧回执没有保存条目索引"/>
+            : detail.retrieval_evidence.length===0
+              ? <Empty description="当轮确认没有召回 L1/L2/L3"/>
+              : <List dataSource={detail.retrieval_evidence} renderItem={evidence=><List.Item actions={[<Link key="open" to={evidencePath(evidence.layer,evidence.item_id)}>打开当前条目</Link>]}><List.Item.Meta title={<Space><Tag>{evidence.layer.toUpperCase()} #{evidence.rank}</Tag><Tag color={evidence.matches_receipt===true?'green':evidence.matches_receipt===false?'gold':'default'}>{evidence.matches_receipt===true?'与回答时一致':evidence.matches_receipt===false?'内容后来变化':'当前已缺失'}</Tag></Space>} description={<><p>{evidence.current_content??'当前数据库中找不到该条目正文。'}</p><code>{evidence.item_id}</code><small className="subtle"> · 当前状态 {evidence.current_state}</small></>}/></List.Item>}/>
+          }
+        </Card>
+      </>:<Empty description="没有可显示的诊断详情"/>}
+    </Drawer>
     <p className="memory-status" role="status">{notice}</p>
   </AppShell>;
 }

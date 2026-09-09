@@ -727,6 +727,17 @@ def test_internal_runtime_requires_token_and_is_immediately_shared_with_web(tmp_
             assert round_item["retrieval_evidence"] == written["retrieval_evidence"]
             assert round_item["retrieval_evidence_recorded"] is True
             assert "input" not in round_item and "answer" not in round_item
+            detail_response = await client.get(
+                base + "/api/round-screen-memory-feedback/"
+                + round_item["feedback_event_id"]
+            )
+            assert detail_response.status == 200
+            detail = await detail_response.json()
+            assert detail["question"] == body["query"]
+            assert detail["answer"] == completion["answer"]
+            assert detail["feedback"] == "你刚才没想起来我告诉过你的事情"
+            assert detail["retrieval_evidence"][0]["matches_receipt"] is True
+            assert "豆包" in detail["retrieval_evidence"][0]["current_content"]
 
             corrected_response = await client.post(
                 endpoint,

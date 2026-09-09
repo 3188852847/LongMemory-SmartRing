@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from hashlib import sha256
 from pathlib import Path
 import sqlite3
 from uuid import uuid4
@@ -104,7 +105,8 @@ class SQLiteRoundScreenMemoryFeedbackStore:
         connection.execute("PRAGMA query_only = ON")
         try:
             rows = connection.execute(
-                "SELECT f.target_user_message_id,f.feedback_message_id,f.event_kind,"
+                "SELECT f.id AS feedback_event_id,f.target_user_message_id,"
+                "f.feedback_message_id,f.event_kind,"
                 "f.occurred_at,t.assistant_message_id,t.retrieved_l1_count,"
                 "t.retrieved_l2_count,t.retrieved_l3_count,"
                 "EXISTS(SELECT 1 FROM round_screen_retrieval_receipts r "
@@ -136,3 +138,79 @@ class SQLiteRoundScreenMemoryFeedbackStore:
             return tuple(result)
         finally:
             connection.close()
+
+    def get_event(self, event_id: str) -> dict | None:
+        """按需读取一条诊断样本；列表接口仍保持无正文。"""
+
+        connection = sqlite3.connect(
+            self._database.as_uri() + "?mode=ro", uri=True, timeout=2,
+        )
+        connection.row_factory = sqlite3.Row
+        connection.execute("PRAGMA query_only = ON")
+        try:
+            row = connection.execute(
+                "SELECT f.id,f.event_kind,f.evidence_kind,f.interpreter_version,"
+                "f.occurred_at,f.target_user_message_id,f.feedback_message_id,"
+                "t.assistant_message_id,q.content AS question,q.created_at AS question_at,"
+                "a.content AS answer,a.created_at AS answer_at,"
+                "m.content AS feedback,m.created_at AS feedback_at "
+                "FROM round_screen_memory_feedback_events f "
+                "JOIN round_screen_turns t ON t.user_message_id=f.target_user_message_id "
+                "JOIN conversation_messages q ON q.id=f.target_user_message_id "
+                "JOIN conversation_messages a ON a.id=t.assistant_message_id "
+                "JOIN conversation_messages m ON m.id=f.feedback_message_id "
+                "WHERE f.id=?",
+                (event_id,),
+            ).fetchone()
+            if row is None:
+                return None
+            result = dict(row)
+            evidence = []
+            for item in connection.execute(
+                "SELECT layer,item_id,rank,content_sha256 FROM "
+                "round_screen_retrieval_evidence WHERE user_message_id=? "
+                "ORDER BY layer,rank",
+                (result["target_user_message_id"],),
+            ).fetchall():
+                evidence.append(self._resolve_evidence(connection, dict(item)))
+            result["retrieval_evidence"] = evidence
+            result["retrieval_evidence_recorded"] = connection.execute(
+                "SELECT 1 FROM round_screen_retrieval_receipts WHERE user_message_id=?",
+                (result["target_user_message_id"],),
+            ).fetchone() is not None
+            return result
+        finally:
+            connection.close()
+
+    @staticmethod
+    def _resolve_evidence(connection, item: dict) -> dict:
+        """读取条目的当前版本并与回答时指纹比较，不猜测缺失正文。"""
+
+        layer, item_id = item["layer"], item["item_id"]
+        if layer == "l1":
+            row = connection.execute(
+                "SELECT content,retired_at FROM atomic_memories WHERE id=?", (item_id,),
+            ).fetchone()
+            content = row["content"] if row is not None else None
+            state = "retired" if row is not None and row["retired_at"] else "available"
+        elif layer == "l2":
+            row = connection.execute(
+                "SELECT title,summary,status FROM scenario_memories WHERE id=?", (item_id,),
+            ).fetchone()
+            content = (row["title"] + "\n" + row["summary"]) if row is not None else None
+            state = row["status"] if row is not None else "missing"
+        else:
+            row = connection.execute(
+                "SELECT label,statement,status FROM persona_memories WHERE id=?", (item_id,),
+            ).fetchone()
+            content = (row["label"] + "\n" + row["statement"]) if row is not None else None
+            state = row["status"] if row is not None else "missing"
+        if row is None:
+            state = "missing"
+        current_digest = sha256(content.encode("utf-8")).hexdigest() if content else None
+        return {
+            **item,
+            "current_content": content,
+            "current_state": state,
+            "matches_receipt": current_digest == item["content_sha256"] if content else None,
+        }

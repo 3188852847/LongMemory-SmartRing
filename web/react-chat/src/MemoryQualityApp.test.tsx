@@ -1,5 +1,5 @@
 import {afterEach,describe,expect,test,vi} from 'vitest';
-import {render,screen} from '@testing-library/react';
+import {fireEvent,render,screen} from '@testing-library/react';
 import {MemoryRouter} from 'react-router-dom';
 import {ChatApi, type MemoryFeedbackIndex} from './api';
 import {MemoryQualityApp} from './MemoryQualityApp';
@@ -27,10 +27,12 @@ describe('记忆质量样本工作台',()=>{
     const response:MemoryFeedbackIndex={
       kind:'issues',offset:0,limit:25,total:1,
       counts:{memory_ok:0,recall_miss:0,wrong_memory:1,memory_irrelevant:0},
-      items:[{source:'round_screen',chat_id:null,chat_title:'圆屏语音',request_id:'l0-user',feedback_message_id:'l0-feedback',assistant_message_id:'l0-assistant',kind:'wrong_memory',revision:1,occurred_at:'2026-09-10T01:00:00Z',retrieved_counts:{l1:1,l2:0,l3:0},retrieval_evidence_recorded:true,retrieval_evidence:[{layer:'l1',item_id:'memory-a',rank:1,content_sha256:'a'.repeat(64)}],diagnostic_focus:'memory_content_freshness_subject_or_ranking'}],
+      items:[{source:'round_screen',chat_id:null,chat_title:'圆屏语音',request_id:'l0-user',feedback_event_id:'event-a',feedback_message_id:'l0-feedback',assistant_message_id:'l0-assistant',kind:'wrong_memory',revision:1,occurred_at:'2026-09-10T01:00:00Z',retrieved_counts:{l1:1,l2:0,l3:0},retrieval_evidence_recorded:true,retrieval_evidence:[{layer:'l1',item_id:'memory-a',rank:1,content_sha256:'a'.repeat(64)}],diagnostic_focus:'memory_content_freshness_subject_or_ranking'}],
     };
     vi.spyOn(ChatApi.prototype,'bootstrap').mockResolvedValue(undefined);
-    vi.spyOn(ChatApi.prototype,'request').mockResolvedValue(response as never);
+    vi.spyOn(ChatApi.prototype,'request').mockImplementation(async path=>path.startsWith('/api/round-screen-memory-feedback/')?{
+      id:'event-a',event_kind:'wrong_memory',evidence_kind:'explicit_round_screen_statement',interpreter_version:'v1',occurred_at:'2026-09-10T01:00:00Z',target_user_message_id:'l0-user',assistant_message_id:'l0-assistant',feedback_message_id:'l0-feedback',question:'我的猫叫什么？',question_at:'2026-09-10T00:59:00Z',answer:'叫豆包。',answer_at:'2026-09-10T00:59:02Z',feedback:'你刚才记错了。',feedback_at:'2026-09-10T01:00:00Z',retrieval_evidence_recorded:true,retrieval_evidence:[{layer:'l1',item_id:'memory-a',rank:1,content_sha256:'a'.repeat(64),current_content:'用户的猫叫豆包。',current_state:'available',matches_receipt:true}],
+    } as never:response as never);
     render(<MemoryRouter><MemoryQualityApp/></MemoryRouter>);
     expect((await screen.findAllByText('圆屏语音')).length).toBe(2);
     expect(screen.getByText('圆屏语音',{selector:'.ant-tag'})).toBeTruthy();
@@ -38,5 +40,9 @@ describe('记忆质量样本工作台',()=>{
     expect(screen.getByRole('link',{name:'回答 L0'}).getAttribute('href')).toBe('/memories?l0_message_id=l0-assistant');
     expect(screen.getByRole('link',{name:'反馈 L0'}).getAttribute('href')).toBe('/memories?l0_message_id=l0-feedback');
     expect(screen.getByRole('link',{name:'L1 #1'}).getAttribute('href')).toBe('/memories?memory_id=memory-a');
+    fireEvent.click(screen.getByRole('button',{name:'在此核对'}));
+    expect(await screen.findByText('我的猫叫什么？')).toBeTruthy();
+    expect(screen.getByText('用户的猫叫豆包。')).toBeTruthy();
+    expect(screen.getByText('与回答时一致')).toBeTruthy();
   });
 });

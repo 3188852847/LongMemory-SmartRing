@@ -78,7 +78,14 @@ export type MemoryFeedbackDiagnosticFocus = 'normal_control'|'negative_control'|
 export interface MemoryFeedbackIndex {
   kind:'issues'|'all'|MemoryFeedbackKind;counts:Record<MemoryFeedbackKind,number>;
   total:number;offset:number;limit:number;
-  items:Array<{source:'web_chat'|'round_screen';chat_id:string|null;chat_title:string;request_id:string;feedback_message_id?:string;assistant_message_id?:string;kind:MemoryFeedbackKind;revision:number;occurred_at:string;retrieved_counts:{l1:number;l2:number;l3:number};retrieval_evidence?:Array<{layer:'l1'|'l2'|'l3';item_id:string;rank:number;content_sha256:string}>;retrieval_evidence_recorded?:boolean;diagnostic_focus:MemoryFeedbackDiagnosticFocus}>;
+  items:Array<{source:'web_chat'|'round_screen';chat_id:string|null;chat_title:string;request_id:string;feedback_event_id?:string;feedback_message_id?:string;assistant_message_id?:string;kind:MemoryFeedbackKind;revision:number;occurred_at:string;retrieved_counts:{l1:number;l2:number;l3:number};retrieval_evidence?:Array<{layer:'l1'|'l2'|'l3';item_id:string;rank:number;content_sha256:string}>;retrieval_evidence_recorded?:boolean;diagnostic_focus:MemoryFeedbackDiagnosticFocus}>;
+}
+export interface RoundScreenFeedbackDetail {
+  id:string;event_kind:'recall_miss'|'wrong_memory';evidence_kind:string;interpreter_version:string;occurred_at:string;
+  target_user_message_id:string;assistant_message_id:string;feedback_message_id:string;
+  question:string;question_at:string;answer:string;answer_at:string;feedback:string;feedback_at:string;
+  retrieval_evidence_recorded:boolean;
+  retrieval_evidence:Array<{layer:'l1'|'l2'|'l3';item_id:string;rank:number;content_sha256:string;current_content:string|null;current_state:string;matches_receipt:boolean|null}>;
 }
 export interface Snapshot {chat_id: string; title: string; pending: boolean; turns: Turn[]}
 export interface Summary {chat_id: string; title: string; turn_count: number}
