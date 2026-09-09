@@ -32,6 +32,8 @@ export function MemoryApp() {
   const [l1, setL1] = useState<Page<L1Summary>>({items: [], total: 0, limit: 25, offset: 0});
   const [l0, setL0] = useState<Page<L0Summary>>({items: [], total: 0, limit: 25, offset: 0});
   const [daily,setDaily] = useState<DailyReview>();
+  const [reviewDate,setReviewDate] = useState(localDateText());
+  const [dailyNotice,setDailyNotice] = useState('');
   const [query, setQuery] = useState('');
   const [l1State, setL1State] = useState('active');
   const [role, setRole] = useState('all');
@@ -59,9 +61,15 @@ export function MemoryApp() {
     const data = await api.request<Page<L0Summary>>(`/api/source-messages?${params}`);
     setL0(data); setSelectedL0(undefined);
   }
-  async function fetchDaily() {
-    const params=new URLSearchParams({local_date:localDateText(),utc_offset_minutes:String(-new Date().getTimezoneOffset())});
-    setDaily(await api.request<DailyReview>(`/api/memories/daily-review?${params}`));
+  async function fetchDaily(date=reviewDate) {
+    const params=new URLSearchParams({local_date:date,utc_offset_minutes:String(-new Date().getTimezoneOffset())});
+    try {
+      setDaily(await api.request<DailyReview>(`/api/memories/daily-review?${params}`));
+      setDailyNotice('');
+    } catch {
+      setDaily(undefined);
+      setDailyNotice('暂时无法读取这一天的回顾；完整 L1 列表仍可正常使用。');
+    }
   }
   async function refresh(offset = 0, search = query) {
     setBusy(true);
@@ -119,6 +127,20 @@ export function MemoryApp() {
   async function openL1(id: string) {
     await guarded(async () => {setSelectedL1(await api.request<L1Detail>(`/api/memories/${encodeURIComponent(id)}`));});
   }
+  async function openCorrection(id:string) {
+    await guarded(async()=>{
+      const detail=await api.request<L1Detail>(`/api/memories/${encodeURIComponent(id)}`);
+      setSelectedL1(detail); setCorrection(''); setCorrecting(true);
+    });
+  }
+  function changeReviewDate(value:string) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || value>localDateText()) return;
+    setReviewDate(value); void fetchDaily(value);
+  }
+  function previousReviewDate() {
+    const date=new Date(`${reviewDate}T12:00:00`); date.setDate(date.getDate()-1);
+    changeReviewDate(localDateText(date));
+  }
   async function openL0(id: string) {
     await guarded(async () => {setSelectedL0(await api.request<L0Detail>(`/api/source-messages/${encodeURIComponent(id)}`));});
   }
@@ -141,7 +163,7 @@ export function MemoryApp() {
       const result = await api.request<{new_memory_id: string}>(`/api/memories/${encodeURIComponent(selectedL1.id)}/corrections`, 'POST', {
         revision: selectedL1.revision, corrected_content: correction.trim(), correction_kind: 'error', confirm_correction: true,
       });
-      setCorrecting(false); setCorrection(''); await fetchL1(0, query);
+      setCorrecting(false); setCorrection(''); await fetchL1(0, query); await fetchDaily();
       setSelectedL1(await api.request<L1Detail>(`/api/memories/${encodeURIComponent(result.new_memory_id)}`));
       setNotice('纠正已保存：新 L1 生效，旧 L1 保留为已取代历史。');
     }, 'write');
@@ -163,7 +185,7 @@ export function MemoryApp() {
         change_kind: 'fact_changed',
         confirm_change: true,
       });
-      setChanging(false); setChangedContent(''); setEffectiveLocal(''); await fetchL1(0, query);
+      setChanging(false); setChangedContent(''); setEffectiveLocal(''); await fetchL1(0, query); await fetchDaily();
       setSelectedL1(await api.request<L1Detail>(`/api/memories/${encodeURIComponent(result.new_memory_id)}`));
       setNotice('变化已保存：旧事实保留历史有效期，新事实从指定时间开始生效。');
     }, 'write');
@@ -173,7 +195,7 @@ export function MemoryApp() {
     await guarded(async () => {
       await api.request(`/api/memories/${encodeURIComponent(selectedL1.id)}`, 'DELETE', {revision: selectedL1.revision, confirm_delete: true});
       setDeleting(false); setDeleteUnderstood(false); setSelectedL1(undefined);
-      await fetchL1(0, query); setNotice('L1 已删除；L0 原始对话仍保留。');
+      await fetchL1(0, query); await fetchDaily(); setNotice('L1 已删除；L0 原始对话仍保留。');
     }, 'write');
   }
 
@@ -184,13 +206,16 @@ export function MemoryApp() {
     </>;
   return <><AppShell subtitle="可追溯的个人记忆" className="memory-shell" sidebar={sidebar}><PageHeader eyebrow="长期记忆" title="原始与原子记忆" description="查看系统保存的原话和从中提取的可召回事实，并核对两者之间的来源关系。" meta={config?.database ?? '未指定记忆库'} action={<Space><ManualMemoryAdd api={api} disabled={!config?.configured || !mode} onSaved={async memoryId => {await fetchL1(0, ''); setTab('l1'); setQuery(''); setNotice('明确事实已处理，列表已更新。'); if (memoryId) await openL1(memoryId);}}/><Button loading={busy} disabled={!config?.configured} onClick={() => void refresh(page.offset)}>刷新</Button></Space>}/>
       <section className="memory-overview" aria-label="记忆概览"><div><small>当前视图</small><strong>{tab === 'l1' ? 'L1 原子记忆' : 'L0 原始记录'}</strong></div><div><small>记录数</small><strong>{page.total}</strong></div><div><small>回答时召回</small><strong className={mode?.use_enabled ? 'is-positive' : ''}>{mode?.use_enabled ? '已开启' : '已关闭'}</strong></div></section>
-      {daily&&<Card className="mode-card" title={`今日记忆回顾 · ${daily.local_date}`} extra={<Tag color={daily.total?'processing':'default'}>{daily.total} 条写入</Tag>}>
-        <p className="subtle">这里按你的本地自然日显示今天形成的 L1，包括后来被纠正或取代的记录；它不是“当前有效记忆”总表，也不会触发模型整理。</p>
+      <Card className="mode-card" title={`每日记忆回顾 · ${reviewDate}`} extra={<Space wrap><Button size="small" onClick={previousReviewDate}>前一天</Button><Input aria-label="回顾日期" type="date" max={localDateText()} value={reviewDate} onChange={event=>changeReviewDate(event.target.value)} style={{width:145}}/><Button size="small" disabled={reviewDate===localDateText()} onClick={()=>changeReviewDate(localDateText())}>今天</Button>{daily&&<Tag color={daily.total?'processing':'default'}>{daily.total} 条写入</Tag>}</Space>}>
+        <p className="subtle">这里按你的本地自然日显示当天形成的 L1，包括后来被纠正或取代的记录；它不是“当前有效记忆”总表，也不会触发模型整理。</p>
+        {dailyNotice&&<p role="status" className="subtle">{dailyNotice}</p>}
+        {daily&&<>
         {daily.items.length?<List size="small" dataSource={daily.items.slice(0,5)} renderItem={item=><List.Item actions={[<Button type="link" key="review" onClick={()=>void openL1(item.id)}>核对来源</Button>]}>
-          <List.Item.Meta title={item.content} description={<Space><Tag color={item.state==='active'?'green':'default'}>{item.state==='active'?'当前':'已退役'}</Tag><span>{displayTime(item.recorded_at)}</span></Space>}/>
-        </List.Item>}/>:<Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="今天还没有形成 L1"/>}
+          <List.Item.Meta title={item.content} description={<Space><Tag color={item.state==='active'?'green':'default'}>{item.state==='active'?'当前':'已退役'}</Tag><span>{displayTime(item.recorded_at)}</span>{item.state==='active'&&config?.allow_correction&&<Button type="link" size="small" onClick={event=>{event.stopPropagation();void openCorrection(item.id);}}>直接纠正</Button>}</Space>}/>
+        </List.Item>}/>:<Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="这一天没有形成 L1"/>}
         {daily.total>5&&<p className="subtle">这里只展开最近 5 条；下方 L1 列表可查看全部。{daily.limited?'今日记录达到 100 条读取上限。':''}</p>}
-      </Card>}
+        </>}
+      </Card>
       {mode && <Card className="mode-card" title={<span>本次运行的记忆模式 <Tag>临时设置</Tag></span>} extra={<Button type="primary" disabled={busy || (mode.write_enabled === modeDraft.write_enabled && mode.use_enabled === modeDraft.use_enabled && mode.scenario_use_enabled === modeDraft.scenario_use_enabled && mode.persona_use_enabled === modeDraft.persona_use_enabled)} onClick={() => void saveMode()}>应用到网页与圆屏</Button>}>
         <div className="memory-mode-grid">
           <label><Switch checked={modeDraft.write_enabled} disabled={busy} onChange={value => setModeDraft({...modeDraft, write_enabled: value})}/><span><strong>生成 L1</strong><small>从新对话提取原子记忆</small></span></label>

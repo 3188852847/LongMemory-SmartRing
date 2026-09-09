@@ -1,0 +1,30 @@
+import {afterEach,describe,expect,test,vi} from 'vitest';
+import {fireEvent,render,screen} from '@testing-library/react';
+import {MemoryRouter} from 'react-router-dom';
+import {ChatApi} from './api';
+import {MemoryApp} from './MemoryApp';
+
+afterEach(()=>vi.restoreAllMocks());
+
+describe('每日记忆回顾',()=>{
+  test('从当天回顾直达已有的追加式纠正确认窗',async()=>{
+    const item={id:'memory-1',content:'用户喜欢乌龙茶。',truncated:false,state:'active' as const,
+      recorded_at:'2026-09-09T08:00:00+00:00',subject_id:'user:self'};
+    vi.spyOn(ChatApi.prototype,'bootstrap').mockResolvedValue(undefined);
+    vi.spyOn(ChatApi.prototype,'request').mockImplementation(async path=>{
+      if(path==='/api/memory-config') return {configured:true,database:'synthetic.db',allow_delete:true,allow_correction:true,allow_change:true} as never;
+      if(path==='/api/memory-mode') return {write_enabled:true,use_enabled:true,scenario_use_enabled:false,scenario_available:true,persona_use_enabled:false,persona_available:true,persistent:false,l0_archived_when_write_disabled:true} as never;
+      if(path.startsWith('/api/memories/daily-review')) return {local_date:'2026-09-09',utc_offset_minutes:480,items:[item],total:1,limited:false} as never;
+      if(path==='/api/memories/memory-1') return {...item,revision:'a'.repeat(64),valid_from:null,valid_to:null,retired_at:null,superseded_by_id:null,sources:[]} as never;
+      if(path.startsWith('/api/memories?')) return {items:[item],total:1,limit:25,offset:0} as never;
+      throw new Error(`unexpected test path: ${path}`);
+    });
+
+    render(<MemoryRouter><MemoryApp/></MemoryRouter>);
+    expect(await screen.findByText(/每日记忆回顾/)).toBeTruthy();
+    expect((await screen.findAllByText('用户喜欢乌龙茶。')).length).toBeGreaterThanOrEqual(2);
+    fireEvent.click(screen.getByRole('button',{name:'直接纠正'}));
+    expect(await screen.findByText('纠正 L1')).toBeTruthy();
+    expect(screen.getByText(/新建 L1，并保留旧记录/)).toBeTruthy();
+  });
+});
