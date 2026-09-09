@@ -66,9 +66,9 @@ export interface Turn {
   memory_feedback_events?:MemoryFeedback[];
   memory_command?: {kind:string; status:string; notice:string; target_memory_ids?:string[]} | null;
   follow_up_suggestion?: {
-    status:'candidate_created'|'replayed'|'not_created'; candidate_id:string|null;
+    status:'candidate_armed'|'candidate_created_requires_proactive_enabled'|'replayed'|'not_created'; candidate_id:string|null;
     source_memory_id:string|null; prompt_text:string|null; follow_up_at:string|null;
-    warning_code:string|null;
+    warning_code:string|null; outreach_id:string|null;
   } | null;
   [key: string]: unknown;
 }

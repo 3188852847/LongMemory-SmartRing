@@ -33,6 +33,7 @@ class FollowUpSuggestionResult:
     prompt_text: str | None = None
     follow_up_at: str | None = None
     warning_code: str | None = None
+    outreach_id: str | None = None
 
 
 def _number(value: str) -> int:

@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 from datetime import timedelta
+from collections.abc import Callable
 from uuid import uuid4
 
 from longmemory.core.companion import CompanionFeedbackEvent, CompanionFeedbackStore
@@ -15,6 +16,12 @@ _REJECT_TOPIC = frozenset({
     "以后不要主动聊这个话题",
     "不要再主动聊这个话题",
     "别再主动聊这个话题",
+})
+_CANCEL_FOLLOW_UP = frozenset({
+    "取消刚才的跟进",
+    "取消刚才的提醒",
+    "不用到时候问我了",
+    "到时候不用问我了",
 })
 
 
@@ -31,13 +38,18 @@ class NaturalCompanionCommandService:
     """只执行明确拒绝，并把“这个话题”限制在最近 30 分钟。"""
 
     def __init__(self, *, conversation_store: ConversationStore,
-                 feedback_store: CompanionFeedbackStore) -> None:
+                 feedback_store: CompanionFeedbackStore,
+                 cancel_recent_follow_up: Callable[..., str]) -> None:
         self._conversation_store = conversation_store
         self._feedback_store = feedback_store
+        self._cancel_recent_follow_up = cancel_recent_follow_up
 
     @staticmethod
     def recognizes(event: MemoryEvent) -> bool:
-        return event.role == "user" and event.content.strip().rstrip("。！？!? ") in _REJECT_TOPIC
+        normalized = event.content.strip().rstrip("。！？!? ")
+        return event.role == "user" and normalized in (
+            _REJECT_TOPIC | _CANCEL_FOLLOW_UP
+        )
 
     def handle(self, event: MemoryEvent) -> NaturalCompanionCommandResult:
         message = ConversationMessage(
@@ -45,6 +57,27 @@ class NaturalCompanionCommandService:
             event.content, event.occurred_at,
         )
         self._conversation_store.save(message)
+        normalized = event.content.strip().rstrip("。！？!? ")
+        if normalized in _CANCEL_FOLLOW_UP:
+            outcome = self._cancel_recent_follow_up(
+                subject_id="user:self",
+                before=event.occurred_at,
+                not_before=event.occurred_at - timedelta(minutes=30),
+            )
+            notices = {
+                "applied": "好的，刚才安排的一次性跟进已经取消，到时不会再播报。",
+                "target_not_found": "最近没有仍可取消的一次性跟进，因此没有改动任何安排。",
+                "target_ambiguous": (
+                    "最近有多条仍未执行的跟进，无法确定你指哪一条，因此没有取消。"
+                    "你可以在控制台查看具体事项。"
+                ),
+                "already_attempted": (
+                    "刚才的跟进已经开始处理或结束，不能再把它记为未执行取消。"
+                ),
+            }
+            return NaturalCompanionCommandResult(
+                "cancel_follow_up", outcome, notices[outcome],
+            )
         target = self._feedback_store.find_recent_topic(
             "user:self", before=event.occurred_at,
             not_before=event.occurred_at - timedelta(minutes=30),

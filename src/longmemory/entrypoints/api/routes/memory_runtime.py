@@ -67,13 +67,20 @@ def register_memory_runtime_routes(app, backend):
                 ),
             }[feedback.kind]
         follow_up_notice = None
-        if (
+        if (prepared.follow_up_suggestion is not None
+                and prepared.follow_up_suggestion.status == "candidate_armed"):
+            follow_up_notice = (
+                "好，这次跟进已经按你说的时间安排。"
+                "到点时仍会遵守勿扰时段、频率限制和设备状态。"
+            )
+        elif (
             prepared.follow_up_suggestion is not None
-            and prepared.follow_up_suggestion.status == "candidate_created"
+            and prepared.follow_up_suggestion.status
+            == "candidate_created_requires_proactive_enabled"
         ):
             follow_up_notice = (
-                "已经按你说的时间形成一条跟进候选，但目前还没有启用主动联系。"
-                "请稍后在控制台的主动交流设置中核对并启用。"
+                "我记下了这次跟进，但主动交流总开关目前关闭，所以它还不会播报。"
+                "你可以稍后在控制台开启总开关，再核对这条候选。"
             )
         command_reply = (
             prepared.memory_command.notice

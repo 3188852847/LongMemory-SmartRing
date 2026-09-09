@@ -28,11 +28,21 @@ from longmemory.adapters.storage.sqlite_follow_up_store import (
 from longmemory.adapters.storage.sqlite_proactive_policy_store import (
     SQLiteProactivePolicyStore,
 )
+from longmemory.adapters.storage.sqlite_proactive_outreach_store import (
+    SQLiteProactiveOutreachStore,
+)
+from longmemory.application.proactive import ProactiveOutreachLedger
 from longmemory.adapters.storage.sqlite_memory_store import SQLiteMemoryStore
 from longmemory.application.natural_memory_commands import NaturalMemoryCommandService
 from longmemory.core.common.identifiers import MessageId
 from longmemory.core.conversation.models import ConversationMessage, MessageRole
-from longmemory.core.proactive import FollowUpCandidate, FollowUpCandidateStatus
+from longmemory.core.proactive import (
+    FollowUpCandidate,
+    FollowUpCandidateStatus,
+    OutreachEvidence,
+    OutreachState,
+    OutreachTrigger,
+)
 from longmemory.infrastructure.database.schema import SCHEMA_VERSION
 
 
@@ -65,6 +75,7 @@ class SQLiteNaturalMemoryCommandHandler:
                 self._connection, commit_changes=False,
             ),
             feedback_store=SQLiteCompanionFeedbackStore(self._connection),
+            cancel_recent_follow_up=self._cancel_recent_follow_up,
         )
 
     def handle(self, event):
@@ -91,7 +102,7 @@ class SQLiteNaturalMemoryCommandHandler:
         )
 
     def suggest_follow_up(self, event, writes):
-        """为明确未来追问请求建立候选；失败不撤销已经提交的 L0/L1。"""
+        """保存明确未来追问；总开关已开时同时原子建立一次性账本。"""
 
         added = tuple(item for item in (writes or ()) if item.operation == "add")
         if len(added) != 1:
@@ -134,31 +145,110 @@ class SQLiteNaturalMemoryCommandHandler:
             SQLiteFollowUpCandidateStore(
                 self._connection, commit_changes=False,
             ).create(candidate)
+            outreach = None
+            # 用户在本轮已经明确说出“到时候问我”，这是该事项的一次授权；
+            # 但它不能替代主动交流总开关，也不能绕过到点时的 P4 护栏。
+            if settings.config.enabled:
+                outreach = ProactiveOutreachLedger(
+                    SQLiteProactiveOutreachStore(
+                        self._connection, commit_changes=False,
+                    ),
+                    clock=lambda: event.occurred_at,
+                ).create_candidate(
+                    subject_id=candidate.subject_id,
+                    trigger=OutreachTrigger.EXPLICIT_SCHEDULE,
+                    trigger_reason_code="conversation_authorized_l1_follow_up",
+                    content=candidate.prompt_text,
+                    scheduled_for=candidate.follow_up_at,
+                    expires_at=(
+                        candidate.follow_up_at + settings.config.maximum_lifetime
+                    ),
+                    idempotency_key=f"follow-up:{candidate.id}",
+                    policy_version=settings.config.policy_version,
+                    follow_up_candidate_id=candidate.id,
+                    follow_up_candidate_revision=candidate.revision,
+                )
             self._connection.commit()
-        except sqlite3.IntegrityError:
+        except (sqlite3.IntegrityError, ValueError):
             self._connection.rollback()
             existing = self._connection.execute(
-                "SELECT id,source_memory_id,prompt_text,follow_up_at "
-                "FROM companion_follow_up_candidates WHERE source_message_id=?",
+                "SELECT f.id,f.source_memory_id,f.prompt_text,f.follow_up_at,o.id AS outreach_id "
+                "FROM companion_follow_up_candidates f "
+                "LEFT JOIN proactive_outreach o ON o.follow_up_candidate_id=f.id "
+                "WHERE f.source_message_id=?",
                 (event.event_id,),
             ).fetchone()
             if existing is None:
                 return FollowUpSuggestionResult(
-                    "not_created", warning_code="follow_up_candidate_conflict",
+                    "not_created", warning_code="follow_up_atomic_activation_failed",
                 )
             return FollowUpSuggestionResult(
                 "replayed", existing["id"], existing["source_memory_id"],
                 existing["prompt_text"], existing["follow_up_at"],
+                outreach_id=existing["outreach_id"],
             )
         except sqlite3.Error:
             self._connection.rollback()
             return FollowUpSuggestionResult(
                 "not_created", warning_code="follow_up_storage_unavailable",
             )
-        return FollowUpSuggestionResult(
-            "candidate_created", candidate.id, candidate.source_memory_id,
-            candidate.prompt_text, candidate.follow_up_at.isoformat(),
+        status = (
+            "candidate_armed"
+            if outreach is not None
+            else "candidate_created_requires_proactive_enabled"
         )
+        return FollowUpSuggestionResult(
+            status, candidate.id, candidate.source_memory_id,
+            candidate.prompt_text, candidate.follow_up_at.isoformat(),
+            outreach_id=(outreach.id if outreach is not None else None),
+        )
+
+    def _cancel_recent_follow_up(
+        self, *, subject_id, before, not_before,
+    ) -> str:
+        """只在最近 30 分钟恰好存在一个未来候选时执行语音取消。"""
+
+        rows = self._connection.execute(
+            "SELECT f.id,f.revision,o.id AS outreach_id,o.state AS outreach_state,"
+            "o.revision AS outreach_revision "
+            "FROM companion_follow_up_candidates f "
+            "LEFT JOIN proactive_outreach o ON o.follow_up_candidate_id=f.id "
+            "WHERE f.subject_id=? AND f.creation_kind='explicit_conversation_request' "
+            "AND f.status='candidate' AND julianday(f.created_at)>=julianday(?) "
+            "AND julianday(f.created_at)<julianday(?) "
+            "AND julianday(f.follow_up_at)>julianday(?) "
+            "ORDER BY julianday(f.created_at) DESC,f.id DESC LIMIT 2",
+            (
+                subject_id, not_before.isoformat(), before.isoformat(),
+                before.isoformat(),
+            ),
+        ).fetchall()
+        if not rows:
+            return "target_not_found"
+        if len(rows) != 1:
+            return "target_ambiguous"
+        row = rows[0]
+        if row["outreach_id"] is not None:
+            if row["outreach_state"] != "candidate":
+                return "already_attempted"
+            ProactiveOutreachLedger(
+                SQLiteProactiveOutreachStore(
+                    self._connection, commit_changes=False,
+                ),
+                clock=lambda: before,
+            ).record_transition(
+                row["outreach_id"],
+                expected_revision=row["outreach_revision"],
+                new_state=OutreachState.CANCELLED,
+                reason_code="user_cancelled_recent_follow_up",
+                evidence=OutreachEvidence.POLICY_DECISION,
+            )
+        changed = SQLiteFollowUpCandidateStore(
+            self._connection, commit_changes=False,
+        ).cancel(row["id"], expected_revision=row["revision"], now=before)
+        if not changed:
+            raise ValueError("follow_up_cancel_conflict")
+        return "applied"
 
     def _execute(self, event, *, companion_command: bool, write_enabled=True):
         self._connection.execute("BEGIN IMMEDIATE")

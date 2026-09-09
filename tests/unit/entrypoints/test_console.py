@@ -787,6 +787,61 @@ def test_internal_runtime_requires_token_and_is_immediately_shared_with_web(tmp_
     asyncio.run(run())
 
 
+def test_explicit_round_screen_follow_up_is_armed_without_web_confirmation(tmp_path):
+    """圆屏用户说出的明确请求就是一次授权，固定回执不能再要求访问网页。"""
+
+    from datetime import timedelta
+
+    from longmemory.adapters.llm.fake import FakeAnswerGenerator
+    from longmemory.adapters.storage.sqlite_proactive_policy_store import (
+        SQLiteProactivePolicyStore,
+    )
+    from longmemory.core.proactive import OutreachPolicyConfig, ProactivePolicySettings
+    from longmemory.entrypoints.api.chat_backend import ChatBackend
+    from longmemory.infrastructure.database.connection import open_database
+    from longmemory.methods.longmemory_v1.method import LongMemoryV1
+
+    database = tmp_path / "round-screen-follow-up.db"
+    LongMemoryV1(database).close()
+    connection = open_database(database)
+    now = datetime.now(UTC)
+    SQLiteProactivePolicyStore(connection).save(
+        ProactivePolicySettings(
+            "user:self",
+            OutreachPolicyConfig(
+                enabled=True, daily_limit=2,
+                minimum_interval=timedelta(0),
+            ),
+            revision=1, updated_at=now,
+        ),
+        expected_revision=0,
+    )
+    connection.close()
+    backend = ChatBackend(database, FakeAnswerGenerator())
+    token = "f" * 64
+
+    async def run():
+        async with console(
+            database, chat_backend=backend, memory_runtime_token=token,
+        ) as (client, base, _bridge):
+            response = await client.post(
+                base + "/api/internal/memory/prepare",
+                headers={"Authorization": "Bearer " + token},
+                json={
+                    "version": 1,
+                    "query": "我明天下午三点要提交毕业设计汇报，到时候问我汇报进展",
+                },
+            )
+            assert response.status == 200
+            payload = await response.json()
+            assert payload["follow_up_suggestion"]["status"] == "candidate_armed"
+            assert payload["follow_up_suggestion"]["outreach_id"] is not None
+            assert "已经按你说的时间安排" in payload["command_reply"]
+            assert "控制台" not in payload["command_reply"]
+
+    asyncio.run(run())
+
+
 def test_memory_mode_http_controls_the_shared_web_and_voice_runtime(tmp_path):
     from longmemory.adapters.llm.fake import FakeAnswerGenerator
     from longmemory.entrypoints.api.chat_backend import ChatBackend
