@@ -18,6 +18,14 @@ test('文字聊天可保存并在刷新后恢复，React 页面可统一导航',
   await page.locator('button[type="submit"]').click();
   await expect(page.locator('.bubble.assistant').getByText('好的，我记住了。', {exact:true})).toBeVisible();
   await expect(page.getByRole('region', {name:'本轮记忆证据'})).toContainText('用户养了一只叫豆包的猫。');
+  await page.getByRole('link', {name:'核对 L0 原话'}).click();
+  await expect(page).toHaveURL(/\/memories\?memory_id=/);
+  await expect(page.getByRole('heading', {name:'L1 原子记忆'})).toBeVisible();
+  await expect(page.getByRole('heading', {name:'L0 原始来源'})).toBeVisible();
+  await expect(page.getByText('我养了一只叫豆包的猫', {exact:true})).toBeVisible();
+  await page.locator('.ant-drawer-close:visible').click();
+  await expect(page).toHaveURL(/\/memories$/);
+  await page.getByRole('link', {name:'文字聊天'}).click();
 
   await page.reload();
   await expect(page.locator('.bubble.user').getByText('我养了一只叫豆包的猫', {exact:true})).toBeVisible();

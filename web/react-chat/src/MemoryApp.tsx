@@ -1,5 +1,6 @@
 import {useEffect, useRef, useState} from 'react';
 import {Button, Card, Checkbox, Descriptions, Drawer, Empty, Input, List, Modal, Select, Space, Switch, Tabs, Tag} from 'antd';
+import {useSearchParams} from 'react-router-dom';
 import {ChatApi} from './api';
 import {AppShell, ConsoleNav} from './AppShell';
 import {PageHeader} from './PageHeader';
@@ -20,6 +21,7 @@ const displayTime = (value?: string | null) => value ? new Date(value).toLocaleS
 const sourceName = (value: string) => value === 'user_stated' ? '用户陈述' : value === 'user_corrected' ? '用户纠正' : value;
 
 export function MemoryApp() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [config, setConfig] = useState<MemoryConfig>();
   const [mode, setMode] = useState<RuntimeMode>();
   const [modeDraft, setModeDraft] = useState({write_enabled: true, use_enabled: true, scenario_use_enabled: false, persona_use_enabled: false});
@@ -74,11 +76,30 @@ export function MemoryApp() {
         } catch {setNotice('记忆库可浏览，但聊天 Runtime 未启用，运行期开关不可用。');}
         const params = new URLSearchParams({q: '', state: 'active', offset: '0', limit: '25'});
         setL1(await api.request<Page<L1Summary>>(`/api/memories?${params}`));
-        setNotice('L1 原子记忆已加载；可切换到 L0 检查原始记录。');
+        const linkedMemoryId = searchParams.get('memory_id')?.trim();
+        if (linkedMemoryId && linkedMemoryId.length <= 128 && !/[\u0000-\u001f\u007f]/.test(linkedMemoryId)) {
+          try {
+            setSelectedL1(await api.request<L1Detail>(`/api/memories/${encodeURIComponent(linkedMemoryId)}`));
+            setNotice('已从聊天证据打开对应 L1；下方可核对 L0 原始来源。');
+          } catch {
+            setNotice('链接指向的 L1 不存在或已不可用；记忆列表仍可正常浏览。');
+          }
+        } else {
+          setNotice(linkedMemoryId ? '记忆链接格式无效；未自动打开详情。' : 'L1 原子记忆已加载；可切换到 L0 检查原始记录。');
+        }
       } catch (error) {setNotice(String(error));}
       finally {setBusy(false);}
     })();
   }, []);
+
+  function closeL1() {
+    setSelectedL1(undefined);
+    if (searchParams.has('memory_id')) {
+      const next = new URLSearchParams(searchParams);
+      next.delete('memory_id');
+      setSearchParams(next, {replace: true});
+    }
+  }
 
   async function guarded(work: () => Promise<void>) {
     if (locked.current) return;
@@ -174,7 +195,7 @@ export function MemoryApp() {
       <div className="pagination"><Button disabled={busy || page.offset === 0} onClick={() => void refresh(Math.max(0, page.offset - page.limit))}>上一页</Button><span>{page.total ? `${page.offset + 1}–${Math.min(page.offset + page.limit, page.total)} / ${page.total}` : '0 条'}</span><Button disabled={busy || page.offset + page.limit >= page.total} onClick={() => void refresh(page.offset + page.limit)}>下一页</Button></div>
       </section><p className="memory-status" role="status">{notice}</p>
     </AppShell>
-    <Drawer width={620} title="L1 原子记忆" open={Boolean(selectedL1)} onClose={() => setSelectedL1(undefined)} extra={<Space><Button disabled={!config?.allow_correction || selectedL1?.state !== 'active'} onClick={() => setCorrecting(true)}>纠正错误</Button><Button disabled={!config?.allow_change || selectedL1?.state !== 'active'} onClick={openChange}>记录变化</Button><Button danger disabled={!config?.allow_delete} onClick={() => setDeleting(true)}>删除</Button></Space>}>
+    <Drawer width={620} title="L1 原子记忆" open={Boolean(selectedL1)} onClose={closeL1} extra={<Space><Button disabled={!config?.allow_correction || selectedL1?.state !== 'active'} onClick={() => setCorrecting(true)}>纠正错误</Button><Button disabled={!config?.allow_change || selectedL1?.state !== 'active'} onClick={openChange}>记录变化</Button><Button danger disabled={!config?.allow_delete} onClick={() => setDeleting(true)}>删除</Button></Space>}>
       {selectedL1 && <><p className="detail-content">{selectedL1.content}</p><Descriptions column={1} size="small" items={[{key:'state',label:'层级与状态',children:<Space><Tag color="magenta">L1</Tag><Tag>{selectedL1.state === 'active' ? '当前' : '已退役'}</Tag></Space>},{key:'id',label:'记忆 ID',children:selectedL1.id},{key:'time',label:'系统记录时间',children:displayTime(selectedL1.recorded_at)},{key:'validFrom',label:'事实开始生效',children:displayTime(selectedL1.valid_from)},{key:'validTo',label:'事实结束生效',children:displayTime(selectedL1.valid_to)},{key:'superseded',label:'取代它的记忆',children:selectedL1.superseded_by_id ?? '无'}]}/>
         <h3>L0 原始来源</h3>{selectedL1.sources.length ? selectedL1.sources.map(source => <Card size="small" className="source-card" key={`${source.source_message_id}:${source.source_type}`} title={<Space><Tag color="blue">L0</Tag><span>{sourceName(source.source_type)}</span></Space>}><p>{source.message?.content ?? '原始来源缺失，无法核对原文。'}</p><small>{source.message ? `${source.message.role === 'user' ? '用户' : '助手'} · ${displayTime(source.message.created_at)}` : source.source_message_id}</small></Card>) : <Empty description="这条 L1 没有可用来源，需要核查"/>}</>}
     </Drawer>

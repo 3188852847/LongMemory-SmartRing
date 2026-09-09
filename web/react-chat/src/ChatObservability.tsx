@@ -1,4 +1,5 @@
 import {Tag} from 'antd';
+import {Link} from 'react-router-dom';
 import type {Config, DeviceStatus, Turn} from './api';
 
 type RailProps = {
@@ -56,7 +57,7 @@ export function TurnMemoryEvidence({turn}: {turn?:Turn}) {
   return <section className={`turn-evidence trace-${summary.kind}`} aria-label="本轮记忆证据">
     <header><span>[ {summary.code} ]</span><p>{summary.text}</p></header>
     {!turn ? <p className="trace-empty">这里会显示回答实际使用的 L1、L2、L3 和本轮写入，而不是模型声称自己记住了什么。</p> : <>
-      {Boolean(turn.retrieved?.length) && <div className="trace-group"><h3>L1 原子记忆</h3>{turn.retrieved!.map(item => <article key={item.item_id}><p>{item.content}</p><code>{item.item_id}</code><small>{item.source_event_ids?.length ?? 0} 条 L0 来源</small></article>)}</div>}
+      {Boolean(turn.retrieved?.length) && <div className="trace-group"><h3>L1 原子记忆</h3>{turn.retrieved!.map(item => <article key={item.item_id}><p>{item.content}</p><code>{item.item_id}</code><footer><small>{item.source_event_ids?.length ?? 0} 条 L0 来源</small><Link className="trace-source-link" to={`/memories?memory_id=${encodeURIComponent(item.item_id)}`}>核对 L0 原话</Link></footer></article>)}</div>}
       {Boolean(turn.scenario_retrieved?.length) && <div className="trace-group"><h3>L2 生活场景</h3>{turn.scenario_retrieved!.map(item => <article key={item.scenario_id}><strong>{item.title}</strong><p>{item.summary}</p><code>{item.scenario_id}</code></article>)}</div>}
       {Boolean(turn.persona_retrieved?.length) && <div className="trace-group"><h3>L3 用户画像</h3>{turn.persona_retrieved!.map(item => <article key={item.persona_id}><strong>{item.label}</strong><p>{item.statement}</p><code>{item.persona_id}</code></article>)}</div>}
       {Boolean(turn.writes?.length) && <div className="trace-group"><h3>本轮记忆写入</h3><p className="trace-tags">{turn.writes!.map((item, index) => <Tag key={`${item.item_id ?? index}-${item.operation}`}>{operationLabel(item.operation)}</Tag>)}</p></div>}

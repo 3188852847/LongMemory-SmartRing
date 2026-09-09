@@ -66,3 +66,7 @@
 :root[data-theme=future] .bubble.assistant{border-left:2px solid var(--accent);clip-path:polygon(0 0,calc(100% - 12px) 0,100% 12px,100% 100%,0 100%)}
 :root[data-theme=future] input,:root[data-theme=future] textarea,:root[data-theme=future] .ant-input,:root[data-theme=future] .ant-select-selector{background-color:rgba(5,15,31,.72)!important}
 :root[data-theme=future] code,:root[data-theme=future] pre{color:#86c9e8}
+/* 回答证据可直接进入 L1 详情，核对其 L0 原话。 */
+.trace-group article footer{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.trace-source-link{color:var(--accent);font-size:.65rem;font-weight:650;text-decoration:none}
+.trace-source-link:hover{text-decoration:underline}
