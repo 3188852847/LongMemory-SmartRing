@@ -6,6 +6,7 @@ import {AppShell, ConsoleNav} from './AppShell';
 import {PageHeader} from './PageHeader';
 import {ExperimentJobs} from './ExperimentJobs';
 import {evidenceLabel, filterRuns, groupLabel, statusLabel, verdictLabel} from '../../assets/experiment-view.mjs';
+import {experimentFailure} from './experimentFailure';
 
 type Run = {id:string; kind:string; provider?:string; model?:string; dataset:string; split:string; status:string; completed:number; total:number; started_at:string};
 type Group = {id:string; completed:number; total:number; answer_scored:boolean; answer_pass:number; evidence_scored:number; evidence_pass:number};
@@ -43,7 +44,7 @@ function ReviewForm({runId, questionId, row, detail, reviewer, onDirty}: {runId:
     report_sha256:detail.report_sha256, reviewer:reviewer.trim(), revision:current?.revision ?? null,
     method:row.group, question_id:questionId, verdict, rationale:rationale.trim(), request_id:crypto.randomUUID(),
   }), onSuccess:async () => {onDirty(false); setNotice('已另存人工复核版本；原报告与自动初筛未改。'); await client.invalidateQueries({queryKey:['experiment',runId]});},
-    onError:error => {setUnknown(true); setNotice(`${String(error)} 结果可能已保存；请刷新档案核对，不自动重发。`);}});
+    onError:error => {setUnknown(true); setNotice(experimentFailure(error, 'review'));}});
   const changed = verdict !== (saved?.verdict ?? 'pending') || rationale !== (saved?.rationale ?? '');
   function changedValue(nextVerdict:string, nextRationale:string) {onDirty(nextVerdict !== (saved?.verdict ?? 'pending') || nextRationale !== (saved?.rationale ?? ''));}
   return <div className="review-form"><h4>我的判断</h4><Select aria-label={`${row.group}复核结论`} value={verdict} disabled={mutation.isPending || unknown} options={['pending','pass','fail','unscorable'].map(value => ({value,label:verdictLabel(value)}))} onChange={value => {setVerdict(value); changedValue(value,rationale);}}/>

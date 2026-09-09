@@ -4,6 +4,7 @@ import {Alert, Button, Card, Checkbox, InputNumber, Modal, Progress, Select, Spa
 import {ChatApi} from './api';
 import {groupLabel} from '../../assets/experiment-view.mjs';
 import {jobStatus, progressText, quoteText} from '../../assets/experiment-jobs.mjs';
+import {experimentCodeText, experimentFailure} from './experimentFailure';
 
 type Retrieval = {id:string; dataset:string; started_at:string};
 type Options = {enabled:boolean; real_available:boolean; real_model?:string|null; retrievals:Retrieval[]; context_default:number; context_max:number};
@@ -45,16 +46,16 @@ export function ExperimentJobs({api, ready, onOpen}: {api:ChatApi; ready:boolean
   const prepare = useMutation({mutationFn:() => api.request<Quote>('/api/experiment-jobs/prepare','POST',{retrieval_id:source,provider,context_chars:budget}),
     onMutate:() => setNotice('正在本机校验来源与预算；这一步不调用模型。'),
     onSuccess:value => {setQuote(value); setConsent(false); setStartUnknown(false); requestId.current=crypto.randomUUID(); setNotice('预检完成，尚未启动；报价 10 分钟后失效。');},
-    onError:error => setNotice(`${String(error)} 未启动实验。`)});
+    onError:error => setNotice(experimentFailure(error, 'prepare'))});
   const start = useMutation({mutationFn:() => api.request<Job>('/api/experiment-jobs/start','POST',{
       quote_id:quote!.quote_id, request_id:requestId.current, confirm:true,
       allow_network:quote!.network, allow_http:quote!.insecure_http,
     }),
     onSuccess:async value => {setQuote(null); setConsent(false); setStartUnknown(false); setNotice('实验已启动；页面只读刷新进度，不会重放启动请求。'); await jobs.refetch(); if (!active(value) && value.report_id) onOpen(value.report_id);},
-    onError:async error => {setStartUnknown(true); setNotice(`${String(error)} 启动结果可能未知；未自动重发。请先刷新任务核对。`); await jobs.refetch();}});
+    onError:async error => {setStartUnknown(true); setNotice(experimentFailure(error, 'start')); await jobs.refetch();}});
   const stop = useMutation({mutationFn:(id:string) => api.request(`/api/experiment-jobs/${id}/stop`,'POST',{}),
     onSuccess:async () => {setNotice('已请求停止后续题目；当前已经发出的一次请求仍可能完成或计费。'); await jobs.refetch();},
-    onError:error => setNotice(`${String(error)} 未自动重复停止请求。`)});
+    onError:error => setNotice(experimentFailure(error, 'stop'))});
 
   const busy = prepare.isPending || start.isPending || stop.isPending;
   const progress = current?.total ? Math.round(100*(current.completed+current.failed)/current.total) : 0;
@@ -82,7 +83,7 @@ export function ExperimentJobs({api, ready, onOpen}: {api:ChatApi; ready:boolean
       <Button type="primary" loading={prepare.isPending} disabled={!options.data?.enabled || !source || busy || active(current)} onClick={() => prepare.mutate()}>预检与核对预算</Button>
     </div>
     <p role="status" className="subtle">{notice}</p>
-    {current && <div className="job-current"><h3>{jobStatus(current.status)} · {current.model.model} · {current.id.slice(-8)}</h3><Progress percent={progress}/><p className="subtle">{progressText(current)}{current.error ? ` 状态说明：${current.error}；不会自动重试。` : ''}</p><Space wrap>
+    {current && <div className="job-current"><h3>{jobStatus(current.status)} · {current.model.model} · {current.id.slice(-8)}</h3><Progress percent={progress}/><p className="subtle">{progressText(current)}{current.error ? ` 状态说明：${experimentCodeText(current.error) ?? '任务未完成；详细内部诊断未在页面展示。'}；不会自动重试。` : ''}</p><Space wrap>
       <Button loading={jobs.isFetching} onClick={() => void jobs.refetch()}>刷新任务</Button>
       <Button danger disabled={!active(current) || current.status==='stopping' || stop.isPending} onClick={() => {if(confirm('停止尚未开始的题目？已发出的一次请求可能完成或计费，结果会保留。')) stop.mutate(current.id);}}>停止后续请求</Button>
       <Button type="primary" disabled={!current.report_id || active(current)} onClick={() => current.report_id && onOpen(current.report_id)}>打开结果</Button>
