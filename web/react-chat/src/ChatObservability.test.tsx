@@ -8,15 +8,17 @@ const config:Config = {enabled:true,database:'synthetic.db',model:'Synthetic-Mod
 
 describe('ConsoleStatusRail', () => {
   it('只按真实探测值呈现状态和有效记忆数', () => {
-    render(<ConsoleStatusRail config={config} device={{connection_count:1,ready:true,read_volume_supported:true,set_volume_supported:true,read_status_supported:true,set_brightness_supported:true,set_theme_supported:true}} deviceFailed={false} activeMemoryCount={128}/>);
+    render(<MemoryRouter><ConsoleStatusRail config={config} device={{connection_count:1,ready:true,read_volume_supported:true,set_volume_supported:true,read_status_supported:true,set_brightness_supported:true,set_theme_supported:true}} deviceFailed={false} activeMemoryCount={128}/></MemoryRouter>);
     expect(screen.getByText('已连接')).toBeTruthy();
     expect(screen.getByText('128 条有效 L1')).toBeTruthy();
     expect(screen.getByText('Synthetic-Model')).toBeTruthy();
     expect(screen.getByText('关键词＋向量')).toBeTruthy();
+    expect(screen.getByRole('link',{name:'查看圆屏诊断'}).getAttribute('href')).toBe('/device');
+    expect(screen.getByRole('link',{name:'查看模型诊断'}).getAttribute('href')).toBe('/settings?tab=model');
   });
 
   it('探测失败时不把旧状态冒充在线', () => {
-    render(<ConsoleStatusRail config={config} device={undefined} deviceFailed activeMemoryCount={undefined}/>);
+    render(<MemoryRouter><ConsoleStatusRail config={config} device={undefined} deviceFailed activeMemoryCount={undefined}/></MemoryRouter>);
     expect(screen.getByText('状态未知')).toBeTruthy();
     expect(screen.getByText('L1 数量未知')).toBeTruthy();
   });

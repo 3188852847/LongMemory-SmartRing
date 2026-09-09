@@ -24,10 +24,10 @@ export function ConsoleStatusRail({config, device, deviceFailed, activeMemoryCou
   const deviceValue = deviceFailed ? '状态未知' : device?.ready ? '已连接' : '等待圆屏';
   const retrieval = config?.retrieval === 'keyword_dense_rrf_v1' ? '关键词＋向量' : config?.retrieval ? '关键词' : '未装配';
   return <section className="console-status-rail" aria-label="当前系统状态">
-    <div className={`rail-cell tone-${deviceTone}`}><span className="rail-dot" aria-hidden="true"/><span><small>圆屏</small><strong>{deviceValue}</strong><em>{device?.connection_count ?? 0} 个连接</em></span></div>
-    <div className={`rail-cell tone-${config?.enabled ? 'good' : 'warning'}`}><span className="rail-dot" aria-hidden="true"/><span><small>记忆服务</small><strong>{config?.enabled ? '已装配' : '未启用'}</strong><em>{activeMemoryCount === undefined ? 'L1 数量未知' : `${activeMemoryCount} 条有效 L1`}</em></span></div>
-    <div className={`rail-cell tone-${model.tone}`}><span className="rail-dot" aria-hidden="true"/><span><small>回答模型</small><strong title={model.value}>{model.value}</strong><em>{model.detail}</em></span></div>
-    <div className="rail-cell tone-idle"><span className="rail-dot" aria-hidden="true"/><span><small>召回策略</small><strong>{retrieval}</strong><em>{config?.method ?? '未装配'}</em></span></div>
+    <Link aria-label="查看圆屏诊断" to="/device" className={`rail-cell tone-${deviceTone}`}><span className="rail-dot" aria-hidden="true"/><span><small>圆屏</small><strong>{deviceValue}</strong><em>{device?.connection_count ?? 0} 个连接</em></span></Link>
+    <Link aria-label="查看记忆管理" to="/memories" className={`rail-cell tone-${config?.enabled ? 'good' : 'warning'}`}><span className="rail-dot" aria-hidden="true"/><span><small>记忆服务</small><strong>{config?.enabled ? '已装配' : '未启用'}</strong><em>{activeMemoryCount === undefined ? 'L1 数量未知' : `${activeMemoryCount} 条有效 L1`}</em></span></Link>
+    <Link aria-label="查看模型诊断" to="/settings?tab=model" className={`rail-cell tone-${model.tone}`}><span className="rail-dot" aria-hidden="true"/><span><small>回答模型</small><strong title={model.value}>{model.value}</strong><em>{model.detail}</em></span></Link>
+    <Link aria-label="查看记忆运行模式" to="/memories" className="rail-cell tone-idle"><span className="rail-dot" aria-hidden="true"/><span><small>召回策略</small><strong>{retrieval}</strong><em>{config?.method ?? '未装配'}</em></span></Link>
   </section>;
 }
 

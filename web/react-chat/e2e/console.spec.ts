@@ -11,6 +11,10 @@ test('文字聊天可保存并在刷新后恢复，React 页面可统一导航',
   await expect(page.getByRole('heading', {name:'聊聊今天'})).toBeVisible();
   await expect(page.getByRole('region', {name:'当前系统状态'})).toBeVisible();
   await expect(page.getByRole('region', {name:'本轮记忆证据'})).toContainText('WAITING');
+  await page.getByRole('link', {name:'查看模型诊断'}).click();
+  await expect(page).toHaveURL(/\/settings\?tab=model$/);
+  await expect(page.getByRole('tab', {name:'模型与服务'})).toHaveAttribute('aria-selected', 'true');
+  await page.getByRole('link', {name:'文字聊天'}).click();
   await page.getByRole('button', {name:'记忆命令'}).click();
   await expect(page.getByRole('dialog', {name:'可直接使用的记忆命令'})).toBeVisible();
   await page.locator('.ant-modal-close').click();

@@ -1,5 +1,6 @@
 import {useQuery, useQueryClient} from '@tanstack/react-query';
 import {Alert, Button, Card, Select, Space, Tabs} from 'antd';
+import {useSearchParams} from 'react-router-dom';
 import {ChatApi, type Config} from './api';
 import {AppShell, ConsoleNav} from './AppShell';
 import {RoleEditor} from './RoleEditor';
@@ -14,11 +15,15 @@ const api = new ChatApi();
 
 /** 将模型、助手角色、声音和浏览器外观汇集到一个入口；设置仍保持不同生效边界。 */
 export function SettingsApp() {
+  const [searchParams,setSearchParams]=useSearchParams();
   const queryClient = useQueryClient();
   const {prefs, update, reset} = useAppearance();
   const session = useQuery({queryKey:['settings-session'], queryFn:async () => {await api.bootstrap(); return true;}, staleTime:Infinity});
   const config = useQuery({queryKey:['chat-config'], queryFn:() => api.request<Config>('/api/chat-config'), enabled:session.isSuccess});
   const enabled = session.isSuccess && config.data?.enabled === true;
+  const requestedTab=searchParams.get('tab');
+  const activeTab=['model','memory-backend','role','voice','appearance','proactive'].includes(requestedTab??'')?requestedTab!:'role';
+  const selectTab=(tab:string)=>{const next=new URLSearchParams(searchParams);if(tab==='role')next.delete('tab');else next.set('tab',tab);setSearchParams(next,{replace:true});};
   const sidebar = <ConsoleNav active="settings" legacyPath="/chat"/>;
 
   return <AppShell subtitle="角色、声音与阅读体验" className="settings-shell" sidebar={sidebar}>
@@ -30,7 +35,7 @@ export function SettingsApp() {
       <div><small>当前模型</small><strong>{config.data?.model ?? '—'}</strong></div>
       <div><small>模型通道</small><strong>{config.data?.provider ?? '—'}</strong></div>
     </section>
-    <Tabs className="settings-tabs" defaultActiveKey="role" items={[
+    <Tabs className="settings-tabs" activeKey={activeTab} onChange={selectTab} items={[
       {key:'model', label:'模型与服务', children:<Card title="模型与服务" extra={<span className="setting-scope">当前服务进程</span>}>
         <p>核对当前进程，并管理学校/官方两个本机配置档。页面永远不读取或显示已有 API Key，切换在重启后生效。</p>
         <ModelConnectionSettings api={api} config={config.data} disabled={!enabled}
