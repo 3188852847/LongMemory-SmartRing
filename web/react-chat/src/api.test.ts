@@ -1,5 +1,5 @@
 import {afterEach, describe, expect, test, vi} from 'vitest';
-import {ChatApi} from './api.ts';
+import {ApiError, ChatApi} from './api.ts';
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -23,5 +23,14 @@ test('GET recovery does not replay a write', async () => {
     return new Response(JSON.stringify({pending: false, turns: []}));
   }));
   await expect(new ChatApi().request('/api/chats/test')).resolves.toEqual({pending:false, turns:[]});
+});
+
+test('non-JSON framework error is reduced to a safe HTTP category', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => new Response('<html>not found</html>', {
+    status: 404, headers: {'Content-Type': 'text/html'},
+  })));
+  const failure = await new ChatApi().request('/api/chats/missing').catch(error => error);
+  expect(failure).toBeInstanceOf(ApiError);
+  expect(failure).toMatchObject({code: 'http_404', status: 404});
 });
 });

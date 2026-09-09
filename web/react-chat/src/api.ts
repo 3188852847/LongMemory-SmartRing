@@ -37,9 +37,16 @@ export class ChatApi {
     const response = await fetch(path, {method, credentials: 'same-origin', cache: 'no-store',
       headers: method === 'GET' ? {} : {'Content-Type': 'application/json', 'X-Console-CSRF': this.csrf},
       body: body === undefined ? undefined : JSON.stringify(body)});
-    const data = await response.json();
-    if (!response.ok) throw new ApiError(String(data.error ?? response.status), response.status);
-    return data;
+    if (!response.ok) {
+      // aiohttp 的框架级 404/400 可能不是 JSON；仍收敛为固定类别，避免把解析异常或 HTML 回显到页面。
+      let code = `http_${response.status}`;
+      try {
+        const data = await response.json() as {error?: unknown};
+        if (typeof data.error === 'string') code = data.error;
+      } catch { /* 保留按 HTTP 状态生成的安全类别。 */ }
+      throw new ApiError(code, response.status);
+    }
+    return await response.json() as T;
   }
 }
 export interface WriteTrace {operation:string; item_id?:string; source_event_ids?:string[] | null}

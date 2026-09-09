@@ -3,7 +3,7 @@ import {createRoot} from 'react-dom/client';
 import {Alert, Button, Input, Modal, Select} from 'antd';
 import {QueryClientProvider, useQuery} from '@tanstack/react-query';
 import {BrowserRouter, Navigate, Route, Routes} from 'react-router-dom';
-import {ChatApi, type Config, type DeviceStatus, type MemoryPageSummary, type Snapshot, type Summary, type Turn} from './api';
+import {ApiError, ChatApi, type Config, type DeviceStatus, type MemoryPageSummary, type Snapshot, type Summary, type Turn} from './api';
 import {turnSummary} from '../../assets/chat-view.mjs';
 import './style.css';
 import {AppearanceProvider} from './AppearanceProvider';
@@ -16,6 +16,7 @@ import {MemoryCommandHelp} from './MemoryCommandHelp';
 import {loadSendShortcut, saveSendShortcut, shouldSendFromKeyboard, type SendShortcut} from './chatInput';
 import {organizeChats, readPinnedChats, togglePinnedChat, writePinnedChats} from './chatSessions';
 import {ConsoleStatusRail, TurnMemoryEvidence} from './ChatObservability';
+import {chatFailure} from './chatFailure';
 
 const DeviceApp = lazy(() => import('./DeviceApp').then(module => ({default: module.DeviceApp})));
 const MemoryApp = lazy(() => import('./MemoryApp').then(module => ({default: module.MemoryApp})));
@@ -85,12 +86,12 @@ function ChatApp() {
         try {previous = localStorage.getItem(selectionKey.current);} catch { /* 默认最近会话。 */ }
         if (rows.length) {const loaded = await load(rows.find(c => c.chat_id === previous)?.chat_id ?? rows[0].chat_id); setNotice(loaded.pending ? '消息仍在处理，请只查询结果。' : '会话已恢复，可以继续聊。');}
         else {await create(); setNotice('新聊天已就绪。');}
-      } catch (error) {setNotice(String(error));} finally {setBusy(false);}
+      } catch (error) {setNotice(chatFailure(error, 'read'));} finally {setBusy(false);}
     })();
   }, []);
   async function action(work: () => Promise<void>) {
     if (locked.current) return; locked.current = true; setBusy(true);
-    try {await work();} catch (error) {setNotice(String(error));} finally {locked.current = false; setBusy(false);}
+    try {await work();} catch (error) {setNotice(chatFailure(error, 'operation'));} finally {locked.current = false; setBusy(false);}
   }
   function changeChat(id?: string) {
     if (busy || unknown || (draft && !confirm('这会清空尚未发送的草稿，继续吗？'))) return;
@@ -117,13 +118,16 @@ function ChatApp() {
           : turn.retrieval_warning === 'dense_retrieval_failed'
             ? '回答已完成，但本地 BGE 检索失败，本轮已明确降级为关键词检索。'
           : turn.status === 'completed' ? '本轮完成，可展开查看记忆证据。' : '本轮未完成；输入可能已保存，请查看过程。');
-      } catch (error) {setUnknown(true); setNotice(`${String(error)} 结果未知，请点击查询结果。`);}
+      } catch (error) {setUnknown(true); setNotice(chatFailure(error, 'write'));}
     });
   }
   async function checkModel(){if(checkingModel||config?.provider!=='openai_compatible')return;setCheckingModel(true);
     try{const health=await api.request<NonNullable<Config['model_health']>>('/api/chat-model/check','POST',{});setConfig(current=>current?{...current,model_health:health}:current);
       setNotice(health.state==='available'?'模型连接验证通过；这不代表回答质量或圆屏链路已经验收。':modelFailure(health.code)??'模型连接验证失败。');
-    }catch(error){setNotice(String(error));}finally{setCheckingModel(false);}}
+    }catch(error){
+      const problem = error instanceof ApiError ? modelFailure(error.code) : undefined;
+      setNotice(problem ?? chatFailure(error, 'read'));
+    }finally{setCheckingModel(false);}}
   const disabled = busy || unknown || !chat;
   const visibleChats = organizeChats(chats, pinnedChats, chatSearch);
   function toggleCurrentPin() {

@@ -1,5 +1,11 @@
 # Changelog
 
+### actionable chat request failures（2026-09-09）
+
+- React 聊天入口将会话失效、CSRF/来源校验、聊天未启用、会话繁忙、名称或消息无效、轮数上限和会话不存在翻译为可执行中文提示；未知内部错误码不再直接显示。
+- 框架级非 JSON 404/400 响应收敛为受控 HTTP 类别，避免浏览器把 JSON 解析异常或 HTML 当作面向用户的诊断。
+- 发送响应丢失时继续按“输入可能已保存”处理，只允许查询结果而不自动重发；新建、切换和重命名失败也只建议刷新核对，不会自动重试。
+
 ### IMU-triggered interaction candidate（2026-09-09）
 
 - 根据厂商说明、示例与原理图确认 SmartRing-Plus 圆屏终端带 QMI8658A 六轴 IMU，I²C 地址为 `0x6B`，INT1 接 ESP32-S3 GPIO42；当前小智 B V2 板级初始化尚未使用该传感器。
