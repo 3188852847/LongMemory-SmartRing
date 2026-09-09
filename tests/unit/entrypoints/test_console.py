@@ -644,6 +644,45 @@ def test_internal_runtime_requires_token_and_is_immediately_shared_with_web(tmp_
             assert written["memory_command"] is None
             assert written["command_reply"] is None
 
+            completion_endpoint = base + "/api/internal/memory/complete"
+            completion = {
+                "version": 1,
+                "turn_id": written["turn_id"],
+                "answer": "好的，我记得你养了一只猫。",
+                "retrieved_counts": {"l1": written["retrieved"], "l2": 0, "l3": 0},
+            }
+            assert (await client.post(completion_endpoint, json=completion)).status == 401
+            completed_response = await client.post(
+                completion_endpoint,
+                headers={"Authorization": "Bearer " + token}, json=completion,
+            )
+            assert completed_response.status == 200
+            completed = await completed_response.json()
+            assert completed["created"] is True
+            assert completed["playback_acknowledgement"] == "unavailable"
+            replay = await client.post(
+                completion_endpoint,
+                headers={"Authorization": "Bearer " + token}, json=completion,
+            )
+            assert replay.status == 200 and (await replay.json())["created"] is False
+            conflict = await client.post(
+                completion_endpoint,
+                headers={"Authorization": "Bearer " + token},
+                json={**completion, "answer": "不同的回答"},
+            )
+            assert conflict.status == 409
+            with sqlite3.connect(database) as connection:
+                answer_rows = connection.execute(
+                    "SELECT role,content FROM conversation_messages WHERE role='assistant'"
+                ).fetchall()
+                turn_row = connection.execute(
+                    "SELECT retrieved_l1_count,retrieved_l2_count,retrieved_l3_count "
+                    "FROM round_screen_turns WHERE user_message_id=?",
+                    (written["turn_id"],),
+                ).fetchone()
+            assert answer_rows == [("assistant", completion["answer"])]
+            assert turn_row == (written["retrieved"], 0, 0)
+
             corrected_response = await client.post(
                 endpoint,
                 headers={"Authorization": "Bearer " + token},

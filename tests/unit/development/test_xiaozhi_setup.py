@@ -225,6 +225,10 @@ def test_published_shared_runtime_provider_is_a_known_upgrade_source():
         '005104cc605aa05ad834774d649a0d088bf450bcc7040e44d0e40a2964d9be52'
         in setup.LEGACY_MEMORY_PROVIDER_SHA256
     )
+    assert (
+        '28969e5bee2c97cbe5c3798ebb80fe5075f6b218e0b1f2fec03e60a2d8ad1357'
+        in setup.LEGACY_MEMORY_PROVIDER_SHA256
+    )
 
 
 def test_longmemory_config_requires_prompt_slot_and_explicit_device(config, tmp_path):

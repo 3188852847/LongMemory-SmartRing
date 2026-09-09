@@ -11,6 +11,9 @@ from longmemory.application.chat.contracts import AnswerGenerationError
 from longmemory.application.memory_runtime import MemoryRuntime
 from longmemory.application.natural_companion_commands import NaturalCompanionCommandResult
 from longmemory.application.natural_memory_commands import NaturalMemoryCommandResult
+from longmemory.adapters.storage.sqlite_round_screen_turn_store import (
+    SQLiteRoundScreenTurnStore,
+)
 from longmemory.bootstrap import build_memory_runtime
 from .role_settings import RoleSettings
 
@@ -62,6 +65,17 @@ class ChatBackend:
                 if self._runtime is None:
                     self._runtime = build_memory_runtime(self.database)
         return self._runtime
+
+    def complete_round_screen_turn(self, *, turn_id, answer, retrieved_counts):
+        """归档小智实际生成的回答；关联表与助手 L0 在同一事务提交。"""
+
+        return SQLiteRoundScreenTurnStore(self.database).record(
+            user_message_id=turn_id,
+            answer=answer,
+            retrieved_l1_count=retrieved_counts["l1"],
+            retrieved_l2_count=retrieved_counts["l2"],
+            retrieved_l3_count=retrieved_counts["l3"],
+        )
 
     def info(self):
         role = self.roles.current()

@@ -174,12 +174,24 @@ def test_provider_uses_runtime_transport_without_starting_subprocess(provider_cl
         def __enter__(self): return self
         def __exit__(self, *_args): return None
         def read(self, _limit):
-            return json.dumps({"version": 1, "context": "用户养猫。", "turn_id": "turn-1",
-                               "added": 1, "retrieved": 1}).encode()
+            return json.dumps({"version": 1, "context": "用户养猫。",
+                               "turn_id": "11111111-1111-1111-1111-111111111111",
+                               "added": 1, "retrieved": 1,
+                               "scenario_retrieved": [{"id": "l2"}],
+                               "persona_retrieved": []}).encode()
+
+    class CompletionResponse(Response):
+        def read(self, _limit):
+            return json.dumps({
+                "version": 1,
+                "assistant_event_id": "22222222-2222-2222-2222-222222222222",
+                "created": True,
+                "playback_acknowledgement": "unavailable",
+            }).encode()
 
     def open_request(request, timeout):
         calls.append((request, timeout))
-        return Response()
+        return CompletionResponse() if request.full_url.endswith('/complete') else Response()
 
     monkeypatch.setenv("LONGMEMORY_MEMORY_TRANSPORT", "runtime")
     monkeypatch.setenv("LONGMEMORY_RUNTIME_URL", "http://127.0.0.1:8767/api/internal/memory/prepare")
@@ -190,6 +202,46 @@ def test_provider_uses_runtime_transport_without_starting_subprocess(provider_cl
     request, timeout = calls[0]
     assert request.get_header("Authorization") == "Bearer " + "a" * 64
     assert timeout == 20
+    assert provider.record_completed_turn("这是最终回答") is True
+    assert provider.record_completed_turn("不能再次提交") is False
+    completion_request, completion_timeout = calls[1]
+    completion_body = json.loads(completion_request.data)
+    assert completion_request.full_url.endswith('/api/internal/memory/complete')
+    assert completion_timeout == 5
+    assert completion_body["retrieved_counts"] == {"l1": 1, "l2": 1, "l3": 0}
+    assert completion_body["answer"] == "这是最终回答"
+
+
+def test_launch_wrapper_reports_only_new_top_level_assistant_text():
+    wrapper = load_script("launch_with_memory")
+    recorded = []
+
+    class Memory:
+        def record_completed_turn(self, answer):
+            recorded.append(answer)
+
+    class Message:
+        def __init__(self, role, content): self.role, self.content = role, content
+
+    class Connection:
+        _longmemory_completion_installed = False
+
+        def __init__(self):
+            self.memory = Memory()
+            self.dialogue = SimpleNamespace(dialogue=[Message("system", "系统")])
+            self.logger = SimpleNamespace(bind=lambda **_kw: SimpleNamespace(error=lambda *_a: None))
+
+        def chat(self, query, depth=0):
+            self.dialogue.dialogue.extend([
+                Message("user", query), Message("assistant", "第一段"),
+                Message("assistant", "第二段"),
+            ])
+            return True
+
+    wrapper.install_answer_completion(Connection)
+    connection = Connection()
+    assert connection.chat("合成提问") is True
+    assert recorded == ["第一段\n第二段"]
 
 
 def test_provider_rejects_malformed_optional_timings(provider_class, config, monkeypatch):

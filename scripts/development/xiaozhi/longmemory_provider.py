@@ -42,6 +42,7 @@ class MemoryProvider(MemoryProviderBase):
             if path.parent != root / "data" / folder or not path.name.startswith("xiaozhi-demo"):
                 raise ValueError("LongMemory 必须使用 data 下的 xiaozhi-demo 专用文件")
         self._lock = threading.Lock()
+        self._pending_completion = None
 
     def init_memory(self, role_id, llm, **kwargs):
         # device_id 只是路由限制，不是可信身份认证；此演示不提供多人隔离。
@@ -157,6 +158,21 @@ class MemoryProvider(MemoryProviderBase):
                 "记忆处理完成 turn_id={} added={} retrieved={}",
                 response["turn_id"], response["added"], response["retrieved"],
             )
+        scenario_items = response.get("scenario_retrieved", [])
+        persona_items = response.get("persona_retrieved", [])
+        if not isinstance(scenario_items, list) or not isinstance(persona_items, list):
+            raise RuntimeError("LongMemory 返回协议无效")
+        # 顶层 chat 完成后由启动适配器取走一次。覆盖旧值表示旧回答没有得到
+        # 完成回执；不能把后来的答案错误关联给旧 turn_id。
+        with self._lock:
+            self._pending_completion = {
+                "turn_id": response["turn_id"],
+                "retrieved_counts": {
+                    "l1": response["retrieved"],
+                    "l2": len(scenario_items),
+                    "l3": len(persona_items),
+                },
+            }
         if command_reply is not None:
             reply = html.escape(command_reply, quote=False)
             context = (
@@ -174,6 +190,53 @@ class MemoryProvider(MemoryProviderBase):
         # 固定版本上游把 memory_str 直接作为 re.sub 替换字符串，必须转义
         # 反斜杠，否则 C:\\new 等用户内容会被当作正则替换转义。
         return context.replace("\\", "\\\\")
+
+    def record_completed_turn(self, answer: str) -> bool:
+        """至多回传一次最终文本；失败不重试，避免重复或错配回答。"""
+
+        if not isinstance(answer, str) or not answer.strip() or len(answer) > 16000:
+            return False
+        with self._lock:
+            pending = self._pending_completion
+            self._pending_completion = None
+        if pending is None:
+            return False
+        source_url = os.environ.get("LONGMEMORY_RUNTIME_URL", "")
+        token = os.environ.get("LONGMEMORY_RUNTIME_TOKEN", "")
+        parsed = urlsplit(source_url)
+        try:
+            port = parsed.port
+        except ValueError:
+            port = None
+        if (parsed.scheme != "http" or parsed.hostname != "127.0.0.1" or port is None
+                or parsed.username is not None or parsed.password is not None
+                or parsed.path != "/api/internal/memory/prepare"
+                or parsed.query or parsed.fragment
+                or re.fullmatch(r"[0-9a-f]{64}", token) is None):
+            raise RuntimeError("LongMemory Runtime 启动环境无效")
+        target = parsed._replace(path="/api/internal/memory/complete").geturl()
+        body = json.dumps({
+            "version": 1,
+            "turn_id": pending["turn_id"],
+            "answer": answer,
+            "retrieved_counts": pending["retrieved_counts"],
+        }).encode("utf-8")
+        request = urlrequest.Request(
+            target, data=body, method="POST",
+            headers={"Content-Type": "application/json", "Authorization": "Bearer " + token},
+        )
+        try:
+            with self._lock, urlrequest.urlopen(request, timeout=5) as result:
+                response = json.loads(result.read(4097))
+                if (result.status != 200 or response.get("version") != 1
+                        or not isinstance(response.get("assistant_event_id"), str)
+                        or type(response.get("created")) is not bool
+                        or response.get("playback_acknowledgement") != "unavailable"):
+                    raise RuntimeError("invalid completion response")
+        except (OSError, urlerror.URLError, ValueError, TypeError,
+                RuntimeError, json.JSONDecodeError):
+            raise RuntimeError("LongMemory 回答回执失败") from None
+        return True
 
     async def query_memory(self, query: str) -> str:
         # SQLite/子进程不阻塞小智音频事件循环。

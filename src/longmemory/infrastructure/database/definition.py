@@ -1,6 +1,6 @@
-"""当前 SQLite V29 的完整结构定义；不包含历史迁移步骤。"""
+"""当前 SQLite V30 的完整结构定义；不包含历史迁移步骤。"""
 
-SCHEMA_VERSION = 29
+SCHEMA_VERSION = 30
 
 LATEST_SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS conversation_messages (
@@ -55,6 +55,19 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_memory_quality_event_source_kind
     ON memory_quality_events (source_message_id, event_kind);
 CREATE INDEX IF NOT EXISTS idx_memory_quality_events_time
     ON memory_quality_events (occurred_at DESC, id DESC);
+
+CREATE TABLE IF NOT EXISTS round_screen_turns (
+    user_message_id TEXT PRIMARY KEY,
+    assistant_message_id TEXT NOT NULL UNIQUE,
+    retrieved_l1_count INTEGER NOT NULL CHECK (retrieved_l1_count >= 0),
+    retrieved_l2_count INTEGER NOT NULL CHECK (retrieved_l2_count >= 0),
+    retrieved_l3_count INTEGER NOT NULL CHECK (retrieved_l3_count >= 0),
+    completed_at TEXT NOT NULL,
+    FOREIGN KEY (user_message_id) REFERENCES conversation_messages (id) ON DELETE RESTRICT,
+    FOREIGN KEY (assistant_message_id) REFERENCES conversation_messages (id) ON DELETE RESTRICT
+);
+CREATE INDEX IF NOT EXISTS idx_round_screen_turns_completed
+    ON round_screen_turns (completed_at DESC, user_message_id DESC);
 
 CREATE TABLE IF NOT EXISTS scenario_memories (
     id TEXT PRIMARY KEY,

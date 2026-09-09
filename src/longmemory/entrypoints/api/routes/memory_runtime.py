@@ -2,6 +2,8 @@
 
 import asyncio
 from dataclasses import asdict
+import sqlite3
+from uuid import UUID
 
 from aiohttp import web
 
@@ -52,5 +54,50 @@ def register_memory_runtime_routes(app, backend):
                               if prepared.memory_command is not None else None),
         })
 
+    async def complete(request):
+        """接收同机小智的最终助手文本；不代表音频已在设备播放完成。"""
+
+        request = request.clone(client_max_size=32768)
+        try:
+            body = await request.json()
+            if not isinstance(body, dict) or set(body) != {
+                "version", "turn_id", "answer", "retrieved_counts",
+            } or body.get("version") != 1:
+                raise ValueError
+            turn_id = body["turn_id"]
+            answer = body["answer"]
+            counts = body["retrieved_counts"]
+            if (not isinstance(turn_id, str) or str(UUID(turn_id)) != turn_id
+                    or not isinstance(answer, str) or not answer.strip()
+                    or len(answer) > 16000 or not isinstance(counts, dict)
+                    or set(counts) != {"l1", "l2", "l3"}
+                    or any(type(value) is not int or not 0 <= value <= 100
+                           for value in counts.values())):
+                raise ValueError
+        except (ValueError, TypeError, KeyError, UnicodeError):
+            return web.json_response(
+                {"error": "invalid_memory_completion", "version": 1}, status=400,
+            )
+        try:
+            result = await asyncio.to_thread(
+                backend.complete_round_screen_turn,
+                turn_id=turn_id, answer=answer, retrieved_counts=counts,
+            )
+        except ValueError as error:
+            code = str(error)
+            status = 404 if code == "round_screen_user_turn_not_found" else 409
+            return web.json_response({"error": code, "version": 1}, status=status)
+        except sqlite3.Error:
+            return web.json_response(
+                {"error": "memory_completion_unavailable", "version": 1}, status=503,
+            )
+        return web.json_response({
+            "version": 1,
+            "assistant_event_id": result.assistant_message_id,
+            "created": result.created,
+            "playback_acknowledgement": "unavailable",
+        })
+
     app.router.add_get("/api/internal/memory/status", status, allow_head=False)
     app.router.add_post("/api/internal/memory/prepare", prepare)
+    app.router.add_post("/api/internal/memory/complete", complete)
