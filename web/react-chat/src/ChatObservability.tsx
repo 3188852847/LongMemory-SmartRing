@@ -72,7 +72,23 @@ export function MemoryFeedbackControls({turn,disabled,onSelect}:{
       onClick={() => onSelect(option.kind)}
     >{option.label}</Button>)}</Space>
     <em>{turn.memory_feedback ? `已复核 · 修订 ${turn.memory_feedback.revision}` : '仅记录标记，不会重答或修改记忆'}</em>
+    {turn.memory_feedback&&<p className="memory-feedback-diagnosis">{memoryFeedbackDiagnosis(turn)}</p>}
   </section>;
+}
+
+/** 只给排查入口，不把人工标签和可见轨迹推断成已确认根因。 */
+export function memoryFeedbackDiagnosis(turn:Turn) {
+  const kind = turn.memory_feedback?.kind;
+  const recalled = (turn.retrieved?.length ?? 0) + (turn.scenario_retrieved?.length ?? 0) + (turn.persona_retrieved?.length ?? 0);
+  if (kind === 'memory_ok') return '正常对照样本：保留当前轨迹，用于和失败样本比较。';
+  if (kind === 'memory_irrelevant') return '不需要记忆的负例：先保留，不把它计作记忆故障。';
+  if (kind === 'recall_miss') return recalled
+    ? '已有记忆进入本轮轨迹：优先核对注入预算，以及回答是否采用了证据。'
+    : '本轮没有召回 L1/L2/L3：优先核对检索查询和候选覆盖。';
+  if (kind === 'wrong_memory') return recalled
+    ? '本轮确实召回了长期记忆：优先核对内容、时效、主体和排序。'
+    : '轨迹没有显示长期记忆：先核对短期上下文或回答模型，不要直接归因于记忆库。';
+  return '尚未人工复核。';
 }
 
 /** 把调试 JSON 中最重要的记忆事实提升为人能直接阅读的证据面板。 */

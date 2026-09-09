@@ -71,6 +71,8 @@ export interface DailyMemoryFeedback {
   local_date:string;utc_offset_minutes:number;total:number;limited:boolean;
   action_counts:Record<MemoryFeedbackKind,number>;
   items:Array<{chat_id:string;chat_title:string;request_id:string;kind:MemoryFeedbackKind;revision:number;occurred_at:string;is_current:boolean}>;
+  current_total:number;current_limited:boolean;current_counts:Record<MemoryFeedbackKind,number>;
+  current_items:Array<{chat_id:string;chat_title:string;request_id:string;kind:MemoryFeedbackKind;revision:number;occurred_at:string}>;
 }
 export interface Snapshot {chat_id: string; title: string; pending: boolean; turns: Turn[]}
 export interface Summary {chat_id: string; title: string; turn_count: number}

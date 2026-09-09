@@ -1,7 +1,7 @@
 import {fireEvent, render, screen} from '@testing-library/react';
 import {describe, expect, it} from 'vitest';
 import {MemoryRouter} from 'react-router-dom';
-import {ConsoleStatusRail, MemoryFeedbackControls, TurnMemoryEvidence, memoryTraceSummary} from './ChatObservability';
+import {ConsoleStatusRail, MemoryFeedbackControls, TurnMemoryEvidence, memoryFeedbackDiagnosis, memoryTraceSummary} from './ChatObservability';
 import type {Config, Turn} from './api';
 
 const config:Config = {enabled:true,database:'synthetic.db',model:'Synthetic-Model',role:'助手',provider:'openai_compatible',method:'longmemory_daily_llm_v2',retrieval:'keyword_dense_rrf_v1',model_health:{state:'available',code:null,checked_at:'2026-09-09T00:00:00Z'}};
@@ -54,5 +54,12 @@ describe('MemoryFeedbackControls', () => {
     expect(screen.getByText('已复核 · 修订 2')).toBeTruthy();
     fireEvent.click(screen.getByRole('button',{name:'没想起已有记忆'}));
     expect(selected).toEqual(['recall_miss']);
+  });
+
+  it('依据可见轨迹给排查方向而不冒充根因', () => {
+    const base:Turn = {request_id:'550e8400-e29b-41d4-a716-446655440000',input:'问题',answer:'回答',status:'completed',user_saved:true,duration_ms:1,writes:[],retrieved:[]};
+    expect(memoryFeedbackDiagnosis({...base,memory_feedback:{kind:'recall_miss',revision:1,occurred_at:'2026-09-09T10:00:00Z'}})).toContain('优先核对检索');
+    expect(memoryFeedbackDiagnosis({...base,retrieved:[{item_id:'l1-a',content:'证据'}],memory_feedback:{kind:'recall_miss',revision:1,occurred_at:'2026-09-09T10:00:00Z'}})).toContain('回答是否采用');
+    expect(memoryFeedbackDiagnosis({...base,memory_feedback:{kind:'wrong_memory',revision:1,occurred_at:'2026-09-09T10:00:00Z'}})).toContain('不要直接归因');
   });
 });

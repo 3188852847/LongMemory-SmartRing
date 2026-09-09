@@ -41,6 +41,8 @@ def test_restart_list_rename_history_and_replay(backend):
                 feedback['occurred_at'][:10] + '&utc_offset_minutes=0'
             )).json()
             assert summary['action_counts']['recall_miss'] == 1
+            assert summary['current_counts']['recall_miss'] == 1
+            assert summary['current_total'] == 1
             assert summary['items'][0]['request_id'] == body['request_id']
             assert 'input' not in summary['items'][0] and 'answer' not in summary['items'][0]
             assert (await client.post(base+f'/api/chats/{key}/title', json={'title':'昨天的聊天'}, headers=headers)).status == 200
@@ -62,6 +64,14 @@ def test_restart_list_rename_history_and_replay(backend):
             refreshed = await (await client.get(base+f'/api/chats/{key}')).json()
             assert refreshed['turns'][0]['memory_feedback']['kind'] == 'memory_ok'
             assert len(refreshed['turns'][0]['memory_feedback_events']) == 2
+            changed_summary = await (await client.get(
+                base + '/api/chat-memory-feedback/daily?local_date=' +
+                feedback['occurred_at'][:10] + '&utc_offset_minutes=0'
+            )).json()
+            assert changed_summary['action_counts']['recall_miss'] == 1
+            assert changed_summary['action_counts']['memory_ok'] == 1
+            assert changed_summary['current_counts']['memory_ok'] == 1
+            assert changed_summary['current_counts']['recall_miss'] == 0
             replay = await (await client.post(base+f'/api/chats/{key}/messages', json=body, headers=headers)).json()
             assert replay['memory_feedback']['kind'] == 'memory_ok' and len(histories) == 1
             await client.post(base+f'/api/chats/{key}/messages', json={'text':'继续', 'request_id':str(uuid4())}, headers=headers)

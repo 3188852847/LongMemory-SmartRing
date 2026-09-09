@@ -45,14 +45,15 @@ const feedbackLabel:Record<MemoryFeedbackKind,string> = {
 function DailyFeedbackReview({feedback}:{feedback:DailyMemoryFeedback}) {
   return <section className="daily-feedback-review" aria-label="网页回答记忆复核">
     <h3>网页回答记忆复核</h3>
-    <p className="subtle">当天共 {feedback.total} 次人工标记；这是内部测试证据，不会自动重答、改写记忆或训练模型。修改标记会保留为新的复核动作。</p>
+    <p className="subtle">当天形成 {feedback.current_total} 个当前有效判断，共发生 {feedback.total} 次复核动作。这是内部测试证据，不会自动重答、改写记忆或训练模型。</p>
     <Space wrap>
-      <Tag color="green">正常 {feedback.action_counts.memory_ok}</Tag>
-      <Tag color="gold">没想起 {feedback.action_counts.recall_miss}</Tag>
-      <Tag color="red">错误记忆 {feedback.action_counts.wrong_memory}</Tag>
-      <Tag>记忆无关 {feedback.action_counts.memory_irrelevant}</Tag>
+      <Tag color="green">正常 {feedback.current_counts.memory_ok}</Tag>
+      <Tag color="gold">没想起 {feedback.current_counts.recall_miss}</Tag>
+      <Tag color="red">错误记忆 {feedback.current_counts.wrong_memory}</Tag>
+      <Tag>记忆无关 {feedback.current_counts.memory_irrelevant}</Tag>
     </Space>
-    {feedback.items.length>0&&<details><summary>回看复核轮次（{feedback.items.length}）</summary><List size="small" dataSource={feedback.items} renderItem={item=><List.Item actions={[<Link key="turn" to={`/chat-react?chat_id=${encodeURIComponent(item.chat_id)}&request_id=${encodeURIComponent(item.request_id)}`}>查看回答与证据</Link>]}><Space direction="vertical" size={0}><span>{feedbackLabel[item.kind]}{item.is_current?'':'（已被后续标记取代）'}</span><small className="subtle">{item.chat_title} · {displayTime(item.occurred_at)} · 修订 {item.revision}</small></Space></List.Item>}/>{feedback.limited&&<p className="subtle">这一天超过 100 次复核动作，仅显示最近 100 次。</p>}</details>}
+    {feedback.current_items.length>0&&<details><summary>回看当前判断（{feedback.current_items.length}）</summary><List size="small" dataSource={feedback.current_items} renderItem={item=><List.Item actions={[<Link key="turn" to={`/chat-react?chat_id=${encodeURIComponent(item.chat_id)}&request_id=${encodeURIComponent(item.request_id)}`}>查看回答与证据</Link>]}><Space direction="vertical" size={0}><span>{feedbackLabel[item.kind]}</span><small className="subtle">{item.chat_title} · {displayTime(item.occurred_at)} · 修订 {item.revision}</small></Space></List.Item>}/>{feedback.current_limited&&<p className="subtle">这一天超过 100 个当前判断，仅显示最近 100 个。</p>}</details>}
+    {feedback.total>feedback.current_total&&<details><summary>查看改标历史（{feedback.total-feedback.current_total} 次旧判断）</summary><List size="small" dataSource={feedback.items.filter(item=>!item.is_current)} renderItem={item=><List.Item><Space direction="vertical" size={0}><span>{feedbackLabel[item.kind]}（已被后续标记取代）</span><small className="subtle">{item.chat_title} · {displayTime(item.occurred_at)} · 修订 {item.revision}</small></Space></List.Item>}/>{feedback.limited&&<p className="subtle">复核动作超过 100 次，旧判断可能未完整展开。</p>}</details>}
   </section>;
 }
 

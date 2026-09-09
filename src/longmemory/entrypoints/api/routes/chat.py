@@ -179,13 +179,32 @@ def register_chat_routes(app, backend):
         counts = {kind: 0 for kind in (
             "memory_ok", "recall_miss", "wrong_memory", "memory_irrelevant"
         )}
+        current_counts = dict.fromkeys(counts, 0)
         rows = []
+        current_rows = []
         offset = timedelta(minutes=offset_minutes)
         for chat_id, chat in chats.items():
             if chat.owner != owner_id:
                 continue
             for turn in chat.turns:
                 current = turn.get("memory_feedback")
+                if isinstance(current, dict):
+                    try:
+                        current_time = datetime.fromisoformat(current["occurred_at"])
+                        current_kind = current["kind"]
+                        if (current_time.tzinfo is not None
+                                and (current_time + offset).date() == local_date
+                                and current_kind in current_counts):
+                            current_counts[current_kind] += 1
+                            current_rows.append({
+                                "chat_id": chat_id, "chat_title": chat.title,
+                                "request_id": turn.get("request_id"),
+                                "kind": current_kind,
+                                "revision": current.get("revision"),
+                                "occurred_at": current["occurred_at"],
+                            })
+                    except (KeyError, TypeError, ValueError):
+                        pass
                 for event in turn.get("memory_feedback_events") or []:
                     try:
                         occurred = datetime.fromisoformat(event["occurred_at"])
@@ -206,10 +225,15 @@ def register_chat_routes(app, backend):
                             and current.get("revision") == event.get("revision"),
                     })
         rows.sort(key=lambda item: item["occurred_at"], reverse=True)
+        current_rows.sort(key=lambda item: item["occurred_at"], reverse=True)
         return web.json_response({"local_date": local_date.isoformat(),
                                   "utc_offset_minutes": offset_minutes,
                                   "action_counts": counts, "total": len(rows),
-                                  "items": rows[:100], "limited": len(rows) > 100})
+                                  "items": rows[:100], "limited": len(rows) > 100,
+                                  "current_counts": current_counts,
+                                  "current_total": len(current_rows),
+                                  "current_items": current_rows[:100],
+                                  "current_limited": len(current_rows) > 100})
 
     async def forget(request):
         chat = selected(request)

@@ -78,6 +78,7 @@
 .speech-player small a{margin-left:6px;color:var(--accent);font-weight:650;text-decoration:none}.speech-player small a:hover{text-decoration:underline}
 .memory-feedback-controls{display:grid;gap:7px;margin-top:12px;padding-top:10px;border-top:1px solid var(--line)}
 .memory-feedback-controls>small{color:var(--muted);font-weight:700}.memory-feedback-controls>em{color:var(--muted);font-size:11px;font-style:normal}
+.memory-feedback-diagnosis{margin:0;padding:8px 10px;border-left:2px solid var(--accent);background:color-mix(in srgb,var(--accent) 7%,transparent);color:var(--muted);font-size:12px}
 .focused-chat-turn{border-radius:10px;outline:1px solid color-mix(in srgb,var(--accent) 70%,transparent);outline-offset:8px}
 .daily-feedback-review{margin:14px 0;padding:14px;border:1px solid var(--line);border-radius:10px;background:color-mix(in srgb,var(--panel) 82%,var(--accent) 3%)}
 .daily-feedback-review h3{margin:0 0 6px;font-size:14px}.daily-feedback-review details{margin-top:10px}
