@@ -38,11 +38,12 @@ def inspect(address):
 $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
 try {
-  $rules = @(Get-NetFirewallRule | Where-Object Name -eq 'LongMemory-Xiaozhi-LAN-Demo')
-  $listeners = @(Get-NetTCPConnection -State Listen | Where-Object { $_.LocalAddress -eq ADDRESS -and $_.LocalPort -in 8000,8003 })
+  $names = @('LongMemory-Xiaozhi-LAN-Demo', 'LongMemory-Wallpaper-LAN-Demo')
+  $rules = @(Get-NetFirewallRule | Where-Object Name -in $names)
+  $listeners = @(Get-NetTCPConnection -State Listen | Where-Object { $_.LocalAddress -eq ADDRESS -and $_.LocalPort -in 8000,8003,8768 })
   $details = @($rules | ForEach-Object {
     $a = $_ | Get-NetFirewallAddressFilter
-    [pscustomobject]@{ enabled = [string]$_.Enabled; local = @($a.LocalAddress); remote = @($a.RemoteAddress) }
+    [pscustomobject]@{ name = $_.Name; enabled = [string]$_.Enabled; local = @($a.LocalAddress); remote = @($a.RemoteAddress) }
   })
   @{ ports = @($listeners.LocalPort | Sort-Object -Unique); rules = $details } | ConvertTo-Json -Depth 5 -Compress
 } catch { exit 1 }

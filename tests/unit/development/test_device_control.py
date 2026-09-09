@@ -98,6 +98,34 @@ class FakeSocket:
         elif name == control.SET_ROUND_SKIN_TOOL:
             self.round_skin = call["params"]["arguments"]
             value = True
+        elif name == control.STAGE_ROUND_WALLPAPER_TOOL:
+            arguments = call["params"]["arguments"]
+            value = {
+                "wallpaper_api": 1, "slot": "b",
+                "wallpaper_id": arguments["wallpaper_id"],
+                "sha256": arguments["sha256"],
+                "size_bytes": arguments["size_bytes"],
+                "state": "staged_verified",
+            }
+        elif name == control.GET_ROUND_WALLPAPER_TOOL:
+            value = {
+                "wallpaper_api": 1, "active_valid": True, "active_slot": "a",
+                "active_wallpaper_id": "wallpaper-" + "a" * 20,
+                "active_sha256": "b" * 64, "active_size_bytes": 2321851,
+                "rollback_available": True,
+            }
+        elif name == control.ACTIVATE_ROUND_WALLPAPER_TOOL:
+            arguments = call["params"]["arguments"]
+            value = {**arguments, "state": "activation_pending_restart"}
+        elif name == control.ROLLBACK_ROUND_WALLPAPER_TOOL:
+            value = {
+                "wallpaper_api": 1, "slot": "a",
+                "wallpaper_id": "wallpaper-" + "a" * 20,
+                "sha256": "b" * 64, "size_bytes": 2321851,
+                "state": "rollback_pending_restart",
+            }
+        elif name == control.REBOOT_TOOL:
+            value = True
         future = self.client.call_results.pop(call["id"])
         future.set_result({"isError": self.set_error and name == control.VOLUME_TOOL,
                            "content": [{"type": "text", "text": json.dumps(value)}]})
@@ -187,6 +215,84 @@ def test_round_skin_rejects_open_fields_before_sending():
         with pytest.raises(control.ControlError, match="round_skin_invalid"):
             await bridge.set_round_skin(invalid)
         assert not socket.calls
+    asyncio.run(run())
+
+
+def test_round_wallpaper_stages_only_to_hidden_fixed_tool_with_exact_readback():
+    async def run():
+        bridge, conn, socket = rig()
+        result = await bridge.stage_round_wallpaper(
+            item_id="wallpaper-" + "a" * 20,
+            sha256="b" * 64,
+            size_bytes=2321851,
+            url="http://192.168.124.93:8768/wallpaper/" + "c" * 64,
+        )
+        assert result["state"] == "staged_verified"
+        assert result["slot"] == "b"
+        assert result["sha256"] == "b" * 64
+        assert socket.calls[-1]["params"]["name"] == control.STAGE_ROUND_WALLPAPER_TOOL
+        assert control.STAGE_ROUND_WALLPAPER_TOOL not in {
+            item["name"] for item in conn.mcp_client.tools.values()
+        }
+
+    asyncio.run(run())
+
+
+def test_round_wallpaper_activation_and_rollback_use_fixed_tools_then_reboot():
+    async def run():
+        bridge, _, socket = rig()
+        staged = {
+            "wallpaper_api": 1, "slot": "b",
+            "wallpaper_id": "wallpaper-" + "a" * 20,
+            "sha256": "b" * 64, "size_bytes": 2321851,
+            "state": "staged_verified",
+        }
+        activated = await bridge.activate_round_wallpaper(staged)
+        assert activated["state"] == "activated_restarting"
+        assert [call["params"]["name"] for call in socket.calls[-2:]] == [
+            control.ACTIVATE_ROUND_WALLPAPER_TOOL, control.REBOOT_TOOL,
+        ]
+        rolled_back = await bridge.rollback_round_wallpaper()
+        assert rolled_back["state"] == "rollback_restarting"
+        assert [call["params"]["name"] for call in socket.calls[-2:]] == [
+            control.ROLLBACK_ROUND_WALLPAPER_TOOL, control.REBOOT_TOOL,
+        ]
+
+    asyncio.run(run())
+
+
+def test_round_wallpaper_status_uses_hidden_fixed_tool_and_exact_projection():
+    async def run():
+        bridge, conn, socket = rig()
+        status = await bridge.read_round_wallpaper()
+        assert status["active_valid"] is True and status["rollback_available"] is True
+        assert socket.calls[-1]["params"]["name"] == control.GET_ROUND_WALLPAPER_TOOL
+        assert control.GET_ROUND_WALLPAPER_TOOL not in {
+            item["name"] for item in conn.mcp_client.tools.values()
+        }
+
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("change", [
+    {"item_id": "../wallpaper"}, {"sha256": "bad"}, {"size_bytes": 0},
+    {"url": "https://192.168.124.93:8768/wallpaper/" + "c" * 64},
+    {"url": "http://8.8.8.8:8768/wallpaper/" + "c" * 64},
+    {"url": "http://192.168.124.93:8768/other/" + "c" * 64},
+])
+def test_round_wallpaper_rejects_unscoped_delivery_before_sending(change):
+    async def run():
+        bridge, _, socket = rig()
+        values = {
+            "item_id": "wallpaper-" + "a" * 20, "sha256": "b" * 64,
+            "size_bytes": 2321851,
+            "url": "http://192.168.124.93:8768/wallpaper/" + "c" * 64,
+        }
+        values.update(change)
+        with pytest.raises(control.ControlError, match="round_wallpaper_stage_invalid"):
+            await bridge.stage_round_wallpaper(**values)
+        assert not socket.calls
+
     asyncio.run(run())
 
 

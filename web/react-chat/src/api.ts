@@ -190,6 +190,15 @@ export interface RoundWallpaperItem {
 }
 export interface RoundWallpaperLibrary {
   enabled:boolean; tool_state:'ready'|'unavailable'; max_upload_bytes:number; items:RoundWallpaperItem[];
+  device_delivery:{enabled:boolean;requires_online_device:true;restart_after_publish:true};
+}
+export interface RoundWallpaperDeployment {
+  wallpaper_api:1; slot:'a'|'b'; wallpaper_id:string; sha256:string; size_bytes:number;
+  state:'activated_restarting'|'rollback_restarting'; operation_id:string;
+}
+export interface RoundWallpaperDeviceStatus {
+  wallpaper_api:1; active_valid:boolean; active_slot:''|'a'|'b'; active_wallpaper_id:string;
+  active_sha256:string; active_size_bytes:number; rollback_available:boolean;
 }
 export interface ProactivePolicy {
   subject_id: string; enabled: boolean; utc_offset_minutes: number;

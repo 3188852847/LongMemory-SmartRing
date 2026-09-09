@@ -218,3 +218,16 @@ class RoundWallpaperLibrary:
         if not preview.is_file() or _sha256(preview) != expected:
             raise MediaProbeError("wallpaper_preview_integrity_failed")
         return preview
+
+    def delivery_spec(self, item_id: str) -> dict[str, object]:
+        """返回设备投递所需的最小字段，并再次复核预览文件。"""
+
+        path = self.preview_path(item_id)
+        manifest = self._load_item(self.root / item_id)
+        preview = manifest["preview"]
+        return {
+            "item_id": item_id,
+            "path": path,
+            "sha256": preview["sha256"],
+            "size_bytes": preview["size_bytes"],
+        }

@@ -1,0 +1,69 @@
+{
+  "schema_version": 1,
+  "captured_on": "2026-09-10",
+  "experiment": "0009-wallpaper-ab-delivery",
+  "depends_on": "0008-wallpaper-state-chrome",
+  "board": "viewe-smartring-plus",
+  "application_version": "2.2.3",
+  "esp_idf_version": "5.5.4",
+  "decision": {
+    "delivery_transport": "short_lived_single_use_http_ticket",
+    "delivery_port": 8768,
+    "maximum_wallpaper_bytes": 4194304,
+    "slot_strategy": "a_b",
+    "activate_after_full_write_and_sha256_match": true,
+    "staged_slot_never_activates_after_accidental_reboot": true,
+    "rollback": "swap_to_previous_verified_slot",
+    "base_assets_fallback": "geometric_face"
+  },
+  "partition_layout": {
+    "assets": {"offset": "0x800000", "length_bytes": 2097152},
+    "wallpaper_a": {"offset": "0xA00000", "length_bytes": 3145728},
+    "wallpaper_b": {"offset": "0xD00000", "length_bytes": 3145728},
+    "slot_header_bytes": 4096
+  },
+  "source": {
+    "patch_sha256": "AA78AA101B09A37621C9CE469C7DDC250B8822E8F65E472CD347C77E03F150F4",
+    "clean_apply": true,
+    "reverse_apply_check": true,
+    "external_worktree_build": "verified"
+  },
+  "application": {
+    "length_bytes": 3980784,
+    "sha256": "124092FC9213400DF9B718B8FFB33661333F91C292A87DF6645B5B4DD45D169F",
+    "partition_length_bytes": 4128768,
+    "remaining_bytes": 147984
+  },
+  "base_assets": {
+    "length_bytes": 352105,
+    "sha256": "C31A144A0DF77BFD8F70545D3AF12E3B23F1501CC3B4865EBD91E0FCAC965478",
+    "partition_length_bytes": 2097152,
+    "remaining_bytes": 1745047,
+    "contains_wallpaper": false
+  },
+  "partition_table": {
+    "length_bytes": 3072,
+    "sha256": "D46BD51980CD6E15F0BF0C86F530D87A0BBC207144BD9442937B3C1A618A3FFD"
+  },
+  "offline_verification": {
+    "python_targeted_tests": "219_passed",
+    "react_tests": "129_passed",
+    "react_production_build": "passed",
+    "firmware_build": "passed"
+  },
+  "flash": {
+    "result": "pending",
+    "required_offsets": ["0x8000", "0x20000", "0x800000"],
+    "partition_table_migration": true,
+    "nvs_write_required": false,
+    "ota_data_write_required": false,
+    "readback_digest": "pending"
+  },
+  "runtime": {
+    "device_status_readback": "pending",
+    "first_publish": "pending",
+    "active_slot_survives_reboot": "pending",
+    "rollback": "pending",
+    "interrupted_download_keeps_old_slot": "pending"
+  }
+}

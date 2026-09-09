@@ -32,7 +32,8 @@ describe('圆屏状态协议与模拟器', () => {
     };
     const request=vi.spyOn(ChatApi.prototype, 'request').mockImplementation(async path =>
       path==='/api/round-wallpapers'
-        ? {enabled:true,tool_state:'ready',max_upload_bytes:805306368,items:[]}
+        ? {enabled:true,tool_state:'ready',max_upload_bytes:805306368,items:[],
+          device_delivery:{enabled:false,requires_online_device:true,restart_after_publish:true}}
         : skinPayload
     );
     render(<QueryClientProvider client={createConsoleQueryClient()}><MemoryRouter><RoundDisplayApp/></MemoryRouter></QueryClientProvider>);

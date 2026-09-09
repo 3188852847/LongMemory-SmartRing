@@ -104,6 +104,35 @@ def create_app(control, token, port=PORT):
             raise ControlError("invalid_json", 400) from None
         return web.json_response(await control.set_round_skin(body))
 
+    async def stage_round_wallpaper(request):
+        if request.content_type != "application/json":
+            raise ControlError("json_required", 415)
+        try:
+            body = await request.json()
+        except (ValueError, UnicodeError):
+            raise ControlError("invalid_json", 400) from None
+        fields = {"item_id", "sha256", "size_bytes", "url"}
+        if not isinstance(body, dict) or set(body) != fields:
+            raise ControlError("invalid_fields", 400)
+        return web.json_response(await control.stage_round_wallpaper(**body))
+
+    async def get_round_wallpaper(_request):
+        return web.json_response(await control.read_round_wallpaper())
+
+    async def activate_round_wallpaper(request):
+        if request.content_type != "application/json":
+            raise ControlError("json_required", 415)
+        try:
+            body = await request.json()
+        except (ValueError, UnicodeError):
+            raise ControlError("invalid_json", 400) from None
+        return web.json_response(await control.activate_round_wallpaper(body))
+
+    async def rollback_round_wallpaper(request):
+        if request.content_length not in (None, 0):
+            raise ControlError("invalid_fields", 400)
+        return web.json_response(await control.rollback_round_wallpaper())
+
     async def announce(request):
         if request.content_type != "application/json":
             raise ControlError("json_required", 415)
@@ -125,6 +154,10 @@ def create_app(control, token, port=PORT):
     app.router.add_post("/api/device/screen", set_screen)
     app.router.add_get("/api/device/round-skin", round_skin, allow_head=False)
     app.router.add_post("/api/device/round-skin", round_skin)
+    app.router.add_post("/api/device/round-wallpaper/stage", stage_round_wallpaper)
+    app.router.add_get("/api/device/round-wallpaper", get_round_wallpaper, allow_head=False)
+    app.router.add_post("/api/device/round-wallpaper/activate", activate_round_wallpaper)
+    app.router.add_post("/api/device/round-wallpaper/rollback", rollback_round_wallpaper)
     app.router.add_post("/api/device/announcement", announce)
     return app
 

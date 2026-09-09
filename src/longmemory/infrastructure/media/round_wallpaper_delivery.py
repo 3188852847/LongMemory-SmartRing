@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+import asyncio
 import base64
 import hashlib
 from pathlib import Path
@@ -119,6 +120,33 @@ class RoundWallpaperDeliveryRegistry:
                 self._tickets.pop(token, None)
 
 
+class RoundWallpaperDeliveryService:
+    """持有票据注册表和局域网 URL 身份；监听生命周期由控制台管理。"""
+
+    def __init__(
+        self,
+        listen_address: str,
+        *,
+        port: int = DEFAULT_DELIVERY_PORT,
+        registry: RoundWallpaperDeliveryRegistry | None = None,
+    ):
+        self.listen_address = listen_address
+        self.port = port
+        self.registry = registry or RoundWallpaperDeliveryRegistry()
+
+    def issue(self, **values) -> tuple[DeliveryTicket, str]:
+        ticket = self.registry.issue(**values)
+        return ticket, f"http://{self.listen_address}:{self.port}/wallpaper/{ticket.token}"
+
+    def revoke(self, token: str) -> None:
+        self.registry.revoke(token)
+
+    def app(self) -> web.Application:
+        return create_round_wallpaper_delivery_app(
+            self.registry, listen_address=self.listen_address, port=self.port,
+        )
+
+
 def create_round_wallpaper_delivery_app(
     registry: RoundWallpaperDeliveryRegistry,
     *,
@@ -147,9 +175,13 @@ def create_round_wallpaper_delivery_app(
         except DeliveryError as error:
             status = 409 if str(error) == "wallpaper_delivery_integrity_failed" else 404
             return web.json_response({"error": str(error)}, status=status)
+        # 最多 4 MiB，先读入不可变响应体再做最后一次校验，避免校验后到
+        # FileResponse 实际打开文件之间被替换的时间窗口。
+        payload = await asyncio.to_thread(ticket.path.read_bytes)
+        if len(payload) != ticket.size_bytes or hashlib.sha256(payload).hexdigest() != ticket.sha256:
+            return web.json_response({"error": "wallpaper_delivery_integrity_failed"}, status=409)
         digest = base64.b64encode(bytes.fromhex(ticket.sha256)).decode("ascii")
-        response = web.FileResponse(ticket.path)
-        response.content_type = "image/gif"
+        response = web.Response(body=payload, content_type="image/gif")
         response.headers["Content-Disposition"] = "attachment; filename=round-wallpaper.gif"
         response.headers["Digest"] = f"sha-256={digest}"
         response.headers["X-Wallpaper-Id"] = ticket.item_id

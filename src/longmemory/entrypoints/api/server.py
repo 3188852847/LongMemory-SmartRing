@@ -30,6 +30,7 @@ from .routes.round_skins import register_round_skin_routes
 from longmemory.infrastructure.config.round_skins import RoundSkinStore
 from .routes.round_wallpapers import register_round_wallpaper_routes
 from longmemory.infrastructure.media.round_wallpaper_library import RoundWallpaperLibrary
+from longmemory.infrastructure.media.round_wallpaper_delivery import RoundWallpaperDeliveryService
 from .routes.proactive_policy import register_proactive_policy_routes
 from .device_role import DeviceRole
 from .voice_settings import VoiceSettings, register_voice_routes
@@ -69,7 +70,8 @@ def create_app(*, port=8765, bridge=None, web_root=None, database=None, allow_me
                consolidation_background_enabled=False, proactive_clock=None,
                model_profile_store=None, voice_model_profiles=None,
                memory_backend_store=None, xiaozhi_memory_backends=None,
-               round_skin_store=None, round_wallpaper_library=None):
+               round_skin_store=None, round_wallpaper_library=None,
+               round_wallpaper_delivery=None):
     sessions = Sessions()
     assets = web_root or ROOT / "web"
     client = bridge if bridge is not None else XiaozhiControlClient(ROOT / "data/control/device-control.token")
@@ -229,7 +231,28 @@ def create_app(*, port=8765, bridge=None, web_root=None, database=None, allow_me
     register_round_wallpaper_routes(
         app,
         round_wallpaper_library or RoundWallpaperLibrary(ROOT / "data" / "round-screen" / "wallpapers"),
+        client,
+        round_wallpaper_delivery,
+        operation_lock,
     )
+    delivery_runner = None
+    if round_wallpaper_delivery is not None:
+        async def start_wallpaper_delivery(_app):
+            nonlocal delivery_runner
+            delivery_runner = web.AppRunner(round_wallpaper_delivery.app(), access_log=None)
+            await delivery_runner.setup()
+            await web.TCPSite(
+                delivery_runner,
+                round_wallpaper_delivery.listen_address,
+                round_wallpaper_delivery.port,
+            ).start()
+
+        async def stop_wallpaper_delivery(_app):
+            if delivery_runner is not None:
+                await delivery_runner.cleanup()
+
+        app.on_startup.append(start_wallpaper_delivery)
+        app.on_cleanup.append(stop_wallpaper_delivery)
     experiments = experiment_backend if experiment_backend is not None else ExperimentBackend(ROOT / "experiments")
     register_experiment_routes(app, experiments)
     register_job_routes(app, job_backend if job_backend is not None else ExperimentJobs(experiments))
@@ -267,6 +290,8 @@ def main():
                         default="longmemory", help="标记本次圆屏进程实际选择的记忆后端")
     parser.add_argument("--ffmpeg-dir", type=Path,
                         help="已安装的 ffmpeg/ffprobe 目录；只用于本机动态壁纸转码")
+    parser.add_argument("--wallpaper-lan-ip",
+                        help="动态壁纸投递专用 RFC1918 IPv4；仅圆屏模式设置")
     args = parser.parse_args()
     if not 1024 <= args.port <= 65535:
         parser.error("port 必须在 1024–65535 之间")
@@ -446,6 +471,18 @@ def main():
     try:
         from longmemory.infrastructure.config.model_profiles import ModelProfileStore
         from longmemory.infrastructure.config.memory_backends import MemoryBackendStore
+        wallpaper_delivery = None
+        if args.wallpaper_lan_ip:
+            import ipaddress
+            try:
+                address = ipaddress.IPv4Address(args.wallpaper_lan_ip)
+            except ipaddress.AddressValueError:
+                parser.error("壁纸投递地址必须是有效 IPv4")
+            if not any(address in ipaddress.ip_network(network) for network in (
+                "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16",
+            )):
+                parser.error("壁纸投递只允许明确的 RFC1918 局域网 IPv4")
+            wallpaper_delivery = RoundWallpaperDeliveryService(str(address))
         web.run_app(create_app(port=args.port, database=args.database, allow_memory_delete=args.allow_memory_delete,
                                allow_memory_correction=args.allow_memory_correction,
                                allow_scenario_management=args.allow_scenario_management,
@@ -461,7 +498,8 @@ def main():
                                round_wallpaper_library=RoundWallpaperLibrary(
                                    ROOT / "data" / "round-screen" / "wallpapers",
                                    ffmpeg_dir=args.ffmpeg_dir,
-                               )),
+                               ),
+                               round_wallpaper_delivery=wallpaper_delivery),
                     host="127.0.0.1", port=args.port, access_log=None, print=None)
     except OSError:
         parser.exit(1, f"控制台未能绑定 127.0.0.1:{args.port}。请检查旧控制台是否仍在运行或端口权限；未自动停止其他进程、未换端口。\n")

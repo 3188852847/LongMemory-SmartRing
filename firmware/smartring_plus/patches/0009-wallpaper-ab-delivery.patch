@@ -1,0 +1,464 @@
+diff --git a/main/CMakeLists.txt b/main/CMakeLists.txt
+index b719668..c1bb586 100644
+--- a/main/CMakeLists.txt
++++ b/main/CMakeLists.txt
+@@ -268,8 +268,7 @@ elseif(CONFIG_BOARD_TYPE_VIEWE_SMARTRING_PLUS)
+     set(BUILTIN_ICON_FONT font_awesome_20_4)
+     set(DEFAULT_EMOJI_COLLECTION twemoji_64)
+     set(EMOTE_RESOLUTION "360_360")
+-    # LongMemory 圆屏实验资源。目录不存在或为空时，默认资源保持原样。
+-    set(DEFAULT_ASSETS_EXTRA_FILES "${CMAKE_CURRENT_SOURCE_DIR}/boards/viewe-smartring-plus/assets")
++    # 动态壁纸从 0009 起使用独立 A/B 分区，不再进入基础 assets 包。
+ elseif(CONFIG_BOARD_TYPE_ESP_SENSAIRSHUTTLE)
+     set(BOARD_TYPE "esp-sensairshuttle")
+     set(BUILTIN_TEXT_FONT font_puhui_basic_16_4)
+diff --git a/main/boards/viewe-smartring-plus/viewe-smartring-plus.cc b/main/boards/viewe-smartring-plus/viewe-smartring-plus.cc
+index 284009a..eca17a0 100644
+--- a/main/boards/viewe-smartring-plus/viewe-smartring-plus.cc
++++ b/main/boards/viewe-smartring-plus/viewe-smartring-plus.cc
+@@ -14,6 +14,10 @@
+ #include <wifi_manager.h>
+ #include <esp_log.h>
+ #include <esp_timer.h>
++#include <esp_heap_caps.h>
++#include <esp_partition.h>
++#include <spi_flash_mmap.h>
++#include <mbedtls/sha256.h>
+
+ #include <driver/i2c_master.h>
+ #include <driver/gpio.h>
+@@ -686,6 +690,304 @@ static void SaveRoundSkin(const RoundSkinConfig& skin) {
+     settings.SetInt("api", skin.api);
+ }
+
++struct RoundWallpaperRecord {
++    int api = 1;
++    std::string slot;
++    std::string id;
++    std::string sha256;
++    size_t size = 0;
++    const void* data = nullptr;
++};
++
++class RoundWallpaperStore {
++private:
++    static constexpr size_t kHeaderSectorSize = 4096;
++    static constexpr size_t kMaxWallpaperBytes = 3 * 1024 * 1024 - kHeaderSectorSize;
++    static constexpr uint32_t kHeaderVersion = 1;
++    static constexpr char kMagic[8] = {'L', 'M', 'W', 'A', 'L', 'L', '1', '\0'};
++
++    struct __attribute__((packed)) Header {
++        char magic[8];
++        uint32_t version;
++        uint32_t data_size;
++        uint16_t width;
++        uint16_t height;
++        uint8_t sha256[32];
++        char wallpaper_id[32];
++    };
++
++    esp_partition_mmap_handle_t mmap_handle_ = 0;
++    const void* mmap_data_ = nullptr;
++    RoundWallpaperRecord active_;
++    RoundWallpaperRecord staged_;
++
++    static const esp_partition_t* Find(const char* slot) {
++        const char* label = std::strcmp(slot, "a") == 0 ? "wallpaper_a" : "wallpaper_b";
++        return esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_ANY, label);
++    }
++
++    static std::string BytesToHex(const uint8_t* data, size_t size) {
++        static constexpr char hex[] = "0123456789abcdef";
++        std::string result(size * 2, '0');
++        for (size_t i = 0; i < size; ++i) {
++            result[i * 2] = hex[data[i] >> 4];
++            result[i * 2 + 1] = hex[data[i] & 0x0F];
++        }
++        return result;
++    }
++
++    static bool HexToBytes(const std::string& value, uint8_t* output, size_t size) {
++        if (!IsLowerHexSha256(value) || size != 32) return false;
++        auto nibble = [](char value) -> uint8_t {
++            return value <= '9' ? value - '0' : value - 'a' + 10;
++        };
++        for (size_t i = 0; i < size; ++i) {
++            output[i] = static_cast<uint8_t>((nibble(value[i * 2]) << 4) | nibble(value[i * 2 + 1]));
++        }
++        return true;
++    }
++
++    static bool IsGif360(const uint8_t* data, size_t size) {
++        return size >= 10 && std::memcmp(data, "GIF", 3) == 0 &&
++               (std::memcmp(data + 3, "87a", 3) == 0 || std::memcmp(data + 3, "89a", 3) == 0) &&
++               static_cast<uint16_t>(data[6] | (data[7] << 8)) == 360 &&
++               static_cast<uint16_t>(data[8] | (data[9] << 8)) == 360;
++    }
++
++    static bool HashPartition(const esp_partition_t* partition, size_t offset, size_t size,
++                              uint8_t output[32]) {
++        auto* buffer = static_cast<uint8_t*>(heap_caps_malloc(4096, MALLOC_CAP_INTERNAL));
++        if (buffer == nullptr) return false;
++        mbedtls_sha256_context context;
++        mbedtls_sha256_init(&context);
++        bool ok = mbedtls_sha256_starts(&context, 0) == 0;
++        for (size_t position = 0; ok && position < size; position += 4096) {
++            const size_t count = std::min<size_t>(4096, size - position);
++            ok = esp_partition_read(partition, offset + position, buffer, count) == ESP_OK &&
++                 mbedtls_sha256_update(&context, buffer, count) == 0;
++        }
++        ok = ok && mbedtls_sha256_finish(&context, output) == 0;
++        mbedtls_sha256_free(&context);
++        heap_caps_free(buffer);
++        return ok;
++    }
++
++    static bool ReadRecord(const char* slot, RoundWallpaperRecord& record) {
++        const esp_partition_t* partition = Find(slot);
++        Header header{};
++        if (partition == nullptr || esp_partition_read(partition, 0, &header, sizeof(header)) != ESP_OK ||
++            std::memcmp(header.magic, kMagic, sizeof(kMagic)) != 0 || header.version != kHeaderVersion ||
++            header.data_size == 0 || header.data_size > kMaxWallpaperBytes ||
++            header.width != 360 || header.height != 360 ||
++            std::memchr(header.wallpaper_id, '\0', sizeof(header.wallpaper_id)) == nullptr) {
++            return false;
++        }
++        const std::string id(header.wallpaper_id);
++        if (!IsRoundSkinId(id)) return false;
++        uint8_t prefix[10]{};
++        uint8_t digest[32]{};
++        if (esp_partition_read(partition, kHeaderSectorSize, prefix, sizeof(prefix)) != ESP_OK ||
++            !IsGif360(prefix, sizeof(prefix)) ||
++            !HashPartition(partition, kHeaderSectorSize, header.data_size, digest) ||
++            std::memcmp(digest, header.sha256, sizeof(digest)) != 0) {
++            return false;
++        }
++        record = {.api = 1, .slot = slot, .id = id,
++                  .sha256 = BytesToHex(header.sha256, sizeof(header.sha256)),
++                  .size = header.data_size, .data = nullptr};
++        return true;
++    }
++
++    void Unmap() {
++        if (mmap_handle_ != 0) {
++            esp_partition_munmap(mmap_handle_);
++            mmap_handle_ = 0;
++            mmap_data_ = nullptr;
++        }
++        active_.data = nullptr;
++    }
++
++public:
++    static RoundWallpaperStore& GetInstance() {
++        static RoundWallpaperStore instance;
++        return instance;
++    }
++
++    ~RoundWallpaperStore() { Unmap(); }
++
++    bool GetSlot(const std::string& slot, RoundWallpaperRecord& record) {
++        return (slot == "a" || slot == "b") && ReadRecord(slot.c_str(), record);
++    }
++
++    cJSON* GetStatus() {
++        Settings settings("round_wallpaper");
++        const std::string active_slot = settings.GetString("active_slot");
++        const std::string previous_slot = settings.GetString("previous_slot");
++        RoundWallpaperRecord active;
++        RoundWallpaperRecord previous;
++        const bool active_valid = GetSlot(active_slot, active);
++        const bool rollback_available = previous_slot != active_slot && GetSlot(previous_slot, previous);
++        cJSON* json = cJSON_CreateObject();
++        cJSON_AddNumberToObject(json, "wallpaper_api", 1);
++        cJSON_AddBoolToObject(json, "active_valid", active_valid);
++        cJSON_AddStringToObject(json, "active_slot", active_valid ? active.slot.c_str() : "");
++        cJSON_AddStringToObject(json, "active_wallpaper_id", active_valid ? active.id.c_str() : "");
++        cJSON_AddStringToObject(json, "active_sha256", active_valid ? active.sha256.c_str() : "");
++        cJSON_AddNumberToObject(json, "active_size_bytes", active_valid ? active.size : 0);
++        cJSON_AddBoolToObject(json, "rollback_available", rollback_available);
++        return json;
++    }
++
++    bool GetActive(RoundWallpaperRecord& record) {
++        if (active_.data != nullptr) {
++            record = active_;
++            return true;
++        }
++        Settings settings("round_wallpaper");
++        std::string preferred = settings.GetString("active_slot");
++        // 暂存槽没有经过显式激活时绝不能在重启后自动生效。只有 NVS 中
++        // 已记录 a/b 才读取；已激活槽损坏时才尝试另一槽作为启动回退。
++        if (preferred != "a" && preferred != "b") {
++            return false;
++        }
++        const char* order[2] = {
++            preferred == "b" ? "b" : "a",
++            preferred == "b" ? "a" : "b",
++        };
++        RoundWallpaperRecord candidate;
++        for (const char* slot : order) {
++            if (!ReadRecord(slot, candidate)) continue;
++            const esp_partition_t* partition = Find(slot);
++            const void* mapped = nullptr;
++            if (esp_partition_mmap(partition, kHeaderSectorSize, candidate.size,
++                                   ESP_PARTITION_MMAP_DATA, &mapped, &mmap_handle_) != ESP_OK) {
++                continue;
++            }
++            mmap_data_ = mapped;
++            candidate.data = mapped;
++            active_ = candidate;
++            record = active_;
++            ESP_LOGI(TAG, "Loaded wallpaper %s from slot %s", active_.id.c_str(), active_.slot.c_str());
++            return true;
++        }
++        return false;
++    }
++
++    bool Stage(const std::string& url, const std::string& id, const std::string& expected_sha,
++               size_t expected_size, RoundWallpaperRecord& result) {
++        if (!IsRoundSkinId(id) || !IsLowerHexSha256(expected_sha) ||
++            expected_size == 0 || expected_size > kMaxWallpaperBytes) {
++            return false;
++        }
++        RoundWallpaperRecord active;
++        const bool has_active = GetActive(active);
++        const char* slot = has_active && active.slot == "a" ? "b" : "a";
++        const esp_partition_t* partition = Find(slot);
++        if (partition == nullptr) return false;
++
++        auto network = Board::GetInstance().GetNetwork();
++        auto http = network->CreateHttp(0);
++        if (!http->Open("GET", url) || http->GetStatusCode() != 200 ||
++            http->GetBodyLength() != expected_size) {
++            ESP_LOGE(TAG, "Wallpaper download preflight failed");
++            return false;
++        }
++        const size_t erase_size = ((kHeaderSectorSize + expected_size + 4095) / 4096) * 4096;
++        if (erase_size > partition->size || esp_partition_erase_range(partition, 0, erase_size) != ESP_OK) {
++            ESP_LOGE(TAG, "Wallpaper inactive slot erase failed");
++            return false;
++        }
++        auto* buffer = static_cast<uint8_t*>(heap_caps_malloc(4096, MALLOC_CAP_INTERNAL));
++        if (buffer == nullptr) return false;
++        mbedtls_sha256_context context;
++        mbedtls_sha256_init(&context);
++        bool ok = mbedtls_sha256_starts(&context, 0) == 0;
++        size_t written = 0;
++        while (ok && written < expected_size) {
++            const size_t wanted = std::min<size_t>(4096, expected_size - written);
++            const int count = http->Read(reinterpret_cast<char*>(buffer), wanted);
++            if (count <= 0 || static_cast<size_t>(count) > wanted) {
++                ok = false;
++                break;
++            }
++            ok = esp_partition_write(partition, kHeaderSectorSize + written, buffer, count) == ESP_OK &&
++                 mbedtls_sha256_update(&context, buffer, count) == 0;
++            written += count;
++        }
++        uint8_t digest[32]{};
++        ok = ok && written == expected_size && mbedtls_sha256_finish(&context, digest) == 0;
++        mbedtls_sha256_free(&context);
++        heap_caps_free(buffer);
++        http->Close();
++        uint8_t expected_digest[32]{};
++        if (!ok || !HexToBytes(expected_sha, expected_digest, sizeof(expected_digest)) ||
++            std::memcmp(digest, expected_digest, sizeof(digest)) != 0) {
++            ESP_LOGE(TAG, "Wallpaper download hash mismatch");
++            return false;
++        }
++        uint8_t prefix[10]{};
++        if (esp_partition_read(partition, kHeaderSectorSize, prefix, sizeof(prefix)) != ESP_OK ||
++            !IsGif360(prefix, sizeof(prefix))) {
++            ESP_LOGE(TAG, "Wallpaper is not a 360x360 GIF");
++            return false;
++        }
++        Header header{};
++        std::memcpy(header.magic, kMagic, sizeof(kMagic));
++        header.version = kHeaderVersion;
++        header.data_size = expected_size;
++        header.width = 360;
++        header.height = 360;
++        std::memcpy(header.sha256, digest, sizeof(digest));
++        std::strncpy(header.wallpaper_id, id.c_str(), sizeof(header.wallpaper_id) - 1);
++        if (esp_partition_write(partition, 0, &header, sizeof(header)) != ESP_OK ||
++            !ReadRecord(slot, staged_)) {
++            ESP_LOGE(TAG, "Wallpaper verified header write failed");
++            return false;
++        }
++        result = staged_;
++        ESP_LOGI(TAG, "Wallpaper %s staged and verified in slot %s", id.c_str(), slot);
++        return true;
++    }
++
++    bool Activate(const std::string& slot, const std::string& id,
++                  const std::string& sha256, size_t size, RoundWallpaperRecord& result) {
++        RoundWallpaperRecord candidate;
++        if (!GetSlot(slot, candidate) || candidate.id != id || candidate.sha256 != sha256 ||
++            candidate.size != size) {
++            ESP_LOGE(TAG, "Wallpaper activation record mismatch");
++            return false;
++        }
++        Settings current("round_wallpaper");
++        const std::string previous = current.GetString("active_slot");
++        Settings writable("round_wallpaper", true);
++        if ((previous == "a" || previous == "b") && previous != slot) {
++            writable.SetString("previous_slot", previous);
++        }
++        writable.SetString("active_slot", slot);
++        result = candidate;
++        ESP_LOGI(TAG, "Wallpaper %s selected in slot %s; restart required", id.c_str(), slot.c_str());
++        return true;
++    }
++
++    bool Rollback(RoundWallpaperRecord& result) {
++        Settings current("round_wallpaper");
++        const std::string active = current.GetString("active_slot");
++        const std::string previous = current.GetString("previous_slot");
++        RoundWallpaperRecord candidate;
++        if ((active != "a" && active != "b") || (previous != "a" && previous != "b") ||
++            active == previous || !GetSlot(previous, candidate)) {
++            ESP_LOGE(TAG, "No verified wallpaper rollback slot");
++            return false;
++        }
++        Settings writable("round_wallpaper", true);
++        writable.SetString("active_slot", previous);
++        writable.SetString("previous_slot", active);
++        result = candidate;
++        ESP_LOGI(TAG, "Wallpaper rollback selected slot %s; restart required", previous.c_str());
++        return true;
++    }
++};
++
+ // SmartRing-Plus 的日常入口继续复用通用 LCD 的状态栏、电量、
+ // 通知和字幕。动态壁纸存在时，它是所有日常交互状态的角色主视觉；
+ // 几何脸只在壁纸缺失或无法解码时作为固件内置回退。
+@@ -727,7 +1029,11 @@ private:
+
+         void* data = nullptr;
+         size_t size = 0;
+-        if (!Assets::GetInstance().GetAssetData(kWallpaperAssetName, data, size)) {
++        RoundWallpaperRecord record;
++        if (RoundWallpaperStore::GetInstance().GetActive(record)) {
++            data = const_cast<void*>(record.data);
++            size = record.size;
++        } else if (!Assets::GetInstance().GetAssetData(kWallpaperAssetName, data, size)) {
+             ESP_LOGW(TAG, "Round wallpaper asset is not available yet");
+             return;
+         }
+@@ -1287,6 +1593,96 @@ private:
+             });
+     }
+
++    void InitializeRoundWallpaperTools() {
++        auto& mcp = McpServer::GetInstance();
++        mcp.AddUserOnlyTool("self.screen.get_round_wallpaper",
++            "Read the verified active wallpaper and rollback availability",
++            PropertyList(), [](const PropertyList&) -> ReturnValue {
++                return RoundWallpaperStore::GetInstance().GetStatus();
++            });
++
++        mcp.AddUserOnlyTool("self.screen.stage_round_wallpaper",
++            "Download a validated 360x360 GIF to the inactive wallpaper slot without activating it",
++            PropertyList({
++                Property("wallpaper_api", kPropertyTypeInteger, 1, 1),
++                Property("wallpaper_id", kPropertyTypeString),
++                Property("sha256", kPropertyTypeString),
++                Property("size_bytes", kPropertyTypeInteger, 1, 3 * 1024 * 1024 - 4096),
++                Property("url", kPropertyTypeString),
++            }), [](const PropertyList& properties) -> ReturnValue {
++                if (properties["wallpaper_api"].value<int>() != 1) {
++                    throw std::invalid_argument("Unsupported wallpaper API");
++                }
++                RoundWallpaperRecord record;
++                if (!RoundWallpaperStore::GetInstance().Stage(
++                        properties["url"].value<std::string>(),
++                        properties["wallpaper_id"].value<std::string>(),
++                        properties["sha256"].value<std::string>(),
++                        properties["size_bytes"].value<int>(), record)) {
++                    throw std::runtime_error("Wallpaper staging failed");
++                }
++                cJSON* json = cJSON_CreateObject();
++                cJSON_AddNumberToObject(json, "wallpaper_api", record.api);
++                cJSON_AddStringToObject(json, "slot", record.slot.c_str());
++                cJSON_AddStringToObject(json, "wallpaper_id", record.id.c_str());
++                cJSON_AddStringToObject(json, "sha256", record.sha256.c_str());
++                cJSON_AddNumberToObject(json, "size_bytes", record.size);
++                cJSON_AddStringToObject(json, "state", "staged_verified");
++                return json;
++            });
++
++        mcp.AddUserOnlyTool("self.screen.activate_round_wallpaper",
++            "Select an exactly verified staged wallpaper; a separate reboot applies it",
++            PropertyList({
++                Property("wallpaper_api", kPropertyTypeInteger, 1, 1),
++                Property("slot", kPropertyTypeString),
++                Property("wallpaper_id", kPropertyTypeString),
++                Property("sha256", kPropertyTypeString),
++                Property("size_bytes", kPropertyTypeInteger, 1, 3 * 1024 * 1024 - 4096),
++            }), [](const PropertyList& properties) -> ReturnValue {
++                if (properties["wallpaper_api"].value<int>() != 1) {
++                    throw std::invalid_argument("Unsupported wallpaper API");
++                }
++                RoundWallpaperRecord record;
++                if (!RoundWallpaperStore::GetInstance().Activate(
++                        properties["slot"].value<std::string>(),
++                        properties["wallpaper_id"].value<std::string>(),
++                        properties["sha256"].value<std::string>(),
++                        properties["size_bytes"].value<int>(), record)) {
++                    throw std::runtime_error("Wallpaper activation failed");
++                }
++                cJSON* json = cJSON_CreateObject();
++                cJSON_AddNumberToObject(json, "wallpaper_api", record.api);
++                cJSON_AddStringToObject(json, "slot", record.slot.c_str());
++                cJSON_AddStringToObject(json, "wallpaper_id", record.id.c_str());
++                cJSON_AddStringToObject(json, "sha256", record.sha256.c_str());
++                cJSON_AddNumberToObject(json, "size_bytes", record.size);
++                cJSON_AddStringToObject(json, "state", "activation_pending_restart");
++                return json;
++            });
++
++        mcp.AddUserOnlyTool("self.screen.rollback_round_wallpaper",
++            "Select the previously active verified wallpaper; a separate reboot applies it",
++            PropertyList({Property("wallpaper_api", kPropertyTypeInteger, 1, 1)}),
++            [](const PropertyList& properties) -> ReturnValue {
++                if (properties["wallpaper_api"].value<int>() != 1) {
++                    throw std::invalid_argument("Unsupported wallpaper API");
++                }
++                RoundWallpaperRecord record;
++                if (!RoundWallpaperStore::GetInstance().Rollback(record)) {
++                    throw std::runtime_error("Wallpaper rollback failed");
++                }
++                cJSON* json = cJSON_CreateObject();
++                cJSON_AddNumberToObject(json, "wallpaper_api", record.api);
++                cJSON_AddStringToObject(json, "slot", record.slot.c_str());
++                cJSON_AddStringToObject(json, "wallpaper_id", record.id.c_str());
++                cJSON_AddStringToObject(json, "sha256", record.sha256.c_str());
++                cJSON_AddNumberToObject(json, "size_bytes", record.size);
++                cJSON_AddStringToObject(json, "state", "rollback_pending_restart");
++                return json;
++            });
++    }
++
+ public:
+     ViewESmartRingPlus() : boot_button_(BOOT_BUTTON_GPIO) {
+         InitializePowerOffPin();
+@@ -1300,6 +1696,7 @@ public:
+         InitializeSt77916Display();
+         InitializeButtons();
+         InitializeRoundSkinTools();
++        InitializeRoundWallpaperTools();
+         InitializePowerManager();
+     }
+
+diff --git a/partitions/v2/16m.csv b/partitions/v2/16m.csv
+index 8af93a3..614f3ca 100644
+--- a/partitions/v2/16m.csv
++++ b/partitions/v2/16m.csv
+@@ -5,4 +5,6 @@ otadata,  data, ota,     0xd000,    0x2000,
+ phy_init, data, phy,     0xf000,    0x1000,
+ ota_0,    app,  ota_0,   0x20000,   0x3f0000,
+ ota_1,    app,  ota_1,   ,          0x3f0000,
+-assets,   data, spiffs,  0x800000,  8M
++assets,       data, spiffs,  0x800000,  2M
++wallpaper_a,  data, 0x40,    0xA00000,  3M
++wallpaper_b,  data, 0x41,    0xD00000,  3M

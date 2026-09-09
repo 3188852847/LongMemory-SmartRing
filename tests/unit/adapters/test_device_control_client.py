@@ -183,3 +183,62 @@ def test_round_skin_rejects_false_verified_mismatch(tmp_path):
     client = client_for(tmp_path, response)
     with pytest.raises(BridgeError, match="bridge_invalid_response"):
         asyncio.run(client.set_round_skin(skin))
+
+
+def test_round_wallpaper_stage_projects_only_verified_slot_result(tmp_path):
+    item_id, digest = "wallpaper-" + "a" * 20, "b" * 64
+    response = {"wallpaper_api": 1, "slot": "b", "wallpaper_id": item_id,
+                "sha256": digest, "size_bytes": 2321851,
+                "state": "staged_verified", "operation_id": "c" * 32}
+    client = client_for(tmp_path, response)
+    result = asyncio.run(client.stage_round_wallpaper(
+        item_id=item_id, sha256=digest, size_bytes=2321851,
+        url="http://192.168.124.93:8768/wallpaper/" + "d" * 64,
+    ))
+    assert result == response
+    args, options = client._session.calls[0]
+    assert args == ("POST", "http://127.0.0.1:8766/api/device/round-wallpaper/stage")
+    assert options["json"]["item_id"] == item_id
+    assert options["timeout"].total == 150
+
+
+def test_round_wallpaper_activation_and_rollback_require_exact_restart_results(tmp_path):
+    item_id, digest = "wallpaper-" + "a" * 20, "b" * 64
+    staged = {"wallpaper_api": 1, "slot": "b", "wallpaper_id": item_id,
+              "sha256": digest, "size_bytes": 2321851, "state": "staged_verified"}
+    activated = {**staged, "state": "activated_restarting", "operation_id": "c" * 32}
+    client = client_for(tmp_path, activated)
+    assert asyncio.run(client.activate_round_wallpaper(staged)) == activated
+
+    rollback = {**activated, "slot": "a", "state": "rollback_restarting"}
+    client = client_for(tmp_path, rollback)
+    assert asyncio.run(client.rollback_round_wallpaper()) == rollback
+
+
+def test_round_wallpaper_status_requires_verified_active_record(tmp_path):
+    response = {
+        "wallpaper_api": 1, "active_valid": True, "active_slot": "a",
+        "active_wallpaper_id": "wallpaper-" + "a" * 20,
+        "active_sha256": "b" * 64, "active_size_bytes": 2321851,
+        "rollback_available": True,
+    }
+    client = client_for(tmp_path, response)
+    assert asyncio.run(client.read_round_wallpaper()) == response
+
+
+@pytest.mark.parametrize("change", [
+    {"state": "active_verified"}, {"slot": "c"}, {"sha256": "e" * 64},
+    {"size_bytes": 1}, {"operation_id": "not-hex"},
+])
+def test_round_wallpaper_stage_rejects_unproven_or_mismatched_response(tmp_path, change):
+    item_id, digest = "wallpaper-" + "a" * 20, "b" * 64
+    response = {"wallpaper_api": 1, "slot": "b", "wallpaper_id": item_id,
+                "sha256": digest, "size_bytes": 2321851,
+                "state": "staged_verified", "operation_id": "c" * 32,
+                **change}
+    client = client_for(tmp_path, response)
+    with pytest.raises(BridgeError, match="bridge_invalid_response"):
+        asyncio.run(client.stage_round_wallpaper(
+            item_id=item_id, sha256=digest, size_bytes=2321851,
+            url="http://192.168.124.93:8768/wallpaper/" + "d" * 64,
+        ))

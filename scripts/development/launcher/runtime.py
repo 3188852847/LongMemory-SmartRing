@@ -16,6 +16,7 @@ from winjob import Job
 ROOT = Path(__file__).resolve().parents[3]
 VOICE_ROOT = Path(r"D:\ESP32-Workspace\xiaozhi-esp32-server\main\xiaozhi-server")
 VOXCPM_PORT = 18768
+WALLPAPER_DELIVERY_PORT = 8768
 DEFAULT_CHAT_PATH = "/chat-react"
 CONSOLE_PATHS = {"chat": DEFAULT_CHAT_PATH, "device": "/device", "memories": "/memories", "settings": "/settings"}
 DEFAULT_BGE_MODEL = ROOT / "data/models/bge-small-zh-v1.5/7999e1d3359715c523056ef9478215996d62a620"
@@ -85,7 +86,7 @@ def build_commands(options, uv=None):
     if (options.model_profile == "campus" or
             (options.voice and options.voice_model_profile == "campus")) and not options.consent:
         raise ValueError("请先确认聊天写入及当前 HTTP 传输风险。")
-    if not 1024 <= options.port <= 65535 or options.port in {8000, 8003, 8766}:
+    if not 1024 <= options.port <= 65535 or options.port in {8000, 8003, 8766, WALLPAPER_DELIVERY_PORT}:
         raise ValueError("控制台端口需在 1024–65535 且不占用小智端口。")
     if options.role not in {"plain_v1", "elysia_v1"}:
         raise ValueError("未知助手角色。")
@@ -148,6 +149,8 @@ def build_commands(options, uv=None):
         if not any(ip in ipaddress.ip_network(net) for net in
                    ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16")):
             raise ValueError("只允许 RFC1918 局域网地址，不允许公网或所有网卡地址。")
+        # 专用监听只提供短时、单次、哈希绑定的 GIF；控制台本身仍只监听回环。
+        console.extend(["--wallpaper-lan-ip", str(ip)])
         python = options.voice_root / ".venv/Scripts/python.exe"
         if not python.is_file():
             raise ValueError("未找到小智自己的 Python 环境。")
@@ -221,7 +224,9 @@ class Manager:
         commands = build_commands(options)
         require_free("127.0.0.1", options.port)
         if options.voice:
-            for host, port in [(options.lan_ip, 8000), (options.lan_ip, 8003), ("127.0.0.1", 8766)]:
+            for host, port in [(options.lan_ip, 8000), (options.lan_ip, 8003),
+                               (options.lan_ip, WALLPAPER_DELIVERY_PORT),
+                               ("127.0.0.1", 8766)]:
                 require_free(host, port)
             if options.tts_backend == "voxcpm2":
                 require_no_listener("127.0.0.1", VOXCPM_PORT)

@@ -9,15 +9,17 @@ param(
     [string]$RemoteSubnet
 )
 $ErrorActionPreference = 'Stop'
-$ruleName = 'LongMemory-Xiaozhi-LAN-Demo'
+$voiceRuleName = 'LongMemory-Xiaozhi-LAN-Demo'
+$wallpaperRuleName = 'LongMemory-Wallpaper-LAN-Demo'
+$ruleNames = @($voiceRuleName, $wallpaperRuleName)
 
 if ($Action -eq 'Revoke') {
-    $existing = Get-NetFirewallRule -Name $ruleName -ErrorAction SilentlyContinue
+    $existing = @($ruleNames | ForEach-Object { Get-NetFirewallRule -Name $_ -ErrorAction SilentlyContinue })
     if ($existing) {
         $existing | Remove-NetFirewallRule
-        Write-Output '已撤销本次演示规则；服务需另外 Ctrl+C 停止。'
+        Write-Output '已撤销本项目语音与壁纸演示规则；服务需另外停止。'
     } else {
-        Write-Output '本次演示规则不存在，无需撤销。'
+        Write-Output '本项目演示规则不存在，无需撤销。'
     }
     return
 }
@@ -50,7 +52,7 @@ if ($parts.Count -eq 2) {
     if ($prefix -lt 21 -or $prefix -gt 32) { throw '演示仅接受 /21 到 /32 的来源范围。' }
 }
 $RemoteSubnet = "$remoteIP/$prefix"
-if (Get-NetFirewallRule -Name $ruleName -ErrorAction SilentlyContinue) {
+if (@($ruleNames | ForEach-Object { Get-NetFirewallRule -Name $_ -ErrorAction SilentlyContinue }).Count -gt 0) {
     throw '演示规则已存在。若需调整，先显式 Revoke，再 Allow；不会覆盖。'
 }
 $adapter = @(Get-NetIPAddress -AddressFamily IPv4 -IPAddress $ListenAddress)
@@ -69,10 +71,28 @@ $programPath = (Get-Process -Id $owners[0]).Path
 if (-not $programPath -or [System.IO.Path]::GetFileName($programPath) -ne 'python.exe') {
     throw '监听进程不是预期的 python.exe，拒绝放行。'
 }
-New-NetFirewallRule -Name $ruleName -DisplayName $ruleName `
-    -Direction Inbound -Action Allow -Protocol TCP -LocalPort 8000,8003 `
-    -LocalAddress $ListenAddress -RemoteAddress $RemoteSubnet `
-    -InterfaceAlias $adapter[0].InterfaceAlias -Program $programPath `
-    -Profile Any -EdgeTraversalPolicy Block | Out-Null
-Write-Output "已创建临时演示规则：$ListenAddress 的 8000/8003，仅来自 $RemoteSubnet。"
-Write-Output "限定程序：$programPath。其他已有放行规则不受本工具控制。演示结束请 Revoke。"
+$wallpaperListeners = @(Get-NetTCPConnection -State Listen -LocalAddress $ListenAddress -LocalPort 8768)
+if ($wallpaperListeners.Count -ne 1) {
+    throw '请用新版启动面板启动圆屏服务，确认该地址的 8768 已监听。'
+}
+$wallpaperProgramPath = (Get-Process -Id $wallpaperListeners[0].OwningProcess).Path
+if (-not $wallpaperProgramPath -or [System.IO.Path]::GetFileName($wallpaperProgramPath) -ne 'python.exe') {
+    throw '壁纸投递监听进程不是预期的 python.exe，拒绝放行。'
+}
+try {
+    New-NetFirewallRule -Name $voiceRuleName -DisplayName $voiceRuleName `
+        -Direction Inbound -Action Allow -Protocol TCP -LocalPort 8000,8003 `
+        -LocalAddress $ListenAddress -RemoteAddress $RemoteSubnet `
+        -InterfaceAlias $adapter[0].InterfaceAlias -Program $programPath `
+        -Profile Any -EdgeTraversalPolicy Block | Out-Null
+    New-NetFirewallRule -Name $wallpaperRuleName -DisplayName $wallpaperRuleName `
+        -Direction Inbound -Action Allow -Protocol TCP -LocalPort 8768 `
+        -LocalAddress $ListenAddress -RemoteAddress $RemoteSubnet `
+        -InterfaceAlias $adapter[0].InterfaceAlias -Program $wallpaperProgramPath `
+        -Profile Any -EdgeTraversalPolicy Block | Out-Null
+} catch {
+    $ruleNames | ForEach-Object { Get-NetFirewallRule -Name $_ -ErrorAction SilentlyContinue | Remove-NetFirewallRule }
+    throw
+}
+Write-Output "已创建临时演示规则：$ListenAddress 的 8000/8003 与单文件壁纸端口 8768，仅来自 $RemoteSubnet。"
+Write-Output "语音进程：$programPath；壁纸进程：$wallpaperProgramPath。演示结束请 Revoke。"

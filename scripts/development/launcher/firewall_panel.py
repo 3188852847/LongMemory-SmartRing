@@ -37,8 +37,8 @@ def open_panel(parent, address, root):
             except ValueError as error:
                 messagebox.showerror('范围无效', str(error), parent=window)
                 return
-            detail = (f'允许 {remote} 访问 {selected} 的 TCP 8000/8003，仅绑定实际监听 Python。\n不会覆盖已有项目规则。'
-                      if action == 'Allow' else '仅撤销 LongMemory-Xiaozhi-LAN-Demo 规则。圆屏可能断连；其他规则不变。')
+            detail = (f'允许 {remote} 访问 {selected} 的 TCP 8000/8003，以及短时壁纸投递端口 8768；分别绑定实际监听 Python。\n不会覆盖已有项目规则。'
+                      if action == 'Allow' else '仅撤销 LongMemory 的语音与壁纸演示规则。圆屏可能断连；其他规则不变。')
             if not messagebox.askyesno('确认修改系统防火墙', detail + '\n随后弹出 Windows 管理员授权。', parent=window):
                 return
         busy = True
@@ -54,7 +54,7 @@ def open_panel(parent, address, root):
                     rules = data['rules']
                     description = '项目规则不存在；不代表防火墙阻止连接，其他规则可能已允许。'
                     if rules:
-                        description = '; '.join(f"规则启用={r['enabled']}，本地={r['local']}，来源={r['remote']}" for r in rules)
+                        description = '; '.join(f"{r['name']}：启用={r['enabled']}，本地={r['local']}，来源={r['remote']}" for r in rules)
                         if any(selected not in r['local'] for r in rules):
                             description += ' 当前 IP 与规则不匹配，请核对后显式撤销旧规则、再添加。'
                     results.put(f'所选地址监听端口：{ports}。\n{description}\n仅检查电脑侧；圆屏在线状态请看控制台设备页。')

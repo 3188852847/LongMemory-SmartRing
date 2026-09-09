@@ -70,6 +70,38 @@ class FakeBridge:
                 "requested_manifest_sha256": skin["manifest_sha256"],
                 "acknowledged": True, "verified": True, "device_skin": skin}
 
+    async def stage_round_wallpaper(self, *, item_id, sha256, size_bytes, url):
+        self.calls.append(("stage-round-wallpaper", item_id, sha256, size_bytes, url))
+        if self.error:
+            raise self.error
+        return {"wallpaper_api": 1, "slot": "b", "wallpaper_id": item_id,
+                "sha256": sha256, "size_bytes": size_bytes,
+                "state": "staged_verified", "operation_id": "b" * 32}
+
+    async def read_round_wallpaper(self):
+        self.calls.append("read-round-wallpaper")
+        if self.error:
+            raise self.error
+        return {"wallpaper_api": 1, "active_valid": True, "active_slot": "a",
+                "active_wallpaper_id": "wallpaper-" + "a" * 20,
+                "active_sha256": "d" * 64, "active_size_bytes": 1234,
+                "rollback_available": True}
+
+    async def activate_round_wallpaper(self, staged):
+        self.calls.append(("activate-round-wallpaper", staged))
+        if self.error:
+            raise self.error
+        return {**staged, "state": "activated_restarting", "operation_id": "c" * 32}
+
+    async def rollback_round_wallpaper(self):
+        self.calls.append("rollback-round-wallpaper")
+        if self.error:
+            raise self.error
+        return {"wallpaper_api": 1, "slot": "a",
+                "wallpaper_id": "wallpaper-" + "a" * 20, "sha256": "d" * 64,
+                "size_bytes": 1234, "state": "rollback_restarting",
+                "operation_id": "e" * 32}
+
     @staticmethod
     def round_skin():
         return {
@@ -93,7 +125,8 @@ async def console(database=None, allow_memory_delete=False, chat_backend=None,
                   persona_producer=None, persona_model=None,
                   proactive_clock=None, model_profile_store=None, voice_model_profiles=None,
                   memory_backend_store=None, xiaozhi_memory_backends=None,
-                  round_skin_store=None, round_wallpaper_library=None):
+                  round_skin_store=None, round_wallpaper_library=None,
+                  round_wallpaper_delivery=None):
     # 先占用随机回环端口，再把精确 Host 交给应用，避免探测后抢占端口。
     sock = socket.socket()
     sock.bind(("127.0.0.1", 0))
@@ -116,7 +149,8 @@ async def console(database=None, allow_memory_delete=False, chat_backend=None,
                                      memory_backend_store=memory_backend_store,
                                      xiaozhi_memory_backends=xiaozhi_memory_backends,
                                      round_skin_store=round_skin_store,
-                                     round_wallpaper_library=round_wallpaper_library), access_log=None)
+                                     round_wallpaper_library=round_wallpaper_library,
+                                     round_wallpaper_delivery=round_wallpaper_delivery), access_log=None)
     await runner.setup()
     await web.SockSite(runner, sock).start()
     try:
@@ -167,6 +201,28 @@ class FakeWallpaperLibrary:
         assert item_id == "wallpaper-" + "a" * 20
         return self.preview
 
+    def delivery_spec(self, item_id):
+        assert item_id == "wallpaper-" + "a" * 20
+        return {"item_id": item_id, "path": self.preview,
+                "sha256": "d" * 64, "size_bytes": self.preview.stat().st_size}
+
+
+class FakeWallpaperDelivery:
+    def __init__(self):
+        self.revoked = []
+
+    def issue(self, **values):
+        from types import SimpleNamespace
+        assert values["expected_sha256"] == "d" * 64
+        ticket = SimpleNamespace(token="e" * 64)
+        return ticket, "http://192.168.124.93:8768/wallpaper/" + ticket.token
+
+    def revoke(self, token):
+        self.revoked.append(token)
+
+    def app(self):
+        return web.Application()
+
 
 def test_round_wallpaper_upload_and_preview_are_csrf_protected(tmp_path):
     async def run():
@@ -196,6 +252,82 @@ def test_round_wallpaper_upload_and_preview_are_csrf_protected(tmp_path):
             preview = await client.get(base + "/api/round-wallpapers/wallpaper-" + "a" * 20 + "/preview")
             assert preview.status == 200 and preview.content_type == "image/gif"
             assert await preview.read() == b"GIF89a"
+    asyncio.run(run())
+
+
+def test_round_wallpaper_stage_is_csrf_protected_and_reports_staged_not_active(tmp_path):
+    async def run():
+        library = FakeWallpaperLibrary(tmp_path / "wallpapers")
+        delivery = FakeWallpaperDelivery()
+        # 该合成服务不需要真的监听第二端口，因此只把投递对象交给路由。
+        async with console(round_wallpaper_library=library) as (client, base, bridge):
+            headers = await login(client, base)
+            item_id = "wallpaper-" + "a" * 20
+            unavailable = await client.post(base + f"/api/round-wallpapers/{item_id}/stage",
+                                            headers=headers)
+            assert unavailable.status == 503
+
+        # 直接构造应用以注入投递对象，同时清空其启动钩子，避免绑定 LAN。
+        sock = socket.socket()
+        sock.bind(("127.0.0.1", 0))
+        port = sock.getsockname()[1]
+        bridge = FakeBridge()
+        app = create_app(port=port, bridge=bridge, round_wallpaper_library=library,
+                         round_wallpaper_delivery=delivery)
+        app.on_startup.clear()
+        app.on_cleanup.clear()
+        runner = web.AppRunner(app, access_log=None)
+        await runner.setup()
+        await web.SockSite(runner, sock).start()
+        try:
+            async with aiohttp.ClientSession(cookie_jar=aiohttp.CookieJar(unsafe=True), trust_env=False) as client:
+                base = f"http://127.0.0.1:{port}"
+                headers = await login(client, base)
+                assert (await client.post(base + f"/api/round-wallpapers/{item_id}/stage")).status == 403
+                response = await client.post(base + f"/api/round-wallpapers/{item_id}/stage", headers=headers)
+                data = await response.json()
+                assert response.status == 200 and data["state"] == "staged_verified"
+                assert "active" not in data
+                assert delivery.revoked == ["e" * 64]
+                assert bridge.calls[-1][0] == "stage-round-wallpaper"
+        finally:
+            await runner.cleanup()
+
+    asyncio.run(run())
+
+
+def test_round_wallpaper_publish_stages_then_activates_and_revokes_ticket(tmp_path):
+    async def run():
+        library = FakeWallpaperLibrary(tmp_path / "wallpapers")
+        delivery = FakeWallpaperDelivery()
+        sock = socket.socket()
+        sock.bind(("127.0.0.1", 0))
+        port = sock.getsockname()[1]
+        bridge = FakeBridge()
+        app = create_app(port=port, bridge=bridge, round_wallpaper_library=library,
+                         round_wallpaper_delivery=delivery)
+        app.on_startup.clear()
+        app.on_cleanup.clear()
+        runner = web.AppRunner(app, access_log=None)
+        await runner.setup()
+        await web.SockSite(runner, sock).start()
+        try:
+            async with aiohttp.ClientSession(cookie_jar=aiohttp.CookieJar(unsafe=True), trust_env=False) as client:
+                base = f"http://127.0.0.1:{port}"
+                headers = await login(client, base)
+                item_id = "wallpaper-" + "a" * 20
+                response = await client.post(
+                    base + f"/api/round-wallpapers/{item_id}/publish", headers=headers,
+                )
+                data = await response.json()
+                assert response.status == 200 and data["state"] == "activated_restarting"
+                assert [call[0] for call in bridge.calls[-2:]] == [
+                    "stage-round-wallpaper", "activate-round-wallpaper",
+                ]
+                assert delivery.revoked == ["e" * 64]
+        finally:
+            await runner.cleanup()
+
     asyncio.run(run())
 
 

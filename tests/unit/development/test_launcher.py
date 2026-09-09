@@ -367,9 +367,9 @@ def test_manager_syncs_selected_voice_model_and_memory_after_ports_are_free(opti
         assert tts_calls[0][2:] == ("edge", {})
         assert tts_calls[1][2] == "edge"
         assert tts_calls[1][3] == {"apply": True, "expected_digest": "c" * 64}
-        # console、8000、8003、8766 四个监听位都通过后，才允许第一次配置检查。
-        assert ordering[:4] == ["port"] * 4
-        assert ordering[4:] == [
+        # console、8000、8003、8768、8766 五个监听位都通过后，才允许第一次配置检查。
+        assert ordering[:5] == ["port"] * 5
+        assert ordering[5:] == [
             "network_check", "tts_check", "model_check", "memory_check",
             "network_apply", "tts_apply", "model_apply", "memory_apply",
         ]

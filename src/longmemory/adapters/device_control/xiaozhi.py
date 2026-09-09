@@ -26,6 +26,9 @@ REASONS = frozenset({
     "status_readback_unavailable", "value_outside_device_schema",
     "brightness_out_of_range", "theme_invalid",
     "round_skin_invalid", "round_skin_readback_invalid", "round_skin_readback_mismatch",
+    "round_wallpaper_stage_invalid", "round_wallpaper_readback_invalid",
+    "round_wallpaper_readback_mismatch", "round_wallpaper_delivery_unavailable",
+    "round_wallpaper_restart_not_acknowledged",
     "set_not_acknowledged_outcome_unknown",
     "device_offline", "device_not_ready", "tools_not_ready", "readback_mismatch",
     "volume_out_of_range", "tool_unavailable",
@@ -53,7 +56,7 @@ class XiaozhiControlClient:
         if self._session is not None:
             await self._session.close()
 
-    async def _request(self, method: str, path: str, body=None) -> dict:
+    async def _request(self, method: str, path: str, body=None, *, timeout_seconds=18) -> dict:
         try:
             # 每次读取，以便小智重建令牌后无需重启网页服务；内容从不打印。
             token = self.token_file.read_text(encoding="utf-8").strip()
@@ -70,6 +73,7 @@ class XiaozhiControlClient:
                 method, "http://127.0.0.1:8766" + path,
                 headers={"Authorization": "Bearer " + token}, json=body,
                 allow_redirects=False,
+                timeout=aiohttp.ClientTimeout(total=timeout_seconds),
             ) as response:
                 raw = bytearray()
                 async for chunk in response.content.iter_chunked(4096):
@@ -209,6 +213,83 @@ class XiaozhiControlClient:
         if "reason" in data:
             result["reason"] = safe_reason(data["reason"])
         return result
+
+    async def stage_round_wallpaper(
+        self, *, item_id: str, sha256: str, size_bytes: int, url: str,
+    ) -> dict:
+        if (not re.fullmatch(r"wallpaper-[0-9a-f]{20}", item_id)
+                or not re.fullmatch(r"[0-9a-f]{64}", sha256)
+                or type(size_bytes) is not int or not 0 < size_bytes <= 4 * 1024 * 1024
+                or not isinstance(url, str)):
+            raise BridgeError("round_wallpaper_stage_invalid", 400)
+        data = await self._request(
+            "POST", "/api/device/round-wallpaper/stage",
+            {"item_id": item_id, "sha256": sha256, "size_bytes": size_bytes, "url": url},
+            timeout_seconds=150,
+        )
+        fields = {"wallpaper_api", "slot", "wallpaper_id", "sha256", "size_bytes",
+                  "state", "operation_id"}
+        if (set(data) != fields or data.get("wallpaper_api") != 1
+                or data.get("slot") not in {"a", "b"}
+                or data.get("wallpaper_id") != item_id or data.get("sha256") != sha256
+                or data.get("size_bytes") != size_bytes
+                or data.get("state") != "staged_verified"
+                or not re.fullmatch(r"[0-9a-f]{32}", str(data.get("operation_id", "")))):
+            raise BridgeError("bridge_invalid_response", 502)
+        return data
+
+    async def read_round_wallpaper(self) -> dict:
+        data = await self._request("GET", "/api/device/round-wallpaper")
+        fields = {"wallpaper_api", "active_valid", "active_slot", "active_wallpaper_id",
+                  "active_sha256", "active_size_bytes", "rollback_available"}
+        if not isinstance(data, dict) or set(data) != fields or data.get("wallpaper_api") != 1:
+            raise BridgeError("bridge_invalid_response", 502)
+        if type(data.get("active_valid")) is not bool or type(data.get("rollback_available")) is not bool:
+            raise BridgeError("bridge_invalid_response", 502)
+        if data["active_valid"]:
+            valid = (data.get("active_slot") in {"a", "b"}
+                     and re.fullmatch(r"wallpaper-[0-9a-f]{20}", str(data.get("active_wallpaper_id", "")))
+                     and re.fullmatch(r"[0-9a-f]{64}", str(data.get("active_sha256", "")))
+                     and type(data.get("active_size_bytes")) is int
+                     and 0 < data["active_size_bytes"] <= 4 * 1024 * 1024)
+        else:
+            valid = (data.get("active_slot") == "" and data.get("active_wallpaper_id") == ""
+                     and data.get("active_sha256") == "" and data.get("active_size_bytes") == 0
+                     and data.get("rollback_available") is False)
+        if not valid:
+            raise BridgeError("bridge_invalid_response", 502)
+        return data
+
+    async def activate_round_wallpaper(self, staged: dict) -> dict:
+        fields = {"wallpaper_api", "slot", "wallpaper_id", "sha256", "size_bytes", "state"}
+        if not isinstance(staged, dict) or set(staged) != fields or staged.get("state") != "staged_verified":
+            raise BridgeError("round_wallpaper_stage_invalid", 400)
+        data = await self._request(
+            "POST", "/api/device/round-wallpaper/activate", staged,
+            timeout_seconds=30,
+        )
+        expected = {**staged, "state": "activated_restarting"}
+        operation_id = data.pop("operation_id", None)
+        if data != expected or not re.fullmatch(r"[0-9a-f]{32}", str(operation_id or "")):
+            raise BridgeError("bridge_invalid_response", 502)
+        return {**data, "operation_id": operation_id}
+
+    async def rollback_round_wallpaper(self) -> dict:
+        data = await self._request(
+            "POST", "/api/device/round-wallpaper/rollback", timeout_seconds=30,
+        )
+        fields = {"wallpaper_api", "slot", "wallpaper_id", "sha256", "size_bytes",
+                  "state", "operation_id"}
+        if (set(data) != fields or data.get("wallpaper_api") != 1
+                or data.get("slot") not in {"a", "b"}
+                or data.get("state") != "rollback_restarting"
+                or not re.fullmatch(r"wallpaper-[0-9a-f]{20}", str(data.get("wallpaper_id", "")))
+                or not re.fullmatch(r"[0-9a-f]{64}", str(data.get("sha256", "")))
+                or type(data.get("size_bytes")) is not int
+                or not 0 < data["size_bytes"] <= 4 * 1024 * 1024
+                or not re.fullmatch(r"[0-9a-f]{32}", str(data.get("operation_id", "")))):
+            raise BridgeError("bridge_invalid_response", 502)
+        return data
 
     @staticmethod
     def _round_skin(value: object) -> dict:

@@ -8,6 +8,8 @@ import asyncio
 import json
 import re
 import time
+import ipaddress
+from urllib.parse import urlsplit
 from uuid import uuid4
 
 
@@ -17,10 +19,16 @@ BRIGHTNESS_TOOL = "self.screen.set_brightness"
 THEME_TOOL = "self.screen.set_theme"
 GET_ROUND_SKIN_TOOL = "self.screen.get_round_skin"
 SET_ROUND_SKIN_TOOL = "self.screen.set_round_skin"
+STAGE_ROUND_WALLPAPER_TOOL = "self.screen.stage_round_wallpaper"
+GET_ROUND_WALLPAPER_TOOL = "self.screen.get_round_wallpaper"
+ACTIVATE_ROUND_WALLPAPER_TOOL = "self.screen.activate_round_wallpaper"
+ROLLBACK_ROUND_WALLPAPER_TOOL = "self.screen.rollback_round_wallpaper"
+REBOOT_TOOL = "self.reboot"
 MIN_VOLUME, MAX_VOLUME = 5, 60  # 技术验证阶段限制，非硬件音量范围。
 MIN_BRIGHTNESS, MAX_BRIGHTNESS = 5, 100
 MAX_ANNOUNCEMENT_CHARS = 80
 MAX_ANNOUNCEMENT_TTL_SECONDS = 300
+MAX_WALLPAPER_BYTES = 4 * 1024 * 1024
 ROUND_SKIN_FIELDS = (
     "skin_api", "skin_id", "manifest_sha256", "background", "foreground", "muted",
     "accent", "listening", "thinking", "happy", "concerned", "error",
@@ -114,6 +122,67 @@ def validate_round_skin(value):
     return value
 
 
+def validate_wallpaper_result(value, expected_state):
+    fields = {"wallpaper_api", "slot", "wallpaper_id", "sha256", "size_bytes", "state"}
+    if not isinstance(value, dict) or set(value) != fields:
+        raise ControlError("round_wallpaper_readback_invalid", 502)
+    if (value.get("wallpaper_api") != 1 or value.get("slot") not in {"a", "b"}
+            or value.get("state") != expected_state
+            or not isinstance(value.get("wallpaper_id"), str)
+            or re.fullmatch(r"wallpaper-[0-9a-f]{20}", value["wallpaper_id"]) is None
+            or not isinstance(value.get("sha256"), str)
+            or re.fullmatch(r"[0-9a-f]{64}", value["sha256"]) is None
+            or type(value.get("size_bytes")) is not int
+            or not 0 < value["size_bytes"] <= MAX_WALLPAPER_BYTES):
+        raise ControlError("round_wallpaper_readback_invalid", 502)
+    return value
+
+
+def validate_wallpaper_status(value):
+    fields = {"wallpaper_api", "active_valid", "active_slot", "active_wallpaper_id",
+              "active_sha256", "active_size_bytes", "rollback_available"}
+    if not isinstance(value, dict) or set(value) != fields or value.get("wallpaper_api") != 1:
+        raise ControlError("round_wallpaper_readback_invalid", 502)
+    if type(value.get("active_valid")) is not bool or type(value.get("rollback_available")) is not bool:
+        raise ControlError("round_wallpaper_readback_invalid", 502)
+    if value["active_valid"]:
+        valid = (value.get("active_slot") in {"a", "b"}
+                 and re.fullmatch(r"wallpaper-[0-9a-f]{20}", str(value.get("active_wallpaper_id", "")))
+                 and re.fullmatch(r"[0-9a-f]{64}", str(value.get("active_sha256", "")))
+                 and type(value.get("active_size_bytes")) is int
+                 and 0 < value["active_size_bytes"] <= MAX_WALLPAPER_BYTES)
+    else:
+        valid = (value.get("active_slot") == "" and value.get("active_wallpaper_id") == ""
+                 and value.get("active_sha256") == "" and value.get("active_size_bytes") == 0
+                 and value.get("rollback_available") is False)
+    if not valid:
+        raise ControlError("round_wallpaper_readback_invalid", 502)
+    return value
+
+
+def validate_wallpaper_url(value):
+    if not isinstance(value, str) or len(value) > 256:
+        raise ControlError("round_wallpaper_stage_invalid", 400)
+    parsed = urlsplit(value)
+    try:
+        address = ipaddress.IPv4Address(parsed.hostname or "")
+    except ipaddress.AddressValueError:
+        raise ControlError("round_wallpaper_stage_invalid", 400) from None
+    try:
+        port = parsed.port
+    except ValueError:
+        raise ControlError("round_wallpaper_stage_invalid", 400) from None
+    private = any(address in ipaddress.ip_network(network) for network in (
+        "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16",
+    ))
+    if (parsed.scheme != "http" or port != 8768 or parsed.username or parsed.password
+            or parsed.query or parsed.fragment
+            or re.fullmatch(r"/wallpaper/[0-9a-f]{64}", parsed.path) is None
+            or not private):
+        raise ControlError("round_wallpaper_stage_invalid", 400)
+    return value
+
+
 class DeviceControl:
     def __init__(self, allowed_device_id, timeout=5, announcement_sender=None):
         self.allowed_device_id = allowed_device_id.lower()
@@ -190,7 +259,7 @@ class DeviceControl:
             result["reason"] = exc.code
         return result
 
-    async def _call(self, conn, name, arguments):
+    async def _call(self, conn, name, arguments, *, timeout=None):
         """复用小智 MCP 的回执路由，直接发送以避免上游辅助函数吞掉发送异常。
 
         握手固定占用 ID 1/2；工具调用跳过它们，并使用上游共享计数器。
@@ -199,12 +268,16 @@ class DeviceControl:
         if self._connection() is not conn:
             raise ControlError("device_connection_changed")
         if name not in (STATUS_TOOL, VOLUME_TOOL, BRIGHTNESS_TOOL, THEME_TOOL,
-                        GET_ROUND_SKIN_TOOL, SET_ROUND_SKIN_TOOL):
+                        GET_ROUND_SKIN_TOOL, SET_ROUND_SKIN_TOOL,
+                        GET_ROUND_WALLPAPER_TOOL, STAGE_ROUND_WALLPAPER_TOOL, ACTIVATE_ROUND_WALLPAPER_TOOL,
+                        ROLLBACK_ROUND_WALLPAPER_TOOL, REBOOT_TOOL):
             raise ControlError("tool_not_allowed", 403)
         client = conn.mcp_client
         # 皮肤工具在固件中标为 user-only，避免语言模型擅自修改外观；因此不会
         # 出现在普通 tools/list 中。只有本机窄控制通道能按固定契约直接调用。
-        if name not in (GET_ROUND_SKIN_TOOL, SET_ROUND_SKIN_TOOL):
+        if name not in (GET_ROUND_SKIN_TOOL, SET_ROUND_SKIN_TOOL,
+                        GET_ROUND_WALLPAPER_TOOL, STAGE_ROUND_WALLPAPER_TOOL, ACTIVATE_ROUND_WALLPAPER_TOOL,
+                        ROLLBACK_ROUND_WALLPAPER_TOOL, REBOOT_TOOL):
             tool_schema(client, name)
         call_id = await client.get_next_id()
         while call_id < 3:
@@ -217,7 +290,9 @@ class DeviceControl:
             async def exchange():
                 await conn.websocket.send(json.dumps(message))
                 return await future
-            raw = await asyncio.wait_for(exchange(), timeout=self.timeout)
+            raw = await asyncio.wait_for(
+                exchange(), timeout=self.timeout if timeout is None else timeout,
+            )
             return decode_result(raw)
         except asyncio.TimeoutError:
             raise ControlError("device_timeout_outcome_unknown", 504) from None
@@ -387,6 +462,67 @@ class DeviceControl:
                 result["reason"] = exc.code
             result["operation_id"] = uuid4().hex
             return result
+
+    async def stage_round_wallpaper(self, *, item_id, sha256, size_bytes, url):
+        if (not isinstance(item_id, str)
+                or re.fullmatch(r"wallpaper-[0-9a-f]{20}", item_id) is None
+                or not isinstance(sha256, str)
+                or re.fullmatch(r"[0-9a-f]{64}", sha256) is None
+                or type(size_bytes) is not int
+                or not 0 < size_bytes <= MAX_WALLPAPER_BYTES):
+            raise ControlError("round_wallpaper_stage_invalid", 400)
+        validate_wallpaper_url(url)
+        if self.operation_lock.locked():
+            raise ControlError("control_busy")
+        async with self.operation_lock:
+            result = validate_wallpaper_result(await self._call(
+                self._connection(), STAGE_ROUND_WALLPAPER_TOOL,
+                {"wallpaper_api": 1, "wallpaper_id": item_id, "sha256": sha256,
+                 "size_bytes": size_bytes, "url": url},
+                timeout=120,
+            ), "staged_verified")
+            if (result["wallpaper_id"] != item_id or result["sha256"] != sha256
+                    or result["size_bytes"] != size_bytes):
+                raise ControlError("round_wallpaper_readback_mismatch", 502)
+            return {**result, "operation_id": uuid4().hex}
+
+    async def read_round_wallpaper(self):
+        return validate_wallpaper_status(await self._call(
+            self._connection(), GET_ROUND_WALLPAPER_TOOL, {},
+        ))
+
+    async def activate_round_wallpaper(self, staged):
+        staged = validate_wallpaper_result(staged, "staged_verified")
+        if self.operation_lock.locked():
+            raise ControlError("control_busy")
+        async with self.operation_lock:
+            arguments = {
+                "wallpaper_api": 1,
+                "slot": staged["slot"],
+                "wallpaper_id": staged["wallpaper_id"],
+                "sha256": staged["sha256"],
+                "size_bytes": staged["size_bytes"],
+            }
+            selected = validate_wallpaper_result(await self._call(
+                self._connection(), ACTIVATE_ROUND_WALLPAPER_TOOL, arguments,
+            ), "activation_pending_restart")
+            if any(selected[key] != arguments[key] for key in arguments):
+                raise ControlError("round_wallpaper_readback_mismatch", 502)
+            if await self._call(self._connection(), REBOOT_TOOL, {}) is not True:
+                raise ControlError("round_wallpaper_restart_not_acknowledged", 502)
+            return {**selected, "state": "activated_restarting", "operation_id": uuid4().hex}
+
+    async def rollback_round_wallpaper(self):
+        if self.operation_lock.locked():
+            raise ControlError("control_busy")
+        async with self.operation_lock:
+            selected = validate_wallpaper_result(await self._call(
+                self._connection(), ROLLBACK_ROUND_WALLPAPER_TOOL,
+                {"wallpaper_api": 1},
+            ), "rollback_pending_restart")
+            if await self._call(self._connection(), REBOOT_TOOL, {}) is not True:
+                raise ControlError("round_wallpaper_restart_not_acknowledged", 502)
+            return {**selected, "state": "rollback_restarting", "operation_id": uuid4().hex}
 
     async def announce(self, text, expires_at_ms):
         """把一条短测试文本放入当前连接的既有 TTS 队列。
