@@ -140,6 +140,7 @@ def test_voice_command_uses_own_environment(options):
 
 def test_default_console_url_opens_react_chat():
     assert runtime.console_url(8767) == "http://127.0.0.1:8767/chat-react"
+    assert runtime.console_url(8767, "overview") == "http://127.0.0.1:8767/overview"
     assert runtime.console_url(8767, "memories") == "http://127.0.0.1:8767/memories"
     with pytest.raises(ValueError, match="未知控制台起始页"):
         runtime.console_url(8767, "https://example.invalid")

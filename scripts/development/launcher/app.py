@@ -41,7 +41,7 @@ def _summary_text(voice, start_page, role, extraction, retrieval, tts, allow_del
                   consolidation, memory_backend="longmemory"):
     """把内部启动枚举翻译为日常首页可理解的三行摘要。"""
     mode = "网页＋圆屏语音" if voice else "网页文字聊天"
-    page_label = {"chat": "聊天", "device": "设备状态", "memories": "记忆管理", "settings": "设置中心"}[start_page]
+    page_label = {"overview": "系统总览", "chat": "聊天", "device": "设备状态", "memories": "记忆管理", "settings": "设置中心"}[start_page]
     role_label = "爱莉希雅风格" if role == "elysia_v1" else "普通助手"
     extraction_label = "模型辅助提取" if extraction == "llm" else "规则提取"
     retrieval_label = "关键词＋语义召回" if retrieval == "hybrid" else "关键词召回"
@@ -241,7 +241,7 @@ def main():
     window.bind_all("<MouseWheel>", scroll_current_tab, add="+")
 
     voice = tk.BooleanVar(value=saved["voice"])
-    start_page_labels = {"聊天": "chat", "设备状态": "device", "记忆管理": "memories", "设置中心": "settings"}
+    start_page_labels = {"系统总览": "overview", "聊天": "chat", "设备状态": "device", "记忆管理": "memories", "设置中心": "settings"}
     start_page = tk.StringVar(value=next(label for label, value in start_page_labels.items() if value == saved["start_page"]))
     consent = tk.BooleanVar(value=saved["http_risk_ack"])
     database = tk.StringVar(value=saved["database"] or str(ROOT / "data/databases/xiaozhi-demo-v1.db"))

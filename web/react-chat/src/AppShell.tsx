@@ -1,12 +1,13 @@
 import type {ReactNode} from 'react';
 import {Link} from 'react-router-dom';
 
-type Page = 'device' | 'display' | 'chat' | 'memories' | 'quality' | 'scenarios' | 'personas' | 'settings' | 'experiments';
+type Page = 'overview' | 'device' | 'display' | 'chat' | 'memories' | 'quality' | 'scenarios' | 'personas' | 'settings' | 'experiments';
 
 const NAV_GROUPS: Array<{label: string; items: Array<{
   page: Page; icon: string; label: string; description: string; to: string;
 }>}> = [
   {label: '日常使用', items: [
+    {page: 'overview', icon: '总', label: '系统总览', description: '服务、模型、记忆与圆屏', to: '/overview'},
     {page: 'chat', icon: '聊', label: '文字聊天', description: '对话与记忆过程', to: '/chat-react'},
     {page: 'device', icon: '屏', label: '设备状态', description: '连接、快照与基础控制', to: '/device'},
     {page: 'display', icon: '显', label: '圆屏预览', description: '状态、情绪与异常', to: '/display-preview'},
@@ -42,7 +43,7 @@ export function AppShell({subtitle, className = '', sidebar, children}: {
   return <div className={`shell ${className}`.trim()}>
     <a className="skip-link" href="#main-content">跳到主要内容</a>
     <aside><div className="sidebar-inner">
-      <div className="brand-block"><Link aria-label="LongMemory" className="brand" to="/chat-react">
+      <div className="brand-block"><Link aria-label="LongMemory" className="brand" to="/overview">
         <span className="brand-mark" aria-hidden="true">LM</span><span className="brand-copy"><strong>LongMemory</strong><small>Companion console</small></span>
       </Link><p>{subtitle}</p></div>
       {sidebar}

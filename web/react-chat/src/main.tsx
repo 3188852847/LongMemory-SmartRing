@@ -26,6 +26,7 @@ const PersonaApp = lazy(() => import('./PersonaApp').then(module => ({default: m
 const SettingsApp = lazy(() => import('./SettingsApp').then(module => ({default: module.SettingsApp})));
 const ExperimentApp = lazy(() => import('./ExperimentApp').then(module => ({default: module.ExperimentApp})));
 const RoundDisplayApp = lazy(() => import('./RoundDisplayApp').then(module => ({default: module.RoundDisplayApp})));
+const OverviewApp = lazy(() => import('./OverviewApp').then(module => ({default: module.OverviewApp})));
 
 const api = new ChatApi();
 const queryClient = createConsoleQueryClient();
@@ -201,6 +202,7 @@ function ChatApp() {
 
 function ConsoleApp() {
   return <QueryClientProvider client={queryClient}><AppearanceProvider><BrowserRouter><Routes>
+    <Route path="/overview" element={<Suspense fallback={<p className="page-loading">正在加载系统总览…</p>}><OverviewApp/></Suspense>}/>
     <Route path="/device" element={<Suspense fallback={<p className="page-loading">正在加载设备控制…</p>}><DeviceApp/></Suspense>}/>
     <Route path="/display-preview" element={<Suspense fallback={<p className="page-loading">正在加载圆屏预览…</p>}><RoundDisplayApp/></Suspense>}/>
     <Route path="/chat-react" element={<ChatApp/>}/>

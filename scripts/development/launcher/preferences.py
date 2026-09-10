@@ -26,7 +26,7 @@ DEFAULTS = {
 }
 
 _CHOICES = {
-    "start_page": {"chat", "device", "memories", "settings"},
+    "start_page": {"overview", "chat", "device", "memories", "settings"},
     "role": {"elysia_v1", "plain_v1"},
     "memory_extraction": {"rules", "llm"},
     "memory_retrieval": {"keyword", "hybrid"},

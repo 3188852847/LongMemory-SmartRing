@@ -9,7 +9,8 @@ describe('控制台共享导航', () => {
       <h1>页面内容</h1>
     </AppShell></MemoryRouter>);
 
-    expect(screen.getByRole('link', {name: 'LongMemory'}).getAttribute('href')).toBe('/chat-react');
+    expect(screen.getByRole('link', {name: 'LongMemory'}).getAttribute('href')).toBe('/overview');
+    expect(screen.getByRole('link', {name: '系统总览'}).getAttribute('href')).toBe('/overview');
     expect(screen.getByRole('link', {name: '原始与原子记忆'}).getAttribute('href')).toBe('/memories');
     expect(screen.getByRole('link', {name: '设备状态'}).getAttribute('href')).toBe('/device');
     expect(screen.getByRole('link', {name: '圆屏预览'}).getAttribute('href')).toBe('/display-preview');
