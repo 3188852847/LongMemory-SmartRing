@@ -45,6 +45,10 @@ describe('圆屏状态协议与模拟器', () => {
     expect(screen.getByText('2. 情绪表达')).toBeTruthy();
     expect(screen.getByText('3. 系统覆盖')).toBeTruthy();
     expect(screen.getByText('4. 皮肤档案')).toBeTruthy();
+    expect(screen.getByText('当前编辑/预览')).toBeTruthy();
+    expect(screen.getByText('网页保存选择')).toBeTruthy();
+    expect(screen.getByText('最近真机回读')).toBeTruthy();
+    expect(screen.getByText('不会自动检测')).toBeTruthy();
     expect(screen.getByText('5. 真机五态观察')).toBeTruthy();
     expect(screen.getByText('6. 动态壁纸素材库')).toBeTruthy();
     expect(screen.getByText('先检测真机皮肤能力')).toBeTruthy();
@@ -60,6 +64,7 @@ describe('圆屏状态协议与模拟器', () => {
     request.mockResolvedValueOnce({skin_api:1,skin_id:'rose-night-v1',manifest_sha256:'a'.repeat(64)});
     fireEvent.click(screen.getByRole('button',{name:'检测真机皮肤能力'}));
     await screen.findByText(/真机支持皮肤协议/);
+    expect(screen.getByText('与当前预览一致')).toBeTruthy();
     fireEvent.click(screen.getByRole('checkbox',{name:'待机'}));
     expect(await screen.findByText(/观察记录已保存在当前浏览器/)).toBeTruthy();
     expect(localStorage.getItem(`longmemory:round-display-observations:v1:rose-night-v1:${'a'.repeat(64)}`)).toContain('idle');

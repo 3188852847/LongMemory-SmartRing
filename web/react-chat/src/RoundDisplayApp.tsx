@@ -140,6 +140,10 @@ export function RoundDisplayApp() {
   });
   const view = useMemo(() => resolveRoundDisplay(interaction, system), [interaction, system]);
   const skin = skins.data?.skins.find(item => item.id === selectedSkin);
+  const savedSkin = skins.data?.skins.find(item => item.id === skins.data?.selected_skin);
+  const deviceMatchesPreview = Boolean(deviceSkin.data && skin
+    && deviceSkin.data.skin_id === skin.id
+    && deviceSkin.data.manifest_sha256 === skin.manifest_sha256);
   const observationKey = deviceSkin.data
     ? roundObservationKey(deviceSkin.data.skin_id, deviceSkin.data.manifest_sha256)
     : '';
@@ -203,6 +207,13 @@ export function RoundDisplayApp() {
         </Card>
         <Card title="4. 皮肤档案" extra={<Tag color="blue">skin_api=1</Tag>}>
           <p className="subtle">“保存预览选择”只改网页；“应用到真机”会写入设备 NVS 并立即回读核对。语言模型看不到这两个固件管理工具。</p>
+          <Descriptions className="round-skin-state-map" bordered size="small" column={{xs:1,sm:1,md:3}} items={[
+            {key:'working',label:'当前编辑/预览',children:<><strong>{skin?.name ?? selectedSkin}</strong><br/><Tag color={draft?'gold':'blue'}>{draft?'未保存编辑草稿':'已加载档案'}</Tag></>},
+            {key:'saved',label:'网页保存选择',children:<><strong>{savedSkin?.name ?? skins.data?.selected_skin ?? '读取中'}</strong><br/><Tag>只影响预览默认值</Tag></>},
+            {key:'device',label:'最近真机回读',children:deviceSkin.isSuccess
+              ? <><strong>{deviceSkin.data.skin_id}</strong><br/><Tag color={deviceMatchesPreview?'success':'warning'}>{deviceMatchesPreview?'与当前预览一致':'与当前预览不同'}</Tag></>
+              : <><strong>尚未读取</strong><br/><Tag>不会自动检测</Tag></>},
+          ]}/>
           {(session.isError || skins.isError || saveSkin.isError) && <Alert type="error" showIcon title="皮肤档案不可用" description="请确认控制台使用最新代码启动，并刷新页面。"/>}
           <Space wrap className="round-skin-actions">
             <Select aria-label="圆屏皮肤" value={selectedSkin} onChange={value => {setSelectedSkin(value); setDraft(undefined);}} style={{minWidth:220}}
