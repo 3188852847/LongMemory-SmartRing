@@ -5,7 +5,7 @@
 识别耗时。状态只保存在当前设备连接内存中，供本机控制桥读取。
 """
 
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 import threading
 import time
 
@@ -57,7 +57,9 @@ class VoiceLatencyTracker:
             self.current = {
                 "version": 1,
                 "sentence_id": None,
-                "started_at": datetime.now(UTC).isoformat(),
+                # 小智当前独立环境仍是 Python 3.10；timezone.utc 在该版本可用，
+                # 不能使用 Python 3.11 才加入的 datetime.UTC 别名。
+                "started_at": datetime.now(timezone.utc).isoformat(),
                 "started": now,
                 "tts_backend": _backend(self.connection),
                 "timings": {field: None for field in TIMING_FIELDS},
