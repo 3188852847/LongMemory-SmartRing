@@ -48,10 +48,12 @@ def register_react_routes(app, root: Path):
         except (OSError, ValueError, KeyError, TypeError):
             raise web.HTTPNotFound()
 
+    app.router.add_get('/overview', page)
     app.router.add_get('/chat-react', page)
     app.router.add_get('/device', page)
     app.router.add_get('/display-preview', page)
     app.router.add_get('/memories', page)
+    app.router.add_get('/memory-quality', page)
     app.router.add_get('/scenarios', page)
     app.router.add_get('/personas', page)
     app.router.add_get('/settings', page)
