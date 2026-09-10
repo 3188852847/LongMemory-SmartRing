@@ -6,7 +6,7 @@ import {applyRolePreferences, DEFAULT_ROLE_PREFERENCES, readRolePreferences, typ
 import {settingsFailure} from './settingsFailure';
 
 interface Role {revision: number; name: string; prompt: string; saved_at: string | null}
-interface Settings {current: Role; presets: {name: string; prompt: string}[]; web: string; device: string}
+interface Settings {current: Role; history?: Role[]; presets: {name: string; prompt: string}[]; web: string; device: string}
 
 export function RoleEditor({api, disabled, onSaved}: {api: ChatApi; disabled: boolean; onSaved: () => void}) {
   const [open, setOpen] = useState(false);
@@ -56,6 +56,9 @@ export function RoleEditor({api, disabled, onSaved}: {api: ChatApi; disabled: bo
       <p>当前保存版本：{settings?.current.revision ?? '未读取'} · {settings?.current.name ?? ''}</p>
       <label>载入预设（只填入草稿）</label><Select className="wide" aria-label="载入角色预设" placeholder="选择预设" value={null} disabled={busy || !settings} options={settings?.presets.map(p => ({value:p.name,label:p.name}))}
         onChange={value => {const preset = settings?.presets.find(p => p.name === value); if (preset) {setName(preset.name); setPrompt(preset.prompt); setGuided(false); setPreferences({...DEFAULT_ROLE_PREFERENCES});}}}/>
+      <label>载入历史版本（只填入草稿）</label><Select className="wide" aria-label="载入角色历史版本" placeholder={settings?.history?.length ? '选择最近保存的版本' : '还没有已保存的历史版本'} value={null} disabled={busy || !settings?.history?.length}
+        options={settings?.history?.map(role => ({value:role.revision,label:`修订 ${role.revision} · ${role.name}${role.revision === settings.current.revision ? '（当前）' : ''}`}))}
+        onChange={revision => {const role = settings?.history?.find(item => item.revision === revision); if (role) {const structured = readRolePreferences(role.prompt); setName(role.name); setPrompt(role.prompt); setGuided(structured.enabled); setPreferences(structured.preferences); setNotice(`已将修订 ${role.revision} 载入草稿；点击保存后才会创建新版本并生效。`);}}}/>
       <label htmlFor="role-name">角色名称</label><Input id="role-name" value={name} maxLength={60} disabled={busy || !settings} onChange={e => setName(e.target.value)}/>
       <div className="role-guided-settings">
         <Space className="setting-line" wrap><div><strong>结构化表达偏好</strong><p>用常用选项调整表达；关闭后保存会移除这一受管配置，不改其他提示词。</p></div><Switch aria-label="启用结构化表达偏好" checked={guided} disabled={busy || !settings} onChange={setGuided}/></Space>

@@ -40,6 +40,18 @@ class RoleSettings:
         with closing(sqlite3.connect(self.path.as_uri() + '?mode=ro', uri=True, timeout=2)) as connection:
             return self.latest(connection) or self.default()
 
+    def history(self, limit=20):
+        """返回最近保存的角色快照，但不创建旁库或改变当前版本。"""
+        if not self.path.exists():
+            return []
+        with closing(sqlite3.connect(self.path.as_uri() + '?mode=ro', uri=True, timeout=2)) as connection:
+            rows = connection.execute(
+                'SELECT revision,name,prompt,saved_at FROM assistant_roles ORDER BY revision DESC LIMIT ?',
+                (limit,),
+            ).fetchall()
+        columns = ('revision', 'name', 'prompt', 'saved_at')
+        return [dict(zip(columns, row)) for row in rows]
+
     def save(self, *, expected_revision, name, prompt):
         if (type(expected_revision) is not int or expected_revision < 0 or
                 not isinstance(name, str) or not 1 <= len(name.strip()) <= 60 or

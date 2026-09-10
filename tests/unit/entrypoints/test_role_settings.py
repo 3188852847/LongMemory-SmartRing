@@ -26,6 +26,15 @@ def test_read_no_creation_save_restart_conflict(tmp_path):
     assert store.current() == value and not database.exists()
 
 
+def test_history_is_newest_first_and_does_not_change_current(tmp_path):
+    store = RoleSettings(tmp_path / 'synthetic.db', 'plain_v1')
+    assert store.history() == [] and not store.path.exists()
+    first = store.save(expected_revision=0, name='第一版', prompt='第一版表达')
+    second = store.save(expected_revision=1, name='第二版', prompt='第二版表达')
+    assert store.history() == [second, first]
+    assert store.current() == second
+
+
 @pytest.mark.parametrize('change', [{'name':''}, {'prompt':' '}, {'prompt':'x'*12001}, {'expected_revision':True}, {'prompt':'x\x00'}])
 def test_invalid_setting_does_not_create_files(tmp_path, change):
     store = RoleSettings(tmp_path / 'synthetic.db', 'plain_v1')
@@ -76,6 +85,7 @@ def test_role_api_security_validation_and_persistence(tmp_path):
             headers = await login(client, base)
             initial = await (await client.get(url)).json()
             assert initial['device'] == 'not_synced' and initial['web'] == 'fake_no_persona'
+            assert initial['history'] == []
             assert not backend.roles.path.exists()
             body = {'expected_revision':0, 'name':'合成角色', 'prompt':'合成内容'*1000}
             assert (await client.post(url, json=body)).status == 403
@@ -84,5 +94,6 @@ def test_role_api_security_validation_and_persistence(tmp_path):
             assert (await client.post(url, json=body, headers=headers)).status == 409
             current = await (await client.get(url)).json()
             assert current['current']['prompt'] == body['prompt']
+            assert current['history'][0]['revision'] == 1
             assert (await client.post(url, json=body | {'prompt':'x'*90000}, headers=headers)).status == 413
     asyncio.run(run())

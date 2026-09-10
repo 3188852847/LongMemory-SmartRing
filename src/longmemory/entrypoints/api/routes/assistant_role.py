@@ -11,6 +11,7 @@ def register_role_routes(app, backend, device_role=None):
         try:
             if request.method == 'GET':
                 return web.json_response({'current': backend.roles.current(),
+                    'history': backend.roles.history(),
                     'presets': [{'name': name, 'prompt': preset_prompt(name)} for name in PRESETS],
                     'web': 'next_turn' if backend.provider != 'fake' else 'fake_no_persona',
                     'device': 'check_required' if device_role else 'not_synced'})
@@ -20,7 +21,9 @@ def register_role_routes(app, backend, device_role=None):
             body = await request.clone(client_max_size=80000).json()
             if not isinstance(body, dict) or set(body) != {'expected_revision', 'name', 'prompt'}:
                 raise ValueError('invalid_body')
-            return web.json_response({'current': backend.roles.save(**body), 'web': 'next_turn' if backend.provider != 'fake' else 'fake_no_persona', 'device': 'not_synced'})
+            current = backend.roles.save(**body)
+            return web.json_response({'current': current, 'history': backend.roles.history(),
+                'web': 'next_turn' if backend.provider != 'fake' else 'fake_no_persona', 'device': 'not_synced'})
         except RoleConflict:
             return web.json_response({'error': 'role_conflict'}, status=409)
         except ValueError:
