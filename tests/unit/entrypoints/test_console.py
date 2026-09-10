@@ -344,7 +344,11 @@ def test_console_serves_only_local_assets_and_protected_device_actions():
                 assert (await client.get(base + path)).status in {401, 404}
             assert (await client.get(base + "/api/session")).status == 403
             assert (await client.get(base + "/api/device")).status == 401
+            assert (await client.get(base + "/api/runtime-status")).status == 401
             headers = await login(client, base)
+            runtime_status = await (await client.get(base + "/api/runtime-status")).json()
+            assert runtime_status["state"] == "launcher_unavailable"
+            assert runtime_status["services"] == {}
             response = await client.get(base + "/api/device")
             assert (await response.json())["ready"] is True
             assert bridge.calls == []  # 连接轮询不发设备命令。

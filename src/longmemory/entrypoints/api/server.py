@@ -35,6 +35,7 @@ from .routes.proactive_policy import register_proactive_policy_routes
 from .device_role import DeviceRole
 from .voice_settings import VoiceSettings, register_voice_routes
 from .proactive_scheduler import ProactiveScheduleLoop
+from .launcher_status import read_launcher_status
 from longmemory.infrastructure.logging.setup import configure_file_logging, close_file_logging
 
 ROOT = Path(__file__).resolve().parents[4]
@@ -71,7 +72,7 @@ def create_app(*, port=8765, bridge=None, web_root=None, database=None, allow_me
                model_profile_store=None, voice_model_profiles=None,
                memory_backend_store=None, xiaozhi_memory_backends=None,
                round_skin_store=None, round_wallpaper_library=None,
-               round_wallpaper_delivery=None):
+               round_wallpaper_delivery=None, launcher_status_file=None):
     sessions = Sessions()
     assets = web_root or ROOT / "web"
     client = bridge if bridge is not None else XiaozhiControlClient(ROOT / "data/control/device-control.token")
@@ -105,6 +106,12 @@ def create_app(*, port=8765, bridge=None, web_root=None, database=None, allow_me
             return web.json_response(await client.status())
         except BridgeError as error:
             return web.json_response({"error": error.code}, status=error.status)
+
+    async def runtime_status(request):
+        return web.json_response(read_launcher_status(
+            launcher_status_file,
+            instance_id,
+        ))
 
     async def volume(request):
         if operation_lock.locked():
@@ -167,6 +174,7 @@ def create_app(*, port=8765, bridge=None, web_root=None, database=None, allow_me
     register_react_routes(app, assets / 'react-chat/dist')
     app.router.add_get("/api/session", session, allow_head=False)
     app.router.add_get("/api/device", device, allow_head=False)
+    app.router.add_get("/api/runtime-status", runtime_status, allow_head=False)
     app.router.add_get("/api/device/volume", volume, allow_head=False)
     app.router.add_post("/api/device/volume", volume)
     app.router.add_get("/api/device/snapshot", device_snapshot, allow_head=False)
@@ -292,6 +300,8 @@ def main():
                         help="已安装的 ffmpeg/ffprobe 目录；只用于本机动态壁纸转码")
     parser.add_argument("--wallpaper-lan-ip",
                         help="动态壁纸投递专用 RFC1918 IPv4；仅圆屏模式设置")
+    parser.add_argument("--launcher-status-file", type=Path,
+                        help="启动面板运行快照；只读展示，不据此控制进程")
     args = parser.parse_args()
     if not 1024 <= args.port <= 65535:
         parser.error("port 必须在 1024–65535 之间")
@@ -499,7 +509,8 @@ def main():
                                    ROOT / "data" / "round-screen" / "wallpapers",
                                    ffmpeg_dir=args.ffmpeg_dir,
                                ),
-                               round_wallpaper_delivery=wallpaper_delivery),
+                               round_wallpaper_delivery=wallpaper_delivery,
+                               launcher_status_file=args.launcher_status_file),
                     host="127.0.0.1", port=args.port, access_log=None, print=None)
     except OSError:
         parser.exit(1, f"控制台未能绑定 127.0.0.1:{args.port}。请检查旧控制台是否仍在运行或端口权限；未自动停止其他进程、未换端口。\n")

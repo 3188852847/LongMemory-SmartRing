@@ -1,6 +1,7 @@
 """最小启动编排：不修改配置、不迁移数据库、不探测模型。"""
 
 from dataclasses import dataclass
+from datetime import datetime, timezone
 import http.client
 import json
 import os
@@ -21,6 +22,7 @@ DEFAULT_CHAT_PATH = "/chat-react"
 CONSOLE_PATHS = {"overview": "/overview", "chat": DEFAULT_CHAT_PATH, "device": "/device", "memories": "/memories", "settings": "/settings"}
 DEFAULT_BGE_MODEL = ROOT / "data/models/bge-small-zh-v1.5/7999e1d3359715c523056ef9478215996d62a620"
 DEFAULT_FFMPEG_DIR = Path(r"D:\Tools\ffmpeg\bin")
+LAUNCHER_STATUS_NAME = "launcher-status.json"
 
 
 def console_url(port: int, page: str = "chat") -> str:
@@ -114,6 +116,7 @@ def build_commands(options, uv=None):
                "--memory-extraction", options.memory_extraction,
                "--memory-retrieval", options.memory_retrieval,
                "--xiaozhi-server", str(options.voice_root.resolve()),
+               "--launcher-status-file", str(root / "data/control" / LAUNCHER_STATUS_NAME),
                "--memory-audit-log", str(root / "data/logs/xiaozhi-demo-v1.jsonl")]
     console.extend(["--model-profile", options.model_profile])
     console.extend(["--memory-backend", options.memory_backend])
@@ -217,6 +220,46 @@ class Manager:
         self.services = {}
         self.instance = ""
         self.options = None
+        self.status_path = None
+
+    def _service_state(self, name, *, ready=False):
+        """只报告启动器拥有的进程事实，不把“进程活着”冒充业务就绪。"""
+        service = self.services.get(name)
+        if service is None:
+            return "disabled"
+        process = getattr(service, "process", None)
+        if process is None:
+            # 测试替身或未来代理可能不暴露句柄；旁路诊断不得阻断启动。
+            return "running"
+        code = process.poll()
+        if code is not None:
+            return "exited"
+        return "ready" if ready else "running"
+
+    def publish_status(self, phase, *, console_ready=False, voxcpm_ready=False):
+        """原子发布不含正文/密钥的本机诊断快照；失败不能影响主服务。"""
+        if self.status_path is None or not self.instance:
+            return
+        snapshot = {
+            "schema_version": 1,
+            "launcher_instance": self.instance,
+            "launcher_pid": os.getpid(),
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+            "phase": phase,
+            "services": {
+                "console": self._service_state("console", ready=console_ready),
+                "voice": self._service_state("voice"),
+                "voxcpm2": self._service_state("voxcpm2", ready=voxcpm_ready),
+            },
+        }
+        temporary = self.status_path.with_suffix(".tmp")
+        try:
+            self.status_path.parent.mkdir(parents=True, exist_ok=True)
+            temporary.write_text(json.dumps(snapshot, ensure_ascii=False), encoding="utf-8")
+            os.replace(temporary, self.status_path)
+        except OSError:
+            # 诊断是旁路能力；磁盘/杀毒软件短暂占用不能中断聊天或语音。
+            pass
 
     def start(self, options):
         if self.services:
@@ -267,6 +310,8 @@ class Manager:
                 )
         self.options = options
         self.instance = secrets.token_hex(24)
+        self.status_path = options.root.resolve() / "data/control" / LAUNCHER_STATUS_NAME
+        self.publish_status("starting")
         runtime_token = secrets.token_hex(32)
         env = os.environ.copy()
         env.update(
@@ -281,6 +326,7 @@ class Manager:
         try:
             for name, command, cwd in commands:
                 self.services[name] = OwnedService(command, cwd, env)
+                self.publish_status("starting")
         except Exception:
             self.stop()
             raise
@@ -315,6 +361,7 @@ class Manager:
             conn.close()
 
     def stop(self):
+        self.publish_status("stopping")
         errors = []
         for service in reversed(list(self.services.values())):
             try:
@@ -324,3 +371,4 @@ class Manager:
         if errors:
             raise RuntimeError("停止未完全确认，请勿重复启动。")
         self.services.clear()
+        self.publish_status("stopped")

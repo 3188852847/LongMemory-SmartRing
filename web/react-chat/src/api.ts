@@ -131,6 +131,14 @@ export interface DeviceStatus {
   aec_advertised?:boolean; allowed_volume?:{minimum:number; maximum:number};
 }
 export interface MemoryPageSummary {total:number; limit:number; offset:number; items:unknown[]}
+export interface RuntimeStatus {
+  enabled:boolean;
+  state:'starting'|'ready'|'stopping'|'stopped'|'failed'|'stale'|'launcher_unavailable';
+  reason:string|null;
+  updated_at?:string;
+  age_seconds?:number;
+  services:Partial<Record<'console'|'voice'|'voxcpm2','disabled'|'running'|'ready'|'exited'>>;
+}
 export interface ModelProfile {
   id:'campus'|'official'; label:string; file_exists:boolean; base_url:string; model:string;
   timeout_seconds:number; max_tokens:number; allow_http:boolean; api_key_configured:boolean;

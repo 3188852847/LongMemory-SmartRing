@@ -2,6 +2,7 @@
 
 from dataclasses import replace
 import importlib.util
+import json
 import os
 from pathlib import Path
 import socket
@@ -50,6 +51,32 @@ def test_command_preserves_paths_and_does_not_enable_deletion_or_jobs(options):
     assert "--embedding-model-dir" not in cmd
     assert "--allow-insecure-http" not in cmd  # 网页仍需 .env 的独立 HTTP 许可。
     assert cmd[cmd.index("--memory-backend") + 1] == "longmemory"
+    assert cmd[cmd.index("--launcher-status-file") + 1].endswith("data\\control\\launcher-status.json")
+
+
+def test_launcher_status_snapshot_contains_only_bounded_runtime_facts(options):
+    class Process:
+        @staticmethod
+        def poll(): return None
+
+    class Owned:
+        process = Process()
+
+    manager = runtime.Manager()
+    manager.options = options
+    manager.instance = "synthetic-instance"
+    manager.status_path = options.root / "data/control/launcher-status.json"
+    manager.services = {"console": Owned(), "voice": Owned()}
+    manager.publish_status("ready", console_ready=True)
+
+    saved = json.loads(manager.status_path.read_text(encoding="utf-8"))
+    assert saved["launcher_instance"] == "synthetic-instance"
+    assert saved["services"] == {
+        "console": "ready", "voice": "running", "voxcpm2": "disabled"
+    }
+    assert set(saved) == {
+        "schema_version", "launcher_instance", "launcher_pid", "updated_at", "phase", "services"
+    }
 
 
 def test_explicit_launcher_choice_enables_l1_delete_capability(options):

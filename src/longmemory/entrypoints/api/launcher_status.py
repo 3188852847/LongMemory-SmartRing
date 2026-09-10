@@ -1,0 +1,61 @@
+"""读取启动器的最小运行快照；不探测、启动或停止任何外部进程。"""
+
+from datetime import datetime, timezone
+import json
+from pathlib import Path
+
+
+ALLOWED_PHASES = {"starting", "ready", "stopping", "stopped", "failed"}
+ALLOWED_SERVICES = {"console", "voice", "voxcpm2"}
+ALLOWED_STATES = {"disabled", "running", "ready", "exited"}
+
+
+def read_launcher_status(path: Path | None, expected_instance: str | None, *, now=None,
+                         maximum_age_seconds: float = 5.0) -> dict:
+    """只接受当前控制台实例的新鲜快照，旧启动器文件永远不会显示为正常。"""
+    unavailable = {
+        "enabled": False,
+        "state": "launcher_unavailable",
+        "reason": "manual_start_or_status_unavailable",
+        "services": {},
+    }
+    if path is None or not expected_instance:
+        return unavailable
+    try:
+        if path.stat().st_size > 32_768:
+            return unavailable
+        raw = json.loads(path.read_text(encoding="utf-8"))
+        updated = datetime.fromisoformat(raw["updated_at"])
+        if updated.tzinfo is None:
+            return unavailable
+        services = raw["services"]
+        if (
+            raw.get("schema_version") != 1
+            or raw.get("launcher_instance") != expected_instance
+            or raw.get("phase") not in ALLOWED_PHASES
+            or not isinstance(services, dict)
+            or set(services) != ALLOWED_SERVICES
+            or any(value not in ALLOWED_STATES for value in services.values())
+        ):
+            return unavailable
+    except (OSError, ValueError, TypeError, KeyError, json.JSONDecodeError):
+        return unavailable
+    current = now or datetime.now(timezone.utc)
+    age = max(0.0, (current - updated.astimezone(timezone.utc)).total_seconds())
+    if age > maximum_age_seconds:
+        return {
+            "enabled": True,
+            "state": "stale",
+            "reason": "launcher_status_stale",
+            "updated_at": raw["updated_at"],
+            "age_seconds": round(age, 1),
+            "services": {},
+        }
+    return {
+        "enabled": True,
+        "state": raw["phase"],
+        "reason": None,
+        "updated_at": raw["updated_at"],
+        "age_seconds": round(age, 1),
+        "services": services,
+    }

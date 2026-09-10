@@ -1,7 +1,7 @@
 import {useQuery} from '@tanstack/react-query';
 import {Alert, Card, Tag} from 'antd';
 import {Link} from 'react-router-dom';
-import {ChatApi, type Config, type DeviceStatus, type MemoryPageSummary} from './api';
+import {ChatApi, type Config, type DeviceStatus, type MemoryPageSummary, type RuntimeStatus} from './api';
 import {AppShell, ConsoleNav} from './AppShell';
 import {ConsoleStatusRail} from './ChatObservability';
 import {PageHeader} from './PageHeader';
@@ -14,6 +14,16 @@ function modelSummary(config?: Config) {
   if (config.model_health?.state === 'available') return {tone: 'green', label: '最近验证可用', detail: `${config.model} · ${config.provider}`};
   if (config.model_health?.state === 'unavailable') return {tone: 'red', label: '最近验证失败', detail: '到“设置中心 → 模型与服务”查看固定故障类别。'};
   return {tone: 'gold', label: '尚未验证', detail: '服务已装配不等于模型网络和 Key 当前有效。'};
+}
+
+function serviceLabel(state?: string) {
+  return ({ready:'已就绪', running:'进程运行中', disabled:'本次未启用', exited:'进程已退出'} as Record<string,string>)[state ?? ''] ?? '状态未知';
+}
+
+function runtimeTone(state?: string) {
+  if (state === 'ready') return 'green';
+  if (state === 'failed' || state === 'stale') return 'red';
+  return 'gold';
 }
 
 /**
@@ -39,6 +49,10 @@ export function OverviewApp() {
     queryFn: () => api.request<MemoryPageSummary>('/api/memories?q=&state=active&offset=0&limit=1'),
     enabled: session.isSuccess && config.data?.enabled === true, retry: false, staleTime: 30000,
   });
+  const runtime = useQuery({
+    queryKey: ['runtime-status'], queryFn: () => api.request<RuntimeStatus>('/api/runtime-status'),
+    enabled: session.isSuccess, retry: false, refetchInterval: 2000,
+  });
   const model = modelSummary(config.data);
   const consoleReady = session.isSuccess && config.isSuccess;
 
@@ -48,6 +62,16 @@ export function OverviewApp() {
     {session.isError && <Alert type="error" showIcon title="控制台会话不可用" description="网页后端可能已经停止。请回到启动面板查看受管服务状态；本页没有自动重启任何进程。"/>}
     <ConsoleStatusRail config={config.data} device={device.data} deviceFailed={device.isError} activeMemoryCount={memories.data?.total}/>
     <section className="overview-grid" aria-label="系统入口与说明">
+      <Card className="overview-runtime-card" title="受管服务"
+        extra={<Tag color={runtimeTone(runtime.data?.state)}>{runtime.data?.state === 'ready' ? '启动面板在线' : runtime.data?.state === 'stale' ? '状态已过期' : runtime.data?.enabled === false ? '非启动面板模式' : '正在核对'}</Tag>}>
+        <dl className="overview-facts">
+          <div><dt>网页控制台</dt><dd>{serviceLabel(runtime.data?.services.console)}</dd></div>
+          <div><dt>小智语音</dt><dd>{serviceLabel(runtime.data?.services.voice)}</dd></div>
+          <div><dt>VoxCPM2</dt><dd>{serviceLabel(runtime.data?.services.voxcpm2)}</dd></div>
+          <div><dt>状态新鲜度</dt><dd>{runtime.data?.age_seconds !== undefined ? `${runtime.data.age_seconds.toFixed(1)} 秒前` : '不可用'}</dd></div>
+        </dl>
+        <p className="subtle">这里只显示启动面板拥有的进程；手动终端启动会标为“非启动面板模式”。进程运行不代表模型、设备或声音已经可用，请结合下方独立状态判断。</p>
+      </Card>
       <Card title="开始使用" extra={<Tag color={consoleReady ? 'green' : 'gold'}>{consoleReady ? '控制台就绪' : '正在核对'}</Tag>}>
         <div className="overview-actions">
           <Link to="/chat-react"><strong>文字聊天</strong><span>输入、回答和本轮记忆证据</span></Link>

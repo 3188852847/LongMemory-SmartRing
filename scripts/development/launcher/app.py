@@ -664,6 +664,11 @@ def main():
                 set_component("browser", "已请求打开" if state["opened"] else "尚未打开",
                               "good" if state["opened"] else "busy")
                 set_status("控制台已就绪" + suffix + "。请在聊天页查看或检测模型状态；关闭网页不会停止服务。", "good")
+                manager.publish_status(
+                    "ready",
+                    console_ready=True,
+                    voxcpm_ready=voxcpm_is_ready,
+                )
             elif time.monotonic() - state["started"] > 90:
                 stopped = stop(False)
                 state["failed"] = True
@@ -673,6 +678,8 @@ def main():
                     set_component("speech", "进程已停止", "error")
                     set_component("browser", "未打开", "error")
                     set_status("90 秒内未确认控制台就绪，已停止受管服务；未停止其他程序。请查看指南。", "error")
+            else:
+                manager.publish_status("starting")
         window.after(1000, tick)
 
     def close():
