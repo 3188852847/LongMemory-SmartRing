@@ -7,20 +7,11 @@ diff --git a/main/boards/viewe-smartring-plus/config.json b/main/boards/viewe-sm
 diff --git a/main/protocols/websocket_protocol.cc b/main/protocols/websocket_protocol.cc
 --- a/main/protocols/websocket_protocol.cc
 +++ b/main/protocols/websocket_protocol.cc
-@@ -83,10 +83,16 @@ bool WebsocketProtocol::OpenAudioChannel() {
-     Settings settings("websocket", false);
-     std::string url = settings.GetString("url");
-     std::string token = settings.GetString("token");
+@@ -86,0 +87,5 @@
 +#if CONFIG_USE_SERVER_AEC
 +    // 服务端 AEC 必须依赖 v2 音频包中的时间戳。实验固件固定使用 v2，
 +    // 避免历史 NVS 中残留的 version=1 让 AEC 看似开启、实际没有参考时间戳。
 +    version_ = 2;
 +#else
-     int version = settings.GetInt("version");
-     if (version != 0) {
-         version_ = version;
-     }
+@@ -90,0 +96 @@
 +#endif
- 
-     error_occurred_ = false;
- 

@@ -17,7 +17,7 @@
 
 1. 从干净的厂家副本创建新的短路径工作副本。
 2. 核对清单中的关键文件哈希。
-3. 应用 `firmware/patches/` 中明确命名的补丁。0007 使用零上下文补丁以避免补丁文件中的伪空白告警，须先核对实验记录中的基线哈希，再使用 `git apply --check --unidiff-zero` 和 `git apply --unidiff-zero`。
+3. 应用 `firmware/patches/` 中明确命名的补丁。0007 与 0010 使用零上下文补丁以避免补丁文件中的伪空白告警，须先核对各自实验记录中的基线哈希，再使用 `git apply --check --unidiff-zero` 和 `git apply --unidiff-zero`。
 4. 使用全新 build 目录构建并记录 map、应用、assets 与分区余量。
 5. 先做离线审查；烧录仍需单独说明写入范围和恢复路径。
 
