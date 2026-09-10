@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "captured_on": "2026-09-10",
+  "experiment": "0010-server-aec-websocket-v2",
+  "depends_on": "0009-wallpaper-ab-delivery",
+  "board": "viewe-smartring-plus",
+  "application_version": "2.2.3",
+  "esp_idf_version": "5.5.4",
+  "decision": {
+    "experimental": true,
+    "device_aec": false,
+    "server_aec": true,
+    "websocket_protocol_version": 2,
+    "force_v2_when_server_aec_enabled": true,
+    "reason": "server AEC requires timestamped microphone and playback-reference audio"
+  },
+  "source": {
+    "patch_sha256": "B7C318F880FEB5A4D64DE976E30524F315A69FA96D694621B9C7C27443D57094",
+    "websocket_protocol_sha256_before": "F8454CDD600CE024D24207405125F6E5730084A2805BE413CCF69FBDCFD55A97",
+    "websocket_protocol_sha256_after": "718E29E7F79841A7517BA290E56AFA8BD57F94DBFA837E821D5F97BCB1AD8DF4",
+    "board_config_sha256_before": "F9BC5E3106409F3ADB4A96FD6AD159BE7688C0F865EDF4BA4AAAEB6BD598DF4F",
+    "board_config_sha256_after": "5E08104E689197DF943464CCE6FF31169A12B85A2AB4CCFACA592290544F0C70",
+    "clean_apply": true,
+    "reverse_apply_check": true,
+    "pre_build_backup_created": true
+  },
+  "application": {
+    "length_bytes": 3981136,
+    "sha256": "E326B281F2DD4868E9F745D62B7A01C0E8C592D74F1076EE41BFCA7389AF118E",
+    "previous_length_bytes": 3980784,
+    "previous_sha256": "124092FC9213400DF9B718B8FFB33661333F91C292A87DF6645B5B4DD45D169F",
+    "partition_length_bytes": 4128768,
+    "remaining_bytes": 147632,
+    "image_validation_hash_valid": true
+  },
+  "unchanged_artifacts": {
+    "partition_table_sha256": "D46BD51980CD6E15F0BF0C86F530D87A0BBC207144BD9442937B3C1A618A3FFD",
+    "base_assets_sha256": "C31A144A0DF77BFD8F70545D3AF12E3B23F1501CC3B4865EBD91E0FCAC965478"
+  },
+  "offline_verification": {
+    "firmware_build": "passed",
+    "generated_config_server_aec": true,
+    "generated_config_device_aec": false,
+    "direct_websocket_v2_server_tests": "1082_python_tests_passed_before_firmware_slice"
+  },
+  "flash": {
+    "result": "pending",
+    "required_offsets": ["0x20000"],
+    "application_only": true,
+    "nvs_write_required": false,
+    "assets_write_required": false,
+    "partition_table_write_required": false,
+    "rollback_image": "D:\\sr-bv2-lvgl-assets\\backups\\0010-pre-server-aec\\xiaozhi-v1.bin"
+  },
+  "runtime": {
+    "capability_gate": "pending_device_validation",
+    "speaker_echo_only_does_not_abort": "pending_device_validation",
+    "near_field_speech_interrupts": "pending_device_validation",
+    "far_field_speech_interrupts": "pending_device_validation",
+    "post_interrupt_conversation_continues": "pending_device_validation"
+  }
+}
