@@ -43,6 +43,7 @@ export function SpeechPlayer({api, text}: {api: ChatApi; text: string}) {
   const releasePlaybackLease = useRef<() => void>(() => undefined);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
+  const [generationMs, setGenerationMs] = useState<number | null>(null);
   const [settingsHint,setSettingsHint] = useState(false);
   const [speechInterrupt, setSpeechInterrupt] = useState(false);
 
@@ -140,11 +141,14 @@ export function SpeechPlayer({api, text}: {api: ChatApi; text: string}) {
     if (busy) return;
     const request = ++requestGeneration.current;
     setBusy(true);
+    setGenerationMs(null);
     setSettingsHint(false);
     setNotice('正在生成朗读…');
+    const startedAt = performance.now();
     try {
       const blob = await api.speech(text);
       if (request !== requestGeneration.current) return;
+      setGenerationMs(Math.max(0, performance.now() - startedAt));
       stopPlayback();
       const url = URL.createObjectURL(blob);
       objectUrl.current = url;
@@ -213,5 +217,6 @@ export function SpeechPlayer({api, text}: {api: ChatApi; text: string}) {
       <Switch size="small" checked={speechInterrupt} onChange={value => void changeSpeechInterrupt(value)}/>
     </Space>
     {notice && <small role="status">{notice}{settingsHint&&<> <Link to="/settings?tab=voice">打开声音设置</Link></>}</small>}
+    {generationMs !== null && <small className="speech-generation-time">最近一次网页合成等待：{(generationMs / 1000).toFixed(2)} 秒（含本机接口与音频返回，不代表圆屏首句延迟）</small>}
   </div>;
 }

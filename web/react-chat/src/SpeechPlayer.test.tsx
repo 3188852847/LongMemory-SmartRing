@@ -72,4 +72,30 @@ describe('网页朗读的麦克风生命周期', () => {
     expect(await screen.findByText(/当前 TTS 服务没有就绪/)).toBeTruthy();
     expect(screen.getByRole('link',{name:'打开声音设置'}).getAttribute('href')).toBe('/settings?tab=voice');
   });
+
+  test('成功朗读显示浏览器观察到的合成等待并说明边界', async () => {
+    const createObjectURL = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:synthetic');
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
+    let now = 100;
+    vi.spyOn(performance, 'now').mockImplementation(() => now);
+    class SyntheticAudio {
+      paused = false; currentTime = 0;
+      onended: (() => void) | null = null; onerror: (() => void) | null = null;
+      play = vi.fn().mockResolvedValue(undefined); pause = vi.fn();
+    }
+    Object.defineProperty(globalThis, 'Audio', {configurable:true,writable:true,value:SyntheticAudio});
+    let finishSpeech:(audio:Blob)=>void=()=>undefined;
+    const speech = vi.fn(() => new Promise<Blob>(resolve => {finishSpeech=resolve;}));
+    const api = {speech} as never;
+    render(<SpeechPlayer api={api} text="合成测试文本"/>);
+
+    fireEvent.click(screen.getByRole('button',{name:'网页朗读'}));
+    await waitFor(() => expect(speech).toHaveBeenCalledOnce());
+    now = 2600;
+    finishSpeech(new Blob(['audio']));
+
+    expect(await screen.findByText(/最近一次网页合成等待：2\.50 秒/)).toBeTruthy();
+    expect(screen.getByText(/不代表圆屏首句延迟/)).toBeTruthy();
+    expect(createObjectURL).toHaveBeenCalledOnce();
+  });
 });
