@@ -44,12 +44,16 @@
     "direct_websocket_v2_server_tests": "1082_python_tests_passed_before_firmware_slice"
   },
   "flash": {
-    "result": "pending",
+    "result": "verified",
+    "verified_on": "2026-09-10",
+    "port": "COM3",
+    "device_mac_suffix": "6d:38",
     "required_offsets": ["0x20000"],
     "application_only": true,
     "nvs_write_required": false,
     "assets_write_required": false,
     "partition_table_write_required": false,
+    "independent_verify_flash": "digest_matched",
     "rollback_image": "D:\\sr-bv2-lvgl-assets\\backups\\0010-pre-server-aec\\xiaozhi-v1.bin"
   },
   "runtime": {

@@ -1,6 +1,6 @@
 # 0010：服务端 AEC 与 WebSocket v2 自然打断实验
 
-状态：补丁前置检查、反向回退检查、ESP-IDF v5.5.4 离线构建和镜像校验已通过；尚未烧录，不能视为自然说话打断可用。
+状态：补丁前置检查、反向回退检查、ESP-IDF v5.5.4 离线构建、仅应用分区烧录和独立读回均已通过；自然说话打断的运行时验收尚未完成。
 
 ## 目的
 
@@ -28,6 +28,14 @@
 - 构建前应用镜像与配置已保存到 `D:\sr-bv2-lvgl-assets\backups\0010-pre-server-aec`；该目录是本机恢复点，不进入 Git。
 
 因此首次试烧只应把新 `xiaozhi.bin` 写入应用偏移 `0x20000`。不写 bootloader、分区表、OTA data、NVS、基础 assets 或壁纸 A/B 槽。失败时把上述 v1 回滚镜像写回同一偏移。
+
+## 2026-09-10 烧录记录
+
+- 目标：COM3，ESP32-S3 revision v0.2，MAC 尾号 `6d:38`。
+- 只向 `0x20000` 写入 3,981,136 字节的 0010 `xiaozhi.bin`；esptool 报告写后哈希通过。
+- 随后独立执行 `verify_flash 0x20000 xiaozhi.bin`，结果为 `digest matched`。
+- 未写 bootloader、分区表、OTA data、NVS、基础 assets 或壁纸 A/B 槽。
+- 烧录与读回只证明设备运行目标二进制，不证明 AEC 质量或自然插话成功。
 
 ## 真机验收
 
