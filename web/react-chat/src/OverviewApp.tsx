@@ -5,6 +5,7 @@ import {ChatApi, type Config, type DeviceStatus, type MemoryPageSummary, type Ru
 import {AppShell, ConsoleNav} from './AppShell';
 import {ConsoleStatusRail} from './ChatObservability';
 import {PageHeader} from './PageHeader';
+import {SystemDiagnostics} from './SystemDiagnostics';
 
 const api = new ChatApi();
 
@@ -62,6 +63,8 @@ export function OverviewApp() {
     {session.isError && <Alert type="error" showIcon title="控制台会话不可用" description="网页后端可能已经停止。请回到启动面板查看受管服务状态；本页没有自动重启任何进程。"/>}
     <ConsoleStatusRail config={config.data} device={device.data} deviceFailed={device.isError} activeMemoryCount={memories.data?.total}/>
     <section className="overview-grid" aria-label="系统入口与说明">
+      <SystemDiagnostics runtime={runtime.data} config={config.data} device={device.data}
+        failures={{runtime:runtime.isError,config:config.isError,device:device.isError}}/>
       <Card className="overview-runtime-card" title="受管服务"
         extra={<Tag color={runtimeTone(runtime.data?.state)}>{runtime.data?.state === 'ready' ? '启动面板在线' : runtime.data?.state === 'stale' ? '状态已过期' : runtime.data?.enabled === false ? '非启动面板模式' : '正在核对'}</Tag>}>
         <dl className="overview-facts">
