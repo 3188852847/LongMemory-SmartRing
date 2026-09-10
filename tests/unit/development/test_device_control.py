@@ -420,6 +420,16 @@ def test_natural_interruption_requires_all_observed_transport_conditions():
     }
 
 
+def test_direct_websocket_v2_counts_only_when_compatibility_wrapper_is_installed():
+    bridge, conn, _ = rig()
+    conn.client_aec = True
+    conn.client_listen_mode = "realtime"
+    conn.headers = {"Protocol-Version": "2"}
+    assert bridge.status()["natural_interruption"]["reason"] == "timestamp_transport_unavailable"
+    conn._longmemory_direct_ws_v2_installed = True
+    assert bridge.status()["natural_interruption"]["state"] == "trial_ready"
+
+
 def test_natural_interruption_offline_is_explicitly_unavailable():
     bridge, conn, _ = rig()
     bridge.detach(conn)

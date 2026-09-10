@@ -211,8 +211,21 @@ def natural_interruption_diagnostics(connection=None):
     features = getattr(connection, "features", {})
     device_aec = isinstance(features, dict) and features.get("aec") is True
     server_aec = getattr(connection, "client_aec", False) is True
-    # 这是当前服务端实现事实，不是对所有 Xiaozhi 版本的泛化判断。
-    timestamped_audio = getattr(connection, "conn_from_mqtt_gateway", False) is True
+    headers = getattr(connection, "headers", {})
+    raw_protocol = next((value for key, value in headers.items()
+                         if isinstance(key, str) and key.lower() == "protocol-version"), "1") \
+        if isinstance(headers, dict) else "1"
+    try:
+        protocol_v2 = int(raw_protocol) == 2
+    except (TypeError, ValueError):
+        protocol_v2 = False
+    # MQTT 原生支持时间戳；直连只有在项目包装器已安装且客户端明确选择 v2 时支持。
+    direct_v2_installed = (
+        getattr(connection, "_longmemory_direct_ws_v2_installed", False) is True
+        or getattr(type(connection), "_longmemory_direct_ws_v2_installed", False) is True
+    )
+    timestamped_audio = (getattr(connection, "conn_from_mqtt_gateway", False) is True
+                         or (protocol_v2 and direct_v2_installed))
     raw_mode = getattr(connection, "client_listen_mode", "unknown")
     listen_mode = raw_mode if raw_mode in {"auto", "manual", "realtime"} else "unknown"
 

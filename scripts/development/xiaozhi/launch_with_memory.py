@@ -113,8 +113,10 @@ def main():
     sys.path.insert(0, str(root))
     from core.connection import ConnectionHandler
     from core.providers.memory.longmemory.longmemory import MemoryProvider
+    from direct_ws_v2 import install_direct_ws_v2
     from voice_latency import install_audio_send_observer, install_voice_latency
     isolate_memory_initialization(ConnectionHandler, MemoryProvider)
+    install_direct_ws_v2(ConnectionHandler)
     install_voice_latency(ConnectionHandler)
     install_audio_send_observer()
     install_answer_completion(ConnectionHandler)

@@ -1,5 +1,12 @@
 # 已确认故障记录
 
+## Windows 中文 Python 路径导致 Tk 测试找不到 `init.tcl`
+
+- 发现时间：2026-09-10，运行完整 pytest 回归时。
+- 现象：其余 1081 项通过，启动面板的 Tk 构造测试报 `Can't find a usable init.tcl`；错误输出中的 Python 安装目录中文显示为乱码。
+- 定位：Tcl/Tk 文件实际完整存在于当前 uv Python 的 `sys.base_prefix/tcl`；显式设置 `TCL_LIBRARY` 与 `TK_LIBRARY` 后失败项通过，不是启动面板业务回归。
+- 修复：`tests/conftest.py` 在 Windows 且目录真实存在时，为 pytest 子进程补全这两个变量；不覆盖调用者配置，不修改系统环境变量，也不影响正式应用进程。
+
 ## Windows PowerShell 5.1 误读中文防火墙脚本
 
 - 发现时间：2026-09-03，执行小智局域网演示的 `firewall.ps1 -Action Allow` 时。
