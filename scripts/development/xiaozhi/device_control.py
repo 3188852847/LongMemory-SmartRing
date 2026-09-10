@@ -29,6 +29,7 @@ MIN_BRIGHTNESS, MAX_BRIGHTNESS = 5, 100
 MAX_ANNOUNCEMENT_CHARS = 80
 MAX_ANNOUNCEMENT_TTL_SECONDS = 300
 MAX_WALLPAPER_BYTES = 4 * 1024 * 1024
+WALLPAPER_RESTART_CONFIRM_SECONDS = 90
 ROUND_SKIN_FIELDS = (
     "skin_api", "skin_id", "manifest_sha256", "background", "foreground", "muted",
     "accent", "listening", "thinking", "happy", "concerned", "error",
@@ -508,8 +509,20 @@ class DeviceControl:
             ), "activation_pending_restart")
             if any(selected[key] != arguments[key] for key in arguments):
                 raise ControlError("round_wallpaper_readback_mismatch", 502)
-            if await self._call(self._connection(), REBOOT_TOOL, {}) is not True:
-                raise ControlError("round_wallpaper_restart_not_acknowledged", 502)
+            reboot_connection = self._connection()
+            try:
+                if await self._call(reboot_connection, REBOOT_TOOL, {}) is not True:
+                    raise ControlError("round_wallpaper_restart_not_acknowledged", 502)
+            except ControlError as exc:
+                # ESP32 可能先执行重启、再来不及把 `true` 回执刷到 WebSocket。
+                # 这时不能重发 reboot，更不能把已经成功的安装显示成失败；只等待
+                # 新连接并读取活动槽，且必须与刚才选择的完整记录严格一致。
+                if exc.code not in {
+                    "device_timeout_outcome_unknown", "device_call_failed_outcome_unknown",
+                    "device_connection_changed",
+                }:
+                    raise
+                await self._confirm_round_wallpaper_after_restart(selected, reboot_connection)
             return {**selected, "state": "activated_restarting", "operation_id": uuid4().hex}
 
     async def rollback_round_wallpaper(self):
@@ -520,9 +533,51 @@ class DeviceControl:
                 self._connection(), ROLLBACK_ROUND_WALLPAPER_TOOL,
                 {"wallpaper_api": 1},
             ), "rollback_pending_restart")
-            if await self._call(self._connection(), REBOOT_TOOL, {}) is not True:
-                raise ControlError("round_wallpaper_restart_not_acknowledged", 502)
+            reboot_connection = self._connection()
+            try:
+                if await self._call(reboot_connection, REBOOT_TOOL, {}) is not True:
+                    raise ControlError("round_wallpaper_restart_not_acknowledged", 502)
+            except ControlError as exc:
+                if exc.code not in {
+                    "device_timeout_outcome_unknown", "device_call_failed_outcome_unknown",
+                    "device_connection_changed",
+                }:
+                    raise
+                await self._confirm_round_wallpaper_after_restart(selected, reboot_connection)
             return {**selected, "state": "rollback_restarting", "operation_id": uuid4().hex}
+
+    async def _confirm_round_wallpaper_after_restart(self, selected, previous_connection):
+        """重启回执不确定时，仅用新连接的活动槽做最终确认，不重发写操作。"""
+        deadline = asyncio.get_running_loop().time() + WALLPAPER_RESTART_CONFIRM_SECONDS
+        transient = {
+            "device_offline", "device_not_ready", "tools_not_ready",
+            "device_connection_changed", "device_timeout_outcome_unknown",
+            "device_call_failed_outcome_unknown",
+        }
+        while asyncio.get_running_loop().time() < deadline:
+            try:
+                connection = self._connection()
+                if connection is previous_connection:
+                    await asyncio.sleep(0.5)
+                    continue
+                status = validate_wallpaper_status(await self._call(
+                    connection, GET_ROUND_WALLPAPER_TOOL, {}, timeout=self.timeout,
+                ))
+            except ControlError as exc:
+                if exc.code in transient:
+                    await asyncio.sleep(0.5)
+                    continue
+                raise
+            expected = {
+                "active_slot": selected["slot"],
+                "active_wallpaper_id": selected["wallpaper_id"],
+                "active_sha256": selected["sha256"],
+                "active_size_bytes": selected["size_bytes"],
+            }
+            if status["active_valid"] and all(status[key] == value for key, value in expected.items()):
+                return status
+            raise ControlError("round_wallpaper_readback_mismatch", 502)
+        raise ControlError("device_timeout_outcome_unknown", 504)
 
     async def announce(self, text, expires_at_ms):
         """把一条短测试文本放入当前连接的既有 TTS 队列。

@@ -266,7 +266,7 @@ class XiaozhiControlClient:
             raise BridgeError("round_wallpaper_stage_invalid", 400)
         data = await self._request(
             "POST", "/api/device/round-wallpaper/activate", staged,
-            timeout_seconds=30,
+            timeout_seconds=120,
         )
         expected = {**staged, "state": "activated_restarting"}
         operation_id = data.pop("operation_id", None)
@@ -276,7 +276,7 @@ class XiaozhiControlClient:
 
     async def rollback_round_wallpaper(self) -> dict:
         data = await self._request(
-            "POST", "/api/device/round-wallpaper/rollback", timeout_seconds=30,
+            "POST", "/api/device/round-wallpaper/rollback", timeout_seconds=120,
         )
         fields = {"wallpaper_api", "slot", "wallpaper_id", "sha256", "size_bytes",
                   "state", "operation_id"}

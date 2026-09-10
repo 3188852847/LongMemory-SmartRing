@@ -209,10 +209,12 @@ def test_round_wallpaper_activation_and_rollback_require_exact_restart_results(t
     activated = {**staged, "state": "activated_restarting", "operation_id": "c" * 32}
     client = client_for(tmp_path, activated)
     assert asyncio.run(client.activate_round_wallpaper(staged)) == activated
+    assert client._session.calls[0][1]["timeout"].total == 120
 
     rollback = {**activated, "slot": "a", "state": "rollback_restarting"}
     client = client_for(tmp_path, rollback)
     assert asyncio.run(client.rollback_round_wallpaper()) == rollback
+    assert client._session.calls[0][1]["timeout"].total == 120
 
 
 def test_round_wallpaper_status_requires_verified_active_record(tmp_path):

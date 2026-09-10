@@ -261,6 +261,67 @@ def test_round_wallpaper_activation_and_rollback_use_fixed_tools_then_reboot():
     asyncio.run(run())
 
 
+def test_round_wallpaper_activation_reconciles_ambiguous_reboot_without_retry(monkeypatch):
+    async def run():
+        bridge, connection, socket = rig()
+        staged = {
+            "wallpaper_api": 1, "slot": "b",
+            "wallpaper_id": "wallpaper-" + "a" * 20,
+            "sha256": "b" * 64, "size_bytes": 2321851,
+            "state": "staged_verified",
+        }
+        original_call = bridge._call
+        reconciled = []
+
+        async def call(conn, name, arguments, timeout=None):
+            if name == control.REBOOT_TOOL:
+                raise control.ControlError("device_timeout_outcome_unknown", 504)
+            return await original_call(conn, name, arguments, timeout=timeout)
+
+        async def confirm(selected, previous_connection):
+            reconciled.append((selected, previous_connection))
+
+        monkeypatch.setattr(bridge, "_call", call)
+        monkeypatch.setattr(bridge, "_confirm_round_wallpaper_after_restart", confirm)
+
+        result = await bridge.activate_round_wallpaper(staged)
+        assert result["state"] == "activated_restarting"
+        assert reconciled == [({**staged, "state": "activation_pending_restart"}, connection)]
+        # 不确定意味着设备可能已经执行重启，因此绝不能自动发第二次 reboot。
+        assert [item["params"]["name"] for item in socket.calls] == [
+            control.ACTIVATE_ROUND_WALLPAPER_TOOL,
+        ]
+
+    asyncio.run(run())
+
+
+def test_round_wallpaper_restart_confirmation_requires_exact_new_connection_readback():
+    async def run():
+        bridge, previous_connection, _ = rig()
+        _, current_connection, current_socket = rig()
+        bridge.detach(previous_connection)
+        bridge.attach(current_connection, bridge.allowed_device_id)
+        selected = {
+            "wallpaper_api": 1, "slot": "a",
+            "wallpaper_id": "wallpaper-" + "a" * 20,
+            "sha256": "b" * 64, "size_bytes": 2321851,
+            "state": "activation_pending_restart",
+        }
+
+        status = await bridge._confirm_round_wallpaper_after_restart(
+            selected, previous_connection,
+        )
+        assert status["active_valid"] is True
+        assert current_socket.calls[-1]["params"]["name"] == control.GET_ROUND_WALLPAPER_TOOL
+
+        with pytest.raises(control.ControlError, match="round_wallpaper_readback_mismatch"):
+            await bridge._confirm_round_wallpaper_after_restart(
+                {**selected, "slot": "b"}, previous_connection,
+            )
+
+    asyncio.run(run())
+
+
 def test_round_wallpaper_status_uses_hidden_fixed_tool_and_exact_projection():
     async def run():
         bridge, conn, socket = rig()

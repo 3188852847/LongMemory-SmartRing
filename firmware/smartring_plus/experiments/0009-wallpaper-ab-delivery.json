@@ -66,9 +66,16 @@
     "pre_migration_recovery_point": "local_git_ignored_backup"
   },
   "runtime": {
-    "device_status_readback": "pending",
-    "first_publish": "pending",
-    "active_slot_survives_reboot": "pending",
+    "verified_on": "2026-09-10",
+    "device_status_readback": "verified",
+    "first_publish": "verified",
+    "active_slot_survives_reboot": "verified",
+    "active_slot": "a",
+    "active_wallpaper_id": "wallpaper-32479fda87ab56344a4f",
+    "active_sha256": "80f3f192f1ec7a7db6263fe152a0c3153328af604106742be1946a9fa52ed9c1",
+    "active_size_bytes": 2321851,
+    "reboot_reply_race_observed": true,
+    "reboot_reply_race_resolution": "wait_for_new_connection_then_exact_readback_without_retrying_write_or_reboot",
     "rollback": "pending",
     "interrupted_download_keeps_old_slot": "pending"
   }

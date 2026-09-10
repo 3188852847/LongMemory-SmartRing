@@ -2,6 +2,7 @@
 
 import hashlib
 import sqlite3
+from datetime import datetime, timezone
 
 import pytest
 
@@ -123,8 +124,12 @@ def test_promote_unlinked_l0_reuses_source_and_deduplicates_fact(recorded):
     assert second["created_new_memory"] is False
     assert second["memory_id"] == first["memory_id"]
     assert len(backend.get(first["memory_id"])["sources"]) == 2
+    with sqlite3.connect(path) as connection:
+        event_date = datetime.fromisoformat(connection.execute(
+            "SELECT occurred_at FROM memory_quality_events ORDER BY occurred_at DESC LIMIT 1"
+        ).fetchone()[0]).astimezone(timezone.utc).date().isoformat()
     assert backend.daily_review(
-        local_date="2026-09-09", utc_offset_minutes=0,
+        local_date=event_date, utc_offset_minutes=0,
     )["quality_counts"]["owner_confirmed_missed_extraction"] == 2
     with pytest.raises(MemoryAccessError, match="source_message_changed"):
         backend.promote_source(

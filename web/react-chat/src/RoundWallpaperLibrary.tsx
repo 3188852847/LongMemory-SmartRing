@@ -15,7 +15,7 @@ const errorCopy:Record<string,string> = {
   round_wallpaper_delivery_unavailable:'当前不是圆屏启动模式，壁纸投递端口没有开放。',
   device_offline:'圆屏当前离线，请先让设备进入已连接/聆听状态。',
   round_wallpaper_stage_failed:'圆屏没有完成下载或哈希核对；原壁纸未被切换。',
-  device_timeout_outcome_unknown:'等待圆屏下载超时；不要重复点击，先看设备是否重启。',
+  device_timeout_outcome_unknown:'等待圆屏重启并回读活动壁纸超时；不要重复发布，设备可能已经完成切换。',
   round_wallpaper_readback_mismatch:'圆屏回执与本机素材不一致，已拒绝激活。',
   round_wallpaper_restart_not_acknowledged:'壁纸已选中，但圆屏没有确认重启；请手动重启后核对。',
 };
