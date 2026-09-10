@@ -66,6 +66,24 @@ describe('VoxCPM2 声音设置', () => {
     expect(screen.getByRole('button', {name: '保存声音方案'}).hasAttribute('disabled')).toBe(true);
   });
 
+  test('恢复推荐声音只修改草稿，仍需明确保存', async () => {
+    const request = vi.spyOn(ChatApi.prototype, 'request').mockResolvedValue({
+      backend: 'voxcpm2', voice: null, voices: [], digest: 'c'.repeat(64), text: '合成测试文本',
+      config_matches: true, editable: true, service_ready: true,
+      profile: {version: 1, reference: 'trial/plain.wav', style: '温柔自然', cfg_value: 2.7, quality: 'quality'},
+      profile_digest: 'a'.repeat(64), references: [{id: null, label: '模型默认声线'}, {id:'trial/plain.wav', label:'plain.wav'}],
+    });
+    render(<VoiceSettings api={new ChatApi()} disabled={false}/>);
+    fireEvent.click(screen.getByRole('button', {name:'声音设置'}));
+    expect(await screen.findByDisplayValue('温柔自然')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', {name:/恢复推荐声音草稿/}));
+    expect((screen.getByPlaceholderText(/年轻女性/) as HTMLInputElement).value).toBe('');
+    expect((screen.getByRole('combobox', {name:'参考音色'}) as HTMLInputElement).value).toBe('');
+    expect(screen.getByText(/点击保存后才会生效/)).toBeTruthy();
+    expect(request).toHaveBeenCalledTimes(1);
+  });
+
   test('读取失败时显示声音操作建议而不是技术错误码', async () => {
     vi.spyOn(ChatApi.prototype, 'request').mockRejectedValue(new ApiError('voice_not_enabled', 403));
     render(<VoiceSettings api={new ChatApi()} disabled={false}/>);

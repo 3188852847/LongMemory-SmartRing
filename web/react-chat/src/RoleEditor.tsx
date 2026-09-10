@@ -66,6 +66,7 @@ export function RoleEditor({api, disabled, onSaved}: {api: ChatApi; disabled: bo
             <div><label>互动方式</label><Select aria-label="互动方式" value={preferences.interactionStyle} onChange={value=>setPreferences({...preferences,interactionStyle:value})} options={[{value:'listen_first',label:'倾听为主'},{value:'ask_before_advice',label:'先倾听，再问是否需要建议'},{value:'direct',label:'直接分析和解决'}]}/></div>
             <div><label>表情频率</label><Select aria-label="表情频率" value={preferences.emojiFrequency} onChange={value=>setPreferences({...preferences,emojiFrequency:value})} options={[{value:'none',label:'不使用'},{value:'occasional',label:'偶尔使用'},{value:'natural',label:'轻松聊天时自然使用'}]}/></div>
           </div>
+          <Button size="small" onClick={() => setPreferences({...DEFAULT_ROLE_PREFERENCES})}>恢复推荐表达草稿</Button>
         </fieldset>
       </div>
       <Collapse className="role-advanced" items={[{key:'prompt',label:'高级：编辑完整角色提示词',children:<><p>结构化偏好会在保存时写入独立受管区块；其余手写内容保持原样。</p><label htmlFor="role-prompt">角色提示词</label><Input.TextArea id="role-prompt" value={prompt} rows={10} maxLength={12000} disabled={busy || !settings} onChange={e => setPrompt(e.target.value)}/></>}]} />

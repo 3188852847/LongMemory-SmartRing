@@ -47,15 +47,16 @@ export function VoiceSettings({api, disabled}: {api: ChatApi; disabled: boolean}
             title={settings.config_matches ? '当前配置：VoxCPM2 本地声音' : 'VoxCPM2 配置与本机适配契约不一致'}
             description={settings.service_ready ? '本机模型服务已就绪；圆屏是否正在播放仍以实际试听为准。' : '本机模型服务未就绪。请通过统一启动面板选择 VoxCPM2 后启动。'}/>
           {profile&&<>
-            <label>参考音色</label><Select className="wide" value={profile.reference??'__default__'} options={(settings.references??[]).map(item=>({value:item.id??'__default__',label:item.label}))} onChange={reference=>setProfile({...profile,reference:reference==='__default__'?null:reference})}/>
+            <label>参考音色</label><Select aria-label="参考音色" className="wide" value={profile.reference??'__default__'} options={(settings.references??[]).map(item=>({value:item.id??'__default__',label:item.label}))} onChange={reference=>setProfile({...profile,reference:reference==='__default__'?null:reference})}/>
             <small>参考 WAV 决定说话人音色；“模型默认声线”不做克隆。当前只列出本机受控音频目录。</small>
             <label>表达指令</label><Input maxLength={100} value={profile.style} placeholder="例如：年轻女性，声音温柔明亮，语速自然，带着微笑" onChange={event=>setProfile({...profile,style:event.target.value})}/>
             <label>指令强度：{profile.cfg_value.toFixed(1)}</label><Slider min={1} max={3} step={0.1} value={profile.cfg_value} onChange={cfg_value=>setProfile({...profile,cfg_value})}/>
             <label>生成质量</label><Select className="wide" value={profile.quality} options={[{value:'fast',label:'快速（6 步）'},{value:'balanced',label:'均衡（10 步）'},{value:'quality',label:'细致（20 步，更慢）'}]} onChange={quality=>setProfile({...profile,quality})}/>
+            <Space wrap><Button onClick={() => {clearAudio();setProfile({...profile,reference:null,style:'',cfg_value:2,quality:'balanced'});setNotice('已恢复 VoxCPM2 推荐值草稿；点击保存后才会生效。');}}>恢复推荐声音草稿</Button>
             <Button type="primary" disabled={busy||!settings.service_ready} onClick={()=>void run(async()=>{
               const value=await api.request<{profile:VoxProfile;profile_digest:string;references:Settings['references']}>('/api/voice-settings','POST',{...profile,expected_profile_digest:settings.profile_digest});
               setProfile(value.profile);setSettings({...settings,profile:value.profile,profile_digest:value.profile_digest,references:value.references});setNotice('声音方案已保存，网页和圆屏下一次合成时使用。');
-            })}>保存声音方案</Button>
+            })}>保存声音方案</Button></Space>
             <p>测试文本：{settings.text}</p><SpeechPlayer api={api} text={settings.text}/>
           </>}
         </>}
