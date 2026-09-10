@@ -339,6 +339,7 @@ def test_manager_syncs_selected_voice_model_and_memory_after_ports_are_free(opti
     memory_calls = []
     network_calls = []
     tts_calls = []
+    vad_calls = []
     ordering = []
     voice_root = options.root / "voice"
     (voice_root / ".venv/Scripts").mkdir(parents=True)
@@ -368,6 +369,11 @@ def test_manager_syncs_selected_voice_model_and_memory_after_ports_are_free(opti
         tts_calls.append((server, project, backend, kwargs))
         return {"config_matches": bool(kwargs.get("apply")), "digest": "c" * 64}
 
+    def vad_action(server, project, profile, **kwargs):
+        ordering.append("vad_apply" if kwargs.get("apply") else "vad_check")
+        vad_calls.append((server, project, profile, kwargs))
+        return {"config_matches": bool(kwargs.get("apply")), "digest": "d" * 64}
+
     class Owned:
         def __init__(self, command, cwd, env): pass
         def stop(self): pass
@@ -376,6 +382,7 @@ def test_manager_syncs_selected_voice_model_and_memory_after_ports_are_free(opti
     monkeypatch.setitem(sys.modules, "memory", SimpleNamespace(config_action=memory_action))
     monkeypatch.setitem(sys.modules, "network", SimpleNamespace(config_action=network_action))
     monkeypatch.setitem(sys.modules, "tts", SimpleNamespace(config_action=tts_action))
+    monkeypatch.setitem(sys.modules, "vad", SimpleNamespace(config_action=vad_action))
     monkeypatch.setattr(runtime, "build_commands", lambda _: [("console", [], options.root)])
     monkeypatch.setattr(runtime, "require_free", lambda *args: ordering.append("port"))
     monkeypatch.setattr(runtime, "OwnedService", Owned)
@@ -395,11 +402,14 @@ def test_manager_syncs_selected_voice_model_and_memory_after_ports_are_free(opti
         assert tts_calls[0][2:] == ("edge", {})
         assert tts_calls[1][2] == "edge"
         assert tts_calls[1][3] == {"apply": True, "expected_digest": "c" * 64}
+        assert vad_calls[0][2:] == ("normal", {})
+        assert vad_calls[1][2] == "normal"
+        assert vad_calls[1][3] == {"apply": True, "expected_digest": "d" * 64}
         # console、8000、8003、8768、8766 五个监听位都通过后，才允许第一次配置检查。
         assert ordering[:5] == ["port"] * 5
         assert ordering[5:] == [
-            "network_check", "tts_check", "model_check", "memory_check",
-            "network_apply", "tts_apply", "model_apply", "memory_apply",
+            "network_check", "tts_check", "model_check", "memory_check", "vad_check",
+            "network_apply", "tts_apply", "model_apply", "memory_apply", "vad_apply",
         ]
     finally:
         manager.stop()
@@ -515,7 +525,7 @@ def test_daily_summary_uses_human_labels_instead_of_internal_enums(monkeypatch):
     summary = app._summary_text(True, "memories", "elysia_v1", "llm", "hybrid", "voxcpm2", True, False, "xiaozhi_local")
     assert summary == (
         "网页＋圆屏语音  ·  打开记忆管理  ·  爱莉希雅风格\n"
-        "模型辅助提取  ·  关键词＋语义召回  ·  VoxCPM2 本地声音\n"
+        "模型辅助提取  ·  关键词＋语义召回  ·  VoxCPM2 本地声音  ·  普通拾音\n"
         "允许单条删除  ·  低频整理关闭  ·  圆屏：小智本地摘要"
     )
     assert not {"elysia_v1", "llm", "hybrid", "voxcpm2"}.intersection(summary.split())

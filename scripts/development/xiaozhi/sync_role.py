@@ -78,7 +78,7 @@ def commit_change(path, body, original, updated, matches, backup_label='role'):
         try:
             if path.read_bytes() != original:
                 raise ValueError('config_changed')
-            if backup_label not in {'role', 'model', 'tts', 'memory'}:
+            if backup_label not in {'role', 'model', 'tts', 'memory', 'vad'}:
                 raise ValueError('invalid_backup_label')
             backup = path.with_name(path.name + '.' + backup_label + '-' + uuid.uuid4().hex + '.bak')
             with backup.open('xb') as handle:

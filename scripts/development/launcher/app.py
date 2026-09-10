@@ -39,7 +39,7 @@ DANGER = "#ff647c"
 
 
 def _summary_text(voice, start_page, role, extraction, retrieval, tts, allow_delete,
-                  consolidation, memory_backend="longmemory"):
+                  consolidation, memory_backend="longmemory", vad_profile="normal"):
     """把内部启动枚举翻译为日常首页可理解的三行摘要。"""
     mode = "网页＋圆屏语音" if voice else "网页文字聊天"
     page_label = {"overview": "系统总览", "chat": "聊天", "device": "设备状态", "memories": "记忆管理", "settings": "设置中心"}[start_page]
@@ -54,9 +54,14 @@ def _summary_text(voice, start_page, role, extraction, retrieval, tts, allow_del
         "xiaozhi_local": "圆屏：小智本地摘要",
         "none": "圆屏：无长期记忆",
     }[memory_backend]
+    vad_label = {
+        "normal": "普通拾音",
+        "noisy": "嘈杂环境拾音",
+        "close_talk": "近讲严格拾音",
+    }[vad_profile]
     return (
         f"{mode}  ·  打开{page_label}  ·  {role_label}\n"
-        f"{extraction_label}  ·  {retrieval_label}  ·  {sound_label}\n"
+        f"{extraction_label}  ·  {retrieval_label}  ·  {sound_label}  ·  {vad_label}\n"
         f"{delete_label}  ·  {consolidation_label}  ·  {backend_label}"
     )
 
@@ -258,6 +263,15 @@ def main():
     memory_consolidation = tk.BooleanVar(value=saved["memory_consolidation"])
     embedding_model = tk.StringVar(value=saved["embedding_model_dir"] or str(DEFAULT_BGE_MODEL))
     tts_backend = tk.StringVar(value=tts_labels[saved["tts_backend"]])
+    vad_profile_labels = {
+        "普通环境（标准灵敏度）": "normal",
+        "嘈杂环境（过滤较远人声）": "noisy",
+        "近讲严格（需靠近圆屏）": "close_talk",
+    }
+    vad_profile = tk.StringVar(value=next(
+        label for label, value in vad_profile_labels.items()
+        if value == saved["vad_profile"]
+    ))
     model_profile_labels = {"学校模型（校园网）": "campus", "官方 DeepSeek（公网 HTTPS）": "official"}
     active_model_profile = load_model_profile(model_profile_path, "web")
     model_profile = tk.StringVar(value=next(label for label, value in model_profile_labels.items()
@@ -300,6 +314,9 @@ def main():
     def selected_tts():
         return "voxcpm2" if tts_backend.get().startswith("VoxCPM2") else "edge"
 
+    def selected_vad_profile():
+        return vad_profile_labels[vad_profile.get()]
+
     def current_preferences():
         # 删除能力有意不进入此字典：每次打开面板都按本机日常约定重新设置。
         return {
@@ -314,6 +331,7 @@ def main():
             "memory_consolidation": memory_consolidation.get(),
             "embedding_model_dir": embedding_model.get().strip(),
             "tts_backend": selected_tts(),
+            "vad_profile": selected_vad_profile(),
             "http_risk_ack": consent.get(),
         }
 
@@ -461,6 +479,12 @@ def main():
             messagebox.showerror("未完成同步", "TTS 配置检查或同步失败；未显示私有配置内容。")
 
     ttk.Button(tts_row, text="检查并同步", command=sync_tts).pack(side="left", padx=8)
+    vad_row = ttk.Frame(sound_box)
+    vad_row.pack(fill="x", pady=(10, 0))
+    ttk.Label(vad_row, text="拾音环境：").pack(side="left")
+    ttk.Combobox(vad_row, textvariable=vad_profile,
+                 values=tuple(vad_profile_labels), state="readonly", width=31).pack(side="left")
+    ttk.Label(vad_row, text="  下次统一启动前自动备份并同步").pack(side="left")
     ttk.Label(advanced, textvariable=settings_status, style="Subtitle.TLabel").pack(anchor="w")
 
     summary = tk.StringVar()
@@ -470,6 +494,7 @@ def main():
             voice.get(), start_page_labels[start_page.get()], role.get(), selected_extraction(), selected_retrieval(),
             selected_tts(), allow_memory_delete.get(), memory_consolidation.get(),
             selected_memory_backend(),
+            selected_vad_profile(),
         ))
 
     summary_box = ttk.LabelFrame(daily, text="本次配置", style="Section.TLabelframe")
@@ -481,7 +506,7 @@ def main():
         style="Subtitle.TLabel",
     ).pack(anchor="w", pady=(4, 0))
     for variable in (voice, start_page, role, memory_extraction, memory_retrieval,
-                     tts_backend, memory_backend, allow_memory_delete, memory_consolidation):
+                     tts_backend, vad_profile, memory_backend, allow_memory_delete, memory_consolidation):
         variable.trace_add("write", update_summary)
     update_summary()
 
@@ -610,6 +635,7 @@ def main():
             options = Options(database=Path(database.get()), voice=voice.get(), voice_root=Path(server.get()),
                               lan_ip=ip.get().strip(), role=role.get(), consent=consent.get(),
                               tts_backend=selected_tts(),
+                              vad_profile=selected_vad_profile(),
                               memory_extraction=selected_extraction(),
                               memory_retrieval=selected_retrieval(),
                               enable_memory_consolidation=memory_consolidation.get(),

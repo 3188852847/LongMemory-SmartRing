@@ -45,6 +45,7 @@ class Options:
     embedding_model_dir: Path = DEFAULT_BGE_MODEL
     voice: bool = False
     tts_backend: str = "edge"
+    vad_profile: str = "normal"
     voice_root: Path = VOICE_ROOT
     lan_ip: str = ""
     consent: bool = False
@@ -98,6 +99,8 @@ def build_commands(options, uv=None):
         raise ValueError("未知记忆召回策略。")
     if options.tts_backend not in {"edge", "voxcpm2"}:
         raise ValueError("未知语音后端。")
+    if options.vad_profile not in {"normal", "noisy", "close_talk"}:
+        raise ValueError("未知拾音环境档位。")
     root = options.root.resolve()
     if not options.database.is_file():
         raise ValueError("请选择已有日常数据库；启动器不会创建或迁移数据库。")
@@ -274,12 +277,13 @@ class Manager:
             if options.tts_backend == "voxcpm2":
                 require_no_listener("127.0.0.1", VOXCPM_PORT)
             # 端口均空闲后才检查并同步小智私有配置，避免给外部正在运行的
-            # 语音服务换地址、声音、模型或记忆后端。先完成四项只读检查，
+            # 语音服务换地址、声音、模型、记忆后端或拾音档位。先完成只读检查，
             # 再逐项备份写入；格式错误不会造成“改了一半才发现无法检查”。
             from network import config_action as network_config_action
             from tts import config_action as tts_config_action
             from model import config_action as model_config_action
             from memory import config_action as memory_config_action
+            from vad import config_action as vad_config_action
             network_checked = network_config_action(options.voice_root, options.lan_ip)
             tts_checked = tts_config_action(
                 options.voice_root, options.root, options.tts_backend
@@ -289,6 +293,9 @@ class Manager:
             )
             memory_checked = memory_config_action(
                 options.voice_root, options.root, options.memory_backend
+            )
+            vad_checked = vad_config_action(
+                options.voice_root, options.root, options.vad_profile
             )
             if network_checked["changed"]:
                 network_config_action(options.voice_root, options.lan_ip, apply=True)
@@ -307,6 +314,11 @@ class Manager:
                 memory_config_action(
                     options.voice_root, options.root, options.memory_backend,
                     apply=True, expected_digest=memory_checked["digest"],
+                )
+            if not vad_checked["config_matches"]:
+                vad_config_action(
+                    options.voice_root, options.root, options.vad_profile,
+                    apply=True, expected_digest=vad_checked["digest"],
                 )
         self.options = options
         self.instance = secrets.token_hex(24)

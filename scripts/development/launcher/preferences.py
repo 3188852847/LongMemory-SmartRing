@@ -22,6 +22,7 @@ DEFAULTS = {
     "memory_consolidation": False,
     "embedding_model_dir": "",
     "tts_backend": "edge",
+    "vad_profile": "normal",
     "http_risk_ack": False,
 }
 
@@ -31,6 +32,7 @@ _CHOICES = {
     "memory_extraction": {"rules", "llm"},
     "memory_retrieval": {"keyword", "hybrid"},
     "tts_backend": {"edge", "voxcpm2"},
+    "vad_profile": {"normal", "noisy", "close_talk"},
 }
 _PATH_FIELDS = {"database", "voice_root", "embedding_model_dir"}
 
@@ -83,6 +85,7 @@ def save_preferences(path: Path, values: dict) -> None:
         "memory_consolidation": bool(values.get("memory_consolidation", False)),
         "embedding_model_dir": str(values.get("embedding_model_dir", ""))[:2048],
         "tts_backend": values.get("tts_backend", DEFAULTS["tts_backend"]),
+        "vad_profile": values.get("vad_profile", DEFAULTS["vad_profile"]),
         "http_risk_ack_version": (
             RISK_ACK_VERSION if values.get("http_risk_ack") else None
         ),
