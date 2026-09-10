@@ -87,3 +87,67 @@ def test_invalid_profile_falls_back_without_exposing_arbitrary_path(tmp_path, mo
     monkeypatch.setattr(service, "PROFILE_PATH", path)
     assert service.current_profile() == {"version":1,"reference":None,"style":"",
                                          "cfg_value":2.0,"quality":"balanced"}
+
+
+def test_waveform_quality_rejects_long_near_silence_and_accepts_speech_like_audio():
+    silent = [0.00001] * 48000
+    voiced = [0.0, 0.08, -0.06, 0.04] * 12000
+
+    assert service.waveform_quality(silent, 48000)["acceptable"] is False
+    result = service.waveform_quality(voiced, 48000)
+    assert result["acceptable"] is True
+    assert result["duration_seconds"] == 1.0
+
+
+def test_voxcpm_retries_silent_result_with_a_different_seed(monkeypatch):
+    class FakeWaveform(list):
+        def __getitem__(self, key):
+            value = super().__getitem__(key)
+            return FakeWaveform(value) if isinstance(key, slice) else value
+
+    class FakeModel:
+        def __init__(self):
+            self.results = [FakeWaveform([0.00001] * 4800), FakeWaveform([0.1, -0.1] * 2400)]
+            self.calls = []
+
+        def generate(self, **kwargs):
+            self.calls.append(kwargs)
+            return self.results.pop(0)
+
+    class FakeCuda:
+        def __init__(self):
+            self.seeds = []
+
+        def manual_seed_all(self, seed):
+            self.seeds.append(seed)
+
+    class FakeTorch:
+        def __init__(self):
+            self.seeds = []
+            self.cuda = FakeCuda()
+
+        def manual_seed(self, seed):
+            self.seeds.append(seed)
+
+    class FakeSoundfile:
+        @staticmethod
+        def write(output, _waveform, _rate, **_kwargs):
+            output.write(b"RIFF-retried-wave")
+
+    monkeypatch.setattr(service, "current_profile", lambda: {
+        "version": 1, "reference": None, "style": "", "cfg_value": 2.0,
+        "quality": "balanced",
+    })
+    synth = service.VoxCPMSynthesizer.__new__(service.VoxCPMSynthesizer)
+    synth._torch = FakeTorch()
+    synth._soundfile = FakeSoundfile()
+    synth._model = FakeModel()
+    synth._sample_rate = 48000
+    synth._cache_entries = 4
+    synth._cache = service.OrderedDict()
+    synth._lock = threading.Lock()
+
+    assert synth.synthesize("测试") == b"RIFF-retried-wave"
+    assert synth._torch.seeds == [42, 43]
+    assert synth._torch.cuda.seeds == [42, 43]
+    assert [call["max_len"] for call in synth._model.calls] == [service.MAX_AUDIO_TOKENS] * 2

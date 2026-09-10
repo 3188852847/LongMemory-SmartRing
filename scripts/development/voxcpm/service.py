@@ -12,6 +12,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from io import BytesIO
 import ipaddress
 import json
+import math
 import os
 from pathlib import Path
 import threading
@@ -25,6 +26,38 @@ DEFAULT_PORT = 18768
 PROFILE_PATH = ROOT / "data/audio/voxcpm-settings.json"
 AUDIO_ROOT = (ROOT / "data/audio").resolve()
 QUALITY_STEPS = {"fast": 6, "balanced": 10, "quality": 20}
+MAX_SYNTHESIS_ATTEMPTS = 2
+MAX_AUDIO_TOKENS = 180
+MIN_AUDIO_SECONDS = 0.08
+MIN_AUDIO_RMS = 0.0015
+MIN_AUDIO_PEAK = 0.015
+
+
+def waveform_quality(waveform, sample_rate: int) -> dict:
+    """低成本识别 VoxCPM2 偶发生成的“有时长但几乎全静音”坏样本。
+
+    这里只抽样计算，不改变波形。阈值使用归一化浮点振幅；它不是音质评分，
+    只负责阻止静音占住小智的播放队列几十秒。
+    """
+    sample_count = len(waveform)
+    if sample_rate <= 0 or sample_count == 0:
+        return {"acceptable": False, "duration_seconds": 0.0, "rms": 0.0, "peak": 0.0}
+    stride = max(1, sample_count // 16000)
+    sampled = waveform[::stride]
+    values = [float(value) for value in sampled]
+    finite = bool(values) and all(math.isfinite(value) for value in values)
+    if not finite:
+        return {"acceptable": False, "duration_seconds": sample_count / sample_rate,
+                "rms": 0.0, "peak": 0.0}
+    peak = max(abs(value) for value in values)
+    rms = math.sqrt(sum(value * value for value in values) / len(values))
+    duration = sample_count / sample_rate
+    return {
+        "acceptable": duration >= MIN_AUDIO_SECONDS and rms >= MIN_AUDIO_RMS and peak >= MIN_AUDIO_PEAK,
+        "duration_seconds": duration,
+        "rms": rms,
+        "peak": peak,
+    }
 
 
 def current_profile():
@@ -94,22 +127,43 @@ class VoxCPMSynthesizer:
             if cached is not None:
                 self._cache[cache_key] = cached
                 return cached
-            self._torch.manual_seed(42)
-            self._torch.cuda.manual_seed_all(42)
             reference = profile["reference"]
             styled_text = f"({profile['style']}){text}" if profile["style"].strip() else text
-            waveform = self._model.generate(
-                text=styled_text,
-                reference_wav_path=str(AUDIO_ROOT / reference) if reference else None,
-                cfg_value=float(profile["cfg_value"]),
-                inference_timesteps=QUALITY_STEPS[profile["quality"]],
-                normalize=False,
-                denoise=False,
-                retry_badcase=False,
-                max_len=300,
-            )
-            if not len(waveform):
-                raise RuntimeError("empty audio")
+            waveform = None
+            quality = None
+            for attempt in range(MAX_SYNTHESIS_ATTEMPTS):
+                # 固定首个种子维持可复现性；仅在坏样本时换种子，避免重复得到同一段静音。
+                seed = 42 + attempt
+                self._torch.manual_seed(seed)
+                self._torch.cuda.manual_seed_all(seed)
+                candidate = self._model.generate(
+                    text=styled_text,
+                    reference_wav_path=str(AUDIO_ROOT / reference) if reference else None,
+                    cfg_value=float(profile["cfg_value"]),
+                    inference_timesteps=QUALITY_STEPS[profile["quality"]],
+                    normalize=False,
+                    denoise=False,
+                    retry_badcase=False,
+                    # 日常句子不应占用约 30 秒音频上限。较小上限也约束坏样本的
+                    # GPU 时间，避免再被小智上游的请求重试成倍放大。
+                    max_len=MAX_AUDIO_TOKENS,
+                )
+                quality = waveform_quality(candidate, self._sample_rate)
+                if quality["acceptable"]:
+                    waveform = candidate
+                    break
+                print(
+                    "VoxCPM2 静音坏样本："
+                    f"attempt={attempt + 1}/{MAX_SYNTHESIS_ATTEMPTS} chars={len(text)} "
+                    f"duration={quality['duration_seconds']:.3f}s "
+                    f"rms={quality['rms']:.6f} peak={quality['peak']:.6f}",
+                    flush=True,
+                )
+            if waveform is None:
+                raise RuntimeError(
+                    "VoxCPM2 returned near-silent audio after "
+                    f"{MAX_SYNTHESIS_ATTEMPTS} attempts"
+                )
             output = BytesIO()
             self._soundfile.write(
                 output, waveform, self._sample_rate, format="WAV", subtype="PCM_16"
