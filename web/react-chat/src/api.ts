@@ -129,6 +129,17 @@ export interface DeviceStatus {
   connection_count:number; ready:boolean; read_volume_supported:boolean; set_volume_supported:boolean;
   read_status_supported:boolean; set_brightness_supported:boolean; set_theme_supported:boolean;
   aec_advertised?:boolean; allowed_volume?:{minimum:number; maximum:number};
+  voice_latency?:VoiceLatency;
+}
+export interface VoiceLatency {
+  version:1;
+  state:'preparing_memory'|'waiting_for_model'|'waiting_for_sentence'|'tts_running'|'audio_ready'|'first_audio_sent';
+  started_at:string; tts_backend:'edge'|'voxcpm2'|'other';
+  timings_ms:{
+    memory_ready_ms:number|null; llm_requested_ms:number|null; llm_first_output_ms:number|null;
+    tts_started_ms:number|null; audio_ready_ms:number|null; first_audio_sent_ms:number|null;
+    response_completed_ms:number|null;
+  };
 }
 export interface MemoryPageSummary {total:number; limit:number; offset:number; items:unknown[]}
 export interface RuntimeStatus {

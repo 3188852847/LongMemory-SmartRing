@@ -484,6 +484,27 @@ def test_status_reports_announcement_support_and_current_readiness():
     assert status["announcement_reason"] == "device_busy"
 
 
+def test_status_exposes_only_tracker_voice_latency_snapshot():
+    bridge, conn, _, _ = announcement_rig()
+    snapshot = {
+        "version": 1,
+        "state": "audio_ready",
+        "started_at": "2026-09-10T10:20:30+00:00",
+        "tts_backend": "edge",
+        "timings_ms": {
+            "memory_ready_ms": 9,
+            "llm_requested_ms": 10,
+            "llm_first_output_ms": 140,
+            "tts_started_ms": 190,
+            "audio_ready_ms": 520,
+            "first_audio_sent_ms": None,
+            "response_completed_ms": 400,
+        },
+    }
+    conn._longmemory_voice_latency = SimpleNamespace(snapshot=lambda: snapshot)
+    assert bridge.status()["voice_latency"] == snapshot
+
+
 @pytest.mark.parametrize("text", ["", " leading", "trailing ", "line\nbreak", "x" * 81])
 def test_announcement_rejects_invalid_text(text):
     async def run():

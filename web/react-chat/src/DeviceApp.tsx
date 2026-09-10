@@ -1,7 +1,7 @@
 import {useEffect, useState} from 'react';
 import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {Alert, Button, Card, Descriptions, InputNumber, Select, Slider, Space, Tag} from 'antd';
-import {ApiError, ChatApi, type DeviceStatus} from './api';
+import {ApiError, ChatApi, type DeviceStatus, type VoiceLatency} from './api';
 import {AppShell, ConsoleNav} from './AppShell';
 import {PageHeader} from './PageHeader';
 import {errorMessage, resultView, statusView, validTarget} from '../../assets/state.mjs';
@@ -15,6 +15,27 @@ type Operation = {action: 'read' | 'set'; data?: VolumeRead | VolumeWrite | Scre
 const api = new ChatApi();
 const clock = () => new Date().toLocaleTimeString('zh-CN', {hour12: false});
 const codeOf = (error: unknown) => error instanceof ApiError ? error.code : 'request_failed';
+const elapsed = (value:number|null|undefined) => value === null || value === undefined ? '尚未到达' : `${(value / 1000).toFixed(2)} 秒`;
+const delta = (end:number|null, start:number|null) => end === null || start === null ? '尚未测得' : elapsed(Math.max(0, end - start));
+
+function VoiceLatencyCard({value}:{value:VoiceLatency}) {
+  const timing=value.timings_ms;
+  const stateLabels:Record<VoiceLatency['state'],string>={
+    preparing_memory:'准备记忆', waiting_for_model:'等待模型', waiting_for_sentence:'组织首句',
+    tts_running:'生成语音', audio_ready:'音频已就绪', first_audio_sent:'首包已发送',
+  };
+  return <Card className="device-latency-card" title="最近一次圆屏首句时序" extra={<Tag color={value.state==='first_audio_sent'?'green':'processing'}>{stateLabels[value.state]}</Tag>}>
+    <Descriptions column={{xs:1,sm:2,lg:3}} size="small" items={[
+      {key:'memory',label:'入口 → 记忆完成',children:elapsed(timing.memory_ready_ms)},
+      {key:'model',label:'模型首个有效输出',children:delta(timing.llm_first_output_ms,timing.llm_requested_ms)},
+      {key:'sentence',label:'输出 → 攒成首句',children:delta(timing.tts_started_ms,timing.llm_first_output_ms)},
+      {key:'tts',label:'TTS 生成与编码',children:delta(timing.audio_ready_ms,timing.tts_started_ms)},
+      {key:'delivery',label:'音频就绪 → 首包发送',children:delta(timing.first_audio_sent_ms,timing.audio_ready_ms)},
+      {key:'total',label:'入口 → 首包发送',children:<strong>{elapsed(timing.first_audio_sent_ms)}</strong>},
+    ]}/>
+    <p className="subtle">计时起点是服务端收到已识别文本并进入回答流程；不含录音与 ASR，也不代表扬声器真正开始出声。当前后端：{value.tts_backend==='edge'?'EdgeTTS':value.tts_backend==='voxcpm2'?'VoxCPM2':'其他'}。</p>
+  </Card>;
+}
 
 /**
  * 设备页是 TanStack Query 的首个真实落点：状态是可缓存、可轮询的服务器状态；
@@ -98,6 +119,7 @@ export function DeviceApp() {
         <div><small>说话打断基础</small><strong>{status.data?.aec_advertised?'固件已上报 AEC':'未上报 AEC'}</strong></div>
       </div><div className="device-refresh-meta"><span>{status.data?.connection_count ?? 0} 个活动连接</span><span>{status.dataUpdatedAt ? `刷新于 ${new Date(status.dataUpdatedAt).toLocaleTimeString('zh-CN', {hour12:false})}` : '尚未刷新'}</span><span>每 5 秒检查连接，不轮询音量</span></div>
     </Card>
+    {status.data?.voice_latency && <VoiceLatencyCard value={status.data.voice_latency}/>}
     {snapshot && <Card className="device-snapshot-card" title="最近设备快照" extra={<Tag color={status.data?.ready && !status.error ? 'blue' : 'gold'}>{status.data?.ready && !status.error ? '单次读取' : '历史读数'}</Tag>}><Descriptions column={{xs:1,sm:3}} items={[
       {key:'battery',label:'电池',children:snapshot.battery ? `${snapshot.battery.level}% · ${snapshot.battery.charging?'充电中':'未充电'}` : '固件未报告'},
       {key:'network',label:'Wi‑Fi 信号',children:snapshot.network?.signal === 'strong'?'强':snapshot.network?.signal === 'medium'?'中':snapshot.network?.signal === 'weak'?'弱':'固件未报告'},

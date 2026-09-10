@@ -45,6 +45,40 @@ def volume_value(value: object) -> bool:
     return type(value) is int and 0 <= value <= 100
 
 
+VOICE_TIMING_FIELDS = {
+    "memory_ready_ms", "llm_requested_ms", "llm_first_output_ms",
+    "tts_started_ms", "audio_ready_ms", "first_audio_sent_ms",
+    "response_completed_ms",
+}
+
+
+def voice_latency(value: object) -> dict:
+    """验证小智内存中的脱敏时序；开放字段不能直接穿透到浏览器。"""
+    fields = {"version", "state", "started_at", "tts_backend", "timings_ms"}
+    if not isinstance(value, dict) or set(value) != fields or value.get("version") != 1:
+        raise BridgeError("bridge_invalid_response", 502)
+    if value.get("state") not in {
+        "preparing_memory", "waiting_for_model", "waiting_for_sentence",
+        "tts_running", "audio_ready", "first_audio_sent",
+    } or value.get("tts_backend") not in {"edge", "voxcpm2", "other"}:
+        raise BridgeError("bridge_invalid_response", 502)
+    if not isinstance(value.get("started_at"), str) or len(value["started_at"]) > 64:
+        raise BridgeError("bridge_invalid_response", 502)
+    try:
+        started = datetime.fromisoformat(value["started_at"])
+    except ValueError:
+        raise BridgeError("bridge_invalid_response", 502) from None
+    if started.tzinfo is None:
+        raise BridgeError("bridge_invalid_response", 502)
+    timings = value.get("timings_ms")
+    if not isinstance(timings, dict) or set(timings) != VOICE_TIMING_FIELDS:
+        raise BridgeError("bridge_invalid_response", 502)
+    if any(item is not None and (type(item) is not int or not 0 <= item <= 3_600_000)
+           for item in timings.values()):
+        raise BridgeError("bridge_invalid_response", 502)
+    return {**value, "timings_ms": dict(timings)}
+
+
 class XiaozhiControlClient:
     """仅连回环控制端口，关闭代理、重定向和自动重试。"""
 
@@ -115,6 +149,8 @@ class XiaozhiControlClient:
         result = {"connection_count": count, **{k: data[k] for k in required_flags},
                   **{k: data.get(k, False) for k in optional_flags}}
         result["allowed_volume"] = {"minimum": 5, "maximum": 60}
+        if "voice_latency" in data:
+            result["voice_latency"] = voice_latency(data["voice_latency"])
         if "reason" in data:
             result["reason"] = safe_reason(data["reason"])
         if "announcement_reason" in data:

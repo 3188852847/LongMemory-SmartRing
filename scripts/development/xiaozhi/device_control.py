@@ -256,6 +256,11 @@ class DeviceControl:
                 result["announcement_ready"] = not busy
                 if busy:
                     result["announcement_reason"] = "device_busy"
+            tracker = getattr(conn, "_longmemory_voice_latency", None)
+            if tracker is not None:
+                latency = tracker.snapshot()
+                if latency is not None:
+                    result["voice_latency"] = latency
         except ControlError as exc:
             result["reason"] = exc.code
         return result

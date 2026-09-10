@@ -25,6 +25,10 @@ def observe_memory_operations(connection):
             return await original_query(*args, **kwargs)
         finally:
             elapsed_ms = (time.perf_counter() - started) * 1000
+            tracker = getattr(connection, "_longmemory_voice_latency", None)
+            if tracker is not None:
+                tracker.bind_sentence()
+                tracker.mark("memory_ready_ms")
             connection.logger.bind(tag="memory-comparison").info(
                 f"记忆查询后端={provider} 耗时={elapsed_ms:.1f}ms"
             )
@@ -109,7 +113,10 @@ def main():
     sys.path.insert(0, str(root))
     from core.connection import ConnectionHandler
     from core.providers.memory.longmemory.longmemory import MemoryProvider
+    from voice_latency import install_audio_send_observer, install_voice_latency
     isolate_memory_initialization(ConnectionHandler, MemoryProvider)
+    install_voice_latency(ConnectionHandler)
+    install_audio_send_observer()
     install_answer_completion(ConnectionHandler)
     if args.device_control:
         from core.websocket_server import WebSocketServer

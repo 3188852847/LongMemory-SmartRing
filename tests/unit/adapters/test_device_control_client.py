@@ -106,6 +106,65 @@ def test_status_projects_only_runtime_flags(tmp_path):
     assert "private_network" not in value
 
 
+def test_status_projects_only_strict_voice_latency_snapshot(tmp_path):
+    latency = {
+        "version": 1,
+        "state": "first_audio_sent",
+        "started_at": "2026-09-10T10:20:30+00:00",
+        "tts_backend": "voxcpm2",
+        "timings_ms": {
+            "memory_ready_ms": 12,
+            "llm_requested_ms": 14,
+            "llm_first_output_ms": 214,
+            "tts_started_ms": 280,
+            "audio_ready_ms": 920,
+            "first_audio_sent_ms": 925,
+            "response_completed_ms": 630,
+        },
+    }
+    client = client_for(tmp_path, {
+        "connection_count": 1, "ready": True,
+        "read_volume_supported": True, "set_volume_supported": True,
+        "announcement_supported": True, "announcement_ready": True,
+        "user_session_active": False, "voice_latency": latency,
+    })
+    value = asyncio.run(client.status())
+    assert value["voice_latency"] == latency
+
+
+@pytest.mark.parametrize("change", [
+    {"private_text": "must-not-escape"},
+    {"tts_backend": "unknown-provider"},
+    {"started_at": "not-a-time"},
+    {"timings_ms": {"first_audio_sent_ms": 10}},
+])
+def test_status_rejects_malformed_voice_latency_snapshot(tmp_path, change):
+    latency = {
+        "version": 1,
+        "state": "waiting_for_model",
+        "started_at": "2026-09-10T10:20:30+00:00",
+        "tts_backend": "edge",
+        "timings_ms": {
+            "memory_ready_ms": None,
+            "llm_requested_ms": 8,
+            "llm_first_output_ms": None,
+            "tts_started_ms": None,
+            "audio_ready_ms": None,
+            "first_audio_sent_ms": None,
+            "response_completed_ms": None,
+        },
+        **change,
+    }
+    client = client_for(tmp_path, {
+        "connection_count": 1, "ready": True,
+        "read_volume_supported": True, "set_volume_supported": True,
+        "announcement_supported": True, "announcement_ready": True,
+        "user_session_active": False, "voice_latency": latency,
+    })
+    with pytest.raises(BridgeError, match="bridge_invalid_response"):
+        asyncio.run(client.status())
+
+
 def test_oversized_response_rejected(tmp_path):
     client = client_for(tmp_path, {"volume": 25, "extra": "x" * 20000})
     with pytest.raises(BridgeError, match="bridge_invalid_response"): asyncio.run(client.read_volume())
