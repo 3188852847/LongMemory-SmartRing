@@ -16,7 +16,7 @@ describe('个性化状态总览', () => {
     const client = new QueryClient({defaultOptions:{queries:{retry:false}}});
     const select = vi.fn();
     render(<QueryClientProvider client={client}><PersonalizationOverview api={new ChatApi()} ready={true}
-      prefs={{theme:'future',size:'normal',motion:'system'}} onSelectTab={select}/></QueryClientProvider>);
+      prefs={{theme:'future',size:'normal',motion:'system',density:'comfortable',chatWidth:'focused'}} onSelectTab={select}/></QueryClientProvider>);
 
     expect(await screen.findByText('爱莉希雅 · 修订 3')).toBeTruthy();
     expect(screen.getByText('当前只是预览选择')).toBeTruthy();
@@ -39,8 +39,8 @@ describe('个性化状态总览', () => {
     });
     const client = new QueryClient({defaultOptions:{queries:{retry:false}}});
     render(<QueryClientProvider client={client}><PersonalizationOverview api={new ChatApi()} ready={true}
-      prefs={{theme:'light',size:'large',motion:'reduce'}} onSelectTab={() => undefined}/></QueryClientProvider>);
-    expect(await screen.findByText('平静浅色')).toBeTruthy();
+      prefs={{theme:'light',size:'large',motion:'reduce',density:'compact',chatWidth:'wide'}} onSelectTab={() => undefined}/></QueryClientProvider>);
+    expect(await screen.findByText('平静浅色 · 紧凑')).toBeTruthy();
     expect(await screen.findByText('已关闭')).toBeTruthy();
     expect((await screen.findAllByText('读取失败')).length).toBeGreaterThan(0);
   });

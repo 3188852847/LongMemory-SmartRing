@@ -11,7 +11,7 @@ function render() {
   theme.value = prefs.theme; size.value = prefs.size;
 }
 function update() {
-  prefs = normalize({theme: theme.value, size: size.value});
+  prefs = normalize({...prefs, theme: theme.value, size: size.value});
   render();
   notice.textContent = save(storage, prefs) ? '已保存到此浏览器；不影响圆屏、声音或记忆。' : '本页已生效，但浏览器不允许保存设置。';
 }

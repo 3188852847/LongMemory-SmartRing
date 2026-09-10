@@ -53,7 +53,7 @@ export function PersonalizationOverview({api, ready, prefs, onSelectTab}:{
       : voice.data.backend === 'edge' ? `Edge · ${voice.data.voice ?? '默认音色'}` : '当前后端不支持设置';
 
   const rows = [
-    {key:'appearance', title:'控制台外观', value:themeLabels[prefs.theme], scope:'当前浏览器', timing:'立即生效', action:'appearance'},
+    {key:'appearance', title:'控制台外观', value:`${themeLabels[prefs.theme]} · ${prefs.density === 'compact' ? '紧凑' : '舒展'}`, scope:'当前浏览器', timing:'立即生效', action:'appearance'},
     {key:'role', title:'助手角色', value:role.data ? `${role.data.current.name} · 修订 ${role.data.current.revision}` : unavailable(role), scope:'网页对话', timing:'下一轮生效', action:'role'},
     {key:'interaction', title:'表达与互动', value:rolePreferences?.enabled ? interactionLabels[rolePreferences.preferences.interactionStyle] : '使用角色提示词默认规则', scope:'网页；圆屏需同步角色', timing:'下一轮／同步后', action:'role'},
     {key:'voice', title:'声音方案', value:voiceValue, scope:'网页朗读＋圆屏 TTS', timing:voice.data?.backend === 'voxcpm2' ? '下次合成' : '重启语音服务后', action:'voice'},

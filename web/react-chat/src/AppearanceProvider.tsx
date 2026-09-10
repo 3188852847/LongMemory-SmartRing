@@ -5,7 +5,12 @@ import {KEY, normalize, read, save, apply} from '../../assets/appearance.mjs';
 type ThemePreference = 'system' | 'light' | 'dark' | 'future';
 type ReadingSize = 'normal' | 'large' | 'larger';
 type MotionPreference = 'system' | 'reduce' | 'full';
-export type AppearancePreferences = {theme: ThemePreference; size: ReadingSize; motion: MotionPreference};
+type DensityPreference = 'comfortable' | 'compact';
+type ChatWidthPreference = 'focused' | 'wide';
+export type AppearancePreferences = {
+  theme: ThemePreference; size: ReadingSize; motion: MotionPreference;
+  density: DensityPreference; chatWidth: ChatWidthPreference;
+};
 type AppearanceContextValue = {
   prefs: AppearancePreferences;
   update: (next: AppearancePreferences) => boolean;
