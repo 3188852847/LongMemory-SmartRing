@@ -10,6 +10,7 @@ type VolumeRead = {volume: number};
 type VolumeWrite = {requested_volume: number; previous_volume?: number; acknowledged: boolean; readback_volume?: number; verified?: boolean};
 type DeviceSnapshot = {volume?:number; brightness?:number; theme?:'light'|'dark'; battery?:{level:number;charging:boolean}; network?:{signal:'strong'|'medium'|'weak'}; chip?:{temperature:number}};
 type ScreenWrite = {requested_value:number|string; previous_value?:number|string; acknowledged:boolean; readback_value?:number|string; verified:boolean};
+type StopSpeechResult = {operation_id:string; state:'stop_sent'|'already_idle'; server_interrupted:boolean; device_acknowledgement:'unavailable'|'not_requested'};
 type Operation = {action: 'read' | 'set'; data?: VolumeRead | VolumeWrite | ScreenWrite; error?: string; at: string};
 
 const api = new ChatApi();
@@ -50,6 +51,8 @@ export function DeviceApp() {
   const [snapshot, setSnapshot] = useState<DeviceSnapshot>();
   const [snapshotAt, setSnapshotAt] = useState<number>();
   const [operation, setOperation] = useState<Operation>();
+  const [stopResult, setStopResult] = useState<StopSpeechResult>();
+  const [stopError, setStopError] = useState<string>();
   const session = useQuery({queryKey: ['console-session'], queryFn: async () => {await api.bootstrap(); return true;}, staleTime: Infinity});
   const status = useQuery({
     queryKey: ['device-status'],
@@ -100,7 +103,13 @@ export function DeviceApp() {
     onError(error) {setOperation({action:'set', error:codeOf(error), at:clock()});},
     onSettled: refreshAfterOperation,
   });
-  const busy = readVolume.isPending || setVolume.isPending || readSnapshot.isPending || setScreen.isPending;
+  const stopSpeech = useMutation({
+    mutationFn: () => api.request<StopSpeechResult>('/api/device/speech/stop', 'POST'),
+    onSuccess(data) {setStopResult(data); setStopError(undefined);},
+    onError(error) {setStopResult(undefined); setStopError(codeOf(error));},
+    onSettled: refreshAfterOperation,
+  });
+  const busy = readVolume.isPending || setVolume.isPending || readSnapshot.isPending || setScreen.isPending || stopSpeech.isPending;
   const operationView = operation ? resultView(operation.error ? {error:operation.error} : operation.data, operation.action) : null;
   const operationDetails = (operationView?.details ?? []) as Array<[string, unknown]>;
   const sidebar = <><ConsoleNav active="device" legacyPath="/"/><Card size="small" className="device-boundary-card" title="控制边界"><p>开放音量、亮度和明暗主题；电池、网络与温度只读。</p><p>重启、配网和刷写仍不开放。</p></Card></>;
@@ -145,6 +154,13 @@ export function DeviceApp() {
         <Select id="device-theme" className="wide" value={theme} disabled={!status.data?.set_theme_supported || busy} options={[{value:'light',label:'浅色'},{value:'dark',label:'深色'}]} onChange={setTheme}/>
         <Button disabled={!status.data?.set_theme_supported || busy} onClick={() => setScreen.mutate({theme})}>应用主题</Button>
         <p className="subtle">按钮不可用表示当前圆屏没有实时上报对应工具；页面不会根据源码猜测。</p>
+      </Card>
+      <Card className="device-control-card" title="当前回答" extra={<Tag color={status.data?.stop_speech_supported ? 'green' : 'default'}>{status.data?.stop_speech_supported ? '可中止' : '不可用'}</Tag>}>
+        <p>在圆屏回答过长、语音生成过慢或你想换个话题时，立即停止当前轮。</p>
+        <Button danger type="primary" loading={stopSpeech.isPending} disabled={!status.data?.ready || !status.data?.stop_speech_supported || busy} onClick={() => stopSpeech.mutate()}>停止当前回答</Button>
+        {stopResult && <Alert className="device-help" showIcon type={stopResult.state==='stop_sent'?'success':'info'} title={stopResult.state==='stop_sent'?'已中止服务端回答':'当前已经处于空闲'} description={stopResult.state==='stop_sent'?'已清空模型与 TTS 队列，并向圆屏发送停止指令。设备协议没有播放停止回执，因此不写成“硬件已确认”。':'没有正在生成或播放的回答，本次未发送停止指令。'}/>}
+        {stopError && <Alert className="device-help" showIcon type="error" title="未能中止当前回答" description={errorMessage(stopError)}/>}
+        <p className="subtle">这不会删除对话或记忆，也不会断开圆屏。不等待亮度、音量等 MCP 工具回执。</p>
       </Card>
       <Card className="device-operation-card" title="最近一次操作">
         {operationView ? <><h3>{operationView.title}</h3><p>{operationView.description}</p><Descriptions column={1} size="small" items={[...operationDetails.map(([label, value], index) => ({key:String(index), label, children:String(value)})), {key:'time',label:'操作时间',children:operation!.at}]}/></> : <><h3>尚未发送指令</h3><p>先读取当前音量，或选择目标音量后应用。</p></>}

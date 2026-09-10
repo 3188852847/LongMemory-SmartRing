@@ -139,7 +139,7 @@ class XiaozhiControlClient:
             "ready", "read_volume_supported", "set_volume_supported",
             "announcement_supported", "announcement_ready", "user_session_active",
         )
-        optional_flags = ("read_status_supported", "set_brightness_supported", "set_theme_supported", "aec_advertised")
+        optional_flags = ("read_status_supported", "set_brightness_supported", "set_theme_supported", "aec_advertised", "stop_speech_supported")
         if type(count) is not int or count < 0 or any(type(data.get(k)) is not bool for k in required_flags):
             raise BridgeError("bridge_invalid_response", 502)
         if any(k in data and type(data[k]) is not bool for k in optional_flags):
@@ -205,6 +205,28 @@ class XiaozhiControlClient:
         if "reason" in data:
             result["reason"] = safe_reason(data["reason"])
         return result
+
+    async def stop_speech(self) -> dict:
+        data = await self._request("POST", "/api/device/speech/stop")
+        operation_id = data.get("operation_id")
+        state = data.get("state")
+        if (not isinstance(operation_id, str)
+                or re.fullmatch(r"[0-9a-f]{32}", operation_id) is None
+                or state not in {"stop_sent", "already_idle"}
+                or type(data.get("server_interrupted")) is not bool
+                or data.get("device_acknowledgement") not in {"unavailable", "not_requested"}):
+            raise BridgeError("bridge_invalid_response", 502)
+        if ((state == "stop_sent" and (data["server_interrupted"] is not True
+                or data["device_acknowledgement"] != "unavailable"))
+                or (state == "already_idle" and (data["server_interrupted"] is not False
+                or data["device_acknowledgement"] != "not_requested"))):
+            raise BridgeError("bridge_invalid_response", 502)
+        return {
+            "operation_id": operation_id,
+            "state": state,
+            "server_interrupted": data["server_interrupted"],
+            "device_acknowledgement": data["device_acknowledgement"],
+        }
 
     async def set_screen(self, field: str, value: object) -> dict:
         if ((field == "brightness" and (type(value) is not int or not 5 <= value <= 100))

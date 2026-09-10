@@ -146,6 +146,11 @@ def create_app(control, token, port=PORT):
             await control.announce(body["text"], body["expires_at_ms"])
         )
 
+    async def stop_speech(request):
+        if request.content_length not in (None, 0):
+            raise ControlError("invalid_fields", 400)
+        return web.json_response(await control.stop_speech())
+
     app = web.Application(middlewares=[guard], client_max_size=1024)
     app.router.add_get("/api/device", status, allow_head=False)
     app.router.add_get("/api/device/volume", read_volume, allow_head=False)
@@ -159,6 +164,7 @@ def create_app(control, token, port=PORT):
     app.router.add_post("/api/device/round-wallpaper/activate", activate_round_wallpaper)
     app.router.add_post("/api/device/round-wallpaper/rollback", rollback_round_wallpaper)
     app.router.add_post("/api/device/announcement", announce)
+    app.router.add_post("/api/device/speech/stop", stop_speech)
     return app
 
 

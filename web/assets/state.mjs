@@ -37,6 +37,7 @@ export function errorMessage(code) {
     device_not_ready: "圆屏连接尚未就绪，请稍候重新读取。",
     tools_not_ready: "音量工具握手尚未完成，请稍候。",
     control_busy: "另一个控制操作正在执行，请等待完成后再读取。",
+    stop_speech_unavailable: "当前小智连接没有可用的语音中止通道。",
     operation_busy: "另一个控制操作正在执行，请等待完成后再读取。",
     invalid_volume: "目标音量必须是 5–60 之间的整数。",
     readback_mismatch: "设备读回值与目标不一致，不能确认设置成功。",

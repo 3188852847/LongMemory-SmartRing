@@ -73,4 +73,28 @@ describe('设备与状态页', () => {
     expect(screen.getByText(/当前后端：VoxCPM2/)).toBeTruthy();
     view.unmount(); client.clear();
   });
+
+  test('停止当前回答只声称服务端中止而不伪造设备回执', async () => {
+    vi.spyOn(ChatApi.prototype, 'bootstrap').mockResolvedValue(undefined);
+    const request=vi.spyOn(ChatApi.prototype, 'request').mockImplementation(async (path) => {
+      if (path === '/api/device/speech/stop') return {
+        operation_id:'c'.repeat(32),state:'stop_sent',server_interrupted:true,
+        device_acknowledgement:'unavailable',
+      };
+      return {
+        connection_count:1,ready:true,read_volume_supported:true,set_volume_supported:true,
+        read_status_supported:true,set_brightness_supported:false,set_theme_supported:false,
+        stop_speech_supported:true,allowed_volume:{minimum:5,maximum:60},
+      };
+    });
+    const client=createConsoleQueryClient();
+    const view=render(<QueryClientProvider client={client}><MemoryRouter><DeviceApp/></MemoryRouter></QueryClientProvider>);
+    const button=await screen.findByRole('button',{name:'停止当前回答'});
+    await waitFor(() => expect(button.hasAttribute('disabled')).toBe(false));
+    fireEvent.click(button);
+    expect(await screen.findByText('已中止服务端回答')).toBeTruthy();
+    expect(screen.getByText(/设备协议没有播放停止回执/)).toBeTruthy();
+    expect(request).toHaveBeenCalledWith('/api/device/speech/stop','POST');
+    view.unmount(); client.clear();
+  });
 });

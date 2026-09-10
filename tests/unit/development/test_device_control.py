@@ -474,6 +474,7 @@ def test_announcement_is_queued_without_claiming_device_acknowledgement():
 def test_status_reports_announcement_support_and_current_readiness():
     bridge, conn, _, _ = announcement_rig()
     assert bridge.status()["announcement_supported"] is True
+    assert bridge.status()["stop_speech_supported"] is True
     assert bridge.status()["announcement_ready"] is True
     assert bridge.status()["user_session_active"] is False
     conn.client_is_speaking = True
@@ -482,6 +483,53 @@ def test_status_reports_announcement_support_and_current_readiness():
     assert status["announcement_ready"] is False
     assert status["user_session_active"] is True
     assert status["announcement_reason"] == "device_busy"
+
+
+def test_stop_speech_interrupts_server_and_reports_missing_device_ack():
+    async def run():
+        bridge, conn, socket, _ = announcement_rig()
+        stopped = []
+
+        async def aborter(selected):
+            stopped.append(selected)
+            selected.client_abort = True
+            while not selected.tts.tts_text_queue.empty():
+                selected.tts.tts_text_queue.get_nowait()
+            selected.client_is_speaking = False
+
+        bridge.response_aborter = aborter
+        conn.client_is_speaking = True
+        await conn.tts.tts_text_queue.put("synthetic answer")
+        result = await bridge.stop_speech()
+
+        assert stopped == [conn]
+        assert result["state"] == "stop_sent"
+        assert result["server_interrupted"] is True
+        assert result["device_acknowledgement"] == "unavailable"
+        assert len(result["operation_id"]) == 32
+        assert conn.client_abort is True
+        assert conn.tts.tts_text_queue.empty()
+        assert not socket.calls  # 不借道 MCP 任意工具。
+
+    asyncio.run(run())
+
+
+def test_stop_speech_is_noop_when_already_idle():
+    async def run():
+        bridge, _, _, _ = announcement_rig()
+        called = []
+
+        async def aborter(conn):
+            called.append(conn)
+
+        bridge.response_aborter = aborter
+        result = await bridge.stop_speech()
+        assert result["state"] == "already_idle"
+        assert result["server_interrupted"] is False
+        assert result["device_acknowledgement"] == "not_requested"
+        assert called == []
+
+    asyncio.run(run())
 
 
 def test_status_exposes_only_tracker_voice_latency_snapshot():

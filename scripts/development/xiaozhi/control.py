@@ -25,6 +25,8 @@ def request_control(action, volume=None, text=None, ttl_seconds=30):
             "text": text,
             "expires_at_ms": int(time.time() * 1000) + ttl_seconds * 1000,
         }).encode()
+    elif action == "stop-speech":
+        path, body = "/api/device/speech/stop", b""
     else:
         path = "/api/device/volume"
         body = json.dumps({"volume": volume}).encode() if action == "set-volume" else None
@@ -43,7 +45,7 @@ def request_control(action, volume=None, text=None, ttl_seconds=30):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=["status", "read-volume", "set-volume", "announce"])
+    parser.add_argument("action", choices=["status", "read-volume", "set-volume", "announce", "stop-speech"])
     parser.add_argument("value", nargs="?")
     parser.add_argument("--ttl-seconds", type=int, default=30)
     args = parser.parse_args(argv)

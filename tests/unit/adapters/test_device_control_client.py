@@ -97,12 +97,14 @@ def test_status_projects_only_runtime_flags(tmp_path):
         "read_volume_supported": True, "set_volume_supported": True,
         "announcement_supported": True, "announcement_ready": False,
         "user_session_active": True, "announcement_reason": "device_busy",
+        "stop_speech_supported": True,
         "private_network": "must-not-escape",
     })
     value = asyncio.run(client.status())
     assert value["user_session_active"] is True
     assert value["announcement_ready"] is False
     assert value["announcement_reason"] == "device_busy"
+    assert value["stop_speech_supported"] is True
     assert "private_network" not in value
 
 
@@ -189,6 +191,44 @@ def test_announcement_is_strictly_projected_without_claiming_playback(tmp_path):
     args, options = client._session.calls[0]
     assert args == ("POST", "http://127.0.0.1:8766/api/device/announcement")
     assert options["json"] == {"text": "合成问候。", "expires_at_ms": expires_at_ms}
+
+
+def test_stop_speech_is_strictly_projected_without_claiming_device_ack(tmp_path):
+    value = {
+        "operation_id": "c" * 32,
+        "state": "stop_sent",
+        "server_interrupted": True,
+        "device_acknowledgement": "unavailable",
+        "private_state": "must-not-escape",
+    }
+    client = client_for(tmp_path, value)
+    assert asyncio.run(client.stop_speech()) == {
+        key: value[key] for key in (
+            "operation_id", "state", "server_interrupted", "device_acknowledgement",
+        )
+    }
+    args, options = client._session.calls[0]
+    assert args == ("POST", "http://127.0.0.1:8766/api/device/speech/stop")
+    assert options["json"] is None
+
+
+@pytest.mark.parametrize("change", [
+    {"operation_id": "bad"},
+    {"state": "played"},
+    {"server_interrupted": False},
+    {"device_acknowledgement": "confirmed"},
+])
+def test_stop_speech_rejects_unproven_or_inconsistent_response(tmp_path, change):
+    value = {
+        "operation_id": "c" * 32,
+        "state": "stop_sent",
+        "server_interrupted": True,
+        "device_acknowledgement": "unavailable",
+        **change,
+    }
+    client = client_for(tmp_path, value)
+    with pytest.raises(BridgeError, match="bridge_invalid_response"):
+        asyncio.run(client.stop_speech())
 
 
 @pytest.mark.parametrize("change", [

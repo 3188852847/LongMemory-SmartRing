@@ -166,6 +166,17 @@ def create_app(*, port=8765, bridge=None, web_root=None, database=None, allow_me
             except BridgeError as error:
                 return web.json_response({"error": error.code}, status=error.status)
 
+    async def stop_speech(request):
+        if operation_lock.locked():
+            return web.json_response({"error": "operation_busy"}, status=409)
+        if request.content_length not in (None, 0):
+            return web.json_response({"error": "invalid_body"}, status=400)
+        async with operation_lock:
+            try:
+                return web.json_response(await client.stop_speech())
+            except BridgeError as error:
+                return web.json_response({"error": error.code}, status=error.status)
+
     async def close(_app):
         await client.close()
 
@@ -179,6 +190,7 @@ def create_app(*, port=8765, bridge=None, web_root=None, database=None, allow_me
     app.router.add_post("/api/device/volume", volume)
     app.router.add_get("/api/device/snapshot", device_snapshot, allow_head=False)
     app.router.add_post("/api/device/screen", screen)
+    app.router.add_post("/api/device/speech/stop", stop_speech)
     memory_backend = MemoryBackend(
         database,
         allow_delete=allow_memory_delete,

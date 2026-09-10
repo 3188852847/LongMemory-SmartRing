@@ -128,7 +128,7 @@ export interface Config {enabled: boolean; database: string; model: string; role
 export interface DeviceStatus {
   connection_count:number; ready:boolean; read_volume_supported:boolean; set_volume_supported:boolean;
   read_status_supported:boolean; set_brightness_supported:boolean; set_theme_supported:boolean;
-  aec_advertised?:boolean; allowed_volume?:{minimum:number; maximum:number};
+  aec_advertised?:boolean; stop_speech_supported?:boolean; allowed_volume?:{minimum:number; maximum:number};
   voice_latency?:VoiceLatency;
 }
 export interface VoiceLatency {

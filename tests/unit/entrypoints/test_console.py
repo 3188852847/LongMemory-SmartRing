@@ -56,6 +56,14 @@ class FakeBridge:
                 "playback_acknowledgement": "unavailable",
                 "expires_at_ms": int(expires_at.timestamp() * 1000)}
 
+    async def stop_speech(self):
+        self.calls.append("stop-speech")
+        if self.error:
+            raise self.error
+        return {"operation_id": "c" * 32, "state": "stop_sent",
+                "server_interrupted": True,
+                "device_acknowledgement": "unavailable"}
+
     async def read_round_skin(self):
         self.calls.append("read-round-skin")
         if self.error:
@@ -356,7 +364,10 @@ def test_console_serves_only_local_assets_and_protected_device_actions():
             response = await client.post(base + "/api/device/volume", headers=headers, json={"volume": 30})
             assert response.status == 200
             assert (await response.json())["verified"] is True
-            assert bridge.calls == ["read", 30]
+            response = await client.post(base + "/api/device/speech/stop", headers=headers)
+            assert response.status == 200
+            assert (await response.json())["state"] == "stop_sent"
+            assert bridge.calls == ["read", 30, "stop-speech"]
     asyncio.run(run())
 
 

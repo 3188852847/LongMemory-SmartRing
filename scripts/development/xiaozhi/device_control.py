@@ -184,11 +184,19 @@ def validate_wallpaper_url(value):
     return value
 
 
+async def abort_current_response(connection):
+    """复用小智已有的中止语义：停止模型/TTS工作、清空队列并向设备发 tts stop。"""
+    from core.handle.abortHandle import handleAbortMessage
+    await handleAbortMessage(connection)
+
+
 class DeviceControl:
-    def __init__(self, allowed_device_id, timeout=5, announcement_sender=None):
+    def __init__(self, allowed_device_id, timeout=5, announcement_sender=None,
+                 response_aborter=None):
         self.allowed_device_id = allowed_device_id.lower()
         self.timeout = timeout
         self.announcement_sender = announcement_sender or enqueue_announcement
+        self.response_aborter = response_aborter or abort_current_response
         self.connections = {}
         self.operation_lock = asyncio.Lock()
 
@@ -224,6 +232,7 @@ class DeviceControl:
                   "set_theme_supported": False,
                   "aec_advertised": False,
                   "announcement_supported": False, "announcement_ready": False,
+                  "stop_speech_supported": False,
                   "user_session_active": False,
                   "allowed_volume": {"minimum": MIN_VOLUME, "maximum": MAX_VOLUME}}
         try:
@@ -246,6 +255,9 @@ class DeviceControl:
                     and hasattr(tts, "tts_text_queue")
                     and hasattr(tts, "tts_audio_queue")):
                 result["announcement_supported"] = True
+                # 这是小智服务端的中止能力，不依赖设备 MCP 工具。
+                # 它能确认服务端已清队列，但设备协议没有播放停止回执。
+                result["stop_speech_supported"] = True
                 active = (getattr(conn, "client_is_speaking", False)
                           or getattr(conn, "client_have_voice", False)
                           or getattr(conn, "calling", False))
@@ -393,6 +405,35 @@ class DeviceControl:
                 result["reason"] = exc.code
             result["operation_id"] = uuid4().hex
             return result
+
+    async def stop_speech(self):
+        """确定性地中止当前服务端回答，不将“指令已发”冒充为硬件回执。"""
+        if self.operation_lock.locked():
+            raise ControlError("control_busy")
+        async with self.operation_lock:
+            conn = self._connection()
+            if getattr(conn, "tts", None) is None or getattr(conn, "loop", None) is None:
+                raise ControlError("stop_speech_unavailable")
+            active = (
+                getattr(conn, "client_is_speaking", False)
+                or not conn.tts.tts_text_queue.empty()
+                or not conn.tts.tts_audio_queue.empty()
+            )
+            operation_id = uuid4().hex
+            if not active:
+                return {
+                    "operation_id": operation_id,
+                    "state": "already_idle",
+                    "server_interrupted": False,
+                    "device_acknowledgement": "not_requested",
+                }
+            await self.response_aborter(conn)
+            return {
+                "operation_id": operation_id,
+                "state": "stop_sent",
+                "server_interrupted": True,
+                "device_acknowledgement": "unavailable",
+            }
 
     async def _set_screen_value(self, *, tool, field, value):
         if self.operation_lock.locked():
