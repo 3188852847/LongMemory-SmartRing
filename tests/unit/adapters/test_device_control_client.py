@@ -98,6 +98,11 @@ def test_status_projects_only_runtime_flags(tmp_path):
         "announcement_supported": True, "announcement_ready": False,
         "user_session_active": True, "announcement_reason": "device_busy",
         "stop_speech_supported": True,
+        "natural_interruption": {
+            "version": 1, "state": "blocked", "device_aec_advertised": False,
+            "server_aec_active": False, "timestamped_audio_supported": False,
+            "listen_mode": "auto", "reason": "device_aec_not_advertised",
+        },
         "private_network": "must-not-escape",
     })
     value = asyncio.run(client.status())
@@ -105,7 +110,32 @@ def test_status_projects_only_runtime_flags(tmp_path):
     assert value["announcement_ready"] is False
     assert value["announcement_reason"] == "device_busy"
     assert value["stop_speech_supported"] is True
+    assert value["natural_interruption"]["reason"] == "device_aec_not_advertised"
     assert "private_network" not in value
+
+
+@pytest.mark.parametrize("change", [
+    {"state": "ready"},
+    {"state": "trial_ready"},
+    {"device_aec_advertised": 1},
+    {"listen_mode": "duplex"},
+    {"reason": "guessed_ready"},
+    {"reason": "ready_for_controlled_trial"},
+])
+def test_status_rejects_malformed_natural_interruption_diagnostic(tmp_path, change):
+    diagnostic = {
+        "version": 1, "state": "blocked", "device_aec_advertised": False,
+        "server_aec_active": False, "timestamped_audio_supported": False,
+        "listen_mode": "auto", "reason": "device_aec_not_advertised", **change,
+    }
+    client = client_for(tmp_path, {
+        "connection_count": 1, "ready": True,
+        "read_volume_supported": True, "set_volume_supported": True,
+        "announcement_supported": True, "announcement_ready": True,
+        "user_session_active": False, "natural_interruption": diagnostic,
+    })
+    with pytest.raises(BridgeError, match="bridge_invalid_response"):
+        asyncio.run(client.status())
 
 
 def test_status_projects_only_strict_voice_latency_snapshot(tmp_path):

@@ -398,8 +398,32 @@ def test_other_device_is_not_registered_and_status_does_not_send():
     bridge.attach(SimpleNamespace(), "00:00:00:00:00:00")
     assert bridge.status()["connection_count"] == 1
     assert bridge.status()["aec_advertised"] is True
+    assert bridge.status()["natural_interruption"] == {
+        "version": 1, "state": "blocked", "device_aec_advertised": True,
+        "server_aec_active": False, "timestamped_audio_supported": False,
+        "listen_mode": "unknown", "reason": "timestamp_transport_unavailable",
+    }
     assert bridge.status()["set_volume_supported"]
     assert not socket.calls
+
+
+def test_natural_interruption_requires_all_observed_transport_conditions():
+    bridge, conn, _ = rig()
+    conn.client_aec = True
+    conn.conn_from_mqtt_gateway = True
+    conn.client_listen_mode = "realtime"
+    diagnostic = bridge.status()["natural_interruption"]
+    assert diagnostic == {
+        "version": 1, "state": "trial_ready", "device_aec_advertised": True,
+        "server_aec_active": True, "timestamped_audio_supported": True,
+        "listen_mode": "realtime", "reason": "ready_for_controlled_trial",
+    }
+
+
+def test_natural_interruption_offline_is_explicitly_unavailable():
+    bridge, conn, _ = rig()
+    bridge.detach(conn)
+    assert bridge.status()["natural_interruption"]["reason"] == "device_offline"
 
 
 @pytest.mark.parametrize("failure", ["no_response", "set_error", "mismatch", "fail_after_set"])

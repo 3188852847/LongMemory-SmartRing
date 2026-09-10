@@ -149,6 +149,35 @@ class XiaozhiControlClient:
         result = {"connection_count": count, **{k: data[k] for k in required_flags},
                   **{k: data.get(k, False) for k in optional_flags}}
         result["allowed_volume"] = {"minimum": 5, "maximum": 60}
+        if "natural_interruption" in data:
+            diagnostic = data["natural_interruption"]
+            fields = {
+                "version", "state", "device_aec_advertised", "server_aec_active",
+                "timestamped_audio_supported", "listen_mode", "reason",
+            }
+            reasons = {
+                "device_offline", "device_aec_not_advertised",
+                "timestamp_transport_unavailable", "server_aec_inactive",
+                "realtime_listening_inactive", "ready_for_controlled_trial",
+            }
+            reason_value = diagnostic.get("reason") if isinstance(diagnostic, dict) else None
+            expected_state = (
+                "unavailable" if reason_value == "device_offline"
+                else "trial_ready" if reason_value == "ready_for_controlled_trial"
+                else "blocked"
+            )
+            if (not isinstance(diagnostic, dict) or set(diagnostic) != fields
+                    or diagnostic.get("version") != 1
+                    or diagnostic.get("state") not in {"unavailable", "blocked", "trial_ready"}
+                    or any(type(diagnostic.get(key)) is not bool for key in (
+                        "device_aec_advertised", "server_aec_active",
+                        "timestamped_audio_supported",
+                    ))
+                    or diagnostic.get("listen_mode") not in {"auto", "manual", "realtime", "unknown"}
+                    or diagnostic.get("reason") not in reasons
+                    or diagnostic.get("state") != expected_state):
+                raise BridgeError("bridge_invalid_response", 502)
+            result["natural_interruption"] = diagnostic
         if "voice_latency" in data:
             result["voice_latency"] = voice_latency(data["voice_latency"])
         if "reason" in data:

@@ -97,4 +97,23 @@ describe('设备与状态页', () => {
     expect(request).toHaveBeenCalledWith('/api/device/speech/stop','POST');
     view.unmount(); client.clear();
   });
+
+  test('自然打断诊断显示真实阻塞层而不提供伪开启按钮', async () => {
+    vi.spyOn(ChatApi.prototype, 'bootstrap').mockResolvedValue(undefined);
+    vi.spyOn(ChatApi.prototype, 'request').mockResolvedValue({
+      connection_count:1,ready:true,read_volume_supported:true,set_volume_supported:true,
+      read_status_supported:true,set_brightness_supported:false,set_theme_supported:false,
+      allowed_volume:{minimum:5,maximum:60},
+      natural_interruption:{version:1,state:'blocked',device_aec_advertised:true,
+        server_aec_active:true,timestamped_audio_supported:false,listen_mode:'realtime',
+        reason:'timestamp_transport_unavailable'},
+    });
+    const client=createConsoleQueryClient();
+    const view=render(<QueryClientProvider client={client}><MemoryRouter><DeviceApp/></MemoryRouter></QueryClientProvider>);
+    expect(await screen.findByText('直连传输缺少时间戳配对')).toBeTruthy();
+    expect(screen.getByText('时间戳音频传输').parentElement?.textContent).toContain('未满足');
+    expect(screen.queryByRole('button',{name:/开启 AEC/})).toBeNull();
+    expect(screen.getByText(/不会把控制台按钮停止算作自然语音打断/)).toBeTruthy();
+    view.unmount(); client.clear();
+  });
 });

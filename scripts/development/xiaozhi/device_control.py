@@ -190,6 +190,54 @@ async def abort_current_response(connection):
     await handleAbortMessage(connection)
 
 
+def natural_interruption_diagnostics(connection=None):
+    """给出自然说话打断的保守能力判定，不把单个 AEC 声明当成完整闭环。
+
+    当前固定小智快照只在 MQTT 网关路径解析带时间戳的音频头并维护
+    播放参考缓存。直连 WebSocket 即使客户端声明 AEC，也缺少这段配对
+    语义，因此不能声称服务端回声消除已经可用。
+    """
+    if connection is None:
+        return {
+            "version": 1,
+            "state": "unavailable",
+            "device_aec_advertised": False,
+            "server_aec_active": False,
+            "timestamped_audio_supported": False,
+            "listen_mode": "unknown",
+            "reason": "device_offline",
+        }
+
+    features = getattr(connection, "features", {})
+    device_aec = isinstance(features, dict) and features.get("aec") is True
+    server_aec = getattr(connection, "client_aec", False) is True
+    # 这是当前服务端实现事实，不是对所有 Xiaozhi 版本的泛化判断。
+    timestamped_audio = getattr(connection, "conn_from_mqtt_gateway", False) is True
+    raw_mode = getattr(connection, "client_listen_mode", "unknown")
+    listen_mode = raw_mode if raw_mode in {"auto", "manual", "realtime"} else "unknown"
+
+    if not device_aec:
+        reason = "device_aec_not_advertised"
+    elif not timestamped_audio:
+        reason = "timestamp_transport_unavailable"
+    elif not server_aec:
+        reason = "server_aec_inactive"
+    elif listen_mode != "realtime":
+        reason = "realtime_listening_inactive"
+    else:
+        reason = "ready_for_controlled_trial"
+
+    return {
+        "version": 1,
+        "state": "trial_ready" if reason == "ready_for_controlled_trial" else "blocked",
+        "device_aec_advertised": device_aec,
+        "server_aec_active": server_aec,
+        "timestamped_audio_supported": timestamped_audio,
+        "listen_mode": listen_mode,
+        "reason": reason,
+    }
+
+
 class DeviceControl:
     def __init__(self, allowed_device_id, timeout=5, announcement_sender=None,
                  response_aborter=None):
@@ -234,12 +282,14 @@ class DeviceControl:
                   "announcement_supported": False, "announcement_ready": False,
                   "stop_speech_supported": False,
                   "user_session_active": False,
+                  "natural_interruption": natural_interruption_diagnostics(),
                   "allowed_volume": {"minimum": MIN_VOLUME, "maximum": MAX_VOLUME}}
         try:
             conn = self._connection()
             result["ready"] = True
             # AEC 是自由说话打断的必要基础之一，但仅凭握手字段不能证明整条打断链路可用。
             result["aec_advertised"] = getattr(conn, "features", {}).get("aec") is True
+            result["natural_interruption"] = natural_interruption_diagnostics(conn)
             for name, field in ((STATUS_TOOL, "read_status_supported"),
                                 (STATUS_TOOL, "read_volume_supported"),
                                 (VOLUME_TOOL, "set_volume_supported"),

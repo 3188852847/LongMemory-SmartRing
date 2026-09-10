@@ -1,7 +1,7 @@
 import {useEffect, useState} from 'react';
 import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {Alert, Button, Card, Descriptions, InputNumber, Select, Slider, Space, Tag} from 'antd';
-import {ApiError, ChatApi, type DeviceStatus, type VoiceLatency} from './api';
+import {ApiError, ChatApi, type DeviceStatus, type NaturalInterruptionDiagnostic, type VoiceLatency} from './api';
 import {AppShell, ConsoleNav} from './AppShell';
 import {PageHeader} from './PageHeader';
 import {errorMessage, resultView, statusView, validTarget} from '../../assets/state.mjs';
@@ -35,6 +35,30 @@ function VoiceLatencyCard({value}:{value:VoiceLatency}) {
       {key:'total',label:'入口 → 首包发送',children:<strong>{elapsed(timing.first_audio_sent_ms)}</strong>},
     ]}/>
     <p className="subtle">计时起点是服务端收到已识别文本并进入回答流程；不含录音与 ASR，也不代表扬声器真正开始出声。当前后端：{value.tts_backend==='edge'?'EdgeTTS':value.tts_backend==='voxcpm2'?'VoxCPM2':'其他'}。</p>
+  </Card>;
+}
+
+function NaturalInterruptionCard({value}:{value:NaturalInterruptionDiagnostic}) {
+  const reason:Record<NaturalInterruptionDiagnostic['reason'],{title:string;description:string}>={
+    device_offline:{title:'等待圆屏连接',description:'当前没有可核对的活动圆屏连接。唤醒设备后，本页会自动刷新诊断。'},
+    device_aec_not_advertised:{title:'固件未声明服务端 AEC',description:'当前圆屏握手没有上报 aec，不能假定它会在播放时持续发送可消除回声的麦克风音频。'},
+    timestamp_transport_unavailable:{title:'直连传输缺少时间戳配对',description:'当前小智直连 WebSocket 路径不解析 AEC 时间戳；服务端无法可靠匹配扬声器参考帧与麦克风帧。'},
+    server_aec_inactive:{title:'服务端 AEC 尚未激活',description:'设备声明与服务端连接状态不一致，不能开始自然打断测试。'},
+    realtime_listening_inactive:{title:'圆屏未进入实时拾音',description:'自然插话需要回答播放期间保持实时聆听；当前模式尚不满足。'},
+    ready_for_controlled_trial:{title:'具备受控试验前提',description:'基础信号均已成立，但仍需用扬声器回声、近讲和远讲场景验证误触发与漏触发。'},
+  };
+  const result=reason[value.reason];
+  const yes=(flag:boolean)=>flag?'满足':'未满足';
+  const mode={auto:'自动停录',manual:'手动停录',realtime:'实时拾音',unknown:'未知'}[value.listen_mode];
+  return <Card className="device-control-card" title="自然说话打断" extra={<Tag color={value.state==='trial_ready'?'green':value.state==='blocked'?'gold':'default'}>{value.state==='trial_ready'?'可试验':value.state==='blocked'?'有阻塞':'不可用'}</Tag>}>
+    <Alert showIcon type={value.state==='trial_ready'?'success':'warning'} title={result.title} description={result.description}/>
+    <Descriptions className="device-help" column={1} size="small" items={[
+      {key:'device',label:'设备 AEC 声明',children:yes(value.device_aec_advertised)},
+      {key:'timestamp',label:'时间戳音频传输',children:yes(value.timestamped_audio_supported)},
+      {key:'server',label:'服务端 AEC',children:yes(value.server_aec_active)},
+      {key:'listen',label:'当前拾音模式',children:mode},
+    ]}/>
+    <p className="subtle">这里只显示能力证据，不会自动开启 AEC，也不会把控制台按钮停止算作自然语音打断。</p>
   </Card>;
 }
 
@@ -129,6 +153,7 @@ export function DeviceApp() {
       </div><div className="device-refresh-meta"><span>{status.data?.connection_count ?? 0} 个活动连接</span><span>{status.dataUpdatedAt ? `刷新于 ${new Date(status.dataUpdatedAt).toLocaleTimeString('zh-CN', {hour12:false})}` : '尚未刷新'}</span><span>每 5 秒检查连接，不轮询音量</span></div>
     </Card>
     {status.data?.voice_latency && <VoiceLatencyCard value={status.data.voice_latency}/>}
+    {status.data?.natural_interruption && <NaturalInterruptionCard value={status.data.natural_interruption}/>}
     {snapshot && <Card className="device-snapshot-card" title="最近设备快照" extra={<Tag color={status.data?.ready && !status.error ? 'blue' : 'gold'}>{status.data?.ready && !status.error ? '单次读取' : '历史读数'}</Tag>}><Descriptions column={{xs:1,sm:3}} items={[
       {key:'battery',label:'电池',children:snapshot.battery ? `${snapshot.battery.level}% · ${snapshot.battery.charging?'充电中':'未充电'}` : '固件未报告'},
       {key:'network',label:'Wi‑Fi 信号',children:snapshot.network?.signal === 'strong'?'强':snapshot.network?.signal === 'medium'?'中':snapshot.network?.signal === 'weak'?'弱':'固件未报告'},

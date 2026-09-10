@@ -129,7 +129,14 @@ export interface DeviceStatus {
   connection_count:number; ready:boolean; read_volume_supported:boolean; set_volume_supported:boolean;
   read_status_supported:boolean; set_brightness_supported:boolean; set_theme_supported:boolean;
   aec_advertised?:boolean; stop_speech_supported?:boolean; allowed_volume?:{minimum:number; maximum:number};
+  natural_interruption?:NaturalInterruptionDiagnostic;
   voice_latency?:VoiceLatency;
+}
+export interface NaturalInterruptionDiagnostic {
+  version:1; state:'unavailable'|'blocked'|'trial_ready';
+  device_aec_advertised:boolean; server_aec_active:boolean; timestamped_audio_supported:boolean;
+  listen_mode:'auto'|'manual'|'realtime'|'unknown';
+  reason:'device_offline'|'device_aec_not_advertised'|'timestamp_transport_unavailable'|'server_aec_inactive'|'realtime_listening_inactive'|'ready_for_controlled_trial';
 }
 export interface VoiceLatency {
   version:1;
