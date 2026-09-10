@@ -20,6 +20,7 @@ from preferences import (
 )
 from firewall_panel import open_panel
 from tts import config_action as tts_config_action
+from voice_recovery import close_stale_voice
 
 
 # 启动器与网页控制台共享“克制未来科技”语义；Tk 不支持网页的渐变和
@@ -581,6 +582,29 @@ def main():
         set_status("已停止本面板启动的服务；其他终端启动的程序未被停止。")
         return True
 
+    def close_external_voice():
+        """只清理符合固定三端口契约的外部/遗留小智，不批量结束 Python。"""
+        if manager.services:
+            set_status("本面板当前拥有受管服务；请使用“停止服务”结束整棵进程树。", "busy")
+            return
+        try:
+            result = close_stale_voice(ip.get().strip())
+        except ValueError as error:
+            set_status(str(error), "error")
+            return
+        if result["state"] == "free":
+            set_status("所选地址的 8000 当前没有监听者，无需清理。", "good")
+        elif result["state"] == "stopped":
+            set_component("voice", "遗留进程已停止", "good")
+            set_status(
+                f"已停止经 8000/8003/8766 共同归属核验的小智语音进程（PID {result['process_id']}）；未停止控制台、VoxCPM2 或其他 Python。",
+                "good",
+            )
+        elif result["state"] == "refused":
+            set_status("8000 的监听者不符合本项目小智三端口契约，已拒绝停止；请人工核对占用程序。", "error")
+        else:
+            set_status("停止结果未能确认，请重新检查端口；不要连续点击。", "error")
+
     def start():
         try:
             options = Options(database=Path(database.get()), voice=voice.get(), voice_root=Path(server.get()),
@@ -691,6 +715,7 @@ def main():
     start_button.pack(side="left", padx=(0, 8))
     ttk.Button(buttons, text="重新打开网页", command=open_page, style="Secondary.TButton").pack(side="left", padx=8)
     ttk.Button(buttons, text="停止服务", command=lambda: stop(False), style="Secondary.TButton").pack(side="left", padx=8)
+    ttk.Button(buttons, text="清理遗留语音", command=close_external_voice, style="Secondary.TButton").pack(side="left", padx=8)
     ttk.Button(buttons, text="使用指南", command=lambda: os.startfile(ROOT / "docs/guides/统一启动.md"), style="Secondary.TButton").pack(side="right", padx=(8, 0))
     window.protocol("WM_DELETE_WINDOW", close)
     window.after(500, tick)
