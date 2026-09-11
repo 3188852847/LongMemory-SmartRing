@@ -1,6 +1,6 @@
 import {useQuery} from '@tanstack/react-query';
 import {Button, Tag} from 'antd';
-import type {ChatApi, ProactivePolicy, RoundSkins} from './api';
+import type {ChatApi, ProactivePolicy, RoundSkins, TTSBackendId, TTSBackends} from './api';
 import type {AppearancePreferences} from './AppearanceProvider';
 import {readRolePreferences} from './rolePreferences';
 
@@ -25,6 +25,9 @@ const interactionLabels = {
   listen_first:'先倾听', ask_before_advice:'先询问再建议', direct:'直接讨论办法',
 };
 const qualityLabels = {fast:'快速', balanced:'均衡', quality:'质量'};
+const backendLabels:Record<TTSBackendId,string> = {
+  edge:'EdgeTTS', voxcpm2:'VoxCPM2', sanotts:'sanoTTS',
+};
 
 function unavailable(query:{isError:boolean}) { return query.isError ? '读取失败' : '读取中'; }
 
@@ -38,6 +41,7 @@ export function PersonalizationOverview({api, ready, prefs, onSelectTab}:{
   const role = useQuery({queryKey:['assistant-role'], queryFn:()=>api.request<RoleSummary>('/api/assistant-role'), enabled:ready});
   const skins = useQuery({queryKey:['round-skins'], queryFn:()=>api.request<RoundSkins>('/api/round-skins'), enabled:ready});
   const proactive = useQuery({queryKey:['proactive-policy'], queryFn:()=>api.request<ProactivePolicy>('/api/proactive-policy'), enabled:ready});
+  const tts = useQuery({queryKey:['tts-backends'], queryFn:()=>api.request<TTSBackends>('/api/tts-backends'), enabled:ready});
   const voice = useQuery({
     queryKey:['personalization-voice'], queryFn:()=>api.request<VoiceSummary>('/api/voice-settings'),
     enabled:false, retry:false,
@@ -47,17 +51,27 @@ export function PersonalizationOverview({api, ready, prefs, onSelectTab}:{
   const selectedSkin = skins.data?.skins.find(item => item.id === skins.data?.selected_skin);
   const reference = voice.data?.profile?.reference;
   const referenceLabel = voice.data?.references?.find(item => item.id === reference)?.label ?? reference;
-  const voiceValue = !voice.data ? (voice.isError ? '读取失败' : '尚未读取')
+  const voiceDetail = !voice.data ? (voice.isError ? '参数读取失败' : '参数尚未读取')
     : voice.data.backend === 'voxcpm2'
-      ? `VoxCPM2 · ${referenceLabel ?? '模型默认声线'} · ${qualityLabels[voice.data.profile?.quality ?? 'balanced']}`
-      : voice.data.backend === 'sanotts' ? 'sanoTTS · 中文小雅 · 整段生成'
-      : voice.data.backend === 'edge' ? `Edge · ${voice.data.voice ?? '默认音色'}` : '当前后端不支持设置';
+      ? `${referenceLabel ?? '模型默认声线'} · ${qualityLabels[voice.data.profile?.quality ?? 'balanced']}`
+      : voice.data.backend === 'sanotts' ? '中文小雅 · 整段生成'
+      : voice.data.backend === 'edge' ? `${voice.data.voice ?? '默认音色'}` : '当前后端不支持设置';
+  const currentTts = tts.data?.current_backend;
+  const nextTts = tts.data?.next_start_backend;
+  const backendSummary = !tts.data ? unavailable(tts)
+    : !tts.data.enabled ? '当前进程未启用选择'
+    : currentTts && nextTts && currentTts !== nextTts
+      ? `本次 ${backendLabels[currentTts]}；下次 ${backendLabels[nextTts]}`
+      : nextTts ? `下次 ${backendLabels[nextTts]}` : '没有可用选择';
+  const voiceValue = `${backendSummary} · ${voiceDetail}`;
+  const voiceTiming = !tts.data ? unavailable(tts) : tts.data.restart_required
+    ? '停止并重启语音后' : tts.data.voice_running ? '本次／下次一致' : '下次启动选择已保存';
 
   const rows = [
     {key:'appearance', title:'控制台外观', value:`${themeLabels[prefs.theme]} · ${prefs.density === 'compact' ? '紧凑' : '舒展'}`, scope:'当前浏览器', timing:'立即生效', action:'appearance'},
     {key:'role', title:'助手角色', value:role.data ? `${role.data.current.name} · 修订 ${role.data.current.revision}` : unavailable(role), scope:'网页对话', timing:'下一轮生效', action:'role'},
     {key:'interaction', title:'表达与互动', value:rolePreferences?.enabled ? interactionLabels[rolePreferences.preferences.interactionStyle] : '使用角色提示词默认规则', scope:'网页；圆屏需同步角色', timing:'下一轮／同步后', action:'role'},
-    {key:'voice', title:'声音方案', value:voiceValue, scope:'网页朗读＋圆屏 TTS', timing:['voxcpm2','sanotts'].includes(voice.data?.backend ?? '') ? '下次合成' : '重启语音服务后', action:'voice'},
+    {key:'voice', title:'声音方案', value:voiceValue, scope:'网页朗读＋圆屏 TTS', timing:voiceTiming, action:'voice'},
     {key:'skin', title:'圆屏状态皮肤', value:selectedSkin?.name ?? (skins.data ? skins.data.selected_skin : unavailable(skins)), scope:'当前只是预览选择', timing:'真机需单独应用', action:'display'},
     {key:'wallpaper', title:'动态壁纸', value:'真机状态未自动读取', scope:'智能圆屏', timing:'在圆屏外观页发布', action:'display'},
     {key:'proactive', title:'主动交流', value:proactive.data ? (proactive.data.enabled ? '已允许' : '已关闭') : unavailable(proactive), scope:'持久策略', timing:'保存后生效', action:'proactive'},
