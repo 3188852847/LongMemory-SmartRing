@@ -4,6 +4,9 @@
 配置编辑与候选学习分别属于其他协作者，避免诊断投递反向依赖记忆 CRUD。
 """
 
+import hashlib
+from datetime import datetime, timedelta, timezone
+
 from longmemory.adapters.device_control import (
     XiaozhiProactiveDelivery,
     XiaozhiRuntimeStateProbe,
@@ -11,8 +14,20 @@ from longmemory.adapters.device_control import (
 from longmemory.adapters.storage.sqlite_proactive_outreach_store import (
     SQLiteProactiveOutreachStore,
 )
+from longmemory.adapters.storage.sqlite_companion_absence_strategy_store import (
+    SQLiteCompanionAbsenceStrategyVersionStore,
+)
+from longmemory.adapters.storage.sqlite_user_initiated_interaction_store import (
+    SQLiteUserInitiatedInteractionStore,
+)
 from longmemory.adapters.storage.sqlite_proactive_policy_store import (
     SQLiteProactivePolicyStore,
+)
+from longmemory.adapters.storage.sqlite_proactive_schedule_override_store import (
+    SQLiteProactiveScheduleOverrideStore,
+)
+from longmemory.adapters.storage.sqlite_proactive_topic_store import (
+    SQLiteProactiveTopicStore,
 )
 from longmemory.adapters.storage.sqlite_proactive_runtime_state import (
     SQLiteProactiveHistoryReader,
@@ -21,7 +36,20 @@ from longmemory.application.proactive import (
     ProactiveOutreachDispatcher,
     ProactiveOutreachLedger,
 )
-from longmemory.core.proactive import OutreachPolicyState, OutreachTrigger
+from longmemory.core.proactive import (
+    OutreachEvidence,
+    OutreachPolicyState,
+    OutreachState,
+    OutreachTrigger,
+    ScheduledTriggerAction,
+    decide_scheduled_trigger,
+)
+from longmemory.core.companion import (
+    AbsenceRoutineDraft,
+    AbsenceRoutineState,
+    AbsenceTriggerAction,
+    decide_routine_absence,
+)
 
 from .errors import MemoryAccessError
 from .proactive_presenters import outreach_result_json
@@ -101,6 +129,506 @@ class ProactiveRuntimeBackend:
                 raise MemoryAccessError(
                     "proactive_dispatch_conflict", 409,
                 ) from None
+            return outreach_result_json(
+                result.outreach,
+                replayed=False,
+                decision=result.decision,
+                delivery=result.delivery,
+                device=device,
+            )
+
+
+    async def follow_up_tick(self, client):
+        """执行最早一条已到时间的已启用事项；终止后绝不补发。"""
+
+        subject_id = "user:self"
+        now = self._clock()
+        with self._open_database() as connection:
+            due_store = SQLiteProactiveOutreachStore(
+                connection, commit_changes=False,
+            )
+            due = due_store.next_due_follow_up(subject_id, now=now)
+            handled_this_minute = due_store.follow_up_handled_in_current_minute(
+                subject_id, now=now,
+            )
+        if due is None:
+            return {
+                "action": "skip",
+                "reason": (
+                    "follow_up_already_handled_this_minute"
+                    if handled_this_minute else "no_due_follow_up"
+                ),
+                "suppress_lower_priority": handled_this_minute,
+            }
+
+        # 已过期无需访问设备；账本用系统恢复证据明确结束。
+        if now >= due.expires_at:
+            with self._open_database(write_capability="proactive") as connection:
+                ledger = ProactiveOutreachLedger(
+                    SQLiteProactiveOutreachStore(connection), clock=lambda: now,
+                )
+                current = ledger.get(due.id)
+                if current is None or current.state != OutreachState.CANDIDATE:
+                    return {"action": "skip", "reason": "follow_up_already_finished"}
+                expired = ledger.record_transition(
+                    current.id, expected_revision=current.revision,
+                    new_state=OutreachState.EXPIRED,
+                    reason_code="follow_up_delivery_window_missed",
+                    evidence=OutreachEvidence.SYSTEM_RECOVERY,
+                )
+                return outreach_result_json(expired, replayed=False)
+
+        device = await XiaozhiRuntimeStateProbe(client).probe()
+        now = self._clock()
+        with self._open_database(write_capability="proactive") as connection:
+            ledger = ProactiveOutreachLedger(
+                SQLiteProactiveOutreachStore(connection), clock=lambda: now,
+            )
+            current = ledger.get(due.id)
+            if current is None or current.state != OutreachState.CANDIDATE:
+                return {"action": "skip", "reason": "follow_up_already_finished"}
+            if now < current.scheduled_for:
+                return {"action": "wait", "reason": "follow_up_not_due"}
+            if now >= current.expires_at:
+                expired = ledger.record_transition(
+                    current.id, expected_revision=current.revision,
+                    new_state=OutreachState.EXPIRED,
+                    reason_code="follow_up_delivery_window_missed",
+                    evidence=OutreachEvidence.SYSTEM_RECOVERY,
+                )
+                return outreach_result_json(expired, replayed=False)
+            source = connection.execute(
+                "SELECT f.status,f.revision,m.content,m.valid_from,m.valid_to,"
+                "m.retired_at "
+                "FROM companion_follow_up_candidates f "
+                "JOIN atomic_memories m ON m.id=f.source_memory_id WHERE f.id=?",
+                (current.follow_up_candidate_id,),
+            ).fetchone()
+            source_valid = (
+                source is not None
+                and source["status"] == "candidate"
+                and source["revision"] == current.follow_up_candidate_revision
+                and source["retired_at"] is None
+                and (
+                    source["valid_from"] is None
+                    or datetime.fromisoformat(source["valid_from"]) <= now
+                )
+                and (
+                    source["valid_to"] is None
+                    or datetime.fromisoformat(source["valid_to"]) > now
+                )
+            )
+            if source_valid:
+                expected_digest = connection.execute(
+                    "SELECT source_content_sha256 FROM companion_follow_up_candidates "
+                    "WHERE id=?", (current.follow_up_candidate_id,),
+                ).fetchone()[0]
+                source_valid = hashlib.sha256(
+                    source["content"].encode("utf-8")
+                ).hexdigest() == expected_digest
+            if not source_valid:
+                cancelled = ledger.record_transition(
+                    current.id, expected_revision=current.revision,
+                    new_state=OutreachState.CANCELLED,
+                    reason_code="follow_up_source_no_longer_current",
+                    evidence=OutreachEvidence.POLICY_DECISION,
+                )
+                return outreach_result_json(cancelled, replayed=False)
+            if not device.ready:
+                blocked = ledger.record_transition(
+                    current.id, expected_revision=current.revision,
+                    new_state=OutreachState.BLOCKED,
+                    reason_code=device.reason_code or "device_offline",
+                    evidence=OutreachEvidence.POLICY_DECISION,
+                )
+                return outreach_result_json(
+                    blocked, replayed=False, device=device,
+                )
+            settings = SQLiteProactivePolicyStore(connection).get(subject_id)
+            history = SQLiteProactiveHistoryReader(connection).read(subject_id, now=now)
+            runtime = OutreachPolicyState(
+                attempted_at=history.attempted_at,
+                awaiting_user_response=history.awaiting_user_response,
+                user_session_active=device.user_session_active,
+                quiet_until=settings.quiet_until,
+            )
+            result = await ProactiveOutreachDispatcher(
+                ledger,
+                delivery_queue=XiaozhiProactiveDelivery(client).queue,
+                clock=lambda: now,
+            ).dispatch(
+                current.id, expected_revision=current.revision,
+                settings=settings, runtime_state=runtime,
+            )
+            return outreach_result_json(
+                result.outreach, replayed=False, decision=result.decision,
+                delivery=result.delivery, device=device,
+            )
+
+    async def background_tick(self, client):
+        """按明确事项、固定定时、习惯缺席的优先级组合三类来源。"""
+
+        follow_up = await self.follow_up_tick(client)
+        if "outreach_id" in follow_up or follow_up.get("suppress_lower_priority"):
+            return {"source": "follow_up", "result": follow_up}
+
+        explicit = await self.scheduled_tick(client)
+        if "outreach_id" in explicit:
+            return {"source": "explicit_schedule", "result": explicit}
+        absence = await self.absence_tick(client)
+        return {"source": "routine_absence", "result": absence}
+
+
+    def _current_absence_decision(self, connection, *, subject_id, now):
+        """从唯一当前版本复算缺席决策；版本行从不被运行期修改。"""
+
+        version_store = SQLiteCompanionAbsenceStrategyVersionStore(connection)
+        selection = version_store.get_selection(subject_id)
+        if selection is None or selection.version_id is None:
+            return None
+        version = version_store.get_version(selection.version_id, subject_id=subject_id)
+        if version is None or not version.replay_gate_passed:
+            return None
+        draft = AbsenceRoutineDraft(
+            candidate_id=version.source_candidate_id,
+            expected_minute=version.expected_minute,
+            grace_minutes=version.grace_minutes,
+            utc_offset_minutes=version.utc_offset_minutes,
+            allowed_weekdays=version.allowed_weekdays,
+            enabled=True,
+            policy_version=version.trigger_policy_version,
+        )
+        history = SQLiteProactiveHistoryReader(connection)
+        observations = SQLiteUserInitiatedInteractionStore(
+            connection, commit_changes=False,
+        )
+        state = AbsenceRoutineState(
+            routine_observed_today=observations.observed_on_local_date(
+                subject_id, now=now,
+                utc_offset_minutes=version.utc_offset_minutes,
+            ),
+            user_chatted_today=history.user_chatted_on_local_date(
+                now=now, utc_offset_minutes=version.utc_offset_minutes,
+            ),
+            already_evaluated_today=False,
+        )
+        decision = decide_routine_absence(draft, now=now, state=state)
+        if (
+            decision.action == AbsenceTriggerAction.CREATE
+            and ProactiveOutreachLedger(
+                SQLiteProactiveOutreachStore(connection, commit_changes=False),
+                clock=lambda: now,
+            ).get_by_idempotency(subject_id, decision.idempotency_key) is not None
+        ):
+            decision = decide_routine_absence(
+                draft, now=now,
+                state=AbsenceRoutineState(
+                    routine_observed_today=state.routine_observed_today,
+                    user_chatted_today=state.user_chatted_today,
+                    already_evaluated_today=True,
+                ),
+            )
+        return version, selection, decision
+
+    async def absence_tick(self, client):
+        """评估当前激活的缺席策略一次；不补发、不调用模型。"""
+
+        subject_id = "user:self"
+        now = self._clock()
+        with self._open_database() as connection:
+            current = self._current_absence_decision(
+                connection, subject_id=subject_id, now=now,
+            )
+        if current is None:
+            return {"action": "skip", "reason": "absence_strategy_inactive"}
+        _, _, decision = current
+        if decision.action != AbsenceTriggerAction.CREATE:
+            return {"action": decision.action.value, "reason": decision.reason.value}
+
+        device = await XiaozhiRuntimeStateProbe(client).probe()
+        now = self._clock()
+        with self._open_database(write_capability="proactive") as connection:
+            current = self._current_absence_decision(
+                connection, subject_id=subject_id, now=now,
+            )
+            if current is None:
+                return {"action": "skip", "reason": "absence_strategy_changed"}
+            version, selection, decision = current
+            if decision.action != AbsenceTriggerAction.CREATE:
+                return {"action": decision.action.value, "reason": decision.reason.value}
+            settings = SQLiteProactivePolicyStore(connection).get(subject_id)
+            topic_seed = (
+                SQLiteProactiveTopicStore(connection).choose_for_schedule(
+                    subject_id, now=now,
+                ) if settings.topic_enabled else None
+            )
+            ledger = ProactiveOutreachLedger(
+                SQLiteProactiveOutreachStore(connection), clock=lambda: now,
+            )
+            outreach = ledger.create_candidate(
+                subject_id=subject_id,
+                trigger=OutreachTrigger.HABIT_CANDIDATE,
+                trigger_reason_code=(
+                    "routine_absence_approved_memory_topic"
+                    if topic_seed is not None else "routine_absence_fixed_greeting"
+                ),
+                content=(topic_seed["prompt_text"] if topic_seed is not None
+                         else settings.greeting_text),
+                scheduled_for=now,
+                expires_at=decision.check_at + settings.config.maximum_lifetime,
+                idempotency_key=decision.idempotency_key,
+                policy_version=(
+                    f"{settings.config.policy_version}+{version.trigger_policy_version}"
+                    f"+selection-r{selection.revision}"
+                ),
+                topic_seed_id=topic_seed["id"] if topic_seed is not None else None,
+                topic_seed_revision=topic_seed["revision"] if topic_seed is not None else None,
+                strategy_version_id=version.id,
+                strategy_selection_revision=selection.revision,
+                strategy_evaluated_local_date=decision.local_date.isoformat(),
+            )
+            if not device.ready:
+                blocked = ledger.record_transition(
+                    outreach.id, expected_revision=outreach.revision,
+                    new_state=OutreachState.BLOCKED,
+                    reason_code=device.reason_code or "device_offline",
+                    evidence=OutreachEvidence.POLICY_DECISION,
+                )
+                return outreach_result_json(
+                    blocked, replayed=False, device=device,
+                )
+            history = SQLiteProactiveHistoryReader(connection).read(subject_id, now=now)
+            runtime = OutreachPolicyState(
+                attempted_at=history.attempted_at,
+                awaiting_user_response=history.awaiting_user_response,
+                user_session_active=device.user_session_active,
+                quiet_until=settings.quiet_until,
+            )
+            result = await ProactiveOutreachDispatcher(
+                ledger,
+                delivery_queue=XiaozhiProactiveDelivery(client).queue,
+                clock=lambda: now,
+            ).dispatch(
+                outreach.id, expected_revision=outreach.revision,
+                settings=settings, runtime_state=runtime,
+            )
+            return outreach_result_json(
+                result.outreach, replayed=False, decision=result.decision,
+                delivery=result.delivery, device=device,
+            )
+
+    async def scheduled_tick(self, client):
+        """评估当前当地分钟一次；不补发、不调用模型、不自动重试投递。"""
+
+        subject_id = "user:self"
+        now = self._clock()
+        development_override = None
+        invalid_override = None
+        with self._open_database() as connection:
+            settings = SQLiteProactivePolicyStore(connection).get(subject_id)
+            history = SQLiteProactiveHistoryReader(connection)
+            offset = timezone(timedelta(minutes=settings.config.utc_offset_minutes))
+            local_now = now.astimezone(offset)
+            local_day = local_now.date()
+            idempotency_key = f"explicit-schedule:{local_day.isoformat()}"
+            ledger = ProactiveOutreachLedger(
+                SQLiteProactiveOutreachStore(connection, commit_changes=False),
+                clock=lambda: now,
+            )
+            development_override = SQLiteProactiveScheduleOverrideStore(
+                connection
+            ).get_armed(subject_id)
+            if development_override is not None:
+                invalid_reason = None
+                if (
+                    development_override["local_date"] != local_day.isoformat()
+                    or development_override["scheduled_minute"]
+                    != settings.scheduled_minute
+                    or development_override["policy_revision"] != settings.revision
+                ):
+                    invalid_reason = "configuration_changed_or_date_expired"
+                elif not settings.config.enabled or not settings.automatic_enabled:
+                    invalid_reason = "automatic_setting_disabled"
+                elif local_now.weekday() not in settings.config.allowed_weekdays:
+                    invalid_reason = "weekday_no_longer_allowed"
+                elif (
+                    local_now.hour * 60 + local_now.minute
+                    > development_override["scheduled_minute"]
+                ):
+                    invalid_reason = "scheduled_minute_missed"
+                if invalid_reason is not None:
+                    invalid_override = (
+                        development_override["id"],
+                        development_override["revision"],
+                        invalid_reason,
+                    )
+            decision = decide_scheduled_trigger(
+                settings,
+                now=now,
+                user_chatted_today=(
+                    False if development_override is not None
+                    else history.user_chatted_on_local_date(
+                        now=now,
+                        utc_offset_minutes=settings.config.utc_offset_minutes,
+                    )
+                ),
+                already_evaluated_today=(
+                    False if development_override is not None
+                    else ledger.get_by_idempotency(
+                        subject_id, idempotency_key,
+                    ) is not None
+                ),
+            )
+        if invalid_override is not None:
+            override_id, override_revision, invalid_reason = invalid_override
+            with self._open_database(
+                write_capability="proactive",
+            ) as write_connection:
+                SQLiteProactiveScheduleOverrideStore(write_connection).finish(
+                    override_id,
+                    subject_id=subject_id,
+                    expected_revision=override_revision,
+                    status="consumed",
+                    reason=invalid_reason,
+                    now=now,
+                )
+            return {"action": "skip", "reason": invalid_reason}
+        if decision.action != ScheduledTriggerAction.CREATE:
+            return {
+                "action": decision.action.value,
+                "reason": decision.reason.value,
+            }
+
+        device = await XiaozhiRuntimeStateProbe(client).probe()
+        # 网络探测可能跨过配置分钟；重新读钟后再次决策，不能用旧时刻补发。
+        now = self._clock()
+        with self._open_database(write_capability="proactive") as connection:
+            settings = SQLiteProactivePolicyStore(connection).get(subject_id)
+            history = SQLiteProactiveHistoryReader(connection)
+            ledger = ProactiveOutreachLedger(
+                SQLiteProactiveOutreachStore(connection), clock=lambda: now,
+            )
+            override_store = SQLiteProactiveScheduleOverrideStore(connection)
+            current_override = (
+                override_store.get_armed(subject_id)
+                if development_override is not None else None
+            )
+            if development_override is not None and (
+                current_override is None
+                or current_override["id"] != development_override["id"]
+            ):
+                return {
+                    "action": "skip",
+                    "reason": "development_override_unavailable",
+                }
+            decision = decide_scheduled_trigger(
+                settings,
+                now=now,
+                user_chatted_today=(
+                    False if current_override is not None
+                    else history.user_chatted_on_local_date(
+                        now=now,
+                        utc_offset_minutes=settings.config.utc_offset_minutes,
+                    )
+                ),
+                already_evaluated_today=(
+                    False if current_override is not None
+                    else ledger.get_by_idempotency(
+                        subject_id, decision.idempotency_key,
+                    ) is not None
+                ),
+            )
+            if decision.action != ScheduledTriggerAction.CREATE:
+                if current_override is not None:
+                    override_store.finish(
+                        current_override["id"],
+                        subject_id=subject_id,
+                        expected_revision=current_override["revision"],
+                        status="consumed",
+                        reason=f"second_check_{decision.reason.value}",
+                        now=now,
+                    )
+                return {
+                    "action": decision.action.value,
+                    "reason": decision.reason.value,
+                }
+            if current_override is not None:
+                override_store.finish(
+                    current_override["id"],
+                    subject_id=subject_id,
+                    expected_revision=current_override["revision"],
+                    status="consumed",
+                    reason="scheduled_attempt_started",
+                    now=now,
+                )
+            topic_seed = (
+                SQLiteProactiveTopicStore(connection).choose_for_schedule(
+                    subject_id, now=now,
+                )
+                if settings.topic_enabled else None
+            )
+            outreach = ledger.create_candidate(
+                subject_id=subject_id,
+                trigger=OutreachTrigger.EXPLICIT_SCHEDULE,
+                trigger_reason_code=(
+                    "development_approved_memory_topic"
+                    if current_override is not None and topic_seed is not None
+                    else "development_fixed_schedule"
+                    if current_override is not None
+                    else "approved_memory_topic" if topic_seed is not None
+                    else "explicit_daily_schedule"
+                ),
+                content=(
+                    topic_seed["prompt_text"] if topic_seed is not None
+                    else settings.greeting_text
+                ),
+                scheduled_for=now,
+                expires_at=(
+                    decision.scheduled_for + settings.config.maximum_lifetime
+                ),
+                idempotency_key=(
+                    f"development-schedule:{current_override['id']}"
+                    if current_override is not None else decision.idempotency_key
+                ),
+                policy_version=settings.config.policy_version,
+                topic_seed_id=(
+                    topic_seed["id"] if topic_seed is not None else None
+                ),
+                topic_seed_revision=(
+                    topic_seed["revision"] if topic_seed is not None else None
+                ),
+            )
+            if not device.ready:
+                blocked = ledger.record_transition(
+                    outreach.id,
+                    expected_revision=outreach.revision,
+                    new_state=OutreachState.BLOCKED,
+                    reason_code=device.reason_code or "device_offline",
+                    evidence=OutreachEvidence.POLICY_DECISION,
+                )
+                return outreach_result_json(
+                    blocked, replayed=False, device=device,
+                )
+            runtime = history.read(subject_id, now=now)
+            runtime = OutreachPolicyState(
+                attempted_at=runtime.attempted_at,
+                awaiting_user_response=(
+                    False if current_override is not None
+                    else runtime.awaiting_user_response
+                ),
+                user_session_active=device.user_session_active,
+                quiet_until=settings.quiet_until,
+            )
+            result = await ProactiveOutreachDispatcher(
+                ledger,
+                delivery_queue=XiaozhiProactiveDelivery(client).queue,
+                clock=lambda: now,
+            ).dispatch(
+                outreach.id,
+                expected_revision=outreach.revision,
+                settings=settings,
+                runtime_state=runtime,
+            )
             return outreach_result_json(
                 result.outreach,
                 replayed=False,
