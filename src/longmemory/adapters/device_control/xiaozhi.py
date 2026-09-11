@@ -10,13 +10,18 @@ import aiohttp
 
 from .protocol import BridgeError, round_skin, safe_reason
 from .projections import (
+    activated_wallpaper,
+    announcement_queued,
     device_status,
     hardware_status,
     read_volume,
+    rolled_back_wallpaper,
     round_skin_update,
     screen_update,
     speech_stop,
+    staged_wallpaper,
     volume_update,
+    wallpaper_status,
 )
 
 
@@ -125,38 +130,13 @@ class XiaozhiControlClient:
             {"item_id": item_id, "sha256": sha256, "size_bytes": size_bytes, "url": url},
             timeout_seconds=150,
         )
-        fields = {"wallpaper_api", "slot", "wallpaper_id", "sha256", "size_bytes",
-                  "state", "operation_id"}
-        if (set(data) != fields or data.get("wallpaper_api") != 1
-                or data.get("slot") not in {"a", "b"}
-                or data.get("wallpaper_id") != item_id or data.get("sha256") != sha256
-                or data.get("size_bytes") != size_bytes
-                or data.get("state") != "staged_verified"
-                or not re.fullmatch(r"[0-9a-f]{32}", str(data.get("operation_id", "")))):
-            raise BridgeError("bridge_invalid_response", 502)
-        return data
+        return staged_wallpaper(
+            data, item_id=item_id, sha256=sha256, size_bytes=size_bytes,
+        )
 
     async def read_round_wallpaper(self) -> dict:
         data = await self._request("GET", "/api/device/round-wallpaper")
-        fields = {"wallpaper_api", "active_valid", "active_slot", "active_wallpaper_id",
-                  "active_sha256", "active_size_bytes", "rollback_available"}
-        if not isinstance(data, dict) or set(data) != fields or data.get("wallpaper_api") != 1:
-            raise BridgeError("bridge_invalid_response", 502)
-        if type(data.get("active_valid")) is not bool or type(data.get("rollback_available")) is not bool:
-            raise BridgeError("bridge_invalid_response", 502)
-        if data["active_valid"]:
-            valid = (data.get("active_slot") in {"a", "b"}
-                     and re.fullmatch(r"wallpaper-[0-9a-f]{20}", str(data.get("active_wallpaper_id", "")))
-                     and re.fullmatch(r"[0-9a-f]{64}", str(data.get("active_sha256", "")))
-                     and type(data.get("active_size_bytes")) is int
-                     and 0 < data["active_size_bytes"] <= 4 * 1024 * 1024)
-        else:
-            valid = (data.get("active_slot") == "" and data.get("active_wallpaper_id") == ""
-                     and data.get("active_sha256") == "" and data.get("active_size_bytes") == 0
-                     and data.get("rollback_available") is False)
-        if not valid:
-            raise BridgeError("bridge_invalid_response", 502)
-        return data
+        return wallpaper_status(data)
 
     async def activate_round_wallpaper(self, staged: dict) -> dict:
         fields = {"wallpaper_api", "slot", "wallpaper_id", "sha256", "size_bytes", "state"}
@@ -166,28 +146,13 @@ class XiaozhiControlClient:
             "POST", "/api/device/round-wallpaper/activate", staged,
             timeout_seconds=120,
         )
-        expected = {**staged, "state": "activated_restarting"}
-        operation_id = data.pop("operation_id", None)
-        if data != expected or not re.fullmatch(r"[0-9a-f]{32}", str(operation_id or "")):
-            raise BridgeError("bridge_invalid_response", 502)
-        return {**data, "operation_id": operation_id}
+        return activated_wallpaper(data, staged)
 
     async def rollback_round_wallpaper(self) -> dict:
         data = await self._request(
             "POST", "/api/device/round-wallpaper/rollback", timeout_seconds=120,
         )
-        fields = {"wallpaper_api", "slot", "wallpaper_id", "sha256", "size_bytes",
-                  "state", "operation_id"}
-        if (set(data) != fields or data.get("wallpaper_api") != 1
-                or data.get("slot") not in {"a", "b"}
-                or data.get("state") != "rollback_restarting"
-                or not re.fullmatch(r"wallpaper-[0-9a-f]{20}", str(data.get("wallpaper_id", "")))
-                or not re.fullmatch(r"[0-9a-f]{64}", str(data.get("sha256", "")))
-                or type(data.get("size_bytes")) is not int
-                or not 0 < data["size_bytes"] <= 4 * 1024 * 1024
-                or not re.fullmatch(r"[0-9a-f]{32}", str(data.get("operation_id", "")))):
-            raise BridgeError("bridge_invalid_response", 502)
-        return data
+        return rolled_back_wallpaper(data)
 
     async def announce(self, text: str, expires_at: datetime) -> dict:
         """请求现有小智 TTS 队列接收短文本，不声称设备已经播放。"""
@@ -203,17 +168,4 @@ class XiaozhiControlClient:
             "POST", "/api/device/announcement",
             {"text": text, "expires_at_ms": expires_at_ms},
         )
-        operation_id = data.get("operation_id")
-        if (not isinstance(operation_id, str)
-                or re.fullmatch(r"[0-9a-f]{32}", operation_id) is None
-                or data.get("state") != "queued"
-                or data.get("playback_acknowledgement") != "unavailable"
-                or data.get("expires_at_ms") != expires_at_ms):
-            raise BridgeError("bridge_invalid_response", 502)
-        # 只保留编排需要的非敏感字段；上游额外数据不向应用层扩散。
-        return {
-            "operation_id": operation_id,
-            "state": "queued",
-            "playback_acknowledgement": "unavailable",
-            "expires_at_ms": expires_at_ms,
-        }
+        return announcement_queued(data, expires_at_ms)

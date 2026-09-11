@@ -122,6 +122,124 @@ def round_skin_update(data: dict, requested: dict) -> dict:
     return result
 
 
+def staged_wallpaper(
+    data: dict, *, item_id: str, sha256: str, size_bytes: int,
+) -> dict:
+    fields = {
+        "wallpaper_api", "slot", "wallpaper_id", "sha256", "size_bytes",
+        "state", "operation_id",
+    }
+    if (
+        set(data) != fields
+        or data.get("wallpaper_api") != 1
+        or data.get("slot") not in {"a", "b"}
+        or data.get("wallpaper_id") != item_id
+        or data.get("sha256") != sha256
+        or data.get("size_bytes") != size_bytes
+        or data.get("state") != "staged_verified"
+        or not re.fullmatch(r"[0-9a-f]{32}", str(data.get("operation_id", "")))
+    ):
+        raise BridgeError("bridge_invalid_response", 502)
+    return data
+
+
+def wallpaper_status(data: dict) -> dict:
+    fields = {
+        "wallpaper_api", "active_valid", "active_slot", "active_wallpaper_id",
+        "active_sha256", "active_size_bytes", "rollback_available",
+    }
+    if (
+        not isinstance(data, dict)
+        or set(data) != fields
+        or data.get("wallpaper_api") != 1
+    ):
+        raise BridgeError("bridge_invalid_response", 502)
+    if (
+        type(data.get("active_valid")) is not bool
+        or type(data.get("rollback_available")) is not bool
+    ):
+        raise BridgeError("bridge_invalid_response", 502)
+    if data["active_valid"]:
+        valid = (
+            data.get("active_slot") in {"a", "b"}
+            and re.fullmatch(
+                r"wallpaper-[0-9a-f]{20}",
+                str(data.get("active_wallpaper_id", "")),
+            )
+            and re.fullmatch(
+                r"[0-9a-f]{64}", str(data.get("active_sha256", "")),
+            )
+            and type(data.get("active_size_bytes")) is int
+            and 0 < data["active_size_bytes"] <= 4 * 1024 * 1024
+        )
+    else:
+        valid = (
+            data.get("active_slot") == ""
+            and data.get("active_wallpaper_id") == ""
+            and data.get("active_sha256") == ""
+            and data.get("active_size_bytes") == 0
+            and data.get("rollback_available") is False
+        )
+    if not valid:
+        raise BridgeError("bridge_invalid_response", 502)
+    return data
+
+
+def activated_wallpaper(data: dict, staged: dict) -> dict:
+    expected = {**staged, "state": "activated_restarting"}
+    operation_id = data.get("operation_id")
+    projected = {
+        key: value for key, value in data.items() if key != "operation_id"
+    }
+    if (
+        projected != expected
+        or not re.fullmatch(r"[0-9a-f]{32}", str(operation_id or ""))
+    ):
+        raise BridgeError("bridge_invalid_response", 502)
+    return {**projected, "operation_id": operation_id}
+
+
+def rolled_back_wallpaper(data: dict) -> dict:
+    fields = {
+        "wallpaper_api", "slot", "wallpaper_id", "sha256", "size_bytes",
+        "state", "operation_id",
+    }
+    if (
+        set(data) != fields
+        or data.get("wallpaper_api") != 1
+        or data.get("slot") not in {"a", "b"}
+        or data.get("state") != "rollback_restarting"
+        or not re.fullmatch(
+            r"wallpaper-[0-9a-f]{20}", str(data.get("wallpaper_id", "")),
+        )
+        or not re.fullmatch(r"[0-9a-f]{64}", str(data.get("sha256", "")))
+        or type(data.get("size_bytes")) is not int
+        or not 0 < data["size_bytes"] <= 4 * 1024 * 1024
+        or not re.fullmatch(r"[0-9a-f]{32}", str(data.get("operation_id", "")))
+    ):
+        raise BridgeError("bridge_invalid_response", 502)
+    return data
+
+
+def announcement_queued(data: dict, expires_at_ms: int) -> dict:
+    operation_id = data.get("operation_id")
+    if (
+        not isinstance(operation_id, str)
+        or re.fullmatch(r"[0-9a-f]{32}", operation_id) is None
+        or data.get("state") != "queued"
+        or data.get("playback_acknowledgement") != "unavailable"
+        or data.get("expires_at_ms") != expires_at_ms
+    ):
+        raise BridgeError("bridge_invalid_response", 502)
+    # 只保留编排需要的非敏感字段；上游额外数据不向应用层扩散。
+    return {
+        "operation_id": operation_id,
+        "state": "queued",
+        "playback_acknowledgement": "unavailable",
+        "expires_at_ms": expires_at_ms,
+    }
+
+
 def device_status(data: dict) -> dict:
     """投影连接及能力状态，丢弃桥内部或未来未知字段。"""
 
