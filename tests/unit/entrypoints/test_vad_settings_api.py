@@ -70,4 +70,19 @@ def test_vad_projection_drops_private_or_future_subprocess_fields():
         "backup": ".config.yaml.vad-private.bak",
         "future_private_field": "must-not-cross-http-boundary",
     })
-    assert set(projected) == {"profile", "values", "digest", "runtime"}
+    assert set(projected) == {
+        "profile", "values", "digest", "runtime", "running_profile", "restart_required",
+    }
+    assert projected["running_profile"] is None
+    assert projected["restart_required"] is False
+
+
+def test_vad_projection_marks_saved_profile_waiting_for_restart():
+    projected = _public_status({
+        "profile": "close_talk",
+        "values": {"threshold": 0.82, "threshold_low": 0.55,
+                   "min_silence_duration_ms": 700},
+        "digest": "a" * 64,
+    }, running_profile="normal")
+    assert projected["running_profile"] == "normal"
+    assert projected["restart_required"] is True

@@ -153,8 +153,12 @@ def test_launcher_status_snapshot_contains_only_bounded_runtime_facts(options):
         "console": "ready", "voice": "running", "voxcpm2": "disabled",
         "sanotts": "disabled",
     }
+    assert saved["schema_version"] == 2
+    assert saved["startup"] == {"voice_enabled": options.voice,
+                                 "vad_profile": options.vad_profile if options.voice else None}
     assert set(saved) == {
-        "schema_version", "launcher_instance", "launcher_pid", "updated_at", "phase", "services"
+        "schema_version", "launcher_instance", "launcher_pid", "updated_at", "phase",
+        "services", "startup",
     }
 
 

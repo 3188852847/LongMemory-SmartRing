@@ -8,6 +8,8 @@ interface Status {
   values:{threshold:number;threshold_low:number;min_silence_duration_ms:number};
   digest:string;
   runtime:'unverified';
+  running_profile:Profile|null;
+  restart_required:boolean;
 }
 
 const options=[
@@ -48,6 +50,8 @@ export function VADSettings({api,disabled}:{api:ChatApi;disabled:boolean}) {
     <p>调整语音活动检测（VAD）的触发门槛。它能减少旁人误触发，但不能识别“说话的人是不是你”。</p>
     {notice&&<Alert type={notice.includes('已保存')?'success':'warning'} showIcon title={notice}/>}
     {status?.profile==='custom'&&<Alert type="warning" showIcon title="当前数值不匹配三个受控预设" description="页面不会猜测它属于哪一档；选择预设并保存后才会替换三个数值。"/>}
+    {status?.restart_required&&<Alert type="info" showIcon title="当前语音进程尚未使用已保存档位" description="启动器记录显示本次语音使用的是另一档。停止并重新启动后再核对；这是启动记录，不是设备端回读。"/>}
+    {status?.running_profile&& !status.restart_required&&<Alert type="success" showIcon title="本次语音启动时已选择当前档位" description="该结论来自统一启动器的当前实例记录，不是圆屏设备端回读。"/>}
     {!status&&!notice&&<p role="status">正在读取拾音配置…</p>}
     <Radio.Group aria-label="拾音灵敏度" value={draft} disabled={disabled||busy||!status} onChange={event=>setDraft(event.target.value)}>
       <Space orientation="vertical">

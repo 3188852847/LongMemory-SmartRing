@@ -14,12 +14,14 @@ import subprocess
 
 from aiohttp import web
 
+from .launcher_status import read_launcher_status
+
 
 PROFILES = {"normal", "noisy", "close_talk"}
 VALUE_KEYS = {"threshold", "threshold_low", "min_silence_duration_ms"}
 
 
-def _public_status(value):
+def _public_status(value, *, running_profile=None):
     """把子进程结果投影为固定公开字段，即使脚本未来增加字段也不会泄露。"""
     if not isinstance(value, dict) or value.get("profile") not in PROFILES | {"custom"}:
         raise ValueError("vad_operation_failed")
@@ -43,14 +45,28 @@ def _public_status(value):
         "values": values,
         "digest": digest,
         "runtime": "unverified",
+        # 启动器只能证明进程启动时选了什么，不能冒充设备端回读。
+        "running_profile": running_profile,
+        "restart_required": (
+            running_profile is not None and running_profile != value["profile"]
+        ),
     }
 
 
 class VadSettings:
-    def __init__(self, server: Path, project: Path):
+    def __init__(self, server: Path, project: Path, launcher_status_file=None, instance_id=None):
         self.server = Path(server).resolve()
         self.project = Path(project).resolve()
         self.lock = asyncio.Lock()
+        self.launcher_status_file = launcher_status_file
+        self.instance_id = instance_id
+
+    def running_profile(self):
+        status = read_launcher_status(self.launcher_status_file, self.instance_id)
+        if status.get("services", {}).get("voice") not in {"running", "ready"}:
+            return None
+        profile = status.get("startup", {}).get("vad_profile")
+        return profile if profile in PROFILES else None
 
     async def call(self, body: dict):
         if self.lock.locked():
@@ -77,7 +93,7 @@ class VadSettings:
                 value = json.loads(result.stdout)
             except (json.JSONDecodeError, UnicodeDecodeError):
                 raise ValueError("vad_operation_failed") from None
-            return _public_status(value)
+            return _public_status(value, running_profile=self.running_profile())
 
 
 def register_vad_routes(app, backend):

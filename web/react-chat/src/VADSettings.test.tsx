@@ -37,4 +37,14 @@ describe('拾音灵敏度设置',()=>{
     expect(await screen.findByText(/当前数值不匹配三个受控预设/)).toBeTruthy();
     await waitFor(()=>expect(screen.getByRole('button',{name:'保存拾音档位'}).hasAttribute('disabled')).toBe(false));
   });
+
+  test('区分已保存档位与本次语音启动档位',async()=>{
+    vi.spyOn(ChatApi.prototype,'request').mockResolvedValue({
+      profile:'close_talk',values:{threshold:.82,threshold_low:.55,min_silence_duration_ms:700},
+      digest:'a'.repeat(64),runtime:'unverified',running_profile:'normal',restart_required:true,
+    });
+    render(<VADSettings api={new ChatApi()} disabled={false}/>);
+    expect(await screen.findByText(/当前语音进程尚未使用已保存档位/)).toBeTruthy();
+    expect(screen.getByText(/不是设备端回读/)).toBeTruthy();
+  });
 });

@@ -266,7 +266,7 @@ class Manager:
         if self.status_path is None or not self.instance:
             return
         snapshot = {
-            "schema_version": 1,
+            "schema_version": 2,
             "launcher_instance": self.instance,
             "launcher_pid": os.getpid(),
             "updated_at": datetime.now(timezone.utc).isoformat(),
@@ -281,6 +281,14 @@ class Manager:
                 "sanotts": self._service_state(
                     "sanotts", ready=tts_ready and self.options is not None
                     and self.options.tts_backend == "sanotts"
+                ),
+            },
+            # 只记录启动时的非敏感选项，不记录地址、密钥、模型或对话。
+            "startup": {
+                "voice_enabled": bool(self.options and self.options.voice),
+                "vad_profile": (
+                    self.options.vad_profile
+                    if self.options is not None and self.options.voice else None
                 ),
             },
         }

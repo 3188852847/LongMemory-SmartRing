@@ -50,3 +50,29 @@ def test_stale_snapshot_hides_service_states(tmp_path):
 
     assert result["state"] == "stale"
     assert result["services"] == {}
+
+
+def test_v2_snapshot_exposes_only_bounded_startup_vad_choice(tmp_path):
+    now = datetime(2026, 9, 10, tzinfo=timezone.utc)
+    snapshot = _snapshot(now)
+    snapshot.update(schema_version=2, startup={"voice_enabled": True,
+                                                "vad_profile": "close_talk"})
+    path = tmp_path / "status.json"
+    path.write_text(json.dumps(snapshot), encoding="utf-8")
+
+    result = read_launcher_status(path, "current", now=now)
+
+    assert result["startup"] == {"voice_enabled": True, "vad_profile": "close_talk"}
+
+
+def test_v2_snapshot_rejects_unknown_vad_or_extra_startup_fields(tmp_path):
+    now = datetime(2026, 9, 10, tzinfo=timezone.utc)
+    path = tmp_path / "status.json"
+    snapshot = _snapshot(now)
+    snapshot.update(schema_version=2, startup={"voice_enabled": True,
+                                                "vad_profile": "maximum"})
+    path.write_text(json.dumps(snapshot), encoding="utf-8")
+    assert read_launcher_status(path, "current", now=now)["state"] == "launcher_unavailable"
+    snapshot["startup"] = {"voice_enabled": True, "vad_profile": "normal", "secret": "no"}
+    path.write_text(json.dumps(snapshot), encoding="utf-8")
+    assert read_launcher_status(path, "current", now=now)["state"] == "launcher_unavailable"
