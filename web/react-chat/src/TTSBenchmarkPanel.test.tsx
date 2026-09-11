@@ -19,6 +19,7 @@ test('显示当前真实能力并运行固定文本测试',async()=>{
   render(<QueryClientProvider client={client}><TTSBenchmarkPanel api={new ChatApi()} enabled={true}/></QueryClientProvider>);
   expect(await screen.findByText('完整音频缓冲')).toBeTruthy();
   expect(screen.getByText('不能取消生成')).toBeTruthy();
+  expect(screen.getByText('同条件探索性汇总')).toBeTruthy();
   fireEvent.click(screen.getByRole('button',{name:'运行一次测试'}));
   await waitFor(()=>expect(screen.getAllByText('4200 ms')).toHaveLength(2));
   expect(screen.getByText(/1.20 秒/)).toBeTruthy();

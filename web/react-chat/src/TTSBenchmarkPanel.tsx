@@ -1,8 +1,9 @@
-import {useState} from 'react';
+import {useMemo, useState} from 'react';
 import {useMutation, useQuery} from '@tanstack/react-query';
 import {Alert, Button, Descriptions, Select, Space, Table, Tag} from 'antd';
 import {ApiError, ChatApi, type TTSBenchmarkIndex, type TTSBenchmarkResult} from './api';
 import {SpeechPlayer} from './SpeechPlayer';
+import {buildTTSComparison} from './ttsBenchmarkComparison';
 
 const localityLabels:Record<string,string>={local:'本机',remote:'联网',browser:'浏览器',device:'设备端'};
 const controlLabels:Record<string,string>={voice_selection:'选择音色',reference_voice:'参考音色',style_prompt:'表达指令',speaking_rate:'语速',volume:'音量',emotion:'情绪'};
@@ -26,6 +27,9 @@ export function TTSBenchmarkPanel({api,enabled}:{api:ChatApi;enabled:boolean}) {
   });
   const capability=index.data?.capabilities;
   const result=run.data;
+  const comparison=useMemo(()=>buildTTSComparison(
+    index.data?.cases??[],index.data?.history.runs??[],
+  ),[index.data?.cases,index.data?.history.runs]);
   return <section className="tts-benchmark" aria-label="TTS 测试台">
     <h3>TTS 测试台</h3>
     <p>只发送下方合成文本，不读取聊天、个人记忆或用户音频；每次只运行一项，失败不重试。</p>
@@ -71,6 +75,19 @@ export function TTSBenchmarkPanel({api,enabled}:{api:ChatApi;enabled:boolean}) {
         {title:'首个可用音频',dataIndex:'first_audio_available_ms',key:'first',render:(value:number)=>`${value.toFixed(0)} ms`},
         {title:'音频时长',key:'duration',render:(_value,record)=>record.wave?`${record.wave.duration_seconds.toFixed(2)} 秒`:'—'},
         {title:'记录时间',dataIndex:'started_at',key:'time',render:(value:string)=>new Date(value).toLocaleString()},
+      ]}/>
+    <h4>同条件探索性汇总</h4>
+    <p className="subtle">只在“同一后端＋同一固定用例”内计算中位数；每组至少 3 次才标为样本已备。结果仍混合冷启动与热启动，不评价音色，也不会自动选出默认后端。</p>
+    <Table size="small" pagination={false} rowKey="key" dataSource={comparison}
+      locale={{emptyText:'完成测试后这里会自动汇总'}} columns={[
+        {title:'后端',dataIndex:'backend',key:'backend'},
+        {title:'固定用例',dataIndex:'caseLabel',key:'case'},
+        {title:'样本',dataIndex:'sampleCount',key:'samples',render:(value:number)=>
+          <Tag color={value>=3?'green':'gold'}>{value>=3?`${value} 次 · 已备`:`${value}/3 · 待补`}</Tag>},
+        {title:'中位首音频',dataIndex:'medianFirstAudioMs',key:'first',render:(value:number)=>`${value.toFixed(0)} ms`},
+        {title:'中位完成',dataIndex:'medianCompletedMs',key:'completed',render:(value:number)=>`${value.toFixed(0)} ms`},
+        {title:'实时系数',dataIndex:'medianRealtimeFactor',key:'rtf',render:(value:number|null)=>value===null?'—':`${value.toFixed(2)}×`},
+        {title:'近静音',dataIndex:'nearSilentCount',key:'silent',render:(value:number)=>value?`${value} 次`:'0'},
       ]}/>
   </section>;
 }
