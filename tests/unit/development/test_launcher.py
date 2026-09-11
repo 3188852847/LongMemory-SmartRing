@@ -20,6 +20,12 @@ try:
     runtime = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = runtime
     spec.loader.exec_module(runtime)
+
+    view_spec = importlib.util.spec_from_file_location(
+        "launcher_view_model_test", DIRECTORY / "view_model.py"
+    )
+    view_model = importlib.util.module_from_spec(view_spec)
+    view_spec.loader.exec_module(view_model)
 finally:
     sys.path.pop(0)
 
@@ -52,6 +58,46 @@ def test_command_preserves_paths_and_does_not_enable_deletion_or_jobs(options):
     assert "--allow-insecure-http" not in cmd  # 网页仍需 .env 的独立 HTTP 许可。
     assert cmd[cmd.index("--memory-backend") + 1] == "longmemory"
     assert cmd[cmd.index("--launcher-status-file") + 1].endswith("data\\control\\launcher-status.json")
+
+
+def test_ready_view_model_keeps_console_voice_and_speech_states_independent():
+    loading = view_model.ready_services(
+        voice=True,
+        tts_backend="sanotts",
+        local_tts_ready=False,
+        opened=True,
+    )
+    assert loading["components"] == {
+        "console": ("已就绪", "good"),
+        "voice": ("小智进程运行", "good"),
+        "speech": ("sanoTTS 加载中", "busy"),
+        "browser": ("已请求打开", "good"),
+    }
+    assert "圆屏语音尚未就绪" in loading["message"]
+
+    text_only = view_model.ready_services(
+        voice=False,
+        tts_backend="edge",
+        local_tts_ready=False,
+        opened=False,
+    )
+    assert text_only["components"]["console"] == ("已就绪", "good")
+    assert text_only["components"]["voice"] == ("本次未启用", "idle")
+    assert text_only["components"]["speech"] == ("本次未启用", "idle")
+    assert text_only["components"]["browser"] == ("尚未打开", "busy")
+
+
+def test_failed_and_timeout_view_models_explain_stopped_services():
+    failed = view_model.failed_services([("voice", 3)])
+    assert failed["tone"] == "error"
+    assert failed["components"]["console"] == ("启动失败", "error")
+    assert "voice（退出码 3）" in failed["message"]
+    assert "共享路径或配置未通过检查" in failed["message"]
+
+    timeout = view_model.readiness_timeout()
+    assert timeout["tone"] == "error"
+    assert timeout["components"]["console"] == ("就绪超时", "error")
+    assert "90 秒内未确认控制台就绪" in timeout["message"]
 
 
 def test_launcher_status_snapshot_contains_only_bounded_runtime_facts(options):

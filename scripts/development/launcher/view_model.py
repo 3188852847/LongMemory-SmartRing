@@ -77,3 +77,74 @@ def failure_hint(exited):
         if hint not in hints:
             hints.append(hint)
     return "；".join(hints) + "。" if hints else "请打开使用指南核对本机配置。"
+
+
+def failed_services(exited):
+    details = "、".join(f"{name}（退出码 {code}）" for name, code in exited)
+    return {
+        "components": {
+            "console": ("启动失败", "error"),
+            "voice": ("进程已停止", "error"),
+            "speech": ("进程已停止", "error"),
+            "browser": ("未打开", "error"),
+        },
+        "message": (
+            f"服务已退出：{details}。已停止其他受管服务。"
+            f"{failure_hint(exited)}"
+        ),
+        "tone": "error",
+    }
+
+
+def ready_services(*, voice, tts_backend, local_tts_ready, opened):
+    """生成服务就绪视图；设备是否连接仍由网页实时状态负责。"""
+
+    if voice and tts_backend in {"voxcpm2", "sanotts"}:
+        label = "VoxCPM2" if tts_backend == "voxcpm2" else "sanoTTS"
+        suffix = (
+            f"；{label} 与语音进程运行中"
+            if local_tts_ready
+            else f"；{label} 正在加载，圆屏语音尚未就绪"
+        )
+        speech = (
+            f"{label} 已就绪" if local_tts_ready else f"{label} 加载中",
+            "good" if local_tts_ready else "busy",
+        )
+    else:
+        suffix = "；语音进程运行中，设备连接请在网页查看" if voice else ""
+        speech = ("EdgeTTS 已选择", "good") if voice else ("本次未启用", "idle")
+    return {
+        "components": {
+            "console": ("已就绪", "good"),
+            "voice": (
+                "小智进程运行" if voice else "本次未启用",
+                "good" if voice else "idle",
+            ),
+            "speech": speech,
+            "browser": (
+                "已请求打开" if opened else "尚未打开",
+                "good" if opened else "busy",
+            ),
+        },
+        "message": (
+            "控制台已就绪" + suffix
+            + "。请在聊天页查看或检测模型状态；关闭网页不会停止服务。"
+        ),
+        "tone": "good",
+    }
+
+
+def readiness_timeout():
+    return {
+        "components": {
+            "console": ("就绪超时", "error"),
+            "voice": ("进程已停止", "error"),
+            "speech": ("进程已停止", "error"),
+            "browser": ("未打开", "error"),
+        },
+        "message": (
+            "90 秒内未确认控制台就绪，已停止受管服务；未停止其他程序。"
+            "请查看指南。"
+        ),
+        "tone": "error",
+    }

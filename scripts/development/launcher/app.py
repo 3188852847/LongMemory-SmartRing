@@ -26,6 +26,7 @@ from tts import config_action as tts_config_action
 from voice_recovery import close_stale_voice
 from view_model import failure_hint as _failure_hint
 from view_model import summary_text as _summary_text
+from view_model import failed_services, readiness_timeout, ready_services
 
 
 # 启动器与网页控制台共享“克制未来科技”语义；Tk 不支持网页的渐变和
@@ -543,6 +544,12 @@ def main():
                   "good": "StatusCellGood.TLabel", "error": "StatusCellError.TLabel"}
         component_values[key].set(message)
         component_dots[key].configure(style=styles.get(tone, "StatusCellIdle.TLabel"))
+
+    def apply_presentation(presentation):
+        """Tk 只应用纯视图模型，不再自行推导各组件文案。"""
+        for key, (message, tone) in presentation["components"].items():
+            set_component(key, message, tone)
+        set_status(presentation["message"], presentation["tone"])
     buttons = ttk.Frame(footer, style="Footer.TFrame")
     buttons.pack(fill="x")
     state = {"opened": False, "started": 0.0, "failed": False}
@@ -655,18 +662,10 @@ def main():
             exited = [(name, service.process.poll()) for name, service in manager.services.items()
                       if service.process.poll() is not None]
             if exited:
-                details = "、".join(f"{name}（退出码 {code}）" for name, code in exited)
                 stopped = stop(False)
                 state["failed"] = True
                 if stopped:
-                    set_component("console", "启动失败", "error")
-                    set_component("voice", "进程已停止", "error")
-                    set_component("speech", "进程已停止", "error")
-                    set_component("browser", "未打开", "error")
-                    set_status(
-                        f"服务已退出：{details}。已停止其他受管服务。{_failure_hint(exited)}",
-                        "error",
-                    )
+                    apply_presentation(failed_services(exited))
             elif manager.ready():
                 if not state["opened"]:
                     state["opened"] = True
@@ -675,26 +674,12 @@ def main():
                                    if manager.options.voice
                                    and manager.options.tts_backend in {"voxcpm2", "sanotts"}
                                    else False)
-                if manager.options.voice and manager.options.tts_backend in {"voxcpm2", "sanotts"}:
-                    label = "VoxCPM2" if manager.options.tts_backend == "voxcpm2" else "sanoTTS"
-                    suffix = (f"；{label} 与语音进程运行中" if local_tts_ready
-                              else f"；{label} 正在加载，圆屏语音尚未就绪")
-                else:
-                    suffix = "；语音进程运行中，设备连接请在网页查看" if manager.options.voice else ""
-                set_component("console", "已就绪", "good")
-                set_component("voice", "小智进程运行" if manager.options.voice else "本次未启用",
-                              "good" if manager.options.voice else "idle")
-                if manager.options.voice and manager.options.tts_backend in {"voxcpm2", "sanotts"}:
-                    label = "VoxCPM2" if manager.options.tts_backend == "voxcpm2" else "sanoTTS"
-                    set_component("speech", f"{label} 已就绪" if local_tts_ready else f"{label} 加载中",
-                                  "good" if local_tts_ready else "busy")
-                elif manager.options.voice:
-                    set_component("speech", "EdgeTTS 已选择", "good")
-                else:
-                    set_component("speech", "本次未启用")
-                set_component("browser", "已请求打开" if state["opened"] else "尚未打开",
-                              "good" if state["opened"] else "busy")
-                set_status("控制台已就绪" + suffix + "。请在聊天页查看或检测模型状态；关闭网页不会停止服务。", "good")
+                apply_presentation(ready_services(
+                    voice=manager.options.voice,
+                    tts_backend=manager.options.tts_backend,
+                    local_tts_ready=local_tts_ready,
+                    opened=state["opened"],
+                ))
                 manager.publish_status(
                     "ready",
                     console_ready=True,
@@ -704,11 +689,7 @@ def main():
                 stopped = stop(False)
                 state["failed"] = True
                 if stopped:
-                    set_component("console", "就绪超时", "error")
-                    set_component("voice", "进程已停止", "error")
-                    set_component("speech", "进程已停止", "error")
-                    set_component("browser", "未打开", "error")
-                    set_status("90 秒内未确认控制台就绪，已停止受管服务；未停止其他程序。请查看指南。", "error")
+                    apply_presentation(readiness_timeout())
             else:
                 manager.publish_status("starting")
         window.after(1000, tick)
