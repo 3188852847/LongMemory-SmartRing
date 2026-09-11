@@ -71,6 +71,7 @@ from .scenario_backend import ScenarioBackend
 from .persona_backend import PersonaBackend
 from .proactive_backend import ProactiveBackend
 from .companion_learning_backend import CompanionLearningBackend
+from .proactive_runtime_backend import ProactiveRuntimeBackend
 
 
 class MemoryBackend:
@@ -109,6 +110,10 @@ class MemoryBackend:
             memory_service_factory=self._service,
         )
         self.companion_learning = CompanionLearningBackend(
+            open_database=self._open,
+            clock=self.clock,
+        )
+        self.proactive_runtime = ProactiveRuntimeBackend(
             open_database=self._open,
             clock=self.clock,
         )
@@ -201,71 +206,7 @@ class MemoryBackend:
     async def proactive_test(self, request, client):
         """执行一次用户明确发起的短文本测试；同 request_id 绝不重播。"""
 
-        subject_id = "user:self"
-        idempotency_key = "manual-console:" + request.request_id
-        with self._open() as connection:
-            ledger = ProactiveOutreachLedger(
-                SQLiteProactiveOutreachStore(connection, commit_changes=False),
-                clock=self.clock,
-            )
-            existing = ledger.get_by_idempotency(subject_id, idempotency_key)
-            if existing is not None:
-                return outreach_result_json(existing, replayed=True)
-            settings = SQLiteProactivePolicyStore(connection).get(subject_id)
-            if settings.revision != request.expected_policy_revision:
-                raise MemoryAccessError("proactive_settings_conflict", 409)
-
-        device = await XiaozhiRuntimeStateProbe(client).probe()
-        now = self.clock()
-        with self._open(write_capability="proactive") as connection:
-            ledger = ProactiveOutreachLedger(
-                SQLiteProactiveOutreachStore(connection), clock=lambda: now,
-            )
-            existing = ledger.get_by_idempotency(subject_id, idempotency_key)
-            if existing is not None:
-                return outreach_result_json(existing, replayed=True, device=device)
-            settings = SQLiteProactivePolicyStore(connection).get(subject_id)
-            if settings.revision != request.expected_policy_revision:
-                raise MemoryAccessError("proactive_settings_conflict", 409)
-            runtime = SQLiteProactiveHistoryReader(connection).read(subject_id, now=now)
-            runtime = OutreachPolicyState(
-                attempted_at=runtime.attempted_at,
-                # 所有者显式点击属于诊断动作，不是系统自主追问；其余许可、
-                # 时段、频率、勿扰和设备会话门控仍保持。
-                awaiting_user_response=False,
-                user_session_active=device.user_session_active,
-                quiet_until=settings.quiet_until,
-            )
-            try:
-                outreach = ledger.create_candidate(
-                    subject_id=subject_id,
-                    trigger=OutreachTrigger.MANUAL_TEST,
-                    trigger_reason_code="manual_console_test",
-                    content=request.text,
-                    scheduled_for=now,
-                    expires_at=now + settings.config.maximum_lifetime,
-                    idempotency_key=idempotency_key,
-                    policy_version=settings.config.policy_version,
-                )
-                result = await ProactiveOutreachDispatcher(
-                    ledger,
-                    delivery_queue=XiaozhiProactiveDelivery(client).queue,
-                    clock=lambda: now,
-                ).dispatch(
-                    outreach.id,
-                    expected_revision=outreach.revision,
-                    settings=settings,
-                    runtime_state=runtime,
-                )
-            except ValueError:
-                raise MemoryAccessError("proactive_dispatch_conflict", 409) from None
-            return outreach_result_json(
-                result.outreach,
-                replayed=False,
-                decision=result.decision,
-                delivery=result.delivery,
-                device=device,
-            )
+        return await self.proactive_runtime.manual_test(request, client)
 
     async def proactive_scheduled_tick(self, client):
         """评估当前当地分钟一次；不补发、不调用模型、不自动重试投递。"""
