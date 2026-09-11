@@ -21,7 +21,7 @@ from ..contracts import (
     FollowUpCandidateCancelRequest,
     FollowUpCandidateArmRequest,
 )
-from ..memory_backend import MemoryAccessError
+from ..errors import MemoryAccessError
 
 
 def register_proactive_policy_routes(app, backend, client, operation_lock):

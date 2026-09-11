@@ -4,7 +4,7 @@ import asyncio
 import re
 
 from aiohttp import web
-from ..memory_backend import MemoryAccessError
+from ..errors import MemoryAccessError
 
 
 def register_memory_routes(app, backend):

@@ -9,7 +9,6 @@ from pathlib import Path
 
 from longmemory.adapters.storage.sqlite_conversation_store import SQLiteConversationStore
 from longmemory.adapters.storage.sqlite_memory_store import SQLiteMemoryStore
-from longmemory.adapters.storage.sqlite_scenario_store import SQLiteScenarioStore
 from longmemory.adapters.storage.sqlite_persona_store import SQLitePersonaStore
 from longmemory.adapters.storage.sqlite_consolidation_run_store import (
     SQLiteConsolidationRunStore,
@@ -91,20 +90,12 @@ from longmemory.adapters.storage.sqlite_l2_consolidation_source_reader import (
 from longmemory.application.consolidation.l2_to_l3_service import L3_TRIGGER_CONFIG
 from longmemory.application.consolidation.status_service import ConsolidationStatusService
 from longmemory.application.memory_management.service import MemoryManagementService
-from longmemory.application.scenario_management.service import ScenarioManagementService
-from longmemory.application.scenario_management.proposal_service import ScenarioProposalService
 from longmemory.application.persona_management.service import PersonaManagementService
 from longmemory.application.persona_management.proposal_service import PersonaProposalService
 from longmemory.application.persona_management.consolidation_service import PersonaConsolidationService
 from longmemory.application.persona_management.profile import build_persona_profile
-from longmemory.core.common.identifiers import MemoryId, MessageId, PersonaId, ScenarioId
+from longmemory.core.common.identifiers import MemoryId, MessageId, PersonaId
 from longmemory.core.memory.l1_atomic.models import CURRENT_USER_SUBJECT_ID
-from longmemory.core.memory.l2_scenario.models import ScenarioReviewDecision
-from longmemory.core.memory.l2_scenario.proposals import (
-    ScenarioProposalError,
-    ScenarioProposalInput,
-)
-from longmemory.adapters.llm.scenario_candidate import SCENARIO_PROMPT_VERSION
 from longmemory.adapters.llm.persona_candidate import (
     PERSONA_CONSOLIDATION_PROMPT_VERSION,
     PERSONA_PROMPT_VERSION,
@@ -129,7 +120,6 @@ from .memory_presenters import (
     persona_model_json,
     persona_replacement_json,
     revision,
-    scenario_json,
 )
 from .proactive_presenters import (
     absence_selection_json,
@@ -142,12 +132,8 @@ from .proactive_presenters import (
     strategy_candidate_json,
     topic_seed_json,
 )
-
-
-class MemoryAccessError(Exception):
-    def __init__(self, code, status=409):
-        super().__init__(code)
-        self.code, self.status = code, status
+from .errors import MemoryAccessError
+from .scenario_backend import ScenarioBackend
 
 
 class MemoryBackend:
@@ -168,6 +154,12 @@ class MemoryBackend:
         self.persona_model = persona_model
         self.consolidation_background_enabled = consolidation_background_enabled
         self.clock = clock or (lambda: datetime.now(UTC))
+        self.scenarios = ScenarioBackend(
+            open_database=self._open,
+            allow_management=self.allow_scenario_management,
+            producer=self.scenario_producer,
+            model=self.scenario_model,
+        )
 
     def info(self):
         return {"configured": self.database is not None,
@@ -1856,189 +1848,35 @@ class MemoryBackend:
             }
 
     def list_scenarios(self, *, state="all", limit=25, offset=0):
-        if state not in {"all", "candidate", "active", "rejected", "stale"}:
-            raise MemoryAccessError("scenario_filter_invalid", 400)
-        with self._open() as connection:
-            where, parameters = ("", []) if state == "all" else (" WHERE status=?", [state])
-            total = connection.execute(
-                "SELECT count(*) FROM scenario_memories" + where, parameters
-            ).fetchone()[0]
-            rows = connection.execute(
-                "SELECT * FROM scenario_memories" + where
-                + " ORDER BY generated_at DESC, id DESC LIMIT ? OFFSET ?",
-                [*parameters, limit, offset],
-            ).fetchall()
-            return {"items": [scenario_json(row) for row in rows],
-                    "total": total, "limit": limit, "offset": offset}
+        return self.scenarios.list(state=state, limit=limit, offset=offset)
 
     def list_scenario_source_inbox(self):
-        """列出尚未进入当前候选/已接受 L2 的活跃 L1；只读且不判断主题。"""
-
-        with self._open() as connection:
-            rows = connection.execute(
-                "SELECT a.id, a.subject_id, a.content, a.recorded_at, "
-                "count(DISTINCT e.source_message_id) AS source_message_count "
-                "FROM atomic_memories a "
-                "JOIN memory_evidence e ON e.memory_id=a.id "
-                "JOIN conversation_messages m ON m.id=e.source_message_id AND m.role='user' "
-                "WHERE a.retired_at IS NULL AND NOT EXISTS ("
-                "SELECT 1 FROM scenario_memory_sources s "
-                "JOIN scenario_memories l2 ON l2.id=s.scenario_id "
-                "WHERE s.memory_id=a.id AND l2.status IN ('candidate','active')) "
-                "GROUP BY a.id ORDER BY a.recorded_at DESC, a.id DESC LIMIT 100"
-            ).fetchall()
-            return {
-                "items": [dict(row) for row in rows],
-                "total": len(rows),
-                "limited": len(rows) == 100,
-                "selection_is_semantic": False,
-            }
+        return self.scenarios.list_source_inbox()
 
     def get_scenario(self, scenario_id):
-        with self._open() as connection:
-            row = connection.execute(
-                "SELECT * FROM scenario_memories WHERE id=?", (scenario_id,)
-            ).fetchone()
-            if row is None:
-                raise MemoryAccessError("scenario_not_found", 404)
-            data = scenario_json(row)
-            sources = [dict(source) for source in connection.execute(
-                "SELECT s.*, a.content AS current_content, a.retired_at "
-                "FROM scenario_memory_sources s LEFT JOIN atomic_memories a ON a.id=s.memory_id "
-                "WHERE s.scenario_id=? ORDER BY s.linked_at, s.memory_id",
-                (scenario_id,),
-            ).fetchall()]
-            # L2 详情必须能沿 L1 继续回到 L0 原话；否则“来源快照”仍只是
-            # 另一个派生结论，用户无法判断场景总结有没有超出原始证据。
-            for source in sources:
-                source["l0_sources"] = [dict(item) for item in connection.execute(
-                    "SELECT e.source_message_id, e.source_type, e.linked_at, "
-                    "m.role, m.content, m.created_at FROM memory_evidence e "
-                    "LEFT JOIN conversation_messages m ON m.id=e.source_message_id "
-                    "WHERE e.memory_id=? ORDER BY e.linked_at, e.source_message_id",
-                    (source["memory_id"],),
-                ).fetchall()]
-            data["sources"] = sources
-            data["lifecycle_events"] = [dict(event) for event in connection.execute(
-                "SELECT id, action, actor_type, occurred_at, previous_status, "
-                "new_status, scenario_revision FROM scenario_lifecycle_events "
-                "WHERE scenario_id=? ORDER BY occurred_at, id",
-                (scenario_id,),
-            ).fetchall()]
-            review = connection.execute(
-                "SELECT decision,reviewer_type,reviewed_at,scenario_revision,"
-                "policy_version,decision_reason FROM scenario_reviews WHERE scenario_id=?",
-                (scenario_id,),
-            ).fetchone()
-            data["review"] = dict(review) if review is not None else None
-            return data
+        return self.scenarios.get(scenario_id)
 
     def preview_scenario(self, *, source_memory_ids):
-        """读取所选来源后释放数据库，再调用模型生成不落库草稿。"""
-
-        if not self.allow_scenario_management:
-            raise MemoryAccessError("scenario_management_disabled", 403)
-        if self.scenario_producer is None:
-            raise MemoryAccessError("scenario_model_preview_unavailable", 503)
-        with self._open() as connection:
-            store = SQLiteMemoryStore(connection)
-            sources = []
-            for value in source_memory_ids:
-                memory = store.get(MemoryId(value))
-                if memory is None:
-                    raise MemoryAccessError("scenario_source_l1_missing", 400)
-                if memory.retired_at is not None:
-                    raise MemoryAccessError("scenario_source_l1_retired", 400)
-                sources.append(ScenarioProposalInput(
-                    memory.id,
-                    memory.subject_id,
-                    memory.content,
-                    tuple(str(item.source_message_id) for item in store.list_evidence(memory.id)),
-                ))
-        try:
-            proposal = ScenarioProposalService(self.scenario_producer).preview(tuple(sources))
-        except ScenarioProposalError as error:
-            raise MemoryAccessError(str(error), 400) from None
-        return {
-            "title": proposal.title,
-            "summary": proposal.summary,
-            "source_memory_ids": [str(value) for value in proposal.source_memory_ids],
-            "generator_name": "model_assisted_console",
-            "generator_version": SCENARIO_PROMPT_VERSION,
-            "model": self.scenario_model,
-            "persisted": False,
-        }
+        return self.scenarios.preview(source_memory_ids=source_memory_ids)
 
     def create_scenario(self, *, title, summary, source_memory_ids, creation_kind="manual",
                         valid_from=None, valid_to=None):
-        with self._open(write_capability="scenario") as connection:
-            service = ScenarioManagementService(
-                memory_store=SQLiteMemoryStore(connection, commit_changes=False),
-                scenario_store=SQLiteScenarioStore(connection, commit_changes=False),
-            )
-            try:
-                try:
-                    parsed_valid_from = datetime.fromisoformat(valid_from) if valid_from else None
-                    parsed_valid_to = datetime.fromisoformat(valid_to) if valid_to else None
-                except ValueError:
-                    raise MemoryAccessError("scenario_valid_time_invalid", 400) from None
-                if creation_kind == "model_assisted" and self.scenario_producer is None:
-                    raise MemoryAccessError("scenario_model_preview_unavailable", 503)
-                generator_name = (
-                    "model_assisted_console" if creation_kind == "model_assisted"
-                    else "manual_console"
-                )
-                generator_version = (
-                    SCENARIO_PROMPT_VERSION if creation_kind == "model_assisted" else "1"
-                )
-                scenario = service.create_candidate(
-                    title=title,
-                    summary=summary,
-                    source_memory_ids=tuple(MemoryId(value) for value in source_memory_ids),
-                    generator_name=generator_name,
-                    generator_version=generator_version,
-                    valid_from=parsed_valid_from,
-                    valid_to=parsed_valid_to,
-                )
-            except (ValueError, LookupError) as error:
-                raise MemoryAccessError(str(error), 400) from None
-            connection.commit()
-            return {"created": True, "id": str(scenario.id), "status": scenario.status.value}
+        return self.scenarios.create(
+            title=title,
+            summary=summary,
+            source_memory_ids=source_memory_ids,
+            creation_kind=creation_kind,
+            valid_from=valid_from,
+            valid_to=valid_to,
+        )
 
     def review_scenario(self, scenario_id, *, decision, expected_revision):
-        with self._open(write_capability="scenario") as connection:
-            service = ScenarioManagementService(
-                memory_store=SQLiteMemoryStore(connection, commit_changes=False),
-                scenario_store=SQLiteScenarioStore(connection, commit_changes=False),
-            )
-            try:
-                scenario = service.review(
-                    ScenarioId(scenario_id), ScenarioReviewDecision(decision),
-                    expected_revision=expected_revision,
-                )
-            except ValueError as error:
-                raise MemoryAccessError(str(error), 409) from None
-            connection.commit()
-            return {"reviewed": True, "id": scenario_id,
-                    "status": scenario.status.value, "revision": scenario.revision}
+        return self.scenarios.review(
+            scenario_id, decision=decision, expected_revision=expected_revision,
+        )
 
     def end_scenario(self, scenario_id, *, expected_revision):
-        """显式结束 active L2；内容与来源不变，新增生命周期事件。"""
-
-        with self._open(write_capability="scenario") as connection:
-            service = ScenarioManagementService(
-                memory_store=SQLiteMemoryStore(connection, commit_changes=False),
-                scenario_store=SQLiteScenarioStore(connection, commit_changes=False),
-            )
-            try:
-                scenario = service.end(
-                    ScenarioId(scenario_id), expected_revision=expected_revision,
-                )
-            except ValueError as error:
-                raise MemoryAccessError(str(error), 409) from None
-            connection.commit()
-            return {"ended": True, "id": scenario_id,
-                    "status": scenario.status.value, "revision": scenario.revision}
+        return self.scenarios.end(scenario_id, expected_revision=expected_revision)
 
     def list_personas(self, *, state="all", limit=25, offset=0):
         if state not in {"all", "candidate", "active", "rejected", "stale"}:
