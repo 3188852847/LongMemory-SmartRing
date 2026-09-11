@@ -131,6 +131,17 @@ from .memory_presenters import (
     revision,
     scenario_json,
 )
+from .proactive_presenters import (
+    absence_selection_json,
+    absence_strategy_version_json,
+    absence_switch_event_json,
+    follow_up_json,
+    outreach_result_json,
+    proactive_policy_json,
+    routine_candidate_json,
+    strategy_candidate_json,
+    topic_seed_json,
+)
 
 
 class MemoryAccessError(Exception):
@@ -186,32 +197,9 @@ class MemoryBackend:
                 ),
                 "persona_model": self.persona_model if self.persona_producer else None}
 
-    @staticmethod
-    def _proactive_json(settings):
-        config = settings.config
-        return {
-            "subject_id": settings.subject_id,
-            "enabled": config.enabled,
-            "utc_offset_minutes": config.utc_offset_minutes,
-            "allowed_weekdays": list(config.allowed_weekdays),
-            "allowed_start_minute": config.allowed_start_minute,
-            "allowed_end_minute": config.allowed_end_minute,
-            "daily_limit": config.daily_limit,
-            "minimum_interval_seconds": int(config.minimum_interval.total_seconds()),
-            "maximum_lifetime_seconds": int(config.maximum_lifetime.total_seconds()),
-            "quiet_until": settings.quiet_until.isoformat() if settings.quiet_until else None,
-            "policy_version": config.policy_version,
-            "revision": settings.revision,
-            "updated_at": settings.updated_at.isoformat() if settings.updated_at else None,
-            "automatic_enabled": settings.automatic_enabled,
-            "scheduled_minute": settings.scheduled_minute,
-            "greeting_text": settings.greeting_text,
-            "topic_enabled": settings.topic_enabled,
-        }
-
     def proactive_policy(self):
         with self._open() as connection:
-            return self._proactive_json(
+            return proactive_policy_json(
                 SQLiteProactivePolicyStore(connection).get("user:self")
             )
 
@@ -311,38 +299,11 @@ class MemoryBackend:
             except ValueError:
                 raise MemoryAccessError("proactive_schedule_override_conflict", 409) from None
 
-    @staticmethod
-    def _topic_seed_json(row, *, now):
-        valid_from = (
-            datetime.fromisoformat(row["scenario_valid_from"])
-            if row["scenario_valid_from"] else None
-        )
-        valid_to = (
-            datetime.fromisoformat(row["scenario_valid_to"])
-            if row["scenario_valid_to"] else None
-        )
-        return {
-            "id": row["id"], "subject_id": row["subject_id"],
-            "scenario_id": row["scenario_id"], "prompt_text": row["prompt_text"],
-            "status": row["status"], "created_at": row["created_at"],
-            "updated_at": row["updated_at"], "revision": row["revision"],
-            "source": {
-                "layer": "l2", "title": row["scenario_title"],
-                "summary": row["scenario_summary"],
-                "status": row["scenario_status"],
-            },
-            "usable": (
-                row["status"] == "active" and row["scenario_status"] == "active"
-                and (valid_from is None or valid_from <= now)
-                and (valid_to is None or valid_to > now)
-            ),
-        }
-
     def list_proactive_topic_seeds(self):
         now = self.clock()
         with self._open() as connection:
             rows = SQLiteProactiveTopicStore(connection).list("user:self")
-            return {"items": [self._topic_seed_json(row, now=now) for row in rows]}
+            return {"items": [topic_seed_json(row, now=now) for row in rows]}
 
     def create_proactive_topic_seed(self, request):
         now = self.clock()
@@ -369,7 +330,7 @@ class MemoryBackend:
                 status = 404 if code == "topic_seed_scenario_not_found" else 409
                 raise MemoryAccessError(code, status) from None
             row = next(item for item in store.list("user:self") if item["id"] == seed.id)
-            return self._topic_seed_json(row, now=now)
+            return topic_seed_json(row, now=now)
 
     def disable_proactive_topic_seed(self, seed_id, *, expected_revision):
         now = self.clock()
@@ -392,63 +353,11 @@ class MemoryBackend:
             return {"id": seed_id, "status": "disabled",
                     "revision": expected_revision + 1, "replayed": False}
 
-    @staticmethod
-    def _follow_up_json(row, *, now):
-        source_digest = hashlib.sha256(
-            row["source_content"].encode("utf-8")
-        ).hexdigest()
-        follow_up_at = datetime.fromisoformat(row["follow_up_at"])
-        source_current = (
-            row["source_retired_at"] is None
-            and (
-                row["source_valid_from"] is None
-                or datetime.fromisoformat(row["source_valid_from"]) <= follow_up_at
-            )
-            and (
-                row["source_valid_to"] is None
-                or datetime.fromisoformat(row["source_valid_to"]) > follow_up_at
-            )
-            and source_digest == row["source_content_sha256"]
-        )
-        outreach_id = row.get("outreach_id")
-        return {
-            "id": row["id"], "subject_id": row["subject_id"],
-            "source_memory_id": row["source_memory_id"],
-            "prompt_text": row["prompt_text"], "follow_up_at": row["follow_up_at"],
-            "status": row["status"], "created_at": row["created_at"],
-            "updated_at": row["updated_at"], "revision": row["revision"],
-            "creation_kind": row["creation_kind"],
-            "source_message_id": row["source_message_id"],
-            "source": {
-                "layer": "l1", "content": row["source_content"],
-                "state": "retired" if row["source_retired_at"] else "active",
-                "superseded_by_id": row["source_superseded_by_id"],
-            },
-            "activation": None if outreach_id is None else {
-                "outreach_id": outreach_id,
-                "state": row["outreach_state"],
-                "revision": row["outreach_revision"],
-                "expires_at": row["outreach_expires_at"],
-            },
-            "due": follow_up_at <= now,
-            "ready_for_activation": (
-                row["status"] == "candidate" and source_current
-                and follow_up_at > now and outreach_id is None
-            ),
-            "blocked_reason": (
-                "cancelled" if row["status"] == "cancelled"
-                else "already_activated" if outreach_id is not None
-                else "source_changed" if not source_current
-                else "time_reached" if follow_up_at <= now
-                else None
-            ),
-        }
-
     def list_follow_up_candidates(self):
         now = self.clock()
         with self._open() as connection:
             rows = SQLiteFollowUpCandidateStore(connection).list("user:self")
-            return {"items": [self._follow_up_json(row, now=now) for row in rows]}
+            return {"items": [follow_up_json(row, now=now) for row in rows]}
 
     def create_follow_up_candidate(self, request):
         now = self.clock()
@@ -495,7 +404,7 @@ class MemoryBackend:
             row = next(
                 item for item in store.list("user:self") if item["id"] == candidate.id
             )
-            return self._follow_up_json(row, now=now)
+            return follow_up_json(row, now=now)
 
     def cancel_follow_up_candidate(self, candidate_id, *, expected_revision):
         now = self.clock()
@@ -555,7 +464,7 @@ class MemoryBackend:
                 raise MemoryAccessError("follow_up_not_found", 404)
             if row["revision"] != expected_revision:
                 raise MemoryAccessError("follow_up_conflict", 409)
-            current = self._follow_up_json(row, now=now)
+            current = follow_up_json(row, now=now)
             if row["outreach_id"] is not None:
                 return {**current, "replayed": True}
             if not current["ready_for_activation"]:
@@ -591,7 +500,7 @@ class MemoryBackend:
             refreshed = next(
                 item for item in store.list("user:self") if item["id"] == candidate_id
             )
-            return {**self._follow_up_json(refreshed, now=now), "replayed": False}
+            return {**follow_up_json(refreshed, now=now), "replayed": False}
 
     def update_proactive_policy(self, request):
         # 在取得写锁前完成纯配置验证；非法输入不能被误报成数据库损坏。
@@ -630,26 +539,9 @@ class MemoryBackend:
                 request.automatic_enabled, request.scheduled_minute,
                 request.greeting_text, request.topic_enabled,
             )
-            return self._proactive_json(
+            return proactive_policy_json(
                 store.save(updated, expected_revision=current.revision)
             )
-
-    @staticmethod
-    def _outreach_result(outreach, *, replayed, decision=None, delivery=None, device=None):
-        return {
-            "outreach_id": outreach.id,
-            "state": outreach.state.value,
-            "revision": outreach.revision,
-            "replayed": replayed,
-            "policy_action": decision.action.value if decision else None,
-            "policy_reason": decision.reason.value if decision else None,
-            "delivery_reason": delivery.reason_code if delivery else None,
-            "device": None if device is None else {
-                "ready": device.ready,
-                "user_session_active": device.user_session_active,
-                "reason": device.reason_code,
-            },
-        }
 
     async def proactive_test(self, request, client):
         """执行一次用户明确发起的短文本测试；同 request_id 绝不重播。"""
@@ -663,7 +555,7 @@ class MemoryBackend:
             )
             existing = ledger.get_by_idempotency(subject_id, idempotency_key)
             if existing is not None:
-                return self._outreach_result(existing, replayed=True)
+                return outreach_result_json(existing, replayed=True)
             settings = SQLiteProactivePolicyStore(connection).get(subject_id)
             if settings.revision != request.expected_policy_revision:
                 raise MemoryAccessError("proactive_settings_conflict", 409)
@@ -676,7 +568,7 @@ class MemoryBackend:
             )
             existing = ledger.get_by_idempotency(subject_id, idempotency_key)
             if existing is not None:
-                return self._outreach_result(existing, replayed=True, device=device)
+                return outreach_result_json(existing, replayed=True, device=device)
             settings = SQLiteProactivePolicyStore(connection).get(subject_id)
             if settings.revision != request.expected_policy_revision:
                 raise MemoryAccessError("proactive_settings_conflict", 409)
@@ -712,7 +604,7 @@ class MemoryBackend:
                 )
             except ValueError:
                 raise MemoryAccessError("proactive_dispatch_conflict", 409) from None
-            return self._outreach_result(
+            return outreach_result_json(
                 result.outreach,
                 replayed=False,
                 decision=result.decision,
@@ -888,7 +780,7 @@ class MemoryBackend:
                     reason_code=device.reason_code or "device_offline",
                     evidence=OutreachEvidence.POLICY_DECISION,
                 )
-                return self._outreach_result(blocked, replayed=False, device=device)
+                return outreach_result_json(blocked, replayed=False, device=device)
             runtime = history.read(subject_id, now=now)
             runtime = OutreachPolicyState(
                 attempted_at=runtime.attempted_at,
@@ -909,7 +801,7 @@ class MemoryBackend:
                 settings=settings,
                 runtime_state=runtime,
             )
-            return self._outreach_result(
+            return outreach_result_json(
                 result.outreach,
                 replayed=False,
                 decision=result.decision,
@@ -1032,7 +924,7 @@ class MemoryBackend:
                     reason_code=device.reason_code or "device_offline",
                     evidence=OutreachEvidence.POLICY_DECISION,
                 )
-                return self._outreach_result(
+                return outreach_result_json(
                     blocked, replayed=False, device=device,
                 )
             history = SQLiteProactiveHistoryReader(connection).read(subject_id, now=now)
@@ -1050,7 +942,7 @@ class MemoryBackend:
                 outreach.id, expected_revision=outreach.revision,
                 settings=settings, runtime_state=runtime,
             )
-            return self._outreach_result(
+            return outreach_result_json(
                 result.outreach, replayed=False, decision=result.decision,
                 delivery=result.delivery, device=device,
             )
@@ -1093,7 +985,7 @@ class MemoryBackend:
                     reason_code="follow_up_delivery_window_missed",
                     evidence=OutreachEvidence.SYSTEM_RECOVERY,
                 )
-                return self._outreach_result(expired, replayed=False)
+                return outreach_result_json(expired, replayed=False)
 
         device = await XiaozhiRuntimeStateProbe(client).probe()
         now = self.clock()
@@ -1113,7 +1005,7 @@ class MemoryBackend:
                     reason_code="follow_up_delivery_window_missed",
                     evidence=OutreachEvidence.SYSTEM_RECOVERY,
                 )
-                return self._outreach_result(expired, replayed=False)
+                return outreach_result_json(expired, replayed=False)
             source = connection.execute(
                 "SELECT f.status,f.revision,m.content,m.valid_from,m.valid_to,"
                 "m.retired_at "
@@ -1150,7 +1042,7 @@ class MemoryBackend:
                     reason_code="follow_up_source_no_longer_current",
                     evidence=OutreachEvidence.POLICY_DECISION,
                 )
-                return self._outreach_result(cancelled, replayed=False)
+                return outreach_result_json(cancelled, replayed=False)
             if not device.ready:
                 blocked = ledger.record_transition(
                     current.id, expected_revision=current.revision,
@@ -1158,7 +1050,7 @@ class MemoryBackend:
                     reason_code=device.reason_code or "device_offline",
                     evidence=OutreachEvidence.POLICY_DECISION,
                 )
-                return self._outreach_result(
+                return outreach_result_json(
                     blocked, replayed=False, device=device,
                 )
             settings = SQLiteProactivePolicyStore(connection).get(subject_id)
@@ -1177,7 +1069,7 @@ class MemoryBackend:
                 current.id, expected_revision=current.revision,
                 settings=settings, runtime_state=runtime,
             )
-            return self._outreach_result(
+            return outreach_result_json(
                 result.outreach, replayed=False, decision=result.decision,
                 delivery=result.delivery, device=device,
             )
@@ -1289,41 +1181,11 @@ class MemoryBackend:
                 })
             return {"items": items}
 
-    @staticmethod
-    def _strategy_candidate_json(candidate, store):
-        local_zone = timezone(
-            timedelta(minutes=candidate.utc_offset_minutes)
-        )
-        sources = []
-        for source in store.list_sources(candidate.id):
-            local = datetime.fromisoformat(source["queued_at"]).astimezone(local_zone)
-            sources.append({
-                **source,
-                "local_date": local.date().isoformat(),
-                "local_minute": local.hour * 60 + local.minute,
-            })
-        return {
-            "id": candidate.id,
-            "subject_id": candidate.subject_id,
-            "status": candidate.status.value,
-            "suggested_minute": candidate.suggested_minute,
-            "utc_offset_minutes": candidate.utc_offset_minutes,
-            "evidence_count": candidate.evidence_count,
-            "distinct_local_dates": candidate.distinct_local_dates,
-            "rationale_code": candidate.rationale_code,
-            "generator_version": candidate.generator_version,
-            "created_at": candidate.created_at.isoformat(),
-            "updated_at": candidate.updated_at.isoformat(),
-            "revision": candidate.revision,
-            "active": False,
-            "sources": sources,
-        }
-
     def list_companion_strategy_candidates(self):
         with self._open() as connection:
             store = SQLiteCompanionStrategyCandidateStore(connection)
             return {"items": [
-                self._strategy_candidate_json(candidate, store)
+                strategy_candidate_json(candidate, store)
                 for candidate in store.list("user:self")
             ]}
 
@@ -1353,42 +1215,11 @@ class MemoryBackend:
                 })
             return {"items": items}
 
-    @staticmethod
-    def _routine_candidate_json(candidate, store):
-        local_zone = timezone(timedelta(minutes=candidate.utc_offset_minutes))
-        sources = []
-        for source in store.list_sources(candidate.id):
-            local = datetime.fromisoformat(source["occurred_at"]).astimezone(
-                local_zone
-            )
-            sources.append({
-                **source,
-                "local_date": local.date().isoformat(),
-                "local_minute": local.hour * 60 + local.minute,
-            })
-        return {
-            "id": candidate.id,
-            "subject_id": candidate.subject_id,
-            "status": candidate.status.value,
-            "expected_minute": candidate.expected_minute,
-            "utc_offset_minutes": candidate.utc_offset_minutes,
-            "observation_window_minutes": candidate.observation_window_minutes,
-            "evidence_count": candidate.evidence_count,
-            "distinct_local_dates": candidate.distinct_local_dates,
-            "rationale_code": candidate.rationale_code,
-            "generator_version": candidate.generator_version,
-            "created_at": candidate.created_at.isoformat(),
-            "updated_at": candidate.updated_at.isoformat(),
-            "revision": candidate.revision,
-            "active": False,
-            "sources": sources,
-        }
-
     def list_companion_routine_candidates(self):
         with self._open() as connection:
             store = SQLiteCompanionRoutineCandidateStore(connection)
             return {"items": [
-                self._routine_candidate_json(candidate, store)
+                routine_candidate_json(candidate, store)
                 for candidate in store.list("user:self")
             ]}
 
@@ -1410,7 +1241,7 @@ class MemoryBackend:
                 "distinct_local_dates": result.distinct_local_dates,
                 "candidate": (
                     None if result.candidate is None
-                    else self._routine_candidate_json(result.candidate, store)
+                    else routine_candidate_json(result.candidate, store)
                 ),
             }
 
@@ -1425,52 +1256,7 @@ class MemoryBackend:
             )
             if candidate is None:
                 raise MemoryAccessError("companion_routine_candidate_conflict", 409)
-            return self._routine_candidate_json(candidate, store)
-
-    @staticmethod
-    def _absence_strategy_version_json(version, *, active=False):
-        return {
-            "id": version.id,
-            "subject_id": version.subject_id,
-            "source_candidate_id": version.source_candidate_id,
-            "source_candidate_revision": version.source_candidate_revision,
-            "expected_minute": version.expected_minute,
-            "grace_minutes": version.grace_minutes,
-            "utc_offset_minutes": version.utc_offset_minutes,
-            "allowed_weekdays": list(version.allowed_weekdays),
-            "trigger_policy_version": version.trigger_policy_version,
-            "replay_protocol": version.replay_protocol,
-            "replay_dataset_name": version.replay_dataset_name,
-            "replay_dataset_version": version.replay_dataset_version,
-            "replay_dataset_sha256": version.replay_dataset_sha256,
-            "parameter_fingerprint": version.parameter_fingerprint,
-            "replay_case_count": version.replay_case_count,
-            "replay_matched_count": version.replay_matched_count,
-            "replay_unsafe_allow_count": version.replay_unsafe_allow_count,
-            "replay_gate_passed": version.replay_gate_passed,
-            "replayed_at": version.replayed_at.isoformat(),
-            "created_at": version.created_at.isoformat(),
-            "active": active,
-        }
-
-    @staticmethod
-    def _absence_selection_json(selection):
-        if selection is None:
-            return {"current_version_id": None, "revision": 0, "updated_at": None}
-        return {
-            "current_version_id": selection.version_id,
-            "revision": selection.revision,
-            "updated_at": selection.updated_at.isoformat(),
-        }
-
-    @staticmethod
-    def _absence_switch_event_json(event):
-        return {
-            "id": event.id, "previous_version_id": event.previous_version_id,
-            "selected_version_id": event.selected_version_id,
-            "action": event.action.value, "pointer_revision": event.pointer_revision,
-            "created_at": event.created_at.isoformat(),
-        }
+            return routine_candidate_json(candidate, store)
 
     def list_companion_absence_strategy_versions(self):
         with self._open() as connection:
@@ -1478,12 +1264,12 @@ class MemoryBackend:
             versions = store.list("user:self")
             selection = store.get_selection("user:self")
             return {"items": [
-                self._absence_strategy_version_json(
+                absence_strategy_version_json(
                     version, active=selection is not None and selection.version_id == version.id,
                 )
                 for version in versions
-            ], "selection": self._absence_selection_json(selection),
-                "events": [self._absence_switch_event_json(event)
+            ], "selection": absence_selection_json(selection),
+                "events": [absence_switch_event_json(event)
                            for event in store.list_switch_events("user:self")]}
 
     def select_companion_absence_strategy_version(self, request, *, rollback=False):
@@ -1500,8 +1286,8 @@ class MemoryBackend:
                 code = str(error)
                 status = 404 if code == "companion_absence_version_missing" else 409
                 raise MemoryAccessError(code, status) from None
-            return {"selection": self._absence_selection_json(selection),
-                    "event": self._absence_switch_event_json(event),
+            return {"selection": absence_selection_json(selection),
+                    "event": absence_switch_event_json(event),
                     "runtime_connected": True}
 
     def deactivate_companion_absence_strategy(self, request):
@@ -1515,8 +1301,8 @@ class MemoryBackend:
                 )
             except ValueError as error:
                 raise MemoryAccessError(str(error), 409) from None
-            return {"selection": self._absence_selection_json(selection),
-                    "event": self._absence_switch_event_json(event),
+            return {"selection": absence_selection_json(selection),
+                    "event": absence_switch_event_json(event),
                     "runtime_connected": True}
 
     def create_companion_absence_strategy_version(self, request):
@@ -1557,7 +1343,7 @@ class MemoryBackend:
                 raise
             return {
                 "outcome": result.outcome,
-                "version": self._absence_strategy_version_json(result.version),
+                "version": absence_strategy_version_json(result.version),
             }
 
     def generate_companion_strategy_candidate(self):
@@ -1578,7 +1364,7 @@ class MemoryBackend:
                 "distinct_local_dates": result.distinct_local_dates,
                 "candidate": (
                     None if result.candidate is None
-                    else self._strategy_candidate_json(result.candidate, store)
+                    else strategy_candidate_json(result.candidate, store)
                 ),
             }
 
@@ -1593,7 +1379,7 @@ class MemoryBackend:
             )
             if candidate is None:
                 raise MemoryAccessError("companion_strategy_candidate_conflict", 409)
-            return self._strategy_candidate_json(candidate, store)
+            return strategy_candidate_json(candidate, store)
 
     def confirm_proactive_played(self, outreach_id, *, expected_revision):
         """把所有者亲耳观察追加为证据；不从设备状态反推播放成功。"""
@@ -1607,7 +1393,7 @@ class MemoryBackend:
             if outreach is None or outreach.subject_id != subject_id:
                 raise MemoryAccessError("proactive_outreach_not_found", 404)
             if outreach.state == OutreachState.PLAYED:
-                return self._outreach_result(outreach, replayed=True)
+                return outreach_result_json(outreach, replayed=True)
             if outreach.revision != expected_revision:
                 raise MemoryAccessError("proactive_outreach_conflict", 409)
             if outreach.state not in {
@@ -1628,7 +1414,7 @@ class MemoryBackend:
                 )
             except ValueError:
                 raise MemoryAccessError("proactive_outreach_conflict", 409) from None
-            return self._outreach_result(played, replayed=False)
+            return outreach_result_json(played, replayed=False)
 
     @contextmanager
     def _open(self, *, write_capability=None):
