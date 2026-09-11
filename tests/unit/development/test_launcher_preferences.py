@@ -86,3 +86,13 @@ def test_memory_backend_pointer_defaults_and_rejects_unknown_values(tmp_path):
     assert preferences.load_memory_backend(path) == "xiaozhi_local"
     with pytest.raises(ValueError, match="launcher_memory_backend_invalid"):
         preferences.save_memory_backend(path, "unknown")
+
+
+def test_tts_backend_pointer_migrates_legacy_fallback_and_rejects_unknown(tmp_path):
+    path = tmp_path / "tts-backend.json"
+    assert preferences.load_tts_backend(path, "sanotts") == "sanotts"
+    preferences.save_tts_backend(path, "voxcpm2")
+    assert preferences.load_tts_backend(path, "sanotts") == "voxcpm2"
+    assert "key" not in path.read_text(encoding="utf-8").lower()
+    with pytest.raises(ValueError, match="launcher_tts_backend_invalid"):
+        preferences.save_tts_backend(path, "unknown")

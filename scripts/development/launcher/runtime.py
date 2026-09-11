@@ -122,6 +122,7 @@ def build_commands(options, uv=None):
                "--chat-provider", "openai_compatible", "--assistant-role", options.role,
                "--memory-extraction", options.memory_extraction,
                "--memory-retrieval", options.memory_retrieval,
+               "--tts-backend", options.tts_backend,
                "--xiaozhi-server", str(options.voice_root.resolve()),
                "--launcher-status-file", str(root / "data/control" / LAUNCHER_STATUS_NAME),
                "--memory-audit-log", str(root / "data/logs/xiaozhi-demo-v1.jsonl")]
@@ -266,7 +267,7 @@ class Manager:
         if self.status_path is None or not self.instance:
             return
         snapshot = {
-            "schema_version": 2,
+            "schema_version": 3,
             "launcher_instance": self.instance,
             "launcher_pid": os.getpid(),
             "updated_at": datetime.now(timezone.utc).isoformat(),
@@ -288,6 +289,10 @@ class Manager:
                 "voice_enabled": bool(self.options and self.options.voice),
                 "vad_profile": (
                     self.options.vad_profile
+                    if self.options is not None and self.options.voice else None
+                ),
+                "tts_backend": (
+                    self.options.tts_backend
                     if self.options is not None and self.options.voice else None
                 ),
             },

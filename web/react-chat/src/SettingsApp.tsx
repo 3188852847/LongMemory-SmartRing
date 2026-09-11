@@ -13,6 +13,7 @@ import {MemoryBackendSettings} from './MemoryBackendSettings';
 import {PersonalizationOverview} from './PersonalizationOverview';
 import {TTSBenchmarkPanel} from './TTSBenchmarkPanel';
 import {VADSettings} from './VADSettings';
+import {TTSBackendSettings} from './TTSBackendSettings';
 
 const api = new ChatApi();
 
@@ -55,6 +56,7 @@ export function SettingsApp() {
       </Card>},
       {key:'voice', label:'声音', children:<Card title="声音" extra={<span className="setting-scope">小智 TTS</span>}>
         <p>查看并试听当前 TTS，调整已接入的语音参数，以及选择圆屏拾音灵敏度。TTS 输出与 VAD 输入互不替代。</p>
+        <TTSBackendSettings api={api} disabled={!enabled}/>
         <VoiceSettings api={api} disabled={!enabled}/>
         <VADSettings api={api} disabled={!enabled}/>
         <TTSBenchmarkPanel api={api} enabled={enabled}/>

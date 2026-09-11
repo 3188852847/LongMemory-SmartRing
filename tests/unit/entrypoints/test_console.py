@@ -133,6 +133,7 @@ async def console(database=None, allow_memory_delete=False, chat_backend=None,
                   persona_producer=None, persona_model=None,
                   proactive_clock=None, model_profile_store=None, voice_model_profiles=None,
                   memory_backend_store=None, xiaozhi_memory_backends=None,
+                  tts_backend_store=None,
                   round_skin_store=None, round_wallpaper_library=None,
                   round_wallpaper_delivery=None):
     # 先占用随机回环端口，再把精确 Host 交给应用，避免探测后抢占端口。
@@ -156,6 +157,7 @@ async def console(database=None, allow_memory_delete=False, chat_backend=None,
                                      voice_model_profiles=voice_model_profiles,
                                      memory_backend_store=memory_backend_store,
                                      xiaozhi_memory_backends=xiaozhi_memory_backends,
+                                     tts_backend_store=tts_backend_store,
                                      round_skin_store=round_skin_store,
                                      round_wallpaper_library=round_wallpaper_library,
                                      round_wallpaper_delivery=round_wallpaper_delivery), access_log=None)

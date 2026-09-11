@@ -57,6 +57,7 @@ def test_command_preserves_paths_and_does_not_enable_deletion_or_jobs(options):
     assert "--embedding-model-dir" not in cmd
     assert "--allow-insecure-http" not in cmd  # 网页仍需 .env 的独立 HTTP 许可。
     assert cmd[cmd.index("--memory-backend") + 1] == "longmemory"
+    assert cmd[cmd.index("--tts-backend") + 1] == "edge"
     assert cmd[cmd.index("--launcher-status-file") + 1].endswith("data\\control\\launcher-status.json")
 
 
@@ -153,9 +154,10 @@ def test_launcher_status_snapshot_contains_only_bounded_runtime_facts(options):
         "console": "ready", "voice": "running", "voxcpm2": "disabled",
         "sanotts": "disabled",
     }
-    assert saved["schema_version"] == 2
+    assert saved["schema_version"] == 3
     assert saved["startup"] == {"voice_enabled": options.voice,
-                                 "vad_profile": options.vad_profile if options.voice else None}
+                                 "vad_profile": options.vad_profile if options.voice else None,
+                                 "tts_backend": options.tts_backend if options.voice else None}
     assert set(saved) == {
         "schema_version", "launcher_instance", "launcher_pid", "updated_at", "phase",
         "services", "startup",

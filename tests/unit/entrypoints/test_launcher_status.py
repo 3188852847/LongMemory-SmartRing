@@ -73,6 +73,19 @@ def test_v2_snapshot_rejects_unknown_vad_or_extra_startup_fields(tmp_path):
                                                 "vad_profile": "maximum"})
     path.write_text(json.dumps(snapshot), encoding="utf-8")
     assert read_launcher_status(path, "current", now=now)["state"] == "launcher_unavailable"
+
+
+def test_v3_snapshot_includes_tts_without_exposing_configuration(tmp_path):
+    now = datetime(2026, 9, 10, tzinfo=timezone.utc)
+    snapshot = _snapshot(now)
+    snapshot.update(schema_version=3, startup={"voice_enabled": True,
+                                                "vad_profile": "noisy",
+                                                "tts_backend": "sanotts"})
+    path = tmp_path / "status.json"
+    path.write_text(json.dumps(snapshot), encoding="utf-8")
+    result = read_launcher_status(path, "current", now=now)
+    assert result["startup"] == {"voice_enabled": True, "vad_profile": "noisy",
+                                  "tts_backend": "sanotts"}
     snapshot["startup"] = {"voice_enabled": True, "vad_profile": "normal", "secret": "no"}
     path.write_text(json.dumps(snapshot), encoding="utf-8")
     assert read_launcher_status(path, "current", now=now)["state"] == "launcher_unavailable"

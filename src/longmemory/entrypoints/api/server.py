@@ -25,6 +25,7 @@ from .routes.memory_commands import register_memory_command_routes
 from .routes.model_profiles import register_model_profile_routes
 from .xiaozhi_model_profiles import XiaozhiModelProfiles
 from .routes.memory_backends import register_memory_backend_routes
+from .routes.tts_backends import register_tts_backend_routes
 from .routes.device import register_device_routes
 from .xiaozhi_memory_backends import XiaozhiMemoryBackends
 from .routes.round_skins import register_round_skin_routes
@@ -73,6 +74,7 @@ def create_app(*, port=8765, bridge=None, web_root=None, database=None, allow_me
                consolidation_background_enabled=False, proactive_clock=None,
                model_profile_store=None, voice_model_profiles=None,
                memory_backend_store=None, xiaozhi_memory_backends=None,
+               tts_backend_store=None,
                round_skin_store=None, round_wallpaper_library=None,
                round_wallpaper_delivery=None, launcher_status_file=None):
     sessions = Sessions()
@@ -108,6 +110,9 @@ def create_app(*, port=8765, bridge=None, web_root=None, database=None, allow_me
             launcher_status_file,
             instance_id,
         ))
+
+    def current_runtime_status():
+        return read_launcher_status(launcher_status_file, instance_id)
 
     async def close(_app):
         await client.close()
@@ -164,6 +169,7 @@ def create_app(*, port=8765, bridge=None, web_root=None, database=None, allow_me
     register_vad_routes(app, VadSettings(
         xiaozhi_server, ROOT, launcher_status_file, instance_id,
     ) if xiaozhi_server and chat_backend else None)
+    register_tts_backend_routes(app, tts_backend_store, current_runtime_status)
     voice_profiles = voice_model_profiles or (
         XiaozhiModelProfiles(ROOT, xiaozhi_server, model_profile_store)
         if xiaozhi_server and model_profile_store else None
@@ -238,6 +244,8 @@ def main():
                         help="标记本进程实际加载的本机模型配置档")
     parser.add_argument("--memory-backend", choices=("longmemory", "xiaozhi_local", "none"),
                         default="longmemory", help="标记本次圆屏进程实际选择的记忆后端")
+    parser.add_argument("--tts-backend", choices=("edge", "voxcpm2", "sanotts"),
+                        default="edge", help="标记本次圆屏语音选择的 TTS 后端")
     parser.add_argument("--ffmpeg-dir", type=Path,
                         help="已安装的 ffmpeg/ffprobe 目录；只用于本机动态壁纸转码")
     parser.add_argument("--wallpaper-lan-ip",
@@ -423,6 +431,7 @@ def main():
     try:
         from longmemory.infrastructure.config.model_profiles import ModelProfileStore
         from longmemory.infrastructure.config.memory_backends import MemoryBackendStore
+        from longmemory.infrastructure.config.tts_backends import TTSBackendStore
         wallpaper_delivery = None
         if args.wallpaper_lan_ip:
             import ipaddress
@@ -447,6 +456,7 @@ def main():
                                consolidation_background_enabled=args.enable_memory_consolidation,
                                model_profile_store=ModelProfileStore(ROOT, current_profile=args.model_profile),
                                memory_backend_store=MemoryBackendStore(ROOT, current_backend=args.memory_backend),
+                               tts_backend_store=TTSBackendStore(ROOT, current_backend=args.tts_backend),
                                round_wallpaper_library=RoundWallpaperLibrary(
                                    ROOT / "data" / "round-screen" / "wallpapers",
                                    ffmpeg_dir=args.ffmpeg_dir,

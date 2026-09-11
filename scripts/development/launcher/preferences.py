@@ -170,3 +170,28 @@ def save_memory_backend(path: Path, backend: str) -> None:
         temporary.replace(path)
     finally:
         temporary.unlink(missing_ok=True)
+
+
+def load_tts_backend(path: Path, fallback: str = "edge") -> str:
+    """读取网页与启动面板共用的 TTS 指针；首次兼容旧 launcher.json。"""
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        value = data.get("selected_backend") if isinstance(data, dict) else None
+    except (OSError, ValueError, TypeError):
+        value = None
+    if value in _CHOICES["tts_backend"]:
+        return value
+    return fallback if fallback in _CHOICES["tts_backend"] else "edge"
+
+
+def save_tts_backend(path: Path, backend: str) -> None:
+    if backend not in _CHOICES["tts_backend"]:
+        raise ValueError("launcher_tts_backend_invalid")
+    body = {"version": 1, "selected_backend": backend}
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    try:
+        temporary.write_text(json.dumps(body, ensure_ascii=False, indent=2), encoding="utf-8")
+        temporary.replace(path)
+    finally:
+        temporary.unlink(missing_ok=True)

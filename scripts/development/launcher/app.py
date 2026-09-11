@@ -17,9 +17,11 @@ from preferences import (
     load_memory_backend,
     load_model_profile,
     load_preferences,
+    load_tts_backend,
     save_memory_backend,
     save_model_profile,
     save_preferences,
+    save_tts_backend,
 )
 from firewall_panel import open_panel
 from tts import config_action as tts_config_action
@@ -168,7 +170,9 @@ def main():
     choice_path = ROOT / 'data/control/launcher.json'
     model_profile_path = ROOT / 'data/control/model-profile.json'
     memory_backend_path = ROOT / 'data/control/memory-backend.json'
+    tts_backend_path = ROOT / 'data/control/tts-backend.json'
     saved = load_preferences(choice_path)
+    saved["tts_backend"] = load_tts_backend(tts_backend_path, saved["tts_backend"])
     header = ttk.Frame(box, style="Header.TFrame")
     header.pack(fill="x", pady=(0, 18))
     header_copy = ttk.Frame(header, style="Header.TFrame")
@@ -223,6 +227,9 @@ def main():
     memory_consolidation = tk.BooleanVar(value=saved["memory_consolidation"])
     embedding_model = tk.StringVar(value=saved["embedding_model_dir"] or str(DEFAULT_BGE_MODEL))
     tts_backend = tk.StringVar(value=tts_labels[saved["tts_backend"]])
+    # 记录面板最后一次从共享指针吸收的值。启动前只有在用户没有亲自改过
+    # 下拉框时才重新读取网页选择，避免已打开的面板覆盖控制台的新意图。
+    tts_pointer_seen = {"backend": saved["tts_backend"]}
     sanotts_source = tk.StringVar(
         value=saved["sanotts_source_root"] or str(DEFAULT_SANOTTS_SOURCE)
     )
@@ -280,6 +287,11 @@ def main():
         if tts_backend.get().startswith("sanoTTS"):
             return "sanotts"
         return "edge"
+
+    def set_tts_backend(value):
+        label = tts_labels.get(value)
+        if label is not None:
+            tts_backend.set(label)
 
     def selected_vad_profile():
         return vad_profile_labels[vad_profile.get()]
@@ -577,6 +589,8 @@ def main():
                            if manager.options is not None else None)
         panel_unchanged = (running_backend is not None
                            and selected_memory_backend() == running_backend)
+        running_tts = manager.options.tts_backend if manager.options is not None else None
+        tts_panel_unchanged = running_tts is not None and selected_tts() == running_tts
         try:
             manager.stop()
         except Exception:
@@ -585,6 +599,10 @@ def main():
         state.update(opened=False, failed=False)
         if panel_unchanged:
             set_memory_backend(load_memory_backend(memory_backend_path))
+        if tts_panel_unchanged:
+            next_tts = load_tts_backend(tts_backend_path, running_tts)
+            set_tts_backend(next_tts)
+            tts_pointer_seen["backend"] = next_tts
         start_button.config(state="normal")
         apply_presentation(stopped_services())
         return True
@@ -614,6 +632,10 @@ def main():
 
     def start():
         try:
+            if selected_tts() == tts_pointer_seen["backend"]:
+                next_tts = load_tts_backend(tts_backend_path, selected_tts())
+                set_tts_backend(next_tts)
+                tts_pointer_seen["backend"] = next_tts
             options = Options(database=Path(database.get()), voice=voice.get(), voice_root=Path(server.get()),
                               lan_ip=ip.get().strip(), role=role.get(), consent=consent.get(),
                               tts_backend=selected_tts(),
@@ -633,6 +655,8 @@ def main():
                 save_model_profile(model_profile_path, selected_model_profile())
                 save_model_profile(model_profile_path, selected_voice_model_profile(), "voice")
                 save_memory_backend(memory_backend_path, selected_memory_backend())
+                save_tts_backend(tts_backend_path, selected_tts())
+                tts_pointer_seen["backend"] = selected_tts()
             except OSError:
                 settings_status.set("服务已启动，但本机首选项未保存；下次仍可手动选择。")
             state.update(started=time.monotonic(), opened=False, failed=False)
