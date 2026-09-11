@@ -11,6 +11,7 @@ from aiohttp import web
 
 from longmemory.adapters.tts import capabilities_for
 from longmemory.application.voice_benchmark import CASES, case_by_id, measure_buffered_speech
+from longmemory.infrastructure.config.tts_benchmark_history import TTSBenchmarkHistory
 
 PROFILE_DEFAULT = {"version": 1, "reference": None, "style": "", "cfg_value": 2.0,
                    "quality": "balanced"}
@@ -37,6 +38,9 @@ class VoiceSettings:
         self.last_preview = float('-inf')
         self.audio_root = (self.project / 'data/audio').resolve()
         self.profile_path = self.audio_root / 'voxcpm-settings.json'
+        self.benchmark_history = TTSBenchmarkHistory(
+            self.project / 'data/control/tts-benchmark-history.json'
+        )
 
     def references(self):
         items = [{"id": None, "label": "模型默认声线"}]
@@ -227,12 +231,17 @@ def register_voice_routes(app, backend):
                 settings = await backend.call({'action':'check'})
             except (ValueError, OSError):
                 return web.json_response({'error':'tts_config_unavailable'}, status=503)
+            try:
+                history, history_state = backend.benchmark_history.list_runs(), 'available'
+            except (OSError, ValueError):
+                history, history_state = [], 'unavailable'
             return web.json_response({
                 'schema_version': 1,
                 'backend': settings.get('backend'),
                 'capabilities': settings.get('capabilities'),
                 'cases': [item.as_dict() for item in CASES],
                 'execution': {'parallel': False, 'retries': 0, 'stores_chat_or_memory': False},
+                'history': {'state': history_state, 'runs': history},
             })
         try:
             body = await request.json()
@@ -245,6 +254,13 @@ def register_voice_routes(app, backend):
             result = await measure_buffered_speech(backend, case)
             result['backend'] = settings.get('backend')
             result['capabilities'] = settings.get('capabilities')
+            try:
+                result['history_run_id'] = backend.benchmark_history.append(result)
+                result['history_saved'] = True
+            except (OSError, ValueError):
+                # 测量已完成时，历史异常不能把真实结果伪装成测试失败。
+                result['history_run_id'] = None
+                result['history_saved'] = False
             return web.json_response(result)
         except ValueError as error:
             if str(error) == 'invalid_body':

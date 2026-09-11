@@ -7,6 +7,7 @@ from longmemory.entrypoints.api.voice_settings import speech_failure
 from longmemory.entrypoints.api.chat_backend import ChatBackend
 from longmemory.adapters.llm.fake import FakeAnswerGenerator
 from longmemory.methods.longmemory_v1.method import LongMemoryV1
+from longmemory.infrastructure.config.tts_benchmark_history import TTSBenchmarkHistory
 
 
 def test_voxcpm_health_requires_expected_local_service(monkeypatch):
@@ -114,7 +115,8 @@ def test_tts_benchmark_uses_only_registered_synthetic_cases(tmp_path, monkeypatc
     chat = ChatBackend(database, FakeAnswerGenerator())
 
     class Fake:
-        def __init__(self, *args): pass
+        def __init__(self, *args):
+            self.benchmark_history = TTSBenchmarkHistory(tmp_path / 'tts-benchmark-history.json')
         async def call(self, body):
             assert body == {'action':'check'}
             return {'backend':'edge', 'capabilities':{'contract_version':2}}
@@ -131,6 +133,7 @@ def test_tts_benchmark_uses_only_registered_synthetic_cases(tmp_path, monkeypatc
             assert index.status == 200
             data = await index.json()
             assert data['backend'] == 'edge' and len(data['cases']) == 4
+            assert data['history'] == {'state':'available', 'runs':[]}
             invalid = await client.post(
                 base + '/api/tts-benchmark', headers=headers, json={'case_id':'private text'},
             )
@@ -143,6 +146,9 @@ def test_tts_benchmark_uses_only_registered_synthetic_cases(tmp_path, monkeypatc
             assert measured['adapter_delivery'] == 'buffered'
             assert measured['case']['id'] == 'short_reply'
             assert measured['backend'] == 'edge'
+            assert measured['history_saved'] is True
+            history = await (await client.get(base + '/api/tts-benchmark')).json()
+            assert history['history']['runs'][0]['backend'] == 'edge'
 
     asyncio.run(run())
 
