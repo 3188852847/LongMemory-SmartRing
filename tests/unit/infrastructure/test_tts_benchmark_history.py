@@ -13,6 +13,7 @@ def result(backend="sanotts", case_id="short_reply", completed=1050.5):
         "audio_bytes": 100396, "content_type": "audio/wav",
         "wave": {"duration_seconds": 2.2756, "near_silent": False},
         "cache_policy": "provider_default",
+        "speaking_rate": 1.0,
     }
 
 
@@ -49,6 +50,19 @@ def test_v1_history_is_migrated_without_changing_measurements(tmp_path):
     migrated = history.list_runs()[0]
     assert migrated["completed_ms"] == 8141.0
     assert migrated["cache_policy"] == "provider_default"
+    assert migrated["speaking_rate"] == 1.0
 
     history.append(result("voxcpm2", completed=9000.0) | {"cache_policy": "bypass_local_cache"})
-    assert json.loads(path.read_text(encoding="utf-8"))["schema_version"] == 2
+    assert json.loads(path.read_text(encoding="utf-8"))["schema_version"] == 3
+
+
+def test_v2_history_adds_default_rate_without_mixing_measurements(tmp_path):
+    path = tmp_path / "history.json"
+    old = result(completed=1485.0)
+    old_record = {"id": "b" * 32, "case_id": old["case"]["id"], **{
+        key: value for key, value in old.items() if key not in {"case", "speaking_rate"}
+    }}
+    path.write_text(json.dumps({"schema_version": 2, "runs": [old_record]}), encoding="utf-8")
+    migrated = TTSBenchmarkHistory(path).list_runs()[0]
+    assert migrated["completed_ms"] == 1485.0
+    assert migrated["speaking_rate"] == 1.0

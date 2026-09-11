@@ -9,6 +9,7 @@ interface Settings {
   backend: 'edge' | 'voxcpm2' | 'sanotts' | 'unsupported'; voice: string | null; voices: string[];
   digest: string; text: string; config_matches: boolean; editable: boolean; service_ready?: boolean | null;
   profile?:VoxProfile; profile_digest?:string; references?:Array<{id:string|null;label:string}>;
+  speed?: number;
 }
 
 export function voiceSettingsFailure(error: unknown) {
@@ -26,6 +27,7 @@ export function VoiceSettings({api, disabled}: {api: ChatApi; disabled: boolean}
   const [open, setOpen] = useState(false), [busy, setBusy] = useState(false);
   const [settings, setSettings] = useState<Settings>(), [voice, setVoice] = useState('');
   const [profile,setProfile]=useState<VoxProfile>();
+  const [sanoSpeed,setSanoSpeed]=useState(1);
   const [notice, setNotice] = useState(''), [audio, setAudio] = useState('');
   const lock = useRef(false), audioRef = useRef('');
   const clearAudio = () => {if (audioRef.current) URL.revokeObjectURL(audioRef.current); audioRef.current = ''; setAudio('');};
@@ -36,7 +38,7 @@ export function VoiceSettings({api, disabled}: {api: ChatApi; disabled: boolean}
     try {await action();} catch (e) {setNotice(voiceSettingsFailure(e));}
     finally {lock.current = false; setBusy(false);}
   }
-  const load = () => run(async () => {setSettings(undefined); const value = await api.request<Settings>('/api/voice-settings'); setSettings(value); setVoice(value.voice ?? '');setProfile(value.profile);});
+  const load = () => run(async () => {setSettings(undefined); const value = await api.request<Settings>('/api/voice-settings'); setSettings(value); setVoice(value.voice ?? '');setProfile(value.profile);setSanoSpeed(value.speed ?? 1);});
   return <><Button disabled={disabled} onClick={() => {setOpen(true); void load();}}>声音设置</Button>
     <Modal title="声音设置" open={open} footer={null} closable={!busy} maskClosable={!busy} onCancel={() => {clearAudio(); setOpen(false);}}>
       <Space orientation="vertical" style={{width: '100%'}}>
@@ -65,7 +67,19 @@ export function VoiceSettings({api, disabled}: {api: ChatApi; disabled: boolean}
             title={settings.config_matches ? '当前配置：sanoTTS 本地中文小雅' : 'sanoTTS 配置与本机适配契约不一致'}
             description={settings.service_ready
               ? '本机 WASM 服务已就绪；当前仍是整段 WAV 生成，不代表已经实现流式首声或中途取消。'
-              : '本机服务未就绪。请在统一启动面板选择 sanoTTS，并核对外部源码目录。'}/>
+               : '本机服务未就绪。请在统一启动面板选择 sanoTTS，并核对外部源码目录。'}/>
+          <label>说话速度：{sanoSpeed.toFixed(2)}×</label>
+          <Slider aria-label="sanoTTS 说话速度" min={0.75} max={1.5} step={0.05} value={sanoSpeed}
+            disabled={busy || !settings.editable} onChange={setSanoSpeed}/>
+          <small>只改变 sanoTTS 的朗读速度，不改变模型、角色、记忆或圆屏扬声器音量。</small>
+          <Space wrap>
+            <Button disabled={busy} onClick={()=>{setSanoSpeed(1);setNotice('已恢复标准语速草稿；点击保存后才会生效。');}}>恢复标准语速草稿</Button>
+            <Button type="primary" disabled={busy || !settings.service_ready || sanoSpeed === settings.speed} onClick={()=>void run(async()=>{
+              const value=await api.request<Settings>('/api/voice-settings','POST',{speed:sanoSpeed,expected_digest:settings.digest});
+              setSettings({...settings,...value,service_ready:settings.service_ready});setSanoSpeed(value.speed ?? sanoSpeed);
+              setNotice('sanoTTS 语速已保存；网页朗读立即使用，圆屏语音重启后使用。');
+            })}>保存说话速度</Button>
+          </Space>
           <p>测试文本：{settings.text}</p>
           <SpeechPlayer api={api} text={settings.text}/>
         </>}

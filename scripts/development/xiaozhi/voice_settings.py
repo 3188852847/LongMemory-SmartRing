@@ -24,6 +24,51 @@ def _custom_contract(config, url):
             and params.get('response_format') == 'wav' and params.get('stream') is False)
 
 
+def _sanotts_speed(params):
+    """旧配置没有 speed 时按上游默认 1.0 解释，不强迫用户重新同步。"""
+    value = params.get('speed', 1.0)
+    if type(value) not in {int, float} or not 0.75 <= value <= 1.5:
+        raise ValueError('invalid_speed')
+    return float(value)
+
+
+def _update_sanotts_speed(text, before, speed, yaml):
+    """只替换或插入 speed 标量，保留私有 YAML 的其余原始字节。"""
+    root = yaml.compose(text)
+    node = root
+    for key in ('TTS', 'CustomTTS', 'params'):
+        if not isinstance(node, yaml.MappingNode):
+            raise ValueError('ambiguous_config')
+        matches = [value for candidate, value in node.value if candidate.value == key]
+        if len(matches) != 1:
+            raise ValueError('ambiguous_config')
+        node = matches[0]
+    if not isinstance(node, yaml.MappingNode):
+        raise ValueError('ambiguous_config')
+
+    speed_nodes = [(key, value) for key, value in node.value if key.value == 'speed']
+    if len(speed_nodes) > 1:
+        raise ValueError('ambiguous_config')
+    scalar = str(speed)
+    if speed_nodes:
+        value = speed_nodes[0][1]
+        if not isinstance(value, yaml.ScalarNode):
+            raise ValueError('ambiguous_config')
+        updated = text[:value.start_mark.index] + scalar + text[value.end_mark.index:]
+    else:
+        # PyYAML 把下一个同级字段的前导空格计入 MappingNode 范围。先退回到
+        # 当前行开头，再插入完整新行，后缀中的四个空格继续属于下一个字段。
+        insertion_at = node.end_mark.index - node.end_mark.column
+        newline = '\r\n' if '\r\n' in text else '\n'
+        insertion = '      speed: ' + scalar + newline
+        updated = text[:insertion_at] + insertion + text[insertion_at:]
+    expected = copy.deepcopy(before)
+    expected['TTS']['CustomTTS']['params']['speed'] = speed
+    if yaml.safe_load(updated) != expected:
+        raise ValueError('unexpected_config_change')
+    return updated.encode('utf-8')
+
+
 def settings(server, body):
     import yaml
     path = server / 'data/.config.yaml'
@@ -36,14 +81,29 @@ def settings(server, body):
     selected = before.get('selected_module', {}).get('TTS')
     digest = hashlib.sha256(raw).hexdigest()
     if selected == 'CustomTTS':
-        if body.get('action') != 'check':
-            raise ValueError('unsupported_tts_operation')
         custom_url = before.get('TTS', {}).get('CustomTTS', {}).get('url')
         backend, voice = ({VOX_URL: ('voxcpm2', 'plain'), SANO_URL: ('sanotts', 'xiaoya')}
                           .get(custom_url, ('unsupported', None)))
+        params = before.get('TTS', {}).get('CustomTTS', {}).get('params', {})
+        speed = _sanotts_speed(params) if backend == 'sanotts' else None
+        if body.get('action') == 'apply_sanotts' and backend == 'sanotts':
+            requested = body.get('speed')
+            if type(requested) not in {int, float} or not 0.75 <= requested <= 1.5:
+                raise ValueError('invalid_speed')
+            updated = _update_sanotts_speed(raw.decode('utf-8'), before,
+                                             float(requested), yaml)
+            result = commit_change(path, body, raw, updated, speed == float(requested),
+                                   backup_label='tts')
+            return result | {'backend': backend, 'voice': voice, 'voices': [],
+                             'digest': hashlib.sha256(updated).hexdigest(), 'text': TEXT,
+                             'config_matches': True, 'editable': True,
+                             'speed': float(requested)}
+        if body.get('action') != 'check':
+            raise ValueError('unsupported_tts_operation')
         return {'backend': backend, 'voice': voice, 'voices': [], 'digest': digest,
                 'text': TEXT, 'config_matches': _custom_contract(before, custom_url)
-                if backend != 'unsupported' else False, 'editable': False}
+                if backend != 'unsupported' else False, 'editable': backend == 'sanotts',
+                **({'speed': speed} if speed is not None else {})}
     if selected != 'EdgeTTS':
         if body.get('action') != 'check':
             raise ValueError('unsupported_tts_operation')

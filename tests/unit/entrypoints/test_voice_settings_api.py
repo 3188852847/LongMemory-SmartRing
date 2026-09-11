@@ -26,6 +26,26 @@ def test_voxcpm_health_requires_expected_local_service(monkeypatch):
     assert server.VoiceSettings.voxcpm_ready() is True
 
 
+def test_sanotts_speech_sends_saved_speaking_rate(monkeypatch):
+    captured = {}
+    class Response:
+        status = 200
+        def read(self, _limit): return b'RIFF-synthetic'
+    class Connection:
+        def __init__(self, host, port, timeout):
+            assert (host, port, timeout) == ('127.0.0.1', 18769, 30)
+        def request(self, method, path, body, headers):
+            captured.update(method=method, path=path, body=json.loads(body), headers=headers)
+        def getresponse(self): return Response()
+        def close(self): pass
+    monkeypatch.setattr('longmemory.entrypoints.api.voice_settings.http.client.HTTPConnection', Connection)
+    audio = server.VoiceSettings.local_speech('sanotts', '合成文本', speaking_rate=1.25)
+    assert audio == b'RIFF-synthetic'
+    assert captured['body'] == {
+        'input':'合成文本', 'response_format':'wav', 'stream':False, 'speed':1.25,
+    }
+
+
 def test_voice_settings_exposes_current_adapter_capabilities(tmp_path, monkeypatch):
     backend = server.VoiceSettings(tmp_path, tmp_path / 'synthetic.db', tmp_path)
     python = tmp_path / '.venv/Scripts/python.exe'
@@ -86,8 +106,11 @@ def test_voice_api_auth_strict_body_and_audio(tmp_path, monkeypatch):
             assert await response.read() == b'audio'
             assert response.headers['Cache-Control'] == 'no-store'
             assert (await client.post(url, headers=headers, json={'voice':'synthetic', 'expected_digest':'a'*64})).status == 200
+            assert (await client.post(url, headers=headers, json={'speed':1.2, 'expected_digest':'a'*64})).status == 200
+            assert (await client.post(url, headers=headers, json={'speed':2.0, 'expected_digest':'a'*64})).status == 409
     asyncio.run(run())
-    assert len(calls) == 3
+    assert calls[-1]['action'] == 'apply_sanotts'
+    assert len(calls) == 4
 
 
 def test_speech_api_returns_safe_actionable_failure(tmp_path, monkeypatch):

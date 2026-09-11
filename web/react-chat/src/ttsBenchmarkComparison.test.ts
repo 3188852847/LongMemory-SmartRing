@@ -11,6 +11,7 @@ function run(backend:string,caseId:string,completed:number,duration=1,nearSilent
     started_at:'2026-09-11T00:00:00Z',adapter_delivery:'buffered',
     first_audio_available_ms:completed,completed_ms:completed,audio_bytes:1000,content_type:'audio/wav',
     cache_policy:'provider_default',
+    speaking_rate:1,
     wave:{duration_seconds:duration,sample_rate_hz:16000,channels:1,sample_width_bits:16,rms:100,peak:1000,near_silent:nearSilent}};
 }
 
@@ -32,6 +33,14 @@ describe('TTS 同条件探索性汇总',()=>{
     const rows=buildTTSComparison(cases,[cached,uncached]);
     expect(rows).toHaveLength(2);
     expect(rows.map(item=>item.cachePolicy).sort()).toEqual(['bypass_local_cache','provider_default']);
+  });
+
+  test('不把 sanoTTS 不同语速的结果混在一起',()=>{
+    const normal=run('sanotts','short_reply',1000);
+    const fast={...run('sanotts','short_reply',800),speaking_rate:1.25};
+    const rows=buildTTSComparison(cases,[normal,fast]);
+    expect(rows).toHaveLength(2);
+    expect(rows.map(item=>item.speakingRate).sort()).toEqual([1,1.25]);
   });
 
   test('保留近静音故障计数，缺少可解码时长时不伪造实时系数',()=>{

@@ -56,7 +56,7 @@ def test_voxcpm_status_is_read_only_and_sanitized(tmp_path):
         module.settings(server, body | {'action': 'apply', 'voice': 'plain'})
 
 
-def test_sanotts_status_is_read_only_and_sanitized(tmp_path):
+def test_sanotts_status_and_speed_update_are_sanitized(tmp_path):
     server = tmp_path
     config = {'prompt': 'synthetic', 'selected_module': {'Memory': 'LongMemory', 'TTS': 'CustomTTS'},
               'Memory': {'LongMemory': {'database_path': str(tmp_path / 'demo.db'),
@@ -70,7 +70,21 @@ def test_sanotts_status_is_read_only_and_sanitized(tmp_path):
             'project': str(tmp_path / 'project')}
     result = module.settings(server, body)
     assert result['backend'] == 'sanotts' and result['voice'] == 'xiaoya'
-    assert result['config_matches'] is True and result['editable'] is False
+    assert result['config_matches'] is True and result['editable'] is True
+    assert result['speed'] == 1.0
+    changed = module.settings(server, body | {
+        'action': 'apply_sanotts', 'speed': 1.2,
+        'expected_digest': result['digest'],
+    })
+    assert changed['speed'] == 1.2
+    saved = yaml.safe_load(path.read_text(encoding='utf-8'))
+    assert saved['TTS']['CustomTTS']['params']['speed'] == 1.2
+    assert '.tts-' in changed['backup']
+    with pytest.raises(ValueError):
+        module.settings(server, body | {
+            'action': 'apply_sanotts', 'speed': 2.0,
+            'expected_digest': changed['digest'],
+        })
 
 
 @pytest.mark.parametrize('memory_provider', ['LongMemory', 'mem_local_short', 'nomem'])

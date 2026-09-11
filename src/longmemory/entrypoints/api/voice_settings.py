@@ -88,13 +88,15 @@ class VoiceSettings:
         return self.profile()
 
     @staticmethod
-    def local_speech(backend, text, *, bypass_local_cache=False):
+    def local_speech(backend, text, *, bypass_local_cache=False, speaking_rate=1.0):
         connection = http.client.HTTPConnection('127.0.0.1', LOCAL_TTS[backend], timeout=30)
         request = {'input': text, 'response_format': 'wav', 'stream': False}
         # VoxCPM2 日常链保留重复句缓存；只有固定测试台显式绕过它，防止把缓存读取
         # 误报为模型生成速度。sanoTTS 没有这一私有字段，保持其公开兼容契约。
         if backend == 'voxcpm2' and bypass_local_cache:
             request['cache'] = False
+        if backend == 'sanotts':
+            request['speed'] = speaking_rate
         payload = json.dumps(request).encode()
         try:
             connection.request('POST', '/v1/audio/speech', body=payload,
@@ -176,6 +178,7 @@ class VoiceSettings:
                 return await asyncio.to_thread(
                     self.local_speech, check['backend'], text,
                     bypass_local_cache=bypass_local_cache,
+                    speaking_rate=check.get('speed', 1.0),
                 ), 'audio/wav'
             if check.get('backend') != 'edge':
                 raise ValueError('unsupported')
@@ -205,6 +208,13 @@ def register_voice_routes(app, backend):
             if not isinstance(body, dict): raise ValueError('invalid_body')
             if set(body) == {'reference','style','cfg_value','quality','expected_profile_digest'} and not preview:
                 result = await backend.call(body | {'action':'apply_voxcpm'})
+                return web.json_response(result)
+            if set(body) == {'speed', 'expected_digest'} and not preview:
+                if (type(body['speed']) not in {int, float} or not 0.75 <= body['speed'] <= 1.5
+                        or not isinstance(body['expected_digest'], str)
+                        or len(body['expected_digest']) != 64):
+                    raise ValueError('invalid_body')
+                result = await backend.call(body | {'action':'apply_sanotts'})
                 return web.json_response(result)
             required = {'voice'} if preview else {'voice', 'expected_digest'}
             if set(body) != required or any(not isinstance(v, str) for v in body.values()): raise ValueError('invalid_body')
@@ -267,6 +277,8 @@ def register_voice_routes(app, backend):
                 'bypass_local_cache' if bypass_local_cache else 'provider_default'
             )
             result['backend'] = settings.get('backend')
+            # 实验条件必须随结果保存，否则不同语速会被错误聚合。
+            result['speaking_rate'] = settings.get('speed', 1.0)
             result['capabilities'] = settings.get('capabilities')
             try:
                 result['history_run_id'] = backend.benchmark_history.append(result)

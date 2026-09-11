@@ -66,16 +66,27 @@ describe('VoxCPM2 声音设置', () => {
     expect(screen.getByRole('button', {name: '保存声音方案'}).hasAttribute('disabled')).toBe(true);
   });
 
-  test('sanoTTS 如实显示整段生成并提供网页朗读入口', async () => {
-    vi.spyOn(ChatApi.prototype, 'request').mockResolvedValue({
-      backend: 'sanotts', voice: 'xiaoya', voices: [], digest: 'd'.repeat(64),
-      text: '合成测试文本', config_matches: true, editable: false, service_ready: true,
+  test('sanoTTS 可保存受控语速并如实说明圆屏需重启', async () => {
+    const request=vi.spyOn(ChatApi.prototype, 'request').mockImplementation(async (_path,method,body)=>{
+      if(method==='POST'){
+        expect(body).toEqual({speed:1,expected_digest:'d'.repeat(64)});
+        return {backend:'sanotts',voice:'xiaoya',voices:[],digest:'e'.repeat(64),text:'合成测试文本',config_matches:true,editable:true,speed:1};
+      }
+      return {
+        backend: 'sanotts', voice: 'xiaoya', voices: [], digest: 'd'.repeat(64),
+        text: '合成测试文本', config_matches: true, editable: true, service_ready: true, speed:1.2,
+      };
     });
     render(<VoiceSettings api={new ChatApi()} disabled={false}/>);
     fireEvent.click(screen.getByRole('button', {name:'声音设置'}));
     expect(await screen.findByText('当前配置：sanoTTS 本地中文小雅')).toBeTruthy();
     expect(screen.getByText(/当前仍是整段 WAV 生成/)).toBeTruthy();
     expect(screen.getByRole('button', {name:'网页朗读'})).toBeTruthy();
+    expect(screen.getByText(/1.20×/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button',{name:'恢复标准语速草稿'}));
+    fireEvent.click(screen.getByRole('button',{name:'保存说话速度'}));
+    expect(await screen.findByText(/圆屏语音重启后使用/)).toBeTruthy();
+    expect(request).toHaveBeenCalledTimes(2);
   });
 
   test('恢复推荐声音只修改草稿，仍需明确保存', async () => {
