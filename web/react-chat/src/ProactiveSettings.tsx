@@ -4,6 +4,7 @@ import {Alert, Button, Card, Checkbox, Input, InputNumber, Select, Space, Switch
 import {ApiError, ChatApi, type CompanionAbsenceStrategyVersion, type CompanionAbsenceStrategyVersionList, type CompanionRoutineCandidate, type CompanionStrategyCandidate, type FollowUpCandidate, type ProactiveOutreachSummary, type ProactivePolicy, type ProactiveScheduleStatus, type ProactiveTestResult, type ProactiveTopicSeed, type UserInitiatedInteraction} from './api';
 import {ProactiveHistorySection} from './ProactiveHistorySection';
 import {ProactiveTopicSection} from './ProactiveTopicSection';
+import {ProactiveFollowUpSection} from './ProactiveFollowUpSection';
 
 const DAYS = ['周一','周二','周三','周四','周五','周六','周日'].map((label, value) => ({label, value}));
 const minuteText = (value:number) => `${String(Math.floor(value / 60)).padStart(2,'0')}:${String(value % 60).padStart(2,'0')}`;
@@ -433,46 +434,29 @@ export function ProactiveSettings({api, ready}:{api:ChatApi; ready:boolean}) {
       onDisable={seed => disableTopic.mutate(seed)}
       onTopicEnabledChange={topic_enabled => change({topic_enabled})}
     />
-    <section className="settings-section">
-      <h3>长期事项跟进候选</h3>
-      <Alert type="info" showIcon title="这里只建立可追溯候选，不会自动联系圆屏"
-        description="选择一条当前 L1 作为依据，并明确写下未来适合追问的短句。下一阶段才会增加启用与一次性投递；在此之前，到达时间也不会发送。"/>
-      <label htmlFor="follow-up-source">依据的 L1 原子记忆</label>
-      <Select id="follow-up-source" aria-label="跟进来源 L1" className="wide"
-        value={followUpSourceId} placeholder="选择一条明确计划或待办"
-        onChange={setFollowUpSourceId}
-        options={(followUpSources.data?.items ?? []).map(item => ({value:item.id,label:item.content}))}/>
-      <label htmlFor="follow-up-text">以后适合问的一句话</label>
-      <Input id="follow-up-text" maxLength={160} showCount value={followUpText}
-        placeholder="例如：毕业设计汇报准备得怎么样了？"
-        onChange={event => setFollowUpText(event.target.value)}/>
-      <label htmlFor="follow-up-time">计划跟进时间</label>
-      <Input id="follow-up-time" type="datetime-local" value={followUpLocal}
-        onChange={event => setFollowUpLocal(event.target.value)}/>
-      <Button loading={createFollowUp.isPending}
-        disabled={!followUpSourceId || !followUpText.trim() || followUpText !== followUpText.trim() || !followUpLocal || Number.isNaN(new Date(followUpLocal).getTime()) || new Date(followUpLocal).getTime() <= Date.now() || createFollowUp.isPending}
-        onClick={() => createFollowUp.mutate()}>建立跟进候选</Button>
-      {followUpNotice && <p role="status">{followUpNotice}</p>}
-      {followUps.isError && <Alert type="error" showIcon title="跟进候选读取失败"/>}
-      <div className="proactive-history">{followUps.data?.items?.map(item => <Card size="small" key={item.id}
-        title={<Space wrap><Tag color={item.activation ? 'blue' : item.ready_for_activation ? 'gold' : 'default'}>{item.status === 'cancelled' ? '已取消' : item.activation ? '已启用' : item.due ? '已到时间' : '候选'}</Tag><strong>{item.prompt_text}</strong>{!item.activation && <Tag>未启用</Tag>}</Space>}
-        extra={item.status === 'candidate' && <Space>{item.ready_for_activation && <Button size="small" type="primary"
-          loading={armFollowUp.isPending && armFollowUp.variables?.id === item.id}
-          disabled={!draft.enabled || dirty || armFollowUp.isPending || cancelFollowUp.isPending}
-          onClick={() => armFollowUp.mutate(item)}>启用一次跟进</Button>}<Button size="small" danger
-          loading={cancelFollowUp.isPending && cancelFollowUp.variables?.id === item.id}
-          disabled={cancelFollowUp.isPending || armFollowUp.isPending || Boolean(item.activation && item.activation.state !== 'candidate')}
-          onClick={() => cancelFollowUp.mutate(item)}>{item.activation ? '取消未执行跟进' : '取消候选'}</Button></Space>}>
-        <p>计划时间：{new Date(item.follow_up_at).toLocaleString('zh-CN')}</p>
-        <p className="subtle">形成方式：{item.creation_kind === 'explicit_conversation_request' ? '来自明确对话请求' : '控制台手动创建'}</p>
-        <p className="subtle">依据 L1：{item.source.content}</p>
-        {item.activation && <p className="subtle">一次性账本：{item.activation.state} · 过期时间 {new Date(item.activation.expires_at).toLocaleString('zh-CN')}</p>}
-        {!item.ready_for_activation && !item.activation && item.status === 'candidate' && <p className="subtle">当前不可启用：{item.blocked_reason === 'source_changed' ? '来源已变化或退役' : item.blocked_reason === 'time_reached' ? '计划时间已经到达' : item.blocked_reason}</p>}
-        {!draft.enabled && item.ready_for_activation && <p className="subtle">启用前需先打开并保存上方主动交流总许可。</p>}
-        <small>候选 ID：{item.id} · 来源 ID：{item.source_memory_id} · 修订 {item.revision}</small>
-      </Card>)}</div>
-      {followUps.isSuccess && (followUps.data?.items?.length ?? 0) === 0 && <p className="subtle">尚无跟进候选。</p>}
-    </section>
+    <ProactiveFollowUpSection
+      sources={followUpSources.data?.items ?? []}
+      items={followUps.data?.items ?? []}
+      loaded={followUps.isSuccess}
+      failed={followUps.isError}
+      sourceId={followUpSourceId}
+      text={followUpText}
+      localTime={followUpLocal}
+      notice={followUpNotice}
+      createPending={createFollowUp.isPending}
+      cancelPending={cancelFollowUp.isPending}
+      armPending={armFollowUp.isPending}
+      cancellingId={cancelFollowUp.variables?.id}
+      armingId={armFollowUp.variables?.id}
+      proactiveEnabled={draft.enabled}
+      policyDirty={dirty}
+      onSourceChange={setFollowUpSourceId}
+      onTextChange={setFollowUpText}
+      onLocalTimeChange={setFollowUpLocal}
+      onCreate={() => createFollowUp.mutate()}
+      onCancel={item => cancelFollowUp.mutate(item)}
+      onArm={item => armFollowUp.mutate(item)}
+    />
     <section className="settings-section">
       <h3>联系时段观察候选</h3>
       <Alert type="info" showIcon title="候选不会自动生效"
