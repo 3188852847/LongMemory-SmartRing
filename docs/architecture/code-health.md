@@ -74,7 +74,7 @@
 
 ### R3：前端
 
-- [ ] 按 `memory/device/voice/proactive` 拆分 API 类型；共享请求与认证仍保留一个客户端。
+- [x] 按 `chat/memory/device/voice/settings/proactive` 拆分 API 类型；共享请求、认证与安全错误解析保留一个客户端，根 `api.ts` 仅作为兼容出口。
 - [ ] 把主动交流页面拆成设置、候选、版本和历史区块；服务端状态继续作为唯一事实来源。
 
 ## 每个切片的完成条件
