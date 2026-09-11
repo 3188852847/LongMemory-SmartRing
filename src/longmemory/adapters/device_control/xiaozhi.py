@@ -8,8 +8,16 @@ from pathlib import Path
 
 import aiohttp
 
-from .protocol import BridgeError, round_skin, safe_reason, volume_value
-from .projections import device_status, hardware_status
+from .protocol import BridgeError, round_skin, safe_reason
+from .projections import (
+    device_status,
+    hardware_status,
+    read_volume,
+    round_skin_update,
+    screen_update,
+    speech_stop,
+    volume_update,
+)
 
 
 class XiaozhiControlClient:
@@ -75,49 +83,17 @@ class XiaozhiControlClient:
 
     async def read_volume(self) -> dict:
         data = await self._request("GET", "/api/device/volume")
-        if not volume_value(data.get("volume")):
-            raise BridgeError("bridge_invalid_response", 502)
-        return {"volume": data["volume"]}
+        return read_volume(data)
 
     async def set_volume(self, volume: int) -> dict:
         if type(volume) is not int or not 5 <= volume <= 60:
             raise BridgeError("invalid_volume", 400)
         data = await self._request("POST", "/api/device/volume", {"volume": volume})
-        if (type(data.get("requested_volume")) is not int or data["requested_volume"] != volume or data.get("acknowledged") is not True
-                or type(data.get("verified")) is not bool
-                or not volume_value(data.get("previous_volume"))
-                or (data.get("readback_volume") is not None and not volume_value(data["readback_volume"]))):
-            raise BridgeError("bridge_invalid_response", 502)
-        if data["verified"] and data.get("readback_volume") != volume:
-            raise BridgeError("bridge_invalid_response", 502)
-        result = {key: data.get(key) for key in (
-            "requested_volume", "previous_volume", "acknowledged", "readback_volume", "verified"
-        )}
-        if "reason" in data:
-            result["reason"] = safe_reason(data["reason"])
-        return result
+        return volume_update(data, volume)
 
     async def stop_speech(self) -> dict:
         data = await self._request("POST", "/api/device/speech/stop")
-        operation_id = data.get("operation_id")
-        state = data.get("state")
-        if (not isinstance(operation_id, str)
-                or re.fullmatch(r"[0-9a-f]{32}", operation_id) is None
-                or state not in {"stop_sent", "already_idle"}
-                or type(data.get("server_interrupted")) is not bool
-                or data.get("device_acknowledgement") not in {"unavailable", "not_requested"}):
-            raise BridgeError("bridge_invalid_response", 502)
-        if ((state == "stop_sent" and (data["server_interrupted"] is not True
-                or data["device_acknowledgement"] != "unavailable"))
-                or (state == "already_idle" and (data["server_interrupted"] is not False
-                or data["device_acknowledgement"] != "not_requested"))):
-            raise BridgeError("bridge_invalid_response", 502)
-        return {
-            "operation_id": operation_id,
-            "state": state,
-            "server_interrupted": data["server_interrupted"],
-            "device_acknowledgement": data["device_acknowledgement"],
-        }
+        return speech_stop(data)
 
     async def set_screen(self, field: str, value: object) -> dict:
         if ((field == "brightness" and (type(value) is not int or not 5 <= value <= 100))
@@ -125,17 +101,7 @@ class XiaozhiControlClient:
                 or field not in {"brightness", "theme"}):
             raise BridgeError("invalid_screen_setting", 400)
         data = await self._request("POST", "/api/device/screen", {field: value})
-        if (data.get("requested_value") != value or data.get("acknowledged") is not True
-                or type(data.get("verified")) is not bool):
-            raise BridgeError("bridge_invalid_response", 502)
-        if data["verified"] and data.get("readback_value") != value:
-            raise BridgeError("bridge_invalid_response", 502)
-        result = {key: data.get(key) for key in (
-            "requested_value", "previous_value", "acknowledged", "readback_value", "verified"
-        )}
-        if "reason" in data:
-            result["reason"] = safe_reason(data["reason"])
-        return result
+        return screen_update(data, value)
 
     async def read_round_skin(self) -> dict:
         data = await self._request("GET", "/api/device/round-skin")
@@ -144,24 +110,7 @@ class XiaozhiControlClient:
     async def set_round_skin(self, skin: dict) -> dict:
         requested = round_skin(skin)
         data = await self._request("POST", "/api/device/round-skin", requested)
-        if (data.get("requested_skin_id") != requested["skin_id"]
-                or data.get("requested_manifest_sha256") != requested["manifest_sha256"]
-                or data.get("acknowledged") is not True
-                or type(data.get("verified")) is not bool):
-            raise BridgeError("bridge_invalid_response", 502)
-        result = {
-            "requested_skin_id": data["requested_skin_id"],
-            "requested_manifest_sha256": data["requested_manifest_sha256"],
-            "acknowledged": True,
-            "verified": data["verified"],
-        }
-        if "device_skin" in data:
-            result["device_skin"] = round_skin(data["device_skin"])
-        if result["verified"] and result.get("device_skin") != requested:
-            raise BridgeError("bridge_invalid_response", 502)
-        if "reason" in data:
-            result["reason"] = safe_reason(data["reason"])
-        return result
+        return round_skin_update(data, requested)
 
     async def stage_round_wallpaper(
         self, *, item_id: str, sha256: str, size_bytes: int, url: str,
