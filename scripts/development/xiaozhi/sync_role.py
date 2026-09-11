@@ -23,8 +23,9 @@ def prepare(path, prompt, database, project):
     if not isinstance(before, dict) or before.get('read_config_from_api', False):
         raise ValueError('unsupported_config')
     memory = before.get('Memory', {}).get('LongMemory', {})
-    if (before.get('selected_module', {}).get('Memory') != 'LongMemory' or
-            Path(memory.get('database_path', '')).resolve() != Path(database).resolve() or
+    # 角色和声音属于独立配置域。这里只用保留的 LongMemory 配置块确认
+    # “这是本项目的那份小智 YAML”，不能要求它恰好是当前启用的记忆后端。
+    if (Path(memory.get('database_path', '')).resolve() != Path(database).resolve() or
             Path(memory.get('project_root', '')).resolve() != Path(project).resolve()):
         raise ValueError('memory_config_mismatch')
     if any(isinstance(token, (yaml.tokens.AnchorToken, yaml.tokens.AliasToken)) for token in yaml.scan(text)):

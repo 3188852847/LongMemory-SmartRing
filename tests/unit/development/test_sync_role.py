@@ -72,6 +72,15 @@ def test_wrong_memory_database_rejected(target):
     with pytest.raises(ValueError): module.sync(server, body | {'database':str(path.parent / 'wrong.db')})
 
 
+@pytest.mark.parametrize('provider', ['LongMemory', 'mem_local_short', 'nomem'])
+def test_role_domain_is_independent_of_selected_memory_backend(target, provider):
+    server, path, body = target
+    config = yaml.safe_load(path.read_text(encoding='utf-8'))
+    config['selected_module']['Memory'] = provider
+    path.write_text(yaml.safe_dump(config, allow_unicode=True), encoding='utf-8')
+    assert module.sync(server, body)['config_matches'] is False
+
+
 def test_stdin_cli_never_prints_config(target):
     server, path, body = target
     result = subprocess.run([sys.executable, spec.origin, str(server)], input=json.dumps(body).encode(), capture_output=True, timeout=5)
