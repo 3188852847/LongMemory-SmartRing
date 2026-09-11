@@ -73,3 +73,13 @@ def test_minimal_private_override_can_add_custom_tts(tmp_path):
     assert config["selected_module"]["TTS"] == "CustomTTS"
     assert config["TTS"]["CustomTTS"]["url"] == module.VOX_URL
     assert config["LLM"]["secret"] == "SYNTHETIC_ONLY"
+
+
+def test_sanotts_uses_separate_fixed_loopback_endpoint(tmp_path):
+    server, path, _ = make_server(tmp_path)
+    checked = module.sync(server, {"action": "check", "backend": "sanotts"})
+    result = module.sync(server, {"action": "apply", "backend": "sanotts",
+                                  "expected_digest": checked["digest"]})
+    config = yaml.safe_load(path.read_text(encoding="utf-8"))
+    assert config["TTS"]["CustomTTS"]["url"] == module.SANO_URL
+    assert result["service_url"] == module.SANO_URL

@@ -1,7 +1,7 @@
 """当前已经接通的 TTS 能力目录。
 
-候选模型只有完成本机适配和验证后才能加入；因此这里暂不登记 sanoTTS、
-CosyVoice 或 GPT-SoVITS。
+候选模型只有完成本机适配和验证后才能加入；因此这里暂不登记 CosyVoice
+或 GPT-SoVITS。
 """
 
 from longmemory.adapters.tts.contracts import TTSCapabilities
@@ -23,6 +23,14 @@ _CAPABILITIES = {
         delivery_modes=("buffered",),
         output_mime_types=("audio/wav",),
         controls=("reference_voice", "style_prompt"),
+    ),
+    "sanotts": TTSCapabilities(
+        provider_id="sanotts",
+        display_name="sanoTTS 中文小雅",
+        locality="local",
+        delivery_modes=("buffered",),
+        output_mime_types=("audio/wav",),
+        controls=("speaking_rate",),
     ),
 }
 

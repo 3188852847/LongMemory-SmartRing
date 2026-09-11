@@ -25,4 +25,11 @@ describe('系统诊断规则', () => {
     expect(codes).toContain('answer_model_unavailable');
     expect(codes).not.toContain('observed_paths_ready');
   });
+
+  test('sanoTTS 未就绪时与 VoxCPM2 分开提示', () => {
+    const loading = {...runtime, services:{...runtime.services, sanotts:'running' as const}};
+    const findings = diagnoseSystem(loading, config, device);
+    expect(findings.map(item => item.code)).toContain('sanotts_loading');
+    expect(findings.find(item => item.code === 'sanotts_loading')?.title).toContain('sanoTTS');
+  });
 });

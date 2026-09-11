@@ -16,7 +16,7 @@
 
 ## 当前状态
 
-VoxCPM2 本机 TTS 适配层已实现：固定权重在独立 CUDA 环境常驻，经环回 HTTP 接收小智 `CustomTTS` 文本并返回 WAV；真实本机请求得到 48 kHz、单声道、16 位有效音频。React 声音窗口可选择受控参考 WAV、表达指令、CFG 和质量档；声音方案由网页与圆屏下一次合成共享。聊天回答支持电脑朗读、停止和浏览器本地说话打断测试。圆屏实际声线、延迟与打断仍由用户实机验收。见 [VoxCPM2 指南](docs/guides/VoxCPM2独立试听.md)、[ADR-0025](docs/adr/0025-local-voxcpm2-tts-adapter.md)与 [ADR-0083](docs/adr/0083-local-voice-profile-web-playback-and-device-surface.md)。
+声音链已支持 EdgeTTS、VoxCPM2 和 sanoTTS 三个可替换后端。VoxCPM2 提供本地参考声线与风格参数；sanoTTS 通过项目外 Node/WASM 中文“小雅”模型提供快速基线，并按内容指纹固定版本。React 声音页支持状态核对、网页朗读与固定测试台，圆屏仍通过小智 `CustomTTS` 播放。三个适配器当前均为整段缓冲，圆屏实际声线、端到端延迟与打断仍需实机验收。见 [声音设置](docs/guides/声音设置.md)、[ADR-0025](docs/adr/0025-local-voxcpm2-tts-adapter.md)与 [ADR-0118](docs/adr/0118-external-sanotts-node-wasm-adapter.md)。
 
 P2 新增声音设置：四种 Edge TTS 音色、固定文本联网试听和确认保存。入口为“设置中心 → 声音”，保存 Edge 音色后需重启小智；实机听感待验收。见[声音设置](docs/guides/声音设置.md)。
 

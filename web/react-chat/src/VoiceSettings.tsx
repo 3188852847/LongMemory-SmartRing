@@ -6,7 +6,7 @@ import {SpeechPlayer} from './SpeechPlayer';
 type VoxProfile={version:number;reference:string|null;style:string;cfg_value:number;quality:'fast'|'balanced'|'quality'};
 
 interface Settings {
-  backend: 'edge' | 'voxcpm2' | 'unsupported'; voice: string | null; voices: string[];
+  backend: 'edge' | 'voxcpm2' | 'sanotts' | 'unsupported'; voice: string | null; voices: string[];
   digest: string; text: string; config_matches: boolean; editable: boolean; service_ready?: boolean | null;
   profile?:VoxProfile; profile_digest?:string; references?:Array<{id:string|null;label:string}>;
 }
@@ -60,7 +60,16 @@ export function VoiceSettings({api, disabled}: {api: ChatApi; disabled: boolean}
             <p>测试文本：{settings.text}</p><SpeechPlayer api={api} text={settings.text}/>
           </>}
         </>}
-        {settings?.backend === 'unsupported' && <Alert type="warning" title="当前 TTS 配置不受本控制台支持" description="请在统一启动面板重新选择并同步 EdgeTTS 或 VoxCPM2。"/>}
+        {settings?.backend === 'sanotts' && <>
+          <Alert type={settings.config_matches && settings.service_ready ? 'success' : 'warning'}
+            title={settings.config_matches ? '当前配置：sanoTTS 本地中文小雅' : 'sanoTTS 配置与本机适配契约不一致'}
+            description={settings.service_ready
+              ? '本机 WASM 服务已就绪；当前仍是整段 WAV 生成，不代表已经实现流式首声或中途取消。'
+              : '本机服务未就绪。请在统一启动面板选择 sanoTTS，并核对外部源码目录。'}/>
+          <p>测试文本：{settings.text}</p>
+          <SpeechPlayer api={api} text={settings.text}/>
+        </>}
+        {settings?.backend === 'unsupported' && <Alert type="warning" title="当前 TTS 配置不受本控制台支持" description="请在统一启动面板重新选择并同步 EdgeTTS、VoxCPM2 或 sanoTTS。"/>}
         {settings?.backend === 'edge' && <>
           <Alert type="info" title="试听会联网发送下方固定文本，不发送聊天记录。在电脑播放，不代表圆屏音量。保存后请重启小智。"/>
           <p>当前配置：EdgeTTS · {settings.voice}（不代表运行中的音色）</p>

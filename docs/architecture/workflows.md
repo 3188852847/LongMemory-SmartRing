@@ -16,6 +16,8 @@
 
 VoxCPM2 流程：启动面板选择本地后端 → 显式检查/同步私有 TTS 覆盖并备份 → 启动独立 Python 3.11 模型服务 → 校验固定权重并常驻 GPU → 本机健康检查通过 → 启动 Xiaozhi → `CustomTTS` POST 句子 → 返回 WAV → Xiaozhi 重采样并编码 Opus → 圆屏播放。停止面板会停止三个受管服务并释放显存；失败不自动切回 Edge。
 
+sanoTTS 流程：启动面板选择 sanoTTS → 核对项目外源码/中文模型目录和完整组合指纹 → 备份并把 Xiaozhi `CustomTTS` 固定到回环 18769 → 启动 Node/WASM 服务 → 健康检查通过 → 启动 Xiaozhi → 整句 POST → 22.05 kHz WAV → Xiaozhi 重采样并编码 Opus → 圆屏播放。停止面板会回收 Node 子进程；失败不静默切回 Edge 或 VoxCPM2。
+
 更新：2026-09-05。当前流程与拟议流程分开；本文解释执行顺序，不是命令手册。可复制命令见[使用说明](../guides/使用说明.md)，模块归属见[架构总览](overview.md)。
 
 ## 1. 当前：启动与停止
@@ -593,7 +595,7 @@ IP 变化时：刷新本机地址 → 选择圆屏可达网卡 → 显式确认�
 2. 清单只描述当前适配器真正交付的能力；底层模型支持流式但项目仍等待完整 WAV 时，必须显示 `buffered`。
 3. 所有者从设置中心选择四条固定合成文本之一；服务端拒绝任意测试正文，并按单次、串行、零重试执行。
 4. 测试记录首个可用音频、完成时间、字节数与有限 PCM WAV 波形检查，不读写聊天、L0–L3 或用户音频。
-5. 当前 EdgeTTS/VoxCPM2 的首个可用音频等于整段完成时间。未来提供器只有真正交付首块音频并实现协作取消后，才可声明 `audio_stream` / `cooperative`。
+5. 当前 EdgeTTS/VoxCPM2/sanoTTS 的首个可用音频等于整段完成时间。未来提供器只有真正交付首块音频并实现协作取消后，才可声明 `audio_stream` / `cooperative`。
 6. 圆屏网络、Opus 编码、设备缓冲、扬声器开始播放与 AEC 插话继续由圆屏分阶段链路验证，不与适配器测试混为一谈。
 
 操作见 [TTS 测试台使用说明](../guides/tts-benchmark.md)，边界见 [ADR-0117](../adr/0117-versioned-tts-capability-contract-and-benchmark.md)。

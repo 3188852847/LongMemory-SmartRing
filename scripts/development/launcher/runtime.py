@@ -17,6 +17,9 @@ from winjob import Job
 ROOT = Path(__file__).resolve().parents[3]
 VOICE_ROOT = Path(r"D:\ESP32-Workspace\xiaozhi-esp32-server\main\xiaozhi-server")
 VOXCPM_PORT = 18768
+SANOTTS_PORT = 18769
+DEFAULT_SANOTTS_SOURCE = Path(r"D:\ESP32-Workspace\sanoTTS")
+EXPECTED_SANOTTS_FINGERPRINT = "e7adac23b8ae2aefa1623eaa24f6f8049ddfd97e30efd5a377e0f239e6cd7605"
 WALLPAPER_DELIVERY_PORT = 8768
 DEFAULT_CHAT_PATH = "/chat-react"
 CONSOLE_PATHS = {"overview": "/overview", "chat": DEFAULT_CHAT_PATH, "device": "/device", "memories": "/memories", "settings": "/settings"}
@@ -45,6 +48,7 @@ class Options:
     embedding_model_dir: Path = DEFAULT_BGE_MODEL
     voice: bool = False
     tts_backend: str = "edge"
+    sanotts_source_root: Path = DEFAULT_SANOTTS_SOURCE
     vad_profile: str = "normal"
     voice_root: Path = VOICE_ROOT
     lan_ip: str = ""
@@ -97,7 +101,7 @@ def build_commands(options, uv=None):
         raise ValueError("未知记忆提取策略。")
     if options.memory_retrieval not in {"keyword", "hybrid"}:
         raise ValueError("未知记忆召回策略。")
-    if options.tts_backend not in {"edge", "voxcpm2"}:
+    if options.tts_backend not in {"edge", "voxcpm2", "sanotts"}:
         raise ValueError("未知语音后端。")
     if options.vad_profile not in {"normal", "noisy", "close_talk"}:
         raise ValueError("未知拾音环境档位。")
@@ -167,6 +171,24 @@ def build_commands(options, uv=None):
                 raise ValueError("VoxCPM2 独立环境或服务脚本不完整。")
             commands.append(("voxcpm2", [str(voxcpm_python), str(service),
                                            "--host", "127.0.0.1", "--port", str(VOXCPM_PORT)],
+                             service.parent))
+        elif options.tts_backend == "sanotts":
+            service = root / "scripts/development/sanotts/service.mjs"
+            source = options.sanotts_source_root.resolve()
+            required = [
+                service,
+                source / "web/snt_voice.js",
+                source / "web/snt_voice.wasm",
+                source / "web/voices/chinese-xiaoya/meta.json",
+            ]
+            if not all(path.is_file() for path in required):
+                raise ValueError("sanoTTS 源码或中文模型不完整；请核对外部目录。")
+            node = shutil.which("node")
+            if not node:
+                raise ValueError("未找到已有 Node.js；启动器不会自动安装依赖。")
+            commands.append(("sanotts", [node, str(service), "--host", "127.0.0.1",
+                                          "--port", str(SANOTTS_PORT), "--source", str(source),
+                                          "--expected-fingerprint", EXPECTED_SANOTTS_FINGERPRINT],
                              service.parent))
         commands.append(("voice", [str(python), str(Path(__file__).with_name("voice.py")),
                                   str(root), str(options.voice_root.resolve()), str(options.database.resolve()),
@@ -239,7 +261,7 @@ class Manager:
             return "exited"
         return "ready" if ready else "running"
 
-    def publish_status(self, phase, *, console_ready=False, voxcpm_ready=False):
+    def publish_status(self, phase, *, console_ready=False, tts_ready=False):
         """原子发布不含正文/密钥的本机诊断快照；失败不能影响主服务。"""
         if self.status_path is None or not self.instance:
             return
@@ -252,7 +274,14 @@ class Manager:
             "services": {
                 "console": self._service_state("console", ready=console_ready),
                 "voice": self._service_state("voice"),
-                "voxcpm2": self._service_state("voxcpm2", ready=voxcpm_ready),
+                "voxcpm2": self._service_state(
+                    "voxcpm2", ready=tts_ready and self.options is not None
+                    and self.options.tts_backend == "voxcpm2"
+                ),
+                "sanotts": self._service_state(
+                    "sanotts", ready=tts_ready and self.options is not None
+                    and self.options.tts_backend == "sanotts"
+                ),
             },
         }
         temporary = self.status_path.with_suffix(".tmp")
@@ -276,6 +305,8 @@ class Manager:
                 require_free(host, port)
             if options.tts_backend == "voxcpm2":
                 require_no_listener("127.0.0.1", VOXCPM_PORT)
+            elif options.tts_backend == "sanotts":
+                require_no_listener("127.0.0.1", SANOTTS_PORT)
             # 端口均空闲后才检查并同步小智私有配置，避免给外部正在运行的
             # 语音服务换地址、声音、模型、记忆后端或拾音档位。先完成只读检查，
             # 再逐项备份写入；格式错误不会造成“改了一半才发现无法检查”。
@@ -358,19 +389,25 @@ class Manager:
         finally:
             conn.close()
 
-    def voxcpm_ready(self):
-        if "voxcpm2" not in self.services or self.services["voxcpm2"].process.poll() is not None:
+    def local_tts_ready(self):
+        backend = self.options.tts_backend if self.options else ""
+        port = {"voxcpm2": VOXCPM_PORT, "sanotts": SANOTTS_PORT}.get(backend)
+        if port is None or backend not in self.services or self.services[backend].process.poll() is not None:
             return False
-        conn = http.client.HTTPConnection("127.0.0.1", VOXCPM_PORT, timeout=0.25)
+        conn = http.client.HTTPConnection("127.0.0.1", port, timeout=0.25)
         try:
             conn.request("GET", "/health")
             response = conn.getresponse()
             body = json.loads(response.read(4096))
-            return response.status == 200 and body.get("ready") is True and body.get("provider") == "voxcpm2"
+            return response.status == 200 and body.get("ready") is True and body.get("provider") == backend
         except (OSError, http.client.HTTPException, json.JSONDecodeError):
             return False
         finally:
             conn.close()
+
+    def voxcpm_ready(self):
+        """保留旧调用方名称；实际按当前本地 TTS 后端检查。"""
+        return self.local_tts_ready()
 
     def stop(self):
         self.publish_status("stopping")

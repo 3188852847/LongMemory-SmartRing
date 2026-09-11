@@ -1,7 +1,10 @@
 """防火墙测试不执行 UAC，不改变任何真实规则。"""
 import base64
 import importlib
+import os
 from pathlib import Path
+import subprocess
+import sys
 from types import SimpleNamespace
 
 import pytest
@@ -57,12 +60,20 @@ def test_inspection_is_readonly(firewall, monkeypatch):
 
 
 def test_panel_constructs_without_queries(firewall, monkeypatch, tmp_path):
-    import tkinter as tk
-    from firewall_panel import open_panel
-    root = tk.Tk()
-    root.withdraw()
-    try:
-        open_panel(root, '192.168.1.2', tmp_path)
-        root.update_idletasks()
-    finally:
-        root.destroy()
+    # Windows Tcl 会把首次 Tk 初始化的库路径缓存到进程全局；另一个 UI 测试
+    # 已销毁 root 后再次创建可能把中文路径乱码化。真实面板本来也在独立进程
+    # 中打开，因此用全新解释器验证构造更贴近日常入口，且不触发任何查询。
+    directory = Path(__file__).resolve().parents[3] / 'scripts/development/launcher'
+    code = (
+        "import sys,tkinter as tk;"
+        f"sys.path.insert(0,{str(directory)!r});"
+        "from firewall_panel import open_panel;"
+        "root=tk.Tk();root.withdraw();"
+        f"window=open_panel(root,'192.168.1.2',{str(tmp_path)!r});"
+        "root.update_idletasks();root.destroy()"
+    )
+    result = subprocess.run(
+        [sys.executable, '-c', code], cwd=directory, env=os.environ.copy(),
+        capture_output=True, timeout=10,
+    )
+    assert result.returncode == 0, 'firewall panel subprocess failed'

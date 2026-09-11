@@ -141,7 +141,7 @@ export interface NaturalInterruptionDiagnostic {
 export interface VoiceLatency {
   version:1;
   state:'preparing_memory'|'waiting_for_model'|'waiting_for_sentence'|'tts_running'|'audio_ready'|'first_audio_sent';
-  started_at:string; tts_backend:'edge'|'voxcpm2'|'other';
+  started_at:string; tts_backend:'edge'|'voxcpm2'|'sanotts'|'other';
   timings_ms:{
     memory_ready_ms:number|null; llm_requested_ms:number|null; llm_first_output_ms:number|null;
     tts_started_ms:number|null; audio_ready_ms:number|null; first_audio_sent_ms:number|null;
@@ -176,7 +176,7 @@ export interface RuntimeStatus {
   reason:string|null;
   updated_at?:string;
   age_seconds?:number;
-  services:Partial<Record<'console'|'voice'|'voxcpm2','disabled'|'running'|'ready'|'exited'>>;
+  services:Partial<Record<'console'|'voice'|'voxcpm2'|'sanotts','disabled'|'running'|'ready'|'exited'>>;
 }
 export interface ModelProfile {
   id:'campus'|'official'; label:string; file_exists:boolean; base_url:string; model:string;

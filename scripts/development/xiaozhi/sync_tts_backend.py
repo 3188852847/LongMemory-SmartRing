@@ -1,4 +1,4 @@
-"""在 EdgeTTS 与本机 VoxCPM2 服务之间检查/切换小智私有配置。
+"""在 EdgeTTS 与本机隔离 TTS 服务之间检查/切换小智私有配置。
 
 脚本不启动服务、不读取或输出密钥；apply 前要求调用方提供配置摘要。
 """
@@ -14,7 +14,9 @@ import sys
 from sync_role import commit_change
 
 VOX_URL = "http://127.0.0.1:18768/v1/audio/speech"
-BACKENDS = {"edge", "voxcpm2"}
+SANO_URL = "http://127.0.0.1:18769/v1/audio/speech"
+CUSTOM_URLS = {"voxcpm2": VOX_URL, "sanotts": SANO_URL}
+BACKENDS = {"edge", *CUSTOM_URLS}
 
 
 def _mapping_value(node, key, yaml):
@@ -50,7 +52,7 @@ def prepare(path: Path, backend: str):
                      json.dumps(selected_name, ensure_ascii=False))]
     expected = copy.deepcopy(config)
     expected.setdefault("selected_module", {})["TTS"] = selected_name
-    if backend == "voxcpm2":
+    if backend in CUSTOM_URLS:
         tts_node = _mapping_value(root, "TTS", yaml)
         tts = expected.get("TTS")
         if not isinstance(tts, dict):
@@ -64,7 +66,7 @@ def prepare(path: Path, backend: str):
             raise ValueError("unsupported_custom_tts")
         params = copy.deepcopy(params) if params is not None else {}
         params.update(input="{prompt_text}", response_format="wav", stream=False)
-        custom.update(type="custom", method="POST", url=VOX_URL, params=params,
+        custom.update(type="custom", method="POST", url=CUSTOM_URLS[backend], params=params,
                       format="wav", output_dir=custom.get("output_dir", "tmp/"), tts_timeout=90)
         custom.setdefault("headers", {})
         tts["CustomTTS"] = custom
@@ -97,7 +99,7 @@ def sync(server: Path, body: dict):
     path = server / "data/.config.yaml"
     original, updated, matches = prepare(path, body["backend"])
     result = commit_change(path, body, original, updated, matches, backup_label="tts")
-    return result | {"backend": body["backend"], "service_url": VOX_URL if body["backend"] == "voxcpm2" else None}
+    return result | {"backend": body["backend"], "service_url": CUSTOM_URLS.get(body["backend"])}
 
 
 if __name__ == "__main__":

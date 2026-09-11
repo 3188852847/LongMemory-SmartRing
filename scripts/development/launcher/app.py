@@ -7,7 +7,10 @@ from tkinter import filedialog, messagebox, ttk
 import webbrowser
 from pathlib import Path
 
-from runtime import DEFAULT_BGE_MODEL, Manager, Options, ROOT, Singleton, VOICE_ROOT, console_url
+from runtime import (
+    DEFAULT_BGE_MODEL, DEFAULT_SANOTTS_SOURCE, Manager, Options, ROOT, Singleton,
+    VOICE_ROOT, console_url,
+)
 from network import local_addresses, config_action
 from preferences import (
     DEFAULT_SESSION_ALLOW_MEMORY_DELETE,
@@ -46,7 +49,11 @@ def _summary_text(voice, start_page, role, extraction, retrieval, tts, allow_del
     role_label = "爱莉希雅风格" if role == "elysia_v1" else "普通助手"
     extraction_label = "模型辅助提取" if extraction == "llm" else "规则提取"
     retrieval_label = "关键词＋语义召回" if retrieval == "hybrid" else "关键词召回"
-    sound_label = "VoxCPM2 本地声音" if tts == "voxcpm2" else "EdgeTTS 联网声音"
+    sound_label = {
+        "edge": "EdgeTTS 联网声音",
+        "voxcpm2": "VoxCPM2 本地声音",
+        "sanotts": "sanoTTS 本地小雅",
+    }[tts]
     delete_label = "允许单条删除" if allow_delete else "不开放删除"
     consolidation_label = "低频整理已开启" if consolidation else "低频整理关闭"
     backend_label = {
@@ -83,6 +90,8 @@ def _failure_hint(exited):
             hint = "VoxCPM2 在限定时间内未就绪；先核对声音环境、模型文件、CUDA 和 18768 端口"
         elif name == "voxcpm2":
             hint = "本地声音服务已退出；先核对声音环境、模型文件、CUDA 和 18768 端口"
+        elif name == "sanotts":
+            hint = "sanoTTS 已退出；先核对外部源码/中文模型、Node.js 和 18769 端口"
         elif name == "voice":
             hint = "圆屏语音进程意外退出；先核对小智配置、网络地址和 8000/8003/8766 端口"
         elif name == "console":
@@ -256,13 +265,20 @@ def main():
     role = tk.StringVar(value=saved["role"])
     extraction_labels = {"rules": "规则提取（基础/对照）", "llm": "模型辅助提取（日常推荐）"}
     retrieval_labels = {"keyword": "关键词召回（基础/对照）", "hybrid": "关键词＋BGE 混合召回（日常推荐）"}
-    tts_labels = {"edge": "EdgeTTS（联网标准音色）", "voxcpm2": "VoxCPM2（本地 plain）"}
+    tts_labels = {
+        "edge": "EdgeTTS（联网标准音色）",
+        "voxcpm2": "VoxCPM2（本地 plain）",
+        "sanotts": "sanoTTS（本地中文小雅）",
+    }
     memory_extraction = tk.StringVar(value=extraction_labels[saved["memory_extraction"]])
     memory_retrieval = tk.StringVar(value=retrieval_labels[saved["memory_retrieval"]])
     allow_memory_delete = tk.BooleanVar(value=DEFAULT_SESSION_ALLOW_MEMORY_DELETE)
     memory_consolidation = tk.BooleanVar(value=saved["memory_consolidation"])
     embedding_model = tk.StringVar(value=saved["embedding_model_dir"] or str(DEFAULT_BGE_MODEL))
     tts_backend = tk.StringVar(value=tts_labels[saved["tts_backend"]])
+    sanotts_source = tk.StringVar(
+        value=saved["sanotts_source_root"] or str(DEFAULT_SANOTTS_SOURCE)
+    )
     vad_profile_labels = {
         "普通环境（标准灵敏度）": "normal",
         "嘈杂环境（过滤较远人声）": "noisy",
@@ -312,7 +328,11 @@ def main():
         return "hybrid" if "BGE" in memory_retrieval.get() else "keyword"
 
     def selected_tts():
-        return "voxcpm2" if tts_backend.get().startswith("VoxCPM2") else "edge"
+        if tts_backend.get().startswith("VoxCPM2"):
+            return "voxcpm2"
+        if tts_backend.get().startswith("sanoTTS"):
+            return "sanotts"
+        return "edge"
 
     def selected_vad_profile():
         return vad_profile_labels[vad_profile.get()]
@@ -331,6 +351,7 @@ def main():
             "memory_consolidation": memory_consolidation.get(),
             "embedding_model_dir": embedding_model.get().strip(),
             "tts_backend": selected_tts(),
+            "sanotts_source_root": sanotts_source.get().strip(),
             "vad_profile": selected_vad_profile(),
             "http_risk_ack": consent.get(),
         }
@@ -454,7 +475,7 @@ def main():
     tts_row.pack(fill="x")
     ttk.Label(tts_row, text="圆屏声音：").pack(side="left")
     ttk.Combobox(tts_row, textvariable=tts_backend,
-                 values=("EdgeTTS（联网标准音色）", "VoxCPM2（本地 plain）"),
+                 values=tuple(tts_labels.values()),
                  state="readonly", width=27).pack(side="left")
 
     settings_status = tk.StringVar(value="高级设置只在下次启动时生效。")
@@ -469,7 +490,11 @@ def main():
             if checked["config_matches"]:
                 settings_status.set("小智声音配置已经匹配；运行中是否生效仍需重启验证。")
                 return
-            label = "VoxCPM2 本地声音" if backend == "voxcpm2" else "EdgeTTS"
+            label = {
+                "edge": "EdgeTTS",
+                "voxcpm2": "VoxCPM2 本地声音",
+                "sanotts": "sanoTTS 本地中文小雅",
+            }[backend]
             if messagebox.askyesno("同步圆屏声音？",
                     f"将小智 TTS 切换为 {label}。\n只修改 TTS 选择与固定接口字段，原配置会备份；不会启动服务。"):
                 tts_config_action(Path(server.get()), ROOT, backend, apply=True,
@@ -479,6 +504,14 @@ def main():
             messagebox.showerror("未完成同步", "TTS 配置检查或同步失败；未显示私有配置内容。")
 
     ttk.Button(tts_row, text="检查并同步", command=sync_tts).pack(side="left", padx=8)
+    sano_row = ttk.Frame(sound_box)
+    sano_row.pack(fill="x", pady=(10, 0))
+    ttk.Label(sano_row, text="sanoTTS 外部目录：").pack(side="left")
+    ttk.Entry(sano_row, textvariable=sanotts_source).pack(side="left", fill="x", expand=True)
+    ttk.Button(sano_row, text="选择目录", command=lambda: (
+        sanotts_source.set(path) if (path := filedialog.askdirectory(
+            parent=window, initialdir=sanotts_source.get() or str(DEFAULT_SANOTTS_SOURCE))) else None
+    )).pack(side="left", padx=(8, 0))
     vad_row = ttk.Frame(sound_box)
     vad_row.pack(fill="x", pady=(10, 0))
     ttk.Label(vad_row, text="拾音环境：").pack(side="left")
@@ -635,6 +668,7 @@ def main():
             options = Options(database=Path(database.get()), voice=voice.get(), voice_root=Path(server.get()),
                               lan_ip=ip.get().strip(), role=role.get(), consent=consent.get(),
                               tts_backend=selected_tts(),
+                              sanotts_source_root=Path(sanotts_source.get()),
                               vad_profile=selected_vad_profile(),
                               memory_extraction=selected_extraction(),
                               memory_retrieval=selected_retrieval(),
@@ -657,8 +691,12 @@ def main():
             set_component("console", "启动中", "busy")
             set_component("voice", "启动中" if voice.get() else "本次未启用",
                           "busy" if voice.get() else "idle")
-            set_component("speech", ("VoxCPM2 加载中" if selected_tts() == "voxcpm2"
-                                      else "EdgeTTS 已选择") if voice.get() else "本次未启用",
+            speech_starting = {
+                "edge": "EdgeTTS 已选择",
+                "voxcpm2": "VoxCPM2 加载中",
+                "sanotts": "sanoTTS 加载中",
+            }[selected_tts()]
+            set_component("speech", speech_starting if voice.get() else "本次未启用",
                           "busy" if voice.get() else "idle")
             set_component("browser", "等待控制台", "busy")
             model_label = "官方 DeepSeek" if selected_model_profile() == "official" else "学校模型"
@@ -693,20 +731,23 @@ def main():
                 if not state["opened"]:
                     state["opened"] = True
                     open_page()
-                voxcpm_is_ready = (manager.voxcpm_ready()
-                                    if manager.options.voice
-                                    and manager.options.tts_backend == "voxcpm2" else False)
-                if manager.options.voice and manager.options.tts_backend == "voxcpm2":
-                    suffix = ("；VoxCPM2 与语音进程运行中" if voxcpm_is_ready
-                              else "；VoxCPM2 正在加载，圆屏语音尚未就绪")
+                local_tts_ready = (manager.local_tts_ready()
+                                   if manager.options.voice
+                                   and manager.options.tts_backend in {"voxcpm2", "sanotts"}
+                                   else False)
+                if manager.options.voice and manager.options.tts_backend in {"voxcpm2", "sanotts"}:
+                    label = "VoxCPM2" if manager.options.tts_backend == "voxcpm2" else "sanoTTS"
+                    suffix = (f"；{label} 与语音进程运行中" if local_tts_ready
+                              else f"；{label} 正在加载，圆屏语音尚未就绪")
                 else:
                     suffix = "；语音进程运行中，设备连接请在网页查看" if manager.options.voice else ""
                 set_component("console", "已就绪", "good")
                 set_component("voice", "小智进程运行" if manager.options.voice else "本次未启用",
                               "good" if manager.options.voice else "idle")
-                if manager.options.voice and manager.options.tts_backend == "voxcpm2":
-                    set_component("speech", "VoxCPM2 已就绪" if voxcpm_is_ready else "VoxCPM2 加载中",
-                                  "good" if voxcpm_is_ready else "busy")
+                if manager.options.voice and manager.options.tts_backend in {"voxcpm2", "sanotts"}:
+                    label = "VoxCPM2" if manager.options.tts_backend == "voxcpm2" else "sanoTTS"
+                    set_component("speech", f"{label} 已就绪" if local_tts_ready else f"{label} 加载中",
+                                  "good" if local_tts_ready else "busy")
                 elif manager.options.voice:
                     set_component("speech", "EdgeTTS 已选择", "good")
                 else:
@@ -717,7 +758,7 @@ def main():
                 manager.publish_status(
                     "ready",
                     console_ready=True,
-                    voxcpm_ready=voxcpm_is_ready,
+                    tts_ready=local_tts_ready,
                 )
             elif time.monotonic() - state["started"] > 90:
                 stopped = stop(False)

@@ -56,6 +56,23 @@ def test_voxcpm_status_is_read_only_and_sanitized(tmp_path):
         module.settings(server, body | {'action': 'apply', 'voice': 'plain'})
 
 
+def test_sanotts_status_is_read_only_and_sanitized(tmp_path):
+    server = tmp_path
+    config = {'prompt': 'synthetic', 'selected_module': {'Memory': 'LongMemory', 'TTS': 'CustomTTS'},
+              'Memory': {'LongMemory': {'database_path': str(tmp_path / 'demo.db'),
+                                        'project_root': str(tmp_path / 'project')}},
+              'TTS': {'CustomTTS': {'type': 'custom', 'method': 'POST', 'url': module.SANO_URL,
+                                     'format': 'wav', 'params': {'input': '{prompt_text}',
+                                                                 'response_format': 'wav', 'stream': False}}}}
+    path = server / 'data/.config.yaml'; path.parent.mkdir(parents=True)
+    path.write_text(yaml.safe_dump(config, allow_unicode=True), encoding='utf-8')
+    body = {'action': 'check', 'database': str(tmp_path / 'demo.db'),
+            'project': str(tmp_path / 'project')}
+    result = module.settings(server, body)
+    assert result['backend'] == 'sanotts' and result['voice'] == 'xiaoya'
+    assert result['config_matches'] is True and result['editable'] is False
+
+
 def test_preview_fixed_text_and_size_limit():
     calls = []
     class Fake:

@@ -11,13 +11,14 @@ from sync_role import commit_change, prepare
 VOICES = ('zh-CN-XiaoxiaoNeural', 'zh-CN-XiaoyiNeural', 'zh-CN-YunxiNeural', 'zh-CN-YunjianNeural')
 TEXT = '你好，很高兴见到你。今天过得怎么样？我们慢慢聊。'
 VOX_URL = 'http://127.0.0.1:18768/v1/audio/speech'
+SANO_URL = 'http://127.0.0.1:18769/v1/audio/speech'
 
 
-def _voxcpm_contract(config):
+def _custom_contract(config, url):
     custom = config.get('TTS', {}).get('CustomTTS', {})
     params = custom.get('params', {}) if isinstance(custom, dict) else {}
     return (isinstance(custom, dict) and custom.get('type') == 'custom'
-            and custom.get('method') == 'POST' and custom.get('url') == VOX_URL
+            and custom.get('method') == 'POST' and custom.get('url') == url
             and custom.get('format') == 'wav' and isinstance(params, dict)
             and params.get('input') == '{prompt_text}'
             and params.get('response_format') == 'wav' and params.get('stream') is False)
@@ -37,8 +38,12 @@ def settings(server, body):
     if selected == 'CustomTTS':
         if body.get('action') != 'check':
             raise ValueError('unsupported_tts_operation')
-        return {'backend': 'voxcpm2', 'voice': 'plain', 'voices': [], 'digest': digest,
-                'text': TEXT, 'config_matches': _voxcpm_contract(before), 'editable': False}
+        custom_url = before.get('TTS', {}).get('CustomTTS', {}).get('url')
+        backend, voice = ({VOX_URL: ('voxcpm2', 'plain'), SANO_URL: ('sanotts', 'xiaoya')}
+                          .get(custom_url, ('unsupported', None)))
+        return {'backend': backend, 'voice': voice, 'voices': [], 'digest': digest,
+                'text': TEXT, 'config_matches': _custom_contract(before, custom_url)
+                if backend != 'unsupported' else False, 'editable': False}
     if selected != 'EdgeTTS':
         if body.get('action') != 'check':
             raise ValueError('unsupported_tts_operation')

@@ -29,7 +29,6 @@ http://127.0.0.1:8767/settings?tab=voice
 
 ## 当前限制
 
-- EdgeTTS 与 VoxCPM2 的项目适配器目前都是完整音频缓冲。
+- EdgeTTS、VoxCPM2 与 sanoTTS 的项目适配器目前都是完整音频缓冲。
 - 页面不保存历史或给后端自动排名，避免把少量非受控运行包装成正式性能实验。
-- sanoTTS、CosyVoice 和 GPT-SoVITS 只有完成独立适配、许可核对和本机验证后才会出现在能力目录。
-
+- sanoTTS 已完成独立适配和本机固定句验证；上游源码/模型仍在项目外。CosyVoice 和 GPT-SoVITS 只有完成相同边界后才会出现在能力目录。

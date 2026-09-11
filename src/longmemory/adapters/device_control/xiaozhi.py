@@ -60,7 +60,7 @@ def voice_latency(value: object) -> dict:
     if value.get("state") not in {
         "preparing_memory", "waiting_for_model", "waiting_for_sentence",
         "tts_running", "audio_ready", "first_audio_sent",
-    } or value.get("tts_backend") not in {"edge", "voxcpm2", "other"}:
+    } or value.get("tts_backend") not in {"edge", "voxcpm2", "sanotts", "other"}:
         raise BridgeError("bridge_invalid_response", 502)
     if not isinstance(value.get("started_at"), str) or len(value["started_at"]) > 64:
         raise BridgeError("bridge_invalid_response", 502)

@@ -72,7 +72,8 @@ def test_launcher_status_snapshot_contains_only_bounded_runtime_facts(options):
     saved = json.loads(manager.status_path.read_text(encoding="utf-8"))
     assert saved["launcher_instance"] == "synthetic-instance"
     assert saved["services"] == {
-        "console": "ready", "voice": "running", "voxcpm2": "disabled"
+        "console": "ready", "voice": "running", "voxcpm2": "disabled",
+        "sanotts": "disabled",
     }
     assert set(saved) == {
         "schema_version", "launcher_instance", "launcher_pid", "updated_at", "phase", "services"
@@ -188,6 +189,30 @@ def test_voxcpm_commands_use_isolated_environment_and_start_before_voice(options
     assert commands[2][1][-2:] == ["voxcpm2", "longmemory"]
 
 
+def test_sanotts_commands_use_external_source_and_start_before_voice(options, monkeypatch):
+    voice = options.root / "voice"; (voice / ".venv/Scripts").mkdir(parents=True)
+    (voice / ".venv/Scripts/python.exe").touch()
+    source = options.root / "external-sanotts"
+    for relative in ("web/snt_voice.js", "web/snt_voice.wasm",
+                     "web/voices/chinese-xiaoya/meta.json"):
+        target = source / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.touch()
+    service = options.root / "scripts/development/sanotts/service.mjs"
+    service.parent.mkdir(parents=True); service.touch()
+    original_which = runtime.shutil.which
+    monkeypatch.setattr(runtime.shutil, "which", lambda name: "synthetic-node" if name == "node" else original_which(name))
+    commands = runtime.build_commands(replace(
+        options, voice=True, voice_root=voice, lan_ip="192.168.1.2",
+        tts_backend="sanotts", sanotts_source_root=source,
+    ), uv="synthetic-uv")
+    assert [item[0] for item in commands] == ["console", "sanotts", "voice"]
+    assert commands[1][1][:2] == ["synthetic-node", str(service)]
+    assert commands[1][1][-4:-2] == ["--source", str(source.resolve())]
+    assert commands[1][1][-2:] == ["--expected-fingerprint", runtime.EXPECTED_SANOTTS_FINGERPRINT]
+    assert commands[2][1][-2:] == ["sanotts", "longmemory"]
+
+
 @pytest.mark.parametrize("mismatch", [None, "database_path", "project_root", "python_executable"])
 def test_voice_shared_paths_are_checked_without_loading_private_config(options, mismatch):
     spec = importlib.util.spec_from_file_location("launcher_voice_test", DIRECTORY / "voice.py")
@@ -226,6 +251,8 @@ def test_voice_tts_contract_is_strict():
         "type": "custom", "method": "POST", "url": "http://127.0.0.1:18768/v1/audio/speech",
         "format": "wav", "params": {"input": "{prompt_text}", "response_format": "wav", "stream": False}}}}
     assert voice.tts_matches(config, "voxcpm2")
+    config["TTS"]["CustomTTS"]["url"] = "http://127.0.0.1:18769/v1/audio/speech"
+    assert voice.tts_matches(config, "sanotts")
     config["TTS"]["CustomTTS"]["url"] = "http://example.invalid"
     assert not voice.tts_matches(config, "voxcpm2")
     assert voice.tts_matches({"selected_module": {"TTS": "EdgeTTS"}}, "edge")

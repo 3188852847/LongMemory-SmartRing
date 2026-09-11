@@ -57,7 +57,9 @@ def test_installed_observer_measures_model_tts_and_audio_without_text_in_logs():
 
     voice_latency.install_voice_latency(Connection)
     connection = Connection()
-    connection.config = {"selected_module": {"TTS": "CustomTTS"}}
+    connection.config = {"selected_module": {"TTS": "CustomTTS"}, "TTS": {"CustomTTS": {
+        "url": "http://127.0.0.1:18768/v1/audio/speech"
+    }}}
     connection.logger = Logger()
     connection.llm, connection.tts = LLM(), TTS()
     connection.chat("private-question")

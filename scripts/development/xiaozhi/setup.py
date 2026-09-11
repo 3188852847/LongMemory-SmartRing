@@ -21,6 +21,10 @@ DEFAULT_FFMPEG = Path(
     r"C:\Users\12280\AppData\Local\Microsoft\WinGet\Packages"
     r"\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\ffmpeg-8.1.2-full_build\bin"
 )
+CUSTOM_TTS_URLS = {
+    "voxcpm2": "http://127.0.0.1:18768/v1/audio/speech",
+    "sanotts": "http://127.0.0.1:18769/v1/audio/speech",
+}
 LEGACY_MEMORY_PROVIDER_SHA256 = {
     # G2 只保存三层召回数量、尚未保存条目索引的已发布回执版。
     "4a61e6b6bbab081304582b10516e3213d569535ce094e35996b6d4789ef0469a",
@@ -73,15 +77,15 @@ def validate_tts_config(config: dict, backend: str) -> None:
         if selected != "EdgeTTS":
             raise SetupError("当前启动选择 EdgeTTS，但私有配置尚未同步为 EdgeTTS。")
         return
-    if backend != "voxcpm2":
-        raise SetupError("--tts-backend 只允许 edge 或 voxcpm2。")
+    if backend not in CUSTOM_TTS_URLS:
+        raise SetupError("--tts-backend 只允许 edge、voxcpm2 或 sanotts。")
 
     custom = config.get("TTS", {}).get("CustomTTS", {})
     params = custom.get("params", {}) if isinstance(custom, dict) else {}
     expected = {
         "type": "custom",
         "method": "POST",
-        "url": "http://127.0.0.1:18768/v1/audio/speech",
+        "url": CUSTOM_TTS_URLS[backend],
         "format": "wav",
     }
     if (
@@ -93,7 +97,7 @@ def validate_tts_config(config: dict, backend: str) -> None:
         or params.get("response_format") != "wav"
         or params.get("stream") is not False
     ):
-        raise SetupError("当前启动选择 VoxCPM2，但 CustomTTS 配置与本机适配服务契约不一致。")
+        raise SetupError(f"当前启动选择 {backend}，但 CustomTTS 配置与本机适配服务契约不一致。")
 
 
 def validate_config(config: dict, lan_ip: str | None = None, tts_backend: str = "edge") -> dict:
@@ -240,7 +244,7 @@ def main() -> int:
     parser.add_argument("--allow-insecure-http", action="store_true")
     parser.add_argument("--lan-ip", help="显式启用局域网演示，填写电脑有线 IPv4 地址")
     parser.add_argument("--device-control", action="store_true", help="显式开启本机 8766 音量验证接口")
-    parser.add_argument("--tts-backend", choices=["edge", "voxcpm2"], default="edge",
+    parser.add_argument("--tts-backend", choices=["edge", "voxcpm2", "sanotts"], default="edge",
                         help="核对本次实际选择的声音后端；默认 edge")
     args = parser.parse_args()
     try:

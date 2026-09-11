@@ -30,6 +30,7 @@ export function diagnoseSystem(runtime?:RuntimeStatus, config?:Config, device?:D
   else if (runtime?.services.voice === 'running' && device && !device.ready) items.push({code:'voice_running_device_offline',tone:'warning',title:'小智进程运行，但圆屏未连接',detail:'先核对圆屏网络与 OTA/WebSocket 地址；无需重新启动文字控制台。',path:'/device',action:'核对圆屏连接'});
 
   if (runtime?.services.voxcpm2 === 'running') items.push({code:'voxcpm_loading',tone:'info',title:'VoxCPM2 进程仍在加载',detail:'本地模型进程存在，但健康检查尚未通过；首次载入权重可能需要等待。',path:'/settings?tab=voice',action:'查看声音设置'});
+  if (runtime?.services.sanotts === 'running') items.push({code:'sanotts_loading',tone:'info',title:'sanoTTS 进程仍在加载',detail:'本机 WASM 服务进程存在，但健康检查尚未通过；请核对外部模型目录。',path:'/settings?tab=voice',action:'查看声音设置'});
   if (items.length === 0 && runtime?.state === 'ready' && config?.model_health?.state === 'available' && device?.ready) {
     items.push({code:'observed_paths_ready',tone:'success',title:'当前可观测链路正常',detail:'启动器、回答模型和圆屏连接均有当前证据；这不等于回答质量或设备播放效果已经验收。'});
   }

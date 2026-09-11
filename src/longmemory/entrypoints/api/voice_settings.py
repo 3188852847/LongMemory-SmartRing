@@ -23,6 +23,7 @@ SPEECH_FAILURES = {
     'unavailable': ('voice_environment_unavailable', 503),
     'voice_operation_failed': ('tts_config_unavailable', 503),
 }
+LOCAL_TTS = {"voxcpm2": 18768, "sanotts": 18769}
 
 
 def speech_failure(error):
@@ -83,8 +84,8 @@ class VoiceSettings:
         return self.profile()
 
     @staticmethod
-    def voxcpm_speech(text):
-        connection = http.client.HTTPConnection('127.0.0.1', 18768, timeout=30)
+    def local_speech(backend, text):
+        connection = http.client.HTTPConnection('127.0.0.1', LOCAL_TTS[backend], timeout=30)
         payload = json.dumps({'input': text, 'response_format': 'wav', 'stream': False}).encode()
         try:
             connection.request('POST', '/v1/audio/speech', body=payload,
@@ -99,18 +100,23 @@ class VoiceSettings:
             connection.close()
 
     @staticmethod
-    def voxcpm_ready():
+    def local_ready(backend):
         """只读取固定环回健康端点；失败表示未就绪，不把底层异常返回页面。"""
-        connection = http.client.HTTPConnection('127.0.0.1', 18768, timeout=0.5)
+        connection = http.client.HTTPConnection('127.0.0.1', LOCAL_TTS[backend], timeout=0.5)
         try:
             connection.request('GET', '/health')
             response = connection.getresponse()
             body = json.loads(response.read(4096))
-            return response.status == 200 and body.get('ready') is True and body.get('provider') == 'voxcpm2'
+            return response.status == 200 and body.get('ready') is True and body.get('provider') == backend
         except (OSError, http.client.HTTPException, json.JSONDecodeError):
             return False
         finally:
             connection.close()
+
+    @staticmethod
+    def voxcpm_ready():
+        """兼容旧测试与调用方。"""
+        return VoiceSettings.local_ready('voxcpm2')
 
     async def call(self, body):
         if self.lock.locked():
@@ -139,8 +145,9 @@ class VoiceSettings:
             if body['action'] == 'preview':
                 return result.stdout
             value = json.loads(result.stdout)
+            if body['action'] == 'check' and value.get('backend') in LOCAL_TTS:
+                value['service_ready'] = await asyncio.to_thread(self.local_ready, value['backend'])
             if body['action'] == 'check' and value.get('backend') == 'voxcpm2':
-                value['service_ready'] = await asyncio.to_thread(self.voxcpm_ready)
                 profile, digest = self.profile()
                 value.update(profile=profile, profile_digest=digest, references=self.references(), editable=True)
             capabilities = capabilities_for(value.get('backend'))
@@ -156,8 +163,8 @@ class VoiceSettings:
             if not python.is_file():
                 raise ValueError('unavailable')
             check = await self.call_without_lock({'action':'check'}, python)
-            if check.get('backend') == 'voxcpm2':
-                return await asyncio.to_thread(self.voxcpm_speech, text), 'audio/wav'
+            if check.get('backend') in LOCAL_TTS:
+                return await asyncio.to_thread(self.local_speech, check['backend'], text), 'audio/wav'
             if check.get('backend') != 'edge':
                 raise ValueError('unsupported')
             audio = await self.call_without_lock({'action':'preview', 'voice':check['voice'], 'text':text}, python)

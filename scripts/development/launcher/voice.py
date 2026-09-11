@@ -12,6 +12,10 @@ MEMORY_PROVIDERS = {
     "xiaozhi_local": "mem_local_short",
     "none": "nomem",
 }
+CUSTOM_TTS_URLS = {
+    "voxcpm2": "http://127.0.0.1:18768/v1/audio/speech",
+    "sanotts": "http://127.0.0.1:18769/v1/audio/speech",
+}
 
 
 def memory_contract_matches(config, root, database, backend):
@@ -36,11 +40,11 @@ def tts_matches(config, backend):
     custom = config.get("TTS", {}).get("CustomTTS", {})
     params = custom.get("params", {})
     return (
-        backend == "voxcpm2"
+        backend in CUSTOM_TTS_URLS
         and config.get("selected_module", {}).get("TTS") == "CustomTTS"
         and custom.get("type") == "custom"
         and custom.get("method") == "POST"
-        and custom.get("url") == "http://127.0.0.1:18768/v1/audio/speech"
+        and custom.get("url") == CUSTOM_TTS_URLS[backend]
         and custom.get("format") == "wav"
         and params.get("input") == "{prompt_text}"
         and params.get("response_format") == "wav"
@@ -48,15 +52,16 @@ def tts_matches(config, backend):
     )
 
 
-def wait_for_voxcpm(timeout=90):
+def wait_for_local_tts(backend, timeout=90):
+    port = {"voxcpm2": 18768, "sanotts": 18769}[backend]
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        connection = http.client.HTTPConnection("127.0.0.1", 18768, timeout=0.5)
+        connection = http.client.HTTPConnection("127.0.0.1", port, timeout=0.5)
         try:
             connection.request("GET", "/health")
             response = connection.getresponse()
             body = json.loads(response.read(4096))
-            if response.status == 200 and body.get("ready") is True and body.get("provider") == "voxcpm2":
+            if response.status == 200 and body.get("ready") is True and body.get("provider") == backend:
                 return True
         except (OSError, http.client.HTTPException, json.JSONDecodeError):
             pass
@@ -81,7 +86,7 @@ def main():
         # 统一启动本来就是项目侧适配器的发布入口。这里只允许 setup 中列出的
         # 已知旧哈希升级；未知文件仍会拒绝覆盖，避免掩盖用户或上游修改。
         setup.install_memory_provider(server, allow_known_update=True)
-        if tts_backend == "voxcpm2" and not wait_for_voxcpm():
+        if tts_backend in CUSTOM_TTS_URLS and not wait_for_local_tts(tts_backend):
             return 4
         sys.argv = [str(root / "scripts/development/xiaozhi/setup.py"), "start", "--server-dir", str(server),
                     "--lan-ip", lan_ip, "--allow-insecure-http", "--device-control",

@@ -11,7 +11,7 @@ interface RoleSummary {
 }
 
 interface VoiceSummary {
-  backend:'edge'|'voxcpm2'|'unsupported';
+  backend:'edge'|'voxcpm2'|'sanotts'|'unsupported';
   voice:string|null;
   service_ready?:boolean|null;
   profile?:{reference:string|null;style:string;quality:'fast'|'balanced'|'quality'};
@@ -50,13 +50,14 @@ export function PersonalizationOverview({api, ready, prefs, onSelectTab}:{
   const voiceValue = !voice.data ? (voice.isError ? '读取失败' : '尚未读取')
     : voice.data.backend === 'voxcpm2'
       ? `VoxCPM2 · ${referenceLabel ?? '模型默认声线'} · ${qualityLabels[voice.data.profile?.quality ?? 'balanced']}`
+      : voice.data.backend === 'sanotts' ? 'sanoTTS · 中文小雅 · 整段生成'
       : voice.data.backend === 'edge' ? `Edge · ${voice.data.voice ?? '默认音色'}` : '当前后端不支持设置';
 
   const rows = [
     {key:'appearance', title:'控制台外观', value:`${themeLabels[prefs.theme]} · ${prefs.density === 'compact' ? '紧凑' : '舒展'}`, scope:'当前浏览器', timing:'立即生效', action:'appearance'},
     {key:'role', title:'助手角色', value:role.data ? `${role.data.current.name} · 修订 ${role.data.current.revision}` : unavailable(role), scope:'网页对话', timing:'下一轮生效', action:'role'},
     {key:'interaction', title:'表达与互动', value:rolePreferences?.enabled ? interactionLabels[rolePreferences.preferences.interactionStyle] : '使用角色提示词默认规则', scope:'网页；圆屏需同步角色', timing:'下一轮／同步后', action:'role'},
-    {key:'voice', title:'声音方案', value:voiceValue, scope:'网页朗读＋圆屏 TTS', timing:voice.data?.backend === 'voxcpm2' ? '下次合成' : '重启语音服务后', action:'voice'},
+    {key:'voice', title:'声音方案', value:voiceValue, scope:'网页朗读＋圆屏 TTS', timing:['voxcpm2','sanotts'].includes(voice.data?.backend ?? '') ? '下次合成' : '重启语音服务后', action:'voice'},
     {key:'skin', title:'圆屏状态皮肤', value:selectedSkin?.name ?? (skins.data ? skins.data.selected_skin : unavailable(skins)), scope:'当前只是预览选择', timing:'真机需单独应用', action:'display'},
     {key:'wallpaper', title:'动态壁纸', value:'真机状态未自动读取', scope:'智能圆屏', timing:'在圆屏外观页发布', action:'display'},
     {key:'proactive', title:'主动交流', value:proactive.data ? (proactive.data.enabled ? '已允许' : '已关闭') : unavailable(proactive), scope:'持久策略', timing:'保存后生效', action:'proactive'},

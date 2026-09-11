@@ -6,7 +6,7 @@ from pathlib import Path
 
 
 ALLOWED_PHASES = {"starting", "ready", "stopping", "stopped", "failed"}
-ALLOWED_SERVICES = {"console", "voice", "voxcpm2"}
+ALLOWED_SERVICES = {"console", "voice", "voxcpm2", "sanotts"}
 ALLOWED_STATES = {"disabled", "running", "ready", "exited"}
 
 

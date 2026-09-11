@@ -13,7 +13,8 @@ def _snapshot(updated_at, instance="current"):
         "launcher_pid": 123,
         "updated_at": updated_at.isoformat(),
         "phase": "ready",
-        "services": {"console": "ready", "voice": "running", "voxcpm2": "disabled"},
+        "services": {"console": "ready", "voice": "running", "voxcpm2": "disabled",
+                     "sanotts": "disabled"},
     }
 
 

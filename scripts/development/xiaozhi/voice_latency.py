@@ -26,7 +26,11 @@ def _backend(connection):
     if name == "EdgeTTS":
         return "edge"
     if name == "CustomTTS":
-        return "voxcpm2"
+        url = connection.config.get("TTS", {}).get("CustomTTS", {}).get("url")
+        return {
+            "http://127.0.0.1:18768/v1/audio/speech": "voxcpm2",
+            "http://127.0.0.1:18769/v1/audio/speech": "sanotts",
+        }.get(url, "other")
     return "other"
 
 
