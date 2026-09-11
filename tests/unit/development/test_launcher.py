@@ -213,6 +213,72 @@ def test_sanotts_commands_use_external_source_and_start_before_voice(options, mo
     assert commands[2][1][-2:] == ["sanotts", "longmemory"]
 
 
+@pytest.mark.parametrize("role", ["plain_v1", "elysia_v1"])
+@pytest.mark.parametrize("memory_backend", ["longmemory", "xiaozhi_local", "none"])
+@pytest.mark.parametrize("tts_backend", ["edge", "voxcpm2", "sanotts"])
+def test_role_memory_and_tts_domains_compose_independently(
+    options, monkeypatch, role, memory_backend, tts_backend,
+):
+    """三个配置域可自由组合，任何一个选项都不能让另一个域失效。"""
+
+    voice_root = options.root / "voice"
+    voice_python = voice_root / ".venv/Scripts/python.exe"
+    voice_python.parent.mkdir(parents=True)
+    voice_python.touch()
+
+    voxcpm_root = options.root / "scripts/development/voxcpm"
+    voxcpm_python = voxcpm_root / ".venv/Scripts/python.exe"
+    voxcpm_python.parent.mkdir(parents=True)
+    voxcpm_python.touch()
+    (voxcpm_root / "service.py").touch()
+
+    sanotts_source = options.root / "external-sanotts"
+    for relative in (
+        "web/snt_voice.js",
+        "web/snt_voice.wasm",
+        "web/voices/chinese-xiaoya/meta.json",
+    ):
+        target = sanotts_source / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.touch()
+    sanotts_service = options.root / "scripts/development/sanotts/service.mjs"
+    sanotts_service.parent.mkdir(parents=True, exist_ok=True)
+    sanotts_service.touch()
+    original_which = runtime.shutil.which
+    monkeypatch.setattr(
+        runtime.shutil,
+        "which",
+        lambda name: "synthetic-node" if name == "node" else original_which(name),
+    )
+
+    commands = runtime.build_commands(
+        replace(
+            options,
+            voice=True,
+            voice_root=voice_root,
+            lan_ip="192.168.1.2",
+            role=role,
+            memory_backend=memory_backend,
+            tts_backend=tts_backend,
+            sanotts_source_root=sanotts_source,
+        ),
+        uv="synthetic-uv",
+    )
+    by_name = {name: command for name, command, _ in commands}
+    console = by_name["console"]
+    voice = by_name["voice"]
+
+    assert console[console.index("--assistant-role") + 1] == role
+    assert console[console.index("--memory-backend") + 1] == memory_backend
+    assert voice[-2:] == [tts_backend, memory_backend]
+    expected_services = {
+        "edge": {"console", "voice"},
+        "voxcpm2": {"console", "voxcpm2", "voice"},
+        "sanotts": {"console", "sanotts", "voice"},
+    }
+    assert set(by_name) == expected_services[tts_backend]
+
+
 @pytest.mark.parametrize("mismatch", [None, "database_path", "project_root", "python_executable"])
 def test_voice_shared_paths_are_checked_without_loading_private_config(options, mismatch):
     spec = importlib.util.spec_from_file_location("launcher_voice_test", DIRECTORY / "voice.py")
