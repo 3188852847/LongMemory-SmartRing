@@ -26,7 +26,13 @@ from tts import config_action as tts_config_action
 from voice_recovery import close_stale_voice
 from view_model import failure_hint as _failure_hint
 from view_model import summary_text as _summary_text
-from view_model import failed_services, readiness_timeout, ready_services
+from view_model import (
+    failed_services,
+    readiness_timeout,
+    ready_services,
+    starting_services,
+    stopped_services,
+)
 
 
 # 启动器与网页控制台共享“克制未来科技”语义；Tk 不支持网页的渐变和
@@ -580,11 +586,7 @@ def main():
         if panel_unchanged:
             set_memory_backend(load_memory_backend(memory_backend_path))
         start_button.config(state="normal")
-        set_component("console", "已停止")
-        set_component("voice", "未启动")
-        set_component("speech", "未启动")
-        set_component("browser", "未打开")
-        set_status("已停止本面板启动的服务；其他终端启动的程序未被停止。")
+        apply_presentation(stopped_services())
         return True
 
     def close_external_voice():
@@ -635,23 +637,13 @@ def main():
                 settings_status.set("服务已启动，但本机首选项未保存；下次仍可手动选择。")
             state.update(started=time.monotonic(), opened=False, failed=False)
             start_button.config(state="disabled")
-            set_component("console", "启动中", "busy")
-            set_component("voice", "启动中" if voice.get() else "本次未启用",
-                          "busy" if voice.get() else "idle")
-            speech_starting = {
-                "edge": "EdgeTTS 已选择",
-                "voxcpm2": "VoxCPM2 加载中",
-                "sanotts": "sanoTTS 加载中",
-            }[selected_tts()]
-            set_component("speech", speech_starting if voice.get() else "本次未启用",
-                          "busy" if voice.get() else "idle")
-            set_component("browser", "等待控制台", "busy")
-            model_label = "官方 DeepSeek" if selected_model_profile() == "official" else "学校模型"
-            voice_model_label = "官方 DeepSeek" if selected_voice_model_profile() == "official" else "学校模型"
-            memory_label = {"longmemory": "LongMemory", "xiaozhi_local": "小智本地摘要", "none": "无长期记忆"}[selected_memory_backend()]
-            set_status(f"正在启动；网页使用 {model_label}" +
-                       (f"，圆屏使用 {voice_model_label} / {memory_label}。" if voice.get() else "。") +
-                       "语音模式已自动核对并备份同步配置；首次加载语音模型可能较慢。", "busy")
+            apply_presentation(starting_services(
+                voice=voice.get(),
+                tts_backend=selected_tts(),
+                model_profile=selected_model_profile(),
+                voice_model_profile=selected_voice_model_profile(),
+                memory_backend=selected_memory_backend(),
+            ))
         except ValueError as error:
             messagebox.showerror("无法启动", str(error))
         except Exception:

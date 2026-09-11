@@ -87,6 +87,38 @@ def test_ready_view_model_keeps_console_voice_and_speech_states_independent():
     assert text_only["components"]["browser"] == ("尚未打开", "busy")
 
 
+def test_starting_and_stopped_view_models_cover_voice_and_text_modes():
+    voice = view_model.starting_services(
+        voice=True,
+        tts_backend="voxcpm2",
+        model_profile="official",
+        voice_model_profile="campus",
+        memory_backend="xiaozhi_local",
+    )
+    assert voice["components"]["speech"] == ("VoxCPM2 加载中", "busy")
+    assert "网页使用 官方 DeepSeek" in voice["message"]
+    assert "圆屏使用 学校模型 / 小智本地摘要" in voice["message"]
+
+    text_only = view_model.starting_services(
+        voice=False,
+        tts_backend="sanotts",
+        model_profile="campus",
+        voice_model_profile="official",
+        memory_backend="longmemory",
+    )
+    assert text_only["components"]["voice"] == ("本次未启用", "idle")
+    assert text_only["components"]["speech"] == ("本次未启用", "idle")
+    assert "圆屏使用" not in text_only["message"]
+
+    stopped = view_model.stopped_services()
+    assert stopped["components"] == {
+        "console": ("已停止", "idle"),
+        "voice": ("未启动", "idle"),
+        "speech": ("未启动", "idle"),
+        "browser": ("未打开", "idle"),
+    }
+
+
 def test_failed_and_timeout_view_models_explain_stopped_services():
     failed = view_model.failed_services([("voice", 3)])
     assert failed["tone"] == "error"

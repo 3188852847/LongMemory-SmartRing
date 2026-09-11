@@ -96,6 +96,55 @@ def failed_services(exited):
     }
 
 
+def starting_services(*, voice, tts_backend, model_profile, voice_model_profile,
+                      memory_backend):
+    """生成启动阶段呈现；这里只翻译选项，不执行配置同步或启动进程。"""
+
+    speech = {
+        "edge": "EdgeTTS 已选择",
+        "voxcpm2": "VoxCPM2 加载中",
+        "sanotts": "sanoTTS 加载中",
+    }[tts_backend]
+    model_label = "官方 DeepSeek" if model_profile == "official" else "学校模型"
+    voice_model_label = (
+        "官方 DeepSeek" if voice_model_profile == "official" else "学校模型"
+    )
+    memory_label = {
+        "longmemory": "LongMemory",
+        "xiaozhi_local": "小智本地摘要",
+        "none": "无长期记忆",
+    }[memory_backend]
+    voice_detail = (
+        f"，圆屏使用 {voice_model_label} / {memory_label}。" if voice else "。"
+    )
+    return {
+        "components": {
+            "console": ("启动中", "busy"),
+            "voice": ("启动中", "busy") if voice else ("本次未启用", "idle"),
+            "speech": (speech, "busy") if voice else ("本次未启用", "idle"),
+            "browser": ("等待控制台", "busy"),
+        },
+        "message": (
+            f"正在启动；网页使用 {model_label}{voice_detail}"
+            "语音模式已自动核对并备份同步配置；首次加载语音模型可能较慢。"
+        ),
+        "tone": "busy",
+    }
+
+
+def stopped_services():
+    return {
+        "components": {
+            "console": ("已停止", "idle"),
+            "voice": ("未启动", "idle"),
+            "speech": ("未启动", "idle"),
+            "browser": ("未打开", "idle"),
+        },
+        "message": "已停止本面板启动的服务；其他终端启动的程序未被停止。",
+        "tone": "idle",
+    }
+
+
 def ready_services(*, voice, tts_backend, local_tts_ready, opened):
     """生成服务就绪视图；设备是否连接仍由网页实时状态负责。"""
 
