@@ -46,6 +46,6 @@ where = ["src"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
-# pytest 会在每次运行前清理这个专用目录；其中只能放测试夹具产物。
-# 同时关闭非必要缓存插件，避免再次写入用户级或仓库缓存目录。
-addopts = "-ra -p no:cacheprovider --basetemp=.pytest-tmp"
+# 每个测试进程的隔离临时目录由 tests/conftest.py 动态创建，避免并行或上次
+# 异常中断的进程争用同一个 SQLite 文件。缓存插件继续关闭，避免写用户目录。
+addopts = "-ra -p no:cacheprovider"

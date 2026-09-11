@@ -8,7 +8,7 @@ import re
 
 from aiohttp import web
 
-from longmemory.adapters.device_control.xiaozhi import BridgeError, XiaozhiControlClient
+from longmemory.adapters.device_control.xiaozhi import XiaozhiControlClient
 from .security import COOKIE, MAX_AGE, Sessions, security_middleware
 from .memory_backend import MemoryBackend
 from .routes.memories import register_memory_routes
@@ -25,6 +25,7 @@ from .routes.memory_commands import register_memory_command_routes
 from .routes.model_profiles import register_model_profile_routes
 from .xiaozhi_model_profiles import XiaozhiModelProfiles
 from .routes.memory_backends import register_memory_backend_routes
+from .routes.device import register_device_routes
 from .xiaozhi_memory_backends import XiaozhiMemoryBackends
 from .routes.round_skins import register_round_skin_routes
 from longmemory.infrastructure.config.round_skins import RoundSkinStore
@@ -101,81 +102,11 @@ def create_app(*, port=8765, bridge=None, web_root=None, database=None, allow_me
         response.set_cookie(COOKIE, session_id, httponly=True, samesite="Strict", max_age=MAX_AGE, path="/")
         return response
 
-    async def device(request):
-        try:
-            return web.json_response(await client.status())
-        except BridgeError as error:
-            return web.json_response({"error": error.code}, status=error.status)
-
     async def runtime_status(request):
         return web.json_response(read_launcher_status(
             launcher_status_file,
             instance_id,
         ))
-
-    async def volume(request):
-        if operation_lock.locked():
-            return web.json_response({"error": "operation_busy"}, status=409)
-        async with operation_lock:
-            try:
-                if request.method == "GET":
-                    data = await client.read_volume()
-                else:
-                    if request.content_type != "application/json":
-                        return web.json_response({"error": "invalid_body"}, status=400)
-                    try:
-                        body = await request.json()
-                    except (ValueError, UnicodeError):
-                        return web.json_response({"error": "invalid_body"}, status=400)
-                    if (not isinstance(body, dict) or set(body) != {"volume"}
-                            or type(body["volume"]) is not int or not 5 <= body["volume"] <= 60):
-                        return web.json_response({"error": "invalid_volume"}, status=400)
-                    data = await client.set_volume(body["volume"])
-                return web.json_response(data)
-            except BridgeError as error:
-                return web.json_response({"error": error.code}, status=error.status)
-
-    async def device_snapshot(request):
-        if operation_lock.locked():
-            return web.json_response({"error": "operation_busy"}, status=409)
-        async with operation_lock:
-            try:
-                return web.json_response(await client.read_status())
-            except BridgeError as error:
-                return web.json_response({"error": error.code}, status=error.status)
-
-    async def screen(request):
-        if operation_lock.locked():
-            return web.json_response({"error": "operation_busy"}, status=409)
-        async with operation_lock:
-            try:
-                if request.content_type != "application/json":
-                    return web.json_response({"error": "invalid_body"}, status=400)
-                body = await request.json()
-                if not isinstance(body, dict) or len(body) != 1:
-                    return web.json_response({"error": "invalid_screen_setting"}, status=400)
-                if set(body) == {"brightness"} and type(body["brightness"]) is int and 5 <= body["brightness"] <= 100:
-                    data = await client.set_screen("brightness", body["brightness"])
-                elif set(body) == {"theme"} and body["theme"] in {"light", "dark"}:
-                    data = await client.set_screen("theme", body["theme"])
-                else:
-                    return web.json_response({"error": "invalid_screen_setting"}, status=400)
-                return web.json_response(data)
-            except (ValueError, UnicodeError):
-                return web.json_response({"error": "invalid_body"}, status=400)
-            except BridgeError as error:
-                return web.json_response({"error": error.code}, status=error.status)
-
-    async def stop_speech(request):
-        if operation_lock.locked():
-            return web.json_response({"error": "operation_busy"}, status=409)
-        if request.content_length not in (None, 0):
-            return web.json_response({"error": "invalid_body"}, status=400)
-        async with operation_lock:
-            try:
-                return web.json_response(await client.stop_speech())
-            except BridgeError as error:
-                return web.json_response({"error": error.code}, status=error.status)
 
     async def close(_app):
         await client.close()
@@ -184,13 +115,8 @@ def create_app(*, port=8765, bridge=None, web_root=None, database=None, allow_me
         app.router.add_get(path, static)
     register_react_routes(app, assets / 'react-chat/dist')
     app.router.add_get("/api/session", session, allow_head=False)
-    app.router.add_get("/api/device", device, allow_head=False)
     app.router.add_get("/api/runtime-status", runtime_status, allow_head=False)
-    app.router.add_get("/api/device/volume", volume, allow_head=False)
-    app.router.add_post("/api/device/volume", volume)
-    app.router.add_get("/api/device/snapshot", device_snapshot, allow_head=False)
-    app.router.add_post("/api/device/screen", screen)
-    app.router.add_post("/api/device/speech/stop", stop_speech)
+    register_device_routes(app, client, operation_lock)
     memory_backend = MemoryBackend(
         database,
         allow_delete=allow_memory_delete,
