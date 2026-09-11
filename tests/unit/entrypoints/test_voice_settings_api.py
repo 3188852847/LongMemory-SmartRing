@@ -25,6 +25,29 @@ def test_voxcpm_health_requires_expected_local_service(monkeypatch):
     assert server.VoiceSettings.voxcpm_ready() is True
 
 
+def test_voice_settings_exposes_current_adapter_capabilities(tmp_path, monkeypatch):
+    backend = server.VoiceSettings(tmp_path, tmp_path / 'synthetic.db', tmp_path)
+    python = tmp_path / '.venv/Scripts/python.exe'
+    python.parent.mkdir(parents=True)
+    python.write_bytes(b'synthetic')
+    (tmp_path / 'app.py').write_text('# synthetic', encoding='utf-8')
+
+    class Result:
+        returncode = 0
+        stdout = json.dumps({
+            'backend': 'edge', 'voice': 'synthetic', 'voices': ['synthetic'],
+            'digest': 'a' * 64, 'text': '测试', 'config_matches': True,
+            'editable': True, 'service_ready': None,
+        }).encode()
+
+    monkeypatch.setattr(
+        'longmemory.entrypoints.api.voice_settings.subprocess.run', lambda *args, **kwargs: Result()
+    )
+    value = asyncio.run(backend.call({'action': 'check'}))
+    assert value['capabilities']['provider_id'] == 'edge'
+    assert value['capabilities']['delivery_modes'] == ['buffered']
+
+
 @pytest.mark.parametrize(('internal', 'public', 'status'), [
     ('busy', 'speech_busy', 409),
     ('synthesis_failed', 'tts_service_unavailable', 503),
@@ -83,6 +106,44 @@ def test_speech_api_returns_safe_actionable_failure(tmp_path, monkeypatch):
             )
             assert response.status == 503
             assert await response.json() == {'error':'tts_service_unavailable'}
+    asyncio.run(run())
+
+
+def test_tts_benchmark_uses_only_registered_synthetic_cases(tmp_path, monkeypatch):
+    database = tmp_path / 'synthetic.db'; LongMemoryV1(database).close()
+    chat = ChatBackend(database, FakeAnswerGenerator())
+
+    class Fake:
+        def __init__(self, *args): pass
+        async def call(self, body):
+            assert body == {'action':'check'}
+            return {'backend':'edge', 'capabilities':{'contract_version':2}}
+        async def speech(self, text):
+            assert text == '好呀，我们慢慢来。'
+            return b'ID3-synthetic', 'audio/mpeg'
+
+    monkeypatch.setattr(server, 'VoiceSettings', Fake)
+
+    async def run():
+        async with console(chat_backend=chat, xiaozhi_server=tmp_path) as (client, base, _):
+            headers = await login(client, base)
+            index = await client.get(base + '/api/tts-benchmark')
+            assert index.status == 200
+            data = await index.json()
+            assert data['backend'] == 'edge' and len(data['cases']) == 4
+            invalid = await client.post(
+                base + '/api/tts-benchmark', headers=headers, json={'case_id':'private text'},
+            )
+            assert invalid.status == 400
+            result = await client.post(
+                base + '/api/tts-benchmark', headers=headers, json={'case_id':'short_reply'},
+            )
+            assert result.status == 200
+            measured = await result.json()
+            assert measured['adapter_delivery'] == 'buffered'
+            assert measured['case']['id'] == 'short_reply'
+            assert measured['backend'] == 'edge'
+
     asyncio.run(run())
 
 

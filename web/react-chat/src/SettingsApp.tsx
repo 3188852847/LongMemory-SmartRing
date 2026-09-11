@@ -11,6 +11,7 @@ import {PageHeader} from './PageHeader';
 import {ModelConnectionSettings} from './ModelConnectionSettings';
 import {MemoryBackendSettings} from './MemoryBackendSettings';
 import {PersonalizationOverview} from './PersonalizationOverview';
+import {TTSBenchmarkPanel} from './TTSBenchmarkPanel';
 
 const api = new ChatApi();
 
@@ -54,6 +55,7 @@ export function SettingsApp() {
       {key:'voice', label:'声音', children:<Card title="声音" extra={<span className="setting-scope">小智 TTS</span>}>
         <p>查看并试听当前 TTS。Edge 可选择标准音色；VoxCPM2 可选择参考音色、表达指令与质量档位。</p>
         <VoiceSettings api={api} disabled={!enabled}/>
+        <TTSBenchmarkPanel api={api} enabled={enabled}/>
       </Card>},
       {key:'appearance', label:'外观与阅读', children:<Card title="外观与阅读" extra={<span className="setting-scope">当前浏览器</span>}>
         <p>只保存主题、字号、阅读密度、聊天宽度和动画偏好，不保存聊天正文或个人记忆。</p>

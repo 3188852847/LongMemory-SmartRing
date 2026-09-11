@@ -32,6 +32,20 @@ MIN_AUDIO_SECONDS = 0.08
 MIN_AUDIO_RMS = 0.0015
 MIN_AUDIO_PEAK = 0.015
 
+# 这是当前 HTTP 适配器已经交付的能力，而不是 VoxCPM2 模型的理论上限。
+# 当前请求仍返回完整 WAV，也没有可供小智中止正在运行推理的取消端点。
+CAPABILITIES = {
+    "contract_version": 2,
+    "provider_id": "voxcpm2",
+    "display_name": "VoxCPM2",
+    "locality": "local",
+    "delivery_modes": ["buffered"],
+    "output_mime_types": ["audio/wav"],
+    "controls": ["reference_voice", "style_prompt"],
+    "cancellation": "none",
+    "max_text_chars": MAX_TEXT_CHARS,
+}
+
 
 def waveform_quality(waveform, sample_rate: int) -> dict:
     """低成本识别 VoxCPM2 偶发生成的“有时长但几乎全静音”坏样本。
@@ -205,10 +219,18 @@ class VoxCPMHandler(BaseHTTPRequestHandler):
         self.wfile.write(payload)
 
     def do_GET(self):
+        if self.path == "/v1/capabilities":
+            self._json(200, CAPABILITIES)
+            return
         if self.path != "/health":
             self._json(404, {"error": "not_found"})
             return
-        self._json(200, {"ready": True, "provider": "voxcpm2", "revision": REVISION})
+        self._json(200, {
+            "ready": True,
+            "provider": "voxcpm2",
+            "revision": REVISION,
+            "capabilities": CAPABILITIES,
+        })
 
     def do_OPTIONS(self):
         # 不提供 CORS；网页不能把本服务当作任意本机 GPU 接口。

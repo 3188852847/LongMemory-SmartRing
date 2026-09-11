@@ -9,6 +9,9 @@ from time import monotonic
 import hashlib
 from aiohttp import web
 
+from longmemory.adapters.tts import capabilities_for
+from longmemory.application.voice_benchmark import CASES, case_by_id, measure_buffered_speech
+
 PROFILE_DEFAULT = {"version": 1, "reference": None, "style": "", "cfg_value": 2.0,
                    "quality": "balanced"}
 
@@ -140,6 +143,9 @@ class VoiceSettings:
                 value['service_ready'] = await asyncio.to_thread(self.voxcpm_ready)
                 profile, digest = self.profile()
                 value.update(profile=profile, profile_digest=digest, references=self.references(), editable=True)
+            capabilities = capabilities_for(value.get('backend'))
+            if capabilities is not None:
+                value['capabilities'] = capabilities.as_dict()
             return value
 
     async def speech(self, text):
@@ -206,7 +212,43 @@ def register_voice_routes(app, backend):
             return web.json_response({'error':code}, status=status)
         except OSError:
             return web.json_response({'error':'voice_environment_unavailable'}, status=503)
+    async def benchmark(request):
+        if backend is None:
+            return web.json_response({'error':'voice_not_enabled'}, status=403)
+        if request.method == 'GET':
+            try:
+                settings = await backend.call({'action':'check'})
+            except (ValueError, OSError):
+                return web.json_response({'error':'tts_config_unavailable'}, status=503)
+            return web.json_response({
+                'schema_version': 1,
+                'backend': settings.get('backend'),
+                'capabilities': settings.get('capabilities'),
+                'cases': [item.as_dict() for item in CASES],
+                'execution': {'parallel': False, 'retries': 0, 'stores_chat_or_memory': False},
+            })
+        try:
+            body = await request.json()
+            if not isinstance(body, dict) or set(body) != {'case_id'} or not isinstance(body['case_id'], str):
+                raise ValueError('invalid_body')
+            case = case_by_id(body['case_id'])
+            if case is None:
+                raise ValueError('invalid_body')
+            settings = await backend.call({'action':'check'})
+            result = await measure_buffered_speech(backend, case)
+            result['backend'] = settings.get('backend')
+            result['capabilities'] = settings.get('capabilities')
+            return web.json_response(result)
+        except ValueError as error:
+            if str(error) == 'invalid_body':
+                return web.json_response({'error':'invalid_tts_benchmark_case'}, status=400)
+            code, status = speech_failure(error)
+            return web.json_response({'error':code}, status=status)
+        except OSError:
+            return web.json_response({'error':'voice_environment_unavailable'}, status=503)
     app.router.add_get('/api/voice-settings', settings, allow_head=False)
     app.router.add_post('/api/voice-settings', settings)
     app.router.add_post('/api/voice-settings/preview', settings)
     app.router.add_post('/api/speech', speech)
+    app.router.add_get('/api/tts-benchmark', benchmark, allow_head=False)
+    app.router.add_post('/api/tts-benchmark', benchmark)

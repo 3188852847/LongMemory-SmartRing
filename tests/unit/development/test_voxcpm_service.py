@@ -54,7 +54,12 @@ def request(port, method, path, body=None, headers=None):
 def test_health_and_xiaozhi_custom_tts_contract(local_service):
     port, synth = local_service
     status, _, body = request(port, "GET", "/health")
-    assert status == 200 and json.loads(body)["provider"] == "voxcpm2"
+    health = json.loads(body)
+    assert status == 200 and health["provider"] == "voxcpm2"
+    assert health["capabilities"]["contract_version"] == 2
+    assert health["capabilities"]["delivery_modes"] == ["buffered"]
+    status, _, body = request(port, "GET", "/v1/capabilities")
+    assert status == 200 and json.loads(body)["cancellation"] == "none"
     status, content_type, body = request(port, "POST", "/v1/audio/speech", {
         "input": "  合成测试  ", "response_format": "wav", "stream": False,
         "voice": "ignored-upstream-field", "speed": 1,
