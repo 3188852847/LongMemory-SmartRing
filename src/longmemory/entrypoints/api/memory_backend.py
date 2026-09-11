@@ -14,12 +14,6 @@ from longmemory.adapters.storage.sqlite_consolidation_run_store import (
 )
 from longmemory.adapters.storage.sqlite_proactive_policy_store import SQLiteProactivePolicyStore
 from longmemory.adapters.storage.sqlite_proactive_outreach_store import SQLiteProactiveOutreachStore
-from longmemory.adapters.storage.sqlite_interaction_outcome_store import (
-    SQLiteInteractionOutcomeStore,
-)
-from longmemory.adapters.storage.sqlite_companion_feedback_store import (
-    SQLiteCompanionFeedbackStore,
-)
 from longmemory.adapters.storage.sqlite_companion_strategy_store import (
     SQLiteCompanionStrategyCandidateStore,
 )
@@ -773,96 +767,7 @@ class MemoryBackend:
     def proactive_history(self, *, limit=20):
         """只读最近投影和最后事件原因，不暴露幂等键或内部连接数据。"""
 
-        subject_id = "user:self"
-        if type(limit) is not int or not 1 <= limit <= 100:
-            raise MemoryAccessError("invalid_proactive_history_limit", 400)
-        with self._open() as connection:
-            ledger = ProactiveOutreachLedger(
-                SQLiteProactiveOutreachStore(connection, commit_changes=False),
-                clock=self.clock,
-            )
-            outcomes = SQLiteInteractionOutcomeStore(
-                connection, commit_changes=False,
-            )
-            feedbacks = SQLiteCompanionFeedbackStore(connection)
-            absence_versions = SQLiteCompanionAbsenceStrategyVersionStore(connection)
-            items = []
-            for outreach in ledger.list_recent(subject_id, limit=limit):
-                events = ledger.list_events(outreach.id)
-                latest = events[-1]
-                outcome = outcomes.get_for_outreach(outreach.id)
-                feedback = feedbacks.get_for_outreach(outreach.id)
-                formal_trigger = (
-                    outreach.trigger.value != "manual_test"
-                    and not outreach.trigger_reason_code.startswith("development_")
-                )
-                delivery_levels = {
-                    "queued": "server_queued",
-                    "transport_sent": "transport_sent",
-                    "device_acknowledged": "device_acknowledged",
-                    "played": "played",
-                }
-                delivery_evidence = delivery_levels.get(outreach.state.value)
-                if not formal_trigger:
-                    observation_state = "not_applicable"
-                elif outcome is not None:
-                    observation_state = "subsequent_user_message_observed"
-                elif delivery_evidence is not None:
-                    observation_state = "awaiting_subsequent_user_message"
-                else:
-                    observation_state = "delivery_not_established"
-                strategy_version = (
-                    absence_versions.get_version(
-                        outreach.strategy_version_id, subject_id=subject_id,
-                    )
-                    if outreach.strategy_version_id is not None else None
-                )
-                strategy_source = None
-                if strategy_version is not None:
-                    strategy_source = {
-                        "version_id": strategy_version.id,
-                        "selection_revision": outreach.strategy_selection_revision,
-                        "evaluated_local_date": outreach.strategy_evaluated_local_date,
-                        "source_candidate_id": strategy_version.source_candidate_id,
-                        "source_candidate_revision": (
-                            strategy_version.source_candidate_revision
-                        ),
-                        "expected_minute": strategy_version.expected_minute,
-                        "grace_minutes": strategy_version.grace_minutes,
-                        "utc_offset_minutes": strategy_version.utc_offset_minutes,
-                        "trigger_policy_version": (
-                            strategy_version.trigger_policy_version
-                        ),
-                    }
-                items.append({
-                    "outreach_id": outreach.id,
-                    "trigger": outreach.trigger.value,
-                    "content": outreach.content,
-                    "created_at": outreach.created_at.isoformat(),
-                    "expires_at": outreach.expires_at.isoformat(),
-                    "state": outreach.state.value,
-                    "revision": outreach.revision,
-                    "reason": latest.reason_code,
-                    "event_count": len(events),
-                    "failure_reason": outreach.failure_reason,
-                    "topic_seed_id": outreach.topic_seed_id,
-                    "topic_seed_revision": outreach.topic_seed_revision,
-                    "follow_up_source": None if outreach.follow_up_candidate_id is None else {
-                        "candidate_id": outreach.follow_up_candidate_id,
-                        "candidate_revision": outreach.follow_up_candidate_revision,
-                        "scheduled_for": outreach.scheduled_for.isoformat(),
-                    },
-                    "strategy_source": strategy_source,
-                    "outcome_observation_state": observation_state,
-                    "delivery_evidence_level": delivery_evidence,
-                    "subsequent_user_message": None if outcome is None else {
-                        "occurred_at": outcome.occurred_at.isoformat(),
-                        "latency_seconds": outcome.latency_seconds,
-                        "evidence": outcome.evidence.value,
-                    },
-                    "explicit_feedback": feedback,
-                })
-            return {"items": items}
+        return self.proactive.history(limit=limit)
 
     def list_companion_strategy_candidates(self):
         with self._open() as connection:
@@ -1067,37 +972,9 @@ class MemoryBackend:
     def confirm_proactive_played(self, outreach_id, *, expected_revision):
         """把所有者亲耳观察追加为证据；不从设备状态反推播放成功。"""
 
-        subject_id = "user:self"
-        with self._open(write_capability="proactive") as connection:
-            ledger = ProactiveOutreachLedger(
-                SQLiteProactiveOutreachStore(connection), clock=self.clock,
-            )
-            outreach = ledger.get(outreach_id)
-            if outreach is None or outreach.subject_id != subject_id:
-                raise MemoryAccessError("proactive_outreach_not_found", 404)
-            if outreach.state == OutreachState.PLAYED:
-                return outreach_result_json(outreach, replayed=True)
-            if outreach.revision != expected_revision:
-                raise MemoryAccessError("proactive_outreach_conflict", 409)
-            if outreach.state not in {
-                OutreachState.QUEUED,
-                OutreachState.TRANSPORT_SENT,
-                OutreachState.DEVICE_ACKNOWLEDGED,
-            }:
-                raise MemoryAccessError(
-                    "proactive_playback_confirmation_invalid_state", 409,
-                )
-            try:
-                played = ledger.record_transition(
-                    outreach.id,
-                    expected_revision=outreach.revision,
-                    new_state=OutreachState.PLAYED,
-                    reason_code="user_confirmed_playback",
-                    evidence=OutreachEvidence.USER_OBSERVED,
-                )
-            except ValueError:
-                raise MemoryAccessError("proactive_outreach_conflict", 409) from None
-            return outreach_result_json(played, replayed=False)
+        return self.proactive.confirm_played(
+            outreach_id, expected_revision=expected_revision,
+        )
 
     @contextmanager
     def _open(self, *, write_capability=None):
