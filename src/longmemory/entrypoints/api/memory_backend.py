@@ -149,6 +149,7 @@ class MemoryBackend:
         return {"configured": self.database is not None,
                 "database": str(self.database) if self.database else None,
                 "allow_delete": self.allow_delete and self.database is not None,
+                "allow_clear": self.allow_delete and self.database is not None,
                 "allow_correction": self.allow_correction and self.database is not None,
                 # 当前两个操作共用同一个显式启动权限，但对前端公开独立能力名，
                 # 以后拆分权限时不需要再改变页面语义。
@@ -1751,6 +1752,64 @@ class MemoryBackend:
                 raise MemoryAccessError("memory_not_found", 404)
             connection.commit()
             return {"deleted": True, "id": memory_id, "l0_preserved": True}
+
+    @staticmethod
+    def _clear_snapshot(connection):
+        """生成不含正文的清空预检快照，并用身份列表防止过期页面误删。"""
+
+        rows = connection.execute(
+            "SELECT id, retired_at FROM atomic_memories ORDER BY id"
+        ).fetchall()
+        l1_identities = [
+            {"id": row["id"], "retired_at": row["retired_at"]}
+            for row in rows
+        ]
+        snapshot = {
+            # 清空确认期间，即使只是某条 L1 的生命周期发生变化，也必须使
+            # 旧预检失效，不能让页面拿着过期影响范围继续执行批量删除。
+            "l1_identities": l1_identities,
+            "l2_current": connection.execute(
+                "SELECT count(*) FROM scenario_memories "
+                "WHERE status IN ('candidate','active')"
+            ).fetchone()[0],
+            "l3_current": connection.execute(
+                "SELECT count(*) FROM persona_memories "
+                "WHERE status IN ('candidate','active')"
+            ).fetchone()[0],
+            "l0_preserved": connection.execute(
+                "SELECT count(*) FROM conversation_messages"
+            ).fetchone()[0],
+        }
+        return {
+            "l1_total": len(l1_identities),
+            "l1_active": sum(row["retired_at"] is None for row in rows),
+            "l1_retired": sum(row["retired_at"] is not None for row in rows),
+            "affected_l2_current": snapshot["l2_current"],
+            "affected_l3_current": snapshot["l3_current"],
+            "l0_preserved": snapshot["l0_preserved"],
+            "revision": revision(snapshot),
+        }
+
+    def clear_preview(self):
+        with self._open() as connection:
+            return self._clear_snapshot(connection)
+
+    def clear_memories(self, expected_revision):
+        """原子删除全部 L1；L0 与审计保留，关联 L2/L3 由触发器失效。"""
+
+        with self._open(write_capability="delete") as connection:
+            before = self._clear_snapshot(connection)
+            if not secrets.compare_digest(before["revision"], expected_revision):
+                raise MemoryAccessError("memory_clear_changed", 409)
+            deleted = connection.execute("DELETE FROM atomic_memories").rowcount
+            connection.commit()
+            return {
+                "cleared": True,
+                "deleted_l1": deleted,
+                "l0_preserved": before["l0_preserved"],
+                "affected_l2_current": before["affected_l2_current"],
+                "affected_l3_current": before["affected_l3_current"],
+            }
 
     def correct(self, memory_id, corrected_content, expected_revision):
         """在一个 SQLite 事务中保存纠正来源、新事实和取代关系。"""

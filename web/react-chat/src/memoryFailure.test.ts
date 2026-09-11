@@ -13,6 +13,7 @@ describe('记忆管理安全错误说明', () => {
     ['source_already_linked', '不需要再次补记'],
     ['promoted_source_must_be_user', '用户事实'],
     ['memory_changed', '重新读取'],
+    ['memory_clear_changed', '本次没有清空'],
     ['invalid_explicit_memory', '关于你自己的完整事实'],
   ])('%s 给出可行动提示', (code, expected) => {
     expect(memoryFailure(new ApiError(code, 409))).toContain(expected);

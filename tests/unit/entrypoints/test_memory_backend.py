@@ -169,6 +169,72 @@ def test_source_changes_invalidate_delete_confirmation(recorded):
     assert after["revision"] != before["revision"]
 
 
+def test_clear_memories_removes_all_l1_preserves_l0_and_stales_derived_layers(recorded):
+    path, memory_id, _ = recorded
+    with sqlite3.connect(path) as connection:
+        connection.execute(
+            "INSERT INTO scenario_memories VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            ("scenario-1", "user:self", "饮茶习惯", "用户经常饮茶。",
+             "2026-09-11T00:00:00+00:00", None, None, "active", "synthetic", "1", 1),
+        )
+        connection.execute(
+            "INSERT INTO scenario_memory_sources VALUES (?,?,?,?)",
+            ("scenario-1", memory_id, "用户喜欢乌龙茶。", "2026-09-11T00:00:00+00:00"),
+        )
+        connection.execute(
+            "INSERT INTO persona_memories VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            ("persona-1", "user:self", "preference", "user_declared", "饮品偏好",
+             "用户偏好茶饮。", "2026-09-11T00:00:00+00:00", None, None, "active",
+             "synthetic", "1", 1),
+        )
+        connection.execute(
+            "INSERT INTO persona_sources VALUES (?,?,?,?,?)",
+            ("persona-1", "l1", memory_id, "用户喜欢乌龙茶。",
+             "2026-09-11T00:00:00+00:00"),
+        )
+
+    backend = MemoryBackend(path, allow_delete=True)
+    preview = backend.clear_preview()
+    assert preview == {
+        "l1_total": 1, "l1_active": 1, "l1_retired": 0,
+        "affected_l2_current": 1, "affected_l3_current": 1,
+        "l0_preserved": 2, "revision": preview["revision"],
+    }
+    result = backend.clear_memories(preview["revision"])
+    assert result == {
+        "cleared": True, "deleted_l1": 1, "l0_preserved": 2,
+        "affected_l2_current": 1, "affected_l3_current": 1,
+    }
+    assert backend.list_page(state="all")["total"] == 0
+    assert backend.list_sources()["total"] == 2
+    with sqlite3.connect(path) as connection:
+        assert connection.execute(
+            "SELECT status FROM scenario_memories WHERE id='scenario-1'"
+        ).fetchone()[0] == "stale"
+        assert connection.execute(
+            "SELECT status FROM persona_memories WHERE id='persona-1'"
+        ).fetchone()[0] == "stale"
+        assert connection.execute("SELECT count(*) FROM l1_deletion_events").fetchone()[0] == 1
+
+
+def test_clear_memories_rejects_stale_preview_and_requires_delete_capability(recorded):
+    path, memory_id, _ = recorded
+    read_only = MemoryBackend(path)
+    preview = read_only.clear_preview()
+    with pytest.raises(MemoryAccessError, match="memory_read_only"):
+        read_only.clear_memories(preview["revision"])
+
+    with sqlite3.connect(path) as connection:
+        connection.execute(
+            "UPDATE atomic_memories SET retired_at=? WHERE id=?",
+            ("2026-09-11T01:00:00+00:00", memory_id),
+        )
+    backend = MemoryBackend(path, allow_delete=True)
+    with pytest.raises(MemoryAccessError, match="memory_clear_changed"):
+        backend.clear_memories(preview["revision"])
+    assert backend.list_page(state="all")["total"] == 1
+
+
 def test_pagination_filter_and_literal_search(recorded):
     path, memory_id, _ = recorded
     with sqlite3.connect(path) as conn:

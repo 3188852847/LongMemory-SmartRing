@@ -453,7 +453,7 @@ def main():
                  state="readonly", width=36).pack(side="left")
     ttk.Checkbutton(
         behavior_box,
-        text="允许 L1 单条删除（本机日常默认开启；仍保留 L0 原话）",
+        text="允许 L1 删除与清空（本机日常默认开启；仍保留 L0 原话）",
         variable=allow_memory_delete,
     ).pack(anchor="w", pady=(0, 4))
     ttk.Checkbutton(

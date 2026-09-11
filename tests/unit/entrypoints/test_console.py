@@ -629,6 +629,7 @@ def test_memory_http_browse_sources_confirmed_delete_and_persistence(tmp_path):
             config = await (await client.get(base + "/api/memory-config")).json()
             assert config["database"] == str(database.resolve())
             assert config["allow_delete"] is True
+            assert config["allow_clear"] is True
             listed = await (await client.get(base + "/api/memories?q=豆包")).json()
             assert listed["total"] == 1
             assert "sources" not in listed["items"][0]
@@ -670,6 +671,41 @@ def test_memory_http_browse_sources_confirmed_delete_and_persistence(tmp_path):
     reopened.close()
     with sqlite3.connect(database) as connection:
         assert connection.execute("SELECT content FROM conversation_messages WHERE id=?", (str(result.user_message.id),)).fetchone()[0] == "我养了一只叫豆包的猫。"
+
+
+def test_memory_http_bulk_clear_requires_auth_confirmation_and_current_preview(tmp_path):
+    from longmemory.bootstrap import build_application
+    database = tmp_path / "bulk-clear.db"
+    app = build_application(database_path=database)
+    first = app.chat("我养了一只叫豆包的猫。")
+    app.chat("我喜欢喝乌龙茶。")
+    app.close()
+
+    async def run():
+        async with console(database, True) as (client, base, _bridge):
+            # 静态清空路由必须优先于 /api/memories/{memory_id}，否则会被当作 ID。
+            assert (await client.get(base + "/api/memories/clear-preview")).status == 401
+            headers = await login(client, base)
+            preview_response = await client.get(base + "/api/memories/clear-preview")
+            preview = await preview_response.json()
+            assert preview_response.status == 200 and preview["l1_total"] == 2
+            body = {"revision": preview["revision"], "confirm_clear": True}
+            assert (await client.post(base + "/api/memories/clear", json=body)).status == 403
+            assert (await client.post(
+                base + "/api/memories/clear", headers=headers,
+                json={**body, "confirm_clear": False},
+            )).status == 400
+            response = await client.post(base + "/api/memories/clear", headers=headers, json=body)
+            result = await response.json()
+            assert response.status == 200 and result["deleted_l1"] == 2
+            assert result["l0_preserved"] == 4
+            assert (await (await client.get(base + "/api/memories?state=all")).json())["total"] == 0
+            assert (await client.post(base + "/api/memories/clear", headers=headers, json=body)).status == 409
+
+    asyncio.run(run())
+    reopened = build_application(database_path=database)
+    assert reopened.get_memory(first.saved_memories[0].id) is None
+    reopened.close()
 
 
 def test_memory_http_promotes_existing_l0_with_csrf_and_explicit_confirmation(tmp_path):
@@ -812,6 +848,7 @@ def test_memory_without_config_is_not_a_fake_empty_database():
             await login(client, base)
             config = await (await client.get(base + "/api/memory-config")).json()
             assert config == {"configured": False, "database": None, "allow_delete": False,
+                              "allow_clear": False,
                               "allow_correction": False, "allow_change": False,
                               "allow_promote_source": False,
                               "allow_scenario_management": False,

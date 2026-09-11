@@ -210,7 +210,7 @@ def main():
     parser = argparse.ArgumentParser(description="LongMemory 本机控制台（不会自动启动小智）")
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--database", type=Path, help="已有当前版本记忆数据库；不自动建库或迁移")
-    parser.add_argument("--allow-memory-delete", action="store_true", help="启用网页单条删除；默认只读")
+    parser.add_argument("--allow-memory-delete", action="store_true", help="启用网页 L1 单条删除与批量清空；默认只读")
     parser.add_argument("--allow-memory-correction", action="store_true", help="启用网页人工纠正；旧记忆保留并标记为已取代")
     parser.add_argument("--allow-scenario-management", action="store_true", help="启用显式 L2 候选创建与复核；默认只读")
     parser.add_argument("--allow-persona-management", action="store_true", help="启用显式 L3 候选创建与复核；默认只读")
