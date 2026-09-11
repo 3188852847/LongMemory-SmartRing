@@ -1,5 +1,7 @@
 # 系统架构总览
 
+代码边界的阶段性检查、热点和渐进拆分顺序见[代码健康检查与渐进重构](code-health.md)。
+
 P2 声音设置有两条边界：React → 本机认证/CSRF API → 当前 TTS，用于网页朗读、停止和浏览器本地说话打断；启动面板 → 可替换的本机 TTS 进程 → Xiaozhi `CustomTTS` → WAV 转 Opus → 圆屏。VoxCPM2 使用独立 Python/CUDA 环境并支持受控参考声线；sanoTTS 使用项目外 Node/WASM 中文模型和固定组合指纹；EdgeTTS 继续作为联网回退。音频不入库，后端切换采用私有配置摘要、备份和明确重启，不改 Memory Core。见 ADR-0024、ADR-0025、ADR-0083、ADR-0118。
 
 更新：2026-09-08。本文描述模块、边界和数据归属；具体执行步骤见[运行流程](workflows.md)，先后顺序见[路线图](../../ROADMAP.md)。采用文字与表格，不维护图形副本。

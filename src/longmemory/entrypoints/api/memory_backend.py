@@ -1,7 +1,6 @@
 """网页记忆管理的装配边界：只打开显式指定的已有数据库，不运行建库/迁移。"""
 
 import hashlib
-import json
 import secrets
 import sqlite3
 from contextlib import contextmanager
@@ -123,50 +122,21 @@ from longmemory.core.memory.l3_persona.proposals import (
 )
 from longmemory.core.memory.consolidation.trigger_policy import ConsolidationTriggerConfig
 from longmemory.infrastructure.database.schema import SCHEMA_VERSION
+from .memory_presenters import (
+    details_json,
+    memory_json,
+    persona_json,
+    persona_model_json,
+    persona_replacement_json,
+    revision,
+    scenario_json,
+)
 
 
 class MemoryAccessError(Exception):
     def __init__(self, code, status=409):
         super().__init__(code)
         self.code, self.status = code, status
-
-
-def memory_json(memory):
-    now = datetime.now(UTC)
-    effective_state = (
-        "retired" if memory.retired_at
-        else "not_started" if memory.valid_from is not None and memory.valid_from > now
-        else "expired" if memory.valid_to is not None and memory.valid_to <= now
-        else "current"
-    )
-    return {
-        "id": str(memory.id), "subject_id": str(memory.subject_id), "content": memory.content,
-        **{key: getattr(memory, key).isoformat() if getattr(memory, key) else None
-           for key in ("recorded_at", "valid_from", "valid_to", "retired_at")},
-        "superseded_by_id": str(memory.superseded_by_id) if memory.superseded_by_id else None,
-        "state": "retired" if memory.retired_at else "active",
-        "effective_state": effective_state,
-    }
-
-
-def details_json(details):
-    result = memory_json(details.memory)
-    result["sources"] = [{
-        "source_message_id": str(source.evidence.source_message_id),
-        "source_type": source.evidence.source_type.value,
-        "linked_at": source.evidence.linked_at.isoformat(),
-        "message": None if source.source_message is None else {
-            "role": source.source_message.role.value,
-            "content": source.source_message.content,
-            "created_at": source.source_message.created_at.isoformat(),
-        },
-    } for source in details.sources]
-    return result
-
-
-def revision(data):
-    """用于删除前再次核对内容及来源，不是鉴权令牌，不替代 CSRF 校验。"""
-    return hashlib.sha256(json.dumps(data, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
 
 
 class MemoryBackend:
@@ -2112,7 +2082,7 @@ class MemoryBackend:
                 + " ORDER BY generated_at DESC, id DESC LIMIT ? OFFSET ?",
                 [*parameters, limit, offset],
             ).fetchall()
-            return {"items": [self._scenario_json(row) for row in rows],
+            return {"items": [scenario_json(row) for row in rows],
                     "total": total, "limit": limit, "offset": offset}
 
     def list_scenario_source_inbox(self):
@@ -2145,7 +2115,7 @@ class MemoryBackend:
             ).fetchone()
             if row is None:
                 raise MemoryAccessError("scenario_not_found", 404)
-            data = self._scenario_json(row)
+            data = scenario_json(row)
             sources = [dict(source) for source in connection.execute(
                 "SELECT s.*, a.content AS current_content, a.retired_at "
                 "FROM scenario_memory_sources s LEFT JOIN atomic_memories a ON a.id=s.memory_id "
@@ -2297,7 +2267,7 @@ class MemoryBackend:
                 + " ORDER BY generated_at DESC, id DESC LIMIT ? OFFSET ?",
                 [*parameters, limit, offset],
             ).fetchall()
-            return {"items": [self._persona_json(row) for row in rows],
+            return {"items": [persona_json(row) for row in rows],
                     "total": total, "limit": limit, "offset": offset}
 
     def get_persona_profile(self):
@@ -2324,7 +2294,7 @@ class MemoryBackend:
                 "status_counts": counts,
                 "sections": [{
                     "kind": section.kind.value,
-                    "items": [self._persona_model_json(item) for item in section.assertions],
+                    "items": [persona_model_json(item) for item in section.assertions],
                 } for section in profile.sections],
             }
 
@@ -2356,7 +2326,7 @@ class MemoryBackend:
             persona = store.get(PersonaId(persona_id))
             if persona is None:
                 raise MemoryAccessError("persona_not_found", 404)
-            data = self._persona_model_json(persona)
+            data = persona_model_json(persona)
             audit = connection.execute(
                 "SELECT source_count, source_message_count, observation_day_count "
                 "FROM persona_generation_audits WHERE persona_id=?", (persona_id,),
@@ -2391,10 +2361,10 @@ class MemoryBackend:
                     "l0_sources": messages,
                 })
             data["sources"] = sources
-            data["replaces"] = [self._persona_replacement_json(
+            data["replaces"] = [persona_replacement_json(
                 replacement, store.get(replacement.replaced_persona_id),
             ) for replacement in store.list_replacements(PersonaId(persona_id))]
-            data["replaced_by"] = [self._persona_replacement_json(
+            data["replaced_by"] = [persona_replacement_json(
                 replacement, store.get(replacement.candidate_persona_id),
             ) for replacement in store.list_replaced_by(PersonaId(persona_id))]
             review = store.get_review(PersonaId(persona_id))
@@ -2598,42 +2568,3 @@ class MemoryBackend:
             connection.commit()
             return {"reviewed": True, "id": persona_id,
                     "status": persona.status.value, "revision": persona.revision}
-
-    @staticmethod
-    def _scenario_json(row):
-        return {key: row[key] for key in (
-            "id", "subject_id", "title", "summary", "generated_at", "valid_from",
-            "valid_to", "status", "generator_name", "generator_version", "revision",
-        )}
-
-    @staticmethod
-    def _persona_json(row):
-        return {key: row[key] for key in (
-            "id", "subject_id", "kind", "basis", "label", "statement",
-            "generated_at", "valid_from", "valid_to", "status",
-            "generator_name", "generator_version", "revision",
-        )}
-
-    @staticmethod
-    def _persona_model_json(persona):
-        return {
-            "id": str(persona.id), "subject_id": str(persona.subject_id),
-            "kind": persona.kind.value, "basis": persona.basis.value,
-            "label": persona.label, "statement": persona.statement,
-            "generated_at": persona.generated_at.isoformat(),
-            "valid_from": persona.valid_from.isoformat() if persona.valid_from else None,
-            "valid_to": persona.valid_to.isoformat() if persona.valid_to else None,
-            "status": persona.status.value, "generator_name": persona.generator_name,
-            "generator_version": persona.generator_version, "revision": persona.revision,
-        }
-
-    @staticmethod
-    def _persona_replacement_json(replacement, related):
-        return {
-            "candidate_persona_id": str(replacement.candidate_persona_id),
-            "replaced_persona_id": str(replacement.replaced_persona_id),
-            "target_revision": replacement.target_revision,
-            "linked_at": replacement.linked_at.isoformat(),
-            "applied_at": replacement.applied_at.isoformat() if replacement.applied_at else None,
-            "related": None if related is None else MemoryBackend._persona_model_json(related),
-        }
