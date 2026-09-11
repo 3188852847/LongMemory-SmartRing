@@ -7,6 +7,7 @@ apply 前必须携带 check 得到的摘要，防止覆盖用户并发修改。
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 from pathlib import Path
 import sys
@@ -69,14 +70,34 @@ def prepare(path: Path, profile: str):
     return original, updated.encode("utf-8"), config == expected
 
 
+def inspect(path: Path):
+    """读取当前三个受控数值，不返回其他 YAML 内容。"""
+    import yaml
+
+    # 复用 prepare 的严格结构检查；normal 只是构造预期文本，不会写盘。
+    original, _, _ = prepare(path, "normal")
+    config = yaml.safe_load(original.decode("utf-8"))
+    silero = config["VAD"]["SileroVAD"]
+    values = {key: silero[key] for key in PROFILES["normal"]}
+    profile = next((name for name, expected in PROFILES.items() if values == expected), "custom")
+    return {
+        "profile": profile,
+        "values": values,
+        "digest": hashlib.sha256(original).hexdigest(),
+        "runtime": "unverified",
+    }
+
+
 def sync(server: Path, body: dict):
+    if body.get("action") == "status" and set(body) == {"action"}:
+        return inspect(server / "data/.config.yaml")
     profile = body.get("profile")
     if body.get("action") not in {"check", "apply"} or profile not in PROFILES:
         raise ValueError("invalid_request")
     path = server / "data/.config.yaml"
     original, updated, matches = prepare(path, profile)
     result = commit_change(path, body, original, updated, matches, backup_label="vad")
-    return result | {"profile": profile}
+    return result | {"profile": profile, "values": PROFILES[profile]}
 
 
 if __name__ == "__main__":

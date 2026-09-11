@@ -35,6 +35,7 @@ from longmemory.infrastructure.media.round_wallpaper_delivery import RoundWallpa
 from .routes.proactive_policy import register_proactive_policy_routes
 from .device_role import DeviceRole
 from .voice_settings import VoiceSettings, register_voice_routes
+from .vad_settings import VadSettings, register_vad_routes
 from .proactive_scheduler import ProactiveScheduleLoop
 from .launcher_status import read_launcher_status
 from longmemory.infrastructure.logging.setup import configure_file_logging, close_file_logging
@@ -160,6 +161,7 @@ def create_app(*, port=8765, bridge=None, web_root=None, database=None, allow_me
     device_role = DeviceRole(xiaozhi_server, chat_backend.roles, chat_backend.database, ROOT) if xiaozhi_server and chat_backend else None
     register_role_routes(app, chat_backend, device_role)
     register_voice_routes(app, VoiceSettings(xiaozhi_server, chat_backend.database, ROOT) if xiaozhi_server and chat_backend else None)
+    register_vad_routes(app, VadSettings(xiaozhi_server, ROOT) if xiaozhi_server and chat_backend else None)
     voice_profiles = voice_model_profiles or (
         XiaozhiModelProfiles(ROOT, xiaozhi_server, model_profile_store)
         if xiaozhi_server and model_profile_store else None

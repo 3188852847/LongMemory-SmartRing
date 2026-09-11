@@ -93,3 +93,7 @@
 :root[data-density=compact] .turn-summary{margin-bottom:12px}
 :root[data-chat-width=wide] .user{margin-left:4%}
 :root[data-chat-width=wide] .assistant{margin-right:2%}
+/* 声音页内的子能力保持分区，避免 TTS、拾音和基准测试视觉上混成一块。 */
+.settings-subsection{margin-top:24px;padding-top:20px;border-top:1px solid var(--border-color,#d9d9d9);display:grid;gap:12px}
+.settings-subsection h3,.settings-subsection p{margin:0}
+.settings-subsection .ant-radio-wrapper{align-items:flex-start;line-height:1.5}

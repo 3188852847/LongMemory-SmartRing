@@ -12,6 +12,7 @@ import {ModelConnectionSettings} from './ModelConnectionSettings';
 import {MemoryBackendSettings} from './MemoryBackendSettings';
 import {PersonalizationOverview} from './PersonalizationOverview';
 import {TTSBenchmarkPanel} from './TTSBenchmarkPanel';
+import {VADSettings} from './VADSettings';
 
 const api = new ChatApi();
 
@@ -53,8 +54,9 @@ export function SettingsApp() {
         <RoleEditor api={api} disabled={!enabled} onSaved={() => {void queryClient.invalidateQueries({queryKey:['chat-config']});}}/>
       </Card>},
       {key:'voice', label:'声音', children:<Card title="声音" extra={<span className="setting-scope">小智 TTS</span>}>
-        <p>查看并试听当前 TTS。Edge 可选择标准音色；VoxCPM2 可选择参考音色、表达指令与质量档位。</p>
+        <p>查看并试听当前 TTS，调整已接入的语音参数，以及选择圆屏拾音灵敏度。TTS 输出与 VAD 输入互不替代。</p>
         <VoiceSettings api={api} disabled={!enabled}/>
+        <VADSettings api={api} disabled={!enabled}/>
         <TTSBenchmarkPanel api={api} enabled={enabled}/>
       </Card>},
       {key:'appearance', label:'外观与阅读', children:<Card title="外观与阅读" extra={<span className="setting-scope">当前浏览器</span>}>

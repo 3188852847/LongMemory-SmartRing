@@ -49,3 +49,22 @@ def test_rejects_unknown_profile_and_stale_digest(tmp_path):
     with pytest.raises(ValueError):
         module.sync(server, {"action": "apply", "profile": "close_talk",
                              "expected_digest": "0" * 64})
+
+
+def test_status_identifies_preset_without_changing_file(tmp_path):
+    server, path, original = make_server(tmp_path)
+    status = module.sync(server, {"action": "status"})
+    assert status["profile"] == "normal"
+    assert status["values"] == module.PROFILES["normal"]
+    assert len(status["digest"]) == 64
+    assert status["runtime"] == "unverified"
+    assert path.read_text(encoding="utf-8") == original
+
+
+def test_status_reports_custom_instead_of_guessing(tmp_path):
+    server, path, _ = make_server(tmp_path)
+    text = path.read_text(encoding="utf-8").replace("threshold: 0.5", "threshold: 0.61")
+    path.write_text(text, encoding="utf-8")
+    status = module.sync(server, {"action": "status"})
+    assert status["profile"] == "custom"
+    assert status["values"]["threshold"] == 0.61
