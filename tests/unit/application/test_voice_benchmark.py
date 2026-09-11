@@ -42,7 +42,8 @@ def test_wave_inspection_reports_duration_and_near_silence():
 
 def test_buffered_measurement_is_honest_about_first_available_audio():
     class Backend:
-        async def speech(self, text):
+        async def speech(self, text, *, bypass_local_cache=False):
+            assert bypass_local_cache is False
             assert text == CASES[0].text
             return pcm_wave(), 'audio/wav'
 
@@ -50,3 +51,16 @@ def test_buffered_measurement_is_honest_about_first_available_audio():
     assert result['adapter_delivery'] == 'buffered'
     assert result['first_audio_available_ms'] == result['completed_ms']
     assert result['audio_bytes'] > 44 and result['wave']['near_silent'] is False
+
+
+def test_buffered_measurement_can_request_local_cache_bypass():
+    class Backend:
+        async def speech(self, text, *, bypass_local_cache=False):
+            assert text == CASES[0].text
+            assert bypass_local_cache is True
+            return pcm_wave(), 'audio/wav'
+
+    result = asyncio.run(measure_buffered_speech(
+        Backend(), CASES[0], bypass_local_cache=True,
+    ))
+    assert result['completed_ms'] >= 0

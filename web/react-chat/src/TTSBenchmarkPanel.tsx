@@ -57,6 +57,7 @@ export function TTSBenchmarkPanel({api,enabled}:{api:ChatApi;enabled:boolean}) {
       <Descriptions bordered size="small" column={{xs:1,sm:2}} items={[
         {key:'backend',label:'实际后端',children:result.capabilities?.display_name??result.backend},
         {key:'delivery',label:'当前交付方式',children:result.adapter_delivery==='buffered'?'完整音频缓冲':'音频流式'},
+        {key:'cache',label:'缓存策略',children:result.cache_policy==='bypass_local_cache'?'绕过本地重复句缓存':'提供器默认'},
         {key:'first',label:'首个可用音频',children:`${result.first_audio_available_ms.toFixed(0)} ms`},
         {key:'total',label:'本次完成',children:`${result.completed_ms.toFixed(0)} ms`},
         {key:'bytes',label:'音频大小',children:`${result.audio_bytes.toLocaleString()} bytes`},
@@ -72,16 +73,18 @@ export function TTSBenchmarkPanel({api,enabled}:{api:ChatApi;enabled:boolean}) {
       locale={{emptyText:'还没有测试记录'}} columns={[
         {title:'后端',dataIndex:'backend',key:'backend'},
         {title:'固定用例',dataIndex:'case_id',key:'case_id',render:(value:string)=>index.data?.cases.find(item=>item.id===value)?.label??value},
+        {title:'缓存',dataIndex:'cache_policy',key:'cache',render:(value:string)=>value==='bypass_local_cache'?'绕过本地缓存':'提供器默认'},
         {title:'首个可用音频',dataIndex:'first_audio_available_ms',key:'first',render:(value:number)=>`${value.toFixed(0)} ms`},
         {title:'音频时长',key:'duration',render:(_value,record)=>record.wave?`${record.wave.duration_seconds.toFixed(2)} 秒`:'—'},
         {title:'记录时间',dataIndex:'started_at',key:'time',render:(value:string)=>new Date(value).toLocaleString()},
       ]}/>
     <h4>同条件探索性汇总</h4>
-    <p className="subtle">只在“同一后端＋同一固定用例”内计算中位数；每组至少 3 次才标为样本已备。结果仍混合冷启动与热启动，不评价音色，也不会自动选出默认后端。</p>
+    <p className="subtle">只在“同一后端＋同一固定用例＋同一缓存策略”内计算中位数；每组至少 3 次才标为样本已备。结果仍混合冷启动与热启动，不评价音色，也不会自动选出默认后端。</p>
     <Table size="small" pagination={false} rowKey="key" dataSource={comparison}
       locale={{emptyText:'完成测试后这里会自动汇总'}} columns={[
         {title:'后端',dataIndex:'backend',key:'backend'},
         {title:'固定用例',dataIndex:'caseLabel',key:'case'},
+        {title:'缓存',dataIndex:'cachePolicy',key:'cache',render:(value:string)=>value==='bypass_local_cache'?'绕过本地缓存':'提供器默认'},
         {title:'样本',dataIndex:'sampleCount',key:'samples',render:(value:number)=>
           <Tag color={value>=3?'green':'gold'}>{value>=3?`${value} 次 · 已备`:`${value}/3 · 待补`}</Tag>},
         {title:'中位首音频',dataIndex:'medianFirstAudioMs',key:'first',render:(value:number)=>`${value.toFixed(0)} ms`},

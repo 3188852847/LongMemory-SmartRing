@@ -5,6 +5,7 @@ export interface TTSComparisonRow {
   backend:string;
   caseId:string;
   caseLabel:string;
+  cachePolicy:TTSBenchmarkRun['cache_policy'];
   sampleCount:number;
   medianFirstAudioMs:number;
   medianCompletedMs:number;
@@ -30,18 +31,18 @@ export function buildTTSComparison(
   const labels=new Map(cases.map(item=>[item.id,item.label]));
   const groups=new Map<string,TTSBenchmarkRun[]>();
   for(const run of runs) {
-    const key=`${run.backend}\u0000${run.case_id}`;
+    const key=`${run.backend}\u0000${run.case_id}\u0000${run.cache_policy}`;
     groups.set(key,[...(groups.get(key)??[]),run]);
   }
   return [...groups.entries()].map(([key,items])=>{
-    const [backend,caseId]=key.split('\u0000');
+    const [backend,caseId,cachePolicy]=key.split('\u0000') as [string,string,TTSBenchmarkRun['cache_policy']];
     const realtimeFactors=items.flatMap(item=>
       item.wave&&item.wave.duration_seconds>0
         ? [item.completed_ms/(item.wave.duration_seconds*1000)]
         : [],
     );
     return {
-      key,backend,caseId,caseLabel:labels.get(caseId)??caseId,
+      key,backend,caseId,caseLabel:labels.get(caseId)??caseId,cachePolicy,
       sampleCount:items.length,
       medianFirstAudioMs:median(items.map(item=>item.first_audio_available_ms)),
       medianCompletedMs:median(items.map(item=>item.completed_ms)),

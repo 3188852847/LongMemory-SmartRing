@@ -88,9 +88,14 @@ class VoiceSettings:
         return self.profile()
 
     @staticmethod
-    def local_speech(backend, text):
+    def local_speech(backend, text, *, bypass_local_cache=False):
         connection = http.client.HTTPConnection('127.0.0.1', LOCAL_TTS[backend], timeout=30)
-        payload = json.dumps({'input': text, 'response_format': 'wav', 'stream': False}).encode()
+        request = {'input': text, 'response_format': 'wav', 'stream': False}
+        # VoxCPM2 日常链保留重复句缓存；只有固定测试台显式绕过它，防止把缓存读取
+        # 误报为模型生成速度。sanoTTS 没有这一私有字段，保持其公开兼容契约。
+        if backend == 'voxcpm2' and bypass_local_cache:
+            request['cache'] = False
+        payload = json.dumps(request).encode()
         try:
             connection.request('POST', '/v1/audio/speech', body=payload,
                                headers={'Content-Type': 'application/json'})
@@ -159,7 +164,7 @@ class VoiceSettings:
                 value['capabilities'] = capabilities.as_dict()
             return value
 
-    async def speech(self, text):
+    async def speech(self, text, *, bypass_local_cache=False):
         if self.lock.locked():
             raise ValueError('busy')
         async with self.lock:
@@ -168,7 +173,10 @@ class VoiceSettings:
                 raise ValueError('unavailable')
             check = await self.call_without_lock({'action':'check'}, python)
             if check.get('backend') in LOCAL_TTS:
-                return await asyncio.to_thread(self.local_speech, check['backend'], text), 'audio/wav'
+                return await asyncio.to_thread(
+                    self.local_speech, check['backend'], text,
+                    bypass_local_cache=bypass_local_cache,
+                ), 'audio/wav'
             if check.get('backend') != 'edge':
                 raise ValueError('unsupported')
             audio = await self.call_without_lock({'action':'preview', 'voice':check['voice'], 'text':text}, python)
@@ -251,7 +259,13 @@ def register_voice_routes(app, backend):
             if case is None:
                 raise ValueError('invalid_body')
             settings = await backend.call({'action':'check'})
-            result = await measure_buffered_speech(backend, case)
+            bypass_local_cache = settings.get('backend') == 'voxcpm2'
+            result = await measure_buffered_speech(
+                backend, case, bypass_local_cache=bypass_local_cache,
+            )
+            result['cache_policy'] = (
+                'bypass_local_cache' if bypass_local_cache else 'provider_default'
+            )
             result['backend'] = settings.get('backend')
             result['capabilities'] = settings.get('capabilities')
             try:

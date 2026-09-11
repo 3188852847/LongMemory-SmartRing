@@ -12,6 +12,7 @@ def result(backend="sanotts", case_id="short_reply", completed=1050.5):
         "first_audio_available_ms": completed, "completed_ms": completed,
         "audio_bytes": 100396, "content_type": "audio/wav",
         "wave": {"duration_seconds": 2.2756, "near_silent": False},
+        "cache_policy": "provider_default",
     }
 
 
@@ -34,3 +35,20 @@ def test_invalid_history_is_not_silently_overwritten(tmp_path):
     with pytest.raises(ValueError, match="tts_benchmark_history_invalid"):
         history.append(result())
     assert json.loads(path.read_text(encoding="utf-8"))["schema_version"] == 999
+
+
+def test_v1_history_is_migrated_without_changing_measurements(tmp_path):
+    path = tmp_path / "history.json"
+    old = result("voxcpm2", completed=8141.0)
+    old_record = {"id": "a" * 32, "case_id": old["case"]["id"], **{
+        key: value for key, value in old.items() if key not in {"case", "cache_policy"}
+    }}
+    path.write_text(json.dumps({"schema_version": 1, "runs": [old_record]}), encoding="utf-8")
+
+    history = TTSBenchmarkHistory(path)
+    migrated = history.list_runs()[0]
+    assert migrated["completed_ms"] == 8141.0
+    assert migrated["cache_policy"] == "provider_default"
+
+    history.append(result("voxcpm2", completed=9000.0) | {"cache_policy": "bypass_local_cache"})
+    assert json.loads(path.read_text(encoding="utf-8"))["schema_version"] == 2

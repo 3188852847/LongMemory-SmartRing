@@ -120,8 +120,9 @@ def test_tts_benchmark_uses_only_registered_synthetic_cases(tmp_path, monkeypatc
         async def call(self, body):
             assert body == {'action':'check'}
             return {'backend':'edge', 'capabilities':{'contract_version':2}}
-        async def speech(self, text):
+        async def speech(self, text, *, bypass_local_cache=False):
             assert text == '好呀，我们慢慢来。'
+            assert bypass_local_cache is False
             return b'ID3-synthetic', 'audio/mpeg'
 
     monkeypatch.setattr(server, 'VoiceSettings', Fake)
@@ -146,6 +147,7 @@ def test_tts_benchmark_uses_only_registered_synthetic_cases(tmp_path, monkeypatc
             assert measured['adapter_delivery'] == 'buffered'
             assert measured['case']['id'] == 'short_reply'
             assert measured['backend'] == 'edge'
+            assert measured['cache_policy'] == 'provider_default'
             assert measured['history_saved'] is True
             history = await (await client.get(base + '/api/tts-benchmark')).json()
             assert history['history']['runs'][0]['backend'] == 'edge'

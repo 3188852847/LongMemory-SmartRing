@@ -95,12 +95,16 @@ def inspect_wave(audio: bytes, content_type: str) -> dict[str, object] | None:
     }
 
 
-async def measure_buffered_speech(backend, case: TTSBenchmarkCase) -> dict[str, object]:
+async def measure_buffered_speech(
+    backend, case: TTSBenchmarkCase, *, bypass_local_cache: bool = False,
+) -> dict[str, object]:
     """执行一次、不重试；错误由既有声音 API 转换为安全故障类别。"""
 
     started_at = datetime.now(timezone.utc).isoformat()
     started = monotonic()
-    audio, content_type = await backend.speech(case.text)
+    audio, content_type = await backend.speech(
+        case.text, bypass_local_cache=bypass_local_cache,
+    )
     completed_ms = round((monotonic() - started) * 1000, 2)
     return {
         "schema_version": 1,

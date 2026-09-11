@@ -105,7 +105,7 @@ def current_profile():
 
 
 class SpeechSynthesizer(Protocol):
-    def synthesize(self, text: str) -> bytes: ...
+    def synthesize(self, text: str, *, use_cache: bool = True) -> bytes: ...
 
 
 class VoxCPMSynthesizer:
@@ -132,15 +132,16 @@ class VoxCPMSynthesizer:
         self._cache: OrderedDict[str, bytes] = OrderedDict()
         self._lock = threading.Lock()
 
-    def synthesize(self, text: str) -> bytes:
+    def synthesize(self, text: str, *, use_cache: bool = True) -> bytes:
         # VoxCPM/PyTorch 的随机状态与模型对象不是并发请求边界；一次只生成一句。
         with self._lock:
             profile = current_profile()
             cache_key = json.dumps(profile, ensure_ascii=False, sort_keys=True) + "\0" + text
-            cached = self._cache.pop(cache_key, None)
-            if cached is not None:
-                self._cache[cache_key] = cached
-                return cached
+            if use_cache:
+                cached = self._cache.pop(cache_key, None)
+                if cached is not None:
+                    self._cache[cache_key] = cached
+                    return cached
             reference = profile["reference"]
             styled_text = f"({profile['style']}){text}" if profile["style"].strip() else text
             waveform = None
@@ -274,6 +275,7 @@ class VoxCPMHandler(BaseHTTPRequestHandler):
             or len(text) > MAX_TEXT_CHARS
             or body.get("response_format", "wav") != "wav"
             or body.get("stream", False) is not False
+            or type(body.get("cache", True)) is not bool
         ):
             self._json(400, {"error": "invalid_request"})
             return
@@ -281,7 +283,9 @@ class VoxCPMHandler(BaseHTTPRequestHandler):
             self._json(503, {"error": "busy"})
             return
         try:
-            audio = self.server.synthesizer.synthesize(text.strip())
+            audio = self.server.synthesizer.synthesize(
+                text.strip(), use_cache=body.get("cache", True)
+            )
         except Exception:
             self._json(500, {"error": "synthesis_failed"})
             return

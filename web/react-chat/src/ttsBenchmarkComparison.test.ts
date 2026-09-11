@@ -10,6 +10,7 @@ function run(backend:string,caseId:string,completed:number,duration=1,nearSilent
   return {id:`${backend}${caseId}${completed}`.padEnd(32,'0').slice(0,32),backend,case_id:caseId,
     started_at:'2026-09-11T00:00:00Z',adapter_delivery:'buffered',
     first_audio_available_ms:completed,completed_ms:completed,audio_bytes:1000,content_type:'audio/wav',
+    cache_policy:'provider_default',
     wave:{duration_seconds:duration,sample_rate_hz:16000,channels:1,sample_width_bits:16,rms:100,peak:1000,near_silent:nearSilent}};
 }
 
@@ -23,6 +24,14 @@ describe('TTS 同条件探索性汇总',()=>{
     expect(sanoShort).toMatchObject({sampleCount:3,medianFirstAudioMs:1000,medianCompletedMs:1000,medianRealtimeFactor:1,readiness:'ready'});
     expect(rows.find(item=>item.backend==='edge')?.readiness).toBe('needs_samples');
     expect(rows).toHaveLength(3);
+  });
+
+  test('不把 VoxCPM2 默认缓存结果与绕过缓存的生成结果混在一起',()=>{
+    const cached=run('voxcpm2','short_reply',125);
+    const uncached={...run('voxcpm2','short_reply',8100),cache_policy:'bypass_local_cache' as const};
+    const rows=buildTTSComparison(cases,[cached,uncached]);
+    expect(rows).toHaveLength(2);
+    expect(rows.map(item=>item.cachePolicy).sort()).toEqual(['bypass_local_cache','provider_default']);
   });
 
   test('保留近静音故障计数，缺少可解码时长时不伪造实时系数',()=>{

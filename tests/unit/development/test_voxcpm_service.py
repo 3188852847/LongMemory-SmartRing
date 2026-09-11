@@ -22,9 +22,11 @@ sys.path.pop(0)
 class FakeSynthesizer:
     def __init__(self):
         self.texts = []
+        self.cache_modes = []
 
-    def synthesize(self, text):
+    def synthesize(self, text, *, use_cache=True):
         self.texts.append(text)
+        self.cache_modes.append(use_cache)
         return b"RIFF-synthetic-wave"
 
 
@@ -66,6 +68,13 @@ def test_health_and_xiaozhi_custom_tts_contract(local_service):
     })
     assert status == 200 and content_type == "audio/wav"
     assert body == b"RIFF-synthetic-wave" and synth.texts == ["合成测试"]
+
+    status, _, body = request(port, "POST", "/v1/audio/speech", {
+        "input": "性能测试", "response_format": "wav", "stream": False, "cache": False,
+    })
+    assert status == 200 and body == b"RIFF-synthetic-wave"
+    assert synth.texts == ["合成测试", "性能测试"]
+    assert synth.cache_modes == [True, False]
 
 
 @pytest.mark.parametrize("body", [
