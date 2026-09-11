@@ -9,7 +9,6 @@ from pathlib import Path
 
 from longmemory.adapters.storage.sqlite_conversation_store import SQLiteConversationStore
 from longmemory.adapters.storage.sqlite_memory_store import SQLiteMemoryStore
-from longmemory.adapters.storage.sqlite_persona_store import SQLitePersonaStore
 from longmemory.adapters.storage.sqlite_consolidation_run_store import (
     SQLiteConsolidationRunStore,
 )
@@ -90,35 +89,13 @@ from longmemory.adapters.storage.sqlite_l2_consolidation_source_reader import (
 from longmemory.application.consolidation.l2_to_l3_service import L3_TRIGGER_CONFIG
 from longmemory.application.consolidation.status_service import ConsolidationStatusService
 from longmemory.application.memory_management.service import MemoryManagementService
-from longmemory.application.persona_management.service import PersonaManagementService
-from longmemory.application.persona_management.proposal_service import PersonaProposalService
-from longmemory.application.persona_management.consolidation_service import PersonaConsolidationService
-from longmemory.application.persona_management.profile import build_persona_profile
-from longmemory.core.common.identifiers import MemoryId, MessageId, PersonaId
+from longmemory.core.common.identifiers import MemoryId, MessageId
 from longmemory.core.memory.l1_atomic.models import CURRENT_USER_SUBJECT_ID
-from longmemory.adapters.llm.persona_candidate import (
-    PERSONA_CONSOLIDATION_PROMPT_VERSION,
-    PERSONA_PROMPT_VERSION,
-)
-from longmemory.core.memory.l3_persona.models import (
-    PersonaBasis,
-    PersonaKind,
-    PersonaReviewDecision,
-    PersonaSourceLayer,
-)
-from longmemory.core.memory.l3_persona.proposals import (
-    PersonaProposalError,
-    PersonaProposalEvidence,
-    PersonaProposalInput,
-)
 from longmemory.core.memory.consolidation.trigger_policy import ConsolidationTriggerConfig
 from longmemory.infrastructure.database.schema import SCHEMA_VERSION
 from .memory_presenters import (
     details_json,
     memory_json,
-    persona_json,
-    persona_model_json,
-    persona_replacement_json,
     revision,
 )
 from .proactive_presenters import (
@@ -134,6 +111,7 @@ from .proactive_presenters import (
 )
 from .errors import MemoryAccessError
 from .scenario_backend import ScenarioBackend
+from .persona_backend import PersonaBackend
 
 
 class MemoryBackend:
@@ -159,6 +137,12 @@ class MemoryBackend:
             allow_management=self.allow_scenario_management,
             producer=self.scenario_producer,
             model=self.scenario_model,
+        )
+        self.personas = PersonaBackend(
+            open_database=self._open,
+            allow_management=self.allow_persona_management,
+            producer=self.persona_producer,
+            model=self.persona_model,
         )
 
     def info(self):
@@ -1879,316 +1863,39 @@ class MemoryBackend:
         return self.scenarios.end(scenario_id, expected_revision=expected_revision)
 
     def list_personas(self, *, state="all", limit=25, offset=0):
-        if state not in {"all", "candidate", "active", "rejected", "stale"}:
-            raise MemoryAccessError("persona_filter_invalid", 400)
-        with self._open() as connection:
-            where, parameters = ("", []) if state == "all" else (" WHERE status=?", [state])
-            total = connection.execute(
-                "SELECT count(*) FROM persona_memories" + where, parameters,
-            ).fetchone()[0]
-            rows = connection.execute(
-                "SELECT * FROM persona_memories" + where
-                + " ORDER BY generated_at DESC, id DESC LIMIT ? OFFSET ?",
-                [*parameters, limit, offset],
-            ).fetchall()
-            return {"items": [persona_json(row) for row in rows],
-                    "total": total, "limit": limit, "offset": offset}
+        return self.personas.list(state=state, limit=limit, offset=offset)
 
     def get_persona_profile(self):
-        """构造一份用户可见画像；底层原子断言和来源链保持不变。"""
-
-        with self._open() as connection:
-            store = SQLitePersonaStore(connection)
-            profile = build_persona_profile(
-                CURRENT_USER_SUBJECT_ID,
-                store.list_active(CURRENT_USER_SUBJECT_ID),
-            )
-            counts = {status: 0 for status in ("candidate", "active", "rejected", "stale")}
-            for row in connection.execute(
-                "SELECT status, count(*) AS amount FROM persona_memories "
-                "WHERE subject_id=? GROUP BY status",
-                (str(CURRENT_USER_SUBJECT_ID),),
-            ).fetchall():
-                counts[row["status"]] = row["amount"]
-            return {
-                "subject_id": str(profile.subject_id),
-                "representation": "aggregated_active_assertions_v1",
-                "updated_at": profile.updated_at.isoformat() if profile.updated_at else None,
-                "active_assertion_count": profile.assertion_count,
-                "status_counts": counts,
-                "sections": [{
-                    "kind": section.kind.value,
-                    "items": [persona_model_json(item) for item in section.assertions],
-                } for section in profile.sections],
-            }
+        return self.personas.profile()
 
     def list_persona_source_options(self):
-        """只返回当前有效的 L1 和已接受 L2；不自动判断适合哪个画像。"""
-
-        with self._open() as connection:
-            l1_rows = connection.execute(
-                "SELECT id, subject_id, content, recorded_at FROM atomic_memories "
-                "WHERE retired_at IS NULL ORDER BY recorded_at DESC, id DESC LIMIT 100"
-            ).fetchall()
-            l2_rows = connection.execute(
-                "SELECT id, subject_id, title, summary, generated_at FROM scenario_memories "
-                "WHERE status='active' ORDER BY generated_at DESC, id DESC LIMIT 100"
-            ).fetchall()
-            return {
-                "l1": [{"layer": "l1", "id": row["id"], "subject_id": row["subject_id"],
-                        "content": row["content"], "recorded_at": row["recorded_at"]}
-                       for row in l1_rows],
-                "l2": [{"layer": "l2", "id": row["id"], "subject_id": row["subject_id"],
-                        "content": f'{row["title"]}：{row["summary"]}',
-                        "recorded_at": row["generated_at"]} for row in l2_rows],
-                "selection_is_semantic": False,
-            }
+        return self.personas.list_source_options()
 
     def get_persona(self, persona_id):
-        with self._open() as connection:
-            store = SQLitePersonaStore(connection)
-            persona = store.get(PersonaId(persona_id))
-            if persona is None:
-                raise MemoryAccessError("persona_not_found", 404)
-            data = persona_model_json(persona)
-            audit = connection.execute(
-                "SELECT source_count, source_message_count, observation_day_count "
-                "FROM persona_generation_audits WHERE persona_id=?", (persona_id,),
-            ).fetchone()
-            data["audit"] = dict(audit) if audit is not None else None
-            sources = []
-            for source in store.list_sources(PersonaId(persona_id)):
-                resolved = store.resolve_source(source.source_layer, source.source_id)
-                messages = []
-                if source.source_layer == PersonaSourceLayer.L1:
-                    messages = [dict(row) for row in connection.execute(
-                        "SELECT m.id, m.content, m.created_at, e.source_type FROM memory_evidence e "
-                        "JOIN conversation_messages m ON m.id=e.source_message_id "
-                        "WHERE e.memory_id=? AND m.role='user' ORDER BY m.created_at, m.id",
-                        (source.source_id,),
-                    ).fetchall()]
-                else:
-                    messages = [dict(row) for row in connection.execute(
-                        "SELECT DISTINCT m.id, m.content, m.created_at, e.source_type "
-                        "FROM scenario_memory_sources s JOIN memory_evidence e ON e.memory_id=s.memory_id "
-                        "JOIN conversation_messages m ON m.id=e.source_message_id "
-                        "WHERE s.scenario_id=? AND m.role='user' ORDER BY m.created_at, m.id",
-                        (source.source_id,),
-                    ).fetchall()]
-                sources.append({
-                    "source_layer": source.source_layer.value,
-                    "source_id": source.source_id,
-                    "source_content_snapshot": source.source_content_snapshot,
-                    "linked_at": source.linked_at.isoformat(),
-                    "current_content": resolved.content_snapshot if resolved else None,
-                    "active": resolved is not None,
-                    "l0_sources": messages,
-                })
-            data["sources"] = sources
-            data["replaces"] = [persona_replacement_json(
-                replacement, store.get(replacement.replaced_persona_id),
-            ) for replacement in store.list_replacements(PersonaId(persona_id))]
-            data["replaced_by"] = [persona_replacement_json(
-                replacement, store.get(replacement.candidate_persona_id),
-            ) for replacement in store.list_replaced_by(PersonaId(persona_id))]
-            review = store.get_review(PersonaId(persona_id))
-            data["review"] = None if review is None else {
-                "decision": review.decision.value,
-                "reviewer_type": review.reviewer_type.value,
-                "reviewed_at": review.reviewed_at.isoformat(),
-                "persona_revision": review.persona_revision,
-                "policy_version": review.policy_version,
-                "decision_reason": review.decision_reason,
-            }
-            data["lifecycle_events"] = [{
-                "id": str(event.id), "action": event.action.value,
-                "source_layer": event.source_layer.value, "source_id": event.source_id,
-                "occurred_at": event.occurred_at.isoformat(),
-                "previous_status": event.previous_status.value,
-                "new_status": event.new_status.value,
-                "persona_revision": event.persona_revision,
-            } for event in store.list_lifecycle_events(PersonaId(persona_id))]
-            return data
+        return self.personas.get(persona_id)
 
     def create_persona(self, *, kind, basis, label, statement, sources,
                        valid_from=None, valid_to=None, creation_kind="manual",
                        replaces=()):
-        with self._open(write_capability="persona") as connection:
-            store = SQLitePersonaStore(connection, commit_changes=False)
-            service = PersonaManagementService(persona_store=store)
-            try:
-                try:
-                    parsed_valid_from = datetime.fromisoformat(valid_from) if valid_from else None
-                    parsed_valid_to = datetime.fromisoformat(valid_to) if valid_to else None
-                except ValueError:
-                    raise MemoryAccessError("persona_valid_time_invalid", 400) from None
-                if creation_kind in {"model_assisted", "model_consolidation"} and self.persona_producer is None:
-                    raise MemoryAccessError("persona_model_preview_unavailable", 503)
-                model_generated = creation_kind in {"model_assisted", "model_consolidation"}
-                persona = service.create_candidate(
-                    kind=PersonaKind(kind), basis=PersonaBasis(basis), label=label,
-                    statement=statement,
-                    source_refs=tuple((PersonaSourceLayer(item["layer"]), item["id"])
-                                      for item in sources),
-                    generator_name=(
-                        "model_assisted_console" if model_generated
-                        else "manual_console"
-                    ),
-                    generator_version=(
-                        PERSONA_CONSOLIDATION_PROMPT_VERSION
-                        if creation_kind == "model_consolidation"
-                        else PERSONA_PROMPT_VERSION if creation_kind == "model_assisted"
-                        else "1"
-                    ),
-                    valid_from=parsed_valid_from, valid_to=parsed_valid_to,
-                    replaces=tuple(PersonaId(item) for item in replaces),
-                )
-            except (ValueError, LookupError) as error:
-                raise MemoryAccessError(str(error), 400) from None
-            connection.commit()
-            return {"created": True, "id": str(persona.id), "status": persona.status.value}
+        return self.personas.create(
+            kind=kind,
+            basis=basis,
+            label=label,
+            statement=statement,
+            sources=sources,
+            valid_from=valid_from,
+            valid_to=valid_to,
+            creation_kind=creation_kind,
+            replaces=replaces,
+        )
 
     def preview_persona(self, *, basis, sources):
-        """读取白名单来源和用户 L0 后关闭数据库，再发起一次模型预览。"""
-
-        if not self.allow_persona_management:
-            raise MemoryAccessError("persona_management_disabled", 403)
-        if self.persona_producer is None:
-            raise MemoryAccessError("persona_model_preview_unavailable", 503)
-        try:
-            parsed_basis = PersonaBasis(basis)
-        except ValueError:
-            raise MemoryAccessError("persona_basis_invalid", 400) from None
-        inputs = []
-        with self._open() as connection:
-            store = SQLitePersonaStore(connection)
-            for item in sources:
-                layer = PersonaSourceLayer(item["layer"])
-                resolved = store.resolve_source(layer, item["id"])
-                if resolved is None:
-                    raise MemoryAccessError("persona_source_missing_or_inactive", 400)
-                if layer == PersonaSourceLayer.L1:
-                    rows = connection.execute(
-                        "SELECT m.id, m.content, m.created_at FROM memory_evidence e "
-                        "JOIN conversation_messages m ON m.id=e.source_message_id "
-                        "WHERE e.memory_id=? AND m.role='user' ORDER BY m.created_at,m.id",
-                        (item["id"],),
-                    ).fetchall()
-                else:
-                    rows = connection.execute(
-                        "SELECT DISTINCT m.id,m.content,m.created_at FROM scenario_memory_sources s "
-                        "JOIN memory_evidence e ON e.memory_id=s.memory_id "
-                        "JOIN conversation_messages m ON m.id=e.source_message_id "
-                        "WHERE s.scenario_id=? AND m.role='user' ORDER BY m.created_at,m.id",
-                        (item["id"],),
-                    ).fetchall()
-                evidence = tuple(PersonaProposalEvidence(
-                    row["id"], row["content"],
-                    datetime.fromisoformat(row["created_at"]).astimezone(UTC).date().isoformat(),
-                ) for row in rows)
-                inputs.append(PersonaProposalInput(
-                    layer, item["id"], resolved.subject_id,
-                    resolved.content_snapshot, evidence,
-                ))
-        try:
-            proposal = PersonaProposalService(self.persona_producer).preview(
-                basis=parsed_basis, sources=tuple(inputs),
-            )
-        except PersonaProposalError as error:
-            raise MemoryAccessError(str(error), 400) from None
-        return {
-            "kind": proposal.kind.value,
-            "basis": proposal.basis.value,
-            "label": proposal.label,
-            "statement": proposal.statement,
-            "sources": [{"layer": layer.value, "id": source_id}
-                        for layer, source_id in proposal.source_refs],
-            "generator_name": "model_assisted_console",
-            "generator_version": PERSONA_PROMPT_VERSION,
-            "model": self.persona_model,
-            "persisted": False,
-        }
+        return self.personas.preview(basis=basis, sources=sources)
 
     def preview_persona_consolidation(self, *, basis, sources):
-        """读取显式来源与当前有效画像后关闭数据库，再生成整理建议。"""
-
-        if not self.allow_persona_management:
-            raise MemoryAccessError("persona_management_disabled", 403)
-        if self.persona_producer is None:
-            raise MemoryAccessError("persona_model_preview_unavailable", 503)
-        try:
-            parsed_basis = PersonaBasis(basis)
-        except ValueError:
-            raise MemoryAccessError("persona_basis_invalid", 400) from None
-        inputs = []
-        with self._open() as connection:
-            store = SQLitePersonaStore(connection)
-            active_personas = store.list_active(CURRENT_USER_SUBJECT_ID)
-            for item in sources:
-                layer = PersonaSourceLayer(item["layer"])
-                resolved = store.resolve_source(layer, item["id"])
-                if resolved is None:
-                    raise MemoryAccessError("persona_source_missing_or_inactive", 400)
-                if layer == PersonaSourceLayer.L1:
-                    rows = connection.execute(
-                        "SELECT m.id,m.content,m.created_at FROM memory_evidence e "
-                        "JOIN conversation_messages m ON m.id=e.source_message_id "
-                        "WHERE e.memory_id=? AND m.role='user' ORDER BY m.created_at,m.id",
-                        (item["id"],),
-                    ).fetchall()
-                else:
-                    rows = connection.execute(
-                        "SELECT DISTINCT m.id,m.content,m.created_at FROM scenario_memory_sources s "
-                        "JOIN memory_evidence e ON e.memory_id=s.memory_id "
-                        "JOIN conversation_messages m ON m.id=e.source_message_id "
-                        "WHERE s.scenario_id=? AND m.role='user' ORDER BY m.created_at,m.id",
-                        (item["id"],),
-                    ).fetchall()
-                inputs.append(PersonaProposalInput(
-                    layer, item["id"], resolved.subject_id, resolved.content_snapshot,
-                    tuple(PersonaProposalEvidence(
-                        row["id"], row["content"],
-                        datetime.fromisoformat(row["created_at"]).astimezone(UTC).date().isoformat(),
-                    ) for row in rows),
-                ))
-        try:
-            suggestion = PersonaConsolidationService(self.persona_producer).preview(
-                basis=parsed_basis,
-                sources=tuple(inputs),
-                active_personas=active_personas,
-            )
-        except PersonaProposalError as error:
-            raise MemoryAccessError(str(error), 400) from None
-        candidate = suggestion.candidate
-        return {
-            "operation": suggestion.operation.value,
-            "candidate": None if candidate is None else {
-                "kind": candidate.kind.value,
-                "basis": candidate.basis.value,
-                "label": candidate.label,
-                "statement": candidate.statement,
-                "sources": [{"layer": layer.value, "id": source_id}
-                            for layer, source_id in candidate.source_refs],
-            },
-            "replaces": [str(item) for item in suggestion.replaces],
-            "generator_name": "model_assisted_console",
-            "generator_version": PERSONA_CONSOLIDATION_PROMPT_VERSION,
-            "model": self.persona_model,
-            "persisted": False,
-        }
+        return self.personas.preview_consolidation(basis=basis, sources=sources)
 
     def review_persona(self, persona_id, *, decision, expected_revision):
-        with self._open(write_capability="persona") as connection:
-            service = PersonaManagementService(
-                persona_store=SQLitePersonaStore(connection, commit_changes=False),
-            )
-            try:
-                persona = service.review(
-                    PersonaId(persona_id), PersonaReviewDecision(decision),
-                    expected_revision=expected_revision,
-                )
-            except ValueError as error:
-                raise MemoryAccessError(str(error), 409) from None
-            connection.commit()
-            return {"reviewed": True, "id": persona_id,
-                    "status": persona.status.value, "revision": persona.revision}
+        return self.personas.review(
+            persona_id, decision=decision, expected_revision=expected_revision,
+        )
