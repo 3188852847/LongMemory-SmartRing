@@ -3,6 +3,7 @@ import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {Alert, Button, Card, Checkbox, Input, InputNumber, Select, Space, Switch, Tag} from 'antd';
 import {ApiError, ChatApi, type CompanionAbsenceStrategyVersion, type CompanionAbsenceStrategyVersionList, type CompanionRoutineCandidate, type CompanionStrategyCandidate, type FollowUpCandidate, type ProactiveOutreachSummary, type ProactivePolicy, type ProactiveScheduleStatus, type ProactiveTestResult, type ProactiveTopicSeed, type UserInitiatedInteraction} from './api';
 import {ProactiveHistorySection} from './ProactiveHistorySection';
+import {ProactiveTopicSection} from './ProactiveTopicSection';
 
 const DAYS = ['周一','周二','周三','周四','周五','周六','周日'].map((label, value) => ({label, value}));
 const minuteText = (value:number) => `${String(Math.floor(value / 60)).padStart(2,'0')}:${String(value % 60).padStart(2,'0')}`;
@@ -412,38 +413,26 @@ export function ProactiveSettings({api, ready}:{api:ChatApi; ready:boolean}) {
       {dirty && <p className="subtle">当前设置尚未保存，请保存或放弃修改后再测试。</p>}
       {testNotice && <p role="status">{testNotice}</p>}
     </section>
-    <section className="settings-section">
-      <h3>记忆驱动话题素材</h3>
-      <Alert type="warning" showIcon title="这里只保存你允许圆屏公开念出的短句"
-        description="来源限定为当前有效且已接受的 L2 场景。仅保存素材不会自动投递；还需显式打开并保存下方开关。实际定时投递仍会经过勿扰、频率和设备状态门控。请不要填写不适合被旁人听见的信息。"/>
-      <label htmlFor="topic-source">来源 L2 场景</label>
-      <Select id="topic-source" aria-label="来源 L2 场景" className="wide" value={topicScenarioId}
-        placeholder="选择一个已接受的生活场景" onChange={setTopicScenarioId}
-        options={(scenarios.data?.items ?? []).map(item => ({value:item.id,label:item.title}))}/>
-      <label htmlFor="topic-text">允许播出的安全话题</label>
-      <Input id="topic-text" maxLength={120} showCount value={topicText}
-        placeholder="例如：毕业设计汇报准备得怎么样了？"
-        onChange={event => setTopicText(event.target.value)}/>
-      <Button loading={createTopic.isPending}
-        disabled={!topicScenarioId || !topicText.trim() || topicText !== topicText.trim() || createTopic.isPending}
-        onClick={() => createTopic.mutate()}>保存为话题素材</Button>
-      {scenarios.isSuccess && (scenarios.data?.items?.length ?? 0) === 0 && <p className="subtle">还没有当前有效且已接受的 L2 场景；请先在“生活场景”页建立并接受场景。</p>}
-      {topicNotice && <p role="status">{topicNotice}</p>}
-      <div className="proactive-history">{topicSeeds.data?.items?.map(seed => <Card size="small" key={seed.id}
-        title={<Space wrap><Tag color={seed.usable ? 'green' : 'default'}>{seed.usable ? '可用' : '不可用'}</Tag><span>{seed.prompt_text}</span></Space>}
-        extra={seed.status === 'active' && <Button size="small" danger disabled={disableTopic.isPending}
-          loading={disableTopic.isPending && disableTopic.variables?.id === seed.id}
-          onClick={() => disableTopic.mutate(seed)}>停用</Button>}>
-        <p className="subtle">来源 L2：{seed.source.title} · {seed.source.status} · 修订 {seed.revision}</p>
-        <p>{seed.source.summary}</p>
-        <small>素材 ID：{seed.id} · 来源 ID：{seed.scenario_id}</small>
-      </Card>)}</div>
-      {topicSeeds.isSuccess && (topicSeeds.data?.items?.length ?? 0) === 0 && <p className="subtle">尚无话题素材。</p>}
-      <div className="setting-line"><span>定时问候优先使用可用话题素材</span><Switch
-        aria-label="优先使用记忆话题" disabled={!draft.enabled || !draft.automatic_enabled}
-        checked={draft.topic_enabled} onChange={topic_enabled => change({topic_enabled})}/></div>
-      <p className="subtle">此开关默认关闭。开启并保存后，定时点会从可用素材中优先选择最久未使用的一条；没有可用素材时仍使用上方固定问候。</p>
-    </section>
+    <ProactiveTopicSection
+      scenarios={scenarios.data?.items ?? []}
+      scenariosLoaded={scenarios.isSuccess}
+      seeds={topicSeeds.data?.items ?? []}
+      seedsLoaded={topicSeeds.isSuccess}
+      scenarioId={topicScenarioId}
+      text={topicText}
+      notice={topicNotice}
+      createPending={createTopic.isPending}
+      disablePending={disableTopic.isPending}
+      disablingId={disableTopic.variables?.id}
+      proactiveEnabled={draft.enabled}
+      automaticEnabled={draft.automatic_enabled}
+      topicEnabled={draft.topic_enabled}
+      onScenarioChange={setTopicScenarioId}
+      onTextChange={setTopicText}
+      onCreate={() => createTopic.mutate()}
+      onDisable={seed => disableTopic.mutate(seed)}
+      onTopicEnabledChange={topic_enabled => change({topic_enabled})}
+    />
     <section className="settings-section">
       <h3>长期事项跟进候选</h3>
       <Alert type="info" showIcon title="这里只建立可追溯候选，不会自动联系圆屏"
