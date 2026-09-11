@@ -34,7 +34,6 @@ from longmemory.adapters.storage.sqlite_user_initiated_interaction_store import 
 )
 from longmemory.adapters.storage.sqlite_proactive_runtime_state import SQLiteProactiveHistoryReader
 from longmemory.adapters.storage.sqlite_proactive_topic_store import SQLiteProactiveTopicStore
-from longmemory.adapters.storage.sqlite_follow_up_store import SQLiteFollowUpCandidateStore
 from longmemory.adapters.storage.sqlite_proactive_schedule_override_store import (
     SQLiteProactiveScheduleOverrideStore,
 )
@@ -68,16 +67,10 @@ from longmemory.core.companion import (
 )
 from longmemory.core.proactive import (
     OutreachEvidence,
-    OutreachPolicyConfig,
     OutreachPolicyState,
     OutreachState,
     OutreachTrigger,
-    ProactivePolicySettings,
-    ProactiveTopicSeed,
-    FollowUpCandidate,
-    FollowUpCandidateStatus,
     ScheduledTriggerAction,
-    TopicSeedStatus,
     decide_scheduled_trigger,
 )
 from longmemory.adapters.storage.sqlite_l1_consolidation_source_reader import (
@@ -102,16 +95,14 @@ from .proactive_presenters import (
     absence_selection_json,
     absence_strategy_version_json,
     absence_switch_event_json,
-    follow_up_json,
     outreach_result_json,
-    proactive_policy_json,
     routine_candidate_json,
     strategy_candidate_json,
-    topic_seed_json,
 )
 from .errors import MemoryAccessError
 from .scenario_backend import ScenarioBackend
 from .persona_backend import PersonaBackend
+from .proactive_backend import ProactiveBackend
 
 
 class MemoryBackend:
@@ -144,6 +135,11 @@ class MemoryBackend:
             producer=self.persona_producer,
             model=self.persona_model,
         )
+        self.proactive = ProactiveBackend(
+            open_database=self._open,
+            clock=self.clock,
+            memory_service_factory=self._service,
+        )
 
     def info(self):
         return {"configured": self.database is not None,
@@ -175,350 +171,60 @@ class MemoryBackend:
                 "persona_model": self.persona_model if self.persona_producer else None}
 
     def proactive_policy(self):
-        with self._open() as connection:
-            return proactive_policy_json(
-                SQLiteProactivePolicyStore(connection).get("user:self")
-            )
+        return self.proactive.policy()
 
     def proactive_schedule_status(self):
         """解释今天的定时触发条件；只读时间与状态，不读取对话正文。"""
 
-        subject_id = "user:self"
-        now = self.clock()
-        with self._open() as connection:
-            settings = SQLiteProactivePolicyStore(connection).get(subject_id)
-            history = SQLiteProactiveHistoryReader(connection)
-            runtime = history.read(subject_id, now=now)
-            offset = timezone(timedelta(minutes=settings.config.utc_offset_minutes))
-            local_day = now.astimezone(offset).date()
-            idempotency_key = f"explicit-schedule:{local_day.isoformat()}"
-            ledger = ProactiveOutreachLedger(
-                SQLiteProactiveOutreachStore(connection, commit_changes=False),
-                clock=lambda: now,
-            )
-            user_chatted_today = history.user_chatted_on_local_date(
-                now=now,
-                utc_offset_minutes=settings.config.utc_offset_minutes,
-            )
-            already_evaluated_today = (
-                ledger.get_by_idempotency(subject_id, idempotency_key) is not None
-            )
-            override_store = SQLiteProactiveScheduleOverrideStore(connection)
-            development_override = override_store.get_armed(subject_id)
-            decision = decide_scheduled_trigger(
-                settings,
-                now=now,
-                user_chatted_today=user_chatted_today,
-                already_evaluated_today=already_evaluated_today,
-            )
-            return {
-                "action": decision.action.value,
-                "reason": decision.reason.value,
-                "local_date": decision.local_date.isoformat(),
-                "scheduled_for": (
-                    decision.scheduled_for.isoformat()
-                    if decision.scheduled_for is not None else None
-                ),
-                "user_chatted_today": user_chatted_today,
-                "awaiting_user_response": runtime.awaiting_user_response,
-                "already_evaluated_today": already_evaluated_today,
-                "development_override": development_override,
-                "latest_development_override": override_store.get_latest(subject_id),
-            }
+        return self.proactive.schedule_status()
 
     def arm_proactive_schedule_override(self, request):
         """仅授权今天当前设置中的未来时刻；不立即投递。"""
 
-        subject_id = "user:self"
-        now = self.clock()
-        with self._open(write_capability="proactive") as connection:
-            settings = SQLiteProactivePolicyStore(connection).get(subject_id)
-            if settings.revision != request.expected_policy_revision:
-                raise MemoryAccessError("proactive_settings_conflict", 409)
-            if not settings.config.enabled or not settings.automatic_enabled:
-                raise MemoryAccessError("proactive_schedule_override_requires_enabled", 400)
-            local_zone = timezone(
-                timedelta(minutes=settings.config.utc_offset_minutes)
-            )
-            local_now = now.astimezone(local_zone)
-            if local_now.weekday() not in settings.config.allowed_weekdays:
-                raise MemoryAccessError("proactive_schedule_override_weekday_blocked", 400)
-            current_minute = local_now.hour * 60 + local_now.minute
-            if current_minute >= settings.scheduled_minute:
-                raise MemoryAccessError("proactive_schedule_override_time_not_future", 400)
-            try:
-                row = SQLiteProactiveScheduleOverrideStore(connection).arm(
-                    override_id=secrets.token_hex(16),
-                    subject_id=subject_id,
-                    local_date=local_now.date().isoformat(),
-                    scheduled_minute=settings.scheduled_minute,
-                    policy_revision=settings.revision,
-                    now=now,
-                )
-            except ValueError:
-                raise MemoryAccessError("proactive_schedule_override_already_armed", 409) from None
-            return row
+        return self.proactive.arm_schedule_override(request)
 
     def cancel_proactive_schedule_override(
         self, override_id, *, expected_revision,
     ):
-        now = self.clock()
-        with self._open(write_capability="proactive") as connection:
-            try:
-                return SQLiteProactiveScheduleOverrideStore(connection).finish(
-                    override_id,
-                    subject_id="user:self",
-                    expected_revision=expected_revision,
-                    status="cancelled",
-                    reason="owner_cancelled",
-                    now=now,
-                )
-            except ValueError:
-                raise MemoryAccessError("proactive_schedule_override_conflict", 409) from None
+        return self.proactive.cancel_schedule_override(
+            override_id, expected_revision=expected_revision,
+        )
 
     def list_proactive_topic_seeds(self):
-        now = self.clock()
-        with self._open() as connection:
-            rows = SQLiteProactiveTopicStore(connection).list("user:self")
-            return {"items": [topic_seed_json(row, now=now) for row in rows]}
+        return self.proactive.list_topic_seeds()
 
     def create_proactive_topic_seed(self, request):
-        now = self.clock()
-        seed = ProactiveTopicSeed(
-            id=request.request_id.replace("-", ""), subject_id="user:self",
-            scenario_id=request.scenario_id, prompt_text=request.prompt_text,
-            status=TopicSeedStatus.ACTIVE, created_at=now, updated_at=now,
-        )
-        with self._open(write_capability="proactive") as connection:
-            store = SQLiteProactiveTopicStore(connection)
-            try:
-                store.create(
-                    seed,
-                    expected_scenario_revision=request.expected_scenario_revision,
-                )
-            except sqlite3.IntegrityError:
-                existing = connection.execute(
-                    "SELECT id FROM proactive_topic_seeds WHERE id=?", (seed.id,),
-                ).fetchone()
-                code = "topic_seed_request_replayed" if existing else "topic_seed_conflict"
-                raise MemoryAccessError(code, 409) from None
-            except ValueError as error:
-                code = str(error)
-                status = 404 if code == "topic_seed_scenario_not_found" else 409
-                raise MemoryAccessError(code, status) from None
-            row = next(item for item in store.list("user:self") if item["id"] == seed.id)
-            return topic_seed_json(row, now=now)
+        return self.proactive.create_topic_seed(request)
 
     def disable_proactive_topic_seed(self, seed_id, *, expected_revision):
-        now = self.clock()
-        with self._open(write_capability="proactive") as connection:
-            row = connection.execute(
-                "SELECT subject_id,status,revision FROM proactive_topic_seeds WHERE id=?",
-                (seed_id,),
-            ).fetchone()
-            if row is None or row["subject_id"] != "user:self":
-                raise MemoryAccessError("topic_seed_not_found", 404)
-            if row["status"] == "disabled":
-                if row["revision"] == expected_revision + 1:
-                    return {"id": seed_id, "status": "disabled",
-                            "revision": row["revision"], "replayed": True}
-                raise MemoryAccessError("topic_seed_conflict", 409)
-            if not SQLiteProactiveTopicStore(connection).disable(
-                seed_id, expected_revision=expected_revision, now=now,
-            ):
-                raise MemoryAccessError("topic_seed_conflict", 409)
-            return {"id": seed_id, "status": "disabled",
-                    "revision": expected_revision + 1, "replayed": False}
+        return self.proactive.disable_topic_seed(
+            seed_id, expected_revision=expected_revision,
+        )
 
     def list_follow_up_candidates(self):
-        now = self.clock()
-        with self._open() as connection:
-            rows = SQLiteFollowUpCandidateStore(connection).list("user:self")
-            return {"items": [follow_up_json(row, now=now) for row in rows]}
+        return self.proactive.list_follow_ups()
 
     def create_follow_up_candidate(self, request):
-        now = self.clock()
-        if request.follow_up_at <= now:
-            raise MemoryAccessError("follow_up_time_not_future", 400)
-        with self._open(write_capability="proactive") as connection:
-            details = self._service(connection).get_memory(
-                MemoryId(request.source_memory_id)
-            )
-            if details is None:
-                raise MemoryAccessError("follow_up_source_not_found", 404)
-            details_data = details_json(details)
-            if not secrets.compare_digest(
-                revision(details_data), request.expected_memory_revision,
-            ):
-                raise MemoryAccessError("follow_up_source_conflict", 409)
-            if details.memory.retired_at is not None:
-                raise MemoryAccessError("follow_up_source_not_current", 409)
-            candidate = FollowUpCandidate(
-                id=request.request_id.replace("-", ""), subject_id="user:self",
-                source_memory_id=request.source_memory_id,
-                source_content_sha256=hashlib.sha256(
-                    details.memory.content.encode("utf-8")
-                ).hexdigest(),
-                prompt_text=request.prompt_text,
-                follow_up_at=request.follow_up_at,
-                status=FollowUpCandidateStatus.CANDIDATE,
-                created_at=now, updated_at=now,
-            )
-            store = SQLiteFollowUpCandidateStore(connection)
-            try:
-                store.create(candidate)
-            except sqlite3.IntegrityError:
-                existing = connection.execute(
-                    "SELECT id FROM companion_follow_up_candidates WHERE id=?",
-                    (candidate.id,),
-                ).fetchone()
-                code = "follow_up_request_replayed" if existing else "follow_up_conflict"
-                raise MemoryAccessError(code, 409) from None
-            except ValueError as error:
-                code = str(error)
-                status = 404 if code == "follow_up_source_not_found" else 409
-                raise MemoryAccessError(code, status) from None
-            row = next(
-                item for item in store.list("user:self") if item["id"] == candidate.id
-            )
-            return follow_up_json(row, now=now)
+        return self.proactive.create_follow_up(request)
 
     def cancel_follow_up_candidate(self, candidate_id, *, expected_revision):
-        now = self.clock()
-        with self._open(write_capability="proactive") as connection:
-            row = connection.execute(
-                "SELECT subject_id,status,revision FROM companion_follow_up_candidates "
-                "WHERE id=?", (candidate_id,),
-            ).fetchone()
-            if row is None or row["subject_id"] != "user:self":
-                raise MemoryAccessError("follow_up_not_found", 404)
-            if row["status"] == "cancelled":
-                if row["revision"] == expected_revision + 1:
-                    return {"id": candidate_id, "status": "cancelled",
-                            "revision": row["revision"], "replayed": True}
-                raise MemoryAccessError("follow_up_conflict", 409)
-            outreach_store = SQLiteProactiveOutreachStore(
-                connection, commit_changes=False,
-            )
-            outreach_row = connection.execute(
-                "SELECT id FROM proactive_outreach WHERE follow_up_candidate_id=?",
-                (candidate_id,),
-            ).fetchone()
-            if outreach_row is not None:
-                ledger = ProactiveOutreachLedger(outreach_store, clock=lambda: now)
-                outreach = ledger.get(outreach_row["id"])
-                if outreach is None or outreach.state != OutreachState.CANDIDATE:
-                    raise MemoryAccessError("follow_up_already_attempted", 409)
-                ledger.record_transition(
-                    outreach.id, expected_revision=outreach.revision,
-                    new_state=OutreachState.CANCELLED,
-                    reason_code="owner_cancelled_follow_up",
-                    evidence=OutreachEvidence.POLICY_DECISION,
-                )
-            if not SQLiteFollowUpCandidateStore(
-                connection, commit_changes=False,
-            ).cancel(
-                candidate_id, expected_revision=expected_revision, now=now,
-            ):
-                raise MemoryAccessError("follow_up_conflict", 409)
-            connection.commit()
-            return {"id": candidate_id, "status": "cancelled",
-                    "revision": expected_revision + 1, "replayed": False}
+        return self.proactive.cancel_follow_up(
+            candidate_id, expected_revision=expected_revision,
+        )
 
     def arm_follow_up_candidate(
         self, candidate_id, *, expected_revision, expected_policy_revision,
     ):
         """显式建立未来账本；这里不探测设备，也不产生任何即时播报。"""
 
-        now = self.clock()
-        with self._open(write_capability="proactive") as connection:
-            store = SQLiteFollowUpCandidateStore(connection)
-            row = next(
-                (item for item in store.list("user:self") if item["id"] == candidate_id),
-                None,
-            )
-            if row is None:
-                raise MemoryAccessError("follow_up_not_found", 404)
-            if row["revision"] != expected_revision:
-                raise MemoryAccessError("follow_up_conflict", 409)
-            current = follow_up_json(row, now=now)
-            if row["outreach_id"] is not None:
-                return {**current, "replayed": True}
-            if not current["ready_for_activation"]:
-                raise MemoryAccessError(
-                    f"follow_up_{current['blocked_reason'] or 'not_ready'}", 409,
-                )
-            settings = SQLiteProactivePolicyStore(connection).get("user:self")
-            if settings.revision != expected_policy_revision:
-                raise MemoryAccessError("proactive_settings_conflict", 409)
-            if not settings.config.enabled:
-                raise MemoryAccessError("follow_up_requires_proactive_enabled", 409)
-            scheduled_for = datetime.fromisoformat(row["follow_up_at"])
-            ledger = ProactiveOutreachLedger(
-                SQLiteProactiveOutreachStore(connection), clock=lambda: now,
-            )
-            try:
-                ledger.create_candidate(
-                    subject_id="user:self",
-                    trigger=OutreachTrigger.EXPLICIT_SCHEDULE,
-                    trigger_reason_code="owner_approved_l1_follow_up",
-                    content=row["prompt_text"],
-                    scheduled_for=scheduled_for,
-                    expires_at=(
-                        scheduled_for + settings.config.maximum_lifetime
-                    ),
-                    idempotency_key=f"follow-up:{candidate_id}",
-                    policy_version=settings.config.policy_version,
-                    follow_up_candidate_id=candidate_id,
-                    follow_up_candidate_revision=row["revision"],
-                )
-            except ValueError:
-                raise MemoryAccessError("follow_up_activation_conflict", 409) from None
-            refreshed = next(
-                item for item in store.list("user:self") if item["id"] == candidate_id
-            )
-            return {**follow_up_json(refreshed, now=now), "replayed": False}
+        return self.proactive.arm_follow_up(
+            candidate_id,
+            expected_revision=expected_revision,
+            expected_policy_revision=expected_policy_revision,
+        )
 
     def update_proactive_policy(self, request):
-        # 在取得写锁前完成纯配置验证；非法输入不能被误报成数据库损坏。
-        try:
-            config = OutreachPolicyConfig(
-                enabled=request.enabled,
-                utc_offset_minutes=request.utc_offset_minutes,
-                allowed_weekdays=tuple(request.allowed_weekdays),
-                allowed_start_minute=request.allowed_start_minute,
-                allowed_end_minute=request.allowed_end_minute,
-                daily_limit=request.daily_limit,
-                minimum_interval=timedelta(seconds=request.minimum_interval_seconds),
-                maximum_lifetime=timedelta(seconds=request.maximum_lifetime_seconds),
-            )
-            # 自动开关与定时点的组合约束也必须在打开写事务前验证，
-            # 否则非法网页输入会被数据库边界误报成“数据库不可用”。
-            ProactivePolicySettings(
-                "user:self",
-                config,
-                request.quiet_until,
-                automatic_enabled=request.automatic_enabled,
-                scheduled_minute=request.scheduled_minute,
-                greeting_text=request.greeting_text,
-                topic_enabled=request.topic_enabled,
-            )
-        except ValueError:
-            raise MemoryAccessError("invalid_proactive_policy", 400) from None
-        with self._open(write_capability="proactive") as connection:
-            store = SQLiteProactivePolicyStore(connection)
-            current = store.get("user:self")
-            if current.revision != request.expected_revision:
-                raise MemoryAccessError("proactive_settings_conflict", 409)
-            updated = ProactivePolicySettings(
-                "user:self", config, request.quiet_until,
-                current.revision + 1, datetime.now(UTC),
-                request.automatic_enabled, request.scheduled_minute,
-                request.greeting_text, request.topic_enabled,
-            )
-            return proactive_policy_json(
-                store.save(updated, expected_revision=current.revision)
-            )
+        return self.proactive.update_policy(request)
 
     async def proactive_test(self, request, client):
         """执行一次用户明确发起的短文本测试；同 request_id 绝不重播。"""
