@@ -51,3 +51,20 @@ http://127.0.0.1:8767/settings?tab=voice
 | 已排除实时默认 | AuK-Flash | 本机单次 2.3 秒音频约耗时 92.17 秒、运行期约 13.9 GB 显存 | 仅保留离线高控制候选 |
 
 每个新后端至少记录：固定源码版本、模型身份/许可证、显存峰值、冷/热启动、首个有效音频、完整耗时、音频时长、近静音检查、中文数字与中英混合表现、取消能力及圆屏实际出声。EdgeTTS 继续作为日常稳定对照；新增候选失败时不自动改用另一个后端掩盖结果。
+
+### CosyVoice 独立试验
+
+CosyVoice 使用项目外独立环境和权重，不加入主项目依赖。源码、依赖和模型准备完成后，先检查本地快照：
+
+```powershell
+$cosyPython = "D:\ESP32-Workspace\CosyVoice\.venv\Scripts\python.exe"
+& $cosyPython "D:\02-项目\LongMemory-SmartRing\scripts\development\cosyvoice\trial.py" inspect
+```
+
+检查通过后关闭其他占用显存的模型服务，再运行一次固定四句流式试验：
+
+```powershell
+& $cosyPython "D:\02-项目\LongMemory-SmartRing\scripts\development\cosyvoice\trial.py" generate
+```
+
+结果保存到 Git 忽略的 `data/audio/cosyvoice-<随机编号>/`。其中包含四个 WAV 和一个 `report.json`；不会写入聊天、记忆、声音设置，也不会切换圆屏后端。只有独立结果通过人工试听和工程门槛后，才设计常驻服务与 TTS V2 适配。
