@@ -28,6 +28,9 @@ from longmemory.core.memory.retrieval.context_builder import (
     build_memory_context,
 )
 from longmemory.core.memory.retrieval.service import is_memory_effective
+from longmemory.core.memory.quality.l1_candidates import (
+    canonicalize_l1_for_exact_dedup,
+)
 from longmemory.core.memory.l1_atomic.models import (
     MemoryEvidence,
     MemoryOperationType,
@@ -200,12 +203,16 @@ class MemoryTurnService:
         memory_operations = []
 
         for candidate_memory in candidate_memories:
+            candidate_dedup_key = canonicalize_l1_for_exact_dedup(
+                candidate_memory.content
+            )
             # 同一句临时状态在有效期结束后可以重新成为一条新 L1；不能把
             # 新证据挂到已过期的旧记录上，否则它仍会因为旧 valid_to 而不可召回。
             existing_memory = next((
                 memory for memory in self._memory_store.list_active()
                 if memory.subject_id == candidate_memory.subject_id
-                and memory.content == candidate_memory.content
+                and canonicalize_l1_for_exact_dedup(memory.content)
+                == candidate_dedup_key
                 and is_memory_effective(memory, message.created_at)
             ), None)
 

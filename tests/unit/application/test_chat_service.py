@@ -19,7 +19,11 @@ from longmemory.core.conversation.models import (
 from longmemory.core.memory.extraction.service import (
     MemoryExtractionService,
 )
-from longmemory.core.memory.models import AtomicMemory, MemoryEvidence
+from longmemory.core.memory.models import (
+    AtomicMemory,
+    CURRENT_USER_SUBJECT_ID,
+    MemoryEvidence,
+)
 from longmemory.core.memory.retrieval.service import (
     KeywordMemoryRetriever,
 )
@@ -270,3 +274,44 @@ def test_chat_reuses_exact_duplicate_memory() -> None:
     assert duplicate_result.reused_memories == (
         first_result.saved_memories[0],
     )
+
+
+def test_chat_reuses_only_conservatively_normalized_duplicate_memory() -> None:
+    """模型提取的主体称呼或句末标点变体应复用 L1，并保留新 L0 证据。"""
+
+    class VariantExtractor:
+        def extract(self, message: ConversationMessage) -> tuple[AtomicMemory, ...]:
+            content = (
+                "用户本人喜欢乌龙茶！"
+                if message.content == "first"
+                else "此人喜欢乌龙茶。"
+            )
+            return (AtomicMemory(
+                MemoryId(f"memory-{message.id}"),
+                CURRENT_USER_SUBJECT_ID,
+                content,
+                FIXED_TIME,
+            ),)
+
+    conversation_store = FakeConversationStore()
+    memory_store = FakeMemoryStore()
+    message_ids = iter(MessageId(value) for value in (
+        "user-1", "assistant-1", "user-2", "assistant-2",
+    ))
+    chat_service = ChatService(
+        conversation_store=conversation_store,
+        memory_store=memory_store,
+        memory_extractor=VariantExtractor(),
+        memory_retriever=KeywordMemoryRetriever(memory_store),
+        answer_generator=FakeAnswerGenerator(),
+        message_id_factory=lambda: next(message_ids),
+        clock=lambda: FIXED_TIME,
+    )
+
+    first = chat_service.chat("first")
+    duplicate = chat_service.chat("second")
+
+    assert len(memory_store.memories) == 1
+    assert len(memory_store.evidence) == 2
+    assert duplicate.saved_memories == ()
+    assert duplicate.reused_memories == first.saved_memories

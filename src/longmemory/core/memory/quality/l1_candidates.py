@@ -12,6 +12,7 @@ from longmemory.core.memory.l1_atomic.models import AtomicMemory
 
 
 _SUBJECT_PREFIXES = ("用户本人", "此人", "用户")
+_TERMINAL_PUNCTUATION = frozenset("。.!！?？;；")
 _NEGATION_PAIRS = (
     ("不喜欢", "喜欢"),
     ("不爱", "爱"),
@@ -31,6 +32,23 @@ class L1QualityCandidate:
     kind: str
     similarity: float
     reason: str
+
+
+def canonicalize_l1_for_exact_dedup(text: str) -> str:
+    """生成仅供写入时严格去重的保守键。
+
+    这里只折叠不影响事实含义的表层差异：Unicode 形式、主体称呼、
+    多余空白和句末标点。内部标点、数字和否定词全部保留，避免把可能
+    不同的事实自动合并。
+    """
+
+    value = unicodedata.normalize("NFKC", text).casefold().strip()
+    for prefix in _SUBJECT_PREFIXES:
+        if value.startswith(prefix):
+            value = value[len(prefix):].lstrip()
+            break
+    value = " ".join(value.split())
+    return value.rstrip("".join(_TERMINAL_PUNCTUATION)).rstrip()
 
 
 def _canonical_text(text: str) -> str:

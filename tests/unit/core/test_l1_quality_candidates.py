@@ -7,7 +7,10 @@ from longmemory.core.memory.l1_atomic.models import (
     AtomicMemory,
     CURRENT_USER_SUBJECT_ID,
 )
-from longmemory.core.memory.quality.l1_candidates import find_l1_quality_candidates
+from longmemory.core.memory.quality.l1_candidates import (
+    canonicalize_l1_for_exact_dedup,
+    find_l1_quality_candidates,
+)
 
 
 NOW = datetime(2026, 9, 13, tzinfo=UTC)
@@ -15,6 +18,24 @@ NOW = datetime(2026, 9, 13, tzinfo=UTC)
 
 def memory(key: str, content: str) -> AtomicMemory:
     return AtomicMemory(MemoryId(key), CURRENT_USER_SUBJECT_ID, content, NOW)
+
+
+def test_write_time_dedup_key_only_folds_safe_surface_variants():
+    assert canonicalize_l1_for_exact_dedup("  用户本人 喜欢乌龙茶！ ") == "喜欢乌龙茶"
+    assert canonicalize_l1_for_exact_dedup("此人喜欢乌龙茶。。") == "喜欢乌龙茶"
+    assert canonicalize_l1_for_exact_dedup("用户喜欢乌龙茶?") == "喜欢乌龙茶"
+
+
+def test_write_time_dedup_key_preserves_meaning_bearing_differences():
+    assert canonicalize_l1_for_exact_dedup("用户不喜欢乌龙茶。") != (
+        canonicalize_l1_for_exact_dedup("用户喜欢乌龙茶。")
+    )
+    assert canonicalize_l1_for_exact_dedup("用户喜欢 A、B。") != (
+        canonicalize_l1_for_exact_dedup("用户喜欢 AB。")
+    )
+    assert canonicalize_l1_for_exact_dedup("用户计划 1.5 小时后出发。") != (
+        canonicalize_l1_for_exact_dedup("用户计划 15 小时后出发。")
+    )
 
 
 def test_finds_normalized_duplicate_without_treating_score_as_confidence():
