@@ -36,8 +36,9 @@ function validate(body) {
   if (body.response_format !== undefined && body.response_format !== 'wav')
     throw new Error('unsupported_format');
   if (body.stream !== undefined && body.stream !== false) throw new Error('streaming_not_supported');
-  if (body.voice !== undefined && body.voice !== 'xiaoya') throw new Error('unsupported_voice');
-  if (body.model !== undefined && body.model !== 'chinese-xiaoya') throw new Error('unsupported_model');
+  // 通用 CustomTTS 可能沿用上一个提供器或全局默认的 voice/model 名称。
+  // 本服务启动时已经固定加载 chinese-xiaoya，不能让无效的路由提示覆盖模型，
+  // 也不应因此丢弃整段回答；故这两个字段与其他兼容元数据一样只忽略。
   const speed = body.speed === undefined ? 1 : body.speed;
   if (typeof speed !== 'number' || !Number.isFinite(speed) || speed < 0.75 || speed > 1.5)
     throw new Error('invalid_speed');
@@ -103,8 +104,8 @@ export function createSanoServer(engine) {
       const code = error instanceof SyntaxError ? 'invalid_json' : String(error?.message || 'request_failed');
       const clientErrors = new Set([
         'request_too_large', 'invalid_request', 'invalid_input',
-        'unsupported_format', 'streaming_not_supported', 'unsupported_voice',
-        'unsupported_model', 'invalid_speed', 'invalid_json',
+        'unsupported_format', 'streaming_not_supported', 'invalid_speed',
+        'invalid_json',
       ]);
       if (!response.headersSent) json(response, clientErrors.has(code) ? 400 : 500, {error: code});
       else response.destroy();

@@ -54,6 +54,7 @@ test('generic CustomTTS metadata is ignored instead of mutating synthesis', asyn
     body: JSON.stringify({
       input: '兼容请求', response_format: 'wav', stream: false,
       speed: 1.2, cache: false, request_id: 'synthetic-only',
+      voice: 'generic-upstream-voice', model: 'generic-upstream-model',
       metadata: {source: 'generic-custom-tts'},
     }),
   });
