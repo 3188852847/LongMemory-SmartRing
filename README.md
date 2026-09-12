@@ -56,6 +56,8 @@ G3.2 已支持两种明确临时互动方式：当天模式把固定完整表达
 
 SQLite V40 开始逐条记录未来 L1 合并真正新增的来源关联，合并历史会显示账本是否完整。V41 允许从控制台恢复至少含一条、数量完整匹配的误合并账本：重新启用被合并 L1，保留已汇入来源且不自动复活 L2/L3；恢复后只能在来源仍安全覆盖时按原方向重新合并。旧 V39 合并和无法区分版本的零来源账本不猜测恢复。见 [ADR-0132](docs/adr/0132-l1-merge-evidence-ledger.md)和 [ADR-0133](docs/adr/0133-restorable-l1-duplicate-merge.md)。
 
+L2 场景仍使用已解释的关键词召回；未来圆屏回答回执会记录实际注入 L2 的关键词重合数、排名和内容指纹，不重复保存场景正文。语义 L2 尚未启用，先用这些日常基线证据评估无关召回与漏召回，再决定是否接入本地 BGE。见 [ADR-0134](docs/adr/0134-audit-l2-retrieval-before-semantic-upgrade.md)。
+
 L2 设计已接受：先生成可追溯、需复核的时间化场景候选，确认前不进入回答；稳定习惯仍属于 L3。个人库已在一致性备份和用户明确授权后迁移到 V6，原有 L0/L1/L2 数量不变，生命周期事件从空表开始。可按 [L2 生活场景合成测试指南](docs/guides/L2生活场景测试.md)体验，设计与边界见 [ADR-0035](docs/adr/0035-reviewable-l2-scenario-candidates.md)、[ADR-0038](docs/adr/0038-audited-l2-lifecycle.md)和 [L2 第一版验收](docs/requirements/l2-scenario-memory.md)。
 
 L3 采用“一条记录一个画像断言”，并区分用户明确声明和系统跨记录推断。控制台把当前有效断言聚合成一份统一画像；候选可由人工或低频整理提出，经证据门槛和确定性风险策略决定是否激活。L3 回答使用有独立开关、数量/字符预算和 L3→L1/L2→L0 轨迹，默认关闭；它不等于系统已能可靠理解任意习惯。见 [L3 验收需求](docs/requirements/l3-user-persona.md)和 [测试指南](docs/guides/L3用户画像测试.md)。

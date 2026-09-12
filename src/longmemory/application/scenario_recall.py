@@ -11,6 +11,8 @@ class ScenarioRecallItem:
     summary: str
     source_memory_ids: tuple[str, ...]
     source_message_ids: tuple[str, ...]
+    # 分数用于回答回执审计，不是场景真实性或回答正确率。
+    keyword_score: int | None = None
 
 
 @dataclass(frozen=True, slots=True)

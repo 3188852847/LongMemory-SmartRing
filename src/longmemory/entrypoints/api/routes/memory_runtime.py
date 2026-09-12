@@ -37,6 +37,12 @@ def _retrieval_evidence(prepared):
                     "dense_score": item.dense_score,
                     "fused_score": item.fused_score,
                 })
+            elif layer == "l2":
+                row.update({
+                    "keyword_score": item.keyword_score,
+                    "dense_score": None,
+                    "fused_score": None,
+                })
             rows.append(row)
     return rows
 

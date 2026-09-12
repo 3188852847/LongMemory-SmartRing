@@ -159,6 +159,7 @@ def test_only_relevant_accepted_scenario_is_recalled_with_full_provenance(tmp_pa
     assert result.items[0].scenario_id == "scenario-1"
     assert result.items[0].source_memory_ids == ("l1-a", "l1-b")
     assert result.items[0].source_message_ids == ("l0-a", "l0-b")
+    assert result.items[0].keyword_score == 4
     assert "已经复核或策略门控" in result.context
     assert provider.recall("我的猫叫什么").items == ()
     connection.execute(

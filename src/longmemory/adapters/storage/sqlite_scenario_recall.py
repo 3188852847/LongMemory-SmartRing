@@ -53,6 +53,7 @@ class SQLiteScenarioRecallProvider:
                     tuple(dict.fromkeys(source["memory_id"] for source in sources)),
                     tuple(dict.fromkeys(source["source_message_id"] for source in sources
                                         if source["source_message_id"] is not None)),
+                    keyword_score=_score,
                 ))
         finally:
             connection.close()

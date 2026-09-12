@@ -157,7 +157,9 @@ class SQLiteRoundScreenTurnStore:
                     or any(score is not None and (
                         type(score) not in (int, float) or not math.isfinite(score))
                         for score in (dense, fused))
-                    or (layer != "l1" and any(
+                    or (layer == "l2" and any(
+                        score is not None for score in (dense, fused)))
+                    or (layer == "l3" and any(
                         score is not None for score in (keyword, dense, fused)))):
                 raise ValueError("round_screen_retrieval_evidence_invalid")
             normalized.append((layer, item_id, rank, digest, keyword, dense, fused))

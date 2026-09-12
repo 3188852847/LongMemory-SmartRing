@@ -89,7 +89,8 @@ def test_turn_receipt_atomically_records_ranked_evidence_and_rejects_conflict(tm
          "content_sha256": "a" * 64, "keyword_score": 2,
          "dense_score": 0.72, "fused_score": 0.031},
         {"layer": "l2", "item_id": "scenario-a", "rank": 1,
-         "content_sha256": "b" * 64},
+         "content_sha256": "b" * 64, "keyword_score": 3,
+         "dense_score": None, "fused_score": None},
     )
     store = SQLiteRoundScreenTurnStore(database, clock=lambda: now)
     created = store.record(
@@ -120,6 +121,11 @@ def test_turn_receipt_atomically_records_ranked_evidence_and_rejects_conflict(tm
         "round_screen_retrieval_evidence WHERE layer='l1'"
     ).fetchone()
     assert tuple(scores) == (2, 0.72, 0.031)
+    l2_scores = connection.execute(
+        "SELECT keyword_score,dense_score,fused_score FROM "
+        "round_screen_retrieval_evidence WHERE layer='l2'"
+    ).fetchone()
+    assert tuple(l2_scores) == (3, None, None)
     assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
     connection.close()
     with pytest.raises(ValueError, match="round_screen_retrieval_evidence_invalid"):
