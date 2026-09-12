@@ -19,6 +19,7 @@ _NEGATION_PAIRS = (
     ("不喝", "喝"),
     ("不吃", "吃"),
 )
+DETECTOR_VERSION = "l1-quality-heuristic-v1"
 
 
 @dataclass(frozen=True, slots=True)

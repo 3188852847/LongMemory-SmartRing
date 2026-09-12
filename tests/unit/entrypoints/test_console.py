@@ -569,9 +569,9 @@ def test_console_exposes_read_only_l1_quality_candidates(tmp_path):
         )
 
     async def run():
-        async with console(database) as (client, base, _bridge):
+        async with console(database, allow_memory_correction=True) as (client, base, _bridge):
             assert (await client.get(base + "/api/memories/quality-candidates")).status == 401
-            await login(client, base)
+            headers = await login(client, base)
             response = await client.get(base + "/api/memories/quality-candidates")
             data = await response.json()
             assert response.status == 200
@@ -581,8 +581,34 @@ def test_console_exposes_read_only_l1_quality_candidates(tmp_path):
             assert data["items"][0]["kind"] == "possible_conflict"
             assert data["items"][0]["left"]["id"] == "memory-a"
             assert data["items"][0]["right"]["id"] == "memory-b"
+            assert data["items"][0]["review_status"] == "pending"
+            reviewed = await client.post(
+                base + "/api/memories/quality-candidates/reviews", headers=headers,
+                json={"left_memory_id": "memory-a", "right_memory_id": "memory-b",
+                      "candidate_kind": "possible_conflict", "action": "dismiss",
+                      "expected_revision": 0},
+            )
+            assert reviewed.status == 200
+            assert await reviewed.json() == {
+                "review_status": "dismissed", "review_revision": 1, "replayed": False,
+            }
+            refreshed = await (await client.get(
+                base + "/api/memories/quality-candidates"
+            )).json()
+            assert refreshed["items"][0]["review_status"] == "dismissed"
+            assert refreshed["items"][0]["review_revision"] == 1
+            stale = await client.post(
+                base + "/api/memories/quality-candidates/reviews", headers=headers,
+                json={"left_memory_id": "memory-a", "right_memory_id": "memory-b",
+                      "candidate_kind": "possible_conflict", "action": "reopen",
+                      "expected_revision": 0},
+            )
+            assert stale.status == 409
 
     asyncio.run(run())
+    with sqlite3.connect(database) as connection:
+        assert connection.execute("SELECT count(*) FROM atomic_memories").fetchone()[0] == 3
+        assert connection.execute("SELECT count(*) FROM l1_quality_review_events").fetchone()[0] == 1
 
 
 @pytest.mark.parametrize("attack", ["no_csrf", "no_origin", "other_origin", "other_host", "cross_site", "same_site", "wrong_cookie"])
@@ -917,6 +943,7 @@ def test_memory_without_config_is_not_a_fake_empty_database():
                               "allow_clear": False,
                               "allow_correction": False, "allow_change": False,
                               "allow_promote_source": False,
+                              "allow_l1_quality_review": False,
                               "allow_scenario_management": False,
                               "allow_persona_management": False,
                               "scenario_model_preview_available": False,

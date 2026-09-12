@@ -37,6 +37,34 @@ def register_memory_routes(app, backend):
             raise web.HTTPBadRequest()
         return await invoke(backend.quality_candidates)
 
+    async def review_quality_candidate(request):
+        if request.content_type != "application/json":
+            raise web.HTTPBadRequest()
+        try:
+            body = await request.json()
+        except (ValueError, UnicodeError):
+            raise web.HTTPBadRequest() from None
+        if (not isinstance(body, dict)
+                or set(body) != {"left_memory_id", "right_memory_id", "candidate_kind",
+                                 "action", "expected_revision"}
+                or any(not isinstance(body.get(key), str) or not body[key]
+                       or len(body[key]) > 128 or re.search(r"[\x00-\x1f\x7f]", body[key])
+                       for key in ("left_memory_id", "right_memory_id"))
+                or body.get("candidate_kind") not in {
+                    "normalized_duplicate", "lexical_near_duplicate", "possible_conflict",
+                }
+                or body.get("action") not in {"dismiss", "reopen"}
+                or type(body.get("expected_revision")) is not int
+                or not 0 <= body["expected_revision"] <= 1000000):
+            raise web.HTTPBadRequest()
+        return await invoke(
+            backend.review_quality_candidate,
+            left_memory_id=body["left_memory_id"],
+            right_memory_id=body["right_memory_id"],
+            candidate_kind=body["candidate_kind"], action=body["action"],
+            expected_revision=body["expected_revision"],
+        )
+
     async def source_listing(request):
         values = request.query
         if (set(values) - {"q", "role", "link_state", "offset", "limit", "local_date", "utc_offset_minutes"}
@@ -495,6 +523,7 @@ def register_memory_routes(app, backend):
     app.router.add_get("/api/memory-config", config, allow_head=False)
     app.router.add_get("/api/memories", listing, allow_head=False)
     app.router.add_get("/api/memories/quality-candidates", quality_candidates, allow_head=False)
+    app.router.add_post("/api/memories/quality-candidates/reviews", review_quality_candidate)
     app.router.add_get("/api/memories/daily-review", daily_review, allow_head=False)
     app.router.add_get("/api/memories/clear-preview", clear_preview, allow_head=False)
     app.router.add_post("/api/memories/clear", clear_memories)

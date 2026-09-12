@@ -16,6 +16,7 @@ type MemoryConfig = {
   allow_correction: boolean;
   allow_change: boolean;
   allow_promote_source: boolean;
+  allow_l1_quality_review: boolean;
 };
 type RuntimeMode = {write_enabled: boolean; use_enabled: boolean; scenario_use_enabled: boolean; scenario_available: boolean; persona_use_enabled: boolean; persona_available: boolean; persistent: boolean; l0_archived_when_write_disabled: boolean};
 type L1Summary = {id: string; content: string; truncated: boolean; state: 'active' | 'retired'; effective_state?: 'current'|'expired'|'not_started'|'retired'; recorded_at: string; subject_id: string};
@@ -35,8 +36,8 @@ type DailyDeletion = {id:string;memory_id:string;subject_id:string;deleted_at:st
 type DailyReview = {local_date:string;utc_offset_minutes:number;items:DailyReviewItem[];total:number;limited:boolean;activity_counts:Record<DailyActivity|'deleted',number>;message_counts:{user:number;assistant:number;total:number;unlinked_user:number};quality_counts:{owner_confirmed_missed_extraction:number};deletions:DailyDeletion[];deletions_limited:boolean};
 type ClearPreview = {l1_total:number;l1_active:number;l1_retired:number;affected_l2_current:number;affected_l3_current:number;l0_preserved:number;revision:string};
 type WipePreview = {l0_total:number;l1_total:number;l2_total:number;l3_total:number;l2_current:number;l3_current:number;related_record_total:number;web_chat_archive_preserved:boolean;existing_backups_preserved:boolean;revision:string};
-type L1QualityCandidate = {kind:'normalized_duplicate'|'lexical_near_duplicate'|'possible_conflict';similarity:number;reason:string;left:L1Summary;right:L1Summary};
-type L1QualityCandidates = {items:L1QualityCandidate[];total:number;scanned_memory_count:number;memory_scan_limited:boolean;candidate_limit:number;candidate_limit_reached:boolean;lexical_threshold:number;generated_at:string};
+type L1QualityCandidate = {kind:'normalized_duplicate'|'lexical_near_duplicate'|'possible_conflict';similarity:number;reason:string;left:L1Summary;right:L1Summary;review_status:'pending'|'dismissed';review_revision:number};
+type L1QualityCandidates = {items:L1QualityCandidate[];total:number;scanned_memory_count:number;memory_scan_limited:boolean;candidate_limit:number;candidate_limit_reached:boolean;lexical_threshold:number;detector_version:string;generated_at:string};
 
 const api = new ChatApi();
 const displayTime = (value?: string | null) => value ? new Date(value).toLocaleString('zh-CN') : '未记录';
@@ -208,6 +209,21 @@ export function MemoryApp() {
         : '没有发现满足当前保守规则的 L1 重复或显式矛盾。');
     } catch (error) {setNotice(memoryFailure(error, 'read'));}
     finally {setQualityScanning(false);}
+  }
+  async function reviewL1Quality(item:L1QualityCandidate, action:'dismiss'|'reopen') {
+    await guarded(async()=>{
+      const result=await api.request<{review_status:'pending'|'dismissed';review_revision:number}>(
+        '/api/memories/quality-candidates/reviews','POST',{
+          left_memory_id:item.left.id,right_memory_id:item.right.id,
+          candidate_kind:item.kind,action,expected_revision:item.review_revision,
+        },
+      );
+      setQualityCandidates(current=>current ? {...current,items:current.items.map(candidate=>
+        candidate.left.id===item.left.id&&candidate.right.id===item.right.id&&candidate.kind===item.kind
+          ? {...candidate,review_status:result.review_status,review_revision:result.review_revision}
+          : candidate)} : current);
+      setNotice(action==='dismiss'?'已把这组候选标为误报；两条 L1 均未修改。':'已恢复这组候选，等待再次复核。');
+    },'write');
   }
   async function openCorrection(id:string) {
     await guarded(async()=>{
@@ -393,7 +409,7 @@ export function MemoryApp() {
             <Space direction="vertical" size={6} className="quality-candidate-body">
               <Space wrap><Tag color={item.kind==='possible_conflict'?'red':item.kind==='normalized_duplicate'?'gold':'blue'}>{item.kind==='possible_conflict'?'可能矛盾':item.kind==='normalized_duplicate'?'规范化重复':'高字面重合'}</Tag><span>{item.reason}</span><code>重合 {Math.round(item.similarity*100)}%</code></Space>
               <div className="quality-candidate-pair"><Button type="text" onClick={()=>void openL1(item.left.id)}><Tag color="magenta">A</Tag>{item.left.content}</Button><Button type="text" onClick={()=>void openL1(item.right.id)}><Tag color="magenta">B</Tag>{item.right.content}</Button></div>
-              <small className="subtle">请分别核对原始来源，再使用已有的“纠正错误 / 记录变化 / 删除”操作；当前版本不会代替你处置。</small>
+              <Space wrap><small className="subtle">请分别核对原始来源，再使用已有的“纠正错误 / 记录变化 / 删除”操作；当前版本不会代替你处置。</small><Button size="small" disabled={!config?.allow_l1_quality_review||busy} onClick={()=>void reviewL1Quality(item,item.review_status==='dismissed'?'reopen':'dismiss')}>{item.review_status==='dismissed'?'恢复候选':'标为误报'}</Button>{item.review_status==='dismissed'&&<Tag>已忽略</Tag>}</Space>
             </Space>
           </List.Item>}/>
         </>}

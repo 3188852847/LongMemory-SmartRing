@@ -80,6 +80,7 @@ class MemoryBackend:
                 # 以后拆分权限时不需要再改变页面语义。
                 "allow_change": self.allow_correction and self.database is not None,
                 "allow_promote_source": self.allow_correction and self.database is not None,
+                "allow_l1_quality_review": self.allow_correction and self.database is not None,
                 "allow_scenario_management": (
                     self.allow_scenario_management and self.database is not None
                 ),
@@ -306,6 +307,9 @@ class MemoryBackend:
 
     def quality_candidates(self):
         return self.atomic_memories.quality_candidates()
+
+    def review_quality_candidate(self, **kwargs):
+        return self.atomic_memories.review_quality_candidate(**kwargs)
 
     @staticmethod
     def _local_day_window(local_date, utc_offset_minutes):

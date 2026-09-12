@@ -1,6 +1,6 @@
-"""当前 SQLite V37 的完整结构定义；不包含历史迁移步骤。"""
+"""当前 SQLite V38 的完整结构定义；不包含历史迁移步骤。"""
 
-SCHEMA_VERSION = 37
+SCHEMA_VERSION = 38
 
 LATEST_SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS conversation_messages (
@@ -55,6 +55,26 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_memory_quality_event_source_kind
     ON memory_quality_events (source_message_id, event_kind);
 CREATE INDEX IF NOT EXISTS idx_memory_quality_events_time
     ON memory_quality_events (occurred_at DESC, id DESC);
+
+CREATE TABLE IF NOT EXISTS l1_quality_review_events (
+    id TEXT PRIMARY KEY,
+    left_memory_id TEXT NOT NULL,
+    right_memory_id TEXT NOT NULL,
+    detector_version TEXT NOT NULL CHECK (length(trim(detector_version)) BETWEEN 1 AND 120),
+    candidate_kind TEXT NOT NULL CHECK (candidate_kind IN (
+        'normalized_duplicate', 'lexical_near_duplicate', 'possible_conflict'
+    )),
+    action TEXT NOT NULL CHECK (action IN ('dismiss', 'reopen')),
+    review_revision INTEGER NOT NULL CHECK (review_revision >= 1),
+    occurred_at TEXT NOT NULL,
+    CHECK (left_memory_id < right_memory_id),
+    UNIQUE (left_memory_id, right_memory_id, detector_version, review_revision),
+    FOREIGN KEY (left_memory_id) REFERENCES atomic_memories (id) ON DELETE CASCADE,
+    FOREIGN KEY (right_memory_id) REFERENCES atomic_memories (id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_l1_quality_review_pair
+    ON l1_quality_review_events
+        (left_memory_id, right_memory_id, detector_version, review_revision DESC);
 
 CREATE TABLE IF NOT EXISTS round_screen_turns (
     user_message_id TEXT PRIMARY KEY,

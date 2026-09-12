@@ -26,7 +26,10 @@ from longmemory.core.memory.consolidation.trigger_policy import (
     ConsolidationTriggerConfig,
 )
 from longmemory.core.memory.l1_atomic.models import CURRENT_USER_SUBJECT_ID
-from longmemory.core.memory.quality.l1_candidates import find_l1_quality_candidates
+from longmemory.core.memory.quality.l1_candidates import (
+    DETECTOR_VERSION,
+    find_l1_quality_candidates,
+)
 from longmemory.core.memory.retrieval.service import is_memory_effective
 
 from .errors import MemoryAccessError
@@ -73,25 +76,95 @@ class AtomicMemoryBackend:
             )
             scanned = active[:maximum_memories]
             candidates = find_l1_quality_candidates(scanned)
+            reviews = {}
+            for row in connection.execute(
+                "SELECT q.left_memory_id,q.right_memory_id,q.action,q.review_revision "
+                "FROM l1_quality_review_events q JOIN ("
+                "SELECT left_memory_id,right_memory_id,max(review_revision) AS revision "
+                "FROM l1_quality_review_events WHERE detector_version=? "
+                "GROUP BY left_memory_id,right_memory_id"
+                ") latest ON latest.left_memory_id=q.left_memory_id "
+                "AND latest.right_memory_id=q.right_memory_id "
+                "AND latest.revision=q.review_revision "
+                "WHERE q.detector_version=?",
+                (DETECTOR_VERSION, DETECTOR_VERSION),
+            ):
+                reviews[(row["left_memory_id"], row["right_memory_id"])] = (
+                    row["action"], row["review_revision"],
+                )
+            rows = []
+            for item in candidates:
+                pair = tuple(sorted((str(item.left.id), str(item.right.id))))
+                action, review_revision = reviews.get(pair, (None, 0))
+                rows.append({
+                    "kind": item.kind,
+                    "similarity": round(item.similarity, 4),
+                    "reason": item.reason,
+                    "left": memory_json(item.left),
+                    "right": memory_json(item.right),
+                    "review_status": "dismissed" if action == "dismiss" else "pending",
+                    "review_revision": review_revision,
+                })
             return {
-                "items": [
-                    {
-                        "kind": item.kind,
-                        "similarity": round(item.similarity, 4),
-                        "reason": item.reason,
-                        "left": memory_json(item.left),
-                        "right": memory_json(item.right),
-                    }
-                    for item in candidates
-                ],
+                "items": rows,
                 "total": len(candidates),
                 "scanned_memory_count": len(scanned),
                 "memory_scan_limited": len(active) > len(scanned),
                 "candidate_limit": 100,
                 "candidate_limit_reached": len(candidates) == 100,
                 "lexical_threshold": 0.72,
+                "detector_version": DETECTOR_VERSION,
                 "generated_at": now.isoformat(),
             }
+
+    def review_quality_candidate(
+        self, *, left_memory_id, right_memory_id, candidate_kind, action,
+        expected_revision,
+    ):
+        """追加人工复核事件；只改变候选展示状态，不改变两条 L1。"""
+
+        pair = tuple(sorted((left_memory_id, right_memory_id)))
+        if pair[0] == pair[1]:
+            raise MemoryAccessError("l1_quality_candidate_invalid", 400)
+        with self._open_database(write_capability="correction") as connection:
+            now = self._clock()
+            store = SQLiteMemoryStore(connection, commit_changes=False)
+            active = tuple(
+                memory for memory in store.list_active()
+                if is_memory_effective(memory, now)
+            )[:500]
+            live = next((
+                item for item in find_l1_quality_candidates(active)
+                if tuple(sorted((str(item.left.id), str(item.right.id)))) == pair
+                and item.kind == candidate_kind
+            ), None)
+            if live is None:
+                raise MemoryAccessError("l1_quality_candidate_stale", 409)
+            row = connection.execute(
+                "SELECT action,review_revision FROM l1_quality_review_events "
+                "WHERE left_memory_id=? AND right_memory_id=? AND detector_version=? "
+                "ORDER BY review_revision DESC LIMIT 1",
+                (*pair, DETECTOR_VERSION),
+            ).fetchone()
+            current_revision = row["review_revision"] if row else 0
+            if current_revision != expected_revision:
+                raise MemoryAccessError("l1_quality_review_conflict", 409)
+            current_status = "dismissed" if row and row["action"] == "dismiss" else "pending"
+            requested_status = "dismissed" if action == "dismiss" else "pending"
+            if current_status == requested_status:
+                return {"review_status": current_status,
+                        "review_revision": current_revision, "replayed": True}
+            next_revision = current_revision + 1
+            connection.execute(
+                "INSERT INTO l1_quality_review_events "
+                "(id,left_memory_id,right_memory_id,detector_version,candidate_kind,"
+                "action,review_revision,occurred_at) VALUES (?,?,?,?,?,?,?,?)",
+                (secrets.token_hex(16), *pair, DETECTOR_VERSION, candidate_kind,
+                 action, next_revision, now.isoformat()),
+            )
+            connection.commit()
+            return {"review_status": requested_status,
+                    "review_revision": next_revision, "replayed": False}
 
     @staticmethod
     def _local_day_window(local_date, utc_offset_minutes):
