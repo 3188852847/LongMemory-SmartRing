@@ -27,6 +27,7 @@ def test_preferences_roundtrip_and_never_persist_delete_permission(tmp_path):
         "memory_extraction": "llm",
         "memory_retrieval": "hybrid",
         "memory_consolidation": True,
+        "l2_sufficiency_shadow": True,
         "embedding_model_dir": "D:/bge",
         "tts_backend": "voxcpm2",
         "http_risk_ack": True,
@@ -40,6 +41,7 @@ def test_preferences_roundtrip_and_never_persist_delete_permission(tmp_path):
     assert loaded["start_page"] == "settings"
     assert loaded["memory_retrieval"] == "hybrid"
     assert loaded["memory_consolidation"] is True
+    assert loaded["l2_sufficiency_shadow"] is True
     assert loaded["http_risk_ack"] is True
     assert "allow_memory_delete" not in raw
     assert "must-not-be-written" not in raw

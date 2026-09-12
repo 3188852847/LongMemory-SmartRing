@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 
 
-PREFERENCES_VERSION = 2
+PREFERENCES_VERSION = 3
 RISK_ACK_VERSION = "campus-http-v1"
 # 只影响当前本机启动面板，不写入偏好文件，也不改变服务端安全默认。
 DEFAULT_SESSION_ALLOW_MEMORY_DELETE = True
@@ -20,6 +20,7 @@ DEFAULTS = {
     "memory_extraction": "rules",
     "memory_retrieval": "keyword",
     "memory_consolidation": False,
+    "l2_sufficiency_shadow": False,
     "embedding_model_dir": "",
     "tts_backend": "edge",
     "sanotts_source_root": "",
@@ -52,6 +53,8 @@ def load_preferences(path: Path) -> dict:
         result["voice"] = raw["voice"]
     if isinstance(raw.get("memory_consolidation"), bool):
         result["memory_consolidation"] = raw["memory_consolidation"]
+    if isinstance(raw.get("l2_sufficiency_shadow"), bool):
+        result["l2_sufficiency_shadow"] = raw["l2_sufficiency_shadow"]
     for field, allowed in _CHOICES.items():
         if raw.get(field) in allowed:
             result[field] = raw[field]
@@ -84,6 +87,9 @@ def save_preferences(path: Path, values: dict) -> None:
             "memory_retrieval", DEFAULTS["memory_retrieval"]
         ),
         "memory_consolidation": bool(values.get("memory_consolidation", False)),
+        "l2_sufficiency_shadow": bool(
+            values.get("l2_sufficiency_shadow", False)
+        ),
         "embedding_model_dir": str(values.get("embedding_model_dir", ""))[:2048],
         "tts_backend": values.get("tts_backend", DEFAULTS["tts_backend"]),
         "sanotts_source_root": str(values.get("sanotts_source_root", ""))[:2048],

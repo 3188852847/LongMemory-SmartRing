@@ -48,6 +48,7 @@ class Options:
     memory_retrieval: str = "keyword"
     allow_memory_delete: bool = False
     enable_memory_consolidation: bool = False
+    enable_l2_sufficiency_shadow: bool = False
     embedding_model_dir: Path = DEFAULT_BGE_MODEL
     voice: bool = False
     tts_backend: str = "edge"
@@ -144,6 +145,10 @@ def build_commands(options, uv=None):
     console.append("--allow-persona-management")
     if options.enable_memory_consolidation:
         console.append("--enable-memory-consolidation")
+    if options.enable_l2_sufficiency_shadow:
+        # 影子审计只旁路记录 L2 证据是否足够，不改变本轮注入和回答。
+        # 默认关闭，因为每个存在 L2 候选的用户问题会增加一次模型请求。
+        console.append("--enable-l2-sufficiency-shadow")
     if options.allow_memory_delete:
         # 这里只授予服务端能力；浏览器仍需打开具体 L1 并二次确认。
         # 当前删除保留 L0 原话，因此不能显示成“彻底遗忘”。

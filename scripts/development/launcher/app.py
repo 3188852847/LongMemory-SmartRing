@@ -226,6 +226,9 @@ def main():
     memory_retrieval = tk.StringVar(value=retrieval_labels[saved["memory_retrieval"]])
     allow_memory_delete = tk.BooleanVar(value=DEFAULT_SESSION_ALLOW_MEMORY_DELETE)
     memory_consolidation = tk.BooleanVar(value=saved["memory_consolidation"])
+    l2_sufficiency_shadow = tk.BooleanVar(
+        value=saved["l2_sufficiency_shadow"]
+    )
     embedding_model = tk.StringVar(value=saved["embedding_model_dir"] or str(DEFAULT_BGE_MODEL))
     tts_backend = tk.StringVar(value=tts_labels[saved["tts_backend"]])
     # 记录面板最后一次从共享指针吸收的值。启动前只有在用户没有亲自改过
@@ -311,6 +314,7 @@ def main():
             "memory_extraction": selected_extraction(),
             "memory_retrieval": selected_retrieval(),
             "memory_consolidation": memory_consolidation.get(),
+            "l2_sufficiency_shadow": l2_sufficiency_shadow.get(),
             "embedding_model_dir": embedding_model.get().strip(),
             "tts_backend": selected_tts(),
             "sanotts_source_root": sanotts_source.get().strip(),
@@ -423,6 +427,11 @@ def main():
         text="启用低频自动整理（L1→L2→L3；有预算与风险复核，默认关闭）",
         variable=memory_consolidation,
     ).pack(anchor="w", pady=(0, 4))
+    ttk.Checkbutton(
+        behavior_box,
+        text="记录 L2 证据旁路质检（增加模型请求；不改变回答，默认关闭）",
+        variable=l2_sufficiency_shadow,
+    ).pack(anchor="w", pady=(0, 4))
     ttk.Label(behavior_box, text="BGE 本地快照（仅混合召回使用）").pack(anchor="w", pady=(4, 0))
     embedding_row = ttk.Frame(behavior_box)
     embedding_row.pack(fill="x")
@@ -491,6 +500,7 @@ def main():
             selected_tts(), allow_memory_delete.get(), memory_consolidation.get(),
             selected_memory_backend(),
             selected_vad_profile(),
+            l2_sufficiency_shadow.get(),
         ))
 
     summary_box = ttk.LabelFrame(daily, text="本次配置", style="Section.TLabelframe")
@@ -502,7 +512,8 @@ def main():
         style="Subtitle.TLabel",
     ).pack(anchor="w", pady=(4, 0))
     for variable in (voice, start_page, role, memory_extraction, memory_retrieval,
-                     tts_backend, vad_profile, memory_backend, allow_memory_delete, memory_consolidation):
+                     tts_backend, vad_profile, memory_backend, allow_memory_delete,
+                     memory_consolidation, l2_sufficiency_shadow):
         variable.trace_add("write", update_summary)
     update_summary()
 
@@ -656,6 +667,7 @@ def main():
                               memory_extraction=selected_extraction(),
                               memory_retrieval=selected_retrieval(),
                               enable_memory_consolidation=memory_consolidation.get(),
+                              enable_l2_sufficiency_shadow=l2_sufficiency_shadow.get(),
                               allow_memory_delete=allow_memory_delete.get(),
                               embedding_model_dir=Path(embedding_model.get()),
                               model_profile=selected_model_profile(),
