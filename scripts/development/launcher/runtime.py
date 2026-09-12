@@ -362,23 +362,47 @@ class Manager:
             vad_checked = vad_config_action(
                 options.voice_root, options.root, options.vad_profile
             )
+            config_changed = False
             if network_checked["changed"]:
                 network_config_action(options.voice_root, options.lan_ip, apply=True)
+                config_changed = True
+            # 五个配置域共用同一个私有 YAML。上一个域一旦写入，后面预检时
+            # 取得的摘要就已经陈旧；写入前重新检查既保留“全部先预检”的安全
+            # 边界，也避免启动器被自己的前序修改触发并发保护。
+            if config_changed:
+                tts_checked = tts_config_action(
+                    options.voice_root, options.root, options.tts_backend
+                )
             if not tts_checked["config_matches"]:
                 tts_config_action(
                     options.voice_root, options.root, options.tts_backend,
                     apply=True, expected_digest=tts_checked["digest"],
                 )
+                config_changed = True
+            if config_changed:
+                model_checked = model_config_action(
+                    options.voice_root, options.root, options.voice_model_profile
+                )
             if not model_checked["config_matches"]:
                 model_config_action(options.voice_root, options.root,
                                     options.voice_model_profile, apply=True,
                                     expected_digest=model_checked["digest"])
+                config_changed = True
             # 记忆后端与模型/TTS 一样只在端口空闲后同步。切换只改变提供器
             # 指针及缺失的内置配置，不读取、迁移或删除任何后端数据。
+            if config_changed:
+                memory_checked = memory_config_action(
+                    options.voice_root, options.root, options.memory_backend
+                )
             if not memory_checked["config_matches"]:
                 memory_config_action(
                     options.voice_root, options.root, options.memory_backend,
                     apply=True, expected_digest=memory_checked["digest"],
+                )
+                config_changed = True
+            if config_changed:
+                vad_checked = vad_config_action(
+                    options.voice_root, options.root, options.vad_profile
                 )
             if not vad_checked["config_matches"]:
                 vad_config_action(

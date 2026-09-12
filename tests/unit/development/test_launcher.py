@@ -557,6 +557,7 @@ def test_manager_syncs_selected_voice_model_and_memory_after_ports_are_free(opti
     tts_calls = []
     vad_calls = []
     ordering = []
+    config_revision = {"value": 0}
     voice_root = options.root / "voice"
     (voice_root / ".venv/Scripts").mkdir(parents=True)
     (voice_root / ".venv/Scripts/python.exe").touch()
@@ -568,27 +569,45 @@ def test_manager_syncs_selected_voice_model_and_memory_after_ports_are_free(opti
     def model_action(server, project, profile, **kwargs):
         ordering.append("model_apply" if kwargs.get("apply") else "model_check")
         calls.append((server, project, profile, kwargs))
-        return {"config_matches": bool(kwargs.get("apply")), "digest": "a" * 64}
+        digest = str(config_revision["value"]) * 64
+        if kwargs.get("apply"):
+            assert kwargs["expected_digest"] == digest
+            config_revision["value"] += 1
+        return {"config_matches": bool(kwargs.get("apply")), "digest": digest}
 
     def memory_action(server, project, profile, **kwargs):
         ordering.append("memory_apply" if kwargs.get("apply") else "memory_check")
         memory_calls.append((server, project, profile, kwargs))
-        return {"config_matches": bool(kwargs.get("apply")), "digest": "b" * 64}
+        digest = str(config_revision["value"]) * 64
+        if kwargs.get("apply"):
+            assert kwargs["expected_digest"] == digest
+            config_revision["value"] += 1
+        return {"config_matches": bool(kwargs.get("apply")), "digest": digest}
 
     def network_action(server, address, apply=False):
         ordering.append("network_apply" if apply else "network_check")
         network_calls.append((server, address, apply))
+        if apply:
+            config_revision["value"] += 1
         return {"changed": not apply, "old_ip": "192.168.1.8"}
 
     def tts_action(server, project, backend, **kwargs):
         ordering.append("tts_apply" if kwargs.get("apply") else "tts_check")
         tts_calls.append((server, project, backend, kwargs))
-        return {"config_matches": bool(kwargs.get("apply")), "digest": "c" * 64}
+        digest = str(config_revision["value"]) * 64
+        if kwargs.get("apply"):
+            assert kwargs["expected_digest"] == digest
+            config_revision["value"] += 1
+        return {"config_matches": bool(kwargs.get("apply")), "digest": digest}
 
     def vad_action(server, project, profile, **kwargs):
         ordering.append("vad_apply" if kwargs.get("apply") else "vad_check")
         vad_calls.append((server, project, profile, kwargs))
-        return {"config_matches": bool(kwargs.get("apply")), "digest": "d" * 64}
+        digest = str(config_revision["value"]) * 64
+        if kwargs.get("apply"):
+            assert kwargs["expected_digest"] == digest
+            config_revision["value"] += 1
+        return {"config_matches": bool(kwargs.get("apply")), "digest": digest}
 
     class Owned:
         def __init__(self, command, cwd, env): pass
@@ -606,26 +625,31 @@ def test_manager_syncs_selected_voice_model_and_memory_after_ports_are_free(opti
     try:
         manager.start(selected)
         assert calls[0][2:] == ("official", {})
-        assert calls[1][2] == "official"
-        assert calls[1][3] == {"apply": True, "expected_digest": "a" * 64}
+        assert calls[1][2:] == ("official", {})
+        assert calls[2][2] == "official"
+        assert calls[2][3] == {"apply": True, "expected_digest": "2" * 64}
         assert memory_calls[0][2:] == ("longmemory", {})
-        assert memory_calls[1][2] == "longmemory"
-        assert memory_calls[1][3] == {"apply": True, "expected_digest": "b" * 64}
+        assert memory_calls[1][2:] == ("longmemory", {})
+        assert memory_calls[2][2] == "longmemory"
+        assert memory_calls[2][3] == {"apply": True, "expected_digest": "3" * 64}
         assert network_calls == [
             (voice_root, "192.168.1.9", False),
             (voice_root, "192.168.1.9", True),
         ]
         assert tts_calls[0][2:] == ("edge", {})
-        assert tts_calls[1][2] == "edge"
-        assert tts_calls[1][3] == {"apply": True, "expected_digest": "c" * 64}
+        assert tts_calls[1][2:] == ("edge", {})
+        assert tts_calls[2][2] == "edge"
+        assert tts_calls[2][3] == {"apply": True, "expected_digest": "1" * 64}
         assert vad_calls[0][2:] == ("normal", {})
-        assert vad_calls[1][2] == "normal"
-        assert vad_calls[1][3] == {"apply": True, "expected_digest": "d" * 64}
+        assert vad_calls[1][2:] == ("normal", {})
+        assert vad_calls[2][2] == "normal"
+        assert vad_calls[2][3] == {"apply": True, "expected_digest": "4" * 64}
         # console、8000、8003、8768、8766 五个监听位都通过后，才允许第一次配置检查。
         assert ordering[:5] == ["port"] * 5
         assert ordering[5:] == [
             "network_check", "tts_check", "model_check", "memory_check", "vad_check",
-            "network_apply", "tts_apply", "model_apply", "memory_apply", "vad_apply",
+            "network_apply", "tts_check", "tts_apply", "model_check", "model_apply",
+            "memory_check", "memory_apply", "vad_check", "vad_apply",
         ]
     finally:
         manager.stop()
