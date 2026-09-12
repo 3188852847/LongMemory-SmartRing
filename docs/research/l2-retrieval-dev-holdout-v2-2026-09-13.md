@@ -49,3 +49,16 @@ uv run --no-sync python -m longmemory.evaluation.l2_retrieval --embedding-model-
 ```
 
 只有候选门控已冻结时，才显式增加 `--split holdout`。
+
+## 证据充分性开发运行
+
+以本地 BGE 生成关键词＋稠密 RRF 候选，再用明确选择的模型配置档逐题复核。当前运行器固定为 `dev`，最多 24 次请求，不重试，不读个人数据库：
+
+```powershell
+uv run --no-sync python -m longmemory.evaluation.l2_sufficiency `
+  --model-profile official `
+  --allow-model-requests `
+  --embedding-model-dir "data/models/bge-small-zh-v1.5/7999e1d3359715c523056ef9478215996d62a620"
+```
+
+报告保存数据、标注、编码器、门控提示和不含密钥的模型身份；每题保存候选分数、结构化决定、误放行和误拦截。真实开发结果在实际运行前不预写。
