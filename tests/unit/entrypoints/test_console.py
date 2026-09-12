@@ -671,6 +671,8 @@ def test_console_merges_duplicate_l1_without_deleting_history_or_sources(tmp_pat
             assert quality_after_merge["total"] == 0
             assert quality_after_merge["merge_history_total"] == 1
             assert quality_after_merge["merge_history"][0]["kept_memory_id"] == "memory-a"
+            assert quality_after_merge["merge_history"][0]["evidence_ledger_count"] == 1
+            assert quality_after_merge["merge_history"][0]["evidence_ledger_complete"] is True
 
     asyncio.run(run())
     with sqlite3.connect(database) as connection:
@@ -682,6 +684,13 @@ def test_console_merges_duplicate_l1_without_deleting_history_or_sources(tmp_pat
         assert retired["superseded_by_id"] == "memory-a"
         assert connection.execute("SELECT count(*) FROM atomic_memories").fetchone()[0] == 2
         assert connection.execute("SELECT count(*) FROM l1_duplicate_merge_events").fetchone()[0] == 1
+        ledger = connection.execute(
+            "SELECT source_message_id,source_type,linked_at "
+            "FROM l1_duplicate_merge_evidence"
+        ).fetchone()
+        assert tuple(ledger) == (
+            "source-b", "user_stated", "2026-09-13T00:01:00+00:00",
+        )
 
 
 @pytest.mark.parametrize("attack", ["no_csrf", "no_origin", "other_origin", "other_host", "cross_site", "same_site", "wrong_cookie"])

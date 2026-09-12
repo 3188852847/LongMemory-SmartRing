@@ -105,7 +105,9 @@ class AtomicMemoryBackend:
             merge_rows = connection.execute(
                 "SELECT e.id,e.kept_memory_id,e.retired_memory_id,e.candidate_kind,"
                 "e.copied_evidence_count,e.merged_at,k.content AS kept_content,"
-                "r.content AS retired_content "
+                "r.content AS retired_content,"
+                "(SELECT count(*) FROM l1_duplicate_merge_evidence le "
+                "WHERE le.merge_event_id=e.id) AS evidence_ledger_count "
                 "FROM l1_duplicate_merge_events e "
                 "JOIN atomic_memories k ON k.id=e.kept_memory_id "
                 "JOIN atomic_memories r ON r.id=e.retired_memory_id "
@@ -121,7 +123,11 @@ class AtomicMemoryBackend:
                 "lexical_threshold": 0.72,
                 "detector_version": DETECTOR_VERSION,
                 "generated_at": now.isoformat(),
-                "merge_history": [dict(row) for row in merge_rows],
+                "merge_history": [dict(row) | {
+                    "evidence_ledger_complete": (
+                        row["evidence_ledger_count"] == row["copied_evidence_count"]
+                    ),
+                } for row in merge_rows],
                 "merge_history_total": merge_total,
                 "merge_history_limited": merge_total > len(merge_rows),
             }
@@ -224,14 +230,21 @@ class AtomicMemoryBackend:
                 raise MemoryAccessError("l1_quality_review_conflict", 409)
             if review and review["action"] == "dismiss":
                 raise MemoryAccessError("l1_quality_candidate_dismissed", 409)
-            connection.execute(
-                "INSERT OR IGNORE INTO memory_evidence "
-                "(memory_id,source_message_id,source_type,linked_at) "
-                "SELECT ?,source_message_id,source_type,linked_at FROM memory_evidence "
-                "WHERE memory_id=?",
-                (kept_memory_id, retired_memory_id),
+            copied_evidence = connection.execute(
+                "SELECT source_message_id,source_type,linked_at FROM memory_evidence r "
+                "WHERE r.memory_id=? AND NOT EXISTS ("
+                "SELECT 1 FROM memory_evidence k WHERE k.memory_id=? "
+                "AND k.source_message_id=r.source_message_id "
+                "AND k.source_type=r.source_type)",
+                (retired_memory_id, kept_memory_id),
+            ).fetchall()
+            connection.executemany(
+                "INSERT INTO memory_evidence "
+                "(memory_id,source_message_id,source_type,linked_at) VALUES (?,?,?,?)",
+                ((kept_memory_id, row["source_message_id"], row["source_type"],
+                  row["linked_at"]) for row in copied_evidence),
             )
-            copied_evidence_count = connection.execute("SELECT changes()").fetchone()[0]
+            copied_evidence_count = len(copied_evidence)
             cursor = connection.execute(
                 "UPDATE atomic_memories SET retired_at=?,superseded_by_id=? "
                 "WHERE id=? AND retired_at IS NULL",
@@ -239,12 +252,19 @@ class AtomicMemoryBackend:
             )
             if cursor.rowcount != 1:
                 raise MemoryAccessError("l1_quality_candidate_stale", 409)
+            merge_event_id = secrets.token_hex(16)
             connection.execute(
                 "INSERT INTO l1_duplicate_merge_events "
                 "(id,kept_memory_id,retired_memory_id,detector_version,candidate_kind,"
                 "copied_evidence_count,merged_at) VALUES (?,?,?,?,?,?,?)",
-                (secrets.token_hex(16), kept_memory_id, retired_memory_id,
+                (merge_event_id, kept_memory_id, retired_memory_id,
                  DETECTOR_VERSION, candidate_kind, copied_evidence_count, now.isoformat()),
+            )
+            connection.executemany(
+                "INSERT INTO l1_duplicate_merge_evidence "
+                "(merge_event_id,source_message_id,source_type,linked_at) VALUES (?,?,?,?)",
+                ((merge_event_id, row["source_message_id"], row["source_type"],
+                  row["linked_at"]) for row in copied_evidence),
             )
             connection.commit()
             return {"kept_memory_id": kept_memory_id,

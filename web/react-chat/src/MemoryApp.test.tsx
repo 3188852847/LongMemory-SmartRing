@@ -228,5 +228,6 @@ describe('L1 质量候选',()=>{
     expect(await screen.findByText('确认合并这两条重复 L1？')).toBeTruthy();
     fireEvent.click(screen.getByRole('button',{name:'确认合并'}));
     expect(await screen.findByText(/重复 L1 已合并/)).toBeTruthy();
+    expect(await screen.findByText(/账本完整 1\/1/)).toBeTruthy();
   });
 });

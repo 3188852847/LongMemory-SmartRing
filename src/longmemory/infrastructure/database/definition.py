@@ -1,6 +1,6 @@
-"""当前 SQLite V39 的完整结构定义；不包含历史迁移步骤。"""
+"""当前 SQLite V40 的完整结构定义；不包含历史迁移步骤。"""
 
-SCHEMA_VERSION = 39
+SCHEMA_VERSION = 40
 
 LATEST_SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS conversation_messages (
@@ -92,6 +92,18 @@ CREATE TABLE IF NOT EXISTS l1_duplicate_merge_events (
 );
 CREATE INDEX IF NOT EXISTS idx_l1_duplicate_merge_kept
     ON l1_duplicate_merge_events (kept_memory_id, merged_at DESC, id DESC);
+
+CREATE TABLE IF NOT EXISTS l1_duplicate_merge_evidence (
+    merge_event_id TEXT NOT NULL,
+    source_message_id TEXT NOT NULL,
+    source_type TEXT NOT NULL CHECK (source_type IN ('user_stated', 'user_corrected')),
+    linked_at TEXT NOT NULL,
+    PRIMARY KEY (merge_event_id, source_message_id, source_type),
+    FOREIGN KEY (merge_event_id) REFERENCES l1_duplicate_merge_events (id) ON DELETE CASCADE,
+    FOREIGN KEY (source_message_id) REFERENCES conversation_messages (id) ON DELETE RESTRICT
+);
+CREATE INDEX IF NOT EXISTS idx_l1_duplicate_merge_evidence_source
+    ON l1_duplicate_merge_evidence (source_message_id, merge_event_id);
 
 CREATE TABLE IF NOT EXISTS round_screen_turns (
     user_message_id TEXT PRIMARY KEY,
