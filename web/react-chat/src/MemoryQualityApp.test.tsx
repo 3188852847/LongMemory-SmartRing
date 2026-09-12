@@ -64,7 +64,7 @@ describe('记忆质量样本工作台',()=>{
       review_counts:{open:0,resolved:0,dismissed:0},items:[],
     };
     const shadow:L2SufficiencyShadowPage={
-      limit:20,runtime:{enabled:true,state:'completed'},items:[{
+      limit:20,runtime:{enabled:true,state:'completed'},review_counts:{completed:1,unreviewed:1,correct:0,incorrect:0,uncertain:0},items:[{
         user_message_id:'turn-shadow',query:'我的猫是什么颜色',
         retrieval_strategy:'l2_keyword_v1',reviewer_version:'gate-v2',
         provider:'openai_compatible',model:'deepseek-v4-flash',status:'completed',

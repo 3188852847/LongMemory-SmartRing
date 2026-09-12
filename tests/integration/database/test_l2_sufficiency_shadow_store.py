@@ -120,6 +120,10 @@ def test_shadow_store_records_snapshot_and_closed_decisions_without_text(tmp_pat
     assert review["review_revision"] == 1
     assert store.get("user-a")["review"]["verdict"] == "correct"
     assert store.list_recent(limit=10)["items"][0]["review_verdict"] == "correct"
+    assert store.list_recent(limit=10)["review_counts"] == {
+        "completed": 1, "unreviewed": 0, "correct": 1,
+        "incorrect": 0, "uncertain": 0,
+    }
     try:
         store.review(
             user_message_id="user-a", verdict="incorrect",

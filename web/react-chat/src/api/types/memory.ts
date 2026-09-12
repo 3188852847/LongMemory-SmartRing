@@ -15,6 +15,7 @@ export interface L2SufficiencyShadowRuntime {enabled:boolean;state:string;submit
 export type L2SufficiencyShadowVerdict='correct'|'incorrect'|'uncertain';
 export interface L2SufficiencyShadowReview {verdict:L2SufficiencyShadowVerdict|null;reason_code:string|null;review_revision:number;occurred_at:string|null}
 export interface L2SufficiencyShadowItem {user_message_id:string;query:string;retrieval_strategy:string;reviewer_version:string;provider:string;model:string;status:'pending'|'completed'|'failed';requested_at:string;completed_at:string|null;error_code:string|null;candidate_count:number;supported_count:number;review_verdict:L2SufficiencyShadowVerdict|null;review_revision:number|null}
-export interface L2SufficiencyShadowPage {items:L2SufficiencyShadowItem[];limit:number;runtime:L2SufficiencyShadowRuntime}
+export interface L2SufficiencyShadowReviewCounts {completed:number;unreviewed:number;correct:number;incorrect:number;uncertain:number}
+export interface L2SufficiencyShadowPage {items:L2SufficiencyShadowItem[];limit:number;runtime:L2SufficiencyShadowRuntime;review_counts:L2SufficiencyShadowReviewCounts}
 export interface L2SufficiencyShadowCandidate {scenario_id:string;rank:number;content_sha256:string;keyword_score:number|null;supports_answer:0|1|null;reason_code:string|null;current_title:string|null;current_summary:string|null;current_status:string|null;content_matches_snapshot:boolean|null}
 export interface L2SufficiencyShadowDetail extends Omit<L2SufficiencyShadowItem,'candidate_count'|'supported_count'> {prompt_sha256:string;candidates:L2SufficiencyShadowCandidate[];review:L2SufficiencyShadowReview}

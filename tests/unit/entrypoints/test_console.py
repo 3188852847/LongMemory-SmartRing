@@ -186,6 +186,8 @@ def test_l2_sufficiency_shadow_routes_are_read_only_and_validate_identity(tmp_pa
         def list_l2_sufficiency_shadow(self, *, limit):
             assert limit == 12
             return {"items": [{"user_message_id": "turn-a"}], "limit": limit,
+                    "review_counts": {"completed": 1, "unreviewed": 1,
+                                      "correct": 0, "incorrect": 0, "uncertain": 0},
                     "runtime": {"enabled": True, "state": "completed"}}
 
         def get_l2_sufficiency_shadow(self, message_id):

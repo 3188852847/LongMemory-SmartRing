@@ -179,7 +179,28 @@ class SQLiteL2SufficiencyShadowStore:
                 "ORDER BY r.requested_at DESC,r.user_message_id DESC LIMIT ?",
                 (limit,),
             ).fetchall()
-            return {"items": [dict(row) for row in rows], "limit": limit}
+            counts = connection.execute(
+                "WITH latest AS ("
+                " SELECT e.user_message_id,e.verdict FROM l2_sufficiency_shadow_review_events e "
+                " JOIN (SELECT user_message_id,max(review_revision) revision "
+                "       FROM l2_sufficiency_shadow_review_events GROUP BY user_message_id) x "
+                " ON x.user_message_id=e.user_message_id AND x.revision=e.review_revision"
+                ") SELECT "
+                "sum(CASE WHEN r.status='completed' THEN 1 ELSE 0 END) completed,"
+                "sum(CASE WHEN r.status='completed' AND l.verdict IS NULL THEN 1 ELSE 0 END) unreviewed,"
+                "sum(CASE WHEN l.verdict='correct' THEN 1 ELSE 0 END) correct,"
+                "sum(CASE WHEN l.verdict='incorrect' THEN 1 ELSE 0 END) incorrect,"
+                "sum(CASE WHEN l.verdict='uncertain' THEN 1 ELSE 0 END) uncertain "
+                "FROM l2_sufficiency_shadow_runs r LEFT JOIN latest l "
+                "ON l.user_message_id=r.user_message_id"
+            ).fetchone()
+            return {
+                "items": [dict(row) for row in rows], "limit": limit,
+                "review_counts": {
+                    key: int(counts[key] or 0)
+                    for key in ("completed", "unreviewed", "correct", "incorrect", "uncertain")
+                },
+            }
         finally:
             connection.close()
 
