@@ -6,10 +6,11 @@ from pathlib import Path
 
 
 ALLOWED_PHASES = {"starting", "ready", "stopping", "stopped", "failed"}
-ALLOWED_SERVICES = {"console", "voice", "voxcpm2", "sanotts"}
+ALLOWED_SERVICES = {"console", "voice", "voxcpm2", "sanotts", "cosyvoice3"}
+LEGACY_SERVICES = {"console", "voice", "voxcpm2", "sanotts"}
 ALLOWED_STATES = {"disabled", "running", "ready", "exited"}
 ALLOWED_VAD_PROFILES = {"normal", "noisy", "close_talk"}
-ALLOWED_TTS_BACKENDS = {"edge", "voxcpm2", "sanotts"}
+ALLOWED_TTS_BACKENDS = {"edge", "voxcpm2", "sanotts", "cosyvoice3"}
 
 
 def read_launcher_status(path: Path | None, expected_instance: str | None, *, now=None,
@@ -34,22 +35,24 @@ def read_launcher_status(path: Path | None, expected_instance: str | None, *, no
         schema_version = raw.get("schema_version")
         startup = raw.get("startup", {})
         if (
-            schema_version not in {1, 2, 3}
+            schema_version not in {1, 2, 3, 4}
             or raw.get("launcher_instance") != expected_instance
             or raw.get("phase") not in ALLOWED_PHASES
             or not isinstance(services, dict)
-            or set(services) != ALLOWED_SERVICES
+            or set(services) != (
+                ALLOWED_SERVICES if schema_version == 4 else LEGACY_SERVICES
+            )
             or any(value not in ALLOWED_STATES for value in services.values())
             or not isinstance(startup, dict)
             or (schema_version == 2 and set(startup) != {"voice_enabled", "vad_profile"})
-            or (schema_version == 3 and set(startup) != {"voice_enabled", "vad_profile", "tts_backend"})
+            or (schema_version in {3, 4} and set(startup) != {"voice_enabled", "vad_profile", "tts_backend"})
             or (schema_version == 2 and type(startup.get("voice_enabled")) is not bool)
-            or (schema_version == 3 and type(startup.get("voice_enabled")) is not bool)
+            or (schema_version in {3, 4} and type(startup.get("voice_enabled")) is not bool)
             or (schema_version == 2 and startup.get("vad_profile") not in
                 (ALLOWED_VAD_PROFILES if startup.get("voice_enabled") else {None}))
-            or (schema_version == 3 and startup.get("vad_profile") not in
+            or (schema_version in {3, 4} and startup.get("vad_profile") not in
                 (ALLOWED_VAD_PROFILES if startup.get("voice_enabled") else {None}))
-            or (schema_version == 3 and startup.get("tts_backend") not in
+            or (schema_version in {3, 4} and startup.get("tts_backend") not in
                 (ALLOWED_TTS_BACKENDS if startup.get("voice_enabled") else {None}))
         ):
             return unavailable
@@ -73,5 +76,5 @@ def read_launcher_status(path: Path | None, expected_instance: str | None, *, no
         "updated_at": raw["updated_at"],
         "age_seconds": round(age, 1),
         "services": services,
-        "startup": startup if schema_version in {2, 3} else {},
+        "startup": startup if schema_version in {2, 3, 4} else {},
     }

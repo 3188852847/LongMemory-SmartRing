@@ -24,7 +24,7 @@ SPEECH_FAILURES = {
     'unavailable': ('voice_environment_unavailable', 503),
     'voice_operation_failed': ('tts_config_unavailable', 503),
 }
-LOCAL_TTS = {"voxcpm2": 18768, "sanotts": 18769}
+LOCAL_TTS = {"voxcpm2": 18768, "sanotts": 18769, "cosyvoice3": 18770}
 
 
 def speech_failure(error):
@@ -93,7 +93,7 @@ class VoiceSettings:
         request = {'input': text, 'response_format': 'wav', 'stream': False}
         # VoxCPM2 日常链保留重复句缓存；只有固定测试台显式绕过它，防止把缓存读取
         # 误报为模型生成速度。sanoTTS 没有这一私有字段，保持其公开兼容契约。
-        if backend == 'voxcpm2' and bypass_local_cache:
+        if backend in {'voxcpm2', 'cosyvoice3'} and bypass_local_cache:
             request['cache'] = False
         if backend == 'sanotts':
             request['speed'] = speaking_rate
@@ -269,7 +269,7 @@ def register_voice_routes(app, backend):
             if case is None:
                 raise ValueError('invalid_body')
             settings = await backend.call({'action':'check'})
-            bypass_local_cache = settings.get('backend') == 'voxcpm2'
+            bypass_local_cache = settings.get('backend') in {'voxcpm2', 'cosyvoice3'}
             result = await measure_buffered_speech(
                 backend, case, bypass_local_cache=bypass_local_cache,
             )

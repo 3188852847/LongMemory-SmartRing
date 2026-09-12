@@ -152,9 +152,9 @@ def test_launcher_status_snapshot_contains_only_bounded_runtime_facts(options):
     assert saved["launcher_instance"] == "synthetic-instance"
     assert saved["services"] == {
         "console": "ready", "voice": "running", "voxcpm2": "disabled",
-        "sanotts": "disabled",
+        "sanotts": "disabled", "cosyvoice3": "disabled",
     }
-    assert saved["schema_version"] == 3
+    assert saved["schema_version"] == 4
     assert saved["startup"] == {"voice_enabled": options.voice,
                                  "vad_profile": options.vad_profile if options.voice else None,
                                  "tts_backend": options.tts_backend if options.voice else None}
@@ -297,9 +297,35 @@ def test_sanotts_commands_use_external_source_and_start_before_voice(options, mo
     assert commands[2][1][-2:] == ["sanotts", "longmemory"]
 
 
+def test_cosyvoice3_commands_use_isolated_environment_and_start_before_voice(options, monkeypatch):
+    voice = options.root / "voice"; (voice / ".venv/Scripts").mkdir(parents=True)
+    voice_python = voice / ".venv/Scripts/python.exe"; voice_python.touch()
+    source = options.root / "external-cosyvoice"
+    cosy_python = source / ".venv/Scripts/python.exe"
+    cosy_python.parent.mkdir(parents=True); cosy_python.touch()
+    model = source / "pretrained_models/Fun-CosyVoice3-0.5B"
+    model.mkdir(parents=True); (model / "cosyvoice3.yaml").touch()
+    service = options.root / "scripts/development/cosyvoice/service.py"
+    service.parent.mkdir(parents=True); service.touch()
+    monkeypatch.setattr(runtime, "DEFAULT_COSYVOICE_SOURCE", source)
+    monkeypatch.setattr(runtime, "DEFAULT_COSYVOICE_MODEL", model)
+
+    commands = runtime.build_commands(replace(
+        options, voice=True, voice_root=voice, lan_ip="192.168.1.2",
+        tts_backend="cosyvoice3",
+    ), uv="synthetic-uv")
+
+    assert [item[0] for item in commands] == ["console", "cosyvoice3", "voice"]
+    assert commands[1][1][0] == str(cosy_python)
+    assert commands[1][1][1] == str(service)
+    assert commands[1][1][commands[1][1].index("--port") + 1] == "18770"
+    assert commands[2][1][0] == str(voice_python)
+    assert commands[2][1][-2:] == ["cosyvoice3", "longmemory"]
+
+
 @pytest.mark.parametrize("role", ["plain_v1", "elysia_v1"])
 @pytest.mark.parametrize("memory_backend", ["longmemory", "xiaozhi_local", "none"])
-@pytest.mark.parametrize("tts_backend", ["edge", "voxcpm2", "sanotts"])
+@pytest.mark.parametrize("tts_backend", ["edge", "voxcpm2", "sanotts", "cosyvoice3"])
 def test_role_memory_and_tts_domains_compose_independently(
     options, monkeypatch, role, memory_backend, tts_backend,
 ):
@@ -328,6 +354,18 @@ def test_role_memory_and_tts_domains_compose_independently(
     sanotts_service = options.root / "scripts/development/sanotts/service.mjs"
     sanotts_service.parent.mkdir(parents=True, exist_ok=True)
     sanotts_service.touch()
+    cosyvoice_source = options.root / "external-cosyvoice"
+    cosyvoice_python = cosyvoice_source / ".venv/Scripts/python.exe"
+    cosyvoice_python.parent.mkdir(parents=True, exist_ok=True)
+    cosyvoice_python.touch()
+    cosyvoice_model = cosyvoice_source / "pretrained_models/Fun-CosyVoice3-0.5B"
+    cosyvoice_model.mkdir(parents=True, exist_ok=True)
+    (cosyvoice_model / "cosyvoice3.yaml").touch()
+    cosyvoice_service = options.root / "scripts/development/cosyvoice/service.py"
+    cosyvoice_service.parent.mkdir(parents=True, exist_ok=True)
+    cosyvoice_service.touch()
+    monkeypatch.setattr(runtime, "DEFAULT_COSYVOICE_SOURCE", cosyvoice_source)
+    monkeypatch.setattr(runtime, "DEFAULT_COSYVOICE_MODEL", cosyvoice_model)
     original_which = runtime.shutil.which
     monkeypatch.setattr(
         runtime.shutil,
@@ -359,6 +397,7 @@ def test_role_memory_and_tts_domains_compose_independently(
         "edge": {"console", "voice"},
         "voxcpm2": {"console", "voxcpm2", "voice"},
         "sanotts": {"console", "sanotts", "voice"},
+        "cosyvoice3": {"console", "cosyvoice3", "voice"},
     }
     assert set(by_name) == expected_services[tts_backend]
 

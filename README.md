@@ -16,7 +16,7 @@
 
 ## 当前状态
 
-声音链已支持 EdgeTTS、VoxCPM2 和 sanoTTS 三个可替换后端。VoxCPM2 提供本地参考声线与风格参数；sanoTTS 通过项目外 Node/WASM 中文“小雅”模型提供快速基线，并按内容指纹固定版本。React 声音页支持状态核对、网页朗读与固定测试台，圆屏仍通过小智 `CustomTTS` 播放。三个适配器当前均为整段缓冲，圆屏实际声线、端到端延迟与打断仍需实机验收。见 [声音设置](docs/guides/声音设置.md)、[ADR-0025](docs/adr/0025-local-voxcpm2-tts-adapter.md)与 [ADR-0118](docs/adr/0118-external-sanotts-node-wasm-adapter.md)。
+声音链已支持 EdgeTTS、VoxCPM2、sanoTTS 和 CosyVoice3 四个可替换后端。VoxCPM2 提供本地参考声线与风格参数；sanoTTS 保留为 Node/WASM 快速基线；CosyVoice3 使用项目外独立 Python 环境和 Fun-CosyVoice3-0.5B，独立试听已由用户确认声音质量高。React 声音页支持状态核对、网页朗读与固定测试台，圆屏仍通过小智 `CustomTTS` 播放。四个适配器当前均为整段缓冲；CosyVoice3 尚需圆屏实际声线和端到端延迟验收，也不具备自然说话打断。日常默认仍为 EdgeTTS。见 [声音设置](docs/guides/声音设置.md)、[ADR-0025](docs/adr/0025-local-voxcpm2-tts-adapter.md)、[ADR-0118](docs/adr/0118-external-sanotts-node-wasm-adapter.md)与 [ADR-0123](docs/adr/0123-isolated-cosyvoice3-buffered-adapter.md)。
 
 P2 新增声音设置：四种 Edge TTS 音色、固定文本联网试听和确认保存。入口为“设置中心 → 声音”，保存 Edge 音色后需重启小智；实机听感待验收。见[声音设置](docs/guides/声音设置.md)。
 

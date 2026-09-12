@@ -32,7 +32,7 @@ _CHOICES = {
     "role": {"elysia_v1", "plain_v1"},
     "memory_extraction": {"rules", "llm"},
     "memory_retrieval": {"keyword", "hybrid"},
-    "tts_backend": {"edge", "voxcpm2", "sanotts"},
+    "tts_backend": {"edge", "voxcpm2", "sanotts", "cosyvoice3"},
     "vad_profile": {"normal", "noisy", "close_talk"},
 }
 _PATH_FIELDS = {"database", "voice_root", "embedding_model_dir", "sanotts_source_root"}

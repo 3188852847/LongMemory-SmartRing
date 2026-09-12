@@ -72,6 +72,7 @@ export function OverviewApp() {
           <div><dt>小智语音</dt><dd>{serviceLabel(runtime.data?.services.voice)}</dd></div>
           <div><dt>VoxCPM2</dt><dd>{serviceLabel(runtime.data?.services.voxcpm2)}</dd></div>
           <div><dt>sanoTTS</dt><dd>{serviceLabel(runtime.data?.services.sanotts)}</dd></div>
+          <div><dt>CosyVoice 3</dt><dd>{serviceLabel(runtime.data?.services.cosyvoice3)}</dd></div>
           <div><dt>状态新鲜度</dt><dd>{runtime.data?.age_seconds !== undefined ? `${runtime.data.age_seconds.toFixed(1)} 秒前` : '不可用'}</dd></div>
         </dl>
         <p className="subtle">这里只显示启动面板拥有的进程；手动终端启动会标为“非启动面板模式”。进程运行不代表模型、设备或声音已经可用，请结合下方独立状态判断。</p>

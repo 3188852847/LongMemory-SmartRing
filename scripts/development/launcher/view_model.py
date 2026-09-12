@@ -32,6 +32,7 @@ def summary_text(
         "edge": "EdgeTTS 联网声音",
         "voxcpm2": "VoxCPM2 本地声音",
         "sanotts": "sanoTTS 本地小雅",
+        "cosyvoice3": "CosyVoice 3 本地高质量声音",
     }[tts]
     delete_label = "允许单条删除" if allow_delete else "不开放删除"
     consolidation_label = "低频整理已开启" if consolidation else "低频整理关闭"
@@ -68,6 +69,8 @@ def failure_hint(exited):
             hint = "本地声音服务已退出；先核对声音环境、模型文件、CUDA 和 18768 端口"
         elif name == "sanotts":
             hint = "sanoTTS 已退出；先核对外部源码/中文模型、Node.js 和 18769 端口"
+        elif name == "cosyvoice3":
+            hint = "CosyVoice 3 已退出；先核对独立环境、模型快照、CUDA 和 18770 端口"
         elif name == "voice":
             hint = "圆屏语音进程意外退出；先核对小智配置、网络地址和 8000/8003/8766 端口"
         elif name == "console":
@@ -104,6 +107,7 @@ def starting_services(*, voice, tts_backend, model_profile, voice_model_profile,
         "edge": "EdgeTTS 已选择",
         "voxcpm2": "VoxCPM2 加载中",
         "sanotts": "sanoTTS 加载中",
+        "cosyvoice3": "CosyVoice 3 加载并预热中",
     }[tts_backend]
     model_label = "官方 DeepSeek" if model_profile == "official" else "学校模型"
     voice_model_label = (
@@ -148,8 +152,9 @@ def stopped_services():
 def ready_services(*, voice, tts_backend, local_tts_ready, opened):
     """生成服务就绪视图；设备是否连接仍由网页实时状态负责。"""
 
-    if voice and tts_backend in {"voxcpm2", "sanotts"}:
-        label = "VoxCPM2" if tts_backend == "voxcpm2" else "sanoTTS"
+    if voice and tts_backend in {"voxcpm2", "sanotts", "cosyvoice3"}:
+        label = {"voxcpm2": "VoxCPM2", "sanotts": "sanoTTS",
+                 "cosyvoice3": "CosyVoice 3"}[tts_backend]
         suffix = (
             f"；{label} 与语音进程运行中"
             if local_tts_ready

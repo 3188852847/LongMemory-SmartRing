@@ -6,7 +6,7 @@ import subprocess
 
 
 def config_action(server: Path, project: Path, backend: str, *, apply=False, expected_digest=None):
-    if backend not in {"edge", "voxcpm2", "sanotts"}:
+    if backend not in {"edge", "voxcpm2", "sanotts", "cosyvoice3"}:
         raise ValueError("未知语音后端。")
     python = server / ".venv/Scripts/python.exe"
     script = project / "scripts/development/xiaozhi/sync_tts_backend.py"

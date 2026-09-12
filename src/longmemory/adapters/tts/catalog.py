@@ -1,7 +1,6 @@
 """当前已经接通的 TTS 能力目录。
 
-候选模型只有完成本机适配和验证后才能加入；因此这里暂不登记 CosyVoice
-或 GPT-SoVITS。
+候选模型只有完成本机适配和验证后才能加入；GPT-SoVITS 尚未登记。
 """
 
 from longmemory.adapters.tts.contracts import TTSCapabilities
@@ -31,6 +30,14 @@ _CAPABILITIES = {
         delivery_modes=("buffered",),
         output_mime_types=("audio/wav",),
         controls=("speaking_rate",),
+    ),
+    "cosyvoice3": TTSCapabilities(
+        provider_id="cosyvoice3",
+        display_name="CosyVoice 3 0.5B",
+        locality="local",
+        # 模型原生流式，但当前 Xiaozhi CustomTTS 等待完整 HTTP 正文。
+        delivery_modes=("buffered",),
+        output_mime_types=("audio/wav",),
     ),
 }
 

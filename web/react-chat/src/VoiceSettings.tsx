@@ -6,7 +6,7 @@ import {SpeechPlayer} from './SpeechPlayer';
 type VoxProfile={version:number;reference:string|null;style:string;cfg_value:number;quality:'fast'|'balanced'|'quality'};
 
 interface Settings {
-  backend: 'edge' | 'voxcpm2' | 'sanotts' | 'unsupported'; voice: string | null; voices: string[];
+  backend: 'edge' | 'voxcpm2' | 'sanotts' | 'cosyvoice3' | 'unsupported'; voice: string | null; voices: string[];
   digest: string; text: string; config_matches: boolean; editable: boolean; service_ready?: boolean | null;
   profile?:VoxProfile; profile_digest?:string; references?:Array<{id:string|null;label:string}>;
   speed?: number;
@@ -83,7 +83,17 @@ export function VoiceSettings({api, disabled}: {api: ChatApi; disabled: boolean}
           <p>测试文本：{settings.text}</p>
           <SpeechPlayer api={api} text={settings.text}/>
         </>}
-        {settings?.backend === 'unsupported' && <Alert type="warning" title="当前 TTS 配置不受本控制台支持" description="请在统一启动面板重新选择并同步 EdgeTTS、VoxCPM2 或 sanoTTS。"/>}
+        {settings?.backend === 'cosyvoice3' && <>
+          <Alert type={settings.config_matches && settings.service_ready ? 'success' : 'warning'}
+            title={settings.config_matches ? '当前配置：CosyVoice 3 本地高质量声音' : 'CosyVoice 3 配置与本机适配契约不一致'}
+            description={settings.service_ready
+              ? '模型已常驻并完成预热；当前小智 CustomTTS 仍等待完整 WAV，不代表已实现首块直送。'
+              : '本机模型服务未就绪。请通过统一启动面板选择 CosyVoice 3 后启动。'}/>
+          <p>当前参考声线：{settings.voice ?? '官方零样本参考音频'}</p>
+          <p>测试文本：{settings.text}</p>
+          <SpeechPlayer api={api} text={settings.text}/>
+        </>}
+        {settings?.backend === 'unsupported' && <Alert type="warning" title="当前 TTS 配置不受本控制台支持" description="请在统一启动面板重新选择并同步 EdgeTTS、VoxCPM2、sanoTTS 或 CosyVoice 3。"/>}
         {settings?.backend === 'edge' && <>
           <Alert type="info" title="试听会联网发送下方固定文本，不发送聊天记录。在电脑播放，不代表圆屏音量。保存后请重启小智。"/>
           <p>当前配置：EdgeTTS · {settings.voice}（不代表运行中的音色）</p>

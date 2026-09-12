@@ -220,6 +220,7 @@ def main():
         "edge": "EdgeTTS（联网标准音色）",
         "voxcpm2": "VoxCPM2（本地 plain）",
         "sanotts": "sanoTTS（本地中文小雅）",
+        "cosyvoice3": "CosyVoice 3（本地高质量）",
     }
     memory_extraction = tk.StringVar(value=extraction_labels[saved["memory_extraction"]])
     memory_retrieval = tk.StringVar(value=retrieval_labels[saved["memory_retrieval"]])
@@ -286,6 +287,8 @@ def main():
             return "voxcpm2"
         if tts_backend.get().startswith("sanoTTS"):
             return "sanotts"
+        if tts_backend.get().startswith("CosyVoice 3"):
+            return "cosyvoice3"
         return "edge"
 
     def set_tts_backend(value):
@@ -453,6 +456,7 @@ def main():
                 "edge": "EdgeTTS",
                 "voxcpm2": "VoxCPM2 本地声音",
                 "sanotts": "sanoTTS 本地中文小雅",
+                "cosyvoice3": "CosyVoice 3 本地高质量声音",
             }[backend]
             if messagebox.askyesno("同步圆屏声音？",
                     f"将小智 TTS 切换为 {label}。\n只修改 TTS 选择与固定接口字段，原配置会备份；不会启动服务。"):
@@ -688,7 +692,7 @@ def main():
                     open_page()
                 local_tts_ready = (manager.local_tts_ready()
                                    if manager.options.voice
-                                   and manager.options.tts_backend in {"voxcpm2", "sanotts"}
+                                   and manager.options.tts_backend in {"voxcpm2", "sanotts", "cosyvoice3"}
                                    else False)
                 apply_presentation(ready_services(
                     voice=manager.options.voice,

@@ -244,7 +244,7 @@ def main():
                         help="标记本进程实际加载的本机模型配置档")
     parser.add_argument("--memory-backend", choices=("longmemory", "xiaozhi_local", "none"),
                         default="longmemory", help="标记本次圆屏进程实际选择的记忆后端")
-    parser.add_argument("--tts-backend", choices=("edge", "voxcpm2", "sanotts"),
+    parser.add_argument("--tts-backend", choices=("edge", "voxcpm2", "sanotts", "cosyvoice3"),
                         default="edge", help="标记本次圆屏语音选择的 TTS 后端")
     parser.add_argument("--ffmpeg-dir", type=Path,
                         help="已安装的 ffmpeg/ffprobe 目录；只用于本机动态壁纸转码")

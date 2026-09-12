@@ -15,7 +15,8 @@ from sync_role import commit_change
 
 VOX_URL = "http://127.0.0.1:18768/v1/audio/speech"
 SANO_URL = "http://127.0.0.1:18769/v1/audio/speech"
-CUSTOM_URLS = {"voxcpm2": VOX_URL, "sanotts": SANO_URL}
+COSY_URL = "http://127.0.0.1:18770/v1/audio/speech"
+CUSTOM_URLS = {"voxcpm2": VOX_URL, "sanotts": SANO_URL, "cosyvoice3": COSY_URL}
 BACKENDS = {"edge", *CUSTOM_URLS}
 
 

@@ -89,3 +89,21 @@ def test_v3_snapshot_includes_tts_without_exposing_configuration(tmp_path):
     snapshot["startup"] = {"voice_enabled": True, "vad_profile": "normal", "secret": "no"}
     path.write_text(json.dumps(snapshot), encoding="utf-8")
     assert read_launcher_status(path, "current", now=now)["state"] == "launcher_unavailable"
+
+
+def test_v4_snapshot_accepts_cosyvoice_without_changing_legacy_shape(tmp_path):
+    now = datetime(2026, 9, 10, tzinfo=timezone.utc)
+    snapshot = _snapshot(now)
+    snapshot.update(
+        schema_version=4,
+        services=snapshot["services"] | {"cosyvoice3": "ready"},
+        startup={"voice_enabled": True, "vad_profile": "normal",
+                 "tts_backend": "cosyvoice3"},
+    )
+    path = tmp_path / "status.json"
+    path.write_text(json.dumps(snapshot), encoding="utf-8")
+
+    result = read_launcher_status(path, "current", now=now)
+
+    assert result["services"]["cosyvoice3"] == "ready"
+    assert result["startup"]["tts_backend"] == "cosyvoice3"

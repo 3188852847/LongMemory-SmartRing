@@ -83,3 +83,15 @@ def test_sanotts_uses_separate_fixed_loopback_endpoint(tmp_path):
     config = yaml.safe_load(path.read_text(encoding="utf-8"))
     assert config["TTS"]["CustomTTS"]["url"] == module.SANO_URL
     assert result["service_url"] == module.SANO_URL
+
+
+def test_cosyvoice3_uses_separate_fixed_loopback_endpoint(tmp_path):
+    server, path, _ = make_server(tmp_path)
+    checked = module.sync(server, {"action": "check", "backend": "cosyvoice3"})
+    result = module.sync(server, {"action": "apply", "backend": "cosyvoice3",
+                                  "expected_digest": checked["digest"]})
+    config = yaml.safe_load(path.read_text(encoding="utf-8"))
+    custom = config["TTS"]["CustomTTS"]
+    assert custom["url"] == module.COSY_URL
+    assert custom["params"]["stream"] is False
+    assert result["service_url"] == module.COSY_URL

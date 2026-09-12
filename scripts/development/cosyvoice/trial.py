@@ -67,9 +67,9 @@ def load_cases():
     return CASES
 
 
-def generate(source_root: Path, model_dir: Path) -> Path:
-    paths = validate_local_files(source_root, model_dir)
-    # 所有输入均须已在本地存在；模型代码若意外访问 Hugging Face，也会立即失败。
+def configure_runtime_cache() -> None:
+    """把第三方运行缓存限制在项目内的 Git 忽略目录。"""
+
     runtime_cache = ROOT / "data" / "control" / "cosyvoice-runtime-cache"
     runtime_cache.mkdir(parents=True, exist_ok=True)
     # Windows 上 Numba 默认尝试把编译缓存写回只读的外部 site-packages；其余库也会
@@ -79,6 +79,12 @@ def generate(source_root: Path, model_dir: Path) -> Path:
     os.environ["HF_HOME"] = str(runtime_cache / "huggingface")
     os.environ["HF_HUB_OFFLINE"] = "1"
     os.environ["HF_HUB_DISABLE_TELEMETRY"] = "1"
+
+
+def generate(source_root: Path, model_dir: Path) -> Path:
+    paths = validate_local_files(source_root, model_dir)
+    # 所有输入均须已在本地存在；模型代码若意外访问 Hugging Face，也会立即失败。
+    configure_runtime_cache()
     sys.path.insert(0, str(source_root))
     sys.path.insert(0, str(source_root / "third_party" / "Matcha-TTS"))
 

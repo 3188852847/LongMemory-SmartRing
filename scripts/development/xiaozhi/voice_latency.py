@@ -30,6 +30,7 @@ def _backend(connection):
         return {
             "http://127.0.0.1:18768/v1/audio/speech": "voxcpm2",
             "http://127.0.0.1:18769/v1/audio/speech": "sanotts",
+            "http://127.0.0.1:18770/v1/audio/speech": "cosyvoice3",
         }.get(url, "other")
     return "other"
 

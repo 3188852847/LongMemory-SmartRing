@@ -24,6 +24,7 @@ DEFAULT_FFMPEG = Path(
 CUSTOM_TTS_URLS = {
     "voxcpm2": "http://127.0.0.1:18768/v1/audio/speech",
     "sanotts": "http://127.0.0.1:18769/v1/audio/speech",
+    "cosyvoice3": "http://127.0.0.1:18770/v1/audio/speech",
 }
 LEGACY_MEMORY_PROVIDER_SHA256 = {
     # G2 只保存三层召回数量、尚未保存条目索引的已发布回执版。
@@ -78,7 +79,7 @@ def validate_tts_config(config: dict, backend: str) -> None:
             raise SetupError("当前启动选择 EdgeTTS，但私有配置尚未同步为 EdgeTTS。")
         return
     if backend not in CUSTOM_TTS_URLS:
-        raise SetupError("--tts-backend 只允许 edge、voxcpm2 或 sanotts。")
+        raise SetupError("--tts-backend 只允许 edge、voxcpm2、sanotts 或 cosyvoice3。")
 
     custom = config.get("TTS", {}).get("CustomTTS", {})
     params = custom.get("params", {}) if isinstance(custom, dict) else {}
@@ -244,7 +245,7 @@ def main() -> int:
     parser.add_argument("--allow-insecure-http", action="store_true")
     parser.add_argument("--lan-ip", help="显式启用局域网演示，填写电脑有线 IPv4 地址")
     parser.add_argument("--device-control", action="store_true", help="显式开启本机 8766 音量验证接口")
-    parser.add_argument("--tts-backend", choices=["edge", "voxcpm2", "sanotts"], default="edge",
+    parser.add_argument("--tts-backend", choices=["edge", "voxcpm2", "sanotts", "cosyvoice3"], default="edge",
                         help="核对本次实际选择的声音后端；默认 edge")
     args = parser.parse_args()
     try:

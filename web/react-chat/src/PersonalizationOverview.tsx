@@ -11,7 +11,7 @@ interface RoleSummary {
 }
 
 interface VoiceSummary {
-  backend:'edge'|'voxcpm2'|'sanotts'|'unsupported';
+  backend:'edge'|'voxcpm2'|'sanotts'|'cosyvoice3'|'unsupported';
   voice:string|null;
   service_ready?:boolean|null;
   profile?:{reference:string|null;style:string;quality:'fast'|'balanced'|'quality'};
@@ -26,7 +26,7 @@ const interactionLabels = {
 };
 const qualityLabels = {fast:'快速', balanced:'均衡', quality:'质量'};
 const backendLabels:Record<TTSBackendId,string> = {
-  edge:'EdgeTTS', voxcpm2:'VoxCPM2', sanotts:'sanoTTS',
+  edge:'EdgeTTS', voxcpm2:'VoxCPM2', sanotts:'sanoTTS', cosyvoice3:'CosyVoice 3',
 };
 
 function unavailable(query:{isError:boolean}) { return query.isError ? '读取失败' : '读取中'; }
@@ -55,6 +55,7 @@ export function PersonalizationOverview({api, ready, prefs, onSelectTab}:{
     : voice.data.backend === 'voxcpm2'
       ? `${referenceLabel ?? '模型默认声线'} · ${qualityLabels[voice.data.profile?.quality ?? 'balanced']}`
       : voice.data.backend === 'sanotts' ? '中文小雅 · 整段生成'
+      : voice.data.backend === 'cosyvoice3' ? '高质量零样本声线 · 常驻预热 · 整段传输'
       : voice.data.backend === 'edge' ? `${voice.data.voice ?? '默认音色'}` : '当前后端不支持设置';
   const currentTts = tts.data?.current_backend;
   const nextTts = tts.data?.next_start_backend;

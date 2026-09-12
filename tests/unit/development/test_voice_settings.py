@@ -87,6 +87,28 @@ def test_sanotts_status_and_speed_update_are_sanitized(tmp_path):
         })
 
 
+def test_cosyvoice3_status_is_read_only_and_sanitized(tmp_path):
+    server = tmp_path
+    config = {'prompt': 'synthetic', 'selected_module': {'Memory': 'LongMemory', 'TTS': 'CustomTTS'},
+              'Memory': {'LongMemory': {'database_path': str(tmp_path / 'demo.db'),
+                                        'project_root': str(tmp_path / 'project')}},
+              'TTS': {'CustomTTS': {'type': 'custom', 'method': 'POST', 'url': module.COSY_URL,
+                                     'format': 'wav', 'params': {'input': '{prompt_text}',
+                                                                 'response_format': 'wav', 'stream': False}}},
+              'LLM': {'secret': 'SYNTHETIC_SECRET'}}
+    path = server / 'data/.config.yaml'; path.parent.mkdir(parents=True)
+    path.write_text(yaml.safe_dump(config, allow_unicode=True), encoding='utf-8')
+    body = {'action': 'check', 'database': str(tmp_path / 'demo.db'),
+            'project': str(tmp_path / 'project')}
+    result = module.settings(server, body)
+    assert result['backend'] == 'cosyvoice3'
+    assert result['voice'] == 'official-zero-shot'
+    assert result['config_matches'] is True and result['editable'] is False
+    assert 'SYNTHETIC_SECRET' not in str(result)
+    with pytest.raises(ValueError):
+        module.settings(server, body | {'action': 'apply', 'voice': 'official-zero-shot'})
+
+
 @pytest.mark.parametrize('memory_provider', ['LongMemory', 'mem_local_short', 'nomem'])
 def test_tts_domain_is_independent_of_selected_memory_backend(tmp_path, memory_provider):
     server = tmp_path

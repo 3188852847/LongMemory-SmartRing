@@ -20,9 +20,14 @@ def pytest_configure(config):
     """
     global _owned_test_temp
     if config.option.basetemp is not None:
+        # pytest 创建 basetemp 自身时不会递归创建父目录。显式传入项目内
+        # ``.test-tmp/run-name`` 在全新检出中会因此整套夹具初始化失败；这里
+        # 只补父目录，不预建或清空 pytest 将接管的目标目录。
+        Path(config.option.basetemp).resolve().parent.mkdir(parents=True, exist_ok=True)
         return
     run_name = f"run-{os.getpid()}-{uuid.uuid4().hex[:8]}"
     _owned_test_temp = Path(config.rootpath) / ".pytest-tmp" / run_name
+    _owned_test_temp.parent.mkdir(parents=True, exist_ok=True)
     config.option.basetemp = str(_owned_test_temp)
 
 

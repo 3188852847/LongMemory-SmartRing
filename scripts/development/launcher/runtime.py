@@ -18,7 +18,10 @@ ROOT = Path(__file__).resolve().parents[3]
 VOICE_ROOT = Path(r"D:\ESP32-Workspace\xiaozhi-esp32-server\main\xiaozhi-server")
 VOXCPM_PORT = 18768
 SANOTTS_PORT = 18769
+COSYVOICE_PORT = 18770
 DEFAULT_SANOTTS_SOURCE = Path(r"D:\ESP32-Workspace\sanoTTS")
+DEFAULT_COSYVOICE_SOURCE = Path(r"D:\ESP32-Workspace\CosyVoice")
+DEFAULT_COSYVOICE_MODEL = DEFAULT_COSYVOICE_SOURCE / "pretrained_models/Fun-CosyVoice3-0.5B"
 EXPECTED_SANOTTS_FINGERPRINT = "e7adac23b8ae2aefa1623eaa24f6f8049ddfd97e30efd5a377e0f239e6cd7605"
 WALLPAPER_DELIVERY_PORT = 8768
 DEFAULT_CHAT_PATH = "/chat-react"
@@ -101,7 +104,7 @@ def build_commands(options, uv=None):
         raise ValueError("未知记忆提取策略。")
     if options.memory_retrieval not in {"keyword", "hybrid"}:
         raise ValueError("未知记忆召回策略。")
-    if options.tts_backend not in {"edge", "voxcpm2", "sanotts"}:
+    if options.tts_backend not in {"edge", "voxcpm2", "sanotts", "cosyvoice3"}:
         raise ValueError("未知语音后端。")
     if options.vad_profile not in {"normal", "noisy", "close_talk"}:
         raise ValueError("未知拾音环境档位。")
@@ -191,6 +194,18 @@ def build_commands(options, uv=None):
                                           "--port", str(SANOTTS_PORT), "--source", str(source),
                                           "--expected-fingerprint", EXPECTED_SANOTTS_FINGERPRINT],
                              service.parent))
+        elif options.tts_backend == "cosyvoice3":
+            cosyvoice_python = DEFAULT_COSYVOICE_SOURCE / ".venv/Scripts/python.exe"
+            service = root / "scripts/development/cosyvoice/service.py"
+            required = [cosyvoice_python, service, DEFAULT_COSYVOICE_MODEL / "cosyvoice3.yaml"]
+            if not all(path.is_file() for path in required):
+                raise ValueError("CosyVoice 独立环境、适配服务或模型快照不完整。")
+            commands.append(("cosyvoice3", [str(cosyvoice_python), str(service),
+                                              "--host", "127.0.0.1",
+                                              "--port", str(COSYVOICE_PORT),
+                                              "--source-root", str(DEFAULT_COSYVOICE_SOURCE),
+                                              "--model-dir", str(DEFAULT_COSYVOICE_MODEL)],
+                             service.parent))
         commands.append(("voice", [str(python), str(Path(__file__).with_name("voice.py")),
                                   str(root), str(options.voice_root.resolve()), str(options.database.resolve()),
                                   str(ip), options.tts_backend, options.memory_backend], options.voice_root.resolve()))
@@ -267,7 +282,7 @@ class Manager:
         if self.status_path is None or not self.instance:
             return
         snapshot = {
-            "schema_version": 3,
+            "schema_version": 4,
             "launcher_instance": self.instance,
             "launcher_pid": os.getpid(),
             "updated_at": datetime.now(timezone.utc).isoformat(),
@@ -282,6 +297,10 @@ class Manager:
                 "sanotts": self._service_state(
                     "sanotts", ready=tts_ready and self.options is not None
                     and self.options.tts_backend == "sanotts"
+                ),
+                "cosyvoice3": self._service_state(
+                    "cosyvoice3", ready=tts_ready and self.options is not None
+                    and self.options.tts_backend == "cosyvoice3"
                 ),
             },
             # 只记录启动时的非敏感选项，不记录地址、密钥、模型或对话。
@@ -320,6 +339,8 @@ class Manager:
                 require_no_listener("127.0.0.1", VOXCPM_PORT)
             elif options.tts_backend == "sanotts":
                 require_no_listener("127.0.0.1", SANOTTS_PORT)
+            elif options.tts_backend == "cosyvoice3":
+                require_no_listener("127.0.0.1", COSYVOICE_PORT)
             # 端口均空闲后才检查并同步小智私有配置，避免给外部正在运行的
             # 语音服务换地址、声音、模型、记忆后端或拾音档位。先完成只读检查，
             # 再逐项备份写入；格式错误不会造成“改了一半才发现无法检查”。
@@ -404,7 +425,8 @@ class Manager:
 
     def local_tts_ready(self):
         backend = self.options.tts_backend if self.options else ""
-        port = {"voxcpm2": VOXCPM_PORT, "sanotts": SANOTTS_PORT}.get(backend)
+        port = {"voxcpm2": VOXCPM_PORT, "sanotts": SANOTTS_PORT,
+                "cosyvoice3": COSYVOICE_PORT}.get(backend)
         if port is None or backend not in self.services or self.services[backend].process.poll() is not None:
             return False
         conn = http.client.HTTPConnection("127.0.0.1", port, timeout=0.25)

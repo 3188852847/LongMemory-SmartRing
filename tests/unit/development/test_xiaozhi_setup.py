@@ -77,6 +77,18 @@ def test_sanotts_config_is_accepted_only_at_its_fixed_endpoint(config):
         setup.validate_config(config, tts_backend="voxcpm2")
 
 
+def test_cosyvoice3_config_is_accepted_only_at_its_fixed_endpoint(config):
+    config["selected_module"]["TTS"] = "CustomTTS"
+    config["TTS"] = {"CustomTTS": {
+        "type": "custom", "method": "POST",
+        "url": setup.CUSTOM_TTS_URLS["cosyvoice3"], "format": "wav",
+        "params": {"input": "{prompt_text}", "response_format": "wav", "stream": False},
+    }}
+    setup.validate_config(config, tts_backend="cosyvoice3")
+    with pytest.raises(setup.SetupError):
+        setup.validate_config(config, tts_backend="sanotts")
+
+
 @pytest.mark.parametrize("host", ["0.0.0.0", "::", "192.168.1.2"])
 def test_non_local_listen_is_rejected(config, host):
     config["server"]["ip"] = host

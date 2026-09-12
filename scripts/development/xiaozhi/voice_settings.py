@@ -12,6 +12,7 @@ VOICES = ('zh-CN-XiaoxiaoNeural', 'zh-CN-XiaoyiNeural', 'zh-CN-YunxiNeural', 'zh
 TEXT = '你好，很高兴见到你。今天过得怎么样？我们慢慢聊。'
 VOX_URL = 'http://127.0.0.1:18768/v1/audio/speech'
 SANO_URL = 'http://127.0.0.1:18769/v1/audio/speech'
+COSY_URL = 'http://127.0.0.1:18770/v1/audio/speech'
 
 
 def _custom_contract(config, url):
@@ -82,7 +83,8 @@ def settings(server, body):
     digest = hashlib.sha256(raw).hexdigest()
     if selected == 'CustomTTS':
         custom_url = before.get('TTS', {}).get('CustomTTS', {}).get('url')
-        backend, voice = ({VOX_URL: ('voxcpm2', 'plain'), SANO_URL: ('sanotts', 'xiaoya')}
+        backend, voice = ({VOX_URL: ('voxcpm2', 'plain'), SANO_URL: ('sanotts', 'xiaoya'),
+                           COSY_URL: ('cosyvoice3', 'official-zero-shot')}
                           .get(custom_url, ('unsupported', None)))
         params = before.get('TTS', {}).get('CustomTTS', {}).get('params', {})
         speed = _sanotts_speed(params) if backend == 'sanotts' else None

@@ -15,6 +15,7 @@ MEMORY_PROVIDERS = {
 CUSTOM_TTS_URLS = {
     "voxcpm2": "http://127.0.0.1:18768/v1/audio/speech",
     "sanotts": "http://127.0.0.1:18769/v1/audio/speech",
+    "cosyvoice3": "http://127.0.0.1:18770/v1/audio/speech",
 }
 
 
@@ -53,7 +54,7 @@ def tts_matches(config, backend):
 
 
 def wait_for_local_tts(backend, timeout=90):
-    port = {"voxcpm2": 18768, "sanotts": 18769}[backend]
+    port = {"voxcpm2": 18768, "sanotts": 18769, "cosyvoice3": 18770}[backend]
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         connection = http.client.HTTPConnection("127.0.0.1", port, timeout=0.5)

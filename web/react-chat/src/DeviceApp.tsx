@@ -48,7 +48,7 @@ function VoiceLatencyCard({value}:{value:VoiceLatency}) {
       {key:'delivery',label:'音频就绪 → 首包发送',children:delta(timing.first_audio_sent_ms,timing.audio_ready_ms)},
       {key:'total',label:'入口 → 首包发送',children:<strong>{elapsed(timing.first_audio_sent_ms)}</strong>},
     ]}/>
-    <p className="subtle">样本开始于 {new Date(value.started_at).toLocaleString('zh-CN', {hour12:false})}。计时起点是服务端收到已识别文本并进入回答流程；不含录音与 ASR，也不代表扬声器真正开始出声。当前后端：{value.tts_backend==='edge'?'EdgeTTS':value.tts_backend==='voxcpm2'?'VoxCPM2':value.tts_backend==='sanotts'?'sanoTTS':'其他'}。</p>
+    <p className="subtle">样本开始于 {new Date(value.started_at).toLocaleString('zh-CN', {hour12:false})}。计时起点是服务端收到已识别文本并进入回答流程；不含录音与 ASR，也不代表扬声器真正开始出声。当前后端：{value.tts_backend==='edge'?'EdgeTTS':value.tts_backend==='voxcpm2'?'VoxCPM2':value.tts_backend==='sanotts'?'sanoTTS':value.tts_backend==='cosyvoice3'?'CosyVoice 3':'其他'}。</p>
   </Card>;
 }
 

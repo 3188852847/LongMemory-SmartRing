@@ -14,6 +14,8 @@ BACKENDS = {
                 "description": "可使用参考 WAV 和表达指令，但首声慢且占用显存。"},
     "sanotts": {"label": "sanoTTS（本地中文小雅）", "local_service": True,
                 "description": "本地 Node/WASM 后端，生成快、资源较轻；当前只有小雅音色。"},
+    "cosyvoice3": {"label": "CosyVoice 3（本地高质量）", "local_service": True,
+                   "description": "本地 0.5B 模型，常驻预热；当前小智适配仍返回完整 WAV。"},
 }
 
 
