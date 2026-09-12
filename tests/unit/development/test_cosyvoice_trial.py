@@ -33,6 +33,16 @@ def test_validate_local_files_accepts_complete_local_snapshot(tmp_path):
     assert result["prompt_wav"].endswith("zero_shot_prompt.wav")
 
 
+def test_validate_local_files_does_not_require_optional_speaker_catalog(tmp_path):
+    source = tmp_path / "source"
+    model = tmp_path / "model"
+    make_files(source, trial.REQUIRED_SOURCE)
+    make_files(model, trial.REQUIRED_MODEL)
+
+    assert not (model / "spk2info.pt").exists()
+    trial.validate_local_files(source, model)
+
+
 def test_validate_local_files_reports_missing_model_without_importing_engine(tmp_path):
     source = tmp_path / "source"
     model = tmp_path / "model"

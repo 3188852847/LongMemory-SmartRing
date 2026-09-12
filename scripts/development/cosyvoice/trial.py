@@ -32,7 +32,6 @@ REQUIRED_MODEL = (
     "hift.pt",
     "campplus.onnx",
     "speech_tokenizer_v3.onnx",
-    "spk2info.pt",
     "CosyVoice-BlankEN",
 )
 PROMPT_TEXT = (
@@ -71,6 +70,13 @@ def load_cases():
 def generate(source_root: Path, model_dir: Path) -> Path:
     paths = validate_local_files(source_root, model_dir)
     # 所有输入均须已在本地存在；模型代码若意外访问 Hugging Face，也会立即失败。
+    runtime_cache = ROOT / "data" / "control" / "cosyvoice-runtime-cache"
+    runtime_cache.mkdir(parents=True, exist_ok=True)
+    # Windows 上 Numba 默认尝试把编译缓存写回只读的外部 site-packages；其余库也会
+    # 使用用户目录。集中到 Git 忽略的项目运行目录，避免修改源码和全局环境。
+    os.environ["NUMBA_CACHE_DIR"] = str(runtime_cache / "numba")
+    os.environ["MPLCONFIGDIR"] = str(runtime_cache / "matplotlib")
+    os.environ["HF_HOME"] = str(runtime_cache / "huggingface")
     os.environ["HF_HUB_OFFLINE"] = "1"
     os.environ["HF_HUB_DISABLE_TELEMETRY"] = "1"
     sys.path.insert(0, str(source_root))
