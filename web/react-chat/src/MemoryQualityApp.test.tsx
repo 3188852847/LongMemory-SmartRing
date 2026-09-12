@@ -1,7 +1,7 @@
 import {afterEach,describe,expect,test,vi} from 'vitest';
 import {fireEvent,render,screen,waitFor} from '@testing-library/react';
 import {MemoryRouter} from 'react-router-dom';
-import {ChatApi, type MemoryFeedbackIndex} from './api';
+import {ChatApi, type L2SufficiencyShadowDetail, type L2SufficiencyShadowPage, type MemoryFeedbackIndex} from './api';
 import {MemoryQualityApp} from './MemoryQualityApp';
 
 afterEach(()=>vi.restoreAllMocks());
@@ -55,5 +55,43 @@ describe('记忆质量样本工作台',()=>{
     expect(screen.getByText('与回答时一致')).toBeTruthy();
     expect(screen.getByText('keyword_dense_rrf_v1')).toBeTruthy();
     expect(screen.getByText(/关键词 1 · 余弦 0.812 · 融合 0.0314/)).toBeTruthy();
+  });
+
+  test('L2影子记录明确不生效并可核对候选判断',async()=>{
+    const feedback:MemoryFeedbackIndex={
+      kind:'issues',offset:0,limit:25,total:0,
+      counts:{memory_ok:0,recall_miss:0,wrong_memory:0,memory_irrelevant:0},
+      review_counts:{open:0,resolved:0,dismissed:0},items:[],
+    };
+    const shadow:L2SufficiencyShadowPage={
+      limit:20,runtime:{enabled:true,state:'completed'},items:[{
+        user_message_id:'turn-shadow',query:'我的猫是什么颜色',
+        retrieval_strategy:'l2_keyword_v1',reviewer_version:'gate-v2',
+        provider:'openai_compatible',model:'deepseek-v4-flash',status:'completed',
+        requested_at:'2026-09-13T01:00:00Z',completed_at:'2026-09-13T01:00:01Z',
+        error_code:null,candidate_count:1,supported_count:0,
+      }],
+    };
+    const detail:L2SufficiencyShadowDetail={
+      ...shadow.items[0],prompt_sha256:'a'.repeat(64),candidates:[{
+        scenario_id:'scene-cat',rank:1,content_sha256:'b'.repeat(64),keyword_score:2,
+        supports_answer:0,reason_code:'missing_attribute',current_title:'猫咪',
+        current_summary:'用户养了一只叫豆包的猫。',current_status:'active',
+        content_matches_snapshot:true,
+      }],
+    };
+    vi.spyOn(ChatApi.prototype,'bootstrap').mockResolvedValue(undefined);
+    vi.spyOn(ChatApi.prototype,'request').mockImplementation(async path=>{
+      if(path==='/api/l2-sufficiency-shadow?limit=20')return shadow as never;
+      if(path==='/api/l2-sufficiency-shadow/turn-shadow')return detail as never;
+      return feedback as never;
+    });
+    render(<MemoryRouter><MemoryQualityApp/></MemoryRouter>);
+    expect(await screen.findByText('我的猫是什么颜色')).toBeTruthy();
+    expect(screen.getByText('这里只显示‘如果门控生效会怎样’')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button',{name:'查看候选判断'}));
+    expect(await screen.findByText('证据不足')).toBeTruthy();
+    expect(screen.getByText('missing_attribute')).toBeTruthy();
+    expect(screen.getByRole('link',{name:'打开 L2'}).getAttribute('href')).toBe('/scenarios?scenario_id=scene-cat');
   });
 });

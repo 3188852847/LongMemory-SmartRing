@@ -22,6 +22,7 @@ from .routes.assistant_role import register_role_routes
 from .routes.memory_runtime import register_memory_runtime_routes
 from .routes.memory_mode import register_memory_mode_routes
 from .routes.memory_commands import register_memory_command_routes
+from .routes.l2_sufficiency_shadow import register_l2_sufficiency_shadow_routes
 from .routes.model_profiles import register_model_profile_routes
 from .xiaozhi_model_profiles import XiaozhiModelProfiles
 from .routes.memory_backends import register_memory_backend_routes
@@ -161,6 +162,7 @@ def create_app(*, port=8765, bridge=None, web_root=None, database=None, allow_me
     register_chat_routes(app, chat_backend)
     register_memory_mode_routes(app, chat_backend)
     register_memory_command_routes(app, chat_backend)
+    register_l2_sufficiency_shadow_routes(app, chat_backend)
     if memory_runtime_token:
         register_memory_runtime_routes(app, chat_backend)
     device_role = DeviceRole(xiaozhi_server, chat_backend.roles, chat_backend.database, ROOT) if xiaozhi_server and chat_backend else None

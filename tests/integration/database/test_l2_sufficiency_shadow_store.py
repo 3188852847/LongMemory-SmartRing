@@ -88,6 +88,15 @@ def test_shadow_store_records_snapshot_and_closed_decisions_without_text(tmp_pat
         "scene-cat", 1, 2, 0, "missing_attribute",
     )
     assert len(candidate[5]) == 64
+    listing = store.list_recent(limit=10)
+    assert listing["items"][0]["query"] == "我的猫是什么颜色"
+    assert listing["items"][0]["candidate_count"] == 1
+    assert listing["items"][0]["supported_count"] == 0
+    detail = store.get("user-a")
+    assert detail["query"] == "我的猫是什么颜色"
+    assert detail["candidates"][0]["current_title"] is None
+    assert detail["candidates"][0]["content_matches_snapshot"] is None
+    assert store.get("missing") is None
     columns = {row[1] for row in connection.execute(
         "PRAGMA table_info(l2_sufficiency_shadow_candidates)"
     )}

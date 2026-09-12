@@ -1,7 +1,7 @@
 import {useEffect, useState} from 'react';
 import {Alert, Button, Card, Descriptions, Drawer, Empty, List, Modal, Select, Space, Statistic, Tag} from 'antd';
 import {Link} from 'react-router-dom';
-import {ChatApi, type MemoryFeedbackDiagnosticFocus, type MemoryFeedbackIndex, type MemoryFeedbackIndexItem, type MemoryFeedbackKind, type RoundScreenFeedbackDetail} from './api';
+import {ChatApi, type L2SufficiencyShadowDetail, type L2SufficiencyShadowPage, type MemoryFeedbackDiagnosticFocus, type MemoryFeedbackIndex, type MemoryFeedbackIndexItem, type MemoryFeedbackKind, type RoundScreenFeedbackDetail} from './api';
 import {AppShell, ConsoleNav} from './AppShell';
 import {PageHeader} from './PageHeader';
 
@@ -55,6 +55,10 @@ export function MemoryQualityApp() {
   const [reviewTarget,setReviewTarget] = useState<{item:MemoryFeedbackIndexItem;action:ReviewAction}|null>(null);
   const [reviewReason,setReviewReason] = useState('');
   const [reviewBusy,setReviewBusy] = useState(false);
+  const [shadow,setShadow] = useState<L2SufficiencyShadowPage|null>(null);
+  const [shadowDetail,setShadowDetail] = useState<L2SufficiencyShadowDetail|null>(null);
+  const [shadowOpen,setShadowOpen] = useState(false);
+  const [shadowBusy,setShadowBusy] = useState(false);
 
   async function load(nextFilter=filter,offset=0) {
     setBusy(true);
@@ -67,10 +71,26 @@ export function MemoryQualityApp() {
     } finally {setBusy(false);}
   }
 
+  async function loadShadow() {
+    try {
+      const value=await api.request<L2SufficiencyShadowPage>('/api/l2-sufficiency-shadow?limit=20');
+      setShadow(value&&Array.isArray(value.items)&&value.runtime&&typeof value.runtime.enabled==='boolean'?value:null);
+    } catch {
+      setShadow(null);
+    }
+  }
+
   useEffect(()=>{void (async()=>{
-    try {await api.bootstrap();await load('issues',0);}
+    try {await api.bootstrap();await Promise.all([load('issues',0),loadShadow()]);}
     catch {setNotice('无法建立本机控制台会话，请刷新页面。');setBusy(false);}
   })();},[]);
+
+  async function inspectShadow(messageId:string) {
+    setShadowOpen(true);setShadowBusy(true);setShadowDetail(null);
+    try {setShadowDetail(await api.request<L2SufficiencyShadowDetail>(`/api/l2-sufficiency-shadow/${encodeURIComponent(messageId)}`));}
+    catch {setNotice('无法读取这条 L2 影子记录。请确认控制台仍在运行后重试。');}
+    finally {setShadowBusy(false);}
+  }
 
   async function inspectRoundScreen(eventId:string) {
     setDetailOpen(true);setDetailBusy(true);setDetail(null);
@@ -102,7 +122,7 @@ export function MemoryQualityApp() {
 
   const sidebar = <ConsoleNav active="quality" legacyPath="/memories"/>;
   return <AppShell subtitle="跨日期的记忆诊断样本" className="quality-shell" sidebar={sidebar}>
-    <PageHeader eyebrow="长期记忆" title="记忆质量样本" description="集中查看网页人工复核和圆屏明确反馈，并回到原始证据核对实际召回情况。" action={<Button loading={busy} onClick={()=>void load(filter,page.offset)}>刷新</Button>}/>
+    <PageHeader eyebrow="长期记忆" title="记忆质量样本" description="集中查看网页人工复核、圆屏明确反馈和只观察不生效的 L2 影子判断。" action={<Button loading={busy} onClick={()=>void Promise.all([load(filter,page.offset),loadShadow()])}>刷新</Button>}/>
     <Alert showIcon type="info" title="这是人工诊断队列，不是准确率报告" description="默认只显示‘没想起’和‘错误记忆’。排查方向由可见轨迹生成，不代表系统已经确认根因，也不会触发模型、重答或记忆修改。"/>
     <section className="quality-counts" aria-label="当前有效判断总览">
       <Card><Statistic title="待处理" value={page.review_counts.open}/></Card>
@@ -129,6 +149,12 @@ export function MemoryQualityApp() {
       </List.Item>}/>
       <div className="pagination"><Button disabled={busy||page.offset===0} onClick={()=>void load(filter,Math.max(0,page.offset-page.limit))}>上一页</Button><span>{page.total?`${page.offset+1}–${Math.min(page.offset+page.limit,page.total)} / ${page.total}`:'0 条'}</span><Button disabled={busy||page.offset+page.limit>=page.total} onClick={()=>void load(filter,page.offset+page.limit)}>下一页</Button></div>
     </Card>
+    <Card className="quality-list-card" title="L2 证据充分性影子记录" extra={<Tag color={shadow?.runtime?.enabled?'cyan':'default'}>{shadow?.runtime?.enabled?'本次已启用':'本次未启用'}</Tag>}>
+      <Alert showIcon type="info" title="这里只显示‘如果门控生效会怎样’" description="影子判断不会过滤本轮 L2、不会修改回答或记忆。默认关闭；历史记录即使当前未启用也会保留。"/>
+      {!shadow?<Empty description="当前数据库没有可读取的 V42 影子记录，或聊天入口未启用"/>:<List dataSource={shadow.items} locale={{emptyText:<Empty description="还没有影子样本"/>}} renderItem={item=><List.Item actions={[<Button key="detail" type="link" onClick={()=>void inspectShadow(item.user_message_id)}>查看候选判断</Button>,<Link key="source" to={`/memories?l0_message_id=${encodeURIComponent(item.user_message_id)}`}>问题 L0</Link>]}>
+        <List.Item.Meta title={<Space wrap><Tag color={item.status==='completed'?'green':item.status==='failed'?'red':'gold'}>{item.status==='completed'?'已完成':item.status==='failed'?'失败':'处理中'}</Tag><span>{item.query}</span></Space>} description={<Space wrap><span>{new Date(item.requested_at).toLocaleString('zh-CN')}</span><span>候选 {item.candidate_count} · 判定支持 {item.supported_count}</span><code>{item.model}</code>{item.error_code&&<code>{item.error_code}</code>}</Space>}/>
+      </List.Item>}/>}
+    </Card>
     <Drawer width={640} title="圆屏记忆质量详情" open={detailOpen} onClose={()=>setDetailOpen(false)}>
       {detailBusy?<p>正在读取原始证据…</p>:detail?<>
         <Alert showIcon type="info" title="正文只在打开详情后读取" description="这里只比较回答当时的召回指纹和条目当前内容；内容变化不自动等于错误根因。"/>
@@ -147,6 +173,19 @@ export function MemoryQualityApp() {
           }
         </Card>
       </>:<Empty description="没有可显示的诊断详情"/>}
+    </Drawer>
+    <Drawer width={680} title="L2 影子门控详情" open={shadowOpen} onClose={()=>setShadowOpen(false)}>
+      {shadowBusy?<p>正在读取候选审计…</p>:shadowDetail?<>
+        <Alert showIcon type="warning" title="判定尚未参与正式回答" description="场景正文来自当前 L2；指纹可核对它是否仍与影子运行时一致。支持只表示候选包含被问信息，不表示最终答案一定正确。"/>
+        <Descriptions column={1} bordered size="small" items={[
+          {key:'query',label:'当轮问题',children:shadowDetail.query},
+          {key:'status',label:'运行状态',children:shadowDetail.status},
+          {key:'strategy',label:'候选策略',children:shadowDetail.retrieval_strategy},
+          {key:'reviewer',label:'门控版本',children:shadowDetail.reviewer_version},
+          {key:'model',label:'复核模型',children:`${shadowDetail.provider} / ${shadowDetail.model}`},
+        ]}/>
+        <List dataSource={shadowDetail.candidates} locale={{emptyText:<Empty description="该轮没有 L2 候选，因此没有调用复核模型"/>}} renderItem={candidate=><List.Item actions={[<Link key="scenario" to={`/scenarios?scenario_id=${encodeURIComponent(candidate.scenario_id)}`}>打开 L2</Link>]}><List.Item.Meta title={<Space wrap><Tag>#{candidate.rank}</Tag><Tag color={candidate.supports_answer===1?'green':candidate.supports_answer===0?'default':'gold'}>{candidate.supports_answer===1?'足以支持':candidate.supports_answer===0?'证据不足':'尚未判定'}</Tag><span>{candidate.current_title??'当前场景已缺失'}</span></Space>} description={<><p>{candidate.current_summary??'当前数据库中没有这条 L2 正文。'}</p><Space wrap><code>{candidate.reason_code??'pending'}</code>{candidate.keyword_score!=null&&<span>关键词 {candidate.keyword_score}</span>}<span>{candidate.content_matches_snapshot===true?'与运行时指纹一致':candidate.content_matches_snapshot===false?'正文后来变化':'无法核对历史正文'}</span></Space></>}/></List.Item>}/>
+      </>:<Empty description="没有可显示的影子详情"/>}
     </Drawer>
     <Modal title={reviewTarget?.action==='resolve'?'标记为已处理':reviewTarget?.action==='dismiss'?'标记为不是记忆问题':'重新打开样本'} open={reviewTarget!==null} confirmLoading={reviewBusy} okText="保存复核状态" cancelText="取消" onOk={()=>void saveReview()} onCancel={()=>!reviewBusy&&setReviewTarget(null)}>
       <p>这只管理诊断队列，不会自动修改、删除或重新生成长期记忆。</p>

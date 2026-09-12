@@ -179,6 +179,43 @@ async def login(client, base):
     return {"Origin": base, "X-Console-CSRF": (await response.json())["csrf"]}
 
 
+def test_l2_sufficiency_shadow_routes_are_read_only_and_validate_identity(tmp_path):
+    class Backend:
+        database = tmp_path / "synthetic-memory.db"
+
+        def list_l2_sufficiency_shadow(self, *, limit):
+            assert limit == 12
+            return {"items": [{"user_message_id": "turn-a"}], "limit": limit,
+                    "runtime": {"enabled": True, "state": "completed"}}
+
+        def get_l2_sufficiency_shadow(self, message_id):
+            return ({"user_message_id": message_id, "candidates": []}
+                    if message_id == "turn-a" else None)
+
+    async def run():
+        async with console(chat_backend=Backend()) as (client, base, _bridge):
+            headers = await login(client, base)
+            response = await client.get(
+                base + "/api/l2-sufficiency-shadow?limit=12", headers=headers,
+            )
+            assert response.status == 200
+            assert (await response.json())["items"][0]["user_message_id"] == "turn-a"
+            response = await client.get(
+                base + "/api/l2-sufficiency-shadow/turn-a", headers=headers,
+            )
+            assert response.status == 200
+            response = await client.get(
+                base + "/api/l2-sufficiency-shadow/missing", headers=headers,
+            )
+            assert response.status == 404
+            response = await client.get(
+                base + "/api/l2-sufficiency-shadow?limit=0", headers=headers,
+            )
+            assert response.status == 400
+
+    asyncio.run(run())
+
+
 class FakeWallpaperLibrary:
     def __init__(self, root):
         self.root = root

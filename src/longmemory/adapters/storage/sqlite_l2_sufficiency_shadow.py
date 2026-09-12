@@ -150,3 +150,67 @@ class SQLiteL2SufficiencyShadowStore:
             raise
         finally:
             connection.close()
+
+    def list_recent(self, *, limit: int = 50) -> dict:
+        """为本机所有者列出近期运行；正文只从已有 L0 按需读取。"""
+
+        if type(limit) is not int or not 1 <= limit <= 100:
+            raise ValueError("l2_sufficiency_shadow_limit_invalid")
+        connection = self._open()
+        try:
+            rows = connection.execute(
+                "SELECT r.user_message_id,m.content AS query,r.retrieval_strategy,"
+                "r.reviewer_version,r.provider,r.model,r.status,r.requested_at,"
+                "r.completed_at,r.error_code,"
+                "(SELECT count(*) FROM l2_sufficiency_shadow_candidates c "
+                " WHERE c.user_message_id=r.user_message_id) AS candidate_count,"
+                "(SELECT count(*) FROM l2_sufficiency_shadow_candidates c "
+                " WHERE c.user_message_id=r.user_message_id AND c.supports_answer=1) "
+                "AS supported_count "
+                "FROM l2_sufficiency_shadow_runs r "
+                "JOIN conversation_messages m ON m.id=r.user_message_id "
+                "ORDER BY r.requested_at DESC,r.user_message_id DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+            return {"items": [dict(row) for row in rows], "limit": limit}
+        finally:
+            connection.close()
+
+    def get(self, user_message_id: str) -> dict | None:
+        """读取单轮候选当前正文，并显式标记是否仍与回答时指纹一致。"""
+
+        if not isinstance(user_message_id, str) or not user_message_id.strip():
+            raise ValueError("l2_sufficiency_shadow_id_invalid")
+        connection = self._open()
+        try:
+            run = connection.execute(
+                "SELECT r.*,m.content AS query FROM l2_sufficiency_shadow_runs r "
+                "JOIN conversation_messages m ON m.id=r.user_message_id "
+                "WHERE r.user_message_id=?", (user_message_id,),
+            ).fetchone()
+            if run is None:
+                return None
+            rows = connection.execute(
+                "SELECT c.*,s.title AS current_title,s.summary AS current_summary,"
+                "s.status AS current_status FROM l2_sufficiency_shadow_candidates c "
+                "LEFT JOIN scenario_memories s ON s.id=c.scenario_id "
+                "WHERE c.user_message_id=? ORDER BY c.rank",
+                (user_message_id,),
+            ).fetchall()
+            candidates = []
+            for row in rows:
+                item = dict(row)
+                if row["current_title"] is None or row["current_summary"] is None:
+                    item["content_matches_snapshot"] = None
+                else:
+                    current = f'{row["current_title"]}：{row["current_summary"]}'
+                    item["content_matches_snapshot"] = (
+                        sha256(current.encode("utf-8")).hexdigest()
+                        == row["content_sha256"]
+                    )
+                candidates.append(item)
+            payload = dict(run)
+            payload["candidates"] = candidates
+            return payload
+        finally:
+            connection.close()
