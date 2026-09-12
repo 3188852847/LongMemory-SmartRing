@@ -206,7 +206,7 @@ describe('L1 质量候选',()=>{
       if(path.startsWith('/api/chat-memory-feedback/daily')) return {local_date:'2026-09-13',utc_offset_minutes:480,total:0,limited:false,action_counts:{memory_ok:0,recall_miss:0,wrong_memory:0,memory_irrelevant:0},items:[],current_total:0,current_limited:false,current_counts:{memory_ok:0,recall_miss:0,wrong_memory:0,memory_irrelevant:0},current_items:[]} as never;
       if(path==='/api/memories/quality-candidates') return {items:[{kind:'possible_conflict',similarity:.88,reason:'检测到明确的“喜欢/不喜欢”相反表述',left:first,right:second,review_status:'pending',review_revision:0},{kind:'normalized_duplicate',similarity:1,reason:'忽略主体前缀、空格和标点后文本一致',left:duplicateA,right:duplicateB,review_status:'pending',review_revision:0}],total:2,scanned_memory_count:4,memory_scan_limited:false,candidate_limit:100,candidate_limit_reached:false,lexical_threshold:.72,detector_version:'l1-quality-heuristic-v1',generated_at:'2026-09-13T00:00:00Z',merge_history:[],merge_history_total:0,merge_history_limited:false} as never;
       if(path==='/api/memories/quality-candidates/reviews') return {review_status:'dismissed',review_revision:1} as never;
-      if(path==='/api/memories/quality-candidates/merge') return {kept_memory_id:'memory-d',retired_memory_id:'memory-e',copied_evidence_count:1,merged_at:'2026-09-13T01:00:00Z',replayed:false} as never;
+      if(path==='/api/memories/quality-candidates/merge') return {kept_memory_id:'memory-d',retired_memory_id:'memory-e',copied_evidence_count:1,evidence_ledger:[{source_message_id:'source-b',source_type:'user_stated',linked_at:'2026-09-13T00:01:00Z'}],merged_at:'2026-09-13T01:00:00Z',replayed:false} as never;
       if(path==='/api/memories/memory-a') return {...first,revision:'a'.repeat(64),valid_from:null,valid_to:null,retired_at:null,superseded_by_id:null,sources:[]} as never;
       if(path==='/api/memories/memory-d') return {...duplicateA,revision:'d'.repeat(64),valid_from:null,valid_to:null,retired_at:null,superseded_by_id:null,sources:[]} as never;
       if(path.startsWith('/api/memories?')) return {items:[first,second,duplicateA],total:3,limit:25,offset:0} as never;
@@ -229,5 +229,6 @@ describe('L1 质量候选',()=>{
     fireEvent.click(screen.getByRole('button',{name:'确认合并'}));
     expect(await screen.findByText(/重复 L1 已合并/)).toBeTruthy();
     expect(await screen.findByText(/账本完整 1\/1/)).toBeTruthy();
+    expect(await screen.findByRole('button',{name:/L0 source-b/})).toBeTruthy();
   });
 });

@@ -113,6 +113,20 @@ class AtomicMemoryBackend:
                 "JOIN atomic_memories r ON r.id=e.retired_memory_id "
                 "ORDER BY e.merged_at DESC,e.id DESC LIMIT 25"
             ).fetchall()
+            merge_history = []
+            for row in merge_rows:
+                ledger_rows = connection.execute(
+                    "SELECT source_message_id,source_type,linked_at "
+                    "FROM l1_duplicate_merge_evidence WHERE merge_event_id=? "
+                    "ORDER BY linked_at,source_message_id,source_type",
+                    (row["id"],),
+                ).fetchall()
+                merge_history.append(dict(row) | {
+                    "evidence_ledger_complete": (
+                        row["evidence_ledger_count"] == row["copied_evidence_count"]
+                    ),
+                    "evidence_ledger": [dict(item) for item in ledger_rows],
+                })
             return {
                 "items": rows,
                 "total": len(candidates),
@@ -123,11 +137,7 @@ class AtomicMemoryBackend:
                 "lexical_threshold": 0.72,
                 "detector_version": DETECTOR_VERSION,
                 "generated_at": now.isoformat(),
-                "merge_history": [dict(row) | {
-                    "evidence_ledger_complete": (
-                        row["evidence_ledger_count"] == row["copied_evidence_count"]
-                    ),
-                } for row in merge_rows],
+                "merge_history": merge_history,
                 "merge_history_total": merge_total,
                 "merge_history_limited": merge_total > len(merge_rows),
             }
@@ -200,15 +210,22 @@ class AtomicMemoryBackend:
         with self._open_database(write_capability="correction") as connection:
             now = self._clock()
             existing = connection.execute(
-                "SELECT kept_memory_id,copied_evidence_count,merged_at "
+                "SELECT id,kept_memory_id,copied_evidence_count,merged_at "
                 "FROM l1_duplicate_merge_events WHERE retired_memory_id=?",
                 (retired_memory_id,),
             ).fetchone()
             if existing:
                 if existing["kept_memory_id"] == kept_memory_id:
+                    existing_ledger = connection.execute(
+                        "SELECT source_message_id,source_type,linked_at "
+                        "FROM l1_duplicate_merge_evidence WHERE merge_event_id=? "
+                        "ORDER BY linked_at,source_message_id,source_type",
+                        (existing["id"],),
+                    ).fetchall()
                     return {"kept_memory_id": kept_memory_id,
                             "retired_memory_id": retired_memory_id,
                             "copied_evidence_count": existing["copied_evidence_count"],
+                            "evidence_ledger": [dict(row) for row in existing_ledger],
                             "merged_at": existing["merged_at"], "replayed": True}
                 raise MemoryAccessError("l1_duplicate_merge_conflict", 409)
             _active, _scanned, candidates = self._find_quality_candidates(connection, now)
@@ -270,6 +287,7 @@ class AtomicMemoryBackend:
             return {"kept_memory_id": kept_memory_id,
                     "retired_memory_id": retired_memory_id,
                     "copied_evidence_count": copied_evidence_count,
+                    "evidence_ledger": [dict(row) for row in copied_evidence],
                     "merged_at": now.isoformat(), "replayed": False}
 
     @staticmethod

@@ -673,6 +673,11 @@ def test_console_merges_duplicate_l1_without_deleting_history_or_sources(tmp_pat
             assert quality_after_merge["merge_history"][0]["kept_memory_id"] == "memory-a"
             assert quality_after_merge["merge_history"][0]["evidence_ledger_count"] == 1
             assert quality_after_merge["merge_history"][0]["evidence_ledger_complete"] is True
+            assert quality_after_merge["merge_history"][0]["evidence_ledger"] == [{
+                "source_message_id": "source-b",
+                "source_type": "user_stated",
+                "linked_at": "2026-09-13T00:01:00+00:00",
+            }]
 
     asyncio.run(run())
     with sqlite3.connect(database) as connection:

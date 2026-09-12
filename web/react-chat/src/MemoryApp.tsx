@@ -37,7 +37,8 @@ type DailyReview = {local_date:string;utc_offset_minutes:number;items:DailyRevie
 type ClearPreview = {l1_total:number;l1_active:number;l1_retired:number;affected_l2_current:number;affected_l3_current:number;l0_preserved:number;revision:string};
 type WipePreview = {l0_total:number;l1_total:number;l2_total:number;l3_total:number;l2_current:number;l3_current:number;related_record_total:number;web_chat_archive_preserved:boolean;existing_backups_preserved:boolean;revision:string};
 type L1QualityCandidate = {kind:'normalized_duplicate'|'lexical_near_duplicate'|'possible_conflict';similarity:number;reason:string;left:L1Summary;right:L1Summary;review_status:'pending'|'dismissed';review_revision:number};
-type L1MergeHistory = {id:string;kept_memory_id:string;retired_memory_id:string;candidate_kind:'normalized_duplicate'|'lexical_near_duplicate';copied_evidence_count:number;evidence_ledger_count:number;evidence_ledger_complete:boolean;merged_at:string;kept_content:string;retired_content:string};
+type L1MergeEvidence = {source_message_id:string;source_type:string;linked_at:string};
+type L1MergeHistory = {id:string;kept_memory_id:string;retired_memory_id:string;candidate_kind:'normalized_duplicate'|'lexical_near_duplicate';copied_evidence_count:number;evidence_ledger_count:number;evidence_ledger_complete:boolean;evidence_ledger:L1MergeEvidence[];merged_at:string;kept_content:string;retired_content:string};
 type L1QualityCandidates = {items:L1QualityCandidate[];total:number;scanned_memory_count:number;memory_scan_limited:boolean;candidate_limit:number;candidate_limit_reached:boolean;lexical_threshold:number;detector_version:string;generated_at:string;merge_history:L1MergeHistory[];merge_history_total:number;merge_history_limited:boolean};
 
 const api = new ChatApi();
@@ -232,7 +233,7 @@ export function MemoryApp() {
     const {item,kept}=mergeChoice;
     await guarded(async()=>{
       const keptMemory=kept==='left'?item.left:item.right;
-      const result=await api.request<{copied_evidence_count:number;merged_at:string}>(
+      const result=await api.request<{copied_evidence_count:number;evidence_ledger:L1MergeEvidence[];merged_at:string}>(
         '/api/memories/quality-candidates/merge','POST',{
           left_memory_id:item.left.id,right_memory_id:item.right.id,
           candidate_kind:item.kind,kept_memory_id:keptMemory.id,
@@ -240,7 +241,7 @@ export function MemoryApp() {
         },
       );
       setMergeChoice(undefined);
-      setQualityCandidates(current=>current ? {...current,total:Math.max(0,current.total-1),items:current.items.filter(candidate=>!(candidate.left.id===item.left.id&&candidate.right.id===item.right.id)),merge_history_total:current.merge_history_total+1,merge_history:[{id:`local-${result.merged_at}`,kept_memory_id:keptMemory.id,retired_memory_id:kept==='left'?item.right.id:item.left.id,candidate_kind:item.kind as 'normalized_duplicate'|'lexical_near_duplicate',copied_evidence_count:result.copied_evidence_count,evidence_ledger_count:result.copied_evidence_count,evidence_ledger_complete:true,merged_at:result.merged_at,kept_content:keptMemory.content,retired_content:(kept==='left'?item.right:item.left).content},...current.merge_history].slice(0,25)} : current);
+      setQualityCandidates(current=>current ? {...current,total:Math.max(0,current.total-1),items:current.items.filter(candidate=>!(candidate.left.id===item.left.id&&candidate.right.id===item.right.id)),merge_history_total:current.merge_history_total+1,merge_history:[{id:`local-${result.merged_at}`,kept_memory_id:keptMemory.id,retired_memory_id:kept==='left'?item.right.id:item.left.id,candidate_kind:item.kind as 'normalized_duplicate'|'lexical_near_duplicate',copied_evidence_count:result.copied_evidence_count,evidence_ledger_count:result.evidence_ledger.length,evidence_ledger_complete:result.evidence_ledger.length===result.copied_evidence_count,evidence_ledger:result.evidence_ledger,merged_at:result.merged_at,kept_content:keptMemory.content,retired_content:(kept==='left'?item.right:item.left).content},...current.merge_history].slice(0,25)} : current);
       await fetchL1(0,'','active');
       setNotice(`重复 L1 已合并：保留所选事实，另一条已退役；汇入 ${result.copied_evidence_count} 条此前未关联的 L0 来源。`);
       setSelectedL1(await api.request<L1Detail>(`/api/memories/${encodeURIComponent(keptMemory.id)}`));
@@ -434,7 +435,7 @@ export function MemoryApp() {
             </Space>
           </List.Item>}/>
         </>}
-        {qualityCandidates&&qualityCandidates.merge_history.length>0&&<details className="quality-merge-history"><summary>查看重复合并历史（{qualityCandidates.merge_history_total}）</summary><List size="small" dataSource={qualityCandidates.merge_history} renderItem={event=><List.Item><Space direction="vertical" size={2}><span><Button type="link" size="small" onClick={()=>void openL1(event.kept_memory_id)}>保留：{event.kept_content}</Button></span><span className="subtle">已取代：{event.retired_content}</span><small className="subtle">{displayTime(event.merged_at)} · 汇入 {event.copied_evidence_count} 条来源 · {event.evidence_ledger_complete?`账本完整 ${event.evidence_ledger_count}/${event.copied_evidence_count}`:'旧合并无逐条账本'}</small></Space></List.Item>}/>{qualityCandidates.merge_history_limited&&<p className="subtle">这里只显示最近 25 次合并。</p>}</details>}
+        {qualityCandidates&&qualityCandidates.merge_history.length>0&&<details className="quality-merge-history"><summary>查看重复合并历史（{qualityCandidates.merge_history_total}）</summary><List size="small" dataSource={qualityCandidates.merge_history} renderItem={event=><List.Item><Space direction="vertical" size={2}><span><Button type="link" size="small" onClick={()=>void openL1(event.kept_memory_id)}>保留：{event.kept_content}</Button></span><span className="subtle">已取代：{event.retired_content}</span><small className="subtle">{displayTime(event.merged_at)} · 汇入 {event.copied_evidence_count} 条来源 · {event.evidence_ledger_complete?`账本完整 ${event.evidence_ledger_count}/${event.copied_evidence_count}`:'旧合并无逐条账本'}</small>{event.evidence_ledger.length>0&&<Space wrap size={4}>{event.evidence_ledger.map(source=><Button key={`${source.source_message_id}:${source.source_type}`} type="link" size="small" onClick={()=>void openL0(source.source_message_id)}>L0 {source.source_message_id.slice(0,8)} · {sourceName(source.source_type)} · {displayTime(source.linked_at)}</Button>)}</Space>}</Space></List.Item>}/>{qualityCandidates.merge_history_limited&&<p className="subtle">这里只显示最近 25 次合并。</p>}</details>}
       </Card>
       {mode && <Card className="mode-card" title={<span>本次运行的记忆模式 <Tag>临时设置</Tag></span>} extra={<Button type="primary" disabled={busy || (mode.write_enabled === modeDraft.write_enabled && mode.use_enabled === modeDraft.use_enabled && mode.scenario_use_enabled === modeDraft.scenario_use_enabled && mode.persona_use_enabled === modeDraft.persona_use_enabled)} onClick={() => void saveMode()}>应用到网页与圆屏</Button>}>
         <div className="memory-mode-grid">
