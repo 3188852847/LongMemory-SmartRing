@@ -190,3 +190,31 @@ describe('开发期记忆重置',()=>{
     expect(await screen.findByText(/已清除当前库的 L0 8、L1 3、L2 1、L3 1 条/)).toBeTruthy();
   });
 });
+
+describe('L1 质量候选',()=>{
+  test('按需扫描并从候选打开来源详情',async()=>{
+    const first={id:'memory-a',content:'用户喜欢喝咖啡。',truncated:false,state:'active' as const,recorded_at:'2026-09-13T00:00:00Z',subject_id:'user:self'};
+    const second={...first,id:'memory-b',content:'用户不喜欢喝咖啡。'};
+    vi.spyOn(ChatApi.prototype,'bootstrap').mockResolvedValue(undefined);
+    vi.spyOn(ChatApi.prototype,'request').mockImplementation(async path=>{
+      if(path==='/api/memory-config') return {configured:true,database:'synthetic.db',allow_delete:true,allow_clear:true,allow_correction:true,allow_change:true,allow_promote_source:true} as never;
+      if(path==='/api/memory-mode') return {write_enabled:true,use_enabled:true,scenario_use_enabled:false,scenario_available:true,persona_use_enabled:false,persona_available:true,persistent:false,l0_archived_when_write_disabled:true} as never;
+      if(path==='/api/consolidation-status') return {background_enabled:false,stages:[]} as never;
+      if(path.startsWith('/api/memories/daily-review')) return {local_date:'2026-09-13',utc_offset_minutes:480,items:[],total:0,limited:false,activity_counts:{added:0,corrected:0,changed:0,deleted:0},message_counts:{user:0,assistant:0,total:0,unlinked_user:0},quality_counts:{owner_confirmed_missed_extraction:0},deletions:[],deletions_limited:false} as never;
+      if(path.startsWith('/api/chat-memory-feedback/daily')) return {local_date:'2026-09-13',utc_offset_minutes:480,total:0,limited:false,action_counts:{memory_ok:0,recall_miss:0,wrong_memory:0,memory_irrelevant:0},items:[],current_total:0,current_limited:false,current_counts:{memory_ok:0,recall_miss:0,wrong_memory:0,memory_irrelevant:0},current_items:[]} as never;
+      if(path==='/api/memories/quality-candidates') return {items:[{kind:'possible_conflict',similarity:.88,reason:'检测到明确的“喜欢/不喜欢”相反表述',left:first,right:second}],total:1,scanned_memory_count:2,memory_scan_limited:false,candidate_limit:100,candidate_limit_reached:false,lexical_threshold:.72,generated_at:'2026-09-13T00:00:00Z'} as never;
+      if(path==='/api/memories/memory-a') return {...first,revision:'a'.repeat(64),valid_from:null,valid_to:null,retired_at:null,superseded_by_id:null,sources:[]} as never;
+      if(path.startsWith('/api/memories?')) return {items:[first,second],total:2,limit:25,offset:0} as never;
+      throw new Error(`unexpected test path: ${path}`);
+    });
+    const client=new QueryClient({defaultOptions:{queries:{retry:false}}});
+    render(<QueryClientProvider client={client}><MemoryRouter><MemoryApp/></MemoryRouter></QueryClientProvider>);
+    const scan=await screen.findByRole('button',{name:'扫描当前 L1'});
+    fireEvent.click(scan);
+    expect(await screen.findByText('可能矛盾')).toBeTruthy();
+    expect(screen.getByText('重合 88%')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button',{name:/A.*用户喜欢喝咖啡/}));
+    expect(await screen.findByText('L1 原子记忆')).toBeTruthy();
+    expect(screen.getByText(/系统没有自动修改记忆/)).toBeTruthy();
+  });
+});

@@ -550,6 +550,41 @@ def test_console_exposes_read_only_consolidation_status(tmp_path):
     asyncio.run(run())
 
 
+def test_console_exposes_read_only_l1_quality_candidates(tmp_path):
+    from longmemory.methods.longmemory_v1.method import LongMemoryV1
+
+    database = tmp_path / "l1-quality-candidates.db"
+    LongMemoryV1(database).close()
+    with sqlite3.connect(database) as connection:
+        values = [
+            ("memory-a", "用户喜欢喝咖啡。"),
+            ("memory-b", "用户不喜欢喝咖啡。"),
+            ("memory-c", "用户计划周五完成毕业设计汇报。"),
+        ]
+        connection.executemany(
+            "INSERT INTO atomic_memories "
+            "(id,subject_id,content,recorded_at,valid_from,valid_to,retired_at,superseded_by_id) "
+            "VALUES (?, 'user:self', ?, '2026-09-13T00:00:00+00:00', NULL, NULL, NULL, NULL)",
+            values,
+        )
+
+    async def run():
+        async with console(database) as (client, base, _bridge):
+            assert (await client.get(base + "/api/memories/quality-candidates")).status == 401
+            await login(client, base)
+            response = await client.get(base + "/api/memories/quality-candidates")
+            data = await response.json()
+            assert response.status == 200
+            assert data["scanned_memory_count"] == 3
+            assert data["memory_scan_limited"] is False
+            assert data["total"] == 1
+            assert data["items"][0]["kind"] == "possible_conflict"
+            assert data["items"][0]["left"]["id"] == "memory-a"
+            assert data["items"][0]["right"]["id"] == "memory-b"
+
+    asyncio.run(run())
+
+
 @pytest.mark.parametrize("attack", ["no_csrf", "no_origin", "other_origin", "other_host", "cross_site", "same_site", "wrong_cookie"])
 def test_console_rejects_browser_attacks_without_calling_device(attack):
     async def run():

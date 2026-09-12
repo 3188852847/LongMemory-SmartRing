@@ -35,6 +35,8 @@ type DailyDeletion = {id:string;memory_id:string;subject_id:string;deleted_at:st
 type DailyReview = {local_date:string;utc_offset_minutes:number;items:DailyReviewItem[];total:number;limited:boolean;activity_counts:Record<DailyActivity|'deleted',number>;message_counts:{user:number;assistant:number;total:number;unlinked_user:number};quality_counts:{owner_confirmed_missed_extraction:number};deletions:DailyDeletion[];deletions_limited:boolean};
 type ClearPreview = {l1_total:number;l1_active:number;l1_retired:number;affected_l2_current:number;affected_l3_current:number;l0_preserved:number;revision:string};
 type WipePreview = {l0_total:number;l1_total:number;l2_total:number;l3_total:number;l2_current:number;l3_current:number;related_record_total:number;web_chat_archive_preserved:boolean;existing_backups_preserved:boolean;revision:string};
+type L1QualityCandidate = {kind:'normalized_duplicate'|'lexical_near_duplicate'|'possible_conflict';similarity:number;reason:string;left:L1Summary;right:L1Summary};
+type L1QualityCandidates = {items:L1QualityCandidate[];total:number;scanned_memory_count:number;memory_scan_limited:boolean;candidate_limit:number;candidate_limit_reached:boolean;lexical_threshold:number;generated_at:string};
 
 const api = new ChatApi();
 const displayTime = (value?: string | null) => value ? new Date(value).toLocaleString('zh-CN') : '未记录';
@@ -96,6 +98,8 @@ export function MemoryApp() {
   const [wipePhrase, setWipePhrase] = useState('');
   const [promoting, setPromoting] = useState(false);
   const [promotedContent, setPromotedContent] = useState('');
+  const [qualityCandidates, setQualityCandidates] = useState<L1QualityCandidates>();
+  const [qualityScanning, setQualityScanning] = useState(false);
   const locked = useRef(false);
 
   async function fetchL1(offset = 0, search = query, stateFilter = l1State) {
@@ -192,6 +196,18 @@ export function MemoryApp() {
   }
   async function openL1(id: string) {
     await guarded(async () => {setSelectedL1(await api.request<L1Detail>(`/api/memories/${encodeURIComponent(id)}`));});
+  }
+  async function scanL1Quality() {
+    if (qualityScanning) return;
+    setQualityScanning(true);
+    try {
+      const result = await api.request<L1QualityCandidates>('/api/memories/quality-candidates');
+      setQualityCandidates(result);
+      setNotice(result.total
+        ? `发现 ${result.total} 组需要人工复核的 L1；系统没有自动修改记忆。`
+        : '没有发现满足当前保守规则的 L1 重复或显式矛盾。');
+    } catch (error) {setNotice(memoryFailure(error, 'read'));}
+    finally {setQualityScanning(false);}
   }
   async function openCorrection(id:string) {
     await guarded(async()=>{
@@ -369,6 +385,19 @@ export function MemoryApp() {
         </>}
       </Card>
       <ConsolidationOverview enabled={config?.configured === true}/>
+      <Card className="mode-card l1-quality-card" title="L1 质量候选" extra={<Button size="small" loading={qualityScanning} disabled={!config?.configured} onClick={() => void scanL1Quality()}>{qualityCandidates ? '重新扫描' : '扫描当前 L1'}</Button>}>
+        <p className="subtle">本地只读检查当前有效 L1，寻找规范化重复、高字面重合和明确肯定/否定冲突。相似度是字符片段重合，不是事实置信度；扫描不会调用模型或修改记忆。</p>
+        {!qualityCandidates ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="尚未扫描"/> : qualityCandidates.items.length === 0 ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={`已检查 ${qualityCandidates.scanned_memory_count} 条当前 L1，未发现候选`}/> : <>
+          <Space wrap><Tag color="gold">待复核 {qualityCandidates.total} 组</Tag><Tag>已检查 {qualityCandidates.scanned_memory_count} 条</Tag>{qualityCandidates.memory_scan_limited&&<Tag color="red">只检查前 500 条</Tag>}{qualityCandidates.candidate_limit_reached&&<Tag color="red">候选达到 {qualityCandidates.candidate_limit} 组上限</Tag>}</Space>
+          <List size="small" dataSource={qualityCandidates.items} renderItem={item => <List.Item className="quality-candidate-item">
+            <Space direction="vertical" size={6} className="quality-candidate-body">
+              <Space wrap><Tag color={item.kind==='possible_conflict'?'red':item.kind==='normalized_duplicate'?'gold':'blue'}>{item.kind==='possible_conflict'?'可能矛盾':item.kind==='normalized_duplicate'?'规范化重复':'高字面重合'}</Tag><span>{item.reason}</span><code>重合 {Math.round(item.similarity*100)}%</code></Space>
+              <div className="quality-candidate-pair"><Button type="text" onClick={()=>void openL1(item.left.id)}><Tag color="magenta">A</Tag>{item.left.content}</Button><Button type="text" onClick={()=>void openL1(item.right.id)}><Tag color="magenta">B</Tag>{item.right.content}</Button></div>
+              <small className="subtle">请分别核对原始来源，再使用已有的“纠正错误 / 记录变化 / 删除”操作；当前版本不会代替你处置。</small>
+            </Space>
+          </List.Item>}/>
+        </>}
+      </Card>
       {mode && <Card className="mode-card" title={<span>本次运行的记忆模式 <Tag>临时设置</Tag></span>} extra={<Button type="primary" disabled={busy || (mode.write_enabled === modeDraft.write_enabled && mode.use_enabled === modeDraft.use_enabled && mode.scenario_use_enabled === modeDraft.scenario_use_enabled && mode.persona_use_enabled === modeDraft.persona_use_enabled)} onClick={() => void saveMode()}>应用到网页与圆屏</Button>}>
         <div className="memory-mode-grid">
           <label><Switch checked={modeDraft.write_enabled} disabled={busy} onChange={value => setModeDraft({...modeDraft, write_enabled: value})}/><span><strong>生成 L1</strong><small>从新对话提取原子记忆</small></span></label>

@@ -32,6 +32,11 @@ def register_memory_routes(app, backend):
             raise web.HTTPBadRequest()
         return await invoke(backend.list_page, query=query, state=state, offset=offset, limit=limit)
 
+    async def quality_candidates(request):
+        if request.query:
+            raise web.HTTPBadRequest()
+        return await invoke(backend.quality_candidates)
+
     async def source_listing(request):
         values = request.query
         if (set(values) - {"q", "role", "link_state", "offset", "limit", "local_date", "utc_offset_minutes"}
@@ -489,6 +494,7 @@ def register_memory_routes(app, backend):
 
     app.router.add_get("/api/memory-config", config, allow_head=False)
     app.router.add_get("/api/memories", listing, allow_head=False)
+    app.router.add_get("/api/memories/quality-candidates", quality_candidates, allow_head=False)
     app.router.add_get("/api/memories/daily-review", daily_review, allow_head=False)
     app.router.add_get("/api/memories/clear-preview", clear_preview, allow_head=False)
     app.router.add_post("/api/memories/clear", clear_memories)

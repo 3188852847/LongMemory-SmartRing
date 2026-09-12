@@ -304,6 +304,9 @@ class MemoryBackend:
             query=query, state=state, limit=limit, offset=offset,
         )
 
+    def quality_candidates(self):
+        return self.atomic_memories.quality_candidates()
+
     @staticmethod
     def _local_day_window(local_date, utc_offset_minutes):
         return AtomicMemoryBackend._local_day_window(

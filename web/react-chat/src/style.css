@@ -97,3 +97,9 @@
 .settings-subsection{margin-top:24px;padding-top:20px;border-top:1px solid var(--border-color,#d9d9d9);display:grid;gap:12px}
 .settings-subsection h3,.settings-subsection p{margin:0}
 .settings-subsection .ant-radio-wrapper{align-items:flex-start;line-height:1.5}
+
+/* L1 质量候选把两条事实并排展示；窄屏降为单列，避免文字被挤成竖排。 */
+.quality-candidate-body{width:100%}
+.quality-candidate-pair{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;width:100%}
+.quality-candidate-pair .ant-btn{height:auto;min-height:40px;justify-content:flex-start;padding:8px 10px;overflow-wrap:anywhere;text-align:left;white-space:normal}
+@media(max-width:760px){.quality-candidate-pair{grid-template-columns:1fr}}

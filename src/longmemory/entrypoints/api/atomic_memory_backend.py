@@ -26,6 +26,8 @@ from longmemory.core.memory.consolidation.trigger_policy import (
     ConsolidationTriggerConfig,
 )
 from longmemory.core.memory.l1_atomic.models import CURRENT_USER_SUBJECT_ID
+from longmemory.core.memory.quality.l1_candidates import find_l1_quality_candidates
+from longmemory.core.memory.retrieval.service import is_memory_effective
 
 from .errors import MemoryAccessError
 from .memory_presenters import details_json, memory_json, revision
@@ -58,6 +60,38 @@ class AtomicMemoryBackend:
                 row["truncated"] = len(item.content) > 240
                 summaries.append(row)
             return {"items": summaries, "total": total, "limit": limit, "offset": offset}
+
+    def quality_candidates(self):
+        """只读发现疑似重复/矛盾 L1；不调用模型，也不改变个人记忆。"""
+
+        maximum_memories = 500
+        with self._open_database() as connection:
+            now = self._clock()
+            active = tuple(
+                memory for memory in SQLiteMemoryStore(connection).list_active()
+                if is_memory_effective(memory, now)
+            )
+            scanned = active[:maximum_memories]
+            candidates = find_l1_quality_candidates(scanned)
+            return {
+                "items": [
+                    {
+                        "kind": item.kind,
+                        "similarity": round(item.similarity, 4),
+                        "reason": item.reason,
+                        "left": memory_json(item.left),
+                        "right": memory_json(item.right),
+                    }
+                    for item in candidates
+                ],
+                "total": len(candidates),
+                "scanned_memory_count": len(scanned),
+                "memory_scan_limited": len(active) > len(scanned),
+                "candidate_limit": 100,
+                "candidate_limit_reached": len(candidates) == 100,
+                "lexical_threshold": 0.72,
+                "generated_at": now.isoformat(),
+            }
 
     @staticmethod
     def _local_day_window(local_date, utc_offset_minutes):
