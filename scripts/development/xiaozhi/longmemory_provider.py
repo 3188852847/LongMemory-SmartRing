@@ -163,6 +163,11 @@ class MemoryProvider(MemoryProviderBase):
         persona_items = response.get("persona_retrieved", [])
         if not isinstance(scenario_items, list) or not isinstance(persona_items, list):
             raise RuntimeError("LongMemory 返回协议无效")
+        retrieval_strategy = response.get("retrieval_strategy")
+        if (retrieval_strategy is not None
+                and (not isinstance(retrieval_strategy, str)
+                     or not 1 <= len(retrieval_strategy.strip()) <= 240)):
+            raise RuntimeError("LongMemory 返回协议无效")
         retrieval_evidence = response.get("retrieval_evidence")
         if retrieval_evidence is not None:
             if not isinstance(retrieval_evidence, list) or len(retrieval_evidence) > 300:
@@ -222,7 +227,7 @@ class MemoryProvider(MemoryProviderBase):
                     "l3": len(persona_items),
                 },
                 "retrieval_evidence": retrieval_evidence,
-                "retrieval_strategy": response.get("retrieval_strategy"),
+                "retrieval_strategy": retrieval_strategy,
                 "retrieval_strategy": response.get("retrieval_strategy"),
             }
         if command_reply is not None:
