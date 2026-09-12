@@ -46,6 +46,9 @@ def test_openai_gate_sends_untrusted_candidates_as_json_and_parses_response():
     assert review.supported_ids == ()
     assert captured["model"] == "test-model"
     assert captured["stream"] is False
+    assert captured["thinking"] == {"type": "disabled"}
+    assert captured["response_format"] == {"type": "json_object"}
+    assert captured["temperature"] == 0
     assert "<script>" not in captured["messages"][0]["content"]
     assert len(SUFFICIENCY_GATE_PROMPT_SHA256) == 64
 
@@ -66,3 +69,17 @@ def test_openai_gate_fails_closed_without_retry_on_invalid_response():
 
     assert str(error.value) == "evidence_sufficiency_review_failed"
     assert calls == 1
+
+
+def test_openai_gate_exposes_safe_http_error_without_response_body():
+    def transport(_settings, _body):
+        return 429, b'{"error":{"message":"sensitive provider body"}}'
+
+    gate = OpenAICompatibleEvidenceSufficiencyGate(_settings(), transport=transport)
+    with pytest.raises(EvidenceSufficiencyError) as error:
+        gate.review(EvidenceSufficiencyInput(
+            query="question", candidates=(EvidenceCandidate("one", "evidence"),),
+        ))
+
+    assert str(error.value) == "evidence_sufficiency_http_error"
+    assert "sensitive" not in str(error.value)

@@ -72,7 +72,7 @@ def test_gate_failure_is_recorded_once_without_removing_case_from_denominator():
 
         def review(self, _value):
             self.calls += 1
-            raise EvidenceSufficiencyError("synthetic_failure")
+            raise EvidenceSufficiencyError("evidence_sufficiency_synthetic_failure")
 
     gate = FailingGate()
     _directory, report = run_l2_sufficiency(corpus, annotations, gate)
@@ -82,3 +82,6 @@ def test_gate_failure_is_recorded_once_without_removing_case_from_denominator():
     assert report["summary"]["completed"] == 0
     assert report["summary"]["failed"] == 24
     assert report["summary"]["request_attempts"] == gate.calls == 24
+    assert {row["error"] for row in report["rows"]} == {
+        "evidence_sufficiency_synthetic_failure"
+    }

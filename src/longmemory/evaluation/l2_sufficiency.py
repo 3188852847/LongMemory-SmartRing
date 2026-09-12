@@ -184,8 +184,13 @@ def run_l2_sufficiency(
                     false_positive_ids=sorted(actual - expected),
                     missed_support_ids=sorted(expected - actual),
                 )
-            except EvidenceSufficiencyError:
-                row.update(status="failed", error="gate_failed")
+            except EvidenceSufficiencyError as error:
+                # 契约异常只有稳定错误码，不携带模型原文或数据正文。
+                code = str(error)
+                row.update(
+                    status="failed",
+                    error=(code if code.startswith("evidence_sufficiency_") else "gate_failed"),
+                )
             finally:
                 row["duration_ms"] = round((perf_counter() - started) * 1000, 3)
                 checkpoint()
