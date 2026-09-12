@@ -82,7 +82,7 @@ class ChatBackend:
     ):
         """归档小智实际生成的回答；关联表与助手 L0 在同一事务提交。"""
 
-        return SQLiteRoundScreenTurnStore(self.database).record(
+        result = SQLiteRoundScreenTurnStore(self.database).record(
             user_message_id=turn_id,
             answer=answer,
             retrieved_l1_count=retrieved_counts["l1"],
@@ -90,11 +90,17 @@ class ChatBackend:
             retrieved_l3_count=retrieved_counts["l3"],
             retrieval_evidence=retrieval_evidence,
         )
+        # 助手 L0 和精确召回索引已经先提交；延后 L1 在受管队列中执行，
+        # 不让完成回执或正在播放的语音继续等待候选模型。
+        self.memory_runtime().complete_deferred_observation(turn_id)
+        return result
 
     def prepare_round_screen_user(self, text):
         """准备圆屏输入，并尝试记录对上一轮的严格显式质量反馈。"""
 
-        prepared = self.memory_runtime().prepare_user(text)
+        prepared = self.memory_runtime().prepare_user(
+            text, defer_slow_observation=True,
+        )
         try:
             feedback = SQLiteRoundScreenMemoryFeedbackStore(
                 self.database,

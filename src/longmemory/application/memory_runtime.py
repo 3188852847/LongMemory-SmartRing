@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from concurrent.futures import Future, ThreadPoolExecutor
 from threading import RLock
 from time import perf_counter
 from uuid import uuid4
@@ -103,8 +104,19 @@ class MemoryRuntime:
         self._next_interaction: tuple[TemporaryInteractionMode, str, str] | None = None
         self._consolidation_scheduler = consolidation_scheduler
         self._clock = clock or (lambda: datetime.now(UTC))
+        # 单工作线程保证候选模型不会并发轰击供应商。任务只由圆屏完成回执
+        # 触发，Runtime 关闭时会等待它收尾，再关闭 SQLite 连接。
+        self._deferred_executor = ThreadPoolExecutor(
+            max_workers=1, thread_name_prefix="longmemory-l1",
+        )
+        self._deferred_events: dict[str, MemoryEvent] = {}
+        self._deferred_futures: set[Future] = set()
+        self._deferred_last_result = {"state": "not_run", "warning_code": None}
+        self._closing = False
 
-    def prepare_user(self, text: str) -> PreparedMemoryTurn:
+    def prepare_user(
+        self, text: str, *, defer_slow_observation: bool = False,
+    ) -> PreparedMemoryTurn:
         started = perf_counter()
         event = MemoryEvent(str(uuid4()), "user", text, self._clock())
         lock_started = perf_counter()
@@ -166,6 +178,19 @@ class MemoryRuntime:
                 observation = self._method.archive(event)
             elif command is not None:
                 observation = ObservationResult(event.event_id, command.writes)
+            elif (
+                defer_slow_observation
+                and self._write_enabled
+                and self._method.capabilities.deferred_observation
+            ):
+                # 本轮回答不需要等模型把“当前这句话”派生为 L1；先保存
+                # L0，再用此前已经完成的记忆召回。回答完成回执会触发补写。
+                observation = self._method.archive(event)
+                self._deferred_events[event.event_id] = event
+                observation = ObservationResult(
+                    event.event_id, (), processing_status="source_only",
+                    warning_code="l1_extraction_deferred",
+                )
             else:
                 observation = (self._method.observe(event) if self._write_enabled
                                else self._method.archive(event))
@@ -300,6 +325,71 @@ class MemoryRuntime:
             follow_up_suggestion, temporary_interaction,
         )
 
+    def complete_deferred_observation(self, event_id: str) -> bool:
+        """把已完成回答对应的 L1 派生交给受管队列；重复回执不重复提交。"""
+
+        with self._lock:
+            self._ensure_open()
+            event = self._deferred_events.pop(event_id, None)
+            if event is None or self._closing:
+                return False
+            future = self._deferred_executor.submit(
+                self._run_deferred_observation, event,
+            )
+            self._deferred_futures.add(future)
+            self._deferred_last_result = {"state": "running", "warning_code": None}
+            future.add_done_callback(self._deferred_done)
+            return True
+
+    def _run_deferred_observation(self, event: MemoryEvent) -> ObservationResult:
+        # 网络模型调用不持 Runtime 锁；网页查看、设备召回和状态读取不会
+        # 因 2–5 秒的候选生成而一起卡住。只有最终 SQLite 补写需要互斥。
+        extracted = self._method.extract_archived(event)
+        if isinstance(extracted, ObservationResult):
+            return extracted
+        with self._lock:
+            self._ensure_open()
+            observation = self._method.persist_archived(event, extracted)
+            if observation.writes:
+                suggester = getattr(
+                    self._memory_command_handler, "suggest_follow_up", None,
+                )
+                if suggester is not None:
+                    suggester(event, observation.writes)
+        if observation.writes and self._consolidation_scheduler is not None:
+            self._consolidation_scheduler.notify_new_evidence()
+        return observation
+
+    def _deferred_done(self, future: Future) -> None:
+        try:
+            result = future.result()
+        except BaseException:
+            # 状态只暴露稳定代码，不泄漏模型、数据库或用户正文。
+            last_result = {
+                "state": "failed", "warning_code": "deferred_observation_failed",
+            }
+        else:
+            last_result = {
+                "state": (
+                    "completed" if result.processing_status == "completed" else "failed"
+                ),
+                "warning_code": result.warning_code,
+            }
+        with self._lock:
+            self._deferred_futures.discard(future)
+            self._deferred_last_result = last_result
+
+    def wait_for_deferred_observations(self) -> None:
+        """等待已提交任务，供停机收尾、诊断和确定性测试使用。"""
+
+        while True:
+            with self._lock:
+                futures = tuple(self._deferred_futures)
+            if not futures:
+                return
+            for future in futures:
+                future.result()
+
     def record_assistant(self, text: str) -> ObservationResult:
         event = MemoryEvent(str(uuid4()), "assistant", text, self._clock())
         with self._lock:
@@ -327,6 +417,12 @@ class MemoryRuntime:
                 ),
                 "next_interaction_armed": self._next_interaction is not None,
                 "settings_persistent": False,
+                "deferred_observation": {
+                    "supported": self._method.capabilities.deferred_observation,
+                    "awaiting_completion": len(self._deferred_events),
+                    "running_or_queued": len(self._deferred_futures),
+                    "last_result": dict(self._deferred_last_result),
+                },
                 "consolidation_scheduler": (
                     self._consolidation_scheduler.status().to_dict()
                     if self._consolidation_scheduler is not None
@@ -358,6 +454,14 @@ class MemoryRuntime:
             return self.status()
 
     def close(self) -> None:
+        # 不能在持锁状态 shutdown：正在完成模型调用的工作线程随后还需
+        # 取得同一把锁写入 SQLite，否则会形成停机死锁。
+        with self._lock:
+            if self._closed or self._closing:
+                return
+            self._closing = True
+            self._deferred_events.clear()
+        self._deferred_executor.shutdown(wait=True, cancel_futures=True)
         with self._lock:
             if not self._closed:
                 try:

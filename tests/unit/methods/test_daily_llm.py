@@ -53,6 +53,28 @@ def test_daily_llm_reuses_existing_database_and_persists_valid_candidate(tmp_pat
         assert connection.execute("SELECT count(*) FROM atomic_memories").fetchone()[0] == 1
 
 
+def test_deferred_phases_reuse_archived_l0_without_duplicate_source(tmp_path):
+    path = existing_database(tmp_path)
+    producer = Stub(proposal())
+    method = DailyLLMMemory(path, producer=producer)
+    source = event("source-deferred", "我叫小林")
+
+    method.archive(source)
+    extracted = method.extract_archived(source)
+    result = method.persist_archived(source, extracted)
+
+    assert result.writes[0].operation == "add"
+    assert producer.calls == 1
+    method.close()
+    with sqlite3.connect(path) as connection:
+        assert connection.execute(
+            "SELECT count(*) FROM conversation_messages"
+        ).fetchone()[0] == 1
+        assert connection.execute(
+            "SELECT count(*) FROM memory_evidence"
+        ).fetchone()[0] == 1
+
+
 def test_extraction_failure_keeps_l0_and_reports_source_only(tmp_path):
     path = existing_database(tmp_path)
 

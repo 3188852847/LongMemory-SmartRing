@@ -14,7 +14,7 @@ from longmemory.core.memory.extraction.candidates import (
 from longmemory.core.memory.l1_atomic.models import AtomicMemory, CURRENT_USER_SUBJECT_ID
 from longmemory.core.memory.extraction.temporary_scope import explicit_temporary_window
 from longmemory.methods.contracts import (
-    MemoryEvent,
+    MemoryEvent, MethodCapabilities,
     ObservationResult,
     UnsupportedCapabilityError,
     WriteTrace,
@@ -31,7 +31,10 @@ class DailyLLMMemory:
 
     name = "longmemory_daily_llm_v2"
     implementation_version = "1"
-    capabilities = LongMemoryV1.capabilities
+    capabilities = MethodCapabilities(
+        source_trace=True,
+        deferred_observation=True,
+    )
 
     def __init__(
         self,
@@ -68,6 +71,25 @@ class DailyLLMMemory:
 
         # 先归档不可替代的原始证据。后续模型或 L1 写入故障都不能回滚 L0。
         self._base.turn_service.archive(message)
+        extracted = self.extract_archived(event)
+        if isinstance(extracted, ObservationResult):
+            return extracted
+        return self.persist_archived(event, extracted)
+
+    def extract_archived(
+        self, event: MemoryEvent,
+    ) -> tuple[AtomicMemory, ...] | ObservationResult:
+        """只调用候选模型，不接触数据库，供受管延后队列使用。"""
+
+        self._base._ensure_open()
+        if event.session_id is not None:
+            raise UnsupportedCapabilityError("当前日常 L1 尚不支持持久化会话元数据。")
+        message = ConversationMessage(
+            MessageId(event.event_id), MessageRole(event.role),
+            event.content, event.occurred_at,
+        )
+        if message.role != MessageRole.USER:
+            return ()
         try:
             proposal = self._extractor.extract(message)
         except CandidateExtractionError:
@@ -82,7 +104,7 @@ class DailyLLMMemory:
             )
 
         recorded_at = datetime.now(UTC)
-        memories = []
+        memories: list[AtomicMemory] = []
         for candidate in proposal.candidates:
             window = explicit_temporary_window(
                 message.content, candidate.content,
@@ -94,7 +116,18 @@ class DailyLLMMemory:
                 valid_from=(window[0] if window else None),
                 valid_to=(window[1] if window else None),
             ))
-        memories = tuple(memories)
+        return tuple(memories)
+
+    def persist_archived(
+        self, event: MemoryEvent, memories: tuple[AtomicMemory, ...],
+    ) -> ObservationResult:
+        """在 Runtime 互斥区内补写 L1，并绑定已经存在的 L0 来源。"""
+
+        self._base._ensure_open()
+        message = ConversationMessage(
+            MessageId(event.event_id), MessageRole(event.role),
+            event.content, event.occurred_at,
+        )
         try:
             operations = self._base.turn_service.persist_extracted(message, memories)
         except sqlite3.Error:

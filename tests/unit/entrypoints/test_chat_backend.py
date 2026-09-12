@@ -224,6 +224,63 @@ def test_daily_llm_failure_is_visible_but_chat_continues_from_archived_l0(databa
         backend.close()
 
 
+def test_round_screen_defers_llm_extraction_until_completion_without_locking_reads(database):
+    started = threading.Event()
+    release = threading.Event()
+
+    class SlowProducer:
+        def propose(self, **_kwargs):
+            started.set()
+            assert release.wait(timeout=3)
+            return json.dumps({
+                "schema_version": 1,
+                "operation": "ADD",
+                "facts": [{"content": "用户叫小林。", "quote": "我叫小林"}],
+            }, ensure_ascii=False)
+
+    method = DailyLLMMemory(
+        database, producer=SlowProducer(), allow_cross_thread=True,
+    )
+    runtime = MemoryRuntime(database, method=method)
+    backend = ChatBackend(
+        database, FakeAnswerGenerator(), runtime=runtime,
+    )
+    try:
+        prepared, _feedback = backend.prepare_round_screen_user("我叫小林")
+        assert prepared.observation.warning_code == "l1_extraction_deferred"
+        assert not started.is_set()
+        with sqlite3.connect(database) as connection:
+            assert connection.execute(
+                "SELECT count(*) FROM conversation_messages WHERE role='user'"
+            ).fetchone()[0] == 1
+            assert connection.execute(
+                "SELECT count(*) FROM atomic_memories"
+            ).fetchone()[0] == 0
+
+        completed = backend.complete_round_screen_turn(
+            turn_id=prepared.event.event_id,
+            answer="好的，我记住了。",
+            retrieved_counts={"l1": 0, "l2": 0, "l3": 0},
+        )
+        assert completed.created is True
+        assert started.wait(timeout=1)
+        # 候选模型仍被阻塞时，Runtime 状态读取不应等待模型完成。
+        status = runtime.status()
+        assert status["deferred_observation"]["running_or_queued"] == 1
+
+        release.set()
+        runtime.wait_for_deferred_observations()
+        # 这里验证补写是否可见，不把关键词基线尚不具备的语义改写能力
+        # 混入延后执行测试，因此直接用实体词查询。
+        assert "小林" in method.recall("小林").context
+        assert runtime.complete_deferred_observation(
+            prepared.event.event_id,
+        ) is False
+    finally:
+        release.set()
+        backend.close()
+
+
 def test_chat_reports_hybrid_retrieval_without_hiding_dense_fallback(database):
     class Encoder:
         identity = "synthetic-chat-encoder"

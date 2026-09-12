@@ -19,6 +19,9 @@ class MethodCapabilities:
     session_metadata: bool = False
     feedback_learning: bool = False
     frozen_evaluation: bool = False
+    # 日常圆屏入口可先归档 L0，待回答已经进入语音链路后再派生 L1。
+    # 只有明确实现两阶段接口的方法才能声明，不能用名字猜测能力。
+    deferred_observation: bool = False
 
 
 @dataclass(frozen=True, slots=True)

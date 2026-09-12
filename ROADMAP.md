@@ -120,6 +120,8 @@ Web 控制台依据 ADR-0032 渐进统一到 React，不进行一次性重写。
 
 P3 采用“个人记忆、外部知识、上下文编排”三个平面。个人记忆按 L0 原始证据、L1 原子记忆、L2 场景、L3 用户画像渐进落地；知识库不是 L4，先通过拟议 `KnowledgeProvider` 做轻量文档检索与引用。当前不引入 LangChain、LangGraph、Deep Agents 或 Semantica 作为核心地基；图谱和持久工作流框架按真实需求重新评估。见 [ADR-0026](docs/adr/0026-layered-memory-and-knowledge-plane.md)。
 
+圆屏真实时序进一步确认召回通常仅约 1–17 ms、同步候选提取常占 2–5 秒，因此模型辅助提取已改为 L0 先保存、回答完成后受管补写 L1；网页和冻结实验不变，见 [ADR-0122](docs/adr/0122-defer-round-screen-l1-extraction.md)。
+
 P3.1 已将网页和统一启动模式下的小智改为共享一个常驻 `MemoryRuntime`；用户已于 2026-09-06 确认网页↔圆屏双向记忆测试通过。P3.2 的模型辅助提取与关键词＋本地 BGE 混合召回已完成首轮组合体验。P3.3 已区分两类显式更新：旧记录本来就错时使用 `user_corrected`；旧事实后来变化时保留旧 L1 的 `valid_to`，并给新 L1 写入 `valid_from`。两者都保留 L0 与 SUPERSEDE 历史，当前召回只使用新事实。日常库已在生成 V3 一致性备份后迁移到 V4，完整性与外键校验通过，用户已完成真实纠正验收；事实变化第一切片尚待真实页面体验。P3.4 第一切片增加本次运行的两个独立开关：暂停生成新 L1、暂停使用已有记忆；网页与圆屏共享，服务重启恢复开启，L0 审计归档不随 L1 开关关闭。见 [ADR-0027](docs/adr/0027-shared-persistent-memory-runtime.md)至 [ADR-0031](docs/adr/0031-runtime-memory-mode-controls.md)，以及 [ADR-0034](docs/adr/0034-temporal-fact-change.md)。
 
 L2 第一版“可复核的时间化场景候选”已完成候选、来源、模型预览、人工/策略复核、现实有效期和审计式手动结束。已接受且当前有效的 L2 可通过独立、默认关闭的运行期开关参与网页与圆屏回答；第一版只做标题/摘要关键词重叠，最多 3 条，并单独记录 L2→L1→L0 来源。来源 L1 退役/删除或用户手动结束都会留下生命周期事件。控制台另有只读“待整理 L1”收件箱；P3.9 已把两阶段整理器接入有预算、冷却、游标和互斥的可选低频调度，但个人库默认关闭。尚未实现一次生成多个候选、语义 L2 召回、场景重建或失效后的自动跨层重建。见 [ADR-0035](docs/adr/0035-reviewable-l2-scenario-candidates.md)、[ADR-0037](docs/adr/0037-controlled-l2-answer-context.md)、[ADR-0038](docs/adr/0038-audited-l2-lifecycle.md)、[ADR-0057](docs/adr/0057-single-owner-consolidation-scheduler.md)与 [L2 验收需求](docs/requirements/l2-scenario-memory.md)。
