@@ -1,7 +1,11 @@
 import json
 from pathlib import Path
 
-from longmemory.evaluation.l2_retrieval import evaluate_l2_retrieval, load_l2_corpus
+from longmemory.evaluation.l2_retrieval import (
+    evaluate_l2_retrieval,
+    load_l2_corpus,
+    load_l2_relevance_annotations,
+)
 
 
 ROOT = Path(__file__).parents[3]
@@ -89,3 +93,39 @@ def test_unknown_or_missing_split_is_rejected():
         assert str(error) == "l2_retrieval_split_invalid"
     else:
         raise AssertionError("unknown split accepted")
+
+
+def test_relevance_annotations_separate_topic_from_answer_support():
+    corpus = load_l2_corpus(ROOT / "datasets/synthetic/l2_retrieval_v2.json")
+    annotations = load_l2_relevance_annotations(
+        ROOT / "datasets/synthetic/l2_retrieval_v2_relevance_v1.json", corpus,
+    )
+    report = evaluate_l2_retrieval(
+        corpus, split="dev", relevance_annotations=annotations,
+    )
+    row = next(
+        item for item in report["results"]["l2_keyword_v1"]
+        if item["case_id"] == "dev-unknown-cat-color"
+    )
+
+    assert row["expected_ids"] == []
+    assert row["eligible_topical_ids"] == ["cat"]
+    assert row["topical_hit_at_k"] is True
+    assert row["correct_abstention"] is False
+    assert report["relevance_annotation_id"] == "l2-retrieval-v2-relevance-v1"
+
+
+def test_relevance_annotations_are_bound_to_exact_dataset_hash(tmp_path):
+    corpus = load_l2_corpus(ROOT / "datasets/synthetic/l2_retrieval_v2.json")
+    source = ROOT / "datasets/synthetic/l2_retrieval_v2_relevance_v1.json"
+    payload = json.loads(source.read_text(encoding="utf-8"))
+    payload["dataset_sha256"] = "0" * 64
+    path = tmp_path / "mismatched.json"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+    try:
+        load_l2_relevance_annotations(path, corpus)
+    except ValueError as error:
+        assert str(error) == "l2_relevance_annotations_invalid"
+    else:
+        raise AssertionError("mismatched relevance annotations accepted")

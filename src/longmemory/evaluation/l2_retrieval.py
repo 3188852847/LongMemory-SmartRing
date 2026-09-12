@@ -19,6 +19,13 @@ class L2Corpus:
     sha256: str
 
 
+@dataclass(frozen=True, slots=True)
+class L2RelevanceAnnotations:
+    annotation_id: str
+    topical_ids_by_case: dict[str, tuple[str, ...]]
+    sha256: str
+
+
 def load_l2_corpus(path: Path) -> L2Corpus:
     raw = path.read_bytes()
     payload = json.loads(raw.decode("utf-8"))
@@ -82,8 +89,51 @@ def load_l2_corpus(path: Path) -> L2Corpus:
                     available_splits, sha256(raw).hexdigest())
 
 
+def load_l2_relevance_annotations(
+        path: Path, corpus: L2Corpus,
+) -> L2RelevanceAnnotations:
+    """加载与冻结问题分离的主题相关标注。
+
+    `expected_ids` 表示能支持答案的证据；`topical_ids` 只表示与问题
+    主题相关。两者分开后，“召回了猫的场景但里面没有毛色”不再被
+    误算为纯召回错误，而是交给后续证据充分性门控。
+    """
+
+    raw = path.read_bytes()
+    payload = json.loads(raw.decode("utf-8"))
+    rows = payload.get("cases")
+    if (payload.get("schema_version") != 1
+            or payload.get("dataset_id") != corpus.dataset_id
+            or payload.get("dataset_sha256") != corpus.sha256
+            or not isinstance(payload.get("annotation_id"), str)
+            or not payload["annotation_id"].strip()
+            or not isinstance(rows, list)
+            or not all(isinstance(row, dict) for row in rows)):
+        raise ValueError("l2_relevance_annotations_invalid")
+    known_cases = {case["id"] for case in corpus.cases}
+    known_scenarios = {scenario["id"] for scenario in corpus.scenarios}
+    by_case: dict[str, tuple[str, ...]] = {}
+    for row in rows:
+        topical_ids = row.get("topical_ids")
+        if (set(row) != {"case_id", "topical_ids"}
+                or row.get("case_id") not in known_cases
+                or row["case_id"] in by_case
+                or not isinstance(topical_ids, list)
+                or not all(isinstance(item_id, str) for item_id in topical_ids)
+                or len(topical_ids) != len(set(topical_ids))
+                or not set(topical_ids) <= known_scenarios):
+            raise ValueError("l2_relevance_annotations_invalid")
+        by_case[row["case_id"]] = tuple(topical_ids)
+    if set(by_case) != known_cases:
+        raise ValueError("l2_relevance_annotations_invalid")
+    return L2RelevanceAnnotations(
+        payload["annotation_id"], by_case, sha256(raw).hexdigest(),
+    )
+
+
 def evaluate_l2_retrieval(
         corpus: L2Corpus, *, encoder=None, limit: int = 3, split: str | None = None,
+        relevance_annotations: L2RelevanceAnnotations | None = None,
 ) -> dict:
     """比较关键词与可选稠密排名；无答案题不会被从分母删除。"""
 
@@ -98,6 +148,7 @@ def evaluate_l2_retrieval(
     documents = tuple(VectorDocument(
         item["id"], item["title"] + " " + item["summary"], ("synthetic:" + item["id"],),
     ) for item in corpus.scenarios if item.get("status", "active") == "active")
+    eligible_ids = {document.item_id for document in documents}
     index = (ExactVectorIndex.build(documents, encoder, encoder_id=encoder.identity)
              if encoder is not None else None)
     strategies = ["l2_keyword_v1"] + (["l2_dense_cosine"] if index else [])
@@ -115,25 +166,40 @@ def evaluate_l2_retrieval(
                 for doc, score in index.search(encoder.encode_query(case["query"]), limit=limit)
             ]
         expected = set(case["expected_ids"])
+        topical = set(
+            relevance_annotations.topical_ids_by_case[case["id"]]
+            if relevance_annotations is not None else case["expected_ids"]
+        )
+        eligible_topical = topical.intersection(eligible_ids)
         for strategy, ranking in rankings.items():
             ids = [item[0] for item in ranking]
             first = next((rank for rank, item_id in enumerate(ids, 1) if item_id in expected), None)
             evidence_recall = (0.0 if not expected else
                                len(expected.intersection(ids)) / len(expected))
+            topical_recall = (0.0 if not eligible_topical else
+                              len(eligible_topical.intersection(ids)) / len(eligible_topical))
             results[strategy].append({
                 "case_id": case["id"], "split": case["split"],
                 "category": case["category"],
                 "expected_ids": case["expected_ids"], "retrieved": ranking,
+                "topical_ids": sorted(topical),
+                "eligible_topical_ids": sorted(eligible_topical),
+                "has_expired_topic": bool(topical - eligible_ids),
                 "hit_at_k": bool(expected and first is not None),
                 "evidence_recall_at_k": evidence_recall,
                 "full_coverage_at_k": bool(expected and evidence_recall == 1.0),
+                "topical_recall_at_k": topical_recall,
+                "topical_hit_at_k": bool(eligible_topical and topical_recall > 0),
                 "reciprocal_rank": 0.0 if first is None else 1.0 / first,
                 "correct_abstention": not expected and not ids,
+                "correct_topic_abstention": not eligible_topical and not ids,
             })
     summary = {}
     for strategy, rows in results.items():
         answerable = [row for row in rows if row["expected_ids"]]
         unknown = [row for row in rows if not row["expected_ids"]]
+        topical = [row for row in rows if row["eligible_topical_ids"]]
+        no_eligible_topic = [row for row in rows if not row["eligible_topical_ids"]]
         summary[strategy] = {
             "answerable": len(answerable),
             "hit_at_k": sum(row["hit_at_k"] for row in answerable),
@@ -144,9 +210,25 @@ def evaluate_l2_retrieval(
             "mean_reciprocal_rank": sum(row["reciprocal_rank"] for row in answerable) / len(answerable),
             "unanswerable": len(unknown),
             "correct_abstention": sum(row["correct_abstention"] for row in unknown),
+            "topical_questions": len(topical),
+            "topical_hit_at_k": sum(row["topical_hit_at_k"] for row in topical),
+            "mean_topical_recall_at_k": (
+                sum(row["topical_recall_at_k"] for row in topical) / len(topical)
+                if topical else None
+            ),
+            "no_eligible_topic": len(no_eligible_topic),
+            "correct_topic_abstention": sum(
+                row["correct_topic_abstention"] for row in no_eligible_topic
+            ),
         }
     return {"dataset_id": corpus.dataset_id, "dataset_sha256": corpus.sha256,
             "split": split or "all", "available_splits": corpus.available_splits,
+            "relevance_annotation_id": (
+                relevance_annotations.annotation_id if relevance_annotations else None
+            ),
+            "relevance_annotation_sha256": (
+                relevance_annotations.sha256 if relevance_annotations else None
+            ),
             "eligible_scenarios": len(documents),
             "excluded_scenarios": len(corpus.scenarios) - len(documents),
             "limit": limit, "summary": summary, "results": results}
@@ -160,20 +242,32 @@ def main() -> None:
     parser.add_argument("--split", choices=("dev", "holdout", "all"), default="dev",
                         help="默认只运行开发集；留出集必须显式指定")
     parser.add_argument("--embedding-model-dir", type=Path)
+    parser.add_argument("--relevance-annotations", type=Path,
+                        help="V2 默认自动使用与冻结数据哈希绑定的主题标注")
     args = parser.parse_args()
     encoder = None
     if args.embedding_model_dir is not None:
         from longmemory.adapters.llm.local_embedding import LocalBGEEncoder
         encoder = LocalBGEEncoder(args.embedding_model_dir)
     corpus = load_l2_corpus(args.dataset)
+    annotations = None
+    annotation_path = args.relevance_annotations
+    if annotation_path is None and corpus.dataset_id == "l2-retrieval-v2":
+        annotation_path = root / "datasets/synthetic/l2_retrieval_v2_relevance_v1.json"
+    if annotation_path is not None:
+        annotations = load_l2_relevance_annotations(annotation_path, corpus)
     split = None if args.split == "all" else args.split
-    report = evaluate_l2_retrieval(corpus, encoder=encoder, split=split)
+    report = evaluate_l2_retrieval(
+        corpus, encoder=encoder, split=split, relevance_annotations=annotations,
+    )
     print(json.dumps({
         "dataset_id": report["dataset_id"],
         "dataset_sha256": report["dataset_sha256"],
         "split": report["split"],
         "eligible_scenarios": report["eligible_scenarios"],
         "excluded_scenarios": report["excluded_scenarios"],
+        "relevance_annotation_id": report["relevance_annotation_id"],
+        "relevance_annotation_sha256": report["relevance_annotation_sha256"],
         "summary": report["summary"],
     }, ensure_ascii=False, indent=2))
 
