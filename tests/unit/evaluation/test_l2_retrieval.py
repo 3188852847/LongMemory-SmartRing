@@ -47,3 +47,45 @@ def test_optional_dense_strategy_uses_same_cases_and_exposes_abstention_risk():
     assert set(report["summary"]) == {"l2_keyword_v1", "l2_dense_cosine"}
     # 无阈值稠密 top-k 必然返回候选；测试把这个风险固定下来，不能冒充拒答。
     assert report["summary"]["l2_dense_cosine"]["correct_abstention"] == 0
+
+
+def test_v2_dataset_keeps_dev_and_holdout_separate_and_excludes_expired_scenes():
+    corpus = load_l2_corpus(ROOT / "datasets/synthetic/l2_retrieval_v2.json")
+
+    assert corpus.available_splits == ("dev", "holdout")
+    dev = evaluate_l2_retrieval(corpus, split="dev")
+    holdout_cases = [case for case in corpus.cases if case["split"] == "holdout"]
+
+    assert dev["split"] == "dev"
+    assert dev["eligible_scenarios"] == 11
+    assert dev["excluded_scenarios"] == 2
+    assert dev["summary"]["l2_keyword_v1"]["answerable"] == 15
+    assert dev["summary"]["l2_keyword_v1"]["unanswerable"] == 9
+    assert len(dev["results"]["l2_keyword_v1"]) == 24
+    assert sum(bool(case["expected_ids"]) for case in holdout_cases) == 9
+    assert sum(not case["expected_ids"] for case in holdout_cases) == 5
+    assert len(holdout_cases) == 14
+
+
+def test_multi_scene_case_reports_full_evidence_coverage():
+    corpus = load_l2_corpus(ROOT / "datasets/synthetic/l2_retrieval_v2.json")
+    report = evaluate_l2_retrieval(corpus, split="dev", limit=1)
+    row = next(
+        item for item in report["results"]["l2_keyword_v1"]
+        if item["case_id"] == "dev-multi-week-plan"
+    )
+
+    assert row["hit_at_k"] is True
+    assert row["evidence_recall_at_k"] == 0.5
+    assert row["full_coverage_at_k"] is False
+
+
+def test_unknown_or_missing_split_is_rejected():
+    corpus = load_l2_corpus(ROOT / "datasets/synthetic/l2_retrieval_v2.json")
+
+    try:
+        evaluate_l2_retrieval(corpus, split="legacy")
+    except ValueError as error:
+        assert str(error) == "l2_retrieval_split_invalid"
+    else:
+        raise AssertionError("unknown split accepted")
