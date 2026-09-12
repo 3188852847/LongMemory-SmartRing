@@ -192,6 +192,12 @@ def test_l2_sufficiency_shadow_routes_are_read_only_and_validate_identity(tmp_pa
             return ({"user_message_id": message_id, "candidates": []}
                     if message_id == "turn-a" else None)
 
+        def review_l2_sufficiency_shadow(self, message_id, **values):
+            assert message_id == "turn-a"
+            assert values == {"verdict": "correct", "reason_code": "agreement",
+                              "expected_review_revision": 0}
+            return {**values, "review_revision": 1}
+
     async def run():
         async with console(chat_backend=Backend()) as (client, base, _bridge):
             headers = await login(client, base)
@@ -210,6 +216,19 @@ def test_l2_sufficiency_shadow_routes_are_read_only_and_validate_identity(tmp_pa
             assert response.status == 404
             response = await client.get(
                 base + "/api/l2-sufficiency-shadow?limit=0", headers=headers,
+            )
+            assert response.status == 400
+            response = await client.post(
+                base + "/api/l2-sufficiency-shadow/turn-a/reviews",
+                headers=headers, json={"verdict": "correct", "reason_code": "agreement",
+                                       "expected_review_revision": 0},
+            )
+            assert response.status == 200
+            assert (await response.json())["review_revision"] == 1
+            response = await client.post(
+                base + "/api/l2-sufficiency-shadow/turn-a/reviews",
+                headers=headers, json={"verdict": "invalid", "reason_code": "agreement",
+                                       "expected_review_revision": 0},
             )
             assert response.status == 400
 

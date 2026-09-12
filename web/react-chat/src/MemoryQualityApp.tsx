@@ -1,7 +1,7 @@
 import {useEffect, useState} from 'react';
 import {Alert, Button, Card, Descriptions, Drawer, Empty, List, Modal, Select, Space, Statistic, Tag} from 'antd';
 import {Link} from 'react-router-dom';
-import {ChatApi, type L2SufficiencyShadowDetail, type L2SufficiencyShadowPage, type MemoryFeedbackDiagnosticFocus, type MemoryFeedbackIndex, type MemoryFeedbackIndexItem, type MemoryFeedbackKind, type RoundScreenFeedbackDetail} from './api';
+import {ChatApi, type L2SufficiencyShadowDetail, type L2SufficiencyShadowPage, type L2SufficiencyShadowVerdict, type MemoryFeedbackDiagnosticFocus, type MemoryFeedbackIndex, type MemoryFeedbackIndexItem, type MemoryFeedbackKind, type RoundScreenFeedbackDetail} from './api';
 import {AppShell, ConsoleNav} from './AppShell';
 import {PageHeader} from './PageHeader';
 
@@ -36,6 +36,11 @@ const reviewReasonOptions:Record<ReviewAction,Array<{value:string;label:string}>
   dismiss:[{value:'not_memory_issue',label:'核对后不是记忆问题'},{value:'false_positive',label:'反馈被误识别为问题'},{value:'other',label:'其他原因'}],
   reopen:[{value:'needs_follow_up',label:'仍需继续核对'}],
 };
+const shadowReasonOptions:Record<L2SufficiencyShadowVerdict,Array<{value:string;label:string}>>={
+  correct:[{value:'agreement',label:'完整支持集合判断正确'}],
+  incorrect:[{value:'missed_support',label:'漏掉了真正支持的 L2'},{value:'false_support',label:'错误放行了不支持的 L2'},{value:'stale_content',label:'L2 正文后来变化，无法按原状态确认'},{value:'other',label:'其他错误'}],
+  uncertain:[{value:'ambiguous_query',label:'问题含义不清，暂时无法判断'},{value:'stale_content',label:'L2 正文后来变化'},{value:'other',label:'其他不确定原因'}],
+};
 
 function evidencePath(layer:'l1'|'l2'|'l3',itemId:string) {
   const key=layer==='l1'?'memory_id':layer==='l2'?'scenario_id':'persona_id';
@@ -59,6 +64,9 @@ export function MemoryQualityApp() {
   const [shadowDetail,setShadowDetail] = useState<L2SufficiencyShadowDetail|null>(null);
   const [shadowOpen,setShadowOpen] = useState(false);
   const [shadowBusy,setShadowBusy] = useState(false);
+  const [shadowReview,setShadowReview] = useState<L2SufficiencyShadowVerdict|null>(null);
+  const [shadowReviewReason,setShadowReviewReason] = useState('');
+  const [shadowReviewBusy,setShadowReviewBusy] = useState(false);
 
   async function load(nextFilter=filter,offset=0) {
     setBusy(true);
@@ -90,6 +98,26 @@ export function MemoryQualityApp() {
     try {setShadowDetail(await api.request<L2SufficiencyShadowDetail>(`/api/l2-sufficiency-shadow/${encodeURIComponent(messageId)}`));}
     catch {setNotice('无法读取这条 L2 影子记录。请确认控制台仍在运行后重试。');}
     finally {setShadowBusy(false);}
+  }
+
+  function beginShadowReview(verdict:L2SufficiencyShadowVerdict) {
+    setShadowReview(verdict);
+    setShadowReviewReason(shadowReasonOptions[verdict][0].value);
+  }
+
+  async function saveShadowReview() {
+    if(!shadowDetail||!shadowReview||!shadowReviewReason)return;
+    setShadowReviewBusy(true);
+    try {
+      await api.request(`/api/l2-sufficiency-shadow/${encodeURIComponent(shadowDetail.user_message_id)}/reviews`,'POST',{
+        verdict:shadowReview,reason_code:shadowReviewReason,
+        expected_review_revision:shadowDetail.review.review_revision,
+      });
+      setShadowReview(null);
+      setNotice('人工复核已追加；机器原判、正式回答和长期记忆均未修改。');
+      await Promise.all([inspectShadow(shadowDetail.user_message_id),loadShadow()]);
+    } catch {setNotice('人工复核没有保存。记录可能已在其他页面更新，请重新打开详情核对。');}
+    finally {setShadowReviewBusy(false);}
   }
 
   async function inspectRoundScreen(eventId:string) {
@@ -152,7 +180,7 @@ export function MemoryQualityApp() {
     <Card className="quality-list-card" title="L2 证据充分性影子记录" extra={<Tag color={shadow?.runtime?.enabled?'cyan':'default'}>{shadow?.runtime?.enabled?'本次已启用':'本次未启用'}</Tag>}>
       <Alert showIcon type="info" title="这里只显示‘如果门控生效会怎样’" description="影子判断不会过滤本轮 L2、不会修改回答或记忆。默认关闭；历史记录即使当前未启用也会保留。"/>
       {!shadow?<Empty description="当前数据库没有可读取的 V42 影子记录，或聊天入口未启用"/>:<List dataSource={shadow.items} locale={{emptyText:<Empty description="还没有影子样本"/>}} renderItem={item=><List.Item actions={[<Button key="detail" type="link" onClick={()=>void inspectShadow(item.user_message_id)}>查看候选判断</Button>,<Link key="source" to={`/memories?l0_message_id=${encodeURIComponent(item.user_message_id)}`}>问题 L0</Link>]}>
-        <List.Item.Meta title={<Space wrap><Tag color={item.status==='completed'?'green':item.status==='failed'?'red':'gold'}>{item.status==='completed'?'已完成':item.status==='failed'?'失败':'处理中'}</Tag><span>{item.query}</span></Space>} description={<Space wrap><span>{new Date(item.requested_at).toLocaleString('zh-CN')}</span><span>候选 {item.candidate_count} · 判定支持 {item.supported_count}</span><code>{item.model}</code>{item.error_code&&<code>{item.error_code}</code>}</Space>}/>
+        <List.Item.Meta title={<Space wrap><Tag color={item.status==='completed'?'green':item.status==='failed'?'red':'gold'}>{item.status==='completed'?'已完成':item.status==='failed'?'失败':'处理中'}</Tag>{item.review_verdict&&<Tag color={item.review_verdict==='correct'?'green':item.review_verdict==='incorrect'?'red':'gold'}>{item.review_verdict==='correct'?'人工确认正确':item.review_verdict==='incorrect'?'人工确认错误':'人工暂不确定'}</Tag>}<span>{item.query}</span></Space>} description={<Space wrap><span>{new Date(item.requested_at).toLocaleString('zh-CN')}</span><span>候选 {item.candidate_count} · 判定支持 {item.supported_count}</span><code>{item.model}</code>{item.error_code&&<code>{item.error_code}</code>}</Space>}/>
       </List.Item>}/>}
     </Card>
     <Drawer width={640} title="圆屏记忆质量详情" open={detailOpen} onClose={()=>setDetailOpen(false)}>
@@ -183,10 +211,16 @@ export function MemoryQualityApp() {
           {key:'strategy',label:'候选策略',children:shadowDetail.retrieval_strategy},
           {key:'reviewer',label:'门控版本',children:shadowDetail.reviewer_version},
           {key:'model',label:'复核模型',children:`${shadowDetail.provider} / ${shadowDetail.model}`},
+          {key:'owner-review',label:'人工复核',children:shadowDetail.review.verdict==='correct'?'判断正确':shadowDetail.review.verdict==='incorrect'?'判断错误':shadowDetail.review.verdict==='uncertain'?'暂不确定':'尚未复核'},
         ]}/>
         <List dataSource={shadowDetail.candidates} locale={{emptyText:<Empty description="该轮没有 L2 候选，因此没有调用复核模型"/>}} renderItem={candidate=><List.Item actions={[<Link key="scenario" to={`/scenarios?scenario_id=${encodeURIComponent(candidate.scenario_id)}`}>打开 L2</Link>]}><List.Item.Meta title={<Space wrap><Tag>#{candidate.rank}</Tag><Tag color={candidate.supports_answer===1?'green':candidate.supports_answer===0?'default':'gold'}>{candidate.supports_answer===1?'足以支持':candidate.supports_answer===0?'证据不足':'尚未判定'}</Tag><span>{candidate.current_title??'当前场景已缺失'}</span></Space>} description={<><p>{candidate.current_summary??'当前数据库中没有这条 L2 正文。'}</p><Space wrap><code>{candidate.reason_code??'pending'}</code>{candidate.keyword_score!=null&&<span>关键词 {candidate.keyword_score}</span>}<span>{candidate.content_matches_snapshot===true?'与运行时指纹一致':candidate.content_matches_snapshot===false?'正文后来变化':'无法核对历史正文'}</span></Space></>}/></List.Item>}/>
+        {shadowDetail.status==='completed'&&<Space wrap><Button onClick={()=>beginShadowReview('correct')}>判断正确</Button><Button danger onClick={()=>beginShadowReview('incorrect')}>判断错误</Button><Button onClick={()=>beginShadowReview('uncertain')}>暂不确定</Button></Space>}
       </>:<Empty description="没有可显示的影子详情"/>}
     </Drawer>
+    <Modal title="复核 L2 影子判断" open={shadowReview!==null} confirmLoading={shadowReviewBusy} okText="保存人工复核" cancelText="取消" onOk={()=>void saveShadowReview()} onCancel={()=>!shadowReviewBusy&&setShadowReview(null)}>
+      <p>复核的是这一轮完整的支持集合；只追加审计事件，不会改变回答或记忆。</p>
+      <Select aria-label="L2 影子复核原因" value={shadowReviewReason} style={{width:'100%'}} options={shadowReview?shadowReasonOptions[shadowReview]:[]} onChange={setShadowReviewReason}/>
+    </Modal>
     <Modal title={reviewTarget?.action==='resolve'?'标记为已处理':reviewTarget?.action==='dismiss'?'标记为不是记忆问题':'重新打开样本'} open={reviewTarget!==null} confirmLoading={reviewBusy} okText="保存复核状态" cancelText="取消" onOk={()=>void saveReview()} onCancel={()=>!reviewBusy&&setReviewTarget(null)}>
       <p>这只管理诊断队列，不会自动修改、删除或重新生成长期记忆。</p>
       <Select aria-label="复核原因" value={reviewReason} style={{width:'100%'}} options={reviewTarget?reviewReasonOptions[reviewTarget.action]:[]} onChange={setReviewReason}/>

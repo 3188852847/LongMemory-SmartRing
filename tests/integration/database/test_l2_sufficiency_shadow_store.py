@@ -1,4 +1,4 @@
-"""V42 L2 证据充分性影子账本只保存引用、指纹和封闭判定。"""
+"""V42/V43 影子账本保存引用、判定与追加式所有者复核。"""
 
 from datetime import UTC, datetime
 
@@ -41,6 +41,22 @@ def test_v41_upgrade_adds_empty_shadow_ledger(tmp_path):
     assert connection.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION
     assert connection.execute(
         "SELECT count(*) FROM l2_sufficiency_shadow_runs"
+    ).fetchone()[0] == 0
+    assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
+    connection.close()
+
+
+def test_v42_upgrade_adds_empty_owner_review_ledger(tmp_path):
+    database = tmp_path / "v42.db"
+    connection = open_database(database)
+    initialize_schema(connection)
+    connection.execute("DROP TABLE l2_sufficiency_shadow_review_events")
+    connection.execute("PRAGMA user_version=42")
+    connection.commit()
+    initialize_schema(connection)
+    assert connection.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION
+    assert connection.execute(
+        "SELECT count(*) FROM l2_sufficiency_shadow_review_events"
     ).fetchone()[0] == 0
     assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
     connection.close()
@@ -96,6 +112,23 @@ def test_shadow_store_records_snapshot_and_closed_decisions_without_text(tmp_pat
     assert detail["query"] == "我的猫是什么颜色"
     assert detail["candidates"][0]["current_title"] is None
     assert detail["candidates"][0]["content_matches_snapshot"] is None
+    assert detail["review"]["review_revision"] == 0
+    review = store.review(
+        user_message_id="user-a", verdict="correct", reason_code="agreement",
+        expected_review_revision=0,
+    )
+    assert review["review_revision"] == 1
+    assert store.get("user-a")["review"]["verdict"] == "correct"
+    assert store.list_recent(limit=10)["items"][0]["review_verdict"] == "correct"
+    try:
+        store.review(
+            user_message_id="user-a", verdict="incorrect",
+            reason_code="missed_support", expected_review_revision=0,
+        )
+    except ValueError as error:
+        assert str(error) == "l2_sufficiency_shadow_review_conflict"
+    else:
+        raise AssertionError("stale review revision should fail")
     assert store.get("missing") is None
     columns = {row[1] for row in connection.execute(
         "PRAGMA table_info(l2_sufficiency_shadow_candidates)"

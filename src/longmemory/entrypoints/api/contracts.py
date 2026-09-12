@@ -68,6 +68,19 @@ class MemoryFeedbackReviewRequest(BaseModel):
         return value
 
 
+class L2SufficiencyShadowReviewRequest(BaseModel):
+    """所有者评价一整轮影子门控；不携带问题或场景正文。"""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    verdict: Literal["correct", "incorrect", "uncertain"]
+    reason_code: Literal[
+        "agreement", "missed_support", "false_support", "ambiguous_query",
+        "stale_content", "other",
+    ]
+    expected_review_revision: int = Field(ge=0)
+
+
 class ExplicitMemoryRequest(BaseModel):
     """控制台手工声明的一条自指事实；仍交由统一记忆命令处理。"""
 

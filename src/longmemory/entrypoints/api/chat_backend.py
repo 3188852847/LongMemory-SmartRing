@@ -155,6 +155,13 @@ class ChatBackend:
     def get_l2_sufficiency_shadow(self, user_message_id):
         return SQLiteL2SufficiencyShadowStore(self.database).get(user_message_id)
 
+    def review_l2_sufficiency_shadow(self, user_message_id, **values):
+        """追加人工复核事件；不修改影子原判或正式回答。"""
+
+        return SQLiteL2SufficiencyShadowStore(self.database).review(
+            user_message_id=user_message_id, **values,
+        )
+
     def info(self):
         role = self.roles.current()
         runtime = self.memory_runtime().status()

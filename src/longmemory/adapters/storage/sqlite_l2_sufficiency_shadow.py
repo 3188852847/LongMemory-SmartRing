@@ -1,9 +1,11 @@
-"""SQLite V42 的 L2 证据充分性影子审计存储。"""
+"""SQLite V42/V43 的 L2 证据充分性影子审计与人工复核存储。"""
 
 from hashlib import sha256
+from datetime import UTC, datetime
 from pathlib import Path
 import re
 import sqlite3
+from uuid import uuid4
 
 from longmemory.application.scenario_recall import ScenarioRecallResult
 from longmemory.core.memory.retrieval.sufficiency import EvidenceSufficiencyReview
@@ -162,6 +164,11 @@ class SQLiteL2SufficiencyShadowStore:
                 "SELECT r.user_message_id,m.content AS query,r.retrieval_strategy,"
                 "r.reviewer_version,r.provider,r.model,r.status,r.requested_at,"
                 "r.completed_at,r.error_code,"
+                "(SELECT verdict FROM l2_sufficiency_shadow_review_events v "
+                " WHERE v.user_message_id=r.user_message_id "
+                " ORDER BY v.review_revision DESC LIMIT 1) AS review_verdict,"
+                "(SELECT max(review_revision) FROM l2_sufficiency_shadow_review_events v "
+                " WHERE v.user_message_id=r.user_message_id) AS review_revision,"
                 "(SELECT count(*) FROM l2_sufficiency_shadow_candidates c "
                 " WHERE c.user_message_id=r.user_message_id) AS candidate_count,"
                 "(SELECT count(*) FROM l2_sufficiency_shadow_candidates c "
@@ -211,6 +218,67 @@ class SQLiteL2SufficiencyShadowStore:
                 candidates.append(item)
             payload = dict(run)
             payload["candidates"] = candidates
+            review = connection.execute(
+                "SELECT verdict,reason_code,review_revision,occurred_at "
+                "FROM l2_sufficiency_shadow_review_events "
+                "WHERE user_message_id=? ORDER BY review_revision DESC LIMIT 1",
+                (user_message_id,),
+            ).fetchone()
+            payload["review"] = (
+                dict(review) if review is not None else {
+                    "verdict": None, "reason_code": None,
+                    "review_revision": 0, "occurred_at": None,
+                }
+            )
             return payload
+        finally:
+            connection.close()
+
+    def review(self, *, user_message_id: str, verdict: str, reason_code: str,
+               expected_review_revision: int) -> dict:
+        """追加所有者复核；机器判定和候选快照保持原样。"""
+
+        allowed_reasons = {
+            "correct": {"agreement"},
+            "incorrect": {"missed_support", "false_support", "stale_content", "other"},
+            "uncertain": {"ambiguous_query", "stale_content", "other"},
+        }
+        if verdict not in allowed_reasons or reason_code not in allowed_reasons[verdict]:
+            raise ValueError("l2_sufficiency_shadow_review_invalid")
+        if type(expected_review_revision) is not int or expected_review_revision < 0:
+            raise ValueError("l2_sufficiency_shadow_review_invalid")
+        connection = self._open()
+        try:
+            run = connection.execute(
+                "SELECT status FROM l2_sufficiency_shadow_runs WHERE user_message_id=?",
+                (user_message_id,),
+            ).fetchone()
+            if run is None:
+                raise ValueError("l2_sufficiency_shadow_not_found")
+            if run["status"] != "completed":
+                raise ValueError("l2_sufficiency_shadow_review_not_ready")
+            current = connection.execute(
+                "SELECT max(review_revision) FROM l2_sufficiency_shadow_review_events "
+                "WHERE user_message_id=?", (user_message_id,),
+            ).fetchone()[0] or 0
+            if current != expected_review_revision:
+                raise ValueError("l2_sufficiency_shadow_review_conflict")
+            revision = current + 1
+            occurred_at = datetime.now(UTC).isoformat()
+            connection.execute(
+                "INSERT INTO l2_sufficiency_shadow_review_events "
+                "(id,user_message_id,review_revision,verdict,reason_code,occurred_at) "
+                "VALUES (?,?,?,?,?,?)",
+                (str(uuid4()), user_message_id, revision, verdict, reason_code,
+                 occurred_at),
+            )
+            connection.commit()
+            return {
+                "verdict": verdict, "reason_code": reason_code,
+                "review_revision": revision, "occurred_at": occurred_at,
+            }
+        except BaseException:
+            connection.rollback()
+            raise
         finally:
             connection.close()

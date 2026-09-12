@@ -1,6 +1,6 @@
-"""当前 SQLite V42 的完整结构定义；不包含历史迁移步骤。"""
+"""当前 SQLite V43 的完整结构定义；不包含历史迁移步骤。"""
 
-SCHEMA_VERSION = 42
+SCHEMA_VERSION = 43
 
 LATEST_SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS conversation_messages (
@@ -215,6 +215,24 @@ CREATE TABLE IF NOT EXISTS l2_sufficiency_shadow_candidates (
 );
 CREATE INDEX IF NOT EXISTS idx_l2_sufficiency_shadow_scenario
     ON l2_sufficiency_shadow_candidates (scenario_id, user_message_id);
+
+CREATE TABLE IF NOT EXISTS l2_sufficiency_shadow_review_events (
+    id TEXT PRIMARY KEY,
+    user_message_id TEXT NOT NULL,
+    review_revision INTEGER NOT NULL CHECK (review_revision >= 1),
+    verdict TEXT NOT NULL CHECK (verdict IN ('correct','incorrect','uncertain')),
+    reason_code TEXT NOT NULL CHECK (reason_code IN (
+        'agreement','missed_support','false_support','ambiguous_query',
+        'stale_content','other'
+    )),
+    occurred_at TEXT NOT NULL,
+    UNIQUE (user_message_id, review_revision),
+    FOREIGN KEY (user_message_id)
+        REFERENCES l2_sufficiency_shadow_runs (user_message_id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_l2_shadow_review_latest
+    ON l2_sufficiency_shadow_review_events
+        (user_message_id, review_revision DESC);
 
 CREATE TABLE IF NOT EXISTS round_screen_memory_feedback_events (
     id TEXT PRIMARY KEY,

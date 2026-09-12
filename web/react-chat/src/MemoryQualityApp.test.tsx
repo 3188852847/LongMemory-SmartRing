@@ -69,7 +69,8 @@ describe('记忆质量样本工作台',()=>{
         retrieval_strategy:'l2_keyword_v1',reviewer_version:'gate-v2',
         provider:'openai_compatible',model:'deepseek-v4-flash',status:'completed',
         requested_at:'2026-09-13T01:00:00Z',completed_at:'2026-09-13T01:00:01Z',
-        error_code:null,candidate_count:1,supported_count:0,
+        error_code:null,candidate_count:1,supported_count:0,review_verdict:null,
+        review_revision:null,
       }],
     };
     const detail:L2SufficiencyShadowDetail={
@@ -78,7 +79,7 @@ describe('记忆质量样本工作台',()=>{
         supports_answer:0,reason_code:'missing_attribute',current_title:'猫咪',
         current_summary:'用户养了一只叫豆包的猫。',current_status:'active',
         content_matches_snapshot:true,
-      }],
+      }],review:{verdict:null,reason_code:null,review_revision:0,occurred_at:null},
     };
     vi.spyOn(ChatApi.prototype,'bootstrap').mockResolvedValue(undefined);
     vi.spyOn(ChatApi.prototype,'request').mockImplementation(async path=>{
@@ -93,5 +94,13 @@ describe('记忆质量样本工作台',()=>{
     expect(await screen.findByText('证据不足')).toBeTruthy();
     expect(screen.getByText('missing_attribute')).toBeTruthy();
     expect(screen.getByRole('link',{name:'打开 L2'}).getAttribute('href')).toBe('/scenarios?scenario_id=scene-cat');
+    fireEvent.click(screen.getByRole('button',{name:'判断错误'}));
+    expect(screen.getByText('复核的是这一轮完整的支持集合；只追加审计事件，不会改变回答或记忆。')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button',{name:'保存人工复核'}));
+    await waitFor(()=>expect(ChatApi.prototype.request).toHaveBeenCalledWith(
+      '/api/l2-sufficiency-shadow/turn-shadow/reviews','POST',{
+        verdict:'incorrect',reason_code:'missed_support',expected_review_revision:0,
+      },
+    ));
   });
 });
