@@ -16,6 +16,7 @@ from longmemory.core.common.identifiers import MessageId
 from longmemory.core.conversation.models import ConversationMessage, MessageRole
 from longmemory.core.memory.extraction.candidates import (
     CandidateExtractionError, CandidateExtractionService, CandidateProducer,
+    PREPROCESSOR_VERSION,
 )
 from longmemory.evaluation.runner import provenance
 from longmemory.infrastructure.config.model_profiles import ModelProfileStore
@@ -142,6 +143,7 @@ def run_l1_extraction(dataset: L1ExtractionDataset, producer: CandidateProducer,
         "dataset_sha256": dataset.sha256, "split": split,
         "case_order": [case["id"] for case in cases],
         "extractor_version": PROMPT_VERSION, "prompt_sha256": PROMPT_SHA256,
+        "preprocessor_version": PREPROCESSOR_VERSION,
         "model": model_config, "request_limit": len(cases), "retry_limit": 0,
         "limitations": ["synthetic_only", "term_constraint_semantic_proxy",
                         "no_personal_database_access", "no_memory_writes"],

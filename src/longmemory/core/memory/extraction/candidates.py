@@ -6,6 +6,7 @@
 
 from dataclasses import dataclass
 import json
+import re
 from typing import Literal, Protocol
 
 from longmemory.core.common.text import looks_like_question
@@ -14,6 +15,17 @@ from longmemory.core.conversation.models import ConversationMessage, MessageRole
 MAX_SOURCE_CHARS = 16000
 MAX_OUTPUT_CHARS = 64000
 MAX_CANDIDATES = 8
+PREPROCESSOR_VERSION = "user-message-safety-gate-v3"
+_TRAILING_RECIPROCAL_QUESTION = re.compile(
+    r"^(?P<statement>.+?)[，,。；;]\s*你呢\s*[?？]\s*$",
+    re.DOTALL,
+)
+_META_INSTRUCTION = re.compile(
+    r"(?:忽略|无视|绕过).{0,16}(?:系统|提示|要求|规则|指令)"
+    r"|(?:输出|返回).{0,12}(?:ADD|NOOP|JSON)"
+    r"|保存为(?:一条)?长期记忆",
+    re.IGNORECASE | re.DOTALL,
+)
 
 
 class CandidateExtractionError(ValueError):
@@ -101,11 +113,22 @@ class CandidateExtractionService:
             return ExtractionProposal("NOOP", ())
         if not str(message.id).strip() or len(message.content) > MAX_SOURCE_CHARS:
             raise CandidateExtractionError("用户消息缺少来源 ID 或超过字符限制。")
-        # 首轮保留原来的保守问句过滤；不是完整语义分类，混合句可能漏记。
-        if looks_like_question(message.content):
+        # 模型提示已声明正文只是数据，但真实开发集证明模型仍可能服从正文中的
+        # 明确元指令。这里先拦截可确定识别的协议操纵语句；普通“请记住，
+        # 我的……”不命中。该规则只是有限纵深防护，不冒充通用注入检测器。
+        if _META_INSTRUCTION.search(message.content):
             return ExtractionProposal("NOOP", ())
+        source_text = message.content
+        if looks_like_question(message.content):
+            # 只放开非常窄的“用户自述，你呢？”结构。它是日常对话里常见的
+            # 互惠追问，但前半句仍是明确自述。其他混合问句继续保守跳过，
+            # 避免把“我想知道，你喜欢什么”等疑问片段误存成用户事实。
+            reciprocal = _TRAILING_RECIPROCAL_QUESTION.fullmatch(message.content.strip())
+            if reciprocal is None or looks_like_question(reciprocal.group("statement")):
+                return ExtractionProposal("NOOP", ())
+            source_text = reciprocal.group("statement").strip()
         try:
-            raw = self._producer.propose(source_text=message.content)
+            raw = self._producer.propose(source_text=source_text)
         except Exception:
             # 不自动重试、不静默降级为规则，不向日志传播供应商/用户正文。
             raise CandidateExtractionError("候选生成失败；未产生可写入结果。") from None

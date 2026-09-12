@@ -22,7 +22,10 @@ class LabelOracleProducer:
 
     def propose(self, *, source_text: str) -> str:
         self.calls += 1
-        case = self._cases[source_text]
+        case = self._cases.get(source_text)
+        if case is None:
+            case = next(case for full_text, case in self._cases.items()
+                        if full_text.startswith(source_text))
         if case["expected_operation"] == "NOOP":
             return json.dumps({"schema_version": 1, "operation": "NOOP", "facts": []})
         facts = [
@@ -32,7 +35,7 @@ class LabelOracleProducer:
         return json.dumps({"schema_version": 1, "operation": "ADD", "facts": facts})
 
 
-def test_dev_run_keeps_fixed_denominator_and_exposes_question_filter_limit(tmp_path):
+def test_dev_run_keeps_fixed_denominator_and_handles_trailing_reciprocal_question(tmp_path):
     dataset = load_l1_extraction_dataset(DATASET)
     producer = LabelOracleProducer(dataset.cases)
 
@@ -41,23 +44,20 @@ def test_dev_run_keeps_fixed_denominator_and_exposes_question_filter_limit(tmp_p
         model_config={"provider": "synthetic-label-oracle"},
     )
 
-    mixed = next(row for row in report["rows"] if row["case_id"] == "dev-mixed-question")
     assert report["status"] == "completed"
     assert report["summary"] == {
         "total": 16,
         "completed": 16,
         "failed": 0,
         "request_attempts": producer.calls,
-        "operation_exact": 15,
-        "fact_count_exact": 15,
-        "fact_match_exact": 15,
+        "operation_exact": 16,
+        "fact_count_exact": 16,
+        "fact_match_exact": 16,
         "add_cases": 10,
-        "add_exact": 9,
+        "add_exact": 10,
         "noop_cases": 6,
         "noop_exact": 6,
     }
-    assert mixed["predicted_operation"] == "NOOP"
-    assert mixed["request_attempted"] is False
     assert (directory / "manifest.json").is_file()
     assert (directory / "report.json").is_file()
     assert not (directory / "report.json.tmp").exists()
