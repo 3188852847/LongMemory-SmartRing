@@ -54,12 +54,19 @@ class VoiceLatencyTracker:
         self.clock = clock
         self.lock = threading.Lock()
         self.current = None
+        self.sequence = 0
 
     def begin(self):
         now = self.clock()
         with self.lock:
+            self.sequence += 1
             self.current = {
                 "version": 1,
+                # token 只在进程内用于拒绝上一轮迟到的 finally 回调，绝不暴露给 API。
+                "token": self.sequence,
+                # chat() 会在进入上游实现后才生成新 sentence_id。记录旧值可防止
+                # 上一轮尚未结束的 Memory/TTS 回调抢先绑定到刚开始的新样本。
+                "previous_sentence_id": getattr(self.connection, "sentence_id", None),
                 "sentence_id": None,
                 # 小智当前独立环境仍是 Python 3.10；timezone.utc 在该版本可用，
                 # 不能使用 Python 3.11 才加入的 datetime.UTC 别名。
@@ -68,22 +75,34 @@ class VoiceLatencyTracker:
                 "tts_backend": _backend(self.connection),
                 "timings": {field: None for field in TIMING_FIELDS},
             }
+            return self.sequence
 
-    def bind_sentence(self):
+    def bind_sentence(self, sentence_id=None):
         with self.lock:
-            if self.current is not None and self.current["sentence_id"] is None:
-                self.current["sentence_id"] = getattr(self.connection, "sentence_id", None)
+            if self.current is None or self.current["sentence_id"] is not None:
+                return
+            candidate = sentence_id
+            if candidate is None:
+                candidate = getattr(self.connection, "sentence_id", None)
+            if candidate is None or candidate == self.current["previous_sentence_id"]:
+                return
+            self.current["sentence_id"] = candidate
 
-    def mark(self, field, *, sentence_id=None):
+    def mark(self, field, *, sentence_id=None, token=None):
         if field not in TIMING_FIELDS:
             raise ValueError("voice_latency_field_invalid")
         with self.lock:
             item = self.current
             if item is None or item["timings"][field] is not None:
                 return
-            expected = item["sentence_id"]
-            if sentence_id is not None and expected is not None and sentence_id != expected:
+            if token is not None and token != item["token"]:
                 return
+            expected = item["sentence_id"]
+            if sentence_id is not None:
+                # 显式带句子归属的异步回调必须等当前样本完成绑定；否则上一轮
+                # 的迟到回调会在 expected=None 时被误收为当前轮数据。
+                if expected is None or sentence_id != expected:
+                    return
             elapsed = max(0, round((self.clock() - item["started"]) * 1000))
             item["timings"][field] = elapsed
         # 日志只含固定阶段名和毫秒数，不含问题、回答、记忆或音色提示词。
@@ -115,6 +134,47 @@ class VoiceLatencyTracker:
                 "tts_backend": self.current["tts_backend"],
                 "timings_ms": timings,
             }
+
+
+def install_edge_first_chunk_policy(tts, *, maximum_chars=18):
+    """让 Edge 的首个无标点长片段提前进入合成，后续切句保持上游行为。
+
+    Edge 适配器会先收完整段音频再转 Opus；这里不伪装成流式 TTS，只缩短
+    “模型已有文字但仍在等标点”的时间。补丁仅作用于当前连接的 Edge 实例。
+    """
+    if maximum_chars < 8:
+        raise ValueError("edge_first_chunk_limit_invalid")
+    if getattr(tts, "_longmemory_edge_first_chunk_installed", False):
+        return
+    original = getattr(tts, "_get_segment_text", None)
+    if not callable(original):
+        return
+
+    def get_segment_text():
+        segment = original()
+        if segment is not None or not getattr(tts, "is_first_sentence", False):
+            return segment
+        full_text = "".join(getattr(tts, "tts_text_buff", ()))
+        processed = getattr(tts, "processed_chars", 0)
+        current = full_text[processed:]
+        if len(current) < maximum_chars:
+            return None
+        # 中文语音以字符为稳定边界；若恰好处于 ASCII 单词中，则向前寻找空格，
+        # 避免把 URL 或英文词拆成两个难以朗读的片段。
+        end = maximum_chars
+        if (end < len(current) and current[end - 1].isascii()
+                and current[end - 1].isalnum() and current[end].isascii()
+                and current[end].isalnum()):
+            boundary = current.rfind(" ", 0, end)
+            if boundary >= 8:
+                end = boundary + 1
+        raw = current[:end]
+        tts.processed_chars += len(raw)
+        tts.is_first_sentence = False
+        return raw.strip()
+
+    tts._get_segment_text = get_segment_text
+    tts._longmemory_edge_first_chunk_installed = True
 
 
 def _observe_generator(connection, responses):
@@ -173,6 +233,8 @@ def _observe_components(connection):
             tracker.mark("audio_ready_ms", sentence_id=getattr(tts, "current_sentence_id", None))
             return original_opus(*args, **kwargs)
         tts.handle_opus = measured_opus
+    if _backend(connection) == "edge":
+        install_edge_first_chunk_policy(tts)
     tts._longmemory_latency_observed = True
 
 
@@ -186,15 +248,14 @@ def install_voice_latency(connection_class):
         if not hasattr(connection, "_longmemory_voice_latency"):
             connection._longmemory_voice_latency = VoiceLatencyTracker(connection)
         tracker = connection._longmemory_voice_latency
-        if depth == 0:
-            tracker.begin()
+        turn_token = tracker.begin() if depth == 0 else None
         _observe_components(connection)
         try:
             return original(connection, query, depth)
         finally:
             if depth == 0:
                 tracker.bind_sentence()
-                tracker.mark("response_completed_ms")
+                tracker.mark("response_completed_ms", token=turn_token)
 
     connection_class.chat = chat
     connection_class._longmemory_latency_installed = True

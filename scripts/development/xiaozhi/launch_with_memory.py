@@ -20,6 +20,9 @@ def observe_memory_operations(connection):
     original_save = memory.save_memory
 
     async def query_memory(*args, **kwargs):
+        # 捕获请求开始时所属句子；同一设备快速产生多轮输入时，旧请求可能晚于
+        # 新请求完成，不能让它覆盖控制台显示的最近一轮首声计时。
+        sentence_id = getattr(connection, "sentence_id", None)
         started = time.perf_counter()
         try:
             return await original_query(*args, **kwargs)
@@ -27,8 +30,8 @@ def observe_memory_operations(connection):
             elapsed_ms = (time.perf_counter() - started) * 1000
             tracker = getattr(connection, "_longmemory_voice_latency", None)
             if tracker is not None:
-                tracker.bind_sentence()
-                tracker.mark("memory_ready_ms")
+                tracker.bind_sentence(sentence_id)
+                tracker.mark("memory_ready_ms", sentence_id=sentence_id)
             connection.logger.bind(tag="memory-comparison").info(
                 f"记忆查询后端={provider} 耗时={elapsed_ms:.1f}ms"
             )
