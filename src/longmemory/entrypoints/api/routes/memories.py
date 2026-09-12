@@ -141,6 +141,26 @@ def register_memory_routes(app, backend):
             raise web.HTTPBadRequest()
         return await invoke(backend.clear_memories, body["revision"])
 
+    async def wipe_preview(request):
+        if request.query:
+            raise web.HTTPBadRequest()
+        return await invoke(backend.wipe_preview)
+
+    async def wipe_memories(request):
+        if request.content_type != "application/json":
+            raise web.HTTPBadRequest()
+        try:
+            body = await request.json()
+        except (ValueError, UnicodeError):
+            raise web.HTTPBadRequest() from None
+        if (not isinstance(body, dict)
+                or set(body) != {"revision", "confirm_wipe"}
+                or body["confirm_wipe"] is not True
+                or not isinstance(body["revision"], str)
+                or not re.fullmatch(r"[0-9a-f]{64}", body["revision"])):
+            raise web.HTTPBadRequest()
+        return await invoke(backend.wipe_memories, body["revision"])
+
     async def correction(request):
         memory_id = request.match_info["memory_id"]
         if not memory_id or len(memory_id) > 128 or any(ord(c) < 32 for c in memory_id):
@@ -472,6 +492,8 @@ def register_memory_routes(app, backend):
     app.router.add_get("/api/memories/daily-review", daily_review, allow_head=False)
     app.router.add_get("/api/memories/clear-preview", clear_preview, allow_head=False)
     app.router.add_post("/api/memories/clear", clear_memories)
+    app.router.add_get("/api/memories/wipe-preview", wipe_preview, allow_head=False)
+    app.router.add_post("/api/memories/wipe", wipe_memories)
     app.router.add_get("/api/source-messages", source_listing, allow_head=False)
     app.router.add_get("/api/consolidation-status", consolidation_status, allow_head=False)
     app.router.add_post("/api/source-messages/{source_id}/promote", promote_source)

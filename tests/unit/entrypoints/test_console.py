@@ -710,6 +710,35 @@ def test_memory_http_bulk_clear_requires_auth_confirmation_and_current_preview(t
     reopened.close()
 
 
+def test_memory_http_wipe_requires_auth_confirmation_and_current_preview(tmp_path):
+    from longmemory.bootstrap import build_application
+    database = tmp_path / "wipe.db"
+    application = build_application(database_path=database)
+    application.chat("我养了一只叫豆包的猫。")
+    application.close()
+
+    async def run():
+        async with console(database, True) as (client, base, _bridge):
+            assert (await client.get(base + "/api/memories/wipe-preview")).status == 401
+            headers = await login(client, base)
+            preview = await (await client.get(base + "/api/memories/wipe-preview")).json()
+            assert preview["l0_total"] == 2 and preview["l1_total"] == 1
+            body = {"revision": preview["revision"], "confirm_wipe": True}
+            assert (await client.post(base + "/api/memories/wipe", json=body)).status == 403
+            assert (await client.post(
+                base + "/api/memories/wipe", headers=headers,
+                json={**body, "confirm_wipe": False},
+            )).status == 400
+            response = await client.post(base + "/api/memories/wipe", headers=headers, json=body)
+            result = await response.json()
+            assert response.status == 200 and result["l0_total"] == 2
+            assert len(result["backup"]["sha256"]) == 64
+            assert (await (await client.get(base + "/api/source-messages")).json())["total"] == 0
+            assert (await client.post(base + "/api/memories/wipe", headers=headers, json=body)).status == 409
+
+    asyncio.run(run())
+
+
 def test_memory_http_promotes_existing_l0_with_csrf_and_explicit_confirmation(tmp_path):
     from longmemory.bootstrap import build_application
     database = tmp_path / "promote-source.db"

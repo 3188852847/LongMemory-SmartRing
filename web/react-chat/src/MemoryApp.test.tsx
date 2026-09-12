@@ -142,13 +142,13 @@ describe('开发期记忆重置',()=>{
     });
     const client=new QueryClient({defaultOptions:{queries:{retry:false}}});
     render(<QueryClientProvider client={client}><MemoryRouter><MemoryApp/></MemoryRouter></QueryClientProvider>);
-    const clearButton=await screen.findByRole('button',{name:'清空记忆'});
+    const clearButton=await screen.findByRole('button',{name:'重置长期记忆'});
     await waitFor(()=>expect(clearButton.hasAttribute('disabled')).toBe(false));
     fireEvent.click(clearButton);
-    expect(await screen.findByText('清空所有可召回记忆？')).toBeTruthy();
+    expect(await screen.findByText('重置长期记忆并保留原话？')).toBeTruthy();
     expect(screen.getByText('3 条（当前 2，已退役 1）')).toBeTruthy();
     expect(screen.getByText('8 条')).toBeTruthy();
-    const confirm=screen.getByRole('button',{name:'永久清空 L1'});
+    const confirm=screen.getByRole('button',{name:'删除全部 L1'});
     expect(confirm.hasAttribute('disabled')).toBe(true);
     fireEvent.change(screen.getByLabelText('清空确认短语'),{target:{value:'清空我的记忆'}});
     expect(confirm.hasAttribute('disabled')).toBe(false);
@@ -157,5 +157,36 @@ describe('开发期记忆重置',()=>{
       path:'/api/memories/clear',method:'POST',body:{revision:'a'.repeat(64),confirm_clear:true},
     }));
     expect(await screen.findByText(/已清空 3 条 L1；8 条 L0 原始对话仍保留/)).toBeTruthy();
+  });
+
+  test('彻底清除入口明确包含 L0 并保留旁库与备份',async()=>{
+    const calls:Array<{path:string;method:string;body:unknown}>=[];
+    let wiped=false;
+    vi.spyOn(ChatApi.prototype,'bootstrap').mockResolvedValue(undefined);
+    vi.spyOn(ChatApi.prototype,'request').mockImplementation(async(path,method='GET',body)=>{
+      calls.push({path,method,body});
+      if(path==='/api/memory-config') return {configured:true,database:'synthetic.db',allow_delete:true,allow_clear:true,allow_correction:true,allow_change:true,allow_promote_source:true} as never;
+      if(path==='/api/memory-mode') return {write_enabled:true,use_enabled:true,scenario_use_enabled:false,scenario_available:true,persona_use_enabled:false,persona_available:true,persistent:false,l0_archived_when_write_disabled:true} as never;
+      if(path==='/api/consolidation-status') return {background_enabled:false,stages:[]} as never;
+      if(path==='/api/memories/wipe-preview') return {l0_total:8,l1_total:3,l2_total:1,l3_total:1,l2_current:1,l3_current:1,related_record_total:12,web_chat_archive_preserved:true,existing_backups_preserved:true,revision:'c'.repeat(64)} as never;
+      if(path==='/api/memories/wipe'&&method==='POST') {wiped=true;return {wiped:true,l0_total:8,l1_total:3,l2_total:1,l3_total:1,related_record_total:12,web_chat_archive_preserved:true,existing_backups_preserved:true,backup:{path:'backup.db',sha256:'d'.repeat(64)}} as never;}
+      if(path.startsWith('/api/memories/daily-review')) return {local_date:'2026-09-13',utc_offset_minutes:480,items:[],total:0,limited:false,activity_counts:{added:0,corrected:0,changed:0,deleted:0},message_counts:{user:0,assistant:0,total:0,unlinked_user:0},quality_counts:{owner_confirmed_missed_extraction:0},deletions:[],deletions_limited:false} as never;
+      if(path.startsWith('/api/chat-memory-feedback/daily')) return {local_date:'2026-09-13',utc_offset_minutes:480,total:0,limited:false,action_counts:{memory_ok:0,recall_miss:0,wrong_memory:0,memory_irrelevant:0},items:[],current_total:0,current_limited:false,current_counts:{memory_ok:0,recall_miss:0,wrong_memory:0,memory_irrelevant:0},current_items:[]} as never;
+      if(path.startsWith('/api/memories?')) return {items:[],total:wiped?0:3,limit:25,offset:0} as never;
+      throw new Error(`unexpected test path: ${path}`);
+    });
+    const client=new QueryClient({defaultOptions:{queries:{retry:false}}});
+    render(<QueryClientProvider client={client}><MemoryRouter><MemoryApp/></MemoryRouter></QueryClientProvider>);
+    const button=await screen.findByRole('button',{name:'清除 L0–L3'});
+    await waitFor(()=>expect(button.hasAttribute('disabled')).toBe(false));
+    fireEvent.click(button);
+    expect(await screen.findByText('清除当前记忆库中的 L0–L3？')).toBeTruthy();
+    expect(screen.getByText(/网页聊天会话旁库和所有既有备份不会删除/)).toBeTruthy();
+    const confirm=screen.getByRole('button',{name:'清除当前库'});
+    expect(confirm.hasAttribute('disabled')).toBe(true);
+    fireEvent.change(screen.getByLabelText('彻底清除确认短语'),{target:{value:'彻底清除当前记忆库'}});
+    fireEvent.click(confirm);
+    await waitFor(()=>expect(calls).toContainEqual({path:'/api/memories/wipe',method:'POST',body:{revision:'c'.repeat(64),confirm_wipe:true}}));
+    expect(await screen.findByText(/已清除当前库的 L0 8、L1 3、L2 1、L3 1 条/)).toBeTruthy();
   });
 });

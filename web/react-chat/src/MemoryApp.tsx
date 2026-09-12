@@ -34,6 +34,7 @@ type DailyReviewItem = L1Summary & {activity:DailyActivity};
 type DailyDeletion = {id:string;memory_id:string;subject_id:string;deleted_at:string};
 type DailyReview = {local_date:string;utc_offset_minutes:number;items:DailyReviewItem[];total:number;limited:boolean;activity_counts:Record<DailyActivity|'deleted',number>;message_counts:{user:number;assistant:number;total:number;unlinked_user:number};quality_counts:{owner_confirmed_missed_extraction:number};deletions:DailyDeletion[];deletions_limited:boolean};
 type ClearPreview = {l1_total:number;l1_active:number;l1_retired:number;affected_l2_current:number;affected_l3_current:number;l0_preserved:number;revision:string};
+type WipePreview = {l0_total:number;l1_total:number;l2_total:number;l3_total:number;l2_current:number;l3_current:number;related_record_total:number;web_chat_archive_preserved:boolean;existing_backups_preserved:boolean;revision:string};
 
 const api = new ChatApi();
 const displayTime = (value?: string | null) => value ? new Date(value).toLocaleString('zh-CN') : '未记录';
@@ -90,6 +91,9 @@ export function MemoryApp() {
   const [clearing, setClearing] = useState(false);
   const [clearPreview, setClearPreview] = useState<ClearPreview>();
   const [clearPhrase, setClearPhrase] = useState('');
+  const [wiping, setWiping] = useState(false);
+  const [wipePreview, setWipePreview] = useState<WipePreview>();
+  const [wipePhrase, setWipePhrase] = useState('');
   const [promoting, setPromoting] = useState(false);
   const [promotedContent, setPromotedContent] = useState('');
   const locked = useRef(false);
@@ -321,13 +325,32 @@ export function MemoryApp() {
       setNotice(`已清空 ${result.deleted_l1} 条 L1；${result.l0_preserved} 条 L0 原始对话仍保留，关联的当前 L2/L3 已停止召回。`);
     }, 'write');
   }
+  async function openWipeMemories() {
+    await guarded(async () => {
+      const preview = await api.request<WipePreview>('/api/memories/wipe-preview');
+      setWipePreview(preview); setWipePhrase(''); setWiping(true);
+      setNotice(`已核对当前库：L0 ${preview.l0_total} 条，L1 ${preview.l1_total} 条。尚未删除。`);
+    });
+  }
+  async function wipeMemories() {
+    if (!wipePreview || wipePhrase !== '彻底清除当前记忆库') return;
+    await guarded(async () => {
+      const result = await api.request<{l0_total:number;l1_total:number;l2_total:number;l3_total:number;backup:{path:string;sha256:string}}>(
+        '/api/memories/wipe', 'POST', {revision: wipePreview.revision, confirm_wipe: true},
+      );
+      setWiping(false); setWipePreview(undefined); setWipePhrase('');
+      setSelectedL1(undefined); setSelectedL0(undefined); setTab('l1'); setQuery(''); setL1State('active');
+      await fetchL1(0, '', 'active'); await fetchDaily();
+      setNotice(`已清除当前库的 L0 ${result.l0_total}、L1 ${result.l1_total}、L2 ${result.l2_total}、L3 ${result.l3_total} 条；操作前恢复点已保存。网页会话档案和既有备份未删除。`);
+    }, 'write');
+  }
 
   const page = tab === 'l1' ? l1 : l0;
   const sidebar = <>
       <ConsoleNav active="memories" legacyPath="/memories-legacy"/>
       <Card size="small" className="memory-layer-guide" title="层级说明"><p><Tag color="magenta">L1</Tag><span>规范化、可召回的派生事实</span></p><p><Tag color="blue">L0</Tag><span>用户或助手当时说过的原文</span></p></Card>
     </>;
-  return <><AppShell subtitle="可追溯的个人记忆" className="memory-shell" sidebar={sidebar}><PageHeader eyebrow="长期记忆" title="原始与原子记忆" description="查看系统保存的原话和从中提取的可召回事实，并核对两者之间的来源关系。" meta={config?.database ?? '未指定记忆库'} action={<Space wrap><ManualMemoryAdd api={api} disabled={!config?.configured || !mode} onSaved={async memoryId => {await fetchL1(0, ''); setTab('l1'); setQuery(''); setNotice('明确事实已处理，列表已更新。'); if (memoryId) await openL1(memoryId);}}/><Button danger disabled={busy || !config?.allow_clear} onClick={() => void openClearMemories()}>清空记忆</Button><Button loading={busy} disabled={!config?.configured} onClick={() => void refresh(page.offset)}>刷新</Button></Space>}/>
+  return <><AppShell subtitle="可追溯的个人记忆" className="memory-shell" sidebar={sidebar}><PageHeader eyebrow="长期记忆" title="原始与原子记忆" description="查看系统保存的原话和从中提取的可召回事实，并核对两者之间的来源关系。" meta={config?.database ?? '未指定记忆库'} action={<Space wrap><ManualMemoryAdd api={api} disabled={!config?.configured || !mode} onSaved={async memoryId => {await fetchL1(0, ''); setTab('l1'); setQuery(''); setNotice('明确事实已处理，列表已更新。'); if (memoryId) await openL1(memoryId);}}/><Button danger disabled={busy || !config?.allow_clear} onClick={() => void openClearMemories()}>重置长期记忆</Button><Button danger type="primary" disabled={busy || !config?.allow_clear} onClick={() => void openWipeMemories()}>清除 L0–L3</Button><Button loading={busy} disabled={!config?.configured} onClick={() => void refresh(page.offset)}>刷新</Button></Space>}/>
       <section className="memory-overview" aria-label="记忆概览"><div><small>当前视图</small><strong>{tab === 'l1' ? 'L1 原子记忆' : 'L0 原始记录'}</strong></div><div><small>记录数</small><strong>{page.total}</strong></div><div><small>回答时召回</small><strong className={mode?.use_enabled ? 'is-positive' : ''}>{mode?.use_enabled ? '已开启' : '已关闭'}</strong></div></section>
       <Card className="mode-card" title={`每日记忆回顾 · ${reviewDate}`} extra={<Space wrap><Button size="small" onClick={previousReviewDate}>前一天</Button><Input aria-label="回顾日期" type="date" max={localDateText()} value={reviewDate} onChange={event=>changeReviewDate(event.target.value)} style={{width:145}}/><Button size="small" disabled={reviewDate===localDateText()} onClick={()=>changeReviewDate(localDateText())}>今天</Button>{daily&&<Tag color={daily.total?'processing':'default'}>{daily.total} 条写入</Tag>}</Space>}>
         <p className="subtle">这里按你的本地自然日显示当天形成的 L1，包括后来被纠正或取代的记录；它不是“当前有效记忆”总表，也不会触发模型整理。</p>
@@ -401,7 +424,7 @@ export function MemoryApp() {
     <Modal title="删除这条 L1 记忆？" open={deleting} okText="确认删除 L1" cancelText="取消" confirmLoading={busy} okButtonProps={{danger: true, disabled: !deleteUnderstood}} onCancel={() => {setDeleting(false); setDeleteUnderstood(false);}} onOk={() => void removeMemory()}>
       <p>只删除 L1 及来源关联；L0 原始对话和备份仍然保留，目前没有一键恢复。</p><Checkbox checked={deleteUnderstood} onChange={event => setDeleteUnderstood(event.target.checked)}>我理解以上影响，只删除这一条 L1。</Checkbox>
     </Modal>
-    <Modal title="清空所有可召回记忆？" open={clearing} okText="永久清空 L1" cancelText="取消" confirmLoading={busy}
+    <Modal title="重置长期记忆并保留原话？" open={clearing} okText="删除全部 L1" cancelText="取消" confirmLoading={busy}
       okButtonProps={{danger:true,disabled:!clearPreview?.l1_total || clearPhrase !== '清空我的记忆'}}
       onCancel={() => {if (!busy) {setClearing(false); setClearPreview(undefined); setClearPhrase('');}}}
       onOk={() => void clearMemories()}>
@@ -415,6 +438,22 @@ export function MemoryApp() {
       <p className="subtle">L0 原始对话和删除审计会保留，因此这不是“清除所有隐私数据”。控制台目前不提供一键恢复。</p>
       <label className="field-label" htmlFor="clear-memory-phrase">请输入“清空我的记忆”确认</label>
       <Input id="clear-memory-phrase" aria-label="清空确认短语" autoComplete="off" value={clearPhrase} onChange={event=>setClearPhrase(event.target.value)}/>
+    </Modal>
+    <Modal title="清除当前记忆库中的 L0–L3？" open={wiping} okText="清除当前库" cancelText="取消" confirmLoading={busy}
+      okButtonProps={{danger:true,disabled:!wipePreview || wipePhrase !== '彻底清除当前记忆库'}}
+      onCancel={() => {if (!busy) {setWiping(false); setWipePreview(undefined); setWipePhrase('');}}}
+      onOk={() => void wipeMemories()}>
+      <p>这会清除当前 SQLite 记忆库中的原始对话、原子记忆、场景、用户画像，以及依赖它们的圆屏回答证据和陪伴学习记录。清除后系统不能再从当前库的 L0 重新提取这些内容。</p>
+      {wipePreview&&<Descriptions column={1} size="small" items={[
+        {key:'l0',label:'将删除的 L0',children:`${wipePreview.l0_total} 条`},
+        {key:'l1',label:'将删除的 L1',children:`${wipePreview.l1_total} 条`},
+        {key:'l2',label:'将删除的 L2',children:`${wipePreview.l2_total} 条（当前 ${wipePreview.l2_current}）`},
+        {key:'l3',label:'将删除的 L3',children:`${wipePreview.l3_total} 条（当前 ${wipePreview.l3_current}）`},
+        {key:'related',label:'相关派生与审计记录',children:`${wipePreview.related_record_total} 条`},
+      ]}/>}
+      <p className="subtle">模型、声音和主动交流规则等产品设置会保留。系统会先创建一致性恢复点；网页聊天会话旁库和所有既有备份不会删除，所以这不是磁盘级隐私擦除。</p>
+      <label className="field-label" htmlFor="wipe-memory-phrase">请输入“彻底清除当前记忆库”确认</label>
+      <Input id="wipe-memory-phrase" aria-label="彻底清除确认短语" autoComplete="off" value={wipePhrase} onChange={event=>setWipePhrase(event.target.value)}/>
     </Modal>
   </>;
 }

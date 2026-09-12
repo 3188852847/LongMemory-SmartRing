@@ -416,6 +416,80 @@ class AtomicMemoryBackend:
                 "affected_l3_current": before["affected_l3_current"],
             }
 
+    # 这些表保存 L0–L3、回答证据或从个人互动派生的学习状态。产品设置表
+    # proactive_policy_settings / proactive_schedule_overrides 不在其中；清除记忆
+    # 不应偷偷重置音量、模型、主动联系时段等另一类配置。
+    _WIPE_TABLES = (
+        "memory_feedback_review_events", "round_screen_memory_feedback_events",
+        "round_screen_retrieval_evidence", "round_screen_retrieval_receipts",
+        "round_screen_turns", "companion_strategy_candidate_sources",
+        "companion_routine_candidate_sources", "companion_feedback_events",
+        "companion_interaction_events", "proactive_outreach_events",
+        "proactive_outreach", "companion_absence_strategy_selections",
+        "companion_absence_strategy_switch_events", "companion_absence_strategy_versions",
+        "companion_strategy_candidates", "companion_routine_candidates",
+        "companion_user_initiated_interactions", "proactive_topic_seeds",
+        "companion_follow_up_candidates", "persona_replacements", "persona_reviews",
+        "persona_sources", "persona_generation_audits", "persona_lifecycle_events",
+        "persona_memories", "scenario_reviews", "scenario_memory_sources",
+        "scenario_generation_audits", "scenario_lifecycle_events", "scenario_memories",
+        "memory_evidence", "atomic_memories", "l1_deletion_events",
+        "memory_quality_events", "memory_consolidation_runs", "conversation_messages",
+    )
+
+    @classmethod
+    def _wipe_snapshot(cls, connection):
+        """哈希全部待删除行，防止预检以后新增对话仍被旧确认误删。"""
+
+        rows_by_table = {}
+        counts = {}
+        for table in cls._WIPE_TABLES:
+            rows = [list(row) for row in connection.execute(
+                f"SELECT * FROM [{table}] ORDER BY rowid"
+            ).fetchall()]
+            rows_by_table[table] = rows
+            counts[table] = len(rows)
+        current_l2 = connection.execute(
+            "SELECT count(*) FROM scenario_memories WHERE status IN ('candidate','active')"
+        ).fetchone()[0]
+        current_l3 = connection.execute(
+            "SELECT count(*) FROM persona_memories WHERE status IN ('candidate','active')"
+        ).fetchone()[0]
+        primary = {"l0": counts["conversation_messages"],
+                   "l1": counts["atomic_memories"],
+                   "l2": counts["scenario_memories"],
+                   "l3": counts["persona_memories"]}
+        return {
+            "l0_total": primary["l0"], "l1_total": primary["l1"],
+            "l2_total": primary["l2"], "l3_total": primary["l3"],
+            "l2_current": current_l2, "l3_current": current_l3,
+            "related_record_total": sum(counts.values()) - sum(primary.values()),
+            "web_chat_archive_preserved": True,
+            "existing_backups_preserved": True,
+            "revision": revision({"tables": rows_by_table}),
+        }
+
+    def wipe_preview(self):
+        with self._open_database() as connection:
+            return self._wipe_snapshot(connection)
+
+    def wipe_memories(self, expected_revision):
+        """原子清除当前库中的 L0–L3 和派生账本，保留产品设置。"""
+
+        with self._open_database(write_capability="delete") as connection:
+            before = self._wipe_snapshot(connection)
+            if not secrets.compare_digest(before["revision"], expected_revision):
+                raise MemoryAccessError("memory_wipe_changed", 409)
+            for table in self._WIPE_TABLES:
+                connection.execute(f"DELETE FROM [{table}]")
+            if connection.execute("PRAGMA foreign_key_check").fetchone() is not None:
+                raise MemoryAccessError("memory_database_invalid", 503)
+            connection.commit()
+            return {**{key: before[key] for key in (
+                "l0_total", "l1_total", "l2_total", "l3_total", "related_record_total",
+                "web_chat_archive_preserved", "existing_backups_preserved",
+            )}, "wiped": True}
+
     def correct(self, memory_id, corrected_content, expected_revision):
         """在一个 SQLite 事务中保存纠正来源、新事实和取代关系。"""
 

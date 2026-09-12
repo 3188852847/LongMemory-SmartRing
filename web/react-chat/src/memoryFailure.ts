@@ -24,6 +24,8 @@ const memoryFailureText: Record<string, string> = {
   promoted_source_must_be_user: '只有用户原话可以人工补成 L1；助手回答不能作为用户事实。',
   memory_changed: '这条记忆已在其他页面发生变化。为防止覆盖较新版本，本次操作已拒绝；请重新读取。',
   memory_clear_changed: '记忆范围在确认期间发生了变化，本次没有清空。请关闭确认框后重新核对。',
+  memory_wipe_changed: 'L0–L3 范围在确认期间发生了变化，本次没有清除。请关闭确认框后重新核对。',
+  memory_backup_failed: '操作前一致性恢复点创建失败，本次没有清除任何记忆。请核对磁盘空间和数据库目录权限。',
   invalid_memory_request: '运行期记忆开关请求无效；没有应用任何设置。请刷新后重试。',
   chat_not_enabled: '共享记忆运行时尚未启动，当前不能修改运行期开关。',
   invalid_explicit_memory: '请输入以“我”或“我的”开头、关于你自己的完整事实。',

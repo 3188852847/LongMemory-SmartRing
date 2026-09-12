@@ -235,6 +235,33 @@ def test_clear_memories_rejects_stale_preview_and_requires_delete_capability(rec
     assert backend.list_page(state="all")["total"] == 1
 
 
+def test_wipe_memories_removes_l0_to_l3_creates_backup_and_preserves_settings(recorded):
+    path, _, _ = recorded
+    with sqlite3.connect(path) as connection:
+        connection.execute(
+            "INSERT INTO proactive_policy_settings VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            ("user:self", 0, 480, 127, 480, 1320, 2, 3600, 120, None,
+             "synthetic", 1, "2026-09-13T00:00:00+00:00", 0, 780,
+             "下午好，今天过得怎么样？", 0),
+        )
+    backend = MemoryBackend(path, allow_delete=True)
+    preview = backend.wipe_preview()
+    assert preview["l0_total"] == 2 and preview["l1_total"] == 1
+
+    result = backend.wipe_memories(preview["revision"])
+
+    backup = result["backup"]
+    assert len(backup["sha256"]) == 64
+    with sqlite3.connect(backup["path"]) as connection:
+        assert connection.execute("SELECT count(*) FROM conversation_messages").fetchone()[0] == 2
+        assert connection.execute("PRAGMA quick_check").fetchone()[0] == "ok"
+    with sqlite3.connect(path) as connection:
+        assert connection.execute("SELECT count(*) FROM conversation_messages").fetchone()[0] == 0
+        assert connection.execute("SELECT count(*) FROM atomic_memories").fetchone()[0] == 0
+        assert connection.execute("SELECT count(*) FROM proactive_policy_settings").fetchone()[0] == 1
+        assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
+
+
 def test_pagination_filter_and_literal_search(recorded):
     path, memory_id, _ = recorded
     with sqlite3.connect(path) as conn:

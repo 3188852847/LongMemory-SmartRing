@@ -1,9 +1,11 @@
 """网页记忆管理的装配边界：只打开显式指定的已有数据库，不运行建库/迁移。"""
 
+import hashlib
 import sqlite3
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
+from uuid import uuid4
 
 from longmemory.adapters.storage.sqlite_conversation_store import SQLiteConversationStore
 from longmemory.adapters.storage.sqlite_memory_store import SQLiteMemoryStore
@@ -345,6 +347,44 @@ class MemoryBackend:
 
     def get(self, memory_id):
         return self.atomic_memories.get(memory_id)
+
+    def wipe_preview(self):
+        return self.atomic_memories.wipe_preview()
+
+    def _backup_before_wipe(self):
+        """创建当前 SQLite 的一致性恢复点；不覆盖、删除任何既有备份。"""
+
+        if not self.allow_delete or self.database is None:
+            raise MemoryAccessError("memory_read_only", 403)
+        backup_root = (self.database.parent.parent / "backups"
+                       if self.database.parent.name == "databases"
+                       else self.database.parent / "backups")
+        backup_root.mkdir(parents=True, exist_ok=True)
+        stamp = self.clock().astimezone(UTC).strftime("%Y%m%d-%H%M%S")
+        backup = backup_root / f"{self.database.stem}-pre-memory-wipe-{stamp}-{uuid4().hex[:8]}.db"
+        source = destination = None
+        try:
+            source = sqlite3.connect(self.database.as_uri() + "?mode=ro", uri=True, timeout=2)
+            destination = sqlite3.connect(backup)
+            source.backup(destination)
+            if destination.execute("PRAGMA quick_check").fetchone()[0] != "ok":
+                raise sqlite3.DatabaseError("backup check failed")
+            destination.close(); destination = None
+            source.close(); source = None
+            digest = hashlib.sha256(backup.read_bytes()).hexdigest()
+            return {"path": str(backup), "sha256": digest}
+        except (OSError, sqlite3.DatabaseError):
+            raise MemoryAccessError("memory_backup_failed", 503) from None
+        finally:
+            if destination is not None:
+                destination.close()
+            if source is not None:
+                source.close()
+
+    def wipe_memories(self, expected_revision):
+        backup = self._backup_before_wipe()
+        result = self.atomic_memories.wipe_memories(expected_revision)
+        return {**result, "backup": backup}
 
     def delete(self, memory_id, expected_revision):
         return self.atomic_memories.delete(memory_id, expected_revision)
