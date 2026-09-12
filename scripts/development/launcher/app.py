@@ -25,7 +25,7 @@ from preferences import (
 )
 from firewall_panel import open_panel
 from tts import config_action as tts_config_action
-from voice_recovery import close_stale_voice
+from voice_recovery import close_stale_tts, close_stale_voice
 from view_model import failure_hint as _failure_hint
 from view_model import summary_text as _summary_text
 from view_model import (
@@ -612,27 +612,35 @@ def main():
         return True
 
     def close_external_voice():
-        """只清理符合固定三端口契约的外部/遗留小智，不批量结束 Python。"""
+        """安全清理遗留小智，以及当前所选且身份匹配的本地 TTS。"""
         if manager.services:
             set_status("本面板当前拥有受管服务；请使用“停止服务”结束整棵进程树。", "busy")
             return
         try:
-            result = close_stale_voice(ip.get().strip())
+            voice_result = close_stale_voice(ip.get().strip())
+            tts_result = close_stale_tts(selected_tts())
         except ValueError as error:
             set_status(str(error), "error")
             return
-        if result["state"] == "free":
-            set_status("所选地址的 8000 当前没有监听者，无需清理。", "good")
-        elif result["state"] == "stopped":
+        stopped = []
+        refused = []
+        if voice_result["state"] == "stopped":
             set_component("voice", "遗留进程已停止", "good")
-            set_status(
-                f"已停止经 8000/8003/8766 共同归属核验的小智语音进程（PID {result['process_id']}）；未停止控制台、VoxCPM2 或其他 Python。",
-                "good",
-            )
-        elif result["state"] == "refused":
-            set_status("8000 的监听者不符合本项目小智三端口契约，已拒绝停止；请人工核对占用程序。", "error")
+            stopped.append(f"小智 PID {voice_result['process_id']}")
+        elif voice_result["state"] != "free":
+            refused.append("小智三端口身份不匹配")
+        if tts_result["state"] == "stopped":
+            set_component("speech", "遗留进程已停止", "good")
+            stopped.append(f"{tts_result['provider']} PID {tts_result['process_id']}")
+        elif tts_result["state"] != "free":
+            refused.append(f"{tts_result['provider']} 端口身份不匹配")
+        if refused:
+            prefix = ("已停止 " + "、".join(stopped) + "；") if stopped else ""
+            set_status(prefix + "已拒绝处理 " + "、".join(refused) + "，请人工核对。", "error")
+        elif stopped:
+            set_status("已安全停止 " + "、".join(stopped) + "；未批量结束其他 Python/Node。", "good")
         else:
-            set_status("停止结果未能确认，请重新检查端口；不要连续点击。", "error")
+            set_status("小智和当前所选声音后端均无遗留监听，无需清理。", "good")
 
     def start():
         try:
@@ -723,7 +731,7 @@ def main():
     start_button.pack(side="left", padx=(0, 8))
     ttk.Button(buttons, text="重新打开网页", command=open_page, style="Secondary.TButton").pack(side="left", padx=8)
     ttk.Button(buttons, text="停止服务", command=lambda: stop(False), style="Secondary.TButton").pack(side="left", padx=8)
-    ttk.Button(buttons, text="清理遗留语音", command=close_external_voice, style="Secondary.TButton").pack(side="left", padx=8)
+    ttk.Button(buttons, text="清理遗留服务", command=close_external_voice, style="Secondary.TButton").pack(side="left", padx=8)
     ttk.Button(buttons, text="使用指南", command=lambda: os.startfile(ROOT / "docs/guides/统一启动.md"), style="Secondary.TButton").pack(side="right", padx=(8, 0))
     window.protocol("WM_DELETE_WINDOW", close)
     window.after(500, tick)

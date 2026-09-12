@@ -72,3 +72,48 @@ def test_public_or_invalid_address_is_rejected_before_powershell(monkeypatch):
     with pytest.raises(ValueError):
         recovery.close_stale_voice("8.8.8.8")
     assert not called
+
+
+@pytest.mark.parametrize("backend,port,runtime", [
+    ("voxcpm2", 18768, "pythonw"),
+    ("sanotts", 18769, "node"),
+    ("cosyvoice3", 18770, "pythonw"),
+])
+def test_local_tts_requires_health_identity_and_expected_runtime(
+    monkeypatch, backend, port, runtime,
+):
+    captured = []
+    monkeypatch.setattr(
+        recovery, "run_ps",
+        lambda source: captured.append(source) or response({
+            "state": "stopped", "provider": backend, "process_id": 456,
+        }),
+    )
+    assert recovery.close_stale_tts(backend) == {
+        "state": "stopped", "provider": backend, "process_id": 456,
+    }
+    script = captured[0]
+    assert str(port) in script and f"/{'health'}" in script
+    assert "provider_id" in script and "tts_owner_changed" in script
+    assert runtime in script and script.index("provider_id") < script.index("Stop-Process")
+
+
+def test_edge_has_no_local_process_and_unknown_backend_is_rejected(monkeypatch):
+    called = []
+    monkeypatch.setattr(recovery, "run_ps", lambda source: called.append(source))
+    assert recovery.close_stale_tts("edge") == {"state": "free", "provider": "edge"}
+    with pytest.raises(ValueError):
+        recovery.close_stale_tts("unknown")
+    assert not called
+
+
+@pytest.mark.parametrize("value", [
+    {"state": "stopped", "provider": "cosyvoice3"},
+    {"state": "stopped", "provider": "cosyvoice3", "process_id": "456"},
+    {"state": "free", "provider": "voxcpm2"},
+    {"state": "refused", "provider": "cosyvoice3", "reason": "untrusted"},
+])
+def test_local_tts_malformed_or_wrong_identity_is_not_success(monkeypatch, value):
+    monkeypatch.setattr(recovery, "run_ps", lambda _source: response(value))
+    with pytest.raises(ValueError):
+        recovery.close_stale_tts("cosyvoice3")
