@@ -101,6 +101,7 @@ export function MemoryApp() {
   const [promotedContent, setPromotedContent] = useState('');
   const [qualityCandidates, setQualityCandidates] = useState<L1QualityCandidates>();
   const [qualityScanning, setQualityScanning] = useState(false);
+  const [mergeChoice, setMergeChoice] = useState<{item:L1QualityCandidate;kept:'left'|'right'}>();
   const locked = useRef(false);
 
   async function fetchL1(offset = 0, search = query, stateFilter = l1State) {
@@ -223,6 +224,25 @@ export function MemoryApp() {
           ? {...candidate,review_status:result.review_status,review_revision:result.review_revision}
           : candidate)} : current);
       setNotice(action==='dismiss'?'已把这组候选标为误报；两条 L1 均未修改。':'已恢复这组候选，等待再次复核。');
+    },'write');
+  }
+  async function mergeL1Quality() {
+    if (!mergeChoice) return;
+    const {item,kept}=mergeChoice;
+    await guarded(async()=>{
+      const keptMemory=kept==='left'?item.left:item.right;
+      const result=await api.request<{copied_evidence_count:number}>(
+        '/api/memories/quality-candidates/merge','POST',{
+          left_memory_id:item.left.id,right_memory_id:item.right.id,
+          candidate_kind:item.kind,kept_memory_id:keptMemory.id,
+          expected_review_revision:item.review_revision,confirm_merge:true,
+        },
+      );
+      setMergeChoice(undefined);
+      setQualityCandidates(current=>current ? {...current,total:Math.max(0,current.total-1),items:current.items.filter(candidate=>!(candidate.left.id===item.left.id&&candidate.right.id===item.right.id))} : current);
+      await fetchL1(0,'','active');
+      setNotice(`重复 L1 已合并：保留所选事实，另一条已退役；汇入 ${result.copied_evidence_count} 条此前未关联的 L0 来源。`);
+      setSelectedL1(await api.request<L1Detail>(`/api/memories/${encodeURIComponent(keptMemory.id)}`));
     },'write');
   }
   async function openCorrection(id:string) {
@@ -409,7 +429,7 @@ export function MemoryApp() {
             <Space direction="vertical" size={6} className="quality-candidate-body">
               <Space wrap><Tag color={item.kind==='possible_conflict'?'red':item.kind==='normalized_duplicate'?'gold':'blue'}>{item.kind==='possible_conflict'?'可能矛盾':item.kind==='normalized_duplicate'?'规范化重复':'高字面重合'}</Tag><span>{item.reason}</span><code>重合 {Math.round(item.similarity*100)}%</code></Space>
               <div className="quality-candidate-pair"><Button type="text" onClick={()=>void openL1(item.left.id)}><Tag color="magenta">A</Tag>{item.left.content}</Button><Button type="text" onClick={()=>void openL1(item.right.id)}><Tag color="magenta">B</Tag>{item.right.content}</Button></div>
-              <Space wrap><small className="subtle">请分别核对原始来源，再使用已有的“纠正错误 / 记录变化 / 删除”操作；当前版本不会代替你处置。</small><Button size="small" disabled={!config?.allow_l1_quality_review||busy} onClick={()=>void reviewL1Quality(item,item.review_status==='dismissed'?'reopen':'dismiss')}>{item.review_status==='dismissed'?'恢复候选':'标为误报'}</Button>{item.review_status==='dismissed'&&<Tag>已忽略</Tag>}</Space>
+              <Space wrap><small className="subtle">请分别核对原始来源；矛盾候选应使用“纠正错误”或“记录变化”，不能当成重复合并。</small><Button size="small" disabled={!config?.allow_l1_quality_review||busy} onClick={()=>void reviewL1Quality(item,item.review_status==='dismissed'?'reopen':'dismiss')}>{item.review_status==='dismissed'?'恢复候选':'标为误报'}</Button>{item.kind!=='possible_conflict'&&item.review_status==='pending'&&<><Button size="small" onClick={()=>setMergeChoice({item,kept:'left'})}>保留 A，合并 B</Button><Button size="small" onClick={()=>setMergeChoice({item,kept:'right'})}>保留 B，合并 A</Button></>}{item.review_status==='dismissed'&&<Tag>已忽略</Tag>}</Space>
             </Space>
           </List.Item>}/>
         </>}
@@ -459,6 +479,9 @@ export function MemoryApp() {
     </Modal>
     <Modal title="纠正 L1" open={correcting} okText="确认旧事实有误并保存" cancelText="取消" confirmLoading={busy} okButtonProps={{disabled: !correction.trim()}} onCancel={() => {setCorrecting(false); setCorrection('');}} onOk={() => void saveCorrection()}>
       <p>纠正会新建 L1，并保留旧记录为已取代历史。只用于旧事实本来就错了，不用于后来发生的变化。</p><Input.TextArea aria-label="纠正后的完整事实" rows={4} maxLength={1000} value={correction} onChange={e => setCorrection(e.target.value)} placeholder="输入可独立理解的完整事实"/>
+    </Modal>
+    <Modal title="确认合并这两条重复 L1？" open={Boolean(mergeChoice)} okText="确认合并" cancelText="取消" confirmLoading={busy} okButtonProps={{danger:true}} onCancel={()=>{if(!busy)setMergeChoice(undefined);}} onOk={()=>void mergeL1Quality()}>
+      {mergeChoice&&<><p>将保留：<strong>{mergeChoice.kept==='left'?mergeChoice.item.left.content:mergeChoice.item.right.content}</strong></p><p>另一条不会物理删除，而是标记为“已由保留项取代”；它的 L0 来源会同时关联到保留项。</p><p className="subtle">依赖被合并项的当前 L2/L3 会按既有来源规则变为失效，等待以后重新整理。这项操作目前没有一键撤销。</p></>}
     </Modal>
     <Modal title="记录事实变化" open={changing} okText="确认事实已经变化" cancelText="取消" confirmLoading={busy} okButtonProps={{disabled: !changedContent.trim() || !effectiveLocal}} onCancel={() => {setChanging(false); setChangedContent(''); setEffectiveLocal('');}} onOk={() => void saveChange()}>
       <p>用于“旧事实过去成立，但后来发生了变化”。旧事实会保留到生效时间，新事实从该时间开始生效；不要用它纠正从一开始就错误的记录。</p>

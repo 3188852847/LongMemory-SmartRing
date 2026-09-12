@@ -1,6 +1,6 @@
-"""当前 SQLite V38 的完整结构定义；不包含历史迁移步骤。"""
+"""当前 SQLite V39 的完整结构定义；不包含历史迁移步骤。"""
 
-SCHEMA_VERSION = 38
+SCHEMA_VERSION = 39
 
 LATEST_SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS conversation_messages (
@@ -75,6 +75,23 @@ CREATE TABLE IF NOT EXISTS l1_quality_review_events (
 CREATE INDEX IF NOT EXISTS idx_l1_quality_review_pair
     ON l1_quality_review_events
         (left_memory_id, right_memory_id, detector_version, review_revision DESC);
+
+CREATE TABLE IF NOT EXISTS l1_duplicate_merge_events (
+    id TEXT PRIMARY KEY,
+    kept_memory_id TEXT NOT NULL,
+    retired_memory_id TEXT NOT NULL UNIQUE,
+    detector_version TEXT NOT NULL CHECK (length(trim(detector_version)) BETWEEN 1 AND 120),
+    candidate_kind TEXT NOT NULL CHECK (candidate_kind IN (
+        'normalized_duplicate', 'lexical_near_duplicate'
+    )),
+    copied_evidence_count INTEGER NOT NULL CHECK (copied_evidence_count >= 0),
+    merged_at TEXT NOT NULL,
+    CHECK (kept_memory_id <> retired_memory_id),
+    FOREIGN KEY (kept_memory_id) REFERENCES atomic_memories (id) ON DELETE CASCADE,
+    FOREIGN KEY (retired_memory_id) REFERENCES atomic_memories (id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_l1_duplicate_merge_kept
+    ON l1_duplicate_merge_events (kept_memory_id, merged_at DESC, id DESC);
 
 CREATE TABLE IF NOT EXISTS round_screen_turns (
     user_message_id TEXT PRIMARY KEY,

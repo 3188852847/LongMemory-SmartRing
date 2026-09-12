@@ -67,15 +67,9 @@ class AtomicMemoryBackend:
     def quality_candidates(self):
         """只读发现疑似重复/矛盾 L1；不调用模型，也不改变个人记忆。"""
 
-        maximum_memories = 500
         with self._open_database() as connection:
             now = self._clock()
-            active = tuple(
-                memory for memory in SQLiteMemoryStore(connection).list_active()
-                if is_memory_effective(memory, now)
-            )
-            scanned = active[:maximum_memories]
-            candidates = find_l1_quality_candidates(scanned)
+            active, scanned, candidates = self._find_quality_candidates(connection, now)
             reviews = {}
             for row in connection.execute(
                 "SELECT q.left_memory_id,q.right_memory_id,q.action,q.review_revision "
@@ -117,6 +111,15 @@ class AtomicMemoryBackend:
                 "generated_at": now.isoformat(),
             }
 
+    @staticmethod
+    def _find_quality_candidates(connection, now):
+        active = tuple(
+            memory for memory in SQLiteMemoryStore(connection).list_active()
+            if is_memory_effective(memory, now)
+        )
+        scanned = active[:500]
+        return active, scanned, find_l1_quality_candidates(scanned)
+
     def review_quality_candidate(
         self, *, left_memory_id, right_memory_id, candidate_kind, action,
         expected_revision,
@@ -128,13 +131,9 @@ class AtomicMemoryBackend:
             raise MemoryAccessError("l1_quality_candidate_invalid", 400)
         with self._open_database(write_capability="correction") as connection:
             now = self._clock()
-            store = SQLiteMemoryStore(connection, commit_changes=False)
-            active = tuple(
-                memory for memory in store.list_active()
-                if is_memory_effective(memory, now)
-            )[:500]
+            _active, _scanned, candidates = self._find_quality_candidates(connection, now)
             live = next((
-                item for item in find_l1_quality_candidates(active)
+                item for item in candidates
                 if tuple(sorted((str(item.left.id), str(item.right.id)))) == pair
                 and item.kind == candidate_kind
             ), None)
@@ -165,6 +164,77 @@ class AtomicMemoryBackend:
             connection.commit()
             return {"review_status": requested_status,
                     "review_revision": next_revision, "replayed": False}
+
+    def merge_quality_candidate(
+        self, *, left_memory_id, right_memory_id, candidate_kind, kept_memory_id,
+        expected_review_revision,
+    ):
+        """合并所有者确认的重复 L1；来源汇入保留项，重复项只退役不删除。"""
+
+        pair = tuple(sorted((left_memory_id, right_memory_id)))
+        if (pair[0] == pair[1] or kept_memory_id not in pair
+                or candidate_kind not in {"normalized_duplicate", "lexical_near_duplicate"}):
+            raise MemoryAccessError("l1_duplicate_merge_invalid", 400)
+        retired_memory_id = pair[1] if kept_memory_id == pair[0] else pair[0]
+        with self._open_database(write_capability="correction") as connection:
+            now = self._clock()
+            existing = connection.execute(
+                "SELECT kept_memory_id,copied_evidence_count "
+                "FROM l1_duplicate_merge_events WHERE retired_memory_id=?",
+                (retired_memory_id,),
+            ).fetchone()
+            if existing:
+                if existing["kept_memory_id"] == kept_memory_id:
+                    return {"kept_memory_id": kept_memory_id,
+                            "retired_memory_id": retired_memory_id,
+                            "copied_evidence_count": existing["copied_evidence_count"],
+                            "replayed": True}
+                raise MemoryAccessError("l1_duplicate_merge_conflict", 409)
+            _active, _scanned, candidates = self._find_quality_candidates(connection, now)
+            live = next((
+                item for item in candidates
+                if tuple(sorted((str(item.left.id), str(item.right.id)))) == pair
+                and item.kind == candidate_kind
+            ), None)
+            if live is None:
+                raise MemoryAccessError("l1_quality_candidate_stale", 409)
+            review = connection.execute(
+                "SELECT action,review_revision FROM l1_quality_review_events "
+                "WHERE left_memory_id=? AND right_memory_id=? AND detector_version=? "
+                "ORDER BY review_revision DESC LIMIT 1",
+                (*pair, DETECTOR_VERSION),
+            ).fetchone()
+            review_revision = review["review_revision"] if review else 0
+            if review_revision != expected_review_revision:
+                raise MemoryAccessError("l1_quality_review_conflict", 409)
+            if review and review["action"] == "dismiss":
+                raise MemoryAccessError("l1_quality_candidate_dismissed", 409)
+            connection.execute(
+                "INSERT OR IGNORE INTO memory_evidence "
+                "(memory_id,source_message_id,source_type,linked_at) "
+                "SELECT ?,source_message_id,source_type,linked_at FROM memory_evidence "
+                "WHERE memory_id=?",
+                (kept_memory_id, retired_memory_id),
+            )
+            copied_evidence_count = connection.execute("SELECT changes()").fetchone()[0]
+            cursor = connection.execute(
+                "UPDATE atomic_memories SET retired_at=?,superseded_by_id=? "
+                "WHERE id=? AND retired_at IS NULL",
+                (now.isoformat(), kept_memory_id, retired_memory_id),
+            )
+            if cursor.rowcount != 1:
+                raise MemoryAccessError("l1_quality_candidate_stale", 409)
+            connection.execute(
+                "INSERT INTO l1_duplicate_merge_events "
+                "(id,kept_memory_id,retired_memory_id,detector_version,candidate_kind,"
+                "copied_evidence_count,merged_at) VALUES (?,?,?,?,?,?,?)",
+                (secrets.token_hex(16), kept_memory_id, retired_memory_id,
+                 DETECTOR_VERSION, candidate_kind, copied_evidence_count, now.isoformat()),
+            )
+            connection.commit()
+            return {"kept_memory_id": kept_memory_id,
+                    "retired_memory_id": retired_memory_id,
+                    "copied_evidence_count": copied_evidence_count, "replayed": False}
 
     @staticmethod
     def _local_day_window(local_date, utc_offset_minutes):

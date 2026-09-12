@@ -611,6 +611,74 @@ def test_console_exposes_read_only_l1_quality_candidates(tmp_path):
         assert connection.execute("SELECT count(*) FROM l1_quality_review_events").fetchone()[0] == 1
 
 
+def test_console_merges_duplicate_l1_without_deleting_history_or_sources(tmp_path):
+    from longmemory.methods.longmemory_v1.method import LongMemoryV1
+
+    database = tmp_path / "l1-duplicate-merge.db"
+    LongMemoryV1(database).close()
+    with sqlite3.connect(database) as connection:
+        connection.executemany(
+            "INSERT INTO conversation_messages(id,role,content,created_at) VALUES (?,'user',?,?)",
+            [("source-a", "我喜欢乌龙茶。", "2026-09-13T00:00:00+00:00"),
+             ("source-b", "我确实喜欢乌龙茶", "2026-09-13T00:01:00+00:00")],
+        )
+        connection.executemany(
+            "INSERT INTO atomic_memories "
+            "(id,subject_id,content,recorded_at,valid_from,valid_to,retired_at,superseded_by_id) "
+            "VALUES (?, 'user:self', ?, ?, NULL, NULL, NULL, NULL)",
+            [("memory-a", "用户喜欢乌龙茶。", "2026-09-13T00:00:00+00:00"),
+             ("memory-b", "此人喜欢乌龙茶", "2026-09-13T00:01:00+00:00")],
+        )
+        connection.executemany(
+            "INSERT INTO memory_evidence(memory_id,source_message_id,source_type,linked_at) "
+            "VALUES (?,?,'user_stated',?)",
+            [("memory-a", "source-a", "2026-09-13T00:00:00+00:00"),
+             ("memory-b", "source-b", "2026-09-13T00:01:00+00:00")],
+        )
+
+    async def run():
+        async with console(database, allow_memory_correction=True) as (client, base, _bridge):
+            headers = await login(client, base)
+            merged = await client.post(
+                base + "/api/memories/quality-candidates/merge", headers=headers,
+                json={"left_memory_id": "memory-a", "right_memory_id": "memory-b",
+                      "candidate_kind": "normalized_duplicate", "kept_memory_id": "memory-a",
+                      "expected_review_revision": 0, "confirm_merge": True},
+            )
+            assert merged.status == 200
+            assert await merged.json() == {
+                "kept_memory_id": "memory-a", "retired_memory_id": "memory-b",
+                "copied_evidence_count": 1, "replayed": False,
+            }
+            replayed = await client.post(
+                base + "/api/memories/quality-candidates/merge", headers=headers,
+                json={"left_memory_id": "memory-a", "right_memory_id": "memory-b",
+                      "candidate_kind": "normalized_duplicate", "kept_memory_id": "memory-a",
+                      "expected_review_revision": 0, "confirm_merge": True},
+            )
+            assert replayed.status == 200
+            assert (await replayed.json())["replayed"] is True
+            assert (await replayed.json())["copied_evidence_count"] == 1
+            detail = await (await client.get(base + "/api/memories/memory-a")).json()
+            assert {source["source_message_id"] for source in detail["sources"]} == {
+                "source-a", "source-b",
+            }
+            assert (await (await client.get(
+                base + "/api/memories/quality-candidates"
+            )).json())["total"] == 0
+
+    asyncio.run(run())
+    with sqlite3.connect(database) as connection:
+        connection.row_factory = sqlite3.Row
+        retired = connection.execute(
+            "SELECT retired_at,superseded_by_id FROM atomic_memories WHERE id='memory-b'"
+        ).fetchone()
+        assert retired["retired_at"] is not None
+        assert retired["superseded_by_id"] == "memory-a"
+        assert connection.execute("SELECT count(*) FROM atomic_memories").fetchone()[0] == 2
+        assert connection.execute("SELECT count(*) FROM l1_duplicate_merge_events").fetchone()[0] == 1
+
+
 @pytest.mark.parametrize("attack", ["no_csrf", "no_origin", "other_origin", "other_host", "cross_site", "same_site", "wrong_cookie"])
 def test_console_rejects_browser_attacks_without_calling_device(attack):
     async def run():

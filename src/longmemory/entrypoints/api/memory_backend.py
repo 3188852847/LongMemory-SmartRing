@@ -311,6 +311,9 @@ class MemoryBackend:
     def review_quality_candidate(self, **kwargs):
         return self.atomic_memories.review_quality_candidate(**kwargs)
 
+    def merge_quality_candidate(self, **kwargs):
+        return self.atomic_memories.merge_quality_candidate(**kwargs)
+
     @staticmethod
     def _local_day_window(local_date, utc_offset_minutes):
         return AtomicMemoryBackend._local_day_window(
