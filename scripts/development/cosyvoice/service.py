@@ -1,8 +1,7 @@
-"""CosyVoice 3 本机常驻服务；只向同机 Xiaozhi 返回完整 WAV。
+"""CosyVoice 3 本机常驻服务；提供完整 WAV 与受限的本机分块通道。
 
-模型原生能够分块生成，但当前 Xiaozhi CustomTTS 会等待完整 HTTP 正文。本适配器
-因此如实声明 buffered，并在启动就绪前完成一次预热；后续流式直送将作为独立的
-Xiaozhi 提供器改造，不在这里虚报能力。
+完整 WAV 接口继续服务网页试听和兼容回退。分块接口使用长度前缀传输模型原生
+生成块，只供同机 Xiaozhi 启动适配器消费；它不接受浏览器来源，也不暴露到局域网。
 """
 
 from __future__ import annotations
@@ -15,6 +14,7 @@ import importlib.util
 import ipaddress
 import json
 from pathlib import Path
+import struct
 import sys
 from time import perf_counter
 import threading
@@ -45,16 +45,20 @@ CAPABILITIES = {
     "provider_id": "cosyvoice3",
     "display_name": "CosyVoice 3 0.5B",
     "locality": "local",
-    "delivery_modes": ["buffered"],
+    "delivery_modes": ["buffered", "audio_stream"],
     "output_mime_types": ["audio/wav"],
     "controls": [],
-    "cancellation": "none",
+    # 客户端关闭 HTTP 响应后，服务端在下一个模型块写出时终止迭代。它不是逐采样
+    # 抢占，因此只声明协作式取消，不能冒充即时 GPU 中止。
+    "cancellation": "cooperative",
     "max_text_chars": MAX_TEXT_CHARS,
 }
 
 
 class SpeechSynthesizer(Protocol):
     def synthesize(self, text: str, *, use_cache: bool = True) -> bytes: ...
+
+    def stream_chunks(self, text: str): ...
 
 
 class CosyVoiceSynthesizer:
@@ -119,6 +123,32 @@ class CosyVoiceSynthesizer:
             subtype="PCM_16",
         )
         return output.getvalue()
+
+    def _wave_bytes(self, speech) -> bytes:
+        """把一个模型输出块封装为可独立解码的 PCM WAV。"""
+        waveform = speech.detach().cpu().squeeze(0)
+        if waveform.numel() == 0 or not self._torch.isfinite(waveform).all():
+            raise RuntimeError("invalid audio chunk")
+        output = BytesIO()
+        self._soundfile.write(
+            output,
+            waveform.numpy(),
+            self._sample_rate,
+            format="WAV",
+            subtype="PCM_16",
+        )
+        return output.getvalue()
+
+    def stream_chunks(self, text: str):
+        """串行占用模型，但不再等待整段语音生成完才交付第一个音频块。"""
+        with self._lock:
+            for item in self._model.inference_zero_shot(
+                text, PROMPT_TEXT, self._prompt_wav, stream=True
+            ):
+                speech = item.get("tts_speech")
+                if speech is None:
+                    raise RuntimeError("empty audio chunk")
+                yield self._wave_bytes(speech)
 
     def synthesize(self, text: str, *, use_cache: bool = True) -> bytes:
         with self._lock:
@@ -187,7 +217,7 @@ class CosyVoiceHandler(BaseHTTPRequestHandler):
             self.rfile.read(length)
 
     def do_POST(self):
-        if self.path != "/v1/audio/speech":
+        if self.path not in {"/v1/audio/speech", "/v1/audio/stream"}:
             self._json(404, {"error": "not_found"})
             return
         if self.headers.get("Origin") is not None:
@@ -212,20 +242,39 @@ class CosyVoiceHandler(BaseHTTPRequestHandler):
             or not text.strip()
             or len(text) > MAX_TEXT_CHARS
             or body.get("response_format", "wav") != "wav"
-            or body.get("stream", False) is not False
+            or type(body.get("stream", False)) is not bool
             or type(body.get("cache", True)) is not bool
         ):
+            self._json(400, {"error": "invalid_request"})
+            return
+        streaming = self.path == "/v1/audio/stream"
+        if streaming != body.get("stream", False):
             self._json(400, {"error": "invalid_request"})
             return
         if not self.server.generation_gate.acquire(blocking=False):
             self._json(503, {"error": "busy"})
             return
         try:
-            audio = self.server.synthesizer.synthesize(
-                text.strip(), use_cache=body.get("cache", True)
-            )
+            if streaming:
+                self.send_response(200)
+                self.send_header("Content-Type", "application/vnd.longmemory.wav-chunks")
+                self.send_header("Cache-Control", "no-store")
+                # HTTP/1.0 会以连接关闭标记响应结束。每个 WAV 前的无符号大端长度
+                # 让客户端不依赖 TCP 分包边界，最大块仍由客户端再次限制。
+                self.end_headers()
+                for chunk in self.server.synthesizer.stream_chunks(text.strip()):
+                    self.wfile.write(struct.pack("!I", len(chunk)))
+                    self.wfile.write(chunk)
+                    self.wfile.flush()
+                return
+            audio = self.server.synthesizer.synthesize(text.strip(), use_cache=body.get("cache", True))
+        except (BrokenPipeError, ConnectionResetError):
+            # 用户打断或 Xiaozhi 退出时，关闭生成器即可释放模型锁；无需把正常取消
+            # 记录成合成故障，也不能在已经发送部分音频后回写 JSON。
+            return
         except Exception:
-            self._json(500, {"error": "synthesis_failed"})
+            if not streaming:
+                self._json(500, {"error": "synthesis_failed"})
             return
         finally:
             self.server.generation_gate.release()

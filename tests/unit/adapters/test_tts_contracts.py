@@ -25,9 +25,10 @@ def test_current_catalog_reports_delivered_not_theoretical_capabilities():
     assert sano.as_dict()["delivery_modes"] == ["buffered"]
     assert sano.as_dict()["controls"] == ["speaking_rate"]
     assert cosy is not None and cosy.as_dict()["locality"] == "local"
-    assert cosy.as_dict()["delivery_modes"] == ["buffered"]
+    assert cosy.as_dict()["delivery_modes"] == ["buffered", "audio_stream"]
+    assert cosy.streams_audio is True
     assert cosy.as_dict()["controls"] == []
-    assert cosy.as_dict()["cancellation"] == "none"
+    assert cosy.as_dict()["cancellation"] == "cooperative"
     assert capabilities_for("planned-but-not-integrated") is None
 
 

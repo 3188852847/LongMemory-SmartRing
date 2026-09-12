@@ -267,6 +267,11 @@ def _observe_components(connection):
     tts = getattr(connection, "tts", None)
     if tts is None or getattr(tts, "_longmemory_latency_observed", False):
         return
+    backend = _backend(connection)
+    if backend == "cosyvoice3":
+        # 先把缓冲实现替换为分块实现，再由下面的通用计时器包住最终入口。
+        from cosyvoice_streaming import install_cosyvoice_streaming
+        install_cosyvoice_streaming(tts, connection)
     original_stream = getattr(tts, "to_tts_stream", None)
     original_opus = getattr(tts, "handle_opus", None)
     if callable(original_stream):
@@ -287,7 +292,7 @@ def _observe_components(connection):
             tracker.mark("audio_ready_ms", sentence_id=getattr(tts, "current_sentence_id", None))
             return original_opus(*args, **kwargs)
         tts.handle_opus = measured_opus
-    if _backend(connection) == "edge":
+    if backend == "edge":
         install_edge_first_chunk_policy(tts)
     tts._longmemory_latency_observed = True
 

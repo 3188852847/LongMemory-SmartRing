@@ -35,9 +35,10 @@ _CAPABILITIES = {
         provider_id="cosyvoice3",
         display_name="CosyVoice 3 0.5B",
         locality="local",
-        # 模型原生流式，但当前 Xiaozhi CustomTTS 等待完整 HTTP 正文。
-        delivery_modes=("buffered",),
+        # 网页试听仍可取完整 WAV；圆屏启动适配器使用本机长度前缀分块通道。
+        delivery_modes=("buffered", "audio_stream"),
         output_mime_types=("audio/wav",),
+        cancellation="cooperative",
     ),
 }
 

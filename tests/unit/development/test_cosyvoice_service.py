@@ -5,6 +5,7 @@ import http.client
 import importlib.util
 import json
 from pathlib import Path
+import struct
 import sys
 import threading
 
@@ -30,6 +31,11 @@ class FakeSynthesizer:
     def synthesize(self, text, *, use_cache=True):
         self.calls.append((text, use_cache))
         return b"RIFF-cosyvoice-wave"
+
+    def stream_chunks(self, text):
+        self.calls.append((text, "stream"))
+        yield b"RIFF-stream-one"
+        yield b"RIFF-stream-two"
 
 
 @pytest.fixture
@@ -65,7 +71,8 @@ def test_health_capabilities_and_synthesis_contract(local_service):
     health = json.loads(body)
     assert status == 200 and health["provider"] == "cosyvoice3"
     assert health["load_seconds"] == 9.0 and health["warmup_seconds"] == 3.0
-    assert health["capabilities"]["delivery_modes"] == ["buffered"]
+    assert health["capabilities"]["delivery_modes"] == ["buffered", "audio_stream"]
+    assert health["capabilities"]["cancellation"] == "cooperative"
 
     status, content_type, body = request(port, "POST", "/v1/audio/speech", {
         "input": "  合成测试  ", "response_format": "wav", "stream": False,
@@ -75,6 +82,17 @@ def test_health_capabilities_and_synthesis_contract(local_service):
     assert body == b"RIFF-cosyvoice-wave"
     assert synth.calls == [("合成测试", False)]
 
+    status, content_type, body = request(port, "POST", "/v1/audio/stream", {
+        "input": "分块测试", "response_format": "wav", "stream": True, "cache": False,
+    })
+    assert status == 200 and content_type == "application/vnd.longmemory.wav-chunks"
+    first_size = struct.unpack("!I", body[:4])[0]
+    assert body[4:4 + first_size] == b"RIFF-stream-one"
+    second_offset = 4 + first_size
+    second_size = struct.unpack("!I", body[second_offset:second_offset + 4])[0]
+    assert body[second_offset + 4:second_offset + 4 + second_size] == b"RIFF-stream-two"
+    assert synth.calls[-1] == ("分块测试", "stream")
+
 
 @pytest.mark.parametrize("body", [
     {}, {"input": ""}, {"input": "x" * 601},
@@ -82,6 +100,13 @@ def test_health_capabilities_and_synthesis_contract(local_service):
 ])
 def test_rejects_invalid_requests(local_service, body):
     assert request(local_service[0], "POST", "/v1/audio/speech", body)[0] == 400
+
+
+@pytest.mark.parametrize("body", [
+    {"input": "ok"}, {"input": "ok", "stream": False}, {"input": "ok", "stream": "yes"},
+])
+def test_stream_endpoint_requires_explicit_boolean_stream(local_service, body):
+    assert request(local_service[0], "POST", "/v1/audio/stream", body)[0] == 400
 
 
 def test_rejects_browser_origin_and_non_loopback(local_service):
