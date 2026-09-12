@@ -151,6 +151,7 @@ class ChatBackend:
                 "scenario_available": runtime["scenario_available"],
                 "persona_use_enabled": runtime["persona_use_enabled"],
                 "persona_available": runtime["persona_available"],
+                "l2_sufficiency_shadow": runtime["l2_sufficiency_shadow"],
                 "memory_mode_persistent": runtime["settings_persistent"],
                 "model_health": self.model_health(),
                 "model_endpoint": self.model_endpoint,

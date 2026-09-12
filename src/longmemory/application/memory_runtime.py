@@ -83,6 +83,7 @@ class MemoryRuntime:
                  persona_provider=None, memory_command_handler=None,
                  temporary_interaction_provider: TemporaryInteractionProvider | None = None,
                  consolidation_scheduler: LowFrequencyConsolidationScheduler | None = None,
+                 l2_sufficiency_shadow=None,
                  clock=None) -> None:
         self.database = database.resolve()
         # Runtime 只编排统一方法契约。具体使用规则、LLM 提取还是其他方法，
@@ -103,6 +104,9 @@ class MemoryRuntime:
         # 所有网页与圆屏入口共享同一个 Runtime，因此不会按入口各自残留。
         self._next_interaction: tuple[TemporaryInteractionMode, str, str] | None = None
         self._consolidation_scheduler = consolidation_scheduler
+        # 影子观察器只接收当前轮候选快照并在后台写审计；它没有修改
+        # ``support`` 的接口，因此即使启用也不能放行或拦截正式回答。
+        self._l2_sufficiency_shadow = l2_sufficiency_shadow
         self._clock = clock or (lambda: datetime.now(UTC))
         # 单工作线程保证候选模型不会并发轰击供应商。任务只由圆屏完成回执
         # 触发，Runtime 关闭时会等待它收尾，再关闭 SQLite 连接。
@@ -222,6 +226,18 @@ class MemoryRuntime:
                         support.call_id, combined, support.retrieved,
                         strategy, support.warning_code,
                     )
+            shadow_scenario_result = scenario_result
+            if (self._use_enabled and self._l2_sufficiency_shadow is not None
+                    and self._scenario_provider is not None
+                    and not self._scenario_use_enabled):
+                # 正式 L2 关闭时仍可旁路观测同一个召回器；结果不会进入
+                # ``support.context``，因此个人体验与当前策略完全一致。
+                try:
+                    shadow_scenario_result = self._scenario_provider.recall(text)
+                except Exception:
+                    # 这是明确的旁路边界：影子读取失败只丢失一条研究样本，
+                    # 不能把原本不使用 L2 的正式回答变成失败。
+                    shadow_scenario_result = None
             scenario_finished = perf_counter()
             persona_started = perf_counter()
             persona_result = PersonaRecallResult("", ())
@@ -318,6 +334,17 @@ class MemoryRuntime:
         # 通知发生在 SQLite 互斥锁之外；它只唤醒后台线程，不让聊天等待整理。
         if observation.writes and self._consolidation_scheduler is not None:
             self._consolidation_scheduler.notify_new_evidence()
+        if (command is None and use_enabled and shadow_scenario_result is not None
+                and self._l2_sufficiency_shadow is not None):
+            try:
+                self._l2_sufficiency_shadow.submit(
+                    user_message_id=event.event_id,
+                    query=text,
+                    candidates=shadow_scenario_result,
+                )
+            except Exception:
+                # 提交器关闭或旁路队列异常同样不改变本轮返回值。
+                pass
         return PreparedMemoryTurn(
             event, observation, support, write_enabled, use_enabled,
             scenario_use_enabled, scenario_result.items,
@@ -428,7 +455,18 @@ class MemoryRuntime:
                     if self._consolidation_scheduler is not None
                     else {"enabled": False, "available": False}
                 ),
+                "l2_sufficiency_shadow": (
+                    self._l2_sufficiency_shadow.status().to_dict()
+                    if self._l2_sufficiency_shadow is not None
+                    else {"enabled": False, "state": "disabled"}
+                ),
             }
+
+    def wait_for_l2_sufficiency_shadow(self) -> None:
+        """等待旁路任务，供测试和受控停机使用；正式聊天不调用。"""
+
+        if self._l2_sufficiency_shadow is not None:
+            self._l2_sufficiency_shadow.wait()
 
     def configure(self, *, write_enabled: bool, use_enabled: bool,
                   scenario_use_enabled: bool | None = None,
@@ -465,6 +503,8 @@ class MemoryRuntime:
         with self._lock:
             if not self._closed:
                 try:
+                    if self._l2_sufficiency_shadow is not None:
+                        self._l2_sufficiency_shadow.close()
                     if self._consolidation_scheduler is not None:
                         self._consolidation_scheduler.close()
                     self._method.close()

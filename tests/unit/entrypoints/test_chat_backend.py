@@ -409,6 +409,101 @@ def test_runtime_l2_use_is_opt_in_shared_and_separately_traced(database):
         backend.close()
 
 
+def test_l2_sufficiency_shadow_observes_candidates_without_injecting_them(database):
+    class ScenarioProvider:
+        def recall(self, query, *, limit=3):
+            assert query == "我的猫是什么颜色"
+            return ScenarioRecallResult(
+                "[L2 private context]",
+                (ScenarioRecallItem(
+                    "scene-cat", "猫咪", "用户养了一只叫豆包的猫。",
+                    ("l1-a",), ("l0-a",), keyword_score=2,
+                ),),
+            )
+
+        def close(self):
+            pass
+
+    class Shadow:
+        def __init__(self):
+            self.calls = []
+
+        def submit(self, **values):
+            self.calls.append(values)
+            return True
+
+        def status(self):
+            class Status:
+                def to_dict(self):
+                    return {"enabled": True, "state": "not_run"}
+            return Status()
+
+        def wait(self):
+            pass
+
+        def close(self):
+            pass
+
+    shadow = Shadow()
+    runtime = MemoryRuntime(
+        database,
+        method=LongMemoryV1(database, existing_only=True),
+        scenario_provider=ScenarioProvider(),
+        l2_sufficiency_shadow=shadow,
+    )
+    backend = ChatBackend(database, FakeAnswerGenerator(), runtime=runtime)
+    try:
+        result = backend.run("我的猫是什么颜色", ())
+        assert result["scenario_use_enabled"] is False
+        assert result["scenario_retrieved"] == []
+        assert "[L2 private context]" not in result["memory_context"]
+        assert len(shadow.calls) == 1
+        assert shadow.calls[0]["user_message_id"] == result["event_id"]
+        assert shadow.calls[0]["candidates"].items[0].scenario_id == "scene-cat"
+        assert runtime.status()["l2_sufficiency_shadow"]["enabled"] is True
+    finally:
+        backend.close()
+
+
+def test_l2_sufficiency_shadow_read_failure_does_not_fail_chat(database):
+    class BrokenScenarioProvider:
+        def recall(self, _query, *, limit=3):
+            raise sqlite3.OperationalError("synthetic shadow read failure")
+
+        def close(self):
+            pass
+
+    class Shadow:
+        def submit(self, **_values):
+            raise AssertionError("读取失败后不应提交不真实的空候选")
+
+        def status(self):
+            class Status:
+                def to_dict(self):
+                    return {"enabled": True, "state": "not_run"}
+            return Status()
+
+        def wait(self):
+            pass
+
+        def close(self):
+            pass
+
+    runtime = MemoryRuntime(
+        database,
+        method=LongMemoryV1(database, existing_only=True),
+        scenario_provider=BrokenScenarioProvider(),
+        l2_sufficiency_shadow=Shadow(),
+    )
+    backend = ChatBackend(database, FakeAnswerGenerator(), runtime=runtime)
+    try:
+        result = backend.run("正常聊天", ())
+        assert result["status"] == "completed"
+        assert result["scenario_retrieved"] == []
+    finally:
+        backend.close()
+
+
 def test_runtime_rejects_unavailable_l2_without_partial_mode_change(database):
     runtime = MemoryRuntime(database, method=LongMemoryV1(database, existing_only=True))
     try:
