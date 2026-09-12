@@ -25,7 +25,21 @@ function VoiceLatencyCard({value}:{value:VoiceLatency}) {
     preparing_memory:'准备记忆', waiting_for_model:'等待模型', waiting_for_sentence:'组织首句',
     tts_running:'生成语音', audio_ready:'音频已就绪', first_audio_sent:'首包已发送',
   };
+  const measuredStages=[
+    {label:'记忆准备',value:timing.memory_ready_ms},
+    {label:'模型首个有效输出',value:timing.llm_first_output_ms === null || timing.llm_requested_ms === null ? null : Math.max(0,timing.llm_first_output_ms-timing.llm_requested_ms)},
+    {label:'首句组织',value:timing.tts_started_ms === null || timing.llm_first_output_ms === null ? null : Math.max(0,timing.tts_started_ms-timing.llm_first_output_ms)},
+    {label:'TTS 生成与编码',value:timing.audio_ready_ms === null || timing.tts_started_ms === null ? null : Math.max(0,timing.audio_ready_ms-timing.tts_started_ms)},
+    {label:'音频发送准备',value:timing.first_audio_sent_ms === null || timing.audio_ready_ms === null ? null : Math.max(0,timing.first_audio_sent_ms-timing.audio_ready_ms)},
+  ].filter((item):item is {label:string;value:number}=>item.value !== null);
+  const longest=measuredStages.reduce<{label:string;value:number}|undefined>((current,item)=>!current||item.value>current.value?item:current,undefined);
   return <Card className="device-latency-card" title="最近一次圆屏首句时序" extra={<Tag color={value.state==='first_audio_sent'?'green':'processing'}>{stateLabels[value.state]}</Tag>}>
+    {longest&&<Alert
+      showIcon
+      type="info"
+      title={`本轮最长已测区段：${longest.label}`}
+      description={`${elapsed(longest.value)}。这是观测到的最长区段，不等于已经证明它是性能根因。`}
+    />}
     <Descriptions column={{xs:1,sm:2,lg:3}} size="small" items={[
       {key:'memory',label:'入口 → 记忆完成',children:elapsed(timing.memory_ready_ms)},
       {key:'model',label:'模型首个有效输出',children:delta(timing.llm_first_output_ms,timing.llm_requested_ms)},
@@ -137,6 +151,9 @@ export function DeviceApp() {
   const operationView = operation ? resultView(operation.error ? {error:operation.error} : operation.data, operation.action) : null;
   const operationDetails = (operationView?.details ?? []) as Array<[string, unknown]>;
   const sidebar = <><ConsoleNav active="device" legacyPath="/"/><Card size="small" className="device-boundary-card" title="控制边界"><p>开放音量、亮度和明暗主题；电池、网络与温度只读。</p><p>重启、配网和刷写仍不开放。</p></Card></>;
+  const unread = '尚未读取';
+  const unsupported = '固件未上报';
+  const snapshotValue = (available: boolean, value: React.ReactNode) => snapshot ? (available ? value : unsupported) : unread;
 
   return <AppShell subtitle="智能圆屏终端管理" className="device-shell" sidebar={sidebar}>
     <PageHeader eyebrow="日常使用" title="设备与状态" description="查看 SmartRing-Plus 圆屏终端，并控制固件已上报且可回读核对的基础能力。"
@@ -152,15 +169,15 @@ export function DeviceApp() {
         <div><small>说话打断基础</small><strong>{status.data?.aec_advertised?'固件已上报 AEC':'未上报 AEC'}</strong></div>
       </div><div className="device-refresh-meta"><span>{status.data?.connection_count ?? 0} 个活动连接</span><span>{status.dataUpdatedAt ? `刷新于 ${new Date(status.dataUpdatedAt).toLocaleTimeString('zh-CN', {hour12:false})}` : '尚未刷新'}</span><span>每 5 秒检查连接，不轮询音量</span></div>
     </Card>
-    {status.data?.voice_latency && <VoiceLatencyCard value={status.data.voice_latency}/>}
+    {status.data?.voice_latency ? <VoiceLatencyCard value={status.data.voice_latency}/> : <Card className="device-latency-card" title="最近一次圆屏首句时序"><p className="subtle">当前连接还没有可用的完整时序。与圆屏完成一轮语音对话后，本页会分开显示记忆、模型、首句组织、TTS 和发送等待。</p></Card>}
     {status.data?.natural_interruption && <NaturalInterruptionCard value={status.data.natural_interruption}/>}
-    {snapshot && <Card className="device-snapshot-card" title="最近设备快照" extra={<Tag color={status.data?.ready && !status.error ? 'blue' : 'gold'}>{status.data?.ready && !status.error ? '单次读取' : '历史读数'}</Tag>}><Descriptions column={{xs:1,sm:3}} items={[
-      {key:'battery',label:'电池',children:snapshot.battery ? `${snapshot.battery.level}% · ${snapshot.battery.charging?'充电中':'未充电'}` : '固件未报告'},
-      {key:'network',label:'Wi‑Fi 信号',children:snapshot.network?.signal === 'strong'?'强':snapshot.network?.signal === 'medium'?'中':snapshot.network?.signal === 'weak'?'弱':'固件未报告'},
-      {key:'temperature',label:'芯片温度',children:snapshot.chip ? `${snapshot.chip.temperature} ℃` : '固件未报告'},
-      {key:'brightness',label:'屏幕亮度',children:snapshot.brightness ?? '固件未报告'},
-      {key:'theme',label:'屏幕主题',children:snapshot.theme === 'dark'?'深色':snapshot.theme === 'light'?'浅色':'固件未报告'},
-    ]}/><p className="subtle">读取于 {snapshotAt ? new Date(snapshotAt).toLocaleTimeString('zh-CN', {hour12:false}) : '未知时间'}。这是一次主动读取，不是持续监测；为保护隐私不显示 Wi‑Fi 名称。{(!status.data?.ready || status.error) ? ' 当前连接不可用，上述内容只代表上一次成功快照。' : ''}</p></Card>}
+    <Card className="device-snapshot-card" title="设备快照" extra={<Tag color={snapshot ? (status.data?.ready && !status.error ? 'blue' : 'gold') : 'default'}>{readSnapshot.isPending?'读取中':snapshot?(status.data?.ready && !status.error?'单次读取':'历史读数'):'等待读取'}</Tag>}><Descriptions column={{xs:1,sm:3}} items={[
+      {key:'battery',label:'电池与充电',children:snapshotValue(Boolean(snapshot?.battery), snapshot?.battery ? `${snapshot.battery.level}% · ${snapshot.battery.charging?'充电中':'未充电'}` : unsupported)},
+      {key:'network',label:'Wi‑Fi 信号',children:snapshotValue(Boolean(snapshot?.network), snapshot?.network?.signal === 'strong'?'强':snapshot?.network?.signal === 'medium'?'中':snapshot?.network?.signal === 'weak'?'弱':unsupported)},
+      {key:'temperature',label:'芯片温度',children:snapshotValue(Boolean(snapshot?.chip), snapshot?.chip ? `${snapshot.chip.temperature} ℃` : unsupported)},
+      {key:'brightness',label:'屏幕亮度',children:snapshotValue(Number.isInteger(snapshot?.brightness), snapshot?.brightness ?? unsupported)},
+      {key:'theme',label:'屏幕主题',children:snapshotValue(Boolean(snapshot?.theme), snapshot?.theme === 'dark'?'深色':snapshot?.theme === 'light'?'浅色':unsupported)},
+    ]}/><p className="subtle">{snapshotAt ? `读取于 ${new Date(snapshotAt).toLocaleTimeString('zh-CN', {hour12:false})}。` : '点击页面右上角“读取设备快照”取得当前值。'} 这是一次主动读取，不是持续监测；为保护隐私不显示 Wi‑Fi 名称。{snapshot && (!status.data?.ready || status.error) ? ' 当前连接不可用，上述内容只代表上一次成功快照。' : ''}</p></Card>
     <div className="device-grid">
       <Card className="device-control-card" title="扬声器音量" extra={<Tag color={view.set ? 'green' : 'default'}>{view.set ? '可控' : '不可控'}</Tag>}>
         <div className="device-card-action"><Button disabled={!view.read || busy} loading={readVolume.isPending} onClick={() => readVolume.mutate()}>读取当前值</Button></div>

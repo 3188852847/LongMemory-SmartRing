@@ -23,6 +23,10 @@ describe('设备与状态页', () => {
 
     expect(await screen.findByText('请唤醒圆屏')).toBeTruthy();
     await waitFor(() => expect(screen.getByRole('button', {name:'读取当前值'}).hasAttribute('disabled')).toBe(true));
+    expect(screen.getByText('电池与充电')).toBeTruthy();
+    expect(screen.getAllByText('尚未读取').length).toBeGreaterThanOrEqual(5);
+    expect(screen.getByText(/点击页面右上角“读取设备快照”取得当前值/)).toBeTruthy();
+    expect(screen.getByText(/当前连接还没有可用的完整时序/)).toBeTruthy();
     expect(screen.getByText(/不需要重新配网/)).toBeTruthy();
     view.unmount();
     client.clear();
@@ -47,6 +51,7 @@ describe('设备与状态页', () => {
     expect(screen.getByText('/ 60')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', {name: '读取设备快照'}));
     expect(await screen.findByText('72% · 充电中')).toBeTruthy();
+    expect(screen.getAllByText('固件未上报').length).toBeGreaterThanOrEqual(3);
     expect(screen.getByText(/读取于 .*不是持续监测；为保护隐私不显示 Wi‑Fi 名称/)).toBeTruthy();
     expect(screen.getByText('单次读取')).toBeTruthy();
 
@@ -68,6 +73,8 @@ describe('设备与状态页', () => {
     const client=createConsoleQueryClient();
     const view=render(<QueryClientProvider client={client}><MemoryRouter><DeviceApp/></MemoryRouter></QueryClientProvider>);
     expect(await screen.findByText('最近一次圆屏首句时序')).toBeTruthy();
+    expect(await screen.findByText('本轮最长已测区段：TTS 生成与编码')).toBeTruthy();
+    expect(screen.getByText(/这是观测到的最长区段，不等于已经证明它是性能根因/)).toBeTruthy();
     expect(screen.getByText('1.00 秒')).toBeTruthy();
     expect(screen.getByText(/不含录音与 ASR，也不代表扬声器真正开始出声/)).toBeTruthy();
     expect(screen.getByText(/当前后端：VoxCPM2/)).toBeTruthy();
