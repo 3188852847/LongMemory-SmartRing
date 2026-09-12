@@ -4,7 +4,6 @@ import {pathToFileURL} from 'node:url';
 import {SanoChineseEngine} from './engine.mjs';
 
 const MAX_BODY_BYTES = 8192;
-const ALLOWED_FIELDS = new Set(['input', 'response_format', 'stream', 'speed', 'voice', 'model']);
 
 function json(response, status, body) {
   const data = Buffer.from(JSON.stringify(body));
@@ -29,7 +28,9 @@ async function readBody(request) {
 
 function validate(body) {
   if (!body || typeof body !== 'object' || Array.isArray(body)) throw new Error('invalid_request');
-  if (Object.keys(body).some(key => !ALLOWED_FIELDS.has(key))) throw new Error('unknown_field');
+  // 小智的 CustomTTS 是通用适配器，不同上游版本可能附带本地服务并不
+  // 使用的兼容字段。这里仅投影并校验 sanoTTS 真正消费的字段；其余字段
+  // 不会进入模型、文件路径或响应头。请求体仍受 8 KiB 上限和回环监听约束。
   if (typeof body.input !== 'string' || !body.input.trim() || body.input.length > 600)
     throw new Error('invalid_input');
   if (body.response_format !== undefined && body.response_format !== 'wav')
@@ -101,7 +102,7 @@ export function createSanoServer(engine) {
     } catch (error) {
       const code = error instanceof SyntaxError ? 'invalid_json' : String(error?.message || 'request_failed');
       const clientErrors = new Set([
-        'request_too_large', 'invalid_request', 'unknown_field', 'invalid_input',
+        'request_too_large', 'invalid_request', 'invalid_input',
         'unsupported_format', 'streaming_not_supported', 'unsupported_voice',
         'unsupported_model', 'invalid_speed', 'invalid_json',
       ]);

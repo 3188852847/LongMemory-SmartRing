@@ -47,6 +47,22 @@ test('fixed speech request returns wave and passes bounded controls', async () =
   assert.deepEqual(calls.at(-1), {text: '你好', options: {speakingRate: 1.1}});
 });
 
+test('generic CustomTTS metadata is ignored instead of mutating synthesis', async () => {
+  const response = await fetch(`${base}/v1/audio/speech`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      input: '兼容请求', response_format: 'wav', stream: false,
+      speed: 1.2, cache: false, request_id: 'synthetic-only',
+      metadata: {source: 'generic-custom-tts'},
+    }),
+  });
+  assert.equal(response.status, 200);
+  assert.deepEqual(calls.at(-1), {
+    text: '兼容请求', options: {speakingRate: 1.2},
+  });
+});
+
 test('browser origins and unsupported streaming are rejected', async () => {
   const browser = await fetch(`${base}/v1/audio/speech`, {
     method: 'POST', headers: {'Content-Type': 'application/json', Origin: 'http://127.0.0.1:8767'},
@@ -58,5 +74,5 @@ test('browser origins and unsupported streaming are rejected', async () => {
     body: JSON.stringify({input: '不应执行', stream: true}),
   });
   assert.equal(streaming.status, 400);
-  assert.equal(calls.length, 1);
+  assert.equal(calls.length, 2);
 });
