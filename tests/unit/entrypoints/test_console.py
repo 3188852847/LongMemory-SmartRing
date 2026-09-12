@@ -646,10 +646,12 @@ def test_console_merges_duplicate_l1_without_deleting_history_or_sources(tmp_pat
                       "expected_review_revision": 0, "confirm_merge": True},
             )
             assert merged.status == 200
-            assert await merged.json() == {
-                "kept_memory_id": "memory-a", "retired_memory_id": "memory-b",
-                "copied_evidence_count": 1, "replayed": False,
-            }
+            merged_payload = await merged.json()
+            assert merged_payload["kept_memory_id"] == "memory-a"
+            assert merged_payload["retired_memory_id"] == "memory-b"
+            assert merged_payload["copied_evidence_count"] == 1
+            assert merged_payload["replayed"] is False
+            assert merged_payload["merged_at"]
             replayed = await client.post(
                 base + "/api/memories/quality-candidates/merge", headers=headers,
                 json={"left_memory_id": "memory-a", "right_memory_id": "memory-b",
@@ -663,9 +665,12 @@ def test_console_merges_duplicate_l1_without_deleting_history_or_sources(tmp_pat
             assert {source["source_message_id"] for source in detail["sources"]} == {
                 "source-a", "source-b",
             }
-            assert (await (await client.get(
+            quality_after_merge = await (await client.get(
                 base + "/api/memories/quality-candidates"
-            )).json())["total"] == 0
+            )).json()
+            assert quality_after_merge["total"] == 0
+            assert quality_after_merge["merge_history_total"] == 1
+            assert quality_after_merge["merge_history"][0]["kept_memory_id"] == "memory-a"
 
     asyncio.run(run())
     with sqlite3.connect(database) as connection:

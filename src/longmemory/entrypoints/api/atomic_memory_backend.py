@@ -99,6 +99,18 @@ class AtomicMemoryBackend:
                     "review_status": "dismissed" if action == "dismiss" else "pending",
                     "review_revision": review_revision,
                 })
+            merge_total = connection.execute(
+                "SELECT count(*) FROM l1_duplicate_merge_events"
+            ).fetchone()[0]
+            merge_rows = connection.execute(
+                "SELECT e.id,e.kept_memory_id,e.retired_memory_id,e.candidate_kind,"
+                "e.copied_evidence_count,e.merged_at,k.content AS kept_content,"
+                "r.content AS retired_content "
+                "FROM l1_duplicate_merge_events e "
+                "JOIN atomic_memories k ON k.id=e.kept_memory_id "
+                "JOIN atomic_memories r ON r.id=e.retired_memory_id "
+                "ORDER BY e.merged_at DESC,e.id DESC LIMIT 25"
+            ).fetchall()
             return {
                 "items": rows,
                 "total": len(candidates),
@@ -109,6 +121,9 @@ class AtomicMemoryBackend:
                 "lexical_threshold": 0.72,
                 "detector_version": DETECTOR_VERSION,
                 "generated_at": now.isoformat(),
+                "merge_history": [dict(row) for row in merge_rows],
+                "merge_history_total": merge_total,
+                "merge_history_limited": merge_total > len(merge_rows),
             }
 
     @staticmethod
@@ -179,7 +194,7 @@ class AtomicMemoryBackend:
         with self._open_database(write_capability="correction") as connection:
             now = self._clock()
             existing = connection.execute(
-                "SELECT kept_memory_id,copied_evidence_count "
+                "SELECT kept_memory_id,copied_evidence_count,merged_at "
                 "FROM l1_duplicate_merge_events WHERE retired_memory_id=?",
                 (retired_memory_id,),
             ).fetchone()
@@ -188,7 +203,7 @@ class AtomicMemoryBackend:
                     return {"kept_memory_id": kept_memory_id,
                             "retired_memory_id": retired_memory_id,
                             "copied_evidence_count": existing["copied_evidence_count"],
-                            "replayed": True}
+                            "merged_at": existing["merged_at"], "replayed": True}
                 raise MemoryAccessError("l1_duplicate_merge_conflict", 409)
             _active, _scanned, candidates = self._find_quality_candidates(connection, now)
             live = next((
@@ -234,7 +249,8 @@ class AtomicMemoryBackend:
             connection.commit()
             return {"kept_memory_id": kept_memory_id,
                     "retired_memory_id": retired_memory_id,
-                    "copied_evidence_count": copied_evidence_count, "replayed": False}
+                    "copied_evidence_count": copied_evidence_count,
+                    "merged_at": now.isoformat(), "replayed": False}
 
     @staticmethod
     def _local_day_window(local_date, utc_offset_minutes):
