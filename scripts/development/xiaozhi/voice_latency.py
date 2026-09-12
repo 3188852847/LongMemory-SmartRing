@@ -62,7 +62,7 @@ class VoiceLatencyTracker:
         with self.lock:
             self.sequence += 1
             self.current = {
-                "version": 1,
+                "version": 2,
                 # token 只在进程内用于拒绝上一轮迟到的 finally 回调，绝不暴露给 API。
                 "token": self.sequence,
                 # chat() 会在进入上游实现后才生成新 sentence_id。记录旧值可防止
@@ -75,6 +75,9 @@ class VoiceLatencyTracker:
                 "started": now,
                 "tts_backend": _backend(self.connection),
                 "timings": {field: None for field in TIMING_FIELDS},
+                # 每个元素只记录顺序与时间，不保存本段文本或音频。短句模型具有
+                # 固定启动开销时，这能区分“首段慢”和“每段都慢”。
+                "tts_segments": [],
             }
             return self.sequence
 
@@ -111,6 +114,51 @@ class VoiceLatencyTracker:
             f"圆屏首句计时 stage={field} elapsed={elapsed}ms"
         )
 
+    def begin_tts_segment(self, *, sentence_id=None):
+        """开始一段脱敏 TTS 计时，返回只在当前进程内使用的句柄。"""
+        with self.lock:
+            item = self.current
+            if item is None:
+                return None
+            expected = item["sentence_id"]
+            if sentence_id is not None and (expected is None or sentence_id != expected):
+                return None
+            elapsed = max(0, round((self.clock() - item["started"]) * 1000))
+            index = len(item["tts_segments"]) + 1
+            item["tts_segments"].append({
+                "index": index,
+                "started_ms": elapsed,
+                "completed_ms": None,
+                "duration_ms": None,
+            })
+            if item["timings"]["tts_started_ms"] is None:
+                item["timings"]["tts_started_ms"] = elapsed
+            return item["token"], index
+
+    def complete_tts_segment(self, handle, *, sentence_id=None):
+        """完成当前段计时；上一轮迟到的回调不能写入新一轮。"""
+        if handle is None:
+            return
+        token, index = handle
+        with self.lock:
+            item = self.current
+            if item is None or token != item["token"]:
+                return
+            expected = item["sentence_id"]
+            if sentence_id is not None and (expected is None or sentence_id != expected):
+                return
+            if not 1 <= index <= len(item["tts_segments"]):
+                return
+            segment = item["tts_segments"][index - 1]
+            if segment["completed_ms"] is not None:
+                return
+            elapsed = max(0, round((self.clock() - item["started"]) * 1000))
+            segment["completed_ms"] = elapsed
+            segment["duration_ms"] = max(0, elapsed - segment["started_ms"])
+        self.connection.logger.bind(tag="voice-latency").info(
+            f"圆屏分段计时 segment={index} duration={segment['duration_ms']}ms"
+        )
+
     def snapshot(self):
         with self.lock:
             if self.current is None:
@@ -129,11 +177,12 @@ class VoiceLatencyTracker:
             else:
                 state = "preparing_memory"
             return {
-                "version": 1,
+                "version": self.current["version"],
                 "state": state,
                 "started_at": self.current["started_at"],
                 "tts_backend": self.current["tts_backend"],
                 "timings_ms": timings,
+                "tts_segments": [dict(segment) for segment in self.current["tts_segments"]],
             }
 
 
@@ -224,8 +273,12 @@ def _observe_components(connection):
         def measured_stream(*args, **kwargs):
             tracker = connection._longmemory_voice_latency
             tracker.bind_sentence()
-            tracker.mark("tts_started_ms", sentence_id=getattr(tts, "current_sentence_id", None))
-            return original_stream(*args, **kwargs)
+            sentence_id = getattr(tts, "current_sentence_id", None)
+            handle = tracker.begin_tts_segment(sentence_id=sentence_id)
+            try:
+                return original_stream(*args, **kwargs)
+            finally:
+                tracker.complete_tts_segment(handle, sentence_id=sentence_id)
         tts.to_tts_stream = measured_stream
     if callable(original_opus):
         def measured_opus(*args, **kwargs):

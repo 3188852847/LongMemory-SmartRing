@@ -54,8 +54,12 @@ VOICE_TIMING_FIELDS = {
 def voice_latency(value: object) -> dict:
     """验证小智内存中的脱敏时序；开放字段不能直接穿透到浏览器。"""
 
+    if not isinstance(value, dict) or value.get("version") not in {1, 2}:
+        raise BridgeError("bridge_invalid_response", 502)
     fields = {"version", "state", "started_at", "tts_backend", "timings_ms"}
-    if not isinstance(value, dict) or set(value) != fields or value.get("version") != 1:
+    if value["version"] == 2:
+        fields.add("tts_segments")
+    if set(value) != fields:
         raise BridgeError("bridge_invalid_response", 502)
     if value.get("state") not in {
         "preparing_memory", "waiting_for_model", "waiting_for_sentence",
@@ -79,7 +83,32 @@ def voice_latency(value: object) -> dict:
         for item in timings.values()
     ):
         raise BridgeError("bridge_invalid_response", 502)
-    return {**value, "timings_ms": dict(timings)}
+    result = {**value, "timings_ms": dict(timings)}
+    if value["version"] == 2:
+        segments = value.get("tts_segments")
+        segment_fields = {"index", "started_ms", "completed_ms", "duration_ms"}
+        if not isinstance(segments, list) or len(segments) > 64:
+            raise BridgeError("bridge_invalid_response", 502)
+        for expected_index, segment in enumerate(segments, start=1):
+            if not isinstance(segment, dict) or set(segment) != segment_fields:
+                raise BridgeError("bridge_invalid_response", 502)
+            if segment.get("index") != expected_index:
+                raise BridgeError("bridge_invalid_response", 502)
+            if type(segment.get("started_ms")) is not int or not 0 <= segment["started_ms"] <= 3_600_000:
+                raise BridgeError("bridge_invalid_response", 502)
+            for field in ("completed_ms", "duration_ms"):
+                item = segment.get(field)
+                if item is not None and (type(item) is not int or not 0 <= item <= 3_600_000):
+                    raise BridgeError("bridge_invalid_response", 502)
+            if (segment["completed_ms"] is None) != (segment["duration_ms"] is None):
+                raise BridgeError("bridge_invalid_response", 502)
+            if segment["completed_ms"] is not None and (
+                segment["completed_ms"] < segment["started_ms"]
+                or segment["duration_ms"] != segment["completed_ms"] - segment["started_ms"]
+            ):
+                raise BridgeError("bridge_invalid_response", 502)
+        result["tts_segments"] = [dict(segment) for segment in segments]
+    return result
 
 
 def round_skin(value: object) -> dict:

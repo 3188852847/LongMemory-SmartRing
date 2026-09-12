@@ -35,6 +35,7 @@ def test_tracker_exposes_only_fixed_timing_fields_and_not_content():
     tracker.mark("llm_requested_ms")
     tracker.mark("llm_first_output_ms")
     result = tracker.snapshot()
+    assert result["version"] == 2
     assert result["tts_backend"] == "edge"
     assert result["timings_ms"]["llm_requested_ms"] == 200
     assert result["timings_ms"]["llm_first_output_ms"] == 500
@@ -112,6 +113,8 @@ def test_installed_observer_measures_model_tts_and_audio_without_text_in_logs():
     assert result["timings_ms"]["llm_first_output_ms"] is not None
     assert result["timings_ms"]["tts_started_ms"] is not None
     assert result["timings_ms"]["audio_ready_ms"] is not None
+    assert len(result["tts_segments"]) == 1
+    assert result["tts_segments"][0]["duration_ms"] is not None
     assert "private" not in " ".join(connection.logger.lines)
 
     async def original(*_args, **_kwargs): return "sent"

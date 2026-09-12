@@ -48,6 +48,13 @@ function VoiceLatencyCard({value}:{value:VoiceLatency}) {
       {key:'delivery',label:'音频就绪 → 首包发送',children:delta(timing.first_audio_sent_ms,timing.audio_ready_ms)},
       {key:'total',label:'入口 → 首包发送',children:<strong>{elapsed(timing.first_audio_sent_ms)}</strong>},
     ]}/>
+    {value.tts_segments&&value.tts_segments.length>0&&<div className="device-segment-timings">
+      <h4>TTS 分段</h4>
+      <Space wrap>{value.tts_segments.map(segment=><Tag key={segment.index} color={segment.duration_ms!==null&&segment.duration_ms>=3000?'gold':'default'}>
+        第 {segment.index} 段 · {segment.duration_ms===null?'生成中':elapsed(segment.duration_ms)}
+      </Tag>)}</Space>
+      <p className="subtle">这里只记录每段进入 TTS 到完成音频编码的时间，不保存该段文字或音频。连续多段都慢，通常表示短句固定开销被重复支付。</p>
+    </div>}
     <p className="subtle">样本开始于 {new Date(value.started_at).toLocaleString('zh-CN', {hour12:false})}。计时起点是服务端收到已识别文本并进入回答流程；不含录音与 ASR，也不代表扬声器真正开始出声。当前后端：{value.tts_backend==='edge'?'EdgeTTS':value.tts_backend==='voxcpm2'?'VoxCPM2':value.tts_backend==='sanotts'?'sanoTTS':value.tts_backend==='cosyvoice3'?'CosyVoice 3':'其他'}。</p>
   </Card>;
 }

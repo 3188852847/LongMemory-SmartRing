@@ -65,10 +65,13 @@ describe('设备与状态页', () => {
       connection_count:1, ready:true, read_volume_supported:true, set_volume_supported:true,
       read_status_supported:true, set_brightness_supported:false, set_theme_supported:false,
       allowed_volume:{minimum:5,maximum:60},
-      voice_latency:{version:1,state:'first_audio_sent',started_at:'2026-09-10T01:00:00+00:00',tts_backend:'voxcpm2',timings_ms:{
+      voice_latency:{version:2,state:'first_audio_sent',started_at:'2026-09-10T01:00:00+00:00',tts_backend:'voxcpm2',timings_ms:{
         memory_ready_ms:80,llm_requested_ms:90,llm_first_output_ms:590,tts_started_ms:790,
         audio_ready_ms:1790,first_audio_sent_ms:1810,response_completed_ms:2100,
-      }},
+      },tts_segments:[
+        {index:1,started_ms:790,completed_ms:1790,duration_ms:1000},
+        {index:2,started_ms:1800,completed_ms:4200,duration_ms:2400},
+      ]},
     });
     const client=createConsoleQueryClient();
     const view=render(<QueryClientProvider client={client}><MemoryRouter><DeviceApp/></MemoryRouter></QueryClientProvider>);
@@ -79,6 +82,9 @@ describe('设备与状态页', () => {
     expect(screen.getByText(/样本开始于/)).toBeTruthy();
     expect(screen.getByText(/不含录音与 ASR，也不代表扬声器真正开始出声/)).toBeTruthy();
     expect(screen.getByText(/当前后端：VoxCPM2/)).toBeTruthy();
+    expect(screen.getByText('第 1 段 · 1.00 秒')).toBeTruthy();
+    expect(screen.getByText('第 2 段 · 2.40 秒')).toBeTruthy();
+    expect(screen.getByText(/不保存该段文字或音频/)).toBeTruthy();
     view.unmount(); client.clear();
   });
 

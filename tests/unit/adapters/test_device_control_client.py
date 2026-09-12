@@ -164,6 +164,59 @@ def test_status_projects_only_strict_voice_latency_snapshot(tmp_path):
     assert value["voice_latency"] == latency
 
 
+def test_status_accepts_v2_voice_latency_segments(tmp_path):
+    latency = {
+        "version": 2,
+        "state": "first_audio_sent",
+        "started_at": "2026-09-13T01:00:00+00:00",
+        "tts_backend": "cosyvoice3",
+        "timings_ms": {
+            "memory_ready_ms": 12,
+            "llm_requested_ms": 13,
+            "llm_first_output_ms": 1945,
+            "tts_started_ms": 1997,
+            "audio_ready_ms": 9107,
+            "first_audio_sent_ms": 9108,
+            "response_completed_ms": 2167,
+        },
+        "tts_segments": [
+            {"index": 1, "started_ms": 1997, "completed_ms": 9107, "duration_ms": 7110},
+            {"index": 2, "started_ms": 9110, "completed_ms": None, "duration_ms": None},
+        ],
+    }
+    client = client_for(tmp_path, {"connection_count": 1, "ready": True,
+        "read_volume_supported": True, "set_volume_supported": True,
+        "read_status_supported": True, "set_brightness_supported": False,
+        "set_theme_supported": False, "allowed_volume": {"minimum": 5, "maximum": 60},
+        "announcement_supported": True, "announcement_ready": True,
+        "user_session_active": False, "voice_latency": latency})
+    assert asyncio.run(client.status())["voice_latency"] == latency
+
+
+def test_status_rejects_inconsistent_v2_voice_latency_segment(tmp_path):
+    latency = {
+        "version": 2, "state": "tts_running",
+        "started_at": "2026-09-13T01:00:00+00:00", "tts_backend": "cosyvoice3",
+        "timings_ms": {field: None for field in (
+            "memory_ready_ms", "llm_requested_ms", "llm_first_output_ms",
+            "tts_started_ms", "audio_ready_ms", "first_audio_sent_ms",
+            "response_completed_ms",
+        )},
+        # duration 必须等于 completed-started，不能让桥接服务注入伪造指标。
+        "tts_segments": [
+            {"index": 1, "started_ms": 100, "completed_ms": 200, "duration_ms": 99},
+        ],
+    }
+    client = client_for(tmp_path, {
+        "connection_count": 1, "ready": True,
+        "read_volume_supported": True, "set_volume_supported": True,
+        "announcement_supported": True, "announcement_ready": True,
+        "user_session_active": False, "voice_latency": latency,
+    })
+    with pytest.raises(BridgeError, match="bridge_invalid_response"):
+        asyncio.run(client.status())
+
+
 @pytest.mark.parametrize("change", [
     {"private_text": "must-not-escape"},
     {"tts_backend": "unknown-provider"},
