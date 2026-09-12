@@ -127,6 +127,11 @@ def test_failed_and_timeout_view_models_explain_stopped_services():
     assert "voice（退出码 3）" in failed["message"]
     assert "共享路径或配置未通过检查" in failed["message"]
 
+    cosy_failed = view_model.failed_services([("voice", 4)], "cosyvoice3")
+    assert "CosyVoice 3" in cosy_failed["message"]
+    assert "18770" in cosy_failed["message"]
+    assert "VoxCPM2" not in cosy_failed["message"]
+
     timeout = view_model.readiness_timeout()
     assert timeout["tone"] == "error"
     assert timeout["components"]["console"] == ("就绪超时", "error")
@@ -780,7 +785,9 @@ def test_launcher_failure_hint_is_actionable_without_copying_process_output(monk
 
     assert "数据库、模型配置和高级设置" in app._failure_hint([("console", 2)])
     assert "共享路径或配置" in app._failure_hint([("voice", 3)])
-    assert "CUDA 和 18768 端口" in app._failure_hint([("voice", 4)])
+    assert "CUDA 和 18768 端口" in app._failure_hint([("voice", 4)], "voxcpm2")
+    assert "Node.js 和 18769 端口" in app._failure_hint([("voice", 4)], "sanotts")
+    assert "CUDA 和 18770 端口" in app._failure_hint([("voice", 4)], "cosyvoice3")
     combined = app._failure_hint([("console", 2), ("voice", 3)])
     assert "控制台参数" in combined and "圆屏语音" in combined
     assert "stdout" not in combined and "traceback" not in combined

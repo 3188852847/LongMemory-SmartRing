@@ -693,7 +693,10 @@ def main():
                 stopped = stop(False)
                 state["failed"] = True
                 if stopped:
-                    apply_presentation(failed_services(exited))
+                    apply_presentation(failed_services(
+                        exited,
+                        manager.options.tts_backend if manager.options else None,
+                    ))
             elif manager.ready():
                 if not state["opened"]:
                     state["opened"] = True

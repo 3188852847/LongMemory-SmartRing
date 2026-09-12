@@ -54,7 +54,7 @@ def summary_text(
     )
 
 
-def failure_hint(exited):
+def failure_hint(exited, tts_backend=None):
     """把稳定退出码翻译为排障提示，不读取或复制子进程输出。"""
 
     hints = []
@@ -64,7 +64,13 @@ def failure_hint(exited):
         elif name == "voice" and code == 3:
             hint = "圆屏语音的共享路径或配置未通过检查；先核对小智目录、数据库和所选模型"
         elif name == "voice" and code == 4:
-            hint = "VoxCPM2 在限定时间内未就绪；先核对声音环境、模型文件、CUDA 和 18768 端口"
+            # 退出码 4 属于小智等待“当前本地 TTS”的通用门槛，不能继续用
+            # 最早只有 VoxCPM2 时留下的固定文案误导用户排查错误端口。
+            hint = {
+                "voxcpm2": "VoxCPM2 在限定时间内未就绪；先核对声音环境、模型文件、CUDA 和 18768 端口",
+                "sanotts": "sanoTTS 在限定时间内未就绪；先核对外部源码、Node.js 和 18769 端口",
+                "cosyvoice3": "CosyVoice 3 在限定时间内未就绪；先核对独立环境、模型文件、CUDA 和 18770 端口",
+            }.get(tts_backend, "所选本地声音在限定时间内未就绪；先核对声音后端环境和对应环回端口")
         elif name == "voxcpm2":
             hint = "本地声音服务已退出；先核对声音环境、模型文件、CUDA 和 18768 端口"
         elif name == "sanotts":
@@ -82,7 +88,7 @@ def failure_hint(exited):
     return "；".join(hints) + "。" if hints else "请打开使用指南核对本机配置。"
 
 
-def failed_services(exited):
+def failed_services(exited, tts_backend=None):
     details = "、".join(f"{name}（退出码 {code}）" for name, code in exited)
     return {
         "components": {
@@ -93,7 +99,7 @@ def failed_services(exited):
         },
         "message": (
             f"服务已退出：{details}。已停止其他受管服务。"
-            f"{failure_hint(exited)}"
+            f"{failure_hint(exited, tts_backend)}"
         ),
         "tone": "error",
     }
