@@ -260,12 +260,20 @@ class DeviceControl:
         self.response_aborter = response_aborter or abort_current_response
         self.connections = {}
         self.operation_lock = asyncio.Lock()
+        # 最近一轮只包含阶段时间和后端名，不含用户问题、回答正文或音频。
+        # 设备回到待机并断开控制连接后仍保留，下一轮样本会覆盖它。
+        self.last_voice_latency = None
 
     def attach(self, connection, device_id):
         if isinstance(device_id, str) and device_id.lower() == self.allowed_device_id:
             self.connections[id(connection)] = connection
 
     def detach(self, connection):
+        tracker = getattr(connection, "_longmemory_voice_latency", None)
+        if tracker is not None:
+            latency = tracker.snapshot()
+            if latency is not None:
+                self.last_voice_latency = latency
         self.connections.pop(id(connection), None)
 
     def _connection(self):
@@ -335,9 +343,11 @@ class DeviceControl:
             if tracker is not None:
                 latency = tracker.snapshot()
                 if latency is not None:
-                    result["voice_latency"] = latency
+                    self.last_voice_latency = latency
         except ControlError as exc:
             result["reason"] = exc.code
+        if self.last_voice_latency is not None:
+            result["voice_latency"] = self.last_voice_latency
         return result
 
     async def _call(self, conn, name, arguments, *, timeout=None):

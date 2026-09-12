@@ -76,6 +76,7 @@ describe('设备与状态页', () => {
     expect(await screen.findByText('本轮最长已测区段：TTS 生成与编码')).toBeTruthy();
     expect(screen.getByText(/这是观测到的最长区段，不等于已经证明它是性能根因/)).toBeTruthy();
     expect(screen.getByText('1.00 秒')).toBeTruthy();
+    expect(screen.getByText(/样本开始于/)).toBeTruthy();
     expect(screen.getByText(/不含录音与 ASR，也不代表扬声器真正开始出声/)).toBeTruthy();
     expect(screen.getByText(/当前后端：VoxCPM2/)).toBeTruthy();
     view.unmount(); client.clear();

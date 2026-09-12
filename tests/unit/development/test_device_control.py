@@ -587,6 +587,33 @@ def test_status_exposes_only_tracker_voice_latency_snapshot():
     assert bridge.status()["voice_latency"] == snapshot
 
 
+def test_last_voice_latency_remains_visible_after_device_disconnects():
+    bridge, conn, _, _ = announcement_rig()
+    snapshot = {
+        "version": 1,
+        "state": "first_audio_sent",
+        "started_at": "2026-09-12T13:30:00+00:00",
+        "tts_backend": "sanotts",
+        "timings_ms": {
+            "memory_ready_ms": 20,
+            "llm_requested_ms": 30,
+            "llm_first_output_ms": 230,
+            "tts_started_ms": 260,
+            "audio_ready_ms": 760,
+            "first_audio_sent_ms": 790,
+            "response_completed_ms": 400,
+        },
+    }
+    conn._longmemory_voice_latency = SimpleNamespace(snapshot=lambda: snapshot)
+
+    bridge.detach(conn)
+
+    status = bridge.status()
+    assert status["ready"] is False
+    assert status["reason"] == "device_offline"
+    assert status["voice_latency"] == snapshot
+
+
 @pytest.mark.parametrize("text", ["", " leading", "trailing ", "line\nbreak", "x" * 81])
 def test_announcement_rejects_invalid_text(text):
     async def run():
