@@ -79,6 +79,7 @@ class ChatBackend:
 
     def complete_round_screen_turn(
         self, *, turn_id, answer, retrieved_counts, retrieval_evidence=None,
+        retrieval_strategy=None,
     ):
         """归档小智实际生成的回答；关联表与助手 L0 在同一事务提交。"""
 
@@ -89,6 +90,7 @@ class ChatBackend:
             retrieved_l2_count=retrieved_counts["l2"],
             retrieved_l3_count=retrieved_counts["l3"],
             retrieval_evidence=retrieval_evidence,
+            retrieval_strategy=retrieval_strategy,
         )
         # 助手 L0 和精确召回索引已经先提交；延后 L1 在受管队列中执行，
         # 不让完成回执或正在播放的语音继续等待候选模型。

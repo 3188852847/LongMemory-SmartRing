@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+import math
 import re
 import sqlite3
 from uuid import uuid4
@@ -24,7 +25,9 @@ class SQLiteRoundScreenTurnStore:
     def record(self, *, user_message_id: str, answer: str,
                retrieved_l1_count: int, retrieved_l2_count: int,
                retrieved_l3_count: int,
-               retrieval_evidence: tuple[dict, ...] | None = None) -> RoundScreenTurnResult:
+               retrieval_evidence: tuple[dict, ...] | None = None,
+               retrieval_strategy: str | None = None) -> RoundScreenTurnResult:
+        strategy = self._validate_strategy(retrieval_strategy)
         evidence = self._validate_evidence(
             retrieval_evidence,
             counts={
@@ -60,13 +63,14 @@ class SQLiteRoundScreenTurnStore:
                 )
                 if same and evidence is not None:
                     receipt = connection.execute(
-                        "SELECT 1 FROM round_screen_retrieval_receipts "
+                        "SELECT retrieval_strategy FROM round_screen_retrieval_receipts "
                         "WHERE user_message_id=?", (user_message_id,),
                     ).fetchone()
-                    same = receipt is not None
+                    same = receipt is not None and receipt["retrieval_strategy"] == strategy
                     saved_evidence = tuple(
                         tuple(row) for row in connection.execute(
-                            "SELECT layer,item_id,rank,content_sha256 FROM "
+                            "SELECT layer,item_id,rank,content_sha256,keyword_score,"
+                            "dense_score,fused_score FROM "
                             "round_screen_retrieval_evidence WHERE user_message_id=? "
                             "ORDER BY layer,rank",
                             (user_message_id,),
@@ -100,14 +104,15 @@ class SQLiteRoundScreenTurnStore:
             )
             if evidence is not None:
                 connection.execute(
-                    "INSERT INTO round_screen_retrieval_receipts (user_message_id) "
-                    "VALUES (?)", (user_message_id,),
+                    "INSERT INTO round_screen_retrieval_receipts "
+                    "(user_message_id,retrieval_strategy) VALUES (?,?)",
+                    (user_message_id, strategy),
                 )
             if evidence:
                 connection.executemany(
                     "INSERT INTO round_screen_retrieval_evidence "
-                    "(user_message_id,layer,item_id,rank,content_sha256) "
-                    "VALUES (?,?,?,?,?)",
+                    "(user_message_id,layer,item_id,rank,content_sha256,"
+                    "keyword_score,dense_score,fused_score) VALUES (?,?,?,?,?,?,?,?)",
                     ((user_message_id, *item) for item in evidence),
                 )
             connection.commit()
@@ -121,7 +126,7 @@ class SQLiteRoundScreenTurnStore:
     @staticmethod
     def _validate_evidence(
         value: tuple[dict, ...] | None, *, counts: dict[str, int],
-    ) -> tuple[tuple[str, str, int, str], ...] | None:
+    ) -> tuple[tuple[str, str, int, str, int | None, float | None, float | None], ...] | None:
         """验证协议证据；缺省表示兼容旧回执，空元组表示明确没有召回。"""
 
         if value is None:
@@ -131,9 +136,9 @@ class SQLiteRoundScreenTurnStore:
         normalized = []
         seen = set()
         for item in value:
-            if not isinstance(item, dict) or set(item) != {
-                "layer", "item_id", "rank", "content_sha256",
-            }:
+            base = {"layer", "item_id", "rank", "content_sha256"}
+            scores = {"keyword_score", "dense_score", "fused_score"}
+            if not isinstance(item, dict) or set(item) not in (base, base | scores):
                 raise ValueError("round_screen_retrieval_evidence_invalid")
             layer, item_id = item["layer"], item["item_id"]
             rank, digest = item["rank"], item["content_sha256"]
@@ -145,10 +150,28 @@ class SQLiteRoundScreenTurnStore:
                     or (layer, item_id) in seen):
                 raise ValueError("round_screen_retrieval_evidence_invalid")
             seen.add((layer, item_id))
-            normalized.append((layer, item_id, rank, digest))
+            keyword = item.get("keyword_score")
+            dense = item.get("dense_score")
+            fused = item.get("fused_score")
+            if ((keyword is not None and (type(keyword) is not int or keyword < 0))
+                    or any(score is not None and (
+                        type(score) not in (int, float) or not math.isfinite(score))
+                        for score in (dense, fused))
+                    or (layer != "l1" and any(
+                        score is not None for score in (keyword, dense, fused)))):
+                raise ValueError("round_screen_retrieval_evidence_invalid")
+            normalized.append((layer, item_id, rank, digest, keyword, dense, fused))
         normalized.sort(key=lambda item: (item[0], item[2]))
         for layer, count in counts.items():
             ranks = [item[2] for item in normalized if item[0] == layer]
             if ranks != list(range(1, count + 1)):
                 raise ValueError("round_screen_retrieval_evidence_invalid")
         return tuple(normalized)
+
+    @staticmethod
+    def _validate_strategy(value: str | None) -> str | None:
+        if value is None:
+            return None
+        if not isinstance(value, str) or not 1 <= len(value.strip()) <= 240:
+            raise ValueError("round_screen_retrieval_strategy_invalid")
+        return value.strip()

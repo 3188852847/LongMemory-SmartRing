@@ -118,7 +118,18 @@ def validate_inputs(retrieval_path, source_path, dataset):
                             raise ValueError("召回正文或来源被修改。")
                     if strategy == "original_keyword":
                         old = method.recall(q.query)
-                        if items != old.retrieved or data["context"] != old.context:
+                        # 冻结报告形成时只承诺 ID、正文和来源；后来加入的
+                        # 日常可审计分数属于可选观测字段，不能让旧档案失效。
+                        old_identity = tuple(
+                            (item.item_id, item.content, item.source_event_ids)
+                            for item in (old.retrieved or ())
+                        )
+                        frozen_identity = tuple(
+                            (item.item_id, item.content, item.source_event_ids)
+                            for item in items
+                        )
+                        if (frozen_identity != old_identity
+                                or data["context"] != old.context):
                             raise ValueError("关键词结果与原方法不同。")
                     else:
                         scores = row["scores"]

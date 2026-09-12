@@ -20,6 +20,14 @@ const focusLabel:Record<MemoryFeedbackDiagnosticFocus,string> = {
   memory_content_freshness_subject_or_ranking:'已召回长期记忆，优先核对内容、时效、主体和排序。',
   short_term_or_answer_model:'没有可见长期记忆，先核对短期上下文或回答模型。',
 };
+
+function scoreSummary(evidence:{keyword_score?:number|null;dense_score?:number|null;fused_score?:number|null}) {
+  const parts:string[]=[];
+  if(evidence.keyword_score!=null) parts.push(`关键词 ${evidence.keyword_score}`);
+  if(evidence.dense_score!=null) parts.push(`余弦 ${evidence.dense_score.toFixed(3)}`);
+  if(evidence.fused_score!=null) parts.push(`融合 ${evidence.fused_score.toFixed(4)}`);
+  return parts.join(' · ');
+}
 const emptyCounts = {memory_ok:0,recall_miss:0,wrong_memory:0,memory_irrelevant:0};
 const emptyReviewCounts = {open:0,resolved:0,dismissed:0};
 type ReviewAction='resolve'|'dismiss'|'reopen';
@@ -130,11 +138,12 @@ export function MemoryQualityApp() {
           {key:'feedback',label:'用户反馈',children:detail.feedback},
         ]}/>
         <Card title="回答当时的召回证据" size="small">
+          <p className="subtle">策略：<code>{detail.retrieval_strategy??'历史未记录'}</code>。关键词分是重合词项数，余弦分是语义相似度，融合分用于排序；它们都不是事实可信度。</p>
           {!detail.retrieval_evidence_recorded
             ? <Alert type="warning" showIcon title="旧回执没有保存条目索引"/>
             : detail.retrieval_evidence.length===0
               ? <Empty description="当轮确认没有召回 L1/L2/L3"/>
-              : <List dataSource={detail.retrieval_evidence} renderItem={evidence=><List.Item actions={[<Link key="open" to={evidencePath(evidence.layer,evidence.item_id)}>打开当前条目</Link>]}><List.Item.Meta title={<Space><Tag>{evidence.layer.toUpperCase()} #{evidence.rank}</Tag><Tag color={evidence.matches_receipt===true?'green':evidence.matches_receipt===false?'gold':'default'}>{evidence.matches_receipt===true?'与回答时一致':evidence.matches_receipt===false?'内容后来变化':'当前已缺失'}</Tag></Space>} description={<><p>{evidence.current_content??'当前数据库中找不到该条目正文。'}</p><code>{evidence.item_id}</code><small className="subtle"> · 当前状态 {evidence.current_state}</small></>}/></List.Item>}/>
+              : <List dataSource={detail.retrieval_evidence} renderItem={evidence=><List.Item actions={[<Link key="open" to={evidencePath(evidence.layer,evidence.item_id)}>打开当前条目</Link>]}><List.Item.Meta title={<Space><Tag>{evidence.layer.toUpperCase()} #{evidence.rank}</Tag><Tag color={evidence.matches_receipt===true?'green':evidence.matches_receipt===false?'gold':'default'}>{evidence.matches_receipt===true?'与回答时一致':evidence.matches_receipt===false?'内容后来变化':'当前已缺失'}</Tag></Space>} description={<><p>{evidence.current_content??'当前数据库中找不到该条目正文。'}</p><code>{evidence.item_id}</code><small className="subtle"> · 当前状态 {evidence.current_state}{scoreSummary(evidence)&&` · ${scoreSummary(evidence)}`}</small></>}/></List.Item>}/>
           }
         </Card>
       </>:<Empty description="没有可显示的诊断详情"/>}

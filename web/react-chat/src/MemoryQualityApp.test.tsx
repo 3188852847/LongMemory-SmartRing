@@ -40,7 +40,7 @@ describe('记忆质量样本工作台',()=>{
     };
     vi.spyOn(ChatApi.prototype,'bootstrap').mockResolvedValue(undefined);
     vi.spyOn(ChatApi.prototype,'request').mockImplementation(async path=>path.startsWith('/api/round-screen-memory-feedback/')?{
-      id:'event-a',event_kind:'wrong_memory',evidence_kind:'explicit_round_screen_statement',interpreter_version:'v1',occurred_at:'2026-09-10T01:00:00Z',target_user_message_id:'l0-user',assistant_message_id:'l0-assistant',feedback_message_id:'l0-feedback',question:'我的猫叫什么？',question_at:'2026-09-10T00:59:00Z',answer:'叫豆包。',answer_at:'2026-09-10T00:59:02Z',feedback:'你刚才记错了。',feedback_at:'2026-09-10T01:00:00Z',retrieval_evidence_recorded:true,retrieval_evidence:[{layer:'l1',item_id:'memory-a',rank:1,content_sha256:'a'.repeat(64),current_content:'用户的猫叫豆包。',current_state:'available',matches_receipt:true}],
+      id:'event-a',event_kind:'wrong_memory',evidence_kind:'explicit_round_screen_statement',interpreter_version:'v1',occurred_at:'2026-09-10T01:00:00Z',target_user_message_id:'l0-user',assistant_message_id:'l0-assistant',feedback_message_id:'l0-feedback',question:'我的猫叫什么？',question_at:'2026-09-10T00:59:00Z',answer:'叫豆包。',answer_at:'2026-09-10T00:59:02Z',feedback:'你刚才记错了。',feedback_at:'2026-09-10T01:00:00Z',retrieval_strategy:'keyword_dense_rrf_v1',retrieval_evidence_recorded:true,retrieval_evidence:[{layer:'l1',item_id:'memory-a',rank:1,content_sha256:'a'.repeat(64),keyword_score:1,dense_score:0.8123,fused_score:0.0314,current_content:'用户的猫叫豆包。',current_state:'available',matches_receipt:true}],
     } as never:response as never);
     render(<MemoryRouter><MemoryQualityApp/></MemoryRouter>);
     expect((await screen.findAllByText('圆屏语音')).length).toBe(2);
@@ -53,5 +53,7 @@ describe('记忆质量样本工作台',()=>{
     expect(await screen.findByText('我的猫叫什么？')).toBeTruthy();
     expect(screen.getByText('用户的猫叫豆包。')).toBeTruthy();
     expect(screen.getByText('与回答时一致')).toBeTruthy();
+    expect(screen.getByText('keyword_dense_rrf_v1')).toBeTruthy();
+    expect(screen.getByText(/关键词 1 · 余弦 0.812 · 融合 0.0314/)).toBeTruthy();
   });
 });

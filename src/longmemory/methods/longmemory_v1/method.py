@@ -141,11 +141,17 @@ class LongMemoryV1:
             diagnostics = (self.retriever.consume_diagnostics()
                            if hasattr(self.retriever, "consume_diagnostics")
                            else {"strategy": "keyword_v1", "warning_code": None})
+            score_by_id = {
+                item["item_id"]: item for item in diagnostics.get("items", ())
+            }
             return MemorySupport(call_id, context, tuple(
                 RetrievedTrace(str(memory.id), memory.content, tuple(
                     str(evidence.source_message_id)
                     for evidence in self.memory_store.list_evidence(memory.id)
-                ))
+                ), **{
+                    key: score_by_id.get(str(memory.id), {}).get(key)
+                    for key in ("keyword_score", "dense_score", "fused_score")
+                })
                 for memory in memories
             ), diagnostics["strategy"], diagnostics["warning_code"])
         finally:

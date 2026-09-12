@@ -1,6 +1,6 @@
-"""当前 SQLite V36 的完整结构定义；不包含历史迁移步骤。"""
+"""当前 SQLite V37 的完整结构定义；不包含历史迁移步骤。"""
 
-SCHEMA_VERSION = 36
+SCHEMA_VERSION = 37
 
 LATEST_SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS conversation_messages (
@@ -71,6 +71,9 @@ CREATE INDEX IF NOT EXISTS idx_round_screen_turns_completed
 
 CREATE TABLE IF NOT EXISTS round_screen_retrieval_receipts (
     user_message_id TEXT PRIMARY KEY,
+    retrieval_strategy TEXT CHECK (
+        retrieval_strategy IS NULL OR length(trim(retrieval_strategy)) BETWEEN 1 AND 240
+    ),
     FOREIGN KEY (user_message_id) REFERENCES round_screen_turns (user_message_id)
         ON DELETE CASCADE
 );
@@ -84,6 +87,9 @@ CREATE TABLE IF NOT EXISTS round_screen_retrieval_evidence (
         length(content_sha256) = 64 AND content_sha256 = lower(content_sha256)
         AND content_sha256 NOT GLOB '*[^0-9a-f]*'
     ),
+    keyword_score INTEGER CHECK (keyword_score IS NULL OR keyword_score >= 0),
+    dense_score REAL,
+    fused_score REAL,
     PRIMARY KEY (user_message_id, layer, rank),
     UNIQUE (user_message_id, layer, item_id),
     FOREIGN KEY (user_message_id) REFERENCES round_screen_turns (user_message_id)

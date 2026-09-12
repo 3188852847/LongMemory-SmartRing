@@ -50,8 +50,12 @@ def test_dense_recovers_cross_expression_and_reports_strategy():
     store = Store([memory("name", "用户叫小林。"), memory("cat", "用户养猫。")])
     retriever = HybridMemoryRetriever(store, Encoder())
     assert retriever.retrieve("我的名字是什么")[0].id == "name"
-    assert retriever.consume_diagnostics() == {
-        "strategy": "keyword_dense_rrf_v1", "warning_code": None,
+    diagnostics = retriever.consume_diagnostics()
+    assert diagnostics["strategy"] == "keyword_dense_rrf_v1"
+    assert diagnostics["warning_code"] is None
+    assert diagnostics["items"][0] == {
+        "item_id": "name", "keyword_score": None,
+        "dense_score": 1.0, "fused_score": 1 / 61,
     }
 
 
@@ -77,9 +81,13 @@ def test_dense_failure_explicitly_falls_back_to_keyword_once():
     store = Store([memory("cat", "用户养猫。"), memory("tea", "用户喜欢乌龙茶。")])
     retriever = HybridMemoryRetriever(store, Broken())
     assert tuple(item.id for item in retriever.retrieve("猫")) == ("cat",)
-    assert retriever.consume_diagnostics() == {
-        "strategy": "keyword_fallback", "warning_code": "dense_retrieval_failed",
-    }
+    diagnostics = retriever.consume_diagnostics()
+    assert diagnostics["strategy"] == "keyword_fallback"
+    assert diagnostics["warning_code"] == "dense_retrieval_failed"
+    assert diagnostics["items"] == ({
+        "item_id": "cat", "keyword_score": 1,
+        "dense_score": None, "fused_score": None,
+    },)
     assert retriever.consume_diagnostics()["warning_code"] is None
 
 

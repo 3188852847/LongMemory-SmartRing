@@ -60,6 +60,7 @@ class KeywordMemoryRetriever:
     ) -> None:
         self._memory_store = memory_store
         self._clock = clock
+        self._last_scores: tuple[dict, ...] = ()
 
     def retrieve(
         self,
@@ -69,6 +70,7 @@ class KeywordMemoryRetriever:
     ) -> tuple[AtomicMemory, ...]:
         """返回与查询存在有效词项重合的记忆。"""
 
+        self._last_scores = ()
         if limit <= 0:
             return ()
 
@@ -100,10 +102,21 @@ class KeywordMemoryRetriever:
             reverse=True,
         )
 
-        return tuple(
-            memory
-            for _, memory in scored_memories[:limit]
-        )
+        selected = scored_memories[:limit]
+        self._last_scores = tuple({
+            "item_id": str(memory.id),
+            "keyword_score": score,
+            "dense_score": None,
+            "fused_score": None,
+        } for score, memory in selected)
+        return tuple(memory for _, memory in selected)
+
+    def consume_diagnostics(self) -> dict:
+        """返回最近一轮的可解释词项分；该整数不是概率。"""
+
+        items = self._last_scores
+        self._last_scores = ()
+        return {"strategy": "keyword_v1", "warning_code": None, "items": items}
 
 
 class HybridMemoryRetriever:
@@ -127,6 +140,7 @@ class HybridMemoryRetriever:
         self._index = ExactVectorIndex((), (), encoder_id=encoder.identity)
         self._signature: tuple[tuple[str, str], ...] = ()
         self._warning_code: str | None = None
+        self._last_scores: tuple[dict, ...] = ()
 
     def _documents(self, memories: tuple[AtomicMemory, ...]) -> tuple[VectorDocument, ...]:
         return tuple(
@@ -161,6 +175,7 @@ class HybridMemoryRetriever:
 
     def retrieve(self, query: str, *, limit: int = 5) -> tuple[AtomicMemory, ...]:
         self._warning_code = None
+        self._last_scores = ()
         if limit <= 0:
             return ()
         keyword = self._keyword.retrieve(query, limit=max(20, limit * 4))
@@ -175,17 +190,19 @@ class HybridMemoryRetriever:
         by_id = {str(memory.id): memory for memory in memories}
         try:
             self._refresh(memories)
-            dense = tuple(
-                by_id[document.item_id]
-                for document, _score in self._index.search(
-                    self._encoder.encode_query(query), limit=max(20, limit * 4),
-                )
+            dense_results = self._index.search(
+                self._encoder.encode_query(query), limit=max(20, limit * 4),
             )
+            dense = tuple(by_id[document.item_id] for document, _ in dense_results)
         except (OSError, RuntimeError, ValueError):
             # 日常入口继续使用可解释基线，但通过 consume_diagnostics 明确
             # 告知调用方发生了降级；不吞掉 SQLite 等存储错误。
             self._warning_code = "dense_retrieval_failed"
-            return keyword[:limit]
+            selected = keyword[:limit]
+            keyword_diagnostics = self._keyword.consume_diagnostics()
+            scores = {item["item_id"]: item for item in keyword_diagnostics["items"]}
+            self._last_scores = tuple(scores[str(memory.id)] for memory in selected)
+            return selected
 
         # Reciprocal Rank Fusion 只融合次序，不把不同量纲的词项分与
         # 余弦分硬相加。60 是算法平滑常数，不是相似度/置信阈值。
@@ -197,13 +214,28 @@ class HybridMemoryRetriever:
                 order.setdefault(key, len(order))
                 scores[key] = scores.get(key, 0.0) + 1.0 / (60 + rank)
         ranked = sorted(scores, key=lambda key: (-scores[key], order[key]))
-        return tuple(by_id[key] for key in ranked[:limit])
+        selected_ids = ranked[:limit]
+        keyword_scores = {
+            item["item_id"]: item["keyword_score"]
+            for item in self._keyword.consume_diagnostics()["items"]
+        }
+        dense_scores = {document.item_id: score for document, score in dense_results}
+        self._last_scores = tuple({
+            "item_id": key,
+            "keyword_score": keyword_scores.get(key),
+            "dense_score": dense_scores.get(key),
+            "fused_score": scores[key],
+        } for key in selected_ids)
+        return tuple(by_id[key] for key in selected_ids)
 
-    def consume_diagnostics(self) -> dict[str, str | None]:
+    def consume_diagnostics(self) -> dict:
         """返回并清除最近一次串行调用状态，避免警告污染下一轮。"""
         warning = self._warning_code
+        items = self._last_scores
         self._warning_code = None
+        self._last_scores = ()
         return {
             "strategy": "keyword_fallback" if warning else self.name,
             "warning_code": warning,
+            "items": items,
         }

@@ -25,12 +25,19 @@ def _retrieval_evidence(prepared):
     )
     for layer, items, identify, content in groups:
         for rank, item in enumerate(items, 1):
-            rows.append({
+            row = {
                 "layer": layer,
                 "item_id": identify(item),
                 "rank": rank,
                 "content_sha256": sha256(content(item).encode("utf-8")).hexdigest(),
-            })
+            }
+            if layer == "l1":
+                row.update({
+                    "keyword_score": item.keyword_score,
+                    "dense_score": item.dense_score,
+                    "fused_score": item.fused_score,
+                })
+            rows.append(row)
     return rows
 
 
@@ -131,7 +138,10 @@ def register_memory_runtime_routes(app, backend):
         try:
             body = await request.json()
             required = {"version", "turn_id", "answer", "retrieved_counts"}
-            allowed_shapes = (required, required | {"retrieval_evidence"})
+            optional = {"retrieval_evidence", "retrieval_strategy"}
+            allowed_shapes = tuple(required | fields for fields in (
+                set(), {"retrieval_evidence"}, {"retrieval_strategy"}, optional,
+            ))
             if (not isinstance(body, dict) or set(body) not in allowed_shapes
                     or body.get("version") != 1):
                 raise ValueError
@@ -139,6 +149,7 @@ def register_memory_runtime_routes(app, backend):
             answer = body["answer"]
             counts = body["retrieved_counts"]
             evidence = body.get("retrieval_evidence")
+            retrieval_strategy = body.get("retrieval_strategy")
             if (not isinstance(turn_id, str) or str(UUID(turn_id)) != turn_id
                     or not isinstance(answer, str) or not answer.strip()
                     or len(answer) > 16000 or not isinstance(counts, dict)
@@ -147,6 +158,10 @@ def register_memory_runtime_routes(app, backend):
                            for value in counts.values())):
                 raise ValueError
             if evidence is not None and not isinstance(evidence, list):
+                raise ValueError
+            if (retrieval_strategy is not None
+                    and (not isinstance(retrieval_strategy, str)
+                         or not 1 <= len(retrieval_strategy.strip()) <= 240)):
                 raise ValueError
         except (ValueError, TypeError, KeyError, UnicodeError):
             return web.json_response(
@@ -157,6 +172,7 @@ def register_memory_runtime_routes(app, backend):
                 backend.complete_round_screen_turn,
                 turn_id=turn_id, answer=answer, retrieved_counts=counts,
                 retrieval_evidence=(tuple(evidence) if evidence is not None else None),
+                retrieval_strategy=retrieval_strategy,
             )
         except ValueError as error:
             code = str(error)

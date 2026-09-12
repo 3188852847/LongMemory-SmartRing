@@ -325,6 +325,7 @@ def register_chat_routes(app, backend):
                 "revision": 1,
                 "occurred_at": event["occurred_at"],
                 "retrieved_counts": layer_counts,
+                "retrieval_strategy": event.get("retrieval_strategy"),
                 "retrieval_evidence": event["retrieval_evidence"],
                 "retrieval_evidence_recorded": bool(
                     event["retrieval_evidence_recorded"]

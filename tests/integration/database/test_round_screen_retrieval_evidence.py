@@ -34,6 +34,45 @@ def test_v31_upgrade_adds_empty_round_screen_retrieval_evidence_table(tmp_path):
     connection.close()
 
 
+def test_v36_upgrade_adds_nullable_retrieval_scores_without_inventing_history(tmp_path):
+    connection = open_database(tmp_path / "memory.db")
+    initialize_schema(connection)
+    connection.execute("PRAGMA user_version = 36")
+    connection.execute("ALTER TABLE round_screen_retrieval_receipts RENAME TO old_receipts")
+    connection.execute("ALTER TABLE round_screen_retrieval_evidence RENAME TO old_evidence")
+    connection.executescript("""
+        CREATE TABLE round_screen_retrieval_receipts (
+            user_message_id TEXT PRIMARY KEY
+        );
+        CREATE TABLE round_screen_retrieval_evidence (
+            user_message_id TEXT NOT NULL,
+            layer TEXT NOT NULL,
+            item_id TEXT NOT NULL,
+            rank INTEGER NOT NULL,
+            content_sha256 TEXT NOT NULL,
+            PRIMARY KEY (user_message_id, layer, rank)
+        );
+    """)
+    connection.execute("DROP TABLE old_evidence")
+    connection.execute("DROP TABLE old_receipts")
+    initialize_schema(connection)
+
+    receipt_columns = {
+        row[1] for row in connection.execute(
+            "PRAGMA table_info(round_screen_retrieval_receipts)"
+        )
+    }
+    evidence_columns = {
+        row[1] for row in connection.execute(
+            "PRAGMA table_info(round_screen_retrieval_evidence)"
+        )
+    }
+    assert "retrieval_strategy" in receipt_columns
+    assert {"keyword_score", "dense_score", "fused_score"} <= evidence_columns
+    assert connection.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION
+    connection.close()
+
+
 def test_turn_receipt_atomically_records_ranked_evidence_and_rejects_conflict(tmp_path):
     database = tmp_path / "evidence.db"
     now = datetime(2026, 9, 10, 2, 0, tzinfo=UTC)
@@ -47,7 +86,8 @@ def test_turn_receipt_atomically_records_ranked_evidence_and_rejects_conflict(tm
     connection.close()
     evidence = (
         {"layer": "l1", "item_id": "memory-a", "rank": 1,
-         "content_sha256": "a" * 64},
+         "content_sha256": "a" * 64, "keyword_score": 2,
+         "dense_score": 0.72, "fused_score": 0.031},
         {"layer": "l2", "item_id": "scenario-a", "rank": 1,
          "content_sha256": "b" * 64},
     )
@@ -55,12 +95,12 @@ def test_turn_receipt_atomically_records_ranked_evidence_and_rejects_conflict(tm
     created = store.record(
         user_message_id="user-turn", answer="合成回答",
         retrieved_l1_count=1, retrieved_l2_count=1, retrieved_l3_count=0,
-        retrieval_evidence=evidence,
+        retrieval_evidence=evidence, retrieval_strategy="keyword_dense_rrf_v1",
     )
     replay = store.record(
         user_message_id="user-turn", answer="合成回答",
         retrieved_l1_count=1, retrieved_l2_count=1, retrieved_l3_count=0,
-        retrieval_evidence=evidence,
+        retrieval_evidence=evidence, retrieval_strategy="keyword_dense_rrf_v1",
     )
     assert created.created is True and replay.created is False
     connection = open_database(database)
@@ -73,8 +113,13 @@ def test_turn_receipt_atomically_records_ranked_evidence_and_rejects_conflict(tm
         ("l2", "scenario-a", 1, "b" * 64),
     ]
     assert connection.execute(
-        "SELECT user_message_id FROM round_screen_retrieval_receipts"
-    ).fetchone()[0] == "user-turn"
+        "SELECT user_message_id,retrieval_strategy FROM round_screen_retrieval_receipts"
+    ).fetchone()[:] == ("user-turn", "keyword_dense_rrf_v1")
+    scores = connection.execute(
+        "SELECT keyword_score,dense_score,fused_score FROM "
+        "round_screen_retrieval_evidence WHERE layer='l1'"
+    ).fetchone()
+    assert tuple(scores) == (2, 0.72, 0.031)
     assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
     connection.close()
     with pytest.raises(ValueError, match="round_screen_retrieval_evidence_invalid"):

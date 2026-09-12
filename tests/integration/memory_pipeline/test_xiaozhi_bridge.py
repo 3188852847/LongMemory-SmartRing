@@ -177,9 +177,12 @@ def test_provider_uses_runtime_transport_without_starting_subprocess(provider_cl
             return json.dumps({"version": 1, "context": "用户养猫。",
                                "turn_id": "11111111-1111-1111-1111-111111111111",
                                "added": 1, "retrieved": 1,
+                               "retrieval_strategy": "keyword_dense_rrf_v1",
                                "retrieval_evidence": [{
                                    "layer": "l1", "item_id": "l1-a", "rank": 1,
                                    "content_sha256": "a" * 64,
+                                   "keyword_score": 1, "dense_score": 0.8,
+                                   "fused_score": 0.03,
                                }, {
                                    "layer": "l2", "item_id": "l2-a", "rank": 1,
                                    "content_sha256": "b" * 64,
@@ -217,6 +220,7 @@ def test_provider_uses_runtime_transport_without_starting_subprocess(provider_cl
     assert completion_timeout == 5
     assert completion_body["retrieved_counts"] == {"l1": 1, "l2": 1, "l3": 0}
     assert [item["item_id"] for item in completion_body["retrieval_evidence"]] == ["l1-a", "l2-a"]
+    assert completion_body["retrieval_strategy"] == "keyword_dense_rrf_v1"
     assert completion_body["answer"] == "这是最终回答"
 
 

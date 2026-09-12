@@ -47,6 +47,10 @@ def test_observe_recall_preserves_source_and_reopen(tmp_path):
         support = method.recall("我的猫叫什么")
         assert "豆包" in support.context and "花花" not in support.context
         assert support.retrieved[0].source_event_ids == ("user-1",)
+        assert support.retrieval_strategy == "keyword_v1"
+        assert support.retrieved[0].keyword_score == 1
+        assert support.retrieved[0].dense_score is None
+        assert support.retrieved[0].fused_score is None
         assert path.read_bytes() == before
         assert method.recall("我的猫叫什么").call_id != support.call_id
         duplicate = method.observe(event("user-2"))

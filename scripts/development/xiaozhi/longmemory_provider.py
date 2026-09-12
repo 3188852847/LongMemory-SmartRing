@@ -7,6 +7,7 @@
 import asyncio
 import html
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -170,8 +171,10 @@ class MemoryProvider(MemoryProviderBase):
             layer_ranks = {"l1": [], "l2": [], "l3": []}
             seen = set()
             for item in retrieval_evidence:
-                if (not isinstance(item, dict) or set(item) != {
-                        "layer", "item_id", "rank", "content_sha256"}):
+                basic_fields = {"layer", "item_id", "rank", "content_sha256"}
+                score_fields = {"keyword_score", "dense_score", "fused_score"}
+                if (not isinstance(item, dict) or set(item) not in (
+                        basic_fields, basic_fields | score_fields)):
                     raise RuntimeError("LongMemory 返回协议无效")
                 layer = item["layer"]
                 item_id = item["item_id"]
@@ -184,6 +187,18 @@ class MemoryProvider(MemoryProviderBase):
                         or re.fullmatch(r"[0-9a-f]{64}", digest) is None
                         or (layer, item_id) in seen):
                     raise RuntimeError("LongMemory 返回协议无效")
+                if set(item) == basic_fields | score_fields:
+                    keyword_score = item["keyword_score"]
+                    dense_score = item["dense_score"]
+                    fused_score = item["fused_score"]
+                    if (layer != "l1"
+                            or (keyword_score is not None and (
+                                type(keyword_score) is not int or keyword_score < 0))
+                            or any(value is not None and (
+                                type(value) not in (int, float)
+                                or not math.isfinite(value))
+                                for value in (dense_score, fused_score))):
+                        raise RuntimeError("LongMemory 返回协议无效")
                 seen.add((layer, item_id))
                 layer_counts[layer] += 1
                 layer_ranks[layer].append(rank)
@@ -207,6 +222,8 @@ class MemoryProvider(MemoryProviderBase):
                     "l3": len(persona_items),
                 },
                 "retrieval_evidence": retrieval_evidence,
+                "retrieval_strategy": response.get("retrieval_strategy"),
+                "retrieval_strategy": response.get("retrieval_strategy"),
             }
         if command_reply is not None:
             reply = html.escape(command_reply, quote=False)
@@ -259,6 +276,10 @@ class MemoryProvider(MemoryProviderBase):
         # 字段缺省兼容更新期间的旧 Runtime；新 Runtime 会返回并持久化精确索引。
         if pending.get("retrieval_evidence") is not None:
             completion["retrieval_evidence"] = pending["retrieval_evidence"]
+        if pending.get("retrieval_strategy") is not None:
+            completion["retrieval_strategy"] = pending["retrieval_strategy"]
+        if pending.get("retrieval_strategy") is not None:
+            completion["retrieval_strategy"] = pending["retrieval_strategy"]
         body = json.dumps(completion).encode("utf-8")
         request = urlrequest.Request(
             target, data=body, method="POST",

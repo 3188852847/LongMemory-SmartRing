@@ -74,6 +74,11 @@ class RetrievedTrace:
     item_id: str
     content: str
     source_event_ids: tuple[str, ...] | None = None
+    # 三种分数的量纲不同：词项重合数、余弦相似度与 RRF 融合分。
+    # None 明确表示当前策略或历史记录没有产生该分数，不能按 0 解释。
+    keyword_score: int | None = None
+    dense_score: float | None = None
+    fused_score: float | None = None
 
 
 @dataclass(frozen=True, slots=True)

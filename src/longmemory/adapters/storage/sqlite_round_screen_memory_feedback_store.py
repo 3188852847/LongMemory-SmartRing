@@ -109,6 +109,8 @@ class SQLiteRoundScreenMemoryFeedbackStore:
                 "f.feedback_message_id,f.event_kind,"
                 "f.occurred_at,t.assistant_message_id,t.retrieved_l1_count,"
                 "t.retrieved_l2_count,t.retrieved_l3_count,"
+                "(SELECT r.retrieval_strategy FROM round_screen_retrieval_receipts r "
+                "WHERE r.user_message_id=t.user_message_id) AS retrieval_strategy,"
                 "EXISTS(SELECT 1 FROM round_screen_retrieval_receipts r "
                 "WHERE r.user_message_id=t.user_message_id) "
                 "AS retrieval_evidence_recorded "
@@ -117,7 +119,8 @@ class SQLiteRoundScreenMemoryFeedbackStore:
                 "ORDER BY f.occurred_at DESC,f.id DESC"
             ).fetchall()
             evidence_rows = connection.execute(
-                "SELECT e.user_message_id,e.layer,e.item_id,e.rank,e.content_sha256 "
+                "SELECT e.user_message_id,e.layer,e.item_id,e.rank,e.content_sha256,"
+                "e.keyword_score,e.dense_score,e.fused_score "
                 "FROM round_screen_retrieval_evidence e JOIN "
                 "round_screen_memory_feedback_events f "
                 "ON f.target_user_message_id=e.user_message_id "
@@ -167,7 +170,8 @@ class SQLiteRoundScreenMemoryFeedbackStore:
             result = dict(row)
             evidence = []
             for item in connection.execute(
-                "SELECT layer,item_id,rank,content_sha256 FROM "
+                "SELECT layer,item_id,rank,content_sha256,keyword_score,dense_score,"
+                "fused_score FROM "
                 "round_screen_retrieval_evidence WHERE user_message_id=? "
                 "ORDER BY layer,rank",
                 (result["target_user_message_id"],),
@@ -178,6 +182,13 @@ class SQLiteRoundScreenMemoryFeedbackStore:
                 "SELECT 1 FROM round_screen_retrieval_receipts WHERE user_message_id=?",
                 (result["target_user_message_id"],),
             ).fetchone() is not None
+            receipt = connection.execute(
+                "SELECT retrieval_strategy FROM round_screen_retrieval_receipts "
+                "WHERE user_message_id=?", (result["target_user_message_id"],),
+            ).fetchone()
+            result["retrieval_strategy"] = (
+                receipt["retrieval_strategy"] if receipt is not None else None
+            )
             return result
         finally:
             connection.close()
