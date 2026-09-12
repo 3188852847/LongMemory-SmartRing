@@ -54,7 +54,7 @@ G3.2 已支持两种明确临时互动方式：当天模式把固定完整表达
 
 圆屏回答完成回执从 SQLite V30 开始保存：实际助手文本与本轮用户 L0、L1/L2/L3 召回数量建立关联。V31–V33 逐步增加明确质量反馈、实际召回证据索引和只追加问题处理状态；它们不自动修改记忆或学习。V34–V36 新增长期事项跟进：所有者可手工建立候选；带明确时间的“到时候问我……”在主动交流总开关开启时可原子建立一次未来联系，总开关关闭时只保留候选。V37 进一步记录日常圆屏回答的检索策略及关键词、余弦与 RRF 分量，供后续用真实反馈校准召回；它不把分数冒充可信度，也不自动改变回答。见 [ADR-0097](docs/adr/0097-round-screen-answer-completion-receipt.md)至 [ADR-0104](docs/adr/0104-conversation-authorized-one-shot-follow-up.md)，以及 [ADR-0128](docs/adr/0128-auditable-daily-retrieval-scores.md)。
 
-SQLite V40 开始逐条记录未来 L1 合并真正新增的来源关联，合并历史会显示账本是否完整。旧 V39 合并不猜测回填，当前仍没有一键撤销。见 [ADR-0132](docs/adr/0132-l1-merge-evidence-ledger.md)。
+SQLite V40 开始逐条记录未来 L1 合并真正新增的来源关联，合并历史会显示账本是否完整。V41 允许从控制台恢复至少含一条、数量完整匹配的误合并账本：重新启用被合并 L1，保留已汇入来源且不自动复活 L2/L3；恢复后只能在来源仍安全覆盖时按原方向重新合并。旧 V39 合并和无法区分版本的零来源账本不猜测恢复。见 [ADR-0132](docs/adr/0132-l1-merge-evidence-ledger.md)和 [ADR-0133](docs/adr/0133-restorable-l1-duplicate-merge.md)。
 
 L2 设计已接受：先生成可追溯、需复核的时间化场景候选，确认前不进入回答；稳定习惯仍属于 L3。个人库已在一致性备份和用户明确授权后迁移到 V6，原有 L0/L1/L2 数量不变，生命周期事件从空表开始。可按 [L2 生活场景合成测试指南](docs/guides/L2生活场景测试.md)体验，设计与边界见 [ADR-0035](docs/adr/0035-reviewable-l2-scenario-candidates.md)、[ADR-0038](docs/adr/0038-audited-l2-lifecycle.md)和 [L2 第一版验收](docs/requirements/l2-scenario-memory.md)。
 

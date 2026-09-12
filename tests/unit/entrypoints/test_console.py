@@ -678,6 +678,47 @@ def test_console_merges_duplicate_l1_without_deleting_history_or_sources(tmp_pat
                 "source_type": "user_stated",
                 "linked_at": "2026-09-13T00:01:00+00:00",
             }]
+            merge_event = quality_after_merge["merge_history"][0]
+            assert merge_event["state"] == "merged"
+            assert merge_event["state_revision"] == 1
+            assert merge_event["restore_available"] is True
+            restored = await client.post(
+                base + "/api/memories/quality-candidates/merges/restore",
+                headers=headers,
+                json={"merge_event_id": merge_event["id"],
+                      "expected_state_revision": 1, "confirm_restore": True},
+            )
+            assert restored.status == 200
+            restored_payload = await restored.json()
+            assert restored_payload["state"] == "restored"
+            assert restored_payload["state_revision"] == 2
+            assert restored_payload["copied_evidence_preserved"] == 1
+            assert restored_payload["derived_memories_reactivated"] is False
+            quality_after_restore = await (await client.get(
+                base + "/api/memories/quality-candidates"
+            )).json()
+            assert quality_after_restore["total"] == 1
+            assert quality_after_restore["items"][0][
+                "required_remerge_kept_memory_id"
+            ] == "memory-a"
+            assert quality_after_restore["merge_history"][0]["state"] == "restored"
+            assert quality_after_restore["merge_history"][0]["restore_available"] is False
+            reapplied = await client.post(
+                base + "/api/memories/quality-candidates/merge", headers=headers,
+                json={"left_memory_id": "memory-a", "right_memory_id": "memory-b",
+                      "candidate_kind": "normalized_duplicate",
+                      "kept_memory_id": "memory-a",
+                      "expected_review_revision": 0, "confirm_merge": True},
+            )
+            assert reapplied.status == 200
+            reapplied_payload = await reapplied.json()
+            assert reapplied_payload["reapplied"] is True
+            assert reapplied_payload["copied_evidence_count"] == 0
+            quality_after_reapply = await (await client.get(
+                base + "/api/memories/quality-candidates"
+            )).json()
+            assert quality_after_reapply["merge_history"][0]["state"] == "merged"
+            assert quality_after_reapply["merge_history"][0]["state_revision"] == 3
 
     asyncio.run(run())
     with sqlite3.connect(database) as connection:
@@ -696,6 +737,10 @@ def test_console_merges_duplicate_l1_without_deleting_history_or_sources(tmp_pat
         assert tuple(ledger) == (
             "source-b", "user_stated", "2026-09-13T00:01:00+00:00",
         )
+        assert connection.execute(
+            "SELECT group_concat(action, ',') FROM "
+            "l1_duplicate_merge_state_events ORDER BY state_revision"
+        ).fetchone()[0] == "restore,reapply"
 
 
 @pytest.mark.parametrize("attack", ["no_csrf", "no_origin", "other_origin", "other_host", "cross_site", "same_site", "wrong_cookie"])

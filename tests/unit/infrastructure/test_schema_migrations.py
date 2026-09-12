@@ -14,8 +14,8 @@ def test_migration_chain_is_contiguous_up_to_current_schema():
     assert len(set(MIGRATIONS.values())) == len(MIGRATIONS)
 
 
-def test_v39_merge_history_is_not_guessed_during_v40_migration():
-    """旧合并只有数量，V40 不能猜测具体来源并回填账本。"""
+def test_v39_merge_history_is_not_guessed_during_later_migrations():
+    """旧合并只有数量，后续迁移不能猜测具体来源并回填账本。"""
 
     connection = sqlite3.connect(":memory:")
     connection.execute("PRAGMA foreign_keys = ON")
@@ -24,7 +24,7 @@ def test_v39_merge_history_is_not_guessed_during_v40_migration():
     connection.execute("PRAGMA user_version = 39")
     initialize_schema(connection)
 
-    assert connection.execute("PRAGMA user_version").fetchone()[0] == 40
+    assert connection.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION
     assert connection.execute(
         "SELECT count(*) FROM l1_duplicate_merge_evidence"
     ).fetchone()[0] == 0

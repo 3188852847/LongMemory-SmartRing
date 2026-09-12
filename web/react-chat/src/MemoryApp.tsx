@@ -36,9 +36,9 @@ type DailyDeletion = {id:string;memory_id:string;subject_id:string;deleted_at:st
 type DailyReview = {local_date:string;utc_offset_minutes:number;items:DailyReviewItem[];total:number;limited:boolean;activity_counts:Record<DailyActivity|'deleted',number>;message_counts:{user:number;assistant:number;total:number;unlinked_user:number};quality_counts:{owner_confirmed_missed_extraction:number};deletions:DailyDeletion[];deletions_limited:boolean};
 type ClearPreview = {l1_total:number;l1_active:number;l1_retired:number;affected_l2_current:number;affected_l3_current:number;l0_preserved:number;revision:string};
 type WipePreview = {l0_total:number;l1_total:number;l2_total:number;l3_total:number;l2_current:number;l3_current:number;related_record_total:number;web_chat_archive_preserved:boolean;existing_backups_preserved:boolean;revision:string};
-type L1QualityCandidate = {kind:'normalized_duplicate'|'lexical_near_duplicate'|'possible_conflict';similarity:number;reason:string;left:L1Summary;right:L1Summary;review_status:'pending'|'dismissed';review_revision:number};
+type L1QualityCandidate = {kind:'normalized_duplicate'|'lexical_near_duplicate'|'possible_conflict';similarity:number;reason:string;left:L1Summary;right:L1Summary;review_status:'pending'|'dismissed';review_revision:number;required_remerge_kept_memory_id:string|null};
 type L1MergeEvidence = {source_message_id:string;source_type:string;linked_at:string};
-type L1MergeHistory = {id:string;kept_memory_id:string;retired_memory_id:string;candidate_kind:'normalized_duplicate'|'lexical_near_duplicate';copied_evidence_count:number;evidence_ledger_count:number;evidence_ledger_complete:boolean;evidence_ledger:L1MergeEvidence[];merged_at:string;kept_content:string;retired_content:string};
+type L1MergeHistory = {id:string;kept_memory_id:string;retired_memory_id:string;candidate_kind:'normalized_duplicate'|'lexical_near_duplicate';copied_evidence_count:number;evidence_ledger_count:number;evidence_ledger_complete:boolean;evidence_ledger:L1MergeEvidence[];merged_at:string;kept_content:string;retired_content:string;state:'merged'|'restored';state_revision:number;state_changed_at:string|null;restore_available:boolean};
 type L1QualityCandidates = {items:L1QualityCandidate[];total:number;scanned_memory_count:number;memory_scan_limited:boolean;candidate_limit:number;candidate_limit_reached:boolean;lexical_threshold:number;detector_version:string;generated_at:string;merge_history:L1MergeHistory[];merge_history_total:number;merge_history_limited:boolean};
 
 const api = new ChatApi();
@@ -104,6 +104,7 @@ export function MemoryApp() {
   const [qualityCandidates, setQualityCandidates] = useState<L1QualityCandidates>();
   const [qualityScanning, setQualityScanning] = useState(false);
   const [mergeChoice, setMergeChoice] = useState<{item:L1QualityCandidate;kept:'left'|'right'}>();
+  const [restoreChoice, setRestoreChoice] = useState<L1MergeHistory>();
   const locked = useRef(false);
 
   async function fetchL1(offset = 0, search = query, stateFilter = l1State) {
@@ -233,7 +234,7 @@ export function MemoryApp() {
     const {item,kept}=mergeChoice;
     await guarded(async()=>{
       const keptMemory=kept==='left'?item.left:item.right;
-      const result=await api.request<{copied_evidence_count:number;evidence_ledger:L1MergeEvidence[];merged_at:string}>(
+      const result=await api.request<{merge_event_id:string;copied_evidence_count:number;reapplied:boolean}>(
         '/api/memories/quality-candidates/merge','POST',{
           left_memory_id:item.left.id,right_memory_id:item.right.id,
           candidate_kind:item.kind,kept_memory_id:keptMemory.id,
@@ -241,10 +242,25 @@ export function MemoryApp() {
         },
       );
       setMergeChoice(undefined);
-      setQualityCandidates(current=>current ? {...current,total:Math.max(0,current.total-1),items:current.items.filter(candidate=>!(candidate.left.id===item.left.id&&candidate.right.id===item.right.id)),merge_history_total:current.merge_history_total+1,merge_history:[{id:`local-${result.merged_at}`,kept_memory_id:keptMemory.id,retired_memory_id:kept==='left'?item.right.id:item.left.id,candidate_kind:item.kind as 'normalized_duplicate'|'lexical_near_duplicate',copied_evidence_count:result.copied_evidence_count,evidence_ledger_count:result.evidence_ledger.length,evidence_ledger_complete:result.evidence_ledger.length===result.copied_evidence_count,evidence_ledger:result.evidence_ledger,merged_at:result.merged_at,kept_content:keptMemory.content,retired_content:(kept==='left'?item.right:item.left).content},...current.merge_history].slice(0,25)} : current);
       await fetchL1(0,'','active');
-      setNotice(`重复 L1 已合并：保留所选事实，另一条已退役；汇入 ${result.copied_evidence_count} 条此前未关联的 L0 来源。`);
+      await scanL1Quality();
+      setNotice(`${result.reapplied?'重复 L1 已重新合并':'重复 L1 已合并'}：保留所选事实，另一条已退役；汇入 ${result.copied_evidence_count} 条此前未关联的 L0 来源。`);
       setSelectedL1(await api.request<L1Detail>(`/api/memories/${encodeURIComponent(keptMemory.id)}`));
+    },'write');
+  }
+  async function restoreL1Merge() {
+    if (!restoreChoice) return;
+    const event=restoreChoice;
+    await guarded(async()=>{
+      const result=await api.request<{copied_evidence_preserved:number}>(
+        '/api/memories/quality-candidates/merges/restore','POST',{
+          merge_event_id:event.id,expected_state_revision:event.state_revision,confirm_restore:true,
+        },
+      );
+      setRestoreChoice(undefined);
+      await fetchL1(0,'','active');
+      await scanL1Quality();
+      setNotice(`被合并的 L1 已恢复为当前记忆；保留项上的 ${result.copied_evidence_preserved} 条来源副本继续保留，L2/L3 没有被自动复活。`);
     },'write');
   }
   async function openCorrection(id:string) {
@@ -431,11 +447,11 @@ export function MemoryApp() {
             <Space direction="vertical" size={6} className="quality-candidate-body">
               <Space wrap><Tag color={item.kind==='possible_conflict'?'red':item.kind==='normalized_duplicate'?'gold':'blue'}>{item.kind==='possible_conflict'?'可能矛盾':item.kind==='normalized_duplicate'?'规范化重复':'高字面重合'}</Tag><span>{item.reason}</span><code>重合 {Math.round(item.similarity*100)}%</code></Space>
               <div className="quality-candidate-pair"><Button type="text" onClick={()=>void openL1(item.left.id)}><Tag color="magenta">A</Tag>{item.left.content}</Button><Button type="text" onClick={()=>void openL1(item.right.id)}><Tag color="magenta">B</Tag>{item.right.content}</Button></div>
-              <Space wrap><small className="subtle">请分别核对原始来源；矛盾候选应使用“纠正错误”或“记录变化”，不能当成重复合并。</small><Button size="small" disabled={!config?.allow_l1_quality_review||busy} onClick={()=>void reviewL1Quality(item,item.review_status==='dismissed'?'reopen':'dismiss')}>{item.review_status==='dismissed'?'恢复候选':'标为误报'}</Button>{item.kind!=='possible_conflict'&&item.review_status==='pending'&&<><Button size="small" onClick={()=>setMergeChoice({item,kept:'left'})}>保留 A，合并 B</Button><Button size="small" onClick={()=>setMergeChoice({item,kept:'right'})}>保留 B，合并 A</Button></>}{item.review_status==='dismissed'&&<Tag>已忽略</Tag>}</Space>
+              <Space wrap><small className="subtle">请分别核对原始来源；矛盾候选应使用“纠正错误”或“记录变化”，不能当成重复合并。</small><Button size="small" disabled={!config?.allow_l1_quality_review||busy} onClick={()=>void reviewL1Quality(item,item.review_status==='dismissed'?'reopen':'dismiss')}>{item.review_status==='dismissed'?'恢复候选':'标为误报'}</Button>{item.kind!=='possible_conflict'&&item.review_status==='pending'&&<><Button size="small" disabled={Boolean(item.required_remerge_kept_memory_id&&item.required_remerge_kept_memory_id!==item.left.id)} onClick={()=>setMergeChoice({item,kept:'left'})}>{item.required_remerge_kept_memory_id===item.left.id?'重新保留 A，合并 B':'保留 A，合并 B'}</Button><Button size="small" disabled={Boolean(item.required_remerge_kept_memory_id&&item.required_remerge_kept_memory_id!==item.right.id)} onClick={()=>setMergeChoice({item,kept:'right'})}>{item.required_remerge_kept_memory_id===item.right.id?'重新保留 B，合并 A':'保留 B，合并 A'}</Button></>}{item.required_remerge_kept_memory_id&&<Tag color="blue">恢复后的候选只能按原方向重新合并</Tag>}{item.review_status==='dismissed'&&<Tag>已忽略</Tag>}</Space>
             </Space>
           </List.Item>}/>
         </>}
-        {qualityCandidates&&qualityCandidates.merge_history.length>0&&<details className="quality-merge-history"><summary>查看重复合并历史（{qualityCandidates.merge_history_total}）</summary><List size="small" dataSource={qualityCandidates.merge_history} renderItem={event=><List.Item><Space direction="vertical" size={2}><span><Button type="link" size="small" onClick={()=>void openL1(event.kept_memory_id)}>保留：{event.kept_content}</Button></span><span className="subtle">已取代：{event.retired_content}</span><small className="subtle">{displayTime(event.merged_at)} · 汇入 {event.copied_evidence_count} 条来源 · {event.evidence_ledger_complete?`账本完整 ${event.evidence_ledger_count}/${event.copied_evidence_count}`:'旧合并无逐条账本'}</small>{event.evidence_ledger.length>0&&<Space wrap size={4}>{event.evidence_ledger.map(source=><Button key={`${source.source_message_id}:${source.source_type}`} type="link" size="small" onClick={()=>void openL0(source.source_message_id)}>L0 {source.source_message_id.slice(0,8)} · {sourceName(source.source_type)} · {displayTime(source.linked_at)}</Button>)}</Space>}</Space></List.Item>}/>{qualityCandidates.merge_history_limited&&<p className="subtle">这里只显示最近 25 次合并。</p>}</details>}
+        {qualityCandidates&&qualityCandidates.merge_history.length>0&&<details className="quality-merge-history"><summary>查看重复合并历史（{qualityCandidates.merge_history_total}）</summary><List size="small" dataSource={qualityCandidates.merge_history} renderItem={event=><List.Item actions={event.restore_available?[<Button key="restore" size="small" onClick={()=>setRestoreChoice(event)}>恢复被合并项</Button>]:undefined}><Space direction="vertical" size={2}><Space wrap><Tag color={event.state==='merged'?'green':'blue'}>{event.state==='merged'?'合并生效中':'已恢复'}</Tag><span><Button type="link" size="small" onClick={()=>void openL1(event.kept_memory_id)}>保留：{event.kept_content}</Button></span></Space><span className="subtle">{event.state==='merged'?'已取代':'曾取代'}：{event.retired_content}</span><small className="subtle">首次合并 {displayTime(event.merged_at)} · 当前状态修订 {event.state_revision}{event.state_changed_at?` · 状态更新 ${displayTime(event.state_changed_at)}`:''} · 汇入 {event.copied_evidence_count} 条来源 · {event.evidence_ledger_complete?`账本完整 ${event.evidence_ledger_count}/${event.copied_evidence_count}`:'旧合并无逐条账本'}</small>{event.evidence_ledger.length>0&&<Space wrap size={4}>{event.evidence_ledger.map(source=><Button key={`${source.source_message_id}:${source.source_type}`} type="link" size="small" onClick={()=>void openL0(source.source_message_id)}>L0 {source.source_message_id.slice(0,8)} · {sourceName(source.source_type)} · {displayTime(source.linked_at)}</Button>)}</Space>}</Space></List.Item>}/>{qualityCandidates.merge_history_limited&&<p className="subtle">这里只显示最近 25 次合并。</p>}</details>}
       </Card>
       {mode && <Card className="mode-card" title={<span>本次运行的记忆模式 <Tag>临时设置</Tag></span>} extra={<Button type="primary" disabled={busy || (mode.write_enabled === modeDraft.write_enabled && mode.use_enabled === modeDraft.use_enabled && mode.scenario_use_enabled === modeDraft.scenario_use_enabled && mode.persona_use_enabled === modeDraft.persona_use_enabled)} onClick={() => void saveMode()}>应用到网页与圆屏</Button>}>
         <div className="memory-mode-grid">
@@ -484,7 +500,10 @@ export function MemoryApp() {
       <p>纠正会新建 L1，并保留旧记录为已取代历史。只用于旧事实本来就错了，不用于后来发生的变化。</p><Input.TextArea aria-label="纠正后的完整事实" rows={4} maxLength={1000} value={correction} onChange={e => setCorrection(e.target.value)} placeholder="输入可独立理解的完整事实"/>
     </Modal>
     <Modal title="确认合并这两条重复 L1？" open={Boolean(mergeChoice)} okText="确认合并" cancelText="取消" confirmLoading={busy} okButtonProps={{danger:true}} onCancel={()=>{if(!busy)setMergeChoice(undefined);}} onOk={()=>void mergeL1Quality()}>
-      {mergeChoice&&<><p>将保留：<strong>{mergeChoice.kept==='left'?mergeChoice.item.left.content:mergeChoice.item.right.content}</strong></p><p>另一条不会物理删除，而是标记为“已由保留项取代”；它的 L0 来源会同时关联到保留项。</p><p className="subtle">依赖被合并项的当前 L2/L3 会按既有来源规则变为失效，等待以后重新整理。这项操作目前没有一键撤销。</p></>}
+      {mergeChoice&&<><p>将保留：<strong>{mergeChoice.kept==='left'?mergeChoice.item.left.content:mergeChoice.item.right.content}</strong></p><p>另一条不会物理删除，而是标记为“已由保留项取代”；它的 L0 来源会同时关联到保留项。</p><p className="subtle">依赖被合并项的当前 L2/L3 会按既有来源规则变为失效，等待以后重新整理。合并历史会留下审计记录，可以从历史中恢复。</p></>}
+    </Modal>
+    <Modal title="恢复这条被合并的 L1？" open={Boolean(restoreChoice)} okText="确认恢复" cancelText="取消" confirmLoading={busy} onCancel={()=>{if(!busy)setRestoreChoice(undefined);}} onOk={()=>void restoreL1Merge()}>
+      {restoreChoice&&<><p>将重新启用：<strong>{restoreChoice.retired_content}</strong></p><p>恢复不会删除已经汇入“{restoreChoice.kept_content}”的 L0 来源副本，避免破坏之后形成的溯源关系。</p><p className="subtle">此前因合并而失效的 L2/L3 不会自动复活；恢复后若确认仍属重复，只能按原来的保留方向再次合并。</p></>}
     </Modal>
     <Modal title="记录事实变化" open={changing} okText="确认事实已经变化" cancelText="取消" confirmLoading={busy} okButtonProps={{disabled: !changedContent.trim() || !effectiveLocal}} onCancel={() => {setChanging(false); setChangedContent(''); setEffectiveLocal('');}} onOk={() => void saveChange()}>
       <p>用于“旧事实过去成立，但后来发生了变化”。旧事实会保留到生效时间，新事实从该时间开始生效；不要用它纠正从一开始就错误的记录。</p>

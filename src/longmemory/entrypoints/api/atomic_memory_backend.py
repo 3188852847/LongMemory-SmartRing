@@ -90,6 +90,18 @@ class AtomicMemoryBackend:
             for item in candidates:
                 pair = tuple(sorted((str(item.left.id), str(item.right.id))))
                 action, review_revision = reviews.get(pair, (None, 0))
+                prior_merge = connection.execute(
+                    "SELECT id,kept_memory_id FROM l1_duplicate_merge_events "
+                    "WHERE (kept_memory_id=? AND retired_memory_id=?) "
+                    "OR (kept_memory_id=? AND retired_memory_id=?) "
+                    "ORDER BY merged_at DESC,id DESC LIMIT 1",
+                    (pair[0], pair[1], pair[1], pair[0]),
+                ).fetchone()
+                required_remerge_kept_memory_id = None
+                if prior_merge:
+                    state = self._merge_state(connection, prior_merge["id"])
+                    if state["state"] == "restored":
+                        required_remerge_kept_memory_id = prior_merge["kept_memory_id"]
                 rows.append({
                     "kind": item.kind,
                     "similarity": round(item.similarity, 4),
@@ -98,6 +110,7 @@ class AtomicMemoryBackend:
                     "right": memory_json(item.right),
                     "review_status": "dismissed" if action == "dismiss" else "pending",
                     "review_revision": review_revision,
+                    "required_remerge_kept_memory_id": required_remerge_kept_memory_id,
                 })
             merge_total = connection.execute(
                 "SELECT count(*) FROM l1_duplicate_merge_events"
@@ -105,7 +118,9 @@ class AtomicMemoryBackend:
             merge_rows = connection.execute(
                 "SELECT e.id,e.kept_memory_id,e.retired_memory_id,e.candidate_kind,"
                 "e.copied_evidence_count,e.merged_at,k.content AS kept_content,"
-                "r.content AS retired_content,"
+                "r.content AS retired_content,k.retired_at AS kept_retired_at,"
+                "r.retired_at AS retired_retired_at,"
+                "r.superseded_by_id AS retired_superseded_by_id,"
                 "(SELECT count(*) FROM l1_duplicate_merge_evidence le "
                 "WHERE le.merge_event_id=e.id) AS evidence_ledger_count "
                 "FROM l1_duplicate_merge_events e "
@@ -121,11 +136,22 @@ class AtomicMemoryBackend:
                     "ORDER BY linked_at,source_message_id,source_type",
                     (row["id"],),
                 ).fetchall()
+                state = self._merge_state(connection, row["id"])
+                ledger_complete = (
+                    row["copied_evidence_count"] > 0
+                    and row["evidence_ledger_count"] == row["copied_evidence_count"]
+                )
                 merge_history.append(dict(row) | {
-                    "evidence_ledger_complete": (
-                        row["evidence_ledger_count"] == row["copied_evidence_count"]
-                    ),
+                    "evidence_ledger_complete": ledger_complete,
                     "evidence_ledger": [dict(item) for item in ledger_rows],
+                    **state,
+                    "restore_available": (
+                        ledger_complete
+                        and state["state"] == "merged"
+                        and row["kept_retired_at"] is None
+                        and row["retired_retired_at"] is not None
+                        and row["retired_superseded_by_id"] == row["kept_memory_id"]
+                    ),
                 })
             return {
                 "items": rows,
@@ -150,6 +176,21 @@ class AtomicMemoryBackend:
         )
         scanned = active[:500]
         return active, scanned, find_l1_quality_candidates(scanned)
+
+    @staticmethod
+    def _merge_state(connection, merge_event_id):
+        row = connection.execute(
+            "SELECT action,state_revision,occurred_at "
+            "FROM l1_duplicate_merge_state_events WHERE merge_event_id=? "
+            "ORDER BY state_revision DESC LIMIT 1",
+            (merge_event_id,),
+        ).fetchone()
+        if row is None:
+            return {"state": "merged", "state_revision": 1,
+                    "state_changed_at": None}
+        return {"state": "restored" if row["action"] == "restore" else "merged",
+                "state_revision": row["state_revision"],
+                "state_changed_at": row["occurred_at"]}
 
     def review_quality_candidate(
         self, *, left_memory_id, right_memory_id, candidate_kind, action,
@@ -211,23 +252,32 @@ class AtomicMemoryBackend:
             now = self._clock()
             existing = connection.execute(
                 "SELECT id,kept_memory_id,copied_evidence_count,merged_at "
-                "FROM l1_duplicate_merge_events WHERE retired_memory_id=?",
-                (retired_memory_id,),
+                "FROM l1_duplicate_merge_events "
+                "WHERE (kept_memory_id=? AND retired_memory_id=?) "
+                "OR (kept_memory_id=? AND retired_memory_id=?) "
+                "ORDER BY merged_at DESC,id DESC LIMIT 1",
+                (pair[0], pair[1], pair[1], pair[0]),
             ).fetchone()
+            reapplying = False
             if existing:
-                if existing["kept_memory_id"] == kept_memory_id:
+                if existing["kept_memory_id"] != kept_memory_id:
+                    raise MemoryAccessError("l1_duplicate_remerge_direction_conflict", 409)
+                existing_state = self._merge_state(connection, existing["id"])
+                if existing_state["state"] == "merged":
                     existing_ledger = connection.execute(
                         "SELECT source_message_id,source_type,linked_at "
                         "FROM l1_duplicate_merge_evidence WHERE merge_event_id=? "
                         "ORDER BY linked_at,source_message_id,source_type",
                         (existing["id"],),
                     ).fetchall()
-                    return {"kept_memory_id": kept_memory_id,
+                    return {"merge_event_id": existing["id"],
+                            "kept_memory_id": kept_memory_id,
                             "retired_memory_id": retired_memory_id,
                             "copied_evidence_count": existing["copied_evidence_count"],
                             "evidence_ledger": [dict(row) for row in existing_ledger],
-                            "merged_at": existing["merged_at"], "replayed": True}
-                raise MemoryAccessError("l1_duplicate_merge_conflict", 409)
+                            "merged_at": existing["merged_at"], "replayed": True,
+                            "reapplied": False}
+                reapplying = True
             _active, _scanned, candidates = self._find_quality_candidates(connection, now)
             live = next((
                 item for item in candidates
@@ -255,6 +305,8 @@ class AtomicMemoryBackend:
                 "AND k.source_type=r.source_type)",
                 (retired_memory_id, kept_memory_id),
             ).fetchall()
+            if reapplying and copied_evidence:
+                raise MemoryAccessError("l1_duplicate_remerge_new_evidence", 409)
             connection.executemany(
                 "INSERT INTO memory_evidence "
                 "(memory_id,source_message_id,source_type,linked_at) VALUES (?,?,?,?)",
@@ -269,26 +321,94 @@ class AtomicMemoryBackend:
             )
             if cursor.rowcount != 1:
                 raise MemoryAccessError("l1_quality_candidate_stale", 409)
-            merge_event_id = secrets.token_hex(16)
-            connection.execute(
-                "INSERT INTO l1_duplicate_merge_events "
-                "(id,kept_memory_id,retired_memory_id,detector_version,candidate_kind,"
-                "copied_evidence_count,merged_at) VALUES (?,?,?,?,?,?,?)",
-                (merge_event_id, kept_memory_id, retired_memory_id,
-                 DETECTOR_VERSION, candidate_kind, copied_evidence_count, now.isoformat()),
-            )
-            connection.executemany(
-                "INSERT INTO l1_duplicate_merge_evidence "
-                "(merge_event_id,source_message_id,source_type,linked_at) VALUES (?,?,?,?)",
-                ((merge_event_id, row["source_message_id"], row["source_type"],
-                  row["linked_at"]) for row in copied_evidence),
-            )
+            if reapplying:
+                merge_event_id = existing["id"]
+                next_state_revision = existing_state["state_revision"] + 1
+                connection.execute(
+                    "INSERT INTO l1_duplicate_merge_state_events "
+                    "(id,merge_event_id,action,state_revision,occurred_at) "
+                    "VALUES (?,?,'reapply',?,?)",
+                    (secrets.token_hex(16), merge_event_id,
+                     next_state_revision, now.isoformat()),
+                )
+            else:
+                merge_event_id = secrets.token_hex(16)
+                connection.execute(
+                    "INSERT INTO l1_duplicate_merge_events "
+                    "(id,kept_memory_id,retired_memory_id,detector_version,candidate_kind,"
+                    "copied_evidence_count,merged_at) VALUES (?,?,?,?,?,?,?)",
+                    (merge_event_id, kept_memory_id, retired_memory_id,
+                     DETECTOR_VERSION, candidate_kind, copied_evidence_count,
+                     now.isoformat()),
+                )
+                connection.executemany(
+                    "INSERT INTO l1_duplicate_merge_evidence "
+                    "(merge_event_id,source_message_id,source_type,linked_at) "
+                    "VALUES (?,?,?,?)",
+                    ((merge_event_id, row["source_message_id"], row["source_type"],
+                      row["linked_at"]) for row in copied_evidence),
+                )
             connection.commit()
-            return {"kept_memory_id": kept_memory_id,
+            return {"merge_event_id": merge_event_id,
+                    "kept_memory_id": kept_memory_id,
                     "retired_memory_id": retired_memory_id,
                     "copied_evidence_count": copied_evidence_count,
                     "evidence_ledger": [dict(row) for row in copied_evidence],
-                    "merged_at": now.isoformat(), "replayed": False}
+                    "merged_at": now.isoformat(), "replayed": False,
+                    "reapplied": reapplying}
+
+    def restore_duplicate_merge(self, *, merge_event_id, expected_state_revision):
+        """恢复被合并 L1；保留已汇入来源，不静默复活派生记忆。"""
+
+        with self._open_database(write_capability="correction") as connection:
+            event = connection.execute(
+                "SELECT e.id,e.kept_memory_id,e.retired_memory_id,e.copied_evidence_count,"
+                "k.retired_at AS kept_retired_at,r.retired_at AS retired_retired_at,"
+                "r.superseded_by_id AS retired_superseded_by_id,"
+                "(SELECT count(*) FROM l1_duplicate_merge_evidence le "
+                "WHERE le.merge_event_id=e.id) AS evidence_ledger_count "
+                "FROM l1_duplicate_merge_events e "
+                "JOIN atomic_memories k ON k.id=e.kept_memory_id "
+                "JOIN atomic_memories r ON r.id=e.retired_memory_id WHERE e.id=?",
+                (merge_event_id,),
+            ).fetchone()
+            if event is None:
+                raise MemoryAccessError("l1_duplicate_merge_not_found", 404)
+            state = self._merge_state(connection, merge_event_id)
+            if state["state_revision"] != expected_state_revision:
+                raise MemoryAccessError("l1_duplicate_merge_state_conflict", 409)
+            if state["state"] == "restored":
+                return {"merge_event_id": merge_event_id, **state,
+                        "copied_evidence_preserved": event["copied_evidence_count"],
+                        "derived_memories_reactivated": False, "replayed": True}
+            if (event["copied_evidence_count"] <= 0
+                    or event["evidence_ledger_count"] != event["copied_evidence_count"]):
+                raise MemoryAccessError("l1_duplicate_merge_ledger_incomplete", 409)
+            if (event["kept_retired_at"] is not None
+                    or event["retired_retired_at"] is None
+                    or event["retired_superseded_by_id"] != event["kept_memory_id"]):
+                raise MemoryAccessError("l1_duplicate_merge_state_conflict", 409)
+            now = self._clock().isoformat()
+            cursor = connection.execute(
+                "UPDATE atomic_memories SET retired_at=NULL,superseded_by_id=NULL "
+                "WHERE id=? AND retired_at=? AND superseded_by_id=?",
+                (event["retired_memory_id"], event["retired_retired_at"],
+                 event["kept_memory_id"]),
+            )
+            if cursor.rowcount != 1:
+                raise MemoryAccessError("l1_duplicate_merge_state_conflict", 409)
+            next_revision = state["state_revision"] + 1
+            connection.execute(
+                "INSERT INTO l1_duplicate_merge_state_events "
+                "(id,merge_event_id,action,state_revision,occurred_at) "
+                "VALUES (?,?,'restore',?,?)",
+                (secrets.token_hex(16), merge_event_id, next_revision, now),
+            )
+            connection.commit()
+            return {"merge_event_id": merge_event_id, "state": "restored",
+                    "state_revision": next_revision, "state_changed_at": now,
+                    "copied_evidence_preserved": event["copied_evidence_count"],
+                    "derived_memories_reactivated": False, "replayed": False}
 
     @staticmethod
     def _local_day_window(local_date, utc_offset_minutes):

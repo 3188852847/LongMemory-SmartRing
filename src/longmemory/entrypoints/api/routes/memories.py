@@ -95,6 +95,30 @@ def register_memory_routes(app, backend):
             expected_review_revision=body["expected_review_revision"],
         )
 
+    async def restore_duplicate_merge(request):
+        if request.content_type != "application/json":
+            raise web.HTTPBadRequest()
+        try:
+            body = await request.json()
+        except (ValueError, UnicodeError):
+            raise web.HTTPBadRequest() from None
+        merge_event_id = body.get("merge_event_id") if isinstance(body, dict) else None
+        if (not isinstance(body, dict)
+                or set(body) != {"merge_event_id", "expected_state_revision",
+                                 "confirm_restore"}
+                or not isinstance(merge_event_id, str) or not merge_event_id
+                or len(merge_event_id) > 128
+                or re.search(r"[\x00-\x1f\x7f]", merge_event_id)
+                or type(body.get("expected_state_revision")) is not int
+                or not 1 <= body["expected_state_revision"] <= 1000000
+                or body.get("confirm_restore") is not True):
+            raise web.HTTPBadRequest()
+        return await invoke(
+            backend.restore_duplicate_merge,
+            merge_event_id=merge_event_id,
+            expected_state_revision=body["expected_state_revision"],
+        )
+
     async def source_listing(request):
         values = request.query
         if (set(values) - {"q", "role", "link_state", "offset", "limit", "local_date", "utc_offset_minutes"}
@@ -555,6 +579,10 @@ def register_memory_routes(app, backend):
     app.router.add_get("/api/memories/quality-candidates", quality_candidates, allow_head=False)
     app.router.add_post("/api/memories/quality-candidates/reviews", review_quality_candidate)
     app.router.add_post("/api/memories/quality-candidates/merge", merge_quality_candidate)
+    app.router.add_post(
+        "/api/memories/quality-candidates/merges/restore",
+        restore_duplicate_merge,
+    )
     app.router.add_get("/api/memories/daily-review", daily_review, allow_head=False)
     app.router.add_get("/api/memories/clear-preview", clear_preview, allow_head=False)
     app.router.add_post("/api/memories/clear", clear_memories)
