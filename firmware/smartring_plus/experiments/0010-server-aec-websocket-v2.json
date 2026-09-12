@@ -59,7 +59,7 @@
   "runtime": {
     "capability_gate": "pending_device_validation",
     "speaker_echo_only_does_not_abort": "pending_device_validation",
-    "near_field_speech_interrupts": "pending_device_validation",
+    "near_field_speech_interrupts": "user_observed_pass_2026-09-13",
     "far_field_speech_interrupts": "pending_device_validation",
     "post_interrupt_conversation_continues": "pending_device_validation"
   }
