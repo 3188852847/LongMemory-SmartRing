@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "dataset_id": "l2-retrieval-v1",
+  "description": "用于开发 L2 场景召回的合成冻结集；不含个人数据。",
+  "scenarios": [
+    {"id": "defense", "title": "准备毕业设计答辩", "summary": "用户周五下午进行毕业设计汇报，这几天晚上主要修改 PPT 并计划周四完成一次彩排。"},
+    {"id": "cat", "title": "照顾豆包", "summary": "用户养了一只叫豆包的猫，最近需要留意它的饮水和猫粮。"},
+    {"id": "tea", "title": "日常饮品偏好", "summary": "用户平时喜欢乌龙茶，最近也会喝茉莉花茶，不喜欢太甜的饮料。"},
+    {"id": "sleep", "title": "近期睡眠安排", "summary": "用户工作日通常零点前休息，第二天早上七点半起床。"},
+    {"id": "exercise", "title": "晚间运动习惯", "summary": "用户最近每周二和周四晚上跑步，雨天改为室内训练。"},
+    {"id": "project", "title": "长程记忆项目开发", "summary": "用户正在开发智能圆屏长期记忆系统，目前关注记忆质量、语音交互和设备体验。"}
+  ],
+  "cases": [
+    {"id": "exact-defense", "category": "direct", "query": "我的答辩准备得怎么样了？", "expected_ids": ["defense"]},
+    {"id": "paraphrase-defense", "category": "paraphrase", "query": "演示文稿和彩排安排到哪一步了？", "expected_ids": ["defense"]},
+    {"id": "exact-cat", "category": "direct", "query": "豆包最近需要注意什么？", "expected_ids": ["cat"]},
+    {"id": "paraphrase-cat", "category": "paraphrase", "query": "我家宠物的饮食照顾有什么要留意的？", "expected_ids": ["cat"]},
+    {"id": "exact-tea", "category": "direct", "query": "我平时喜欢喝什么茶？", "expected_ids": ["tea"]},
+    {"id": "paraphrase-sleep", "category": "paraphrase", "query": "我一般几点睡，早晨几点起来？", "expected_ids": ["sleep"]},
+    {"id": "abstract-sleep", "category": "abstract_paraphrase", "query": "昼夜节律怎样？", "expected_ids": ["sleep"]},
+    {"id": "conditional-exercise", "category": "conditional", "query": "下雨时我还去外面跑步吗？", "expected_ids": ["exercise"]},
+    {"id": "multi-project", "category": "multi_topic", "query": "我做的圆屏记忆系统目前关注哪些体验？", "expected_ids": ["project"]},
+    {"id": "unknown-color", "category": "unanswerable", "query": "豆包的毛是什么颜色？", "expected_ids": []},
+    {"id": "unknown-food", "category": "unanswerable", "query": "我今天午饭吃了什么？", "expected_ids": []},
+    {"id": "unknown-travel", "category": "unanswerable", "query": "我下个月要去哪个城市旅行？", "expected_ids": []},
+    {"id": "hard-negative", "category": "unanswerable", "query": "我的导师最喜欢喝什么茶？", "expected_ids": []}
+  ]
+}
