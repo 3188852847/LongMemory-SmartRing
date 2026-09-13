@@ -1,8 +1,7 @@
 """按精确人工支持集计算 L1/L2 影子门控代理，不读取正文。"""
 
-from longmemory.core.memory.quality.sufficiency_gate_readiness import (
-    assess_sufficiency_gate_readiness,
-)
+from longmemory.core.memory.quality.l1_gate_readiness import assess_l1_gate_readiness
+from longmemory.core.memory.quality.l2_gate_readiness import assess_l2_gate_readiness
 
 
 def calculate_policy_metrics(connection, *, layer: str, candidate_id: str) -> dict:
@@ -80,5 +79,8 @@ def calculate_policy_metrics(connection, *, layer: str, candidate_id: str) -> di
             totals["true_positive_count"] / expected_positive, 6,
         ),
     })
-    totals["readiness"] = assess_sufficiency_gate_readiness(totals, layer=layer)
+    readiness_assessor = (
+        assess_l1_gate_readiness if layer == "l1" else assess_l2_gate_readiness
+    )
+    totals["readiness"] = readiness_assessor(totals)
     return totals
