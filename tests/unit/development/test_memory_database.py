@@ -3,6 +3,8 @@
 import sqlite3
 from pathlib import Path
 
+import pytest
+
 from longmemory.infrastructure.database.definition import SCHEMA_VERSION
 from longmemory.infrastructure.database.schema import initialize_schema
 
@@ -53,3 +55,49 @@ def test_migration_creates_backup_and_upgrades_copy(tmp_path):
         assert reopened.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION
     with sqlite3.connect(result["backup"]) as backup:
         assert backup.execute("PRAGMA user_version").fetchone()[0] == 3
+
+
+def test_verify_restore_compares_schema_and_all_table_counts(tmp_path):
+    tool = _load_tool()
+    database = tmp_path / "personal-synthetic.db"
+    connection = sqlite3.connect(database)
+    initialize_schema(connection)
+    connection.execute(
+        "INSERT INTO conversation_messages VALUES "
+        "('message-1','user','合成内容','2026-09-13T00:00:00+00:00')"
+    )
+    connection.commit()
+    connection.close()
+
+    result = tool.verify_restore(database, tmp_path / "backups")
+
+    assert result["verified"] is True
+    assert result["version"] == SCHEMA_VERSION
+    assert result["table_count"] > 1
+    assert result["total_rows"] == 1
+    assert len(result["backup_sha256"]) == 64
+    assert len(result["restored_sha256"]) == 64
+    assert Path(result["backup"]).is_file()
+    assert Path(result["restored_copy"]).is_file()
+    with sqlite3.connect(database) as source:
+        assert source.execute(
+            "SELECT content FROM conversation_messages"
+        ).fetchone()[0] == "合成内容"
+
+
+def test_verify_restore_rejects_foreign_key_violation(tmp_path):
+    tool = _load_tool()
+    database = tmp_path / "broken-synthetic.db"
+    connection = sqlite3.connect(database)
+    initialize_schema(connection)
+    connection.execute(
+        "INSERT INTO memory_evidence VALUES "
+        "('missing-memory','missing-message','user_stated',"
+        "'2026-09-13T00:00:00+00:00')"
+    )
+    connection.commit()
+    connection.close()
+
+    with pytest.raises(ValueError, match="外键校验未通过"):
+        tool.verify_restore(database, tmp_path / "backups")
+    assert list((tmp_path / "backups").glob("*.db")) == []

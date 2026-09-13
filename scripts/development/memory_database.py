@@ -1,4 +1,4 @@
-"""检查或显式升级 LongMemory SQLite；绝不接受目录和不存在的路径。"""
+"""检查、升级或验证恢复 LongMemory SQLite；绝不创建未指定的活动库。"""
 
 import argparse
 import hashlib
@@ -33,6 +33,92 @@ def status(path: Path) -> dict:
                 "target_version": SCHEMA_VERSION, "needs_migration": version != SCHEMA_VERSION}
     finally:
         connection.close()
+
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _logical_signature(connection: sqlite3.Connection) -> tuple[int, tuple]:
+    """只比较结构版本和逐表行数，不读取或输出个人正文。"""
+
+    version = connection.execute("PRAGMA user_version").fetchone()[0]
+    table_names = tuple(row[0] for row in connection.execute(
+        "SELECT name FROM sqlite_schema WHERE type='table' "
+        "AND name NOT LIKE 'sqlite_%' ORDER BY name"
+    ))
+    counts = []
+    for name in table_names:
+        # 表名来自 sqlite_schema，不接收命令行文本；双引号仍作防御性转义。
+        identifier = '"' + name.replace('"', '""') + '"'
+        counts.append((name, connection.execute(
+            f"SELECT COUNT(*) FROM {identifier}"
+        ).fetchone()[0]))
+    return version, tuple(counts)
+
+
+def verify_restore(path: Path, backup_directory: Path) -> dict:
+    """一致性备份活动库，再从该备份创建独立恢复副本并比较逻辑签名。"""
+
+    source = _open_existing(path)
+    backup_directory.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
+    backup = backup_directory.resolve() / f"{path.stem}-v1-rc-backup-{stamp}.db"
+    restored = (
+        backup_directory.resolve()
+        / f"{path.stem}-v1-rc-restore-check-{stamp}.db"
+    )
+    if backup.exists() or restored.exists():
+        source.close()
+        raise ValueError("恢复演练目标意外存在，拒绝覆盖。")
+    try:
+        if source.execute("PRAGMA foreign_key_check").fetchall():
+            raise ValueError("活动数据库外键校验未通过，拒绝创建恢复演练。")
+        backup_connection = sqlite3.connect(backup)
+        try:
+            source.backup(backup_connection)
+        finally:
+            backup_connection.close()
+    finally:
+        source.close()
+
+    backup_source = _open_existing(backup)
+    try:
+        if backup_source.execute("PRAGMA foreign_key_check").fetchall():
+            raise RuntimeError("一致性备份外键校验未通过。")
+        backup_signature = _logical_signature(backup_source)
+        restore_destination = sqlite3.connect(restored)
+        try:
+            backup_source.backup(restore_destination)
+        finally:
+            restore_destination.close()
+    finally:
+        backup_source.close()
+
+    restored_source = _open_existing(restored)
+    try:
+        if restored_source.execute("PRAGMA foreign_key_check").fetchall():
+            raise RuntimeError("恢复副本外键校验未通过。")
+        restored_signature = _logical_signature(restored_source)
+    finally:
+        restored_source.close()
+    if restored_signature != backup_signature:
+        raise RuntimeError("恢复副本与一致性备份的结构或逐表行数不一致。")
+    version, table_counts = backup_signature
+    return {
+        "verified": True,
+        "version": version,
+        "table_count": len(table_counts),
+        "total_rows": sum(count for _name, count in table_counts),
+        "backup": str(backup),
+        "backup_sha256": _sha256(backup),
+        "restored_copy": str(restored),
+        "restored_sha256": _sha256(restored),
+    }
 
 
 def migrate(path: Path, backup_directory: Path) -> dict:
@@ -72,20 +158,28 @@ def migrate(path: Path, backup_directory: Path) -> dict:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="检查或显式升级 LongMemory SQLite")
-    parser.add_argument("action", choices=("status", "migrate"))
+    parser = argparse.ArgumentParser(description="检查、升级或验证恢复 LongMemory SQLite")
+    parser.add_argument("action", choices=("status", "migrate", "verify-restore"))
     parser.add_argument("--database", type=Path, required=True)
     parser.add_argument("--backup-directory", type=Path, default=Path("data/backups"))
     parser.add_argument("--confirm-upgrade", action="store_true")
+    parser.add_argument("--confirm-backup", action="store_true")
     args = parser.parse_args()
     try:
         if args.action == "status":
             result = status(args.database)
-        else:
+        elif args.action == "migrate":
             if not args.confirm_upgrade:
                 parser.error("migrate 必须显式添加 --confirm-upgrade；升级前会创建 SQLite 一致性备份")
             result = migrate(args.database, args.backup_directory)
-    except (ValueError, sqlite3.Error) as error:
+        else:
+            if not args.confirm_backup:
+                parser.error(
+                    "verify-restore 必须显式添加 --confirm-backup；"
+                    "它会创建一致性备份和独立恢复副本"
+                )
+            result = verify_restore(args.database, args.backup_directory)
+    except (ValueError, RuntimeError, sqlite3.Error) as error:
         parser.error(str(error))
     for key, value in result.items():
         print(f"{key}: {value}")
