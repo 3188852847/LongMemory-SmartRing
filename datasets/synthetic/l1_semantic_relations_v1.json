@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "dataset_id": "l1-semantic-relations-v1",
+  "memories": [
+    {"id":"dev-home-old","split":"dev","subject_id":"user:self","content":"用户以前住在南京。","recorded_at":"2026-08-01T00:00:00Z"},
+    {"id":"dev-home-new","split":"dev","subject_id":"user:self","content":"用户现在搬到合肥居住。","recorded_at":"2026-09-01T00:00:00Z"},
+    {"id":"dev-tea","split":"dev","subject_id":"user:self","content":"用户喜欢喝乌龙茶。","recorded_at":"2026-08-02T00:00:00Z"},
+    {"id":"dev-coffee","split":"dev","subject_id":"user:self","content":"用户也喜欢喝咖啡。","recorded_at":"2026-08-03T00:00:00Z"},
+    {"id":"dev-cat-a","split":"dev","subject_id":"user:self","content":"用户的猫叫豆包。","recorded_at":"2026-08-04T00:00:00Z"},
+    {"id":"dev-cat-b","split":"dev","subject_id":"user:self","content":"用户的猫叫年糕。","recorded_at":"2026-08-05T00:00:00Z"},
+    {"id":"dev-report","split":"dev","subject_id":"user:self","content":"用户周五要进行毕业设计汇报。","recorded_at":"2026-08-06T00:00:00Z"},
+    {"id":"dev-report-rewrite","split":"dev","subject_id":"user:self","content":"用户的毕业答辩安排在本周五。","recorded_at":"2026-08-06T01:00:00Z"},
+    {"id":"holdout-job-old","split":"holdout","subject_id":"user:self","content":"用户以前在学校实验室实习。","recorded_at":"2026-07-01T00:00:00Z"},
+    {"id":"holdout-job-new","split":"holdout","subject_id":"user:self","content":"用户现在已经离开实验室。","recorded_at":"2026-09-02T00:00:00Z"},
+    {"id":"holdout-spicy-a","split":"holdout","subject_id":"user:self","content":"用户喜欢吃辣。","recorded_at":"2026-07-02T00:00:00Z"},
+    {"id":"holdout-spicy-b","split":"holdout","subject_id":"user:self","content":"用户不喜欢辣味食物。","recorded_at":"2026-07-03T00:00:00Z"},
+    {"id":"holdout-music","split":"holdout","subject_id":"user:self","content":"用户喜欢听古典音乐。","recorded_at":"2026-07-04T00:00:00Z"},
+    {"id":"holdout-game","split":"holdout","subject_id":"user:self","content":"用户喜欢玩原神。","recorded_at":"2026-07-05T00:00:00Z"},
+    {"id":"holdout-sleep-a","split":"holdout","subject_id":"user:self","content":"用户通常晚上十一点睡觉。","recorded_at":"2026-07-06T00:00:00Z"},
+    {"id":"holdout-sleep-b","split":"holdout","subject_id":"user:self","content":"用户一般在23点左右入睡。","recorded_at":"2026-07-07T00:00:00Z"}
+  ],
+  "annotations": [
+    {"id":"dev-change-home","split":"dev","left_id":"dev-home-old","right_id":"dev-home-new","relation":"possible_change"},
+    {"id":"dev-compatible-drinks","split":"dev","left_id":"dev-tea","right_id":"dev-coffee","relation":"compatible"},
+    {"id":"dev-conflict-cat","split":"dev","left_id":"dev-cat-a","right_id":"dev-cat-b","relation":"possible_conflict"},
+    {"id":"dev-equivalent-report","split":"dev","left_id":"dev-report","right_id":"dev-report-rewrite","relation":"equivalent"},
+    {"id":"holdout-change-job","split":"holdout","left_id":"holdout-job-old","right_id":"holdout-job-new","relation":"possible_change"},
+    {"id":"holdout-conflict-spicy","split":"holdout","left_id":"holdout-spicy-a","right_id":"holdout-spicy-b","relation":"possible_conflict"},
+    {"id":"holdout-compatible-hobbies","split":"holdout","left_id":"holdout-music","right_id":"holdout-game","relation":"compatible"},
+    {"id":"holdout-equivalent-sleep","split":"holdout","left_id":"holdout-sleep-a","right_id":"holdout-sleep-b","relation":"equivalent"}
+  ]
+}
