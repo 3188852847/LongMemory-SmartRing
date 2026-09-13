@@ -228,7 +228,6 @@ class MemoryProvider(MemoryProviderBase):
                 },
                 "retrieval_evidence": retrieval_evidence,
                 "retrieval_strategy": retrieval_strategy,
-                "retrieval_strategy": response.get("retrieval_strategy"),
             }
         if command_reply is not None:
             reply = html.escape(command_reply, quote=False)
@@ -281,8 +280,6 @@ class MemoryProvider(MemoryProviderBase):
         # 字段缺省兼容更新期间的旧 Runtime；新 Runtime 会返回并持久化精确索引。
         if pending.get("retrieval_evidence") is not None:
             completion["retrieval_evidence"] = pending["retrieval_evidence"]
-        if pending.get("retrieval_strategy") is not None:
-            completion["retrieval_strategy"] = pending["retrieval_strategy"]
         if pending.get("retrieval_strategy") is not None:
             completion["retrieval_strategy"] = pending["retrieval_strategy"]
         body = json.dumps(completion).encode("utf-8")
