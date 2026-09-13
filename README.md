@@ -12,13 +12,13 @@
 
 学校模型与官方 DeepSeek 使用两个独立且不提交的本机配置档。可在“设置中心 → 模型与服务”编辑安全摘要、覆盖新 Key，并分别选择网页与圆屏下次启动档案；当前进程不会热切换，启动器会在语音启动前备份并同步小智私有配置。见[模型配置分流指南](docs/guides/模型配置分流.md)、[ADR-0089](docs/adr/0089-editable-local-model-profiles.md)与[ADR-0091](docs/adr/0091-independent-web-and-round-screen-model-profiles.md)。
 
-**完整产品方向：[产品能力地图](docs/requirements/product-capability-map.md)**；**具体自定义候选：[自定义功能清单](docs/requirements/自定义功能清单.md)**。两者区分已有基础、正在完善、候选新增、需验证与研究保留，不代表全部承诺开发。
+**正式版本终点：[V1.0 个人日用陪伴助手](docs/requirements/v1-personal-companion.md)**；**完整产品方向：[产品能力地图](docs/requirements/product-capability-map.md)**；**具体自定义候选：[自定义功能清单](docs/requirements/自定义功能清单.md)**。V1 文档定义发布范围和验收，后两者保留未来能力，不代表全部承诺开发。
 
 ## 当前状态
 
 时间感知历史问答已支持沿当前 L1 的明确事实变化链补充旧事实，并保留有效区间、L0 来源与圆屏历史回执。历史召回 V2 进一步要求同一分句具有明确问句与历史表达，读取时复核锚点仍有效，并让历史内容与来源来自同一只读快照；通用时间推理仍未实现。见 [ADR-0153](docs/adr/0153-temporal-recall-question-and-snapshot-boundaries.md)。
 
-声音链已支持 EdgeTTS、VoxCPM2、sanoTTS 和 CosyVoice3 四个可替换后端。VoxCPM2 提供本地参考声线与风格参数；sanoTTS 保留为 Node/WASM 快速基线；CosyVoice3 使用项目外独立 Python 环境和 Fun-CosyVoice3-0.5B，独立试听已由用户确认声音质量高。React 声音页支持状态核对、网页朗读与固定测试台，圆屏仍通过小智 `CustomTTS` 播放。四个适配器当前均为整段缓冲；CosyVoice3 尚需圆屏实际声线和端到端延迟验收，也不具备自然说话打断。日常默认仍为 EdgeTTS。见 [声音设置](docs/guides/声音设置.md)、[ADR-0025](docs/adr/0025-local-voxcpm2-tts-adapter.md)、[ADR-0118](docs/adr/0118-external-sanotts-node-wasm-adapter.md)与 [ADR-0123](docs/adr/0123-isolated-cosyvoice3-buffered-adapter.md)。
+声音链已支持 EdgeTTS、VoxCPM2、sanoTTS 和 CosyVoice3 四个可替换后端。VoxCPM2 提供本地参考声线与风格参数；sanoTTS 保留为 Node/WASM 快速基线；CosyVoice3 使用项目外独立 Python 环境和 Fun-CosyVoice3-0.5B，并通过本机专用长度前缀 WAV 通道向圆屏逐块交付。用户已确认声音质量、连续性、当前速度和播放期间自然插话达到日用门槛；取消仍是模型在下一块产出时观察断开的协作式取消。EdgeTTS 保留稳定回退。见 [声音设置](docs/guides/声音设置.md)、[ADR-0025](docs/adr/0025-local-voxcpm2-tts-adapter.md)、[ADR-0118](docs/adr/0118-external-sanotts-node-wasm-adapter.md)、[ADR-0123](docs/adr/0123-isolated-cosyvoice3-buffered-adapter.md)与 [ADR-0126](docs/adr/0126-cosyvoice3-loopback-streaming-bridge.md)。
 
 P2 新增声音设置：四种 Edge TTS 音色、固定文本联网试听和确认保存。入口为“设置中心 → 声音”，保存 Edge 音色后需重启小智；实机听感待验收。见[声音设置](docs/guides/声音设置.md)。
 
