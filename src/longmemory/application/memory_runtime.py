@@ -360,8 +360,15 @@ class MemoryRuntime:
             event = self._deferred_events.pop(event_id, None)
             if event is None or self._closing:
                 return False
+            # V44 账本和失败事件也属于 SQLite 写入，必须在 Runtime 锁内。
+            # 工作线程随后只执行模型计算，不能直接使用共享连接。
+            begin = getattr(self._method, "begin_archived_extraction", None)
+            start_audit_in_worker = begin is None
+            if begin is not None:
+                begin(event)
             future = self._deferred_executor.submit(
                 self._run_deferred_observation, event,
+                start_audit_in_worker, start_audit_in_worker,
             )
             self._deferred_futures.add(future)
             self._deferred_last_result = {"state": "running", "warning_code": None}
@@ -388,7 +395,7 @@ class MemoryRuntime:
                 source_message_id, expected_attempt_id=expected_attempt_id,
             )
             future = self._deferred_executor.submit(
-                self._run_deferred_observation, event, False,
+                self._run_deferred_observation, event, False, False,
             )
             self._deferred_futures.add(future)
             self._deferred_last_result = {"state": "running", "warning_code": None}
@@ -400,13 +407,23 @@ class MemoryRuntime:
 
     def _run_deferred_observation(
         self, event: MemoryEvent, start_audit: bool = True,
+        persist_failure: bool = True,
     ) -> ObservationResult:
         # 网络模型调用不持 Runtime 锁；网页查看、设备召回和状态读取不会
         # 因 2–5 秒的候选生成而一起卡住。只有最终 SQLite 补写需要互斥。
         extracted = self._method.extract_archived(
-            event, start_audit=start_audit,
+            event, start_audit=start_audit, persist_failure=persist_failure,
         )
         if isinstance(extracted, ObservationResult):
+            if not persist_failure:
+                with self._lock:
+                    self._ensure_open()
+                    finalize = getattr(
+                        self._method, "finalize_archived_extraction_failure", None,
+                    )
+                    if finalize is None:
+                        raise RuntimeError("延后提取方法缺少失败持久化边界。")
+                    finalize(event)
             return extracted
         with self._lock:
             self._ensure_open()

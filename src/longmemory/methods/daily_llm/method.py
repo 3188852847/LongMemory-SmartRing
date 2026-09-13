@@ -117,6 +117,26 @@ class DailyLLMMemory:
             # started 仍是诚实的“不完整尝试”，不能为补审计破坏主路径。
             pass
 
+    def begin_archived_extraction(self, event: MemoryEvent) -> str | None:
+        """在 Runtime 互斥区登记尝试；模型工作线程只做纯候选计算。"""
+
+        return self._start_audit(event)
+
+    def finalize_archived_extraction_failure(self, event: MemoryEvent) -> None:
+        """在 Runtime 互斥区保存失败标记与审计终态。"""
+
+        message = ConversationMessage(
+            MessageId(event.event_id), MessageRole(event.role),
+            event.content, event.occurred_at,
+        )
+        self._base.turn_service.report_extraction_failure(
+            message, code="l1_extraction_failed",
+        )
+        self._finish_audit(
+            event, phase="failed", outcome_code="extraction_failed",
+            candidate_count=0, added_count=0,
+        )
+
     def observe(self, event: MemoryEvent) -> ObservationResult:
         self._base._ensure_open()
         if event.session_id is not None:
@@ -139,6 +159,7 @@ class DailyLLMMemory:
 
     def extract_archived(
         self, event: MemoryEvent, *, start_audit: bool = True,
+        persist_failure: bool = True,
     ) -> tuple[AtomicMemory, ...] | ObservationResult:
         """只调用候选模型，不接触数据库，供受管延后队列使用。"""
 
@@ -156,13 +177,8 @@ class DailyLLMMemory:
         try:
             proposal = self._extractor.extract(message)
         except CandidateExtractionError:
-            self._base.turn_service.report_extraction_failure(
-                message, code="l1_extraction_failed"
-            )
-            self._finish_audit(
-                event, phase="failed", outcome_code="extraction_failed",
-                candidate_count=0, added_count=0,
-            )
+            if persist_failure:
+                self.finalize_archived_extraction_failure(event)
             return ObservationResult(
                 event.event_id,
                 (),

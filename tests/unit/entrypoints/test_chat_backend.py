@@ -264,6 +264,12 @@ def test_round_screen_defers_llm_extraction_until_completion_without_locking_rea
         )
         assert completed.created is True
         assert started.wait(timeout=1)
+        # 尝试账本必须已经在 Runtime 互斥区提交；模型工作线程此刻只做计算。
+        with sqlite3.connect(database) as connection:
+            assert connection.execute(
+                "SELECT phase FROM l1_extraction_events WHERE source_message_id=?",
+                (prepared.event.event_id,),
+            ).fetchone()[0] == "started"
         # 候选模型仍被阻塞时，Runtime 状态读取不应等待模型完成。
         status = runtime.status()
         assert status["deferred_observation"]["running_or_queued"] == 1
