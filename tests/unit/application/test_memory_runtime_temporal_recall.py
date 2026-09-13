@@ -97,7 +97,7 @@ def test_runtime_adds_historical_trace_after_current_recall(tmp_path):
         assert "用户住在合肥" in prepared.support.context
         assert "用户住在南京" in prepared.support.context
         assert prepared.support.retrieval_strategy == (
-            "current-only+explicit_temporal_history_v1"
+            "current-only+explicit_temporal_history_v2"
         )
         historical = prepared.support.retrieved[1]
         assert historical.item_id == "old-place"

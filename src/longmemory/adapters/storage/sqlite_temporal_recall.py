@@ -1,5 +1,7 @@
 """从现有 SQLite L1 中只读扩展明确的事实变化时间线。"""
 
+from collections.abc import Callable
+from datetime import UTC, datetime
 from pathlib import Path
 import sqlite3
 
@@ -14,13 +16,18 @@ from longmemory.application.temporal_recall import (
     classify_temporal_query,
 )
 from longmemory.core.common.identifiers import MemoryId
+from longmemory.core.memory.retrieval.service import is_memory_effective
 
 
 class SQLiteTemporalRecallProvider:
     """只有明确历史意图且已有当前 L1 锚点时，才读取退役变化链。"""
 
-    def __init__(self, database: Path) -> None:
+    def __init__(
+        self, database: Path,
+        *, clock: Callable[[], datetime] = lambda: datetime.now(UTC),
+    ) -> None:
         self.database = database.resolve()
+        self._clock = clock
 
     def recall(
         self, query: str, *, current_memory_ids: tuple[str, ...], limit: int = 10,
@@ -39,13 +46,25 @@ class SQLiteTemporalRecallProvider:
         connection.row_factory = sqlite3.Row
         try:
             connection.execute("PRAGMA query_only = ON")
+            # 内容、变化边与来源必须来自同一快照；显式读事务避免两个
+            # SELECT 之间的管理写入拼出“旧正文 + 新证据”的混合结果。
+            connection.execute("BEGIN")
             store = SQLiteMemoryStore(connection)
             memories = store.list_all()
             by_id = {str(item.id): item for item in memories}
+            now = self._clock()
             selected = []
             seen = set(current_memory_ids)
             for anchor_id in current_memory_ids:
-                if anchor_id not in by_id:
+                anchor = by_id.get(anchor_id)
+                # 调用方给的是先前召回的 ID，不能当作永久有效的授权。
+                # 已退役锚点若继续向后遍历，会把新的当前事实错标为历史。
+                if (
+                    anchor is None
+                    or anchor.retired_at is not None
+                    or anchor.superseded_by_id is not None
+                    or not is_memory_effective(anchor, now)
+                ):
                     continue
                 try:
                     history = build_temporal_fact_history(

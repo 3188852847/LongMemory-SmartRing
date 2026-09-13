@@ -16,6 +16,8 @@
 
 ## 当前状态
 
+时间感知历史问答已支持沿当前 L1 的明确事实变化链补充旧事实，并保留有效区间、L0 来源与圆屏历史回执。历史召回 V2 进一步要求同一分句具有明确问句与历史表达，读取时复核锚点仍有效，并让历史内容与来源来自同一只读快照；通用时间推理仍未实现。见 [ADR-0153](docs/adr/0153-temporal-recall-question-and-snapshot-boundaries.md)。
+
 声音链已支持 EdgeTTS、VoxCPM2、sanoTTS 和 CosyVoice3 四个可替换后端。VoxCPM2 提供本地参考声线与风格参数；sanoTTS 保留为 Node/WASM 快速基线；CosyVoice3 使用项目外独立 Python 环境和 Fun-CosyVoice3-0.5B，独立试听已由用户确认声音质量高。React 声音页支持状态核对、网页朗读与固定测试台，圆屏仍通过小智 `CustomTTS` 播放。四个适配器当前均为整段缓冲；CosyVoice3 尚需圆屏实际声线和端到端延迟验收，也不具备自然说话打断。日常默认仍为 EdgeTTS。见 [声音设置](docs/guides/声音设置.md)、[ADR-0025](docs/adr/0025-local-voxcpm2-tts-adapter.md)、[ADR-0118](docs/adr/0118-external-sanotts-node-wasm-adapter.md)与 [ADR-0123](docs/adr/0123-isolated-cosyvoice3-buffered-adapter.md)。
 
 P2 新增声音设置：四种 Edge TTS 音色、固定文本联网试听和确认保存。入口为“设置中心 → 声音”，保存 Edge 音色后需重启小智；实机听感待验收。见[声音设置](docs/guides/声音设置.md)。
