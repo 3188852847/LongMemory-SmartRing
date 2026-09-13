@@ -1,6 +1,6 @@
 """按精确人工支持集计算 L1/L2 影子门控代理，不读取正文。"""
 
-from longmemory.core.memory.quality.l1_gate_readiness import (
+from longmemory.core.memory.quality.sufficiency_gate_readiness import (
     assess_sufficiency_gate_readiness,
 )
 
