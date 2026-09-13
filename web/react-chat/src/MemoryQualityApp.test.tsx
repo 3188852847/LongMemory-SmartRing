@@ -83,7 +83,7 @@ describe('记忆质量样本工作台',()=>{
       review_counts:{open:0,resolved:0,dismissed:0},items:[],
     };
     const shadow:L2SufficiencyShadowPage={
-      limit:20,runtime:{enabled:true,state:'completed'},review_counts:{completed:1,unreviewed:1,correct:0,incorrect:0,uncertain:0},policy_metrics:{reviewed_cases:0,labeled_cases:0,answerable_labeled_cases:0,unsupported_labeled_cases:0,excluded_latest_reviews:0,false_block_cases:0,unsupported_pass_cases:0,incomplete_allow_cases:0,overinclusive_allow_cases:0,original_candidate_count:0,kept_candidate_count:0,removed_candidate_count:0,candidate_reduction_rate:null,context_measured_cases:0,original_context_characters:0,kept_context_characters:0,context_character_reduction_rate:null,candidate_precision:null,candidate_recall:null,readiness:{policy_id:'l2-sufficiency-controlled-trial-readiness-v1',status:'not_ready',automatic_activation:false,minimum_cases_per_stratum:60,confidence_level:0.95,answerable_zero_error_upper_bound:null,unsupported_zero_error_upper_bound:null,conditions:[],limitations:[]}},items:[{
+      limit:20,runtime:{enabled:true,state:'completed'},review_counts:{completed:1,unreviewed:1,correct:0,incorrect:0,uncertain:0},policy_metrics:{reviewed_cases:0,labeled_cases:0,answerable_labeled_cases:0,unsupported_labeled_cases:0,excluded_latest_reviews:0,false_block_cases:0,unsupported_pass_cases:0,incomplete_allow_cases:0,overinclusive_allow_cases:0,original_candidate_count:0,kept_candidate_count:0,removed_candidate_count:0,candidate_reduction_rate:null,context_measured_cases:0,original_context_characters:0,kept_context_characters:0,context_character_reduction_rate:null,candidate_precision:null,candidate_recall:null,readiness:{policy_id:'l2-sufficiency-controlled-trial-readiness-v1',status:'not_ready',automatic_activation:false,minimum_cases_per_stratum:60,confidence_level:0.95,answerable_zero_error_upper_bound:null,unsupported_zero_error_upper_bound:null,conditions:[{code:'answerable_sample_floor',passed:false,actual:0,required:60}],limitations:[]}},items:[{
         user_message_id:'turn-shadow',query:'我的猫是什么颜色',
         retrieval_strategy:'l2_keyword_v1',reviewer_version:'gate-v2',
         provider:'openai_compatible',model:'deepseek-v4-flash',status:'completed',
@@ -109,6 +109,9 @@ describe('记忆质量样本工作台',()=>{
     render(<MemoryRouter><MemoryQualityApp/></MemoryRouter>);
     expect(await screen.findByText('我的猫是什么颜色')).toBeTruthy();
     expect(screen.getByText('这里只显示‘如果门控生效会怎样’')).toBeTruthy();
+    expect(screen.getByText('正式 L2 门控未就绪')).toBeTruthy();
+    expect(screen.getAllByText(/有支持证据 0\/60/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/有证据问题样本：当前 0，要求 60/).length).toBeGreaterThan(0);
     fireEvent.click(screen.getByRole('button',{name:'查看候选判断'}));
     expect(await screen.findByText('证据不足')).toBeTruthy();
     expect(screen.getByText('missing_attribute')).toBeTruthy();

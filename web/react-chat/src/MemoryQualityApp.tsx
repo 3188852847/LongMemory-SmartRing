@@ -1,7 +1,7 @@
 import {useEffect, useState} from 'react';
 import {Alert, Button, Card, Checkbox, Descriptions, Drawer, Empty, List, Modal, Select, Space, Statistic, Tag} from 'antd';
 import {Link} from 'react-router-dom';
-import {ChatApi, type L1ExtractionAuditPage, type L1ExtractionOutcome, type L1SufficiencyShadowDetail, type L1SufficiencyShadowPage, type L2SufficiencyShadowDetail, type L2SufficiencyShadowPage, type L2SufficiencyShadowVerdict, type MemoryFeedbackDiagnosticFocus, type MemoryFeedbackIndex, type MemoryFeedbackIndexItem, type MemoryFeedbackKind, type RoundScreenFeedbackDetail} from './api';
+import {ChatApi, type L1ExtractionAuditPage, type L1ExtractionOutcome, type L1SufficiencyPolicyMetrics, type L1SufficiencyShadowDetail, type L1SufficiencyShadowPage, type L2SufficiencyShadowDetail, type L2SufficiencyShadowPage, type L2SufficiencyShadowVerdict, type MemoryFeedbackDiagnosticFocus, type MemoryFeedbackIndex, type MemoryFeedbackIndexItem, type MemoryFeedbackKind, type RoundScreenFeedbackDetail} from './api';
 import {AppShell, ConsoleNav} from './AppShell';
 import {PageHeader} from './PageHeader';
 
@@ -46,7 +46,7 @@ const extractionOutcomeLabel:Record<L1ExtractionOutcome|'incomplete',string>={
   extraction_failed:'模型提取失败',persistence_failed:'L1 落库失败',
   incomplete:'未完成',
 };
-const l1ReadinessConditionLabel:Record<string,string>={
+const readinessConditionLabel:Record<string,string>={
   answerable_sample_floor:'有证据问题样本',
   unsupported_sample_floor:'无证据问题样本',
   zero_false_blocks:'误拦截',
@@ -55,6 +55,18 @@ const l1ReadinessConditionLabel:Record<string,string>={
   all_labeled_context_lengths_measured:'上下文长度覆盖',
   positive_candidate_reduction:'候选缩减收益',
 };
+
+/** L1/L2 共享同一证据门槛，但两层样本和结论始终分别展示、分别评审。 */
+function SufficiencyReadinessAlert({layer,metrics}:{layer:'L1'|'L2';metrics:L1SufficiencyPolicyMetrics}) {
+  const readiness=metrics.readiness;
+  const ready=readiness.status==='ready_for_controlled_trial';
+  const unmet=readiness.conditions.filter(item=>!item.passed);
+  return <Alert showIcon type={ready?'success':'warning'} title={ready?`已具备评审 ${layer} 受控试验的证据`:`正式 ${layer} 门控未就绪`} description={<>
+    <p>精确人工标签 {metrics.labeled_cases} 轮：有支持证据 {metrics.answerable_labeled_cases}/{readiness.minimum_cases_per_stratum}，无支持证据 {metrics.unsupported_labeled_cases}/{readiness.minimum_cases_per_stratum}。</p>
+    <p>误拦截 {metrics.false_block_cases}；无证据误放行 {metrics.unsupported_pass_cases}；支持集漏选 {metrics.incomplete_allow_cases}；候选减少 {metrics.removed_candidate_count}/{metrics.original_candidate_count}。达标也只允许考虑受控试验，永不自动开启。</p>
+    <details><summary>查看 {unmet.length} 项未达条件</summary><ul>{unmet.map(item=><li key={item.code}>{readinessConditionLabel[item.code]??item.code}：当前 {String(item.actual??'无')}，要求 {String(item.required)}</li>)}</ul></details>
+  </>}/>;
+}
 
 function evidencePath(layer:'l1'|'l2'|'l3',itemId:string) {
   const key=layer==='l1'?'memory_id':layer==='l2'?'scenario_id':'persona_id';
@@ -307,11 +319,7 @@ export function MemoryQualityApp() {
     <Card className="quality-list-card" title="L1 证据充分性影子记录" extra={<Tag color={l1Shadow?.runtime?.enabled?'cyan':'default'}>{l1Shadow?.runtime?.enabled?'本次已启用':'本次未启用'}</Tag>}>
       <Alert showIcon type="info" title="语义相关不等于足以回答" description="影子判断只记录如果增加证据门控会发生什么；它不过滤当轮 L1，不修改回答或记忆。"/>
       {l1Shadow&&<Space wrap className="quality-shadow-counts"><Tag>已完成 {l1Shadow.review_counts.completed}</Tag><Tag color="blue">待复核 {l1Shadow.review_counts.unreviewed}</Tag><Tag color="green">正确 {l1Shadow.review_counts.correct}</Tag><Tag color="red">错误 {l1Shadow.review_counts.incorrect}</Tag><Tag color="gold">不确定 {l1Shadow.review_counts.uncertain}</Tag></Space>}
-      {l1Shadow&&<Alert showIcon type={l1Shadow.policy_metrics.readiness.status==='ready_for_controlled_trial'?'success':'warning'} title={l1Shadow.policy_metrics.readiness.status==='ready_for_controlled_trial'?'已具备评审受控试验的证据':'正式 L1 门控未就绪'} description={<>
-        <p>精确人工标签 {l1Shadow.policy_metrics.labeled_cases} 轮：有支持证据 {l1Shadow.policy_metrics.answerable_labeled_cases}/{l1Shadow.policy_metrics.readiness.minimum_cases_per_stratum}，无支持证据 {l1Shadow.policy_metrics.unsupported_labeled_cases}/{l1Shadow.policy_metrics.readiness.minimum_cases_per_stratum}。</p>
-        <p>误拦截 {l1Shadow.policy_metrics.false_block_cases}；无证据误放行 {l1Shadow.policy_metrics.unsupported_pass_cases}；候选减少 {l1Shadow.policy_metrics.removed_candidate_count}/{l1Shadow.policy_metrics.original_candidate_count}。达标也只允许考虑受控试验，永不自动开启。</p>
-        <details><summary>查看 {l1Shadow.policy_metrics.readiness.conditions.filter(item=>!item.passed).length} 项未达条件</summary><ul>{l1Shadow.policy_metrics.readiness.conditions.filter(item=>!item.passed).map(item=><li key={item.code}>{l1ReadinessConditionLabel[item.code]??item.code}：当前 {String(item.actual??'无')}，要求 {String(item.required)}</li>)}</ul></details>
-      </>}/>}
+      {l1Shadow&&<SufficiencyReadinessAlert layer="L1" metrics={l1Shadow.policy_metrics}/>}
       {!l1Shadow?<Empty description="当前数据库没有可读取的 V46 L1 影子记录，或聊天入口未启用"/>:<List dataSource={l1Shadow.items} locale={{emptyText:<Empty description="还没有 L1 影子样本"/>}} renderItem={item=><List.Item actions={[<Button key="detail" type="link" onClick={()=>void inspectL1Shadow(item.user_message_id)}>查看 L1 候选判断</Button>,<Link key="source" to={`/memories?l0_message_id=${encodeURIComponent(item.user_message_id)}`}>问题 L0</Link>]}>
         <List.Item.Meta title={<Space wrap><Tag color={item.status==='completed'?'green':item.status==='failed'?'red':'gold'}>{item.status==='completed'?'已完成':item.status==='failed'?'失败':'处理中'}</Tag>{item.review_verdict&&<Tag color={item.review_verdict==='correct'?'green':item.review_verdict==='incorrect'?'red':'gold'}>{item.review_verdict==='correct'?'人工确认正确':item.review_verdict==='incorrect'?'人工确认错误':'人工暂不确定'}</Tag>}<span>{item.query}</span></Space>} description={<Space wrap><span>{new Date(item.requested_at).toLocaleString('zh-CN')}</span><span>候选 {item.candidate_count} · 判定支持 {item.supported_count}</span><code>{item.retrieval_strategy}</code><code>{item.model}</code>{item.error_code&&<code>{item.error_code}</code>}</Space>}/>
       </List.Item>}/>}
@@ -319,7 +327,7 @@ export function MemoryQualityApp() {
     <Card className="quality-list-card" title="L2 证据充分性影子记录" extra={<Tag color={shadow?.runtime?.enabled?'cyan':'default'}>{shadow?.runtime?.enabled?'本次已启用':'本次未启用'}</Tag>}>
       <Alert showIcon type="info" title="这里只显示‘如果门控生效会怎样’" description="影子判断不会过滤本轮 L2、不会修改回答或记忆。默认关闭；历史记录即使当前未启用也会保留。"/>
       {shadow&&<Space wrap className="quality-shadow-counts"><Tag>已完成 {shadow.review_counts.completed}</Tag><Tag color="blue">待复核 {shadow.review_counts.unreviewed}</Tag><Tag color="green">正确 {shadow.review_counts.correct}</Tag><Tag color="red">错误 {shadow.review_counts.incorrect}</Tag><Tag color="gold">不确定 {shadow.review_counts.uncertain}</Tag></Space>}
-      {shadow&&<Alert showIcon type="info" title={`精确人工标签 ${shadow.policy_metrics.labeled_cases} 轮`} description={`有支持证据 ${shadow.policy_metrics.answerable_labeled_cases}/60；无支持证据 ${shadow.policy_metrics.unsupported_labeled_cases}/60；误拦截 ${shadow.policy_metrics.false_block_cases}；无证据误放行 ${shadow.policy_metrics.unsupported_pass_cases}。这些仍只是旁路指标。`}/>}
+      {shadow&&<SufficiencyReadinessAlert layer="L2" metrics={shadow.policy_metrics}/>}
       {!shadow?<Empty description="当前数据库没有可读取的 V42 影子记录，或聊天入口未启用"/>:<List dataSource={shadow.items} locale={{emptyText:<Empty description="还没有影子样本"/>}} renderItem={item=><List.Item actions={[<Button key="detail" type="link" onClick={()=>void inspectShadow(item.user_message_id)}>查看候选判断</Button>,<Link key="source" to={`/memories?l0_message_id=${encodeURIComponent(item.user_message_id)}`}>问题 L0</Link>]}>
         <List.Item.Meta title={<Space wrap><Tag color={item.status==='completed'?'green':item.status==='failed'?'red':'gold'}>{item.status==='completed'?'已完成':item.status==='failed'?'失败':'处理中'}</Tag>{item.review_verdict&&<Tag color={item.review_verdict==='correct'?'green':item.review_verdict==='incorrect'?'red':'gold'}>{item.review_verdict==='correct'?'人工确认正确':item.review_verdict==='incorrect'?'人工确认错误':'人工暂不确定'}</Tag>}<span>{item.query}</span></Space>} description={<Space wrap><span>{new Date(item.requested_at).toLocaleString('zh-CN')}</span><span>候选 {item.candidate_count} · 判定支持 {item.supported_count}</span><code>{item.model}</code>{item.error_code&&<code>{item.error_code}</code>}</Space>}/>
       </List.Item>}/>}
