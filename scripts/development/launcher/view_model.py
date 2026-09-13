@@ -13,6 +13,7 @@ def summary_text(
     memory_backend="longmemory",
     vad_profile="normal",
     l2_sufficiency_shadow=False,
+    l1_sufficiency_shadow=False,
 ):
     """把内部启动枚举翻译为日常首页可理解的三行摘要。"""
 
@@ -37,7 +38,8 @@ def summary_text(
     }[tts]
     delete_label = "允许单条删除" if allow_delete else "不开放删除"
     consolidation_label = "低频整理已开启" if consolidation else "低频整理关闭"
-    shadow_label = "L2 旁路质检已开启" if l2_sufficiency_shadow else "L2 旁路质检关闭"
+    l1_shadow_label = "L1 旁路质检已开启" if l1_sufficiency_shadow else "L1 旁路质检关闭"
+    l2_shadow_label = "L2 旁路质检已开启" if l2_sufficiency_shadow else "L2 旁路质检关闭"
     backend_label = {
         "longmemory": "圆屏：LongMemory",
         "xiaozhi_local": "圆屏：小智本地摘要",
@@ -52,7 +54,8 @@ def summary_text(
         f"{mode}  ·  打开{page_label}  ·  {role_label}\n"
         f"{extraction_label}  ·  {retrieval_label}  ·  "
         f"{sound_label}  ·  {vad_label}\n"
-        f"{delete_label}  ·  {consolidation_label}  ·  {shadow_label}  ·  {backend_label}"
+        f"{delete_label}  ·  {consolidation_label}  ·  {l1_shadow_label}  ·  "
+        f"{l2_shadow_label}  ·  {backend_label}"
     )
 
 

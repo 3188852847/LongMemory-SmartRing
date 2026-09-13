@@ -23,6 +23,7 @@ from .routes.memory_runtime import register_memory_runtime_routes
 from .routes.memory_mode import register_memory_mode_routes
 from .routes.memory_commands import register_memory_command_routes
 from .routes.l2_sufficiency_shadow import register_l2_sufficiency_shadow_routes
+from .routes.l1_sufficiency_shadow import register_l1_sufficiency_shadow_routes
 from .routes.l1_extraction_audit import register_l1_extraction_audit_routes
 from .routes.model_profiles import register_model_profile_routes
 from .xiaozhi_model_profiles import XiaozhiModelProfiles
@@ -163,6 +164,7 @@ def create_app(*, port=8765, bridge=None, web_root=None, database=None, allow_me
     register_chat_routes(app, chat_backend)
     register_memory_mode_routes(app, chat_backend)
     register_memory_command_routes(app, chat_backend)
+    register_l1_sufficiency_shadow_routes(app, chat_backend)
     register_l2_sufficiency_shadow_routes(app, chat_backend)
     register_l1_extraction_audit_routes(app, chat_backend)
     if memory_runtime_token:
@@ -234,6 +236,10 @@ def main():
         help="显式启用单一后台 L1→L2→L3 整理；默认关闭并且不会扫描数据库",
     )
     parser.add_argument(
+        "--enable-l1-sufficiency-shadow", action="store_true",
+        help="旁路复核 L1 候选并记录审计；默认关闭且绝不改变回答上下文",
+    )
+    parser.add_argument(
         "--enable-l2-sufficiency-shadow", action="store_true",
         help="旁路复核 L2 候选并记录审计；默认关闭且绝不改变回答上下文",
     )
@@ -281,6 +287,10 @@ def main():
         parser.error("L2 影子门控只能由启用文字聊天的共享 Runtime 单一拥有")
     if args.enable_l2_sufficiency_shadow and args.chat_provider != "openai_compatible":
         parser.error("L2 影子门控需要 openai_compatible 复核模型")
+    if args.enable_l1_sufficiency_shadow and not args.enable_chat:
+        parser.error("L1 影子门控只能由启用文字聊天的共享 Runtime 单一拥有")
+    if args.enable_l1_sufficiency_shadow and args.chat_provider != "openai_compatible":
+        parser.error("L1 影子门控需要 openai_compatible 复核模型")
     if args.memory_extraction == "llm" and not args.enable_chat:
         parser.error("模型辅助提取仅在启用文字聊天/共享 Runtime 时有效")
     if args.memory_retrieval == "hybrid" and not args.enable_chat:
@@ -295,6 +305,7 @@ def main():
     scenario_model = None
     persona_producer = None
     persona_model = None
+    l1_sufficiency_shadow = None
     l2_sufficiency_shadow = None
     if args.enable_experiment_runs:
         from longmemory.infrastructure.config.settings import load_model_settings
@@ -335,6 +346,24 @@ def main():
             role_prompt = role_prompt.replace("<memory></memory>", "（证据见独立 memory_evidence 消息。）")
             generator = (FakeAnswerGenerator() if settings.provider == "fake" else
                          OpenAICompatibleAnswerGenerator(settings, role_prompt=role_prompt))
+            if args.enable_l1_sufficiency_shadow:
+                from longmemory.adapters.llm.evidence_sufficiency import (
+                    OpenAICompatibleEvidenceSufficiencyGate,
+                    SUFFICIENCY_GATE_PROMPT_SHA256,
+                )
+                from longmemory.adapters.storage.sqlite_l1_sufficiency_shadow import (
+                    SQLiteL1SufficiencyShadowStore,
+                )
+                from longmemory.application.l1_sufficiency_shadow import (
+                    L1SufficiencyShadowObserver,
+                )
+                l1_sufficiency_shadow = L1SufficiencyShadowObserver(
+                    gate=OpenAICompatibleEvidenceSufficiencyGate(settings),
+                    store=SQLiteL1SufficiencyShadowStore(args.database),
+                    prompt_sha256=SUFFICIENCY_GATE_PROMPT_SHA256,
+                    provider=settings.provider,
+                    model=settings.model,
+                )
             if args.enable_l2_sufficiency_shadow:
                 from longmemory.adapters.llm.evidence_sufficiency import (
                     OpenAICompatibleEvidenceSufficiencyGate,
@@ -410,6 +439,7 @@ def main():
                                         memory_command_handler=SQLiteNaturalMemoryCommandHandler(args.database),
                                         temporary_interaction_provider=SQLiteTemporaryInteractionProvider(args.database),
                                         consolidation_scheduler=consolidation_scheduler,
+                                        l1_sufficiency_shadow=l1_sufficiency_shadow,
                                         l2_sufficiency_shadow=l2_sufficiency_shadow)
             elif retriever_factory is not None:
                 method = LongMemoryV1(
@@ -422,6 +452,7 @@ def main():
                                         memory_command_handler=SQLiteNaturalMemoryCommandHandler(args.database),
                                         temporary_interaction_provider=SQLiteTemporaryInteractionProvider(args.database),
                                         consolidation_scheduler=consolidation_scheduler,
+                                        l1_sufficiency_shadow=l1_sufficiency_shadow,
                                         l2_sufficiency_shadow=l2_sufficiency_shadow)
             else:
                 method = LongMemoryV1(
@@ -434,6 +465,7 @@ def main():
                     memory_command_handler=SQLiteNaturalMemoryCommandHandler(args.database),
                     temporary_interaction_provider=SQLiteTemporaryInteractionProvider(args.database),
                     consolidation_scheduler=consolidation_scheduler,
+                    l1_sufficiency_shadow=l1_sufficiency_shadow,
                     l2_sufficiency_shadow=l2_sufficiency_shadow,
                 )
             chat_backend = ChatBackend(args.database, generator, provider=settings.provider,
@@ -452,6 +484,8 @@ def main():
             if runtime is not None:
                 runtime.close()
             else:
+                if l1_sufficiency_shadow is not None:
+                    l1_sufficiency_shadow.close()
                 if l2_sufficiency_shadow is not None:
                     l2_sufficiency_shadow.close()
                 if consolidation_scheduler is not None:
@@ -480,6 +514,8 @@ def main():
         print(f"文字聊天已启用：{args.chat_provider} / {args.assistant_role}；L1 提取={extraction}，召回={retrieval}，不驱动圆屏播音。")
         if args.enable_l2_sufficiency_shadow:
             print("L2 证据充分性影子记录已启用：后台复核候选，但不会改变本轮注入或回答。")
+        if args.enable_l1_sufficiency_shadow:
+            print("L1 证据充分性影子记录已启用：后台复核候选，但不会改变本轮注入或回答。")
     audit_handler = configure_file_logging(args.memory_audit_log) if args.memory_audit_log else None
     try:
         from longmemory.infrastructure.config.model_profiles import ModelProfileStore

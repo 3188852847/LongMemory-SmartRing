@@ -1,7 +1,7 @@
 import {afterEach,describe,expect,test,vi} from 'vitest';
 import {fireEvent,render,screen,waitFor} from '@testing-library/react';
 import {MemoryRouter} from 'react-router-dom';
-import {ChatApi, type L1ExtractionAuditPage, type L2SufficiencyShadowDetail, type L2SufficiencyShadowPage, type MemoryFeedbackIndex} from './api';
+import {ChatApi, type L1ExtractionAuditPage, type L1SufficiencyShadowDetail, type L1SufficiencyShadowPage, type L2SufficiencyShadowDetail, type L2SufficiencyShadowPage, type MemoryFeedbackIndex} from './api';
 import {MemoryQualityApp} from './MemoryQualityApp';
 
 afterEach(()=>vi.restoreAllMocks());
@@ -119,6 +119,36 @@ describe('记忆质量样本工作台',()=>{
     await waitFor(()=>expect(ChatApi.prototype.request).toHaveBeenCalledWith(
       '/api/l2-sufficiency-shadow/turn-shadow/reviews','POST',{
         verdict:'incorrect',reason_code:'missed_support',expected_review_revision:0,
+      },
+    ));
+  });
+
+  test('L1影子记录展示召回分数并只追加人工复核',async()=>{
+    const feedback:MemoryFeedbackIndex={kind:'issues',offset:0,limit:25,total:0,counts:{memory_ok:0,recall_miss:0,wrong_memory:0,memory_irrelevant:0},review_counts:{open:0,resolved:0,dismissed:0},items:[]};
+    const shadow:L1SufficiencyShadowPage={limit:20,runtime:{enabled:true,state:'completed'},review_counts:{completed:1,unreviewed:1,correct:0,incorrect:0,uncertain:0},items:[{
+      user_message_id:'turn-l1-shadow',query:'豆包是什么颜色',retrieval_strategy:'keyword_dense_rrf_v1',reviewer_version:'gate-v2',provider:'openai_compatible',model:'deepseek-v4-flash',status:'completed',requested_at:'2026-09-13T02:00:00Z',completed_at:'2026-09-13T02:00:01Z',error_code:null,candidate_count:1,supported_count:0,review_verdict:null,review_revision:null,
+    }]};
+    const detail:L1SufficiencyShadowDetail={...shadow.items[0],prompt_sha256:'a'.repeat(64),candidates:[{
+      memory_id:'memory-cat',rank:1,content_sha256:'b'.repeat(64),keyword_score:1,dense_score:0.81,fused_score:0.03,supports_answer:0,reason_code:'missing_attribute',current_content:'用户养了一只叫豆包的猫。',current_status:'current',content_matches_snapshot:true,
+    }],review:{verdict:null,reason_code:null,review_revision:0,occurred_at:null}};
+    vi.spyOn(ChatApi.prototype,'bootstrap').mockResolvedValue(undefined);
+    const request=vi.spyOn(ChatApi.prototype,'request').mockImplementation(async path=>{
+      if(path==='/api/l1-sufficiency-shadow?limit=20')return shadow as never;
+      if(path==='/api/l1-sufficiency-shadow/turn-l1-shadow')return detail as never;
+      return feedback as never;
+    });
+    render(<MemoryRouter><MemoryQualityApp/></MemoryRouter>);
+    expect(await screen.findByText('豆包是什么颜色')).toBeTruthy();
+    expect(screen.getByText('语义相关不等于足以回答')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button',{name:'查看 L1 候选判断'}));
+    expect(await screen.findByText('用户养了一只叫豆包的猫。')).toBeTruthy();
+    expect(screen.getByText(/关键词 1 · 余弦 0.810 · 融合 0.0300/)).toBeTruthy();
+    expect(screen.getByRole('link',{name:'打开 L1'}).getAttribute('href')).toBe('/memories?memory_id=memory-cat');
+    fireEvent.click(screen.getByRole('button',{name:'L1 判断正确'}));
+    fireEvent.click(screen.getByRole('button',{name:'保存 L1 复核'}));
+    await waitFor(()=>expect(request).toHaveBeenCalledWith(
+      '/api/l1-sufficiency-shadow/turn-l1-shadow/reviews','POST',{
+        verdict:'correct',reason_code:'agreement',expected_review_revision:0,
       },
     ));
   });

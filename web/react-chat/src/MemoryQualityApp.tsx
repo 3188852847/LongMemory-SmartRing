@@ -1,7 +1,7 @@
 import {useEffect, useState} from 'react';
 import {Alert, Button, Card, Descriptions, Drawer, Empty, List, Modal, Select, Space, Statistic, Tag} from 'antd';
 import {Link} from 'react-router-dom';
-import {ChatApi, type L1ExtractionAuditPage, type L1ExtractionOutcome, type L2SufficiencyShadowDetail, type L2SufficiencyShadowPage, type L2SufficiencyShadowVerdict, type MemoryFeedbackDiagnosticFocus, type MemoryFeedbackIndex, type MemoryFeedbackIndexItem, type MemoryFeedbackKind, type RoundScreenFeedbackDetail} from './api';
+import {ChatApi, type L1ExtractionAuditPage, type L1ExtractionOutcome, type L1SufficiencyShadowDetail, type L1SufficiencyShadowPage, type L2SufficiencyShadowDetail, type L2SufficiencyShadowPage, type L2SufficiencyShadowVerdict, type MemoryFeedbackDiagnosticFocus, type MemoryFeedbackIndex, type MemoryFeedbackIndexItem, type MemoryFeedbackKind, type RoundScreenFeedbackDetail} from './api';
 import {AppShell, ConsoleNav} from './AppShell';
 import {PageHeader} from './PageHeader';
 
@@ -38,8 +38,8 @@ const reviewReasonOptions:Record<ReviewAction,Array<{value:string;label:string}>
 };
 const shadowReasonOptions:Record<L2SufficiencyShadowVerdict,Array<{value:string;label:string}>>={
   correct:[{value:'agreement',label:'完整支持集合判断正确'}],
-  incorrect:[{value:'missed_support',label:'漏掉了真正支持的 L2'},{value:'false_support',label:'错误放行了不支持的 L2'},{value:'stale_content',label:'L2 正文后来变化，无法按原状态确认'},{value:'other',label:'其他错误'}],
-  uncertain:[{value:'ambiguous_query',label:'问题含义不清，暂时无法判断'},{value:'stale_content',label:'L2 正文后来变化'},{value:'other',label:'其他不确定原因'}],
+  incorrect:[{value:'missed_support',label:'漏掉了真正支持的候选证据'},{value:'false_support',label:'错误放行了不支持的候选证据'},{value:'stale_content',label:'候选正文后来变化，无法按原状态确认'},{value:'other',label:'其他错误'}],
+  uncertain:[{value:'ambiguous_query',label:'问题含义不清，暂时无法判断'},{value:'stale_content',label:'候选正文后来变化'},{value:'other',label:'其他不确定原因'}],
 };
 const extractionOutcomeLabel:Record<L1ExtractionOutcome|'incomplete',string>={
   noop:'正常不记',added:'新增 L1',reused:'复用已有 L1',
@@ -65,6 +65,13 @@ export function MemoryQualityApp() {
   const [reviewTarget,setReviewTarget] = useState<{item:MemoryFeedbackIndexItem;action:ReviewAction}|null>(null);
   const [reviewReason,setReviewReason] = useState('');
   const [reviewBusy,setReviewBusy] = useState(false);
+  const [l1Shadow,setL1Shadow] = useState<L1SufficiencyShadowPage|null>(null);
+  const [l1ShadowDetail,setL1ShadowDetail] = useState<L1SufficiencyShadowDetail|null>(null);
+  const [l1ShadowOpen,setL1ShadowOpen] = useState(false);
+  const [l1ShadowBusy,setL1ShadowBusy] = useState(false);
+  const [l1ShadowReview,setL1ShadowReview] = useState<L2SufficiencyShadowVerdict|null>(null);
+  const [l1ShadowReviewReason,setL1ShadowReviewReason] = useState('');
+  const [l1ShadowReviewBusy,setL1ShadowReviewBusy] = useState(false);
   const [shadow,setShadow] = useState<L2SufficiencyShadowPage|null>(null);
   const [shadowDetail,setShadowDetail] = useState<L2SufficiencyShadowDetail|null>(null);
   const [shadowOpen,setShadowOpen] = useState(false);
@@ -95,6 +102,13 @@ export function MemoryQualityApp() {
     }
   }
 
+  async function loadL1Shadow() {
+    try {
+      const value=await api.request<L1SufficiencyShadowPage>('/api/l1-sufficiency-shadow?limit=20');
+      setL1Shadow(value&&Array.isArray(value.items)&&value.runtime&&typeof value.runtime.enabled==='boolean'?value:null);
+    } catch {setL1Shadow(null);}
+  }
+
   async function loadExtractionAudit() {
     try {
       const value=await api.request<L1ExtractionAuditPage>('/api/l1-extraction-audit?limit=30');
@@ -120,7 +134,7 @@ export function MemoryQualityApp() {
   }
 
   useEffect(()=>{void (async()=>{
-    try {await api.bootstrap();await Promise.all([load('issues',0),loadShadow(),loadExtractionAudit()]);}
+    try {await api.bootstrap();await Promise.all([load('issues',0),loadL1Shadow(),loadShadow(),loadExtractionAudit()]);}
     catch {setNotice('无法建立本机控制台会话，请刷新页面。');setBusy(false);}
   })();},[]);
 
@@ -129,6 +143,33 @@ export function MemoryQualityApp() {
     try {setShadowDetail(await api.request<L2SufficiencyShadowDetail>(`/api/l2-sufficiency-shadow/${encodeURIComponent(messageId)}`));}
     catch {setNotice('无法读取这条 L2 影子记录。请确认控制台仍在运行后重试。');}
     finally {setShadowBusy(false);}
+  }
+
+  async function inspectL1Shadow(messageId:string) {
+    setL1ShadowOpen(true);setL1ShadowBusy(true);setL1ShadowDetail(null);
+    try {setL1ShadowDetail(await api.request<L1SufficiencyShadowDetail>(`/api/l1-sufficiency-shadow/${encodeURIComponent(messageId)}`));}
+    catch {setNotice('无法读取这条 L1 影子记录。请确认控制台仍在运行后重试。');}
+    finally {setL1ShadowBusy(false);}
+  }
+
+  function beginL1ShadowReview(verdict:L2SufficiencyShadowVerdict) {
+    setL1ShadowReview(verdict);
+    setL1ShadowReviewReason(shadowReasonOptions[verdict][0].value);
+  }
+
+  async function saveL1ShadowReview() {
+    if(!l1ShadowDetail||!l1ShadowReview||!l1ShadowReviewReason)return;
+    setL1ShadowReviewBusy(true);
+    try {
+      await api.request(`/api/l1-sufficiency-shadow/${encodeURIComponent(l1ShadowDetail.user_message_id)}/reviews`,'POST',{
+        verdict:l1ShadowReview,reason_code:l1ShadowReviewReason,
+        expected_review_revision:l1ShadowDetail.review.review_revision,
+      });
+      setL1ShadowReview(null);
+      setNotice('L1 人工复核已追加；模型原判、正式回答和长期记忆均未修改。');
+      await Promise.all([inspectL1Shadow(l1ShadowDetail.user_message_id),loadL1Shadow()]);
+    } catch {setNotice('L1 人工复核没有保存。记录可能已在其他页面更新，请重新打开详情核对。');}
+    finally {setL1ShadowReviewBusy(false);}
   }
 
   function beginShadowReview(verdict:L2SufficiencyShadowVerdict) {
@@ -181,7 +222,7 @@ export function MemoryQualityApp() {
 
   const sidebar = <ConsoleNav active="quality" legacyPath="/memories"/>;
   return <AppShell subtitle="跨日期的记忆诊断样本" className="quality-shell" sidebar={sidebar}>
-    <PageHeader eyebrow="长期记忆" title="记忆质量样本" description="集中查看日常 L1 提取、网页人工复核、圆屏明确反馈和只观察不生效的 L2 影子判断。" action={<Button loading={busy} onClick={()=>void Promise.all([load(filter,page.offset),loadShadow(),loadExtractionAudit()])}>刷新</Button>}/>
+    <PageHeader eyebrow="长期记忆" title="记忆质量样本" description="集中查看日常 L1 提取、网页人工复核、圆屏明确反馈和只观察不生效的 L1/L2 影子判断。" action={<Button loading={busy} onClick={()=>void Promise.all([load(filter,page.offset),loadL1Shadow(),loadShadow(),loadExtractionAudit()])}>刷新</Button>}/>
     <Alert showIcon type="info" title="这是人工诊断队列，不是准确率报告" description="默认只显示‘没想起’和‘错误记忆’。排查方向由可见轨迹生成，不代表系统已经确认根因，也不会触发模型、重答或记忆修改。"/>
     <section className="quality-counts" aria-label="当前有效判断总览">
       <Card><Statistic title="待处理" value={page.review_counts.open}/></Card>
@@ -227,6 +268,13 @@ export function MemoryQualityApp() {
       </List.Item>}/>
       <div className="pagination"><Button disabled={busy||page.offset===0} onClick={()=>void load(filter,Math.max(0,page.offset-page.limit))}>上一页</Button><span>{page.total?`${page.offset+1}–${Math.min(page.offset+page.limit,page.total)} / ${page.total}`:'0 条'}</span><Button disabled={busy||page.offset+page.limit>=page.total} onClick={()=>void load(filter,page.offset+page.limit)}>下一页</Button></div>
     </Card>
+    <Card className="quality-list-card" title="L1 证据充分性影子记录" extra={<Tag color={l1Shadow?.runtime?.enabled?'cyan':'default'}>{l1Shadow?.runtime?.enabled?'本次已启用':'本次未启用'}</Tag>}>
+      <Alert showIcon type="info" title="语义相关不等于足以回答" description="影子判断只记录如果增加证据门控会发生什么；它不过滤当轮 L1，不修改回答或记忆。"/>
+      {l1Shadow&&<Space wrap className="quality-shadow-counts"><Tag>已完成 {l1Shadow.review_counts.completed}</Tag><Tag color="blue">待复核 {l1Shadow.review_counts.unreviewed}</Tag><Tag color="green">正确 {l1Shadow.review_counts.correct}</Tag><Tag color="red">错误 {l1Shadow.review_counts.incorrect}</Tag><Tag color="gold">不确定 {l1Shadow.review_counts.uncertain}</Tag></Space>}
+      {!l1Shadow?<Empty description="当前数据库没有可读取的 V45 L1 影子记录，或聊天入口未启用"/>:<List dataSource={l1Shadow.items} locale={{emptyText:<Empty description="还没有 L1 影子样本"/>}} renderItem={item=><List.Item actions={[<Button key="detail" type="link" onClick={()=>void inspectL1Shadow(item.user_message_id)}>查看 L1 候选判断</Button>,<Link key="source" to={`/memories?l0_message_id=${encodeURIComponent(item.user_message_id)}`}>问题 L0</Link>]}>
+        <List.Item.Meta title={<Space wrap><Tag color={item.status==='completed'?'green':item.status==='failed'?'red':'gold'}>{item.status==='completed'?'已完成':item.status==='failed'?'失败':'处理中'}</Tag>{item.review_verdict&&<Tag color={item.review_verdict==='correct'?'green':item.review_verdict==='incorrect'?'red':'gold'}>{item.review_verdict==='correct'?'人工确认正确':item.review_verdict==='incorrect'?'人工确认错误':'人工暂不确定'}</Tag>}<span>{item.query}</span></Space>} description={<Space wrap><span>{new Date(item.requested_at).toLocaleString('zh-CN')}</span><span>候选 {item.candidate_count} · 判定支持 {item.supported_count}</span><code>{item.retrieval_strategy}</code><code>{item.model}</code>{item.error_code&&<code>{item.error_code}</code>}</Space>}/>
+      </List.Item>}/>}
+    </Card>
     <Card className="quality-list-card" title="L2 证据充分性影子记录" extra={<Tag color={shadow?.runtime?.enabled?'cyan':'default'}>{shadow?.runtime?.enabled?'本次已启用':'本次未启用'}</Tag>}>
       <Alert showIcon type="info" title="这里只显示‘如果门控生效会怎样’" description="影子判断不会过滤本轮 L2、不会修改回答或记忆。默认关闭；历史记录即使当前未启用也会保留。"/>
       {shadow&&<Space wrap className="quality-shadow-counts"><Tag>已完成 {shadow.review_counts.completed}</Tag><Tag color="blue">待复核 {shadow.review_counts.unreviewed}</Tag><Tag color="green">正确 {shadow.review_counts.correct}</Tag><Tag color="red">错误 {shadow.review_counts.incorrect}</Tag><Tag color="gold">不确定 {shadow.review_counts.uncertain}</Tag></Space>}
@@ -253,6 +301,21 @@ export function MemoryQualityApp() {
         </Card>
       </>:<Empty description="没有可显示的诊断详情"/>}
     </Drawer>
+    <Drawer width={680} title="L1 影子门控详情" open={l1ShadowOpen} onClose={()=>setL1ShadowOpen(false)}>
+      {l1ShadowBusy?<p>正在读取 L1 候选审计…</p>:l1ShadowDetail?<>
+        <Alert showIcon type="warning" title="判定尚未参与正式回答" description="正文来自当前 L1；指纹用于核对它是否仍与影子运行时一致。支持只表示该候选包含被问信息。"/>
+        <Descriptions column={1} bordered size="small" items={[
+          {key:'query',label:'当轮问题',children:l1ShadowDetail.query},
+          {key:'status',label:'运行状态',children:l1ShadowDetail.status},
+          {key:'strategy',label:'召回策略',children:l1ShadowDetail.retrieval_strategy},
+          {key:'reviewer',label:'门控版本',children:l1ShadowDetail.reviewer_version},
+          {key:'model',label:'复核模型',children:`${l1ShadowDetail.provider} / ${l1ShadowDetail.model}`},
+          {key:'owner-review',label:'人工复核',children:l1ShadowDetail.review.verdict==='correct'?'判断正确':l1ShadowDetail.review.verdict==='incorrect'?'判断错误':l1ShadowDetail.review.verdict==='uncertain'?'暂不确定':'尚未复核'},
+        ]}/>
+        <List dataSource={l1ShadowDetail.candidates} locale={{emptyText:<Empty description="该轮没有 L1 候选，因此没有调用复核模型"/>}} renderItem={candidate=><List.Item actions={[<Link key="memory" to={`/memories?memory_id=${encodeURIComponent(candidate.memory_id)}`}>打开 L1</Link>]}><List.Item.Meta title={<Space wrap><Tag>#{candidate.rank}</Tag><Tag color={candidate.supports_answer===1?'green':candidate.supports_answer===0?'default':'gold'}>{candidate.supports_answer===1?'足以支持':candidate.supports_answer===0?'证据不足':'尚未判定'}</Tag><code>{candidate.memory_id}</code></Space>} description={<><p>{candidate.current_content??'当前数据库中没有这条 L1 正文。'}</p><Space wrap><code>{candidate.reason_code??'pending'}</code>{scoreSummary(candidate)&&<span>{scoreSummary(candidate)}</span>}<span>{candidate.content_matches_snapshot===true?'与运行时指纹一致':candidate.content_matches_snapshot===false?'正文后来变化':'无法核对历史正文'}</span></Space></>}/></List.Item>}/>
+        {l1ShadowDetail.status==='completed'&&<Space wrap><Button onClick={()=>beginL1ShadowReview('correct')}>L1 判断正确</Button><Button danger onClick={()=>beginL1ShadowReview('incorrect')}>L1 判断错误</Button><Button onClick={()=>beginL1ShadowReview('uncertain')}>L1 暂不确定</Button></Space>}
+      </>:<Empty description="没有可显示的 L1 影子详情"/>}
+    </Drawer>
     <Drawer width={680} title="L2 影子门控详情" open={shadowOpen} onClose={()=>setShadowOpen(false)}>
       {shadowBusy?<p>正在读取候选审计…</p>:shadowDetail?<>
         <Alert showIcon type="warning" title="判定尚未参与正式回答" description="场景正文来自当前 L2；指纹可核对它是否仍与影子运行时一致。支持只表示候选包含被问信息，不表示最终答案一定正确。"/>
@@ -271,6 +334,10 @@ export function MemoryQualityApp() {
     <Modal title="复核 L2 影子判断" open={shadowReview!==null} confirmLoading={shadowReviewBusy} okText="保存人工复核" cancelText="取消" onOk={()=>void saveShadowReview()} onCancel={()=>!shadowReviewBusy&&setShadowReview(null)}>
       <p>复核的是这一轮完整的支持集合；只追加审计事件，不会改变回答或记忆。</p>
       <Select aria-label="L2 影子复核原因" value={shadowReviewReason} style={{width:'100%'}} options={shadowReview?shadowReasonOptions[shadowReview]:[]} onChange={setShadowReviewReason}/>
+    </Modal>
+    <Modal title="复核 L1 影子判断" open={l1ShadowReview!==null} confirmLoading={l1ShadowReviewBusy} okText="保存 L1 复核" cancelText="取消" onOk={()=>void saveL1ShadowReview()} onCancel={()=>!l1ShadowReviewBusy&&setL1ShadowReview(null)}>
+      <p>复核的是这一轮完整 L1 支持集合；只追加审计事件，不会改变回答或记忆。</p>
+      <Select aria-label="L1 影子复核原因" value={l1ShadowReviewReason} style={{width:'100%'}} options={l1ShadowReview?shadowReasonOptions[l1ShadowReview]:[]} onChange={setL1ShadowReviewReason}/>
     </Modal>
     <Modal title={reviewTarget?.action==='resolve'?'标记为已处理':reviewTarget?.action==='dismiss'?'标记为不是记忆问题':'重新打开样本'} open={reviewTarget!==null} confirmLoading={reviewBusy} okText="保存复核状态" cancelText="取消" onOk={()=>void saveReview()} onCancel={()=>!reviewBusy&&setReviewTarget(null)}>
       <p>这只管理诊断队列，不会自动修改、删除或重新生成长期记忆。</p>

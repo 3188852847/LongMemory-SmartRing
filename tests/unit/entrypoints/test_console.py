@@ -179,7 +179,7 @@ async def login(client, base):
     return {"Origin": base, "X-Console-CSRF": (await response.json())["csrf"]}
 
 
-def test_l2_sufficiency_shadow_routes_are_read_only_and_validate_identity(tmp_path):
+def test_sufficiency_shadow_routes_validate_identity_and_closed_reviews(tmp_path):
     class Backend:
         database = tmp_path / "synthetic-memory.db"
 
@@ -197,6 +197,23 @@ def test_l2_sufficiency_shadow_routes_are_read_only_and_validate_identity(tmp_pa
         def review_l2_sufficiency_shadow(self, message_id, **values):
             assert message_id == "turn-a"
             assert values == {"verdict": "correct", "reason_code": "agreement",
+                              "expected_review_revision": 0}
+            return {**values, "review_revision": 1}
+
+        def list_l1_sufficiency_shadow(self, *, limit):
+            assert limit == 7
+            return {"items": [{"user_message_id": "turn-l1"}], "limit": limit,
+                    "review_counts": {"completed": 1, "unreviewed": 1,
+                                      "correct": 0, "incorrect": 0, "uncertain": 0},
+                    "runtime": {"enabled": True, "state": "completed"}}
+
+        def get_l1_sufficiency_shadow(self, message_id):
+            return ({"user_message_id": message_id, "candidates": []}
+                    if message_id == "turn-l1" else None)
+
+        def review_l1_sufficiency_shadow(self, message_id, **values):
+            assert message_id == "turn-l1"
+            assert values == {"verdict": "incorrect", "reason_code": "false_support",
                               "expected_review_revision": 0}
             return {**values, "review_revision": 1}
 
@@ -233,6 +250,26 @@ def test_l2_sufficiency_shadow_routes_are_read_only_and_validate_identity(tmp_pa
                 base + "/api/l2-sufficiency-shadow?limit=0", headers=headers,
             )
             assert response.status == 400
+            response = await client.get(
+                base + "/api/l1-sufficiency-shadow?limit=7", headers=headers,
+            )
+            assert response.status == 200
+            assert (await response.json())["items"][0]["user_message_id"] == "turn-l1"
+            response = await client.get(
+                base + "/api/l1-sufficiency-shadow/turn-l1", headers=headers,
+            )
+            assert response.status == 200
+            response = await client.get(
+                base + "/api/l1-sufficiency-shadow/missing", headers=headers,
+            )
+            assert response.status == 404
+            response = await client.post(
+                base + "/api/l1-sufficiency-shadow/turn-l1/reviews",
+                headers=headers, json={"verdict": "incorrect", "reason_code": "false_support",
+                                       "expected_review_revision": 0},
+            )
+            assert response.status == 200
+            assert (await response.json())["review_revision"] == 1
             response = await client.get(
                 base + "/api/l1-extraction-audit?limit=9", headers=headers,
             )

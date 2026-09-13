@@ -471,6 +471,51 @@ def test_l2_sufficiency_shadow_observes_candidates_without_injecting_them(databa
         backend.close()
 
 
+def test_l1_sufficiency_shadow_observes_only_atomic_recall_without_filtering(database):
+    seed = ChatBackend(database, FakeAnswerGenerator())
+    seeded = seed.run("我养了一只叫豆包的猫", ())
+    seed.close()
+
+    class Shadow:
+        def __init__(self):
+            self.calls = []
+
+        def submit(self, **values):
+            self.calls.append(values)
+            return True
+
+        def status(self):
+            class Status:
+                def to_dict(self):
+                    return {"enabled": True, "state": "not_run"}
+            return Status()
+
+        def wait(self):
+            pass
+
+        def close(self):
+            pass
+
+    shadow = Shadow()
+    runtime = MemoryRuntime(
+        database, method=LongMemoryV1(database, existing_only=True),
+        l1_sufficiency_shadow=shadow,
+    )
+    backend = ChatBackend(database, FakeAnswerGenerator(), runtime=runtime)
+    try:
+        result = backend.run("我的猫叫什么", ())
+        assert result["status"] == "completed"
+        assert "豆包" in result["memory_context"]  # 影子复核没有过滤正式上下文。
+        assert len(shadow.calls) == 1
+        call = shadow.calls[0]
+        assert call["user_message_id"] == result["event_id"]
+        assert call["candidates"][0].item_id == seeded["writes"][0]["item_id"]
+        assert call["retrieval_strategy"]
+        assert runtime.status()["l1_sufficiency_shadow"]["enabled"] is True
+    finally:
+        backend.close()
+
+
 def test_l2_sufficiency_shadow_read_failure_does_not_fail_chat(database):
     class BrokenScenarioProvider:
         def recall(self, _query, *, limit=3):

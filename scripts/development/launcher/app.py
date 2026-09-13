@@ -226,6 +226,9 @@ def main():
     memory_retrieval = tk.StringVar(value=retrieval_labels[saved["memory_retrieval"]])
     allow_memory_delete = tk.BooleanVar(value=DEFAULT_SESSION_ALLOW_MEMORY_DELETE)
     memory_consolidation = tk.BooleanVar(value=saved["memory_consolidation"])
+    l1_sufficiency_shadow = tk.BooleanVar(
+        value=saved["l1_sufficiency_shadow"]
+    )
     l2_sufficiency_shadow = tk.BooleanVar(
         value=saved["l2_sufficiency_shadow"]
     )
@@ -314,6 +317,7 @@ def main():
             "memory_extraction": selected_extraction(),
             "memory_retrieval": selected_retrieval(),
             "memory_consolidation": memory_consolidation.get(),
+            "l1_sufficiency_shadow": l1_sufficiency_shadow.get(),
             "l2_sufficiency_shadow": l2_sufficiency_shadow.get(),
             "embedding_model_dir": embedding_model.get().strip(),
             "tts_backend": selected_tts(),
@@ -429,6 +433,11 @@ def main():
     ).pack(anchor="w", pady=(0, 4))
     ttk.Checkbutton(
         behavior_box,
+        text="记录 L1 证据旁路质检（增加模型请求；不改变回答，默认关闭）",
+        variable=l1_sufficiency_shadow,
+    ).pack(anchor="w", pady=(0, 4))
+    ttk.Checkbutton(
+        behavior_box,
         text="记录 L2 证据旁路质检（增加模型请求；不改变回答，默认关闭）",
         variable=l2_sufficiency_shadow,
     ).pack(anchor="w", pady=(0, 4))
@@ -501,6 +510,7 @@ def main():
             selected_memory_backend(),
             selected_vad_profile(),
             l2_sufficiency_shadow.get(),
+            l1_sufficiency_shadow.get(),
         ))
 
     summary_box = ttk.LabelFrame(daily, text="本次配置", style="Section.TLabelframe")
@@ -513,7 +523,8 @@ def main():
     ).pack(anchor="w", pady=(4, 0))
     for variable in (voice, start_page, role, memory_extraction, memory_retrieval,
                      tts_backend, vad_profile, memory_backend, allow_memory_delete,
-                     memory_consolidation, l2_sufficiency_shadow):
+                     memory_consolidation, l1_sufficiency_shadow,
+                     l2_sufficiency_shadow):
         variable.trace_add("write", update_summary)
     update_summary()
 
@@ -667,6 +678,7 @@ def main():
                               memory_extraction=selected_extraction(),
                               memory_retrieval=selected_retrieval(),
                               enable_memory_consolidation=memory_consolidation.get(),
+                              enable_l1_sufficiency_shadow=l1_sufficiency_shadow.get(),
                               enable_l2_sufficiency_shadow=l2_sufficiency_shadow.get(),
                               allow_memory_delete=allow_memory_delete.get(),
                               embedding_model_dir=Path(embedding_model.get()),

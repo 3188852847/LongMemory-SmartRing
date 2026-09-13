@@ -83,6 +83,7 @@ class MemoryRuntime:
                  persona_provider=None, memory_command_handler=None,
                  temporary_interaction_provider: TemporaryInteractionProvider | None = None,
                  consolidation_scheduler: LowFrequencyConsolidationScheduler | None = None,
+                 l1_sufficiency_shadow=None,
                  l2_sufficiency_shadow=None,
                  clock=None) -> None:
         self.database = database.resolve()
@@ -104,8 +105,9 @@ class MemoryRuntime:
         # 所有网页与圆屏入口共享同一个 Runtime，因此不会按入口各自残留。
         self._next_interaction: tuple[TemporaryInteractionMode, str, str] | None = None
         self._consolidation_scheduler = consolidation_scheduler
-        # 影子观察器只接收当前轮候选快照并在后台写审计；它没有修改
-        # ``support`` 的接口，因此即使启用也不能放行或拦截正式回答。
+        # 两个影子观察器只接收当前轮候选快照并在后台写审计；
+        # 它们都没有修改 ``support`` 的接口，因此不能放行或拦截回答。
+        self._l1_sufficiency_shadow = l1_sufficiency_shadow
         self._l2_sufficiency_shadow = l2_sufficiency_shadow
         self._clock = clock or (lambda: datetime.now(UTC))
         # 单工作线程保证候选模型不会并发轰击供应商。任务只由圆屏完成回执
@@ -212,6 +214,10 @@ class MemoryRuntime:
                 if self._use_enabled
                 else MemorySupport(str(uuid4()), "", (), "disabled_by_user", None)
             )
+            # 只截取记忆方法刚返回的 L1。后续加入的 L2、L3 和临时互动
+            # 证据不属于这个评估单元，不能混入候选快照。
+            l1_shadow_candidates = tuple(support.retrieved or ())
+            l1_shadow_strategy = support.retrieval_strategy or "unspecified"
             recall_finished = perf_counter()
             scenario_started = perf_counter()
             scenario_result = ScenarioRecallResult("", ())
@@ -334,6 +340,18 @@ class MemoryRuntime:
         # 通知发生在 SQLite 互斥锁之外；它只唤醒后台线程，不让聊天等待整理。
         if observation.writes and self._consolidation_scheduler is not None:
             self._consolidation_scheduler.notify_new_evidence()
+        if (command is None and use_enabled
+                and self._l1_sufficiency_shadow is not None):
+            try:
+                self._l1_sufficiency_shadow.submit(
+                    user_message_id=event.event_id,
+                    query=text,
+                    candidates=l1_shadow_candidates,
+                    retrieval_strategy=l1_shadow_strategy,
+                )
+            except Exception:
+                # 旁路任务即使关闭或排队失败，也不改变本轮返回。
+                pass
         if (command is None and use_enabled and shadow_scenario_result is not None
                 and self._l2_sufficiency_shadow is not None):
             try:
@@ -511,7 +529,18 @@ class MemoryRuntime:
                     if self._l2_sufficiency_shadow is not None
                     else {"enabled": False, "state": "disabled"}
                 ),
+                "l1_sufficiency_shadow": (
+                    self._l1_sufficiency_shadow.status().to_dict()
+                    if self._l1_sufficiency_shadow is not None
+                    else {"enabled": False, "state": "disabled"}
+                ),
             }
+
+    def wait_for_l1_sufficiency_shadow(self) -> None:
+        """等待 L1 旁路任务，仅供测试和受控停机使用。"""
+
+        if self._l1_sufficiency_shadow is not None:
+            self._l1_sufficiency_shadow.wait()
 
     def wait_for_l2_sufficiency_shadow(self) -> None:
         """等待旁路任务，供测试和受控停机使用；正式聊天不调用。"""
@@ -554,6 +583,8 @@ class MemoryRuntime:
         with self._lock:
             if not self._closed:
                 try:
+                    if self._l1_sufficiency_shadow is not None:
+                        self._l1_sufficiency_shadow.close()
                     if self._l2_sufficiency_shadow is not None:
                         self._l2_sufficiency_shadow.close()
                     if self._consolidation_scheduler is not None:

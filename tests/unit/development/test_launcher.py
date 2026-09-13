@@ -204,6 +204,16 @@ def test_explicit_launcher_choice_enables_l2_sufficiency_shadow(options):
     assert enabled.count("--enable-l2-sufficiency-shadow") == 1
 
 
+def test_explicit_launcher_choice_enables_l1_sufficiency_shadow(options):
+    disabled = runtime.build_commands(options, uv="synthetic-uv")[0][1]
+    enabled = runtime.build_commands(
+        replace(options, enable_l1_sufficiency_shadow=True), uv="synthetic-uv"
+    )[0][1]
+
+    assert "--enable-l1-sufficiency-shadow" not in disabled
+    assert enabled.count("--enable-l1-sufficiency-shadow") == 1
+
+
 def test_hybrid_retrieval_requires_and_passes_existing_snapshot(options):
     model = options.root / "synthetic-bge"
     model.mkdir()
@@ -781,7 +791,8 @@ def test_daily_summary_uses_human_labels_instead_of_internal_enums(monkeypatch):
     assert summary == (
         "网页＋圆屏语音  ·  打开记忆管理  ·  爱莉希雅风格\n"
         "模型辅助提取  ·  关键词＋语义召回  ·  VoxCPM2 本地声音  ·  普通拾音\n"
-        "允许单条删除  ·  低频整理关闭  ·  L2 旁路质检关闭  ·  圆屏：小智本地摘要"
+        "允许单条删除  ·  低频整理关闭  ·  L1 旁路质检关闭  ·  "
+        "L2 旁路质检关闭  ·  圆屏：小智本地摘要"
     )
     assert not {"elysia_v1", "llm", "hybrid", "voxcpm2"}.intersection(summary.split())
 

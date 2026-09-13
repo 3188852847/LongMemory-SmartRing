@@ -25,6 +25,9 @@ from longmemory.adapters.storage.sqlite_memory_feedback_review_store import (
 from longmemory.adapters.storage.sqlite_l2_sufficiency_shadow import (
     SQLiteL2SufficiencyShadowStore,
 )
+from longmemory.adapters.storage.sqlite_l1_sufficiency_shadow import (
+    SQLiteL1SufficiencyShadowStore,
+)
 from longmemory.adapters.storage.sqlite_l1_extraction_audit import (
     SQLiteL1ExtractionAuditStore,
 )
@@ -166,6 +169,27 @@ class ChatBackend:
             user_message_id=user_message_id, **values,
         )
 
+    def list_l1_sufficiency_shadow(self, *, limit=50):
+        """列出 L1 影子运行；正文仍只从原表按需读取。"""
+
+        result = SQLiteL1SufficiencyShadowStore(self.database).list_recent(
+            limit=limit,
+        )
+        result["runtime"] = self.memory_runtime().status()[
+            "l1_sufficiency_shadow"
+        ]
+        return result
+
+    def get_l1_sufficiency_shadow(self, user_message_id):
+        return SQLiteL1SufficiencyShadowStore(self.database).get(user_message_id)
+
+    def review_l1_sufficiency_shadow(self, user_message_id, **values):
+        """追加 L1 人工复核事件；不修改原判、候选或回答。"""
+
+        return SQLiteL1SufficiencyShadowStore(self.database).review(
+            user_message_id=user_message_id, **values,
+        )
+
     def list_l1_extraction_audit(self, *, limit=50):
         """读取脱敏提取结果；刻意不返回用户原文。"""
 
@@ -195,6 +219,7 @@ class ChatBackend:
                 "scenario_available": runtime["scenario_available"],
                 "persona_use_enabled": runtime["persona_use_enabled"],
                 "persona_available": runtime["persona_available"],
+                "l1_sufficiency_shadow": runtime["l1_sufficiency_shadow"],
                 "l2_sufficiency_shadow": runtime["l2_sufficiency_shadow"],
                 "memory_mode_persistent": runtime["settings_persistent"],
                 "model_health": self.model_health(),
