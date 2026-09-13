@@ -82,7 +82,44 @@ def test_store_appends_started_and_terminal_metadata_without_content(tmp_path):
     assert page["counts"]["added"] == 1
     assert page["counts"]["incomplete"] == 0
     assert page["items"][0]["source_message_id"] == "source-1"
+    assert page["items"][0]["retryable"] is False
     assert "content" not in page["items"][0]
+    connection.close()
+
+
+def test_only_latest_failed_or_incomplete_attempt_is_retryable(tmp_path):
+    connection = open_database(tmp_path / "audit.db")
+    initialize_schema(connection)
+    _source(connection)
+    store = SQLiteL1ExtractionAuditStore(connection)
+    first = datetime(2026, 9, 13, 1, 2, tzinfo=UTC)
+    second = datetime(2026, 9, 13, 1, 3, tzinfo=UTC)
+    store.start(
+        attempt_id="attempt-failed", source_message_id="source-1",
+        metadata=_metadata(), occurred_at=first,
+    )
+    store.finish(
+        attempt_id="attempt-failed", source_message_id="source-1",
+        phase="failed", outcome_code="extraction_failed", candidate_count=0,
+        added_count=0, metadata=_metadata(), occurred_at=first,
+        duration_ms=10,
+    )
+    store.start(
+        attempt_id="attempt-new", source_message_id="source-1",
+        metadata=_metadata(), occurred_at=second,
+    )
+
+    page = store.list_recent(limit=10)
+    assert [(item["attempt_id"], item["retryable"]) for item in page["items"]] == [
+        ("attempt-new", True), ("attempt-failed", False),
+    ]
+    with pytest.raises(ValueError, match="l1_retry_stale"):
+        store.require_retryable(
+            source_message_id="source-1", expected_attempt_id="attempt-failed",
+        )
+    store.require_retryable(
+        source_message_id="source-1", expected_attempt_id="attempt-new",
+    )
     connection.close()
 
 

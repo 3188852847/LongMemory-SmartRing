@@ -368,10 +368,44 @@ class MemoryRuntime:
             future.add_done_callback(self._deferred_done)
             return True
 
-    def _run_deferred_observation(self, event: MemoryEvent) -> ObservationResult:
+    def retry_failed_observation(
+        self, source_message_id: str, *, expected_attempt_id: str,
+    ) -> dict:
+        """显式重跑一个失败/中断的 L1 派生；只排队一次，不复制 L0。"""
+
+        with self._lock:
+            self._ensure_open()
+            if self._closing:
+                raise ValueError("l1_retry_runtime_closing")
+            if not self._method.capabilities.failed_observation_recovery:
+                raise ValueError("l1_retry_method_unsupported")
+            prepare = getattr(
+                self._method, "prepare_failed_observation_recovery", None,
+            )
+            if prepare is None:
+                raise ValueError("l1_retry_method_unsupported")
+            event, attempt_id = prepare(
+                source_message_id, expected_attempt_id=expected_attempt_id,
+            )
+            future = self._deferred_executor.submit(
+                self._run_deferred_observation, event, False,
+            )
+            self._deferred_futures.add(future)
+            self._deferred_last_result = {"state": "running", "warning_code": None}
+            future.add_done_callback(self._deferred_done)
+            return {
+                "state": "queued", "source_message_id": source_message_id,
+                "attempt_id": attempt_id,
+            }
+
+    def _run_deferred_observation(
+        self, event: MemoryEvent, start_audit: bool = True,
+    ) -> ObservationResult:
         # 网络模型调用不持 Runtime 锁；网页查看、设备召回和状态读取不会
         # 因 2–5 秒的候选生成而一起卡住。只有最终 SQLite 补写需要互斥。
-        extracted = self._method.extract_archived(event)
+        extracted = self._method.extract_archived(
+            event, start_audit=start_audit,
+        )
         if isinstance(extracted, ObservationResult):
             return extracted
         with self._lock:

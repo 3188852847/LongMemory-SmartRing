@@ -81,6 +81,21 @@ class L2SufficiencyShadowReviewRequest(BaseModel):
     expected_review_revision: int = Field(ge=0)
 
 
+class L1ExtractionRetryRequest(BaseModel):
+    """重试最新失败尝试；attempt ID 防止旧页面或双击重复调用模型。"""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    expected_attempt_id: str
+
+    @field_validator("expected_attempt_id")
+    @classmethod
+    def canonical_attempt_id(cls, value: str) -> str:
+        if str(UUID(value)) != value:
+            raise ValueError("non-canonical UUID")
+        return value
+
+
 class ExplicitMemoryRequest(BaseModel):
     """控制台手工声明的一条自指事实；仍交由统一记忆命令处理。"""
 

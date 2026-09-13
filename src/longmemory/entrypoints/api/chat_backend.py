@@ -175,6 +175,13 @@ class ChatBackend:
         finally:
             connection.close()
 
+    def retry_l1_extraction(self, source_message_id, *, expected_attempt_id):
+        """将所有者的一次显式恢复请求交给常驻 Runtime 的受管队列。"""
+
+        return self.memory_runtime().retry_failed_observation(
+            source_message_id, expected_attempt_id=expected_attempt_id,
+        )
+
     def info(self):
         role = self.roles.current()
         runtime = self.memory_runtime().status()

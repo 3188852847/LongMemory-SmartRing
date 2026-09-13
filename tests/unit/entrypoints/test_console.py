@@ -207,6 +207,12 @@ def test_l2_sufficiency_shadow_routes_are_read_only_and_validate_identity(tmp_pa
                                "extraction_failed": 0, "persistence_failed": 0,
                                "incomplete": 0}}
 
+        def retry_l1_extraction(self, message_id, *, expected_attempt_id):
+            assert message_id == "turn-a"
+            assert expected_attempt_id == "11111111-1111-4111-8111-111111111111"
+            return {"state": "queued", "source_message_id": message_id,
+                    "attempt_id": "22222222-2222-4222-8222-222222222222"}
+
     async def run():
         async with console(chat_backend=Backend()) as (client, base, _bridge):
             headers = await login(client, base)
@@ -234,6 +240,17 @@ def test_l2_sufficiency_shadow_routes_are_read_only_and_validate_identity(tmp_pa
             assert (await response.json())["items"][0]["attempt_id"] == "attempt-a"
             response = await client.get(
                 base + "/api/l1-extraction-audit?limit=101", headers=headers,
+            )
+            assert response.status == 400
+            response = await client.post(
+                base + "/api/l1-extraction-audit/turn-a/retry", headers=headers,
+                json={"expected_attempt_id": "11111111-1111-4111-8111-111111111111"},
+            )
+            assert response.status == 202
+            assert (await response.json())["state"] == "queued"
+            response = await client.post(
+                base + "/api/l1-extraction-audit/turn-a/retry", headers=headers,
+                json={"expected_attempt_id": "not-a-uuid"},
             )
             assert response.status == 400
             response = await client.post(

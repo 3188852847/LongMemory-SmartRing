@@ -68,10 +68,14 @@ class SQLiteL1ExtractionAuditStore:
         rows = self._connection.execute(
             "SELECT s.attempt_id,s.source_message_id,s.occurred_at,s.method_version,"
             "s.prompt_version,s.preprocessor_version,s.prompt_sha256,s.provider,s.model,"
-            "t.phase,t.outcome_code,t.candidate_count,t.added_count,t.occurred_at,t.duration_ms "
+            "t.phase,t.outcome_code,t.candidate_count,t.added_count,t.occurred_at,t.duration_ms,"
+            "NOT EXISTS (SELECT 1 FROM l1_extraction_events newer "
+            "WHERE newer.source_message_id=s.source_message_id AND newer.phase='started' "
+            "AND (newer.occurred_at>s.occurred_at OR "
+            "(newer.occurred_at=s.occurred_at AND newer.rowid>s.rowid))) AS is_latest "
             "FROM l1_extraction_events s LEFT JOIN l1_extraction_events t "
             "ON t.attempt_id=s.attempt_id AND t.phase IN ('completed','failed') "
-            "WHERE s.phase='started' ORDER BY s.occurred_at DESC,s.id DESC LIMIT ?",
+            "WHERE s.phase='started' ORDER BY s.occurred_at DESC,s.rowid DESC LIMIT ?",
             (limit,),
         ).fetchall()
         counts = {
@@ -90,8 +94,30 @@ class SQLiteL1ExtractionAuditStore:
                 "phase": row[9] or "started", "outcome_code": row[10],
                 "candidate_count": row[11], "added_count": row[12],
                 "finished_at": row[13], "duration_ms": row[14],
+                "retryable": bool(row[15]) and outcome in {
+                    "extraction_failed", "persistence_failed", "incomplete",
+                },
             })
         return {"limit": limit, "counts": counts, "items": items}
+
+    def require_retryable(self, *, source_message_id: str,
+                          expected_attempt_id: str) -> None:
+        """用最新尝试做乐观并发检查，防止旧页面重复发起模型调用。"""
+
+        row = self._connection.execute(
+            "SELECT s.attempt_id,t.outcome_code FROM l1_extraction_events s "
+            "LEFT JOIN l1_extraction_events t ON t.attempt_id=s.attempt_id "
+            "AND t.phase IN ('completed','failed') "
+            "WHERE s.source_message_id=? AND s.phase='started' "
+            "ORDER BY s.occurred_at DESC,s.rowid DESC LIMIT 1",
+            (source_message_id,),
+        ).fetchone()
+        if row is None:
+            raise ValueError("l1_retry_not_available")
+        if row[0] != expected_attempt_id:
+            raise ValueError("l1_retry_stale")
+        if row[1] not in {None, "extraction_failed", "persistence_failed"}:
+            raise ValueError("l1_retry_not_available")
 
     def _insert(self, **values) -> None:
         metadata = values["metadata"]

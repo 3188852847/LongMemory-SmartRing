@@ -73,6 +73,7 @@ export function MemoryQualityApp() {
   const [shadowReviewReason,setShadowReviewReason] = useState('');
   const [shadowReviewBusy,setShadowReviewBusy] = useState(false);
   const [extractionAudit,setExtractionAudit] = useState<L1ExtractionAuditPage|null>(null);
+  const [retryingAttempt,setRetryingAttempt] = useState<string|null>(null);
 
   async function load(nextFilter=filter,offset=0) {
     setBusy(true);
@@ -101,6 +102,21 @@ export function MemoryQualityApp() {
     } catch {
       setExtractionAudit(null);
     }
+  }
+
+  async function retryExtraction(sourceMessageId:string,attemptId:string) {
+    setRetryingAttempt(attemptId);
+    try {
+      await api.request(
+        `/api/l1-extraction-audit/${encodeURIComponent(sourceMessageId)}/retry`,
+        'POST',{expected_attempt_id:attemptId},
+      );
+      setNotice('已排队重新提取一次；复用原 L0，不会复制对话。稍后刷新可查看新尝试结果。');
+      await loadExtractionAudit();
+    } catch {
+      setNotice('没有发起重新提取。该来源可能已在处理，或列表状态已经过期；请刷新后核对。');
+      await loadExtractionAudit();
+    } finally {setRetryingAttempt(null);}
   }
 
   useEffect(()=>{void (async()=>{
@@ -174,7 +190,7 @@ export function MemoryQualityApp() {
       <Card><Statistic title="没想起 / 错误" value={`${page.counts.recall_miss} / ${page.counts.wrong_memory}`}/></Card>
     </section>
     <Card className="quality-list-card" title="L1 日常提取运行" extra={<Tag color={extractionAudit?.counts.incomplete?'gold':'green'}>{extractionAudit?.counts.incomplete?`未完成 ${extractionAudit.counts.incomplete}`:'最近尝试均有终态'}</Tag>}>
-      <Alert showIcon type="info" title="这里回答‘为什么这一句没有变成 L1’" description="正常不记和故障会明确区分。列表只保存 L0 编号、版本、数量与耗时；要看原话请主动打开对应 L0。旧对话没有历史回填。"/>
+      <Alert showIcon type="info" title="这里回答‘为什么这一句没有变成 L1’" description="正常不记和故障会明确区分。只有最新的失败或中断项可手动重试一次；不会重跑正常不记，也不会复制 L0。旧对话没有历史回填。"/>
       {extractionAudit&&<Space wrap className="quality-shadow-counts">
         <Tag color="green">新增 {extractionAudit.counts.added}</Tag>
         <Tag color="cyan">复用 {extractionAudit.counts.reused}</Tag>
@@ -185,7 +201,9 @@ export function MemoryQualityApp() {
       {!extractionAudit?<Empty description="当前数据库尚未迁移到 V44，或聊天入口未启用"/>:<List dataSource={extractionAudit.items} locale={{emptyText:<Empty description="还没有新的 L1 提取尝试；旧对话不会伪造回填"/>}} renderItem={item=>{
         const outcome=item.outcome_code??'incomplete';
         const color=outcome==='added'?'green':outcome==='reused'?'cyan':outcome==='noop'?'default':outcome==='incomplete'?'gold':'red';
-        return <List.Item actions={[<Link key="source" to={`/memories?l0_message_id=${encodeURIComponent(item.source_message_id)}`}>打开来源 L0</Link>]}>
+        const actions=[<Link key="source" to={`/memories?l0_message_id=${encodeURIComponent(item.source_message_id)}`}>打开来源 L0</Link>];
+        if(item.retryable) actions.push(<Button key="retry" type="link" danger loading={retryingAttempt===item.attempt_id} disabled={retryingAttempt!==null&&retryingAttempt!==item.attempt_id} onClick={()=>void retryExtraction(item.source_message_id,item.attempt_id)}>重新提取一次</Button>);
+        return <List.Item actions={actions}>
           <List.Item.Meta title={<Space wrap><Tag color={color}>{extractionOutcomeLabel[outcome]}</Tag><code>{item.source_message_id}</code></Space>} description={<Space wrap><span>{new Date(item.started_at).toLocaleString('zh-CN')}</span><span>候选 {item.candidate_count??'—'} · 新增 {item.added_count??'—'}</span><span>{item.duration_ms==null?'耗时未记录':`${Math.round(item.duration_ms)} ms`}</span><code>{item.provider} / {item.model}</code><code>{item.preprocessor_version}</code></Space>}/>
         </List.Item>;
       }}/>} {null}

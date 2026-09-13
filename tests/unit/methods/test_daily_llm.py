@@ -3,6 +3,7 @@
 from datetime import UTC, datetime
 import json
 import sqlite3
+import pytest
 
 from longmemory.methods.contracts import MemoryEvent
 from longmemory.methods.daily_llm.method import DailyLLMMemory
@@ -41,7 +42,7 @@ def audit_rows(path):
     with sqlite3.connect(path) as connection:
         return connection.execute(
             "SELECT phase,outcome_code,candidate_count,added_count,provider,model "
-            "FROM l1_extraction_events ORDER BY occurred_at,id"
+            "FROM l1_extraction_events ORDER BY occurred_at,rowid"
         ).fetchall()
 
 
@@ -107,6 +108,59 @@ def test_extraction_failure_keeps_l0_and_reports_source_only(tmp_path):
         ("started", None, None, None),
         ("failed", "extraction_failed", 0, 0),
     ]
+
+
+def test_failed_source_can_be_recovered_once_without_copying_l0(tmp_path):
+    path = existing_database(tmp_path)
+
+    class RecoveringProducer:
+        def __init__(self):
+            self.calls = 0
+
+        def propose(self, **_kwargs):
+            self.calls += 1
+            if self.calls == 1:
+                raise OSError("synthetic first failure")
+            return proposal()
+
+    method = DailyLLMMemory(path, producer=RecoveringProducer())
+    assert method.observe(event("source-retry", "我叫小林")).processing_status == "source_only"
+    with sqlite3.connect(path) as connection:
+        failed_attempt = connection.execute(
+            "SELECT attempt_id FROM l1_extraction_events WHERE phase='started'"
+        ).fetchone()[0]
+
+    recovered_event, recovery_attempt = method.prepare_failed_observation_recovery(
+        "source-retry", expected_attempt_id=failed_attempt,
+    )
+    extracted = method.extract_archived(recovered_event, start_audit=False)
+    result = method.persist_archived(recovered_event, extracted)
+
+    assert recovery_attempt != failed_attempt
+    assert result.writes[0].operation == "add"
+    with sqlite3.connect(path) as connection:
+        assert connection.execute("SELECT count(*) FROM conversation_messages").fetchone()[0] == 1
+        assert connection.execute("SELECT count(*) FROM atomic_memories").fetchone()[0] == 1
+    with pytest.raises(ValueError, match="l1_retry_stale"):
+        method.prepare_failed_observation_recovery(
+            "source-retry", expected_attempt_id=failed_attempt,
+        )
+    method.close()
+
+
+def test_completed_noop_cannot_be_reprocessed_as_failure(tmp_path):
+    path = existing_database(tmp_path)
+    method = DailyLLMMemory(path, producer=Stub(proposal()))
+    method.observe(event("question-no-retry", "我叫什么？"))
+    with sqlite3.connect(path) as connection:
+        attempt_id = connection.execute(
+            "SELECT attempt_id FROM l1_extraction_events WHERE phase='started'"
+        ).fetchone()[0]
+    with pytest.raises(ValueError, match="l1_retry_not_available"):
+        method.prepare_failed_observation_recovery(
+            "question-no-retry", expected_attempt_id=attempt_id,
+        )
+    method.close()
 
 
 def test_l1_persistence_failure_keeps_l0_and_has_distinct_warning(tmp_path):

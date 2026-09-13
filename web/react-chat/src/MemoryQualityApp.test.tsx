@@ -1,12 +1,31 @@
 import {afterEach,describe,expect,test,vi} from 'vitest';
 import {fireEvent,render,screen,waitFor} from '@testing-library/react';
 import {MemoryRouter} from 'react-router-dom';
-import {ChatApi, type L2SufficiencyShadowDetail, type L2SufficiencyShadowPage, type MemoryFeedbackIndex} from './api';
+import {ChatApi, type L1ExtractionAuditPage, type L2SufficiencyShadowDetail, type L2SufficiencyShadowPage, type MemoryFeedbackIndex} from './api';
 import {MemoryQualityApp} from './MemoryQualityApp';
 
 afterEach(()=>vi.restoreAllMocks());
 
 describe('记忆质量样本工作台',()=>{
+  test('只为最新失败项提供单次重新提取入口',async()=>{
+    const feedback:MemoryFeedbackIndex={kind:'issues',offset:0,limit:25,total:0,counts:{memory_ok:0,recall_miss:0,wrong_memory:0,memory_irrelevant:0},review_counts:{open:0,resolved:0,dismissed:0},items:[]};
+    const attempt='11111111-1111-4111-8111-111111111111';
+    const audit:L1ExtractionAuditPage={limit:30,counts:{noop:0,added:0,reused:0,extraction_failed:1,persistence_failed:0,incomplete:0},items:[{attempt_id:attempt,source_message_id:'source-failed',started_at:'2026-09-13T01:00:00Z',finished_at:'2026-09-13T01:00:01Z',method_version:'1',prompt_version:'candidate-v1',preprocessor_version:'safety-v3',prompt_sha256:'a'.repeat(64),provider:'official',model:'model-a',phase:'failed',outcome_code:'extraction_failed',candidate_count:0,added_count:0,duration_ms:1000,retryable:true}]};
+    vi.spyOn(ChatApi.prototype,'bootstrap').mockResolvedValue(undefined);
+    const request=vi.spyOn(ChatApi.prototype,'request').mockImplementation(async (path,method)=>{
+      if(path==='/api/l1-extraction-audit?limit=30')return audit as never;
+      if(method==='POST')return {state:'queued'} as never;
+      return feedback as never;
+    });
+    render(<MemoryRouter><MemoryQualityApp/></MemoryRouter>);
+    fireEvent.click(await screen.findByRole('button',{name:'重新提取一次'}));
+    await waitFor(()=>expect(request).toHaveBeenCalledWith(
+      '/api/l1-extraction-audit/source-failed/retry','POST',
+      {expected_attempt_id:attempt},
+    ));
+    expect(await screen.findByText(/已排队重新提取一次/)).toBeTruthy();
+  });
+
   test('默认只呈现问题队列和无正文诊断元数据',async()=>{
     const response:MemoryFeedbackIndex={
       kind:'issues',offset:0,limit:25,total:1,

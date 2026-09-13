@@ -623,9 +623,10 @@ IP 变化时：刷新本机地址 → 选择圆屏可达网卡 → 显式确认�
 3. 候选模型失败记为 `failed/extraction_failed`，SQLite L1 写入失败记为 `failed/persistence_failed`；两者都保留 L0 并让回答继续走显式降级。
 4. 事件只含 L0 ID、固定状态、数量、耗时与实现版本，不复制用户原话、候选正文或模型返回。
 5. 仅有 `started` 没有终态时显示为未完成，不能自动解释为正常不记。V44 以前的旧对话不回填。
-6. 记忆质量页展示最近尝试和汇总，并允许沿 L0 ID 主动查看来源；页面读取不会运行提取或修改记忆。
+6. 记忆质量页展示最近尝试和汇总，并允许沿 L0 ID 主动查看来源；普通页面读取不会运行提取或修改记忆。
+7. 只有同一 L0 的最新尝试为模型失败、落库失败或无终态时，所有者才能显式排队“重新提取一次”。请求以旧 `attempt_id` 防双击和陈旧页面覆盖，复用原 L0，在单工作线程中运行并产生新的追加式尝试；正常 NOOP、成功项和旧版无账本 L0 不允许重跑。
 
-具体边界见 [ADR-0140](../adr/0140-append-only-l1-extraction-attempt-ledger.md)。
+具体边界见 [ADR-0140](../adr/0140-append-only-l1-extraction-attempt-ledger.md) 与 [ADR-0142](../adr/0142-explicit-recovery-for-failed-l1-extraction.md)。
 
 ## 42. 当前实现：小智内部结束提示来源隔离
 

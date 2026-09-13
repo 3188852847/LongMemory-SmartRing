@@ -44,6 +44,7 @@ class DailyLLMMemory:
     capabilities = MethodCapabilities(
         source_trace=True,
         deferred_observation=True,
+        failed_observation_recovery=True,
     )
 
     def __init__(
@@ -79,7 +80,7 @@ class DailyLLMMemory:
         self._pending_audits: dict[str, tuple[str, float]] = {}
         self.retrieval_name = self._base.retrieval_name
 
-    def _start_audit(self, event: MemoryEvent) -> None:
+    def _start_audit(self, event: MemoryEvent) -> str | None:
         attempt_id = str(uuid4())
         try:
             self._audit_store.start(
@@ -90,8 +91,9 @@ class DailyLLMMemory:
             )
         except sqlite3.Error:
             # 质量旁路不能让已经归档的 L0 或日常回答一起失败。
-            return
+            return None
         self._pending_audits[event.event_id] = (attempt_id, perf_counter())
+        return attempt_id
 
     def _finish_audit(self, event: MemoryEvent, *, phase: str, outcome_code: str,
                       candidate_count: int, added_count: int) -> None:
@@ -136,7 +138,7 @@ class DailyLLMMemory:
         return self.persist_archived(event, extracted)
 
     def extract_archived(
-        self, event: MemoryEvent,
+        self, event: MemoryEvent, *, start_audit: bool = True,
     ) -> tuple[AtomicMemory, ...] | ObservationResult:
         """只调用候选模型，不接触数据库，供受管延后队列使用。"""
 
@@ -149,7 +151,8 @@ class DailyLLMMemory:
         )
         if message.role != MessageRole.USER:
             return ()
-        self._start_audit(event)
+        if start_audit:
+            self._start_audit(event)
         try:
             proposal = self._extractor.extract(message)
         except CandidateExtractionError:
@@ -181,6 +184,31 @@ class DailyLLMMemory:
                 valid_to=(window[1] if window else None),
             ))
         return tuple(memories)
+
+    def prepare_failed_observation_recovery(
+        self, source_message_id: str, *, expected_attempt_id: str,
+    ) -> tuple[MemoryEvent, str]:
+        """核对旧 L0 与最新失败状态，并先登记一次新的恢复尝试。"""
+
+        self._base._ensure_open()
+        self._audit_store.require_retryable(
+            source_message_id=source_message_id,
+            expected_attempt_id=expected_attempt_id,
+        )
+        if source_message_id in self._pending_audits:
+            raise ValueError("l1_retry_busy")
+        message = self._base.conversation_store.get(MessageId(source_message_id))
+        if message is None:
+            raise ValueError("l1_retry_source_not_found")
+        if message.role != MessageRole.USER:
+            raise ValueError("l1_retry_source_not_user")
+        event = MemoryEvent(
+            str(message.id), "user", message.content, message.created_at,
+        )
+        attempt_id = self._start_audit(event)
+        if attempt_id is None:
+            raise ValueError("l1_retry_audit_unavailable")
+        return event, attempt_id
 
     def persist_archived(
         self, event: MemoryEvent, memories: tuple[AtomicMemory, ...],
