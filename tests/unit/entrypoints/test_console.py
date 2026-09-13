@@ -200,6 +200,13 @@ def test_l2_sufficiency_shadow_routes_are_read_only_and_validate_identity(tmp_pa
                               "expected_review_revision": 0}
             return {**values, "review_revision": 1}
 
+        def list_l1_extraction_audit(self, *, limit):
+            assert limit == 9
+            return {"items": [{"attempt_id": "attempt-a"}], "limit": limit,
+                    "counts": {"added": 1, "reused": 0, "noop": 0,
+                               "extraction_failed": 0, "persistence_failed": 0,
+                               "incomplete": 0}}
+
     async def run():
         async with console(chat_backend=Backend()) as (client, base, _bridge):
             headers = await login(client, base)
@@ -218,6 +225,15 @@ def test_l2_sufficiency_shadow_routes_are_read_only_and_validate_identity(tmp_pa
             assert response.status == 404
             response = await client.get(
                 base + "/api/l2-sufficiency-shadow?limit=0", headers=headers,
+            )
+            assert response.status == 400
+            response = await client.get(
+                base + "/api/l1-extraction-audit?limit=9", headers=headers,
+            )
+            assert response.status == 200
+            assert (await response.json())["items"][0]["attempt_id"] == "attempt-a"
+            response = await client.get(
+                base + "/api/l1-extraction-audit?limit=101", headers=headers,
             )
             assert response.status == 400
             response = await client.post(

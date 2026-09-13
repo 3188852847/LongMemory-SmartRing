@@ -1,7 +1,7 @@
 import {useEffect, useState} from 'react';
 import {Alert, Button, Card, Descriptions, Drawer, Empty, List, Modal, Select, Space, Statistic, Tag} from 'antd';
 import {Link} from 'react-router-dom';
-import {ChatApi, type L2SufficiencyShadowDetail, type L2SufficiencyShadowPage, type L2SufficiencyShadowVerdict, type MemoryFeedbackDiagnosticFocus, type MemoryFeedbackIndex, type MemoryFeedbackIndexItem, type MemoryFeedbackKind, type RoundScreenFeedbackDetail} from './api';
+import {ChatApi, type L1ExtractionAuditPage, type L1ExtractionOutcome, type L2SufficiencyShadowDetail, type L2SufficiencyShadowPage, type L2SufficiencyShadowVerdict, type MemoryFeedbackDiagnosticFocus, type MemoryFeedbackIndex, type MemoryFeedbackIndexItem, type MemoryFeedbackKind, type RoundScreenFeedbackDetail} from './api';
 import {AppShell, ConsoleNav} from './AppShell';
 import {PageHeader} from './PageHeader';
 
@@ -41,6 +41,11 @@ const shadowReasonOptions:Record<L2SufficiencyShadowVerdict,Array<{value:string;
   incorrect:[{value:'missed_support',label:'漏掉了真正支持的 L2'},{value:'false_support',label:'错误放行了不支持的 L2'},{value:'stale_content',label:'L2 正文后来变化，无法按原状态确认'},{value:'other',label:'其他错误'}],
   uncertain:[{value:'ambiguous_query',label:'问题含义不清，暂时无法判断'},{value:'stale_content',label:'L2 正文后来变化'},{value:'other',label:'其他不确定原因'}],
 };
+const extractionOutcomeLabel:Record<L1ExtractionOutcome|'incomplete',string>={
+  noop:'正常不记',added:'新增 L1',reused:'复用已有 L1',
+  extraction_failed:'模型提取失败',persistence_failed:'L1 落库失败',
+  incomplete:'未完成',
+};
 
 function evidencePath(layer:'l1'|'l2'|'l3',itemId:string) {
   const key=layer==='l1'?'memory_id':layer==='l2'?'scenario_id':'persona_id';
@@ -67,6 +72,7 @@ export function MemoryQualityApp() {
   const [shadowReview,setShadowReview] = useState<L2SufficiencyShadowVerdict|null>(null);
   const [shadowReviewReason,setShadowReviewReason] = useState('');
   const [shadowReviewBusy,setShadowReviewBusy] = useState(false);
+  const [extractionAudit,setExtractionAudit] = useState<L1ExtractionAuditPage|null>(null);
 
   async function load(nextFilter=filter,offset=0) {
     setBusy(true);
@@ -88,8 +94,17 @@ export function MemoryQualityApp() {
     }
   }
 
+  async function loadExtractionAudit() {
+    try {
+      const value=await api.request<L1ExtractionAuditPage>('/api/l1-extraction-audit?limit=30');
+      setExtractionAudit(value&&Array.isArray(value.items)?value:null);
+    } catch {
+      setExtractionAudit(null);
+    }
+  }
+
   useEffect(()=>{void (async()=>{
-    try {await api.bootstrap();await Promise.all([load('issues',0),loadShadow()]);}
+    try {await api.bootstrap();await Promise.all([load('issues',0),loadShadow(),loadExtractionAudit()]);}
     catch {setNotice('无法建立本机控制台会话，请刷新页面。');setBusy(false);}
   })();},[]);
 
@@ -150,7 +165,7 @@ export function MemoryQualityApp() {
 
   const sidebar = <ConsoleNav active="quality" legacyPath="/memories"/>;
   return <AppShell subtitle="跨日期的记忆诊断样本" className="quality-shell" sidebar={sidebar}>
-    <PageHeader eyebrow="长期记忆" title="记忆质量样本" description="集中查看网页人工复核、圆屏明确反馈和只观察不生效的 L2 影子判断。" action={<Button loading={busy} onClick={()=>void Promise.all([load(filter,page.offset),loadShadow()])}>刷新</Button>}/>
+    <PageHeader eyebrow="长期记忆" title="记忆质量样本" description="集中查看日常 L1 提取、网页人工复核、圆屏明确反馈和只观察不生效的 L2 影子判断。" action={<Button loading={busy} onClick={()=>void Promise.all([load(filter,page.offset),loadShadow(),loadExtractionAudit()])}>刷新</Button>}/>
     <Alert showIcon type="info" title="这是人工诊断队列，不是准确率报告" description="默认只显示‘没想起’和‘错误记忆’。排查方向由可见轨迹生成，不代表系统已经确认根因，也不会触发模型、重答或记忆修改。"/>
     <section className="quality-counts" aria-label="当前有效判断总览">
       <Card><Statistic title="待处理" value={page.review_counts.open}/></Card>
@@ -158,6 +173,23 @@ export function MemoryQualityApp() {
       <Card><Statistic title="非记忆问题" value={page.review_counts.dismissed}/></Card>
       <Card><Statistic title="没想起 / 错误" value={`${page.counts.recall_miss} / ${page.counts.wrong_memory}`}/></Card>
     </section>
+    <Card className="quality-list-card" title="L1 日常提取运行" extra={<Tag color={extractionAudit?.counts.incomplete?'gold':'green'}>{extractionAudit?.counts.incomplete?`未完成 ${extractionAudit.counts.incomplete}`:'最近尝试均有终态'}</Tag>}>
+      <Alert showIcon type="info" title="这里回答‘为什么这一句没有变成 L1’" description="正常不记和故障会明确区分。列表只保存 L0 编号、版本、数量与耗时；要看原话请主动打开对应 L0。旧对话没有历史回填。"/>
+      {extractionAudit&&<Space wrap className="quality-shadow-counts">
+        <Tag color="green">新增 {extractionAudit.counts.added}</Tag>
+        <Tag color="cyan">复用 {extractionAudit.counts.reused}</Tag>
+        <Tag>正常不记 {extractionAudit.counts.noop}</Tag>
+        <Tag color="red">提取失败 {extractionAudit.counts.extraction_failed}</Tag>
+        <Tag color="red">落库失败 {extractionAudit.counts.persistence_failed}</Tag>
+      </Space>}
+      {!extractionAudit?<Empty description="当前数据库尚未迁移到 V44，或聊天入口未启用"/>:<List dataSource={extractionAudit.items} locale={{emptyText:<Empty description="还没有新的 L1 提取尝试；旧对话不会伪造回填"/>}} renderItem={item=>{
+        const outcome=item.outcome_code??'incomplete';
+        const color=outcome==='added'?'green':outcome==='reused'?'cyan':outcome==='noop'?'default':outcome==='incomplete'?'gold':'red';
+        return <List.Item actions={[<Link key="source" to={`/memories?l0_message_id=${encodeURIComponent(item.source_message_id)}`}>打开来源 L0</Link>]}>
+          <List.Item.Meta title={<Space wrap><Tag color={color}>{extractionOutcomeLabel[outcome]}</Tag><code>{item.source_message_id}</code></Space>} description={<Space wrap><span>{new Date(item.started_at).toLocaleString('zh-CN')}</span><span>候选 {item.candidate_count??'—'} · 新增 {item.added_count??'—'}</span><span>{item.duration_ms==null?'耗时未记录':`${Math.round(item.duration_ms)} ms`}</span><code>{item.provider} / {item.model}</code><code>{item.preprocessor_version}</code></Space>}/>
+        </List.Item>;
+      }}/>} {null}
+    </Card>
     <Card className="quality-list-card" title="当前有效判断" extra={<Select aria-label="质量样本筛选" value={filter} disabled={busy} style={{width:190}} options={[
       {value:'issues',label:'需要核对的问题'}, {value:'recall_miss',label:'只看没想起'},
       {value:'wrong_memory',label:'只看错误记忆'}, {value:'memory_ok',label:'正常对照'},

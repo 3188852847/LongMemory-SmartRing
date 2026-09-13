@@ -3,15 +3,25 @@
 from datetime import UTC, datetime
 from pathlib import Path
 import sqlite3
+from time import perf_counter
 from uuid import uuid4
 
+from longmemory.adapters.storage.sqlite_l1_extraction_audit import (
+    L1ExtractionAuditMetadata,
+    SQLiteL1ExtractionAuditStore,
+)
 from longmemory.core.common.identifiers import MemoryId, MessageId
 from longmemory.core.conversation.models import ConversationMessage, MessageRole
 from longmemory.core.memory.extraction.candidates import (
     CandidateExtractionError,
     CandidateExtractionService,
+    PREPROCESSOR_VERSION,
 )
-from longmemory.core.memory.l1_atomic.models import AtomicMemory, CURRENT_USER_SUBJECT_ID
+from longmemory.core.memory.l1_atomic.models import (
+    AtomicMemory,
+    CURRENT_USER_SUBJECT_ID,
+    MemoryOperationType,
+)
 from longmemory.core.memory.extraction.temporary_scope import explicit_temporary_window
 from longmemory.methods.contracts import (
     MemoryEvent, MethodCapabilities,
@@ -44,6 +54,7 @@ class DailyLLMMemory:
         existing_only: bool = True,
         allow_cross_thread: bool = False,
         retriever_factory=None,
+        audit_metadata: L1ExtractionAuditMetadata | None = None,
     ) -> None:
         if producer is None:
             raise ValueError("日常模型提取必须显式提供候选生成器。")
@@ -54,7 +65,55 @@ class DailyLLMMemory:
             retriever_factory=retriever_factory,
         )
         self._extractor = CandidateExtractionService(producer)
+        self._audit_store = SQLiteL1ExtractionAuditStore(self._base.connection)
+        self._audit_metadata = audit_metadata or L1ExtractionAuditMetadata(
+            method_version=self.implementation_version,
+            prompt_version=None,
+            preprocessor_version=PREPROCESSOR_VERSION,
+            prompt_sha256=None,
+            provider="synthetic",
+            model="synthetic",
+        )
+        # 模型调用与最终写库分处两个阶段；只在内存中关联本进程的尝试。
+        # 若进程中途退出，数据库仍保留没有终态的 started 事件。
+        self._pending_audits: dict[str, tuple[str, float]] = {}
         self.retrieval_name = self._base.retrieval_name
+
+    def _start_audit(self, event: MemoryEvent) -> None:
+        attempt_id = str(uuid4())
+        try:
+            self._audit_store.start(
+                attempt_id=attempt_id,
+                source_message_id=event.event_id,
+                metadata=self._audit_metadata,
+                occurred_at=datetime.now(UTC),
+            )
+        except sqlite3.Error:
+            # 质量旁路不能让已经归档的 L0 或日常回答一起失败。
+            return
+        self._pending_audits[event.event_id] = (attempt_id, perf_counter())
+
+    def _finish_audit(self, event: MemoryEvent, *, phase: str, outcome_code: str,
+                      candidate_count: int, added_count: int) -> None:
+        pending = self._pending_audits.pop(event.event_id, None)
+        if pending is None:
+            return
+        attempt_id, started = pending
+        try:
+            self._audit_store.finish(
+                attempt_id=attempt_id,
+                source_message_id=event.event_id,
+                phase=phase,
+                outcome_code=outcome_code,
+                candidate_count=candidate_count,
+                added_count=added_count,
+                metadata=self._audit_metadata,
+                occurred_at=datetime.now(UTC),
+                duration_ms=(perf_counter() - started) * 1000,
+            )
+        except sqlite3.Error:
+            # started 仍是诚实的“不完整尝试”，不能为补审计破坏主路径。
+            pass
 
     def observe(self, event: MemoryEvent) -> ObservationResult:
         self._base._ensure_open()
@@ -90,11 +149,16 @@ class DailyLLMMemory:
         )
         if message.role != MessageRole.USER:
             return ()
+        self._start_audit(event)
         try:
             proposal = self._extractor.extract(message)
         except CandidateExtractionError:
             self._base.turn_service.report_extraction_failure(
                 message, code="l1_extraction_failed"
+            )
+            self._finish_audit(
+                event, phase="failed", outcome_code="extraction_failed",
+                candidate_count=0, added_count=0,
             )
             return ObservationResult(
                 event.event_id,
@@ -134,12 +198,26 @@ class DailyLLMMemory:
             self._base.turn_service.report_extraction_failure(
                 message, code="l1_persistence_failed"
             )
+            self._finish_audit(
+                event, phase="failed", outcome_code="persistence_failed",
+                candidate_count=len(memories), added_count=0,
+            )
             return ObservationResult(
                 event.event_id,
                 (),
                 processing_status="source_only",
                 warning_code="l1_persistence_failed",
             )
+        added_count = sum(
+            operation.operation == MemoryOperationType.ADD for operation in operations
+        )
+        outcome = (
+            "noop" if not memories else "added" if added_count else "reused"
+        )
+        self._finish_audit(
+            event, phase="completed", outcome_code=outcome,
+            candidate_count=len(memories), added_count=added_count,
+        )
         return ObservationResult(
             event.event_id,
             tuple(

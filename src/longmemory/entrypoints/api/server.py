@@ -23,6 +23,7 @@ from .routes.memory_runtime import register_memory_runtime_routes
 from .routes.memory_mode import register_memory_mode_routes
 from .routes.memory_commands import register_memory_command_routes
 from .routes.l2_sufficiency_shadow import register_l2_sufficiency_shadow_routes
+from .routes.l1_extraction_audit import register_l1_extraction_audit_routes
 from .routes.model_profiles import register_model_profile_routes
 from .xiaozhi_model_profiles import XiaozhiModelProfiles
 from .routes.memory_backends import register_memory_backend_routes
@@ -163,6 +164,7 @@ def create_app(*, port=8765, bridge=None, web_root=None, database=None, allow_me
     register_memory_mode_routes(app, chat_backend)
     register_memory_command_routes(app, chat_backend)
     register_l2_sufficiency_shadow_routes(app, chat_backend)
+    register_l1_extraction_audit_routes(app, chat_backend)
     if memory_runtime_token:
         register_memory_runtime_routes(app, chat_backend)
     device_role = DeviceRole(xiaozhi_server, chat_backend.roles, chat_backend.database, ROOT) if xiaozhi_server and chat_backend else None
@@ -305,7 +307,13 @@ def main():
               ("兼容模型配置可用（未联网验证）。" if experiment_settings else "未配置兼容模型，目前仅能运行 Fake。"))
     if args.enable_chat:
         from longmemory.adapters.llm.fake import FakeAnswerGenerator
-        from longmemory.adapters.llm.candidate_extractor import OpenAICompatibleCandidateProducer
+        from longmemory.adapters.llm.candidate_extractor import (
+            OpenAICompatibleCandidateProducer, PROMPT_SHA256, PROMPT_VERSION,
+        )
+        from longmemory.adapters.storage.sqlite_l1_extraction_audit import (
+            L1ExtractionAuditMetadata,
+        )
+        from longmemory.core.memory.extraction.candidates import PREPROCESSOR_VERSION
         from longmemory.adapters.llm.openai_compatible import OpenAICompatibleAnswerGenerator
         from longmemory.application.memory_runtime import MemoryRuntime
         from longmemory.adapters.storage.sqlite_scenario_recall import SQLiteScenarioRecallProvider
@@ -387,6 +395,14 @@ def main():
                     existing_only=True,
                     allow_cross_thread=True,
                     retriever_factory=retriever_factory,
+                    audit_metadata=L1ExtractionAuditMetadata(
+                        method_version=DailyLLMMemory.implementation_version,
+                        prompt_version=PROMPT_VERSION,
+                        preprocessor_version=PREPROCESSOR_VERSION,
+                        prompt_sha256=PROMPT_SHA256,
+                        provider=settings.provider,
+                        model=settings.model,
+                    ),
                 )
                 runtime = MemoryRuntime(args.database, method=method,
                                         scenario_provider=SQLiteScenarioRecallProvider(args.database),

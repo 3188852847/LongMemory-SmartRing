@@ -37,6 +37,14 @@ def existing_database(tmp_path):
     return path
 
 
+def audit_rows(path):
+    with sqlite3.connect(path) as connection:
+        return connection.execute(
+            "SELECT phase,outcome_code,candidate_count,added_count,provider,model "
+            "FROM l1_extraction_events ORDER BY occurred_at,id"
+        ).fetchall()
+
+
 def test_daily_llm_reuses_existing_database_and_persists_valid_candidate(tmp_path):
     path = existing_database(tmp_path)
     producer = Stub(proposal())
@@ -51,6 +59,10 @@ def test_daily_llm_reuses_existing_database_and_persists_valid_candidate(tmp_pat
     with sqlite3.connect(path) as connection:
         assert connection.execute("SELECT count(*) FROM conversation_messages").fetchone()[0] == 1
         assert connection.execute("SELECT count(*) FROM atomic_memories").fetchone()[0] == 1
+    assert audit_rows(path) == [
+        ("started", None, None, None, "synthetic", "synthetic"),
+        ("completed", "added", 1, 1, "synthetic", "synthetic"),
+    ]
 
 
 def test_deferred_phases_reuse_archived_l0_without_duplicate_source(tmp_path):
@@ -91,6 +103,10 @@ def test_extraction_failure_keeps_l0_and_reports_source_only(tmp_path):
     with sqlite3.connect(path) as connection:
         assert connection.execute("SELECT content FROM conversation_messages").fetchone()[0] == "我叫小林"
         assert connection.execute("SELECT count(*) FROM atomic_memories").fetchone()[0] == 0
+    assert [row[:4] for row in audit_rows(path)] == [
+        ("started", None, None, None),
+        ("failed", "extraction_failed", 0, 0),
+    ]
 
 
 def test_l1_persistence_failure_keeps_l0_and_has_distinct_warning(tmp_path):
@@ -108,6 +124,10 @@ def test_l1_persistence_failure_keeps_l0_and_has_distinct_warning(tmp_path):
     with sqlite3.connect(path) as connection:
         assert connection.execute("SELECT count(*) FROM conversation_messages").fetchone()[0] == 1
         assert connection.execute("SELECT count(*) FROM atomic_memories").fetchone()[0] == 0
+    assert [row[:4] for row in audit_rows(path)] == [
+        ("started", None, None, None),
+        ("failed", "persistence_failed", 1, 0),
+    ]
 
 
 def test_question_is_completed_noop_not_extraction_failure(tmp_path):
@@ -118,6 +138,10 @@ def test_question_is_completed_noop_not_extraction_failure(tmp_path):
     assert result.processing_status == "completed" and result.writes == ()
     assert producer.calls == 0
     method.close()
+    assert [row[:4] for row in audit_rows(path)] == [
+        ("started", None, None, None),
+        ("completed", "noop", 0, 0),
+    ]
 
 
 def test_assistant_is_archived_without_becoming_user_fact(tmp_path):
@@ -143,6 +167,12 @@ def test_duplicate_fact_keeps_two_sources(tmp_path):
     with sqlite3.connect(path) as connection:
         assert connection.execute("SELECT count(*) FROM atomic_memories").fetchone()[0] == 1
         assert connection.execute("SELECT count(*) FROM memory_evidence").fetchone()[0] == 2
+    assert [row[:4] for row in audit_rows(path)] == [
+        ("started", None, None, None),
+        ("completed", "added", 1, 1),
+        ("started", None, None, None),
+        ("completed", "reused", 1, 0),
+    ]
 
 
 def test_daily_llm_scopes_explicit_today_state_and_allows_next_day_recurrence(tmp_path):

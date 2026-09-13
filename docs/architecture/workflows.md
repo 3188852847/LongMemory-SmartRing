@@ -616,6 +616,17 @@ IP 变化时：刷新本机地址 → 选择圆屏可达网卡 → 显式确认�
 
 具体边界见 [ADR-0137](../adr/0137-default-off-l2-sufficiency-shadow.md) 与 [ADR-0138](../adr/0138-append-only-owner-review-for-l2-shadow.md)。
 
-## 41. 维护规则
+## 41. 当前实现：日常 L1 提取尝试账本
+
+1. 用户 L0 成功归档后，日常 L1 方法追加一条 `started`；助手消息不进入该账本。
+2. 输入门正常判定不记时追加 `completed/noop`；新增、复用分别记为 `added`、`reused`。
+3. 候选模型失败记为 `failed/extraction_failed`，SQLite L1 写入失败记为 `failed/persistence_failed`；两者都保留 L0 并让回答继续走显式降级。
+4. 事件只含 L0 ID、固定状态、数量、耗时与实现版本，不复制用户原话、候选正文或模型返回。
+5. 仅有 `started` 没有终态时显示为未完成，不能自动解释为正常不记。V44 以前的旧对话不回填。
+6. 记忆质量页展示最近尝试和汇总，并允许沿 L0 ID 主动查看来源；页面读取不会运行提取或修改记忆。
+
+具体边界见 [ADR-0140](../adr/0140-append-only-l1-extraction-attempt-ledger.md)。
+
+## 42. 维护规则
 
 功能上线时将对应“拟议”改为“当前”，写入实际限制和验证范围，并同步架构、需求与使用说明。历史 V0.1 流程见 [memory-pipeline.md](memory-pipeline.md)，不把历史说明当作全部入口的现状。

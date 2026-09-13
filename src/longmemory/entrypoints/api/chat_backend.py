@@ -25,6 +25,10 @@ from longmemory.adapters.storage.sqlite_memory_feedback_review_store import (
 from longmemory.adapters.storage.sqlite_l2_sufficiency_shadow import (
     SQLiteL2SufficiencyShadowStore,
 )
+from longmemory.adapters.storage.sqlite_l1_extraction_audit import (
+    SQLiteL1ExtractionAuditStore,
+)
+from longmemory.infrastructure.database.connection import open_database
 from longmemory.application.round_screen_memory_feedback import (
     classify_explicit_round_screen_feedback,
 )
@@ -161,6 +165,15 @@ class ChatBackend:
         return SQLiteL2SufficiencyShadowStore(self.database).review(
             user_message_id=user_message_id, **values,
         )
+
+    def list_l1_extraction_audit(self, *, limit=50):
+        """读取脱敏提取结果；刻意不返回用户原文。"""
+
+        connection = open_database(self.database)
+        try:
+            return SQLiteL1ExtractionAuditStore(connection).list_recent(limit=limit)
+        finally:
+            connection.close()
 
     def info(self):
         role = self.roles.current()

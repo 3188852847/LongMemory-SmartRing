@@ -45,6 +45,7 @@ from longmemory.infrastructure.database.migrations.v39_to_v40 import migrate as 
 from longmemory.infrastructure.database.migrations.v40_to_v41 import migrate as v40_to_v41
 from longmemory.infrastructure.database.migrations.v41_to_v42 import migrate as v41_to_v42
 from longmemory.infrastructure.database.migrations.v42_to_v43 import migrate as v42_to_v43
+from longmemory.infrastructure.database.migrations.v43_to_v44 import migrate as v43_to_v44
 
 Migration = Callable[[Connection], None]
 MIGRATIONS: dict[int, Migration] = {
@@ -90,6 +91,7 @@ MIGRATIONS: dict[int, Migration] = {
     40: v40_to_v41,
     41: v41_to_v42,
     42: v42_to_v43,
+    43: v43_to_v44,
 }
 
 __all__ = ["MIGRATIONS", "Migration"]
