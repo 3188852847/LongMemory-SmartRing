@@ -1,6 +1,6 @@
-"""当前 SQLite V47 的完整结构定义；不包含历史迁移步骤。"""
+"""当前 SQLite V48 的完整结构定义；不包含历史迁移步骤。"""
 
-SCHEMA_VERSION = 47
+SCHEMA_VERSION = 48
 
 LATEST_SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS conversation_messages (
@@ -291,6 +291,11 @@ CREATE TABLE IF NOT EXISTS round_screen_retrieval_evidence (
     keyword_score INTEGER CHECK (keyword_score IS NULL OR keyword_score >= 0),
     dense_score REAL,
     fused_score REAL,
+    temporal_role TEXT CHECK (
+        temporal_role IS NULL OR (layer = 'l1' AND temporal_role = 'historical')
+    ),
+    valid_from TEXT,
+    valid_to TEXT,
     PRIMARY KEY (user_message_id, layer, rank),
     UNIQUE (user_message_id, layer, item_id),
     FOREIGN KEY (user_message_id) REFERENCES round_screen_turns (user_message_id)

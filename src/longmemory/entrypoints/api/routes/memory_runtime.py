@@ -36,6 +36,9 @@ def _retrieval_evidence(prepared):
                     "keyword_score": item.keyword_score,
                     "dense_score": item.dense_score,
                     "fused_score": item.fused_score,
+                    "temporal_role": item.temporal_role,
+                    "valid_from": item.valid_from,
+                    "valid_to": item.valid_to,
                 })
             elif layer == "l2":
                 row.update({

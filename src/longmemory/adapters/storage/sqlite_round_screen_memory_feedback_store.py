@@ -120,7 +120,8 @@ class SQLiteRoundScreenMemoryFeedbackStore:
             ).fetchall()
             evidence_rows = connection.execute(
                 "SELECT e.user_message_id,e.layer,e.item_id,e.rank,e.content_sha256,"
-                "e.keyword_score,e.dense_score,e.fused_score "
+                "e.keyword_score,e.dense_score,e.fused_score,e.temporal_role,"
+                "e.valid_from,e.valid_to "
                 "FROM round_screen_retrieval_evidence e JOIN "
                 "round_screen_memory_feedback_events f "
                 "ON f.target_user_message_id=e.user_message_id "
@@ -171,7 +172,7 @@ class SQLiteRoundScreenMemoryFeedbackStore:
             evidence = []
             for item in connection.execute(
                 "SELECT layer,item_id,rank,content_sha256,keyword_score,dense_score,"
-                "fused_score FROM "
+                "fused_score,temporal_role,valid_from,valid_to FROM "
                 "round_screen_retrieval_evidence WHERE user_message_id=? "
                 "ORDER BY layer,rank",
                 (result["target_user_message_id"],),

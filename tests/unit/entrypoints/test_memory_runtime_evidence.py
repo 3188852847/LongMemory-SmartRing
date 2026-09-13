@@ -27,3 +27,22 @@ def test_round_screen_receipt_includes_auditable_l2_keyword_score():
     assert evidence[1]["fused_score"] is None
     assert "title" not in evidence[1]
     assert "summary" not in evidence[1]
+
+
+def test_round_screen_receipt_preserves_historical_role_and_interval():
+    prepared = SimpleNamespace(
+        support=SimpleNamespace(retrieved=(RetrievedTrace(
+            "l1-old", "用户住在南京。", ("l0-old",),
+            temporal_role="historical", valid_from=None,
+            valid_to="2026-05-01T00:00:00+00:00",
+        ),)),
+        scenarios=(),
+        personas=(),
+    )
+
+    evidence = _retrieval_evidence(prepared)
+
+    assert evidence[0]["temporal_role"] == "historical"
+    assert evidence[0]["valid_from"] is None
+    assert evidence[0]["valid_to"] == "2026-05-01T00:00:00+00:00"
+    assert "content" not in evidence[0]

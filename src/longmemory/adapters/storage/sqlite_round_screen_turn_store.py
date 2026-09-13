@@ -70,7 +70,7 @@ class SQLiteRoundScreenTurnStore:
                     saved_evidence = tuple(
                         tuple(row) for row in connection.execute(
                             "SELECT layer,item_id,rank,content_sha256,keyword_score,"
-                            "dense_score,fused_score FROM "
+                            "dense_score,fused_score,temporal_role,valid_from,valid_to FROM "
                             "round_screen_retrieval_evidence WHERE user_message_id=? "
                             "ORDER BY layer,rank",
                             (user_message_id,),
@@ -112,7 +112,8 @@ class SQLiteRoundScreenTurnStore:
                 connection.executemany(
                     "INSERT INTO round_screen_retrieval_evidence "
                     "(user_message_id,layer,item_id,rank,content_sha256,"
-                    "keyword_score,dense_score,fused_score) VALUES (?,?,?,?,?,?,?,?)",
+                    "keyword_score,dense_score,fused_score,temporal_role,valid_from,valid_to) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
                     ((user_message_id, *item) for item in evidence),
                 )
             connection.commit()
@@ -126,7 +127,7 @@ class SQLiteRoundScreenTurnStore:
     @staticmethod
     def _validate_evidence(
         value: tuple[dict, ...] | None, *, counts: dict[str, int],
-    ) -> tuple[tuple[str, str, int, str, int | None, float | None, float | None], ...] | None:
+    ) -> tuple[tuple, ...] | None:
         """验证协议证据；缺省表示兼容旧回执，空元组表示明确没有召回。"""
 
         if value is None:
@@ -138,7 +139,10 @@ class SQLiteRoundScreenTurnStore:
         for item in value:
             base = {"layer", "item_id", "rank", "content_sha256"}
             scores = {"keyword_score", "dense_score", "fused_score"}
-            if not isinstance(item, dict) or set(item) not in (base, base | scores):
+            temporal = {"temporal_role", "valid_from", "valid_to"}
+            if not isinstance(item, dict) or set(item) not in (
+                base, base | scores, base | scores | temporal,
+            ):
                 raise ValueError("round_screen_retrieval_evidence_invalid")
             layer, item_id = item["layer"], item["item_id"]
             rank, digest = item["rank"], item["content_sha256"]
@@ -153,6 +157,9 @@ class SQLiteRoundScreenTurnStore:
             keyword = item.get("keyword_score")
             dense = item.get("dense_score")
             fused = item.get("fused_score")
+            temporal_role = item.get("temporal_role")
+            valid_from = item.get("valid_from")
+            valid_to = item.get("valid_to")
             if ((keyword is not None and (type(keyword) is not int or keyword < 0))
                     or any(score is not None and (
                         type(score) not in (int, float) or not math.isfinite(score))
@@ -162,13 +169,38 @@ class SQLiteRoundScreenTurnStore:
                     or (layer == "l3" and any(
                         score is not None for score in (keyword, dense, fused)))):
                 raise ValueError("round_screen_retrieval_evidence_invalid")
-            normalized.append((layer, item_id, rank, digest, keyword, dense, fused))
+            if temporal_role is None:
+                if valid_from is not None or valid_to is not None:
+                    raise ValueError("round_screen_retrieval_evidence_invalid")
+            elif (
+                temporal_role != "historical"
+                or layer != "l1"
+                or valid_to is None
+                or not all(SQLiteRoundScreenTurnStore._valid_timestamp(value) for value in (
+                    valid_from, valid_to,
+                ) if value is not None)
+            ):
+                raise ValueError("round_screen_retrieval_evidence_invalid")
+            normalized.append((
+                layer, item_id, rank, digest, keyword, dense, fused,
+                temporal_role, valid_from, valid_to,
+            ))
         normalized.sort(key=lambda item: (item[0], item[2]))
         for layer, count in counts.items():
             ranks = [item[2] for item in normalized if item[0] == layer]
             if ranks != list(range(1, count + 1)):
                 raise ValueError("round_screen_retrieval_evidence_invalid")
         return tuple(normalized)
+
+    @staticmethod
+    def _valid_timestamp(value: str) -> bool:
+        if not isinstance(value, str) or not 1 <= len(value) <= 64:
+            return False
+        try:
+            parsed = datetime.fromisoformat(value)
+        except ValueError:
+            return False
+        return parsed.tzinfo is not None and parsed.utcoffset() is not None
 
     @staticmethod
     def _validate_strategy(value: str | None) -> str | None:
