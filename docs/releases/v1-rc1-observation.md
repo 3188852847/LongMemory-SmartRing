@@ -50,11 +50,24 @@
 完成。先创建合成事实和来源，再通过与日用相同的控制台执行；不得复制个人库来伪装
 合成数据。这样可以验证完整能力，又不用等待现实中的个人事实恰好发生变化。
 
+在仓库根目录使用一个从未存在过的文件名。第一条命令若发现同名文件会直接失败，
+不会覆盖旧验收结果：
+
+```powershell
+pnpm --dir web/react-chat build
+uv run --no-sync python -c "from pathlib import Path; from longmemory.methods.longmemory_v1.method import LongMemoryV1; p=Path(r'data/test-tmp/v1-rc1-synthetic.db'); assert not p.exists(), '请换一个新的合成库文件名'; p.parent.mkdir(parents=True, exist_ok=True); LongMemoryV1(p).close()"
+uv run --no-sync longmemory-console --port 18777 --database data/test-tmp/v1-rc1-synthetic.db --enable-chat --chat-provider fake --memory-extraction rules --memory-retrieval keyword --allow-memory-delete --allow-memory-correction
+```
+
+然后打开 `http://127.0.0.1:18777/chat-react`。该进程不读取 `.env`、不调用真实模型、
+不连接圆屏；端口已占用时先确认旧进程归属，不自动停止或换端口规避。每次需要验证
+“完全重启”时先用 `Ctrl+C` 停止，再用相同数据库和第二条命令启动。
+
 | 编号 | 操作与判定 | 结果 | 定位证据 |
 | --- | --- | --- | --- |
 | S-01 | 对一条从开始就错误的事实做纠正，旧项退役、新项生效 | 待执行 | 旧/新 L1 ID |
 | S-02 | 对一条合成事实记录变化，旧/新项形成连续有效区间 | 待执行 | 旧/新 L1 ID |
-| S-03 | 当前问法只回答现状；唯一明确日期问法只补充相交历史 | 待执行 | 回答/历史回执 ID |
+| S-03 | 当前问法只回答现状；唯一明确日期问法只补充相交历史 | 待执行 | 回答/历史证据 ID |
 | S-04 | 无效、多日期或证据未覆盖的日期问法保持保守，不拿现状代替 | 待执行 | 回答 ID |
 | S-05 | 单条删除经过确认，目标 L1 消失，L0 与删除审计仍在 | 待执行 | L1/审计 ID |
 | S-06 | 两条真正重复的 L1 可由所有者选择保留项并合并来源 | 待执行 | 合并账本 ID |
