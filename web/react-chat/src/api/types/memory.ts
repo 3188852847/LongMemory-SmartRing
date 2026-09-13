@@ -21,11 +21,12 @@ export interface L2SufficiencyShadowCandidate {scenario_id:string;rank:number;co
 export interface L2SufficiencyShadowDetail extends Omit<L2SufficiencyShadowItem,'candidate_count'|'supported_count'> {prompt_sha256:string;candidates:L2SufficiencyShadowCandidate[];review:L2SufficiencyShadowReview}
 export type L1SufficiencyShadowRuntime=L2SufficiencyShadowRuntime;
 export type L1SufficiencyShadowVerdict=L2SufficiencyShadowVerdict;
-export type L1SufficiencyShadowReview=L2SufficiencyShadowReview;
+export interface L1SufficiencyShadowReview extends L2SufficiencyShadowReview {expected_supported_memory_ids:string[]|null}
 export type L1SufficiencyShadowItem=L2SufficiencyShadowItem;
 export type L1SufficiencyShadowReviewCounts=L2SufficiencyShadowReviewCounts;
-export interface L1SufficiencyShadowPage {items:L1SufficiencyShadowItem[];limit:number;runtime:L1SufficiencyShadowRuntime;review_counts:L1SufficiencyShadowReviewCounts}
-export interface L1SufficiencyShadowCandidate {memory_id:string;rank:number;content_sha256:string;keyword_score:number|null;dense_score:number|null;fused_score:number|null;supports_answer:0|1|null;reason_code:string|null;current_content:string|null;current_status:string|null;content_matches_snapshot:boolean|null}
+export interface L1SufficiencyPolicyMetrics {reviewed_cases:number;labeled_cases:number;excluded_latest_reviews:number;false_block_cases:number;unsupported_pass_cases:number;incomplete_allow_cases:number;overinclusive_allow_cases:number;original_candidate_count:number;kept_candidate_count:number;removed_candidate_count:number;candidate_reduction_rate:number|null;context_measured_cases:number;original_context_characters:number;kept_context_characters:number;context_character_reduction_rate:number|null;candidate_precision:number|null;candidate_recall:number|null}
+export interface L1SufficiencyShadowPage {items:L1SufficiencyShadowItem[];limit:number;runtime:L1SufficiencyShadowRuntime;review_counts:L1SufficiencyShadowReviewCounts;policy_metrics:L1SufficiencyPolicyMetrics}
+export interface L1SufficiencyShadowCandidate {memory_id:string;rank:number;content_sha256:string;content_characters:number|null;keyword_score:number|null;dense_score:number|null;fused_score:number|null;supports_answer:0|1|null;reason_code:string|null;current_content:string|null;current_status:string|null;content_matches_snapshot:boolean|null}
 export interface L1SufficiencyShadowDetail extends Omit<L1SufficiencyShadowItem,'candidate_count'|'supported_count'> {prompt_sha256:string;candidates:L1SufficiencyShadowCandidate[];review:L1SufficiencyShadowReview}
 export type L1ExtractionOutcome='noop'|'added'|'reused'|'extraction_failed'|'persistence_failed';
 export interface L1ExtractionAuditItem {attempt_id:string;source_message_id:string;started_at:string;finished_at:string|null;method_version:string;prompt_version:string|null;preprocessor_version:string;prompt_sha256:string|null;provider:string;model:string;phase:'started'|'completed'|'failed';outcome_code:L1ExtractionOutcome|null;candidate_count:number|null;added_count:number|null;duration_ms:number|null;retryable:boolean}

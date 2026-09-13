@@ -81,6 +81,26 @@ class L2SufficiencyShadowReviewRequest(BaseModel):
     expected_review_revision: int = Field(ge=0)
 
 
+class L1SufficiencyShadowReviewRequest(L2SufficiencyShadowReviewRequest):
+    """L1 复核额外冻结人工认为真正支持回答的候选集合。"""
+
+    expected_supported_memory_ids: list[str] | None = Field(
+        default=None, max_length=100,
+    )
+
+    @field_validator("expected_supported_memory_ids")
+    @classmethod
+    def support_ids_are_unique_and_clean(cls, value: list[str] | None):
+        if value is None:
+            return value
+        if (len(value) != len(set(value))
+                or any(not item.strip() or len(item) > 200
+                       or any(ord(character) < 32 for character in item)
+                       for item in value)):
+            raise ValueError("invalid support ids")
+        return value
+
+
 class L1ExtractionRetryRequest(BaseModel):
     """重试最新失败尝试；attempt ID 防止旧页面或双击重复调用模型。"""
 

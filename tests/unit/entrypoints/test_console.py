@@ -214,7 +214,8 @@ def test_sufficiency_shadow_routes_validate_identity_and_closed_reviews(tmp_path
         def review_l1_sufficiency_shadow(self, message_id, **values):
             assert message_id == "turn-l1"
             assert values == {"verdict": "incorrect", "reason_code": "false_support",
-                              "expected_review_revision": 0}
+                              "expected_review_revision": 0,
+                              "expected_supported_memory_ids": []}
             return {**values, "review_revision": 1}
 
         def list_l1_extraction_audit(self, *, limit):
@@ -266,7 +267,8 @@ def test_sufficiency_shadow_routes_validate_identity_and_closed_reviews(tmp_path
             response = await client.post(
                 base + "/api/l1-sufficiency-shadow/turn-l1/reviews",
                 headers=headers, json={"verdict": "incorrect", "reason_code": "false_support",
-                                       "expected_review_revision": 0},
+                                       "expected_review_revision": 0,
+                                       "expected_supported_memory_ids": []},
             )
             assert response.status == 200
             assert (await response.json())["review_revision"] == 1

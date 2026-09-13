@@ -1,6 +1,8 @@
-"""V45 L1 影子账本只存快照指纹、封闭判定和追加复核。"""
+"""V46 L1 影子账本保存机器判定与人工标注的精确支持集合。"""
 
 from datetime import UTC, datetime
+
+import pytest
 
 from longmemory.adapters.storage.sqlite_l1_sufficiency_shadow import (
     SQLiteL1SufficiencyShadowStore,
@@ -12,6 +14,7 @@ from longmemory.core.memory.retrieval.sufficiency import (
 from longmemory.infrastructure.database.connection import open_database
 from longmemory.infrastructure.database.definition import SCHEMA_VERSION
 from longmemory.infrastructure.database.schema import initialize_schema
+from longmemory.infrastructure.database.migrations.v44_to_v45 import migrate as migrate_v44_to_v45
 from longmemory.methods.contracts import RetrievedTrace
 
 
@@ -34,6 +37,7 @@ def test_v44_upgrade_adds_empty_l1_shadow_ledgers(tmp_path):
     database = tmp_path / "v44.db"
     connection = open_database(database)
     initialize_schema(connection)
+    connection.execute("DROP TABLE l1_sufficiency_shadow_review_supports")
     connection.execute("DROP TABLE l1_sufficiency_shadow_review_events")
     connection.execute("DROP TABLE l1_sufficiency_shadow_candidates")
     connection.execute("DROP TABLE l1_sufficiency_shadow_runs")
@@ -46,6 +50,43 @@ def test_v44_upgrade_adds_empty_l1_shadow_ledgers(tmp_path):
     ).fetchone()[0] == 0
     assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
     connection.close()
+
+
+def test_v45_review_migrates_as_legacy_label_without_inventing_support_set(tmp_path):
+    database = tmp_path / "v45-review.db"
+    _seed(database)
+    connection = open_database(database)
+    connection.execute("DROP TABLE l1_sufficiency_shadow_review_supports")
+    connection.execute("DROP TABLE l1_sufficiency_shadow_review_events")
+    connection.execute("DROP TABLE l1_sufficiency_shadow_candidates")
+    connection.execute("DROP TABLE l1_sufficiency_shadow_runs")
+    migrate_v44_to_v45(connection)
+    connection.execute(
+        "INSERT INTO l1_sufficiency_shadow_runs "
+        "(user_message_id,retrieval_strategy,reviewer_version,prompt_sha256,provider,"
+        "model,status,requested_at,completed_at) VALUES (?,?,?,?,?,?,'completed',?,?)",
+        ("user-a", "keyword-v1", "gate-v1", "a" * 64, "synthetic", "synthetic",
+         "2026-09-13T01:00:00+00:00", "2026-09-13T01:00:01+00:00"),
+    )
+    connection.execute(
+        "INSERT INTO l1_sufficiency_shadow_review_events "
+        "(id,user_message_id,review_revision,verdict,reason_code,occurred_at) "
+        "VALUES (?,?,?,?,?,?)",
+        ("review-old", "user-a", 1, "correct", "agreement",
+         "2026-09-13T01:01:00+00:00"),
+    )
+    connection.execute("PRAGMA user_version=45")
+    connection.commit()
+    initialize_schema(connection)
+    connection.close()
+
+    review = SQLiteL1SufficiencyShadowStore(database).get("user-a")["review"]
+    assert review["verdict"] == "correct"
+    assert review["expected_supported_memory_ids"] is None
+    metrics = SQLiteL1SufficiencyShadowStore(database).list_recent(limit=10)["policy_metrics"]
+    assert metrics["reviewed_cases"] == 1
+    assert metrics["labeled_cases"] == 0
+    assert metrics["excluded_latest_reviews"] == 1
 
 
 def test_l1_shadow_store_records_scores_hashes_decisions_and_owner_review(tmp_path):
@@ -78,13 +119,14 @@ def test_l1_shadow_store_records_scores_hashes_decisions_and_owner_review(tmp_pa
     connection = open_database(database)
     row = connection.execute(
         "SELECT memory_id,rank,keyword_score,dense_score,fused_score,"
-        "supports_answer,reason_code,content_sha256 "
+        "supports_answer,reason_code,content_sha256,content_characters "
         "FROM l1_sufficiency_shadow_candidates"
     ).fetchone()
     assert tuple(row[:7]) == (
         "memory-a", 1, 2, 0.75, 0.04, 0, "missing_attribute",
     )
     assert len(row[7]) == 64
+    assert row[8] == len("用户养了一只叫豆包的猫。")
     columns = {item[1] for item in connection.execute(
         "PRAGMA table_info(l1_sufficiency_shadow_candidates)"
     )}
@@ -100,10 +142,35 @@ def test_l1_shadow_store_records_scores_hashes_decisions_and_owner_review(tmp_pa
     assert detail["candidates"][0]["content_matches_snapshot"] is True
     review = store.review(
         user_message_id="user-a", verdict="correct", reason_code="agreement",
-        expected_review_revision=0,
+        expected_review_revision=0, expected_supported_memory_ids=[],
     )
     assert review["review_revision"] == 1
+    assert review["expected_supported_memory_ids"] == []
+    assert store.get("user-a")["review"]["expected_supported_memory_ids"] == []
     assert store.list_recent(limit=10)["review_counts"]["correct"] == 1
+
+    corrected = store.review(
+        user_message_id="user-a", verdict="incorrect",
+        reason_code="missed_support", expected_review_revision=1,
+        expected_supported_memory_ids=["memory-a"],
+    )
+    assert corrected["expected_supported_memory_ids"] == ["memory-a"]
+    assert store.get("user-a")["review"]["expected_supported_memory_ids"] == ["memory-a"]
+    metrics = store.list_recent(limit=10)["policy_metrics"]
+    assert metrics["labeled_cases"] == 1
+    assert metrics["false_block_cases"] == 1
+    assert metrics["unsupported_pass_cases"] == 0
+    assert metrics["original_candidate_count"] == 1
+    assert metrics["kept_candidate_count"] == 0
+    assert metrics["context_measured_cases"] == 1
+    assert metrics["candidate_recall"] == 0
+
+    with pytest.raises(ValueError, match="verdict_mismatch"):
+        store.review(
+            user_message_id="user-a", verdict="incorrect",
+            reason_code="missed_support", expected_review_revision=2,
+            expected_supported_memory_ids=[],
+        )
 
 
 def test_l1_shadow_empty_candidates_complete_without_decisions(tmp_path):

@@ -6,7 +6,7 @@ import re
 from aiohttp import web
 from pydantic import ValidationError
 
-from longmemory.entrypoints.api.contracts import L2SufficiencyShadowReviewRequest
+from longmemory.entrypoints.api.contracts import L1SufficiencyShadowReviewRequest
 
 
 def register_l1_sufficiency_shadow_routes(app, backend):
@@ -53,7 +53,7 @@ def register_l1_sufficiency_shadow_routes(app, backend):
                 {"error": "invalid_l1_sufficiency_shadow_review"}, status=400,
             )
         try:
-            payload = L2SufficiencyShadowReviewRequest.model_validate(
+            payload = L1SufficiencyShadowReviewRequest.model_validate(
                 await request.json()
             )
         except (ValidationError, ValueError, TypeError):

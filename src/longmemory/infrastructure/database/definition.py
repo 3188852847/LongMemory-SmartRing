@@ -1,6 +1,6 @@
-"""当前 SQLite V45 的完整结构定义；不包含历史迁移步骤。"""
+"""当前 SQLite V46 的完整结构定义；不包含历史迁移步骤。"""
 
-SCHEMA_VERSION = 45
+SCHEMA_VERSION = 46
 
 LATEST_SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS conversation_messages (
@@ -138,6 +138,9 @@ CREATE TABLE IF NOT EXISTS l1_sufficiency_shadow_candidates (
         length(content_sha256)=64 AND content_sha256=lower(content_sha256)
         AND content_sha256 NOT GLOB '*[^0-9a-f]*'
     ),
+    content_characters INTEGER CHECK (
+        content_characters IS NULL OR content_characters >= 0
+    ),
     keyword_score INTEGER CHECK (keyword_score IS NULL OR keyword_score >= 0),
     dense_score REAL,
     fused_score REAL,
@@ -167,6 +170,8 @@ CREATE TABLE IF NOT EXISTS l1_sufficiency_shadow_review_events (
         'agreement','missed_support','false_support','ambiguous_query',
         'stale_content','other'
     )),
+    support_set_recorded INTEGER NOT NULL DEFAULT 0
+        CHECK (support_set_recorded IN (0,1)),
     occurred_at TEXT NOT NULL,
     UNIQUE (user_message_id, review_revision),
     FOREIGN KEY (user_message_id)
@@ -175,6 +180,21 @@ CREATE TABLE IF NOT EXISTS l1_sufficiency_shadow_review_events (
 CREATE INDEX IF NOT EXISTS idx_l1_shadow_review_latest
     ON l1_sufficiency_shadow_review_events
         (user_message_id, review_revision DESC);
+
+CREATE TABLE IF NOT EXISTS l1_sufficiency_shadow_review_supports (
+    review_event_id TEXT NOT NULL,
+    user_message_id TEXT NOT NULL,
+    memory_id TEXT NOT NULL,
+    PRIMARY KEY (review_event_id, memory_id),
+    FOREIGN KEY (review_event_id)
+        REFERENCES l1_sufficiency_shadow_review_events (id) ON DELETE CASCADE,
+    FOREIGN KEY (user_message_id, memory_id)
+        REFERENCES l1_sufficiency_shadow_candidates (user_message_id, memory_id)
+        ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_l1_shadow_review_support_message
+    ON l1_sufficiency_shadow_review_supports
+        (user_message_id, review_event_id, memory_id);
 
 CREATE TABLE IF NOT EXISTS l1_quality_review_events (
     id TEXT PRIMARY KEY,

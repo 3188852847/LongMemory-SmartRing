@@ -125,12 +125,12 @@ describe('记忆质量样本工作台',()=>{
 
   test('L1影子记录展示召回分数并只追加人工复核',async()=>{
     const feedback:MemoryFeedbackIndex={kind:'issues',offset:0,limit:25,total:0,counts:{memory_ok:0,recall_miss:0,wrong_memory:0,memory_irrelevant:0},review_counts:{open:0,resolved:0,dismissed:0},items:[]};
-    const shadow:L1SufficiencyShadowPage={limit:20,runtime:{enabled:true,state:'completed'},review_counts:{completed:1,unreviewed:1,correct:0,incorrect:0,uncertain:0},items:[{
+    const shadow:L1SufficiencyShadowPage={limit:20,runtime:{enabled:true,state:'completed'},review_counts:{completed:1,unreviewed:1,correct:0,incorrect:0,uncertain:0},policy_metrics:{reviewed_cases:0,labeled_cases:0,excluded_latest_reviews:0,false_block_cases:0,unsupported_pass_cases:0,incomplete_allow_cases:0,overinclusive_allow_cases:0,original_candidate_count:0,kept_candidate_count:0,removed_candidate_count:0,candidate_reduction_rate:null,context_measured_cases:0,original_context_characters:0,kept_context_characters:0,context_character_reduction_rate:null,candidate_precision:null,candidate_recall:null},items:[{
       user_message_id:'turn-l1-shadow',query:'豆包是什么颜色',retrieval_strategy:'keyword_dense_rrf_v1',reviewer_version:'gate-v2',provider:'openai_compatible',model:'deepseek-v4-flash',status:'completed',requested_at:'2026-09-13T02:00:00Z',completed_at:'2026-09-13T02:00:01Z',error_code:null,candidate_count:1,supported_count:0,review_verdict:null,review_revision:null,
     }]};
     const detail:L1SufficiencyShadowDetail={...shadow.items[0],prompt_sha256:'a'.repeat(64),candidates:[{
-      memory_id:'memory-cat',rank:1,content_sha256:'b'.repeat(64),keyword_score:1,dense_score:0.81,fused_score:0.03,supports_answer:0,reason_code:'missing_attribute',current_content:'用户养了一只叫豆包的猫。',current_status:'current',content_matches_snapshot:true,
-    }],review:{verdict:null,reason_code:null,review_revision:0,occurred_at:null}};
+      memory_id:'memory-cat',rank:1,content_sha256:'b'.repeat(64),content_characters:13,keyword_score:1,dense_score:0.81,fused_score:0.03,supports_answer:0,reason_code:'missing_attribute',current_content:'用户养了一只叫豆包的猫。',current_status:'current',content_matches_snapshot:true,
+    }],review:{verdict:null,reason_code:null,review_revision:0,occurred_at:null,expected_supported_memory_ids:null}};
     vi.spyOn(ChatApi.prototype,'bootstrap').mockResolvedValue(undefined);
     const request=vi.spyOn(ChatApi.prototype,'request').mockImplementation(async path=>{
       if(path==='/api/l1-sufficiency-shadow?limit=20')return shadow as never;
@@ -144,11 +144,16 @@ describe('记忆质量样本工作台',()=>{
     expect(await screen.findByText('用户养了一只叫豆包的猫。')).toBeTruthy();
     expect(screen.getByText(/关键词 1 · 余弦 0.810 · 融合 0.0300/)).toBeTruthy();
     expect(screen.getByRole('link',{name:'打开 L1'}).getAttribute('href')).toBe('/memories?memory_id=memory-cat');
-    fireEvent.click(screen.getByRole('button',{name:'L1 判断正确'}));
-    fireEvent.click(screen.getByRole('button',{name:'保存 L1 复核'}));
+    fireEvent.click(screen.getByRole('button',{name:'L1 判断错误'}));
+    const save=screen.getByRole('button',{name:/保存 L1 复核/});
+    expect(save.hasAttribute('disabled')).toBe(true);
+    fireEvent.click(screen.getByRole('checkbox',{name:/#1 用户养了一只叫豆包的猫/}));
+    expect(save.hasAttribute('disabled')).toBe(false);
+    fireEvent.click(save);
     await waitFor(()=>expect(request).toHaveBeenCalledWith(
       '/api/l1-sufficiency-shadow/turn-l1-shadow/reviews','POST',{
-        verdict:'correct',reason_code:'agreement',expected_review_revision:0,
+        verdict:'incorrect',reason_code:'missed_support',expected_review_revision:0,
+        expected_supported_memory_ids:['memory-cat'],
       },
     ));
   });

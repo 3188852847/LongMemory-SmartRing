@@ -58,10 +58,11 @@ class SQLiteL1SufficiencyShadowStore:
             for rank, item in enumerate(candidates, 1):
                 connection.execute(
                     "INSERT INTO l1_sufficiency_shadow_candidates "
-                    "(user_message_id,memory_id,rank,content_sha256,keyword_score,"
-                    "dense_score,fused_score) VALUES (?,?,?,?,?,?,?)",
+                    "(user_message_id,memory_id,rank,content_sha256,content_characters,"
+                    "keyword_score,dense_score,fused_score) VALUES (?,?,?,?,?,?,?,?)",
                     (user_message_id, item.item_id, rank,
                      sha256(item.content.encode("utf-8")).hexdigest(),
+                     len(item.content),
                      item.keyword_score, item.dense_score, item.fused_score),
                 )
             connection.commit()
@@ -196,9 +197,97 @@ class SQLiteL1SufficiencyShadowStore:
                     key: int(counts[key] or 0)
                     for key in ("completed", "unreviewed", "correct", "incorrect", "uncertain")
                 },
+                "policy_metrics": self._policy_metrics(connection),
             }
         finally:
             connection.close()
+
+    @staticmethod
+    def _policy_metrics(connection) -> dict:
+        """只用每轮最新且带精确人工集合的复核计算离线门控代理。"""
+
+        latest = connection.execute(
+            "SELECT e.id,e.user_message_id,e.support_set_recorded FROM "
+            "l1_sufficiency_shadow_review_events e JOIN ("
+            " SELECT user_message_id,max(review_revision) revision "
+            " FROM l1_sufficiency_shadow_review_events GROUP BY user_message_id"
+            ") x ON x.user_message_id=e.user_message_id "
+            "AND x.revision=e.review_revision ORDER BY e.occurred_at,e.id"
+        ).fetchall()
+        totals = {
+            "reviewed_cases": len(latest), "labeled_cases": 0,
+            "false_block_cases": 0, "unsupported_pass_cases": 0,
+            "incomplete_allow_cases": 0, "overinclusive_allow_cases": 0,
+            "original_candidate_count": 0, "kept_candidate_count": 0,
+            "true_positive_count": 0, "false_positive_count": 0,
+            "missed_support_count": 0, "context_measured_cases": 0,
+            "original_context_characters": 0, "kept_context_characters": 0,
+        }
+        for review in latest:
+            if not review["support_set_recorded"]:
+                continue
+            candidates = connection.execute(
+                "SELECT memory_id,supports_answer,content_characters "
+                "FROM l1_sufficiency_shadow_candidates WHERE user_message_id=? "
+                "ORDER BY rank", (review["user_message_id"],),
+            ).fetchall()
+            expected = {
+                row["memory_id"] for row in connection.execute(
+                    "SELECT memory_id FROM l1_sufficiency_shadow_review_supports "
+                    "WHERE review_event_id=?", (review["id"],),
+                ).fetchall()
+            }
+            predicted = {
+                row["memory_id"] for row in candidates if row["supports_answer"] == 1
+            }
+            totals["labeled_cases"] += 1
+            totals["false_block_cases"] += bool(expected) and not predicted
+            totals["unsupported_pass_cases"] += not expected and bool(predicted)
+            totals["incomplete_allow_cases"] += bool(expected and predicted and expected - predicted)
+            totals["overinclusive_allow_cases"] += bool(predicted and predicted - expected)
+            totals["original_candidate_count"] += len(candidates)
+            totals["kept_candidate_count"] += len(predicted)
+            totals["true_positive_count"] += len(expected & predicted)
+            totals["false_positive_count"] += len(predicted - expected)
+            totals["missed_support_count"] += len(expected - predicted)
+            if all(row["content_characters"] is not None for row in candidates):
+                totals["context_measured_cases"] += 1
+                totals["original_context_characters"] += sum(
+                    row["content_characters"] for row in candidates
+                )
+                totals["kept_context_characters"] += sum(
+                    row["content_characters"] for row in candidates
+                    if row["memory_id"] in predicted
+                )
+        original = totals["original_candidate_count"]
+        original_chars = totals["original_context_characters"]
+        predicted_positive = totals["true_positive_count"] + totals["false_positive_count"]
+        expected_positive = totals["true_positive_count"] + totals["missed_support_count"]
+        totals.update({
+            "excluded_latest_reviews": totals["reviewed_cases"] - totals["labeled_cases"],
+            "removed_candidate_count": original - totals["kept_candidate_count"],
+            "candidate_reduction_rate": (
+                None if not original else round(
+                    (original - totals["kept_candidate_count"]) / original, 6,
+                )
+            ),
+            "context_character_reduction_rate": (
+                None if not original_chars else round(
+                    (original_chars - totals["kept_context_characters"]) / original_chars, 6,
+                )
+            ),
+            "candidate_precision": (
+                None if not predicted_positive else round(
+                    totals["true_positive_count"] / predicted_positive, 6,
+                )
+            ),
+            "candidate_recall": (
+                None if not expected_positive else round(
+                    totals["true_positive_count"] / expected_positive, 6,
+                )
+            ),
+        })
+        return totals
 
     def get(self, user_message_id: str) -> dict | None:
         if not isinstance(user_message_id, str) or not user_message_id.strip():
@@ -233,20 +322,36 @@ class SQLiteL1SufficiencyShadowStore:
             payload = dict(run)
             payload["candidates"] = candidates
             review = connection.execute(
-                "SELECT verdict,reason_code,review_revision,occurred_at "
+                "SELECT id,verdict,reason_code,review_revision,occurred_at,"
+                "support_set_recorded "
                 "FROM l1_sufficiency_shadow_review_events WHERE user_message_id=? "
                 "ORDER BY review_revision DESC LIMIT 1", (user_message_id,),
             ).fetchone()
-            payload["review"] = dict(review) if review is not None else {
-                "verdict": None, "reason_code": None,
-                "review_revision": 0, "occurred_at": None,
-            }
+            if review is not None:
+                review_payload = dict(review)
+                review_payload["expected_supported_memory_ids"] = (
+                    [row["memory_id"] for row in connection.execute(
+                        "SELECT memory_id FROM l1_sufficiency_shadow_review_supports "
+                        "WHERE review_event_id=? ORDER BY memory_id", (review["id"],),
+                    ).fetchall()]
+                    if review["support_set_recorded"] else None
+                )
+                review_payload.pop("id")
+                review_payload.pop("support_set_recorded")
+                payload["review"] = review_payload
+            else:
+                payload["review"] = {
+                    "verdict": None, "reason_code": None,
+                    "review_revision": 0, "occurred_at": None,
+                    "expected_supported_memory_ids": None,
+                }
             return payload
         finally:
             connection.close()
 
     def review(self, *, user_message_id: str, verdict: str, reason_code: str,
-               expected_review_revision: int) -> dict:
+               expected_review_revision: int,
+               expected_supported_memory_ids: list[str] | None = None) -> dict:
         allowed = {
             "correct": {"agreement"},
             "incorrect": {"missed_support", "false_support", "stale_content", "other"},
@@ -255,6 +360,17 @@ class SQLiteL1SufficiencyShadowStore:
         if verdict not in allowed or reason_code not in allowed[verdict]:
             raise ValueError("l1_sufficiency_shadow_review_invalid")
         if type(expected_review_revision) is not int or expected_review_revision < 0:
+            raise ValueError("l1_sufficiency_shadow_review_invalid")
+        if (expected_supported_memory_ids is not None
+                and (not isinstance(expected_supported_memory_ids, list)
+                     or len(expected_supported_memory_ids) > 100
+                     or len(expected_supported_memory_ids) != len(
+                         set(expected_supported_memory_ids)
+                     )
+                     or any(not isinstance(item, str) or not item.strip()
+                            for item in expected_supported_memory_ids))):
+            raise ValueError("l1_sufficiency_shadow_review_invalid")
+        if (verdict == "uncertain") != (expected_supported_memory_ids is None):
             raise ValueError("l1_sufficiency_shadow_review_invalid")
         connection = self._open()
         try:
@@ -266,6 +382,20 @@ class SQLiteL1SufficiencyShadowStore:
                 raise ValueError("l1_sufficiency_shadow_not_found")
             if run["status"] != "completed":
                 raise ValueError("l1_sufficiency_shadow_review_not_ready")
+            candidates = connection.execute(
+                "SELECT memory_id,supports_answer FROM l1_sufficiency_shadow_candidates "
+                "WHERE user_message_id=? ORDER BY rank", (user_message_id,),
+            ).fetchall()
+            available = {row["memory_id"] for row in candidates}
+            expected_set = set(expected_supported_memory_ids or ())
+            if not expected_set <= available:
+                raise ValueError("l1_sufficiency_shadow_review_support_invalid")
+            machine_set = {
+                row["memory_id"] for row in candidates if row["supports_answer"] == 1
+            }
+            if ((verdict == "correct" and expected_set != machine_set)
+                    or (verdict == "incorrect" and expected_set == machine_set)):
+                raise ValueError("l1_sufficiency_shadow_review_verdict_mismatch")
             current = connection.execute(
                 "SELECT max(review_revision) FROM l1_sufficiency_shadow_review_events "
                 "WHERE user_message_id=?", (user_message_id,),
@@ -274,17 +404,25 @@ class SQLiteL1SufficiencyShadowStore:
                 raise ValueError("l1_sufficiency_shadow_review_conflict")
             revision = current + 1
             occurred_at = datetime.now(UTC).isoformat()
+            event_id = str(uuid4())
             connection.execute(
                 "INSERT INTO l1_sufficiency_shadow_review_events "
-                "(id,user_message_id,review_revision,verdict,reason_code,occurred_at) "
-                "VALUES (?,?,?,?,?,?)",
-                (str(uuid4()), user_message_id, revision, verdict,
-                 reason_code, occurred_at),
+                "(id,user_message_id,review_revision,verdict,reason_code,"
+                "support_set_recorded,occurred_at) VALUES (?,?,?,?,?,?,?)",
+                (event_id, user_message_id, revision, verdict, reason_code,
+                 int(expected_supported_memory_ids is not None), occurred_at),
             )
+            for memory_id in expected_supported_memory_ids or ():
+                connection.execute(
+                    "INSERT INTO l1_sufficiency_shadow_review_supports "
+                    "(review_event_id,user_message_id,memory_id) VALUES (?,?,?)",
+                    (event_id, user_message_id, memory_id),
+                )
             connection.commit()
             return {
                 "verdict": verdict, "reason_code": reason_code,
                 "review_revision": revision, "occurred_at": occurred_at,
+                "expected_supported_memory_ids": expected_supported_memory_ids,
             }
         except BaseException:
             connection.rollback()
