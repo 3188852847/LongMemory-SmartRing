@@ -16,8 +16,11 @@ def _zero_error_upper_bound(sample_count: int) -> float | None:
     return round(1 - pow(1 - CONFIDENCE_LEVEL, 1 / sample_count), 6)
 
 
-def assess_l1_gate_readiness(metrics: dict) -> dict:
+def assess_sufficiency_gate_readiness(metrics: dict, *, layer: str) -> dict:
     """评估是否只具备“考虑受控试验”的证据，绝不自动启用。"""
+
+    if layer not in {"l1", "l2"}:
+        raise ValueError("sufficiency_gate_readiness_layer_invalid")
 
     answerable = int(metrics.get("answerable_labeled_cases", 0))
     unsupported = int(metrics.get("unsupported_labeled_cases", 0))
@@ -47,7 +50,10 @@ def assess_l1_gate_readiness(metrics: dict) -> dict:
     ]
     ready = all(item["passed"] for item in conditions)
     return {
-        "policy_id": POLICY_ID,
+        "policy_id": (
+            POLICY_ID if layer == "l1"
+            else "l2-sufficiency-controlled-trial-readiness-v1"
+        ),
         "status": "ready_for_controlled_trial" if ready else "not_ready",
         "automatic_activation": False,
         "minimum_cases_per_stratum": MINIMUM_CASES_PER_STRATUM,
@@ -69,3 +75,9 @@ def assess_l1_gate_readiness(metrics: dict) -> dict:
             "readiness_never_enables_runtime_policy_automatically",
         ],
     }
+
+
+def assess_l1_gate_readiness(metrics: dict) -> dict:
+    """保留 L1 显式入口，避免调用方将层级传错。"""
+
+    return assess_sufficiency_gate_readiness(metrics, layer="l1")

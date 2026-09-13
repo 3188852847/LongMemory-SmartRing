@@ -9,6 +9,9 @@ from uuid import uuid4
 
 from longmemory.application.scenario_recall import ScenarioRecallResult
 from longmemory.core.memory.retrieval.sufficiency import EvidenceSufficiencyReview
+from longmemory.adapters.storage.sqlite_sufficiency_policy_metrics import (
+    calculate_policy_metrics,
+)
 
 
 class SQLiteL2SufficiencyShadowStore:
@@ -58,10 +61,10 @@ class SQLiteL2SufficiencyShadowStore:
                 ).hexdigest()
                 connection.execute(
                     "INSERT INTO l2_sufficiency_shadow_candidates "
-                    "(user_message_id,scenario_id,rank,content_sha256,keyword_score) "
-                    "VALUES (?,?,?,?,?)",
+                    "(user_message_id,scenario_id,rank,content_sha256,keyword_score,"
+                    "content_characters) VALUES (?,?,?,?,?,?)",
                     (user_message_id, item.scenario_id, rank, digest,
-                     item.keyword_score),
+                     item.keyword_score, len(f"{item.title}：{item.summary}")),
                 )
             connection.commit()
             return True
@@ -200,9 +203,16 @@ class SQLiteL2SufficiencyShadowStore:
                     key: int(counts[key] or 0)
                     for key in ("completed", "unreviewed", "correct", "incorrect", "uncertain")
                 },
+                "policy_metrics": self._policy_metrics(connection),
             }
         finally:
             connection.close()
+
+    @staticmethod
+    def _policy_metrics(connection) -> dict:
+        return calculate_policy_metrics(
+            connection, layer="l2", candidate_id="scenario_id",
+        )
 
     def get(self, user_message_id: str) -> dict | None:
         """读取单轮候选当前正文，并显式标记是否仍与回答时指纹一致。"""
@@ -240,23 +250,36 @@ class SQLiteL2SufficiencyShadowStore:
             payload = dict(run)
             payload["candidates"] = candidates
             review = connection.execute(
-                "SELECT verdict,reason_code,review_revision,occurred_at "
+                "SELECT id,verdict,reason_code,review_revision,occurred_at,"
+                "support_set_recorded "
                 "FROM l2_sufficiency_shadow_review_events "
                 "WHERE user_message_id=? ORDER BY review_revision DESC LIMIT 1",
                 (user_message_id,),
             ).fetchone()
-            payload["review"] = (
-                dict(review) if review is not None else {
+            if review is not None:
+                review_payload = dict(review)
+                review_payload["expected_supported_scenario_ids"] = (
+                    [row["scenario_id"] for row in connection.execute(
+                        "SELECT scenario_id FROM l2_sufficiency_shadow_review_supports "
+                        "WHERE review_event_id=? ORDER BY scenario_id", (review["id"],),
+                    ).fetchall()] if review["support_set_recorded"] else None
+                )
+                review_payload.pop("id")
+                review_payload.pop("support_set_recorded")
+            else:
+                review_payload = {
                     "verdict": None, "reason_code": None,
                     "review_revision": 0, "occurred_at": None,
+                    "expected_supported_scenario_ids": None,
                 }
-            )
+            payload["review"] = review_payload
             return payload
         finally:
             connection.close()
 
     def review(self, *, user_message_id: str, verdict: str, reason_code: str,
-               expected_review_revision: int) -> dict:
+               expected_review_revision: int,
+               expected_supported_scenario_ids: list[str] | None) -> dict:
         """追加所有者复核；机器判定和候选快照保持原样。"""
 
         allowed_reasons = {
@@ -268,6 +291,16 @@ class SQLiteL2SufficiencyShadowStore:
             raise ValueError("l2_sufficiency_shadow_review_invalid")
         if type(expected_review_revision) is not int or expected_review_revision < 0:
             raise ValueError("l2_sufficiency_shadow_review_invalid")
+        if (expected_supported_scenario_ids is not None
+                and (not isinstance(expected_supported_scenario_ids, list)
+                     or len(expected_supported_scenario_ids) > 100
+                     or len(expected_supported_scenario_ids)
+                     != len(set(expected_supported_scenario_ids))
+                     or any(not isinstance(item, str) or not item.strip()
+                            for item in expected_supported_scenario_ids))):
+            raise ValueError("l2_sufficiency_shadow_review_invalid")
+        if (verdict == "uncertain") != (expected_supported_scenario_ids is None):
+            raise ValueError("l2_sufficiency_shadow_review_invalid")
         connection = self._open()
         try:
             run = connection.execute(
@@ -278,6 +311,21 @@ class SQLiteL2SufficiencyShadowStore:
                 raise ValueError("l2_sufficiency_shadow_not_found")
             if run["status"] != "completed":
                 raise ValueError("l2_sufficiency_shadow_review_not_ready")
+            candidates = connection.execute(
+                "SELECT scenario_id,supports_answer FROM "
+                "l2_sufficiency_shadow_candidates WHERE user_message_id=?",
+                (user_message_id,),
+            ).fetchall()
+            available = {row["scenario_id"] for row in candidates}
+            expected = set(expected_supported_scenario_ids or ())
+            if not expected <= available:
+                raise ValueError("l2_sufficiency_shadow_review_support_invalid")
+            predicted = {
+                row["scenario_id"] for row in candidates if row["supports_answer"] == 1
+            }
+            if ((verdict == "correct" and expected != predicted)
+                    or (verdict == "incorrect" and expected == predicted)):
+                raise ValueError("l2_sufficiency_shadow_review_verdict_mismatch")
             current = connection.execute(
                 "SELECT max(review_revision) FROM l2_sufficiency_shadow_review_events "
                 "WHERE user_message_id=?", (user_message_id,),
@@ -286,17 +334,27 @@ class SQLiteL2SufficiencyShadowStore:
                 raise ValueError("l2_sufficiency_shadow_review_conflict")
             revision = current + 1
             occurred_at = datetime.now(UTC).isoformat()
+            review_id = str(uuid4())
             connection.execute(
                 "INSERT INTO l2_sufficiency_shadow_review_events "
-                "(id,user_message_id,review_revision,verdict,reason_code,occurred_at) "
-                "VALUES (?,?,?,?,?,?)",
-                (str(uuid4()), user_message_id, revision, verdict, reason_code,
-                 occurred_at),
+                "(id,user_message_id,review_revision,verdict,reason_code,"
+                "support_set_recorded,occurred_at) VALUES (?,?,?,?,?,?,?)",
+                (review_id, user_message_id, revision, verdict, reason_code,
+                 int(expected_supported_scenario_ids is not None), occurred_at),
             )
+            for scenario_id in expected_supported_scenario_ids or ():
+                connection.execute(
+                    "INSERT INTO l2_sufficiency_shadow_review_supports "
+                    "(review_event_id,user_message_id,scenario_id) VALUES (?,?,?)",
+                    (review_id, user_message_id, scenario_id),
+                )
             connection.commit()
             return {
                 "verdict": verdict, "reason_code": reason_code,
                 "review_revision": revision, "occurred_at": occurred_at,
+                "expected_supported_scenario_ids": (
+                    expected_supported_scenario_ids
+                ),
             }
         except BaseException:
             connection.rollback()

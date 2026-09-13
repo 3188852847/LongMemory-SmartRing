@@ -7,6 +7,10 @@ import re
 import sqlite3
 from uuid import uuid4
 
+from longmemory.adapters.storage.sqlite_sufficiency_policy_metrics import (
+    calculate_policy_metrics,
+)
+
 from longmemory.core.memory.retrieval.sufficiency import EvidenceSufficiencyReview
 from longmemory.methods.contracts import RetrievedTrace
 
@@ -205,99 +209,9 @@ class SQLiteL1SufficiencyShadowStore:
     @staticmethod
     def _policy_metrics(connection) -> dict:
         """只用每轮最新且带精确人工集合的复核计算离线门控代理。"""
-
-        from longmemory.core.memory.quality.l1_gate_readiness import (
-            assess_l1_gate_readiness,
+        return calculate_policy_metrics(
+            connection, layer="l1", candidate_id="memory_id",
         )
-
-        latest = connection.execute(
-            "SELECT e.id,e.user_message_id,e.support_set_recorded FROM "
-            "l1_sufficiency_shadow_review_events e JOIN ("
-            " SELECT user_message_id,max(review_revision) revision "
-            " FROM l1_sufficiency_shadow_review_events GROUP BY user_message_id"
-            ") x ON x.user_message_id=e.user_message_id "
-            "AND x.revision=e.review_revision ORDER BY e.occurred_at,e.id"
-        ).fetchall()
-        totals = {
-            "reviewed_cases": len(latest), "labeled_cases": 0,
-            "answerable_labeled_cases": 0, "unsupported_labeled_cases": 0,
-            "false_block_cases": 0, "unsupported_pass_cases": 0,
-            "incomplete_allow_cases": 0, "overinclusive_allow_cases": 0,
-            "original_candidate_count": 0, "kept_candidate_count": 0,
-            "true_positive_count": 0, "false_positive_count": 0,
-            "missed_support_count": 0, "context_measured_cases": 0,
-            "original_context_characters": 0, "kept_context_characters": 0,
-        }
-        for review in latest:
-            if not review["support_set_recorded"]:
-                continue
-            candidates = connection.execute(
-                "SELECT memory_id,supports_answer,content_characters "
-                "FROM l1_sufficiency_shadow_candidates WHERE user_message_id=? "
-                "ORDER BY rank", (review["user_message_id"],),
-            ).fetchall()
-            expected = {
-                row["memory_id"] for row in connection.execute(
-                    "SELECT memory_id FROM l1_sufficiency_shadow_review_supports "
-                    "WHERE review_event_id=?", (review["id"],),
-                ).fetchall()
-            }
-            predicted = {
-                row["memory_id"] for row in candidates if row["supports_answer"] == 1
-            }
-            totals["labeled_cases"] += 1
-            totals[
-                "answerable_labeled_cases" if expected
-                else "unsupported_labeled_cases"
-            ] += 1
-            totals["false_block_cases"] += bool(expected) and not predicted
-            totals["unsupported_pass_cases"] += not expected and bool(predicted)
-            totals["incomplete_allow_cases"] += bool(expected and predicted and expected - predicted)
-            totals["overinclusive_allow_cases"] += bool(predicted and predicted - expected)
-            totals["original_candidate_count"] += len(candidates)
-            totals["kept_candidate_count"] += len(predicted)
-            totals["true_positive_count"] += len(expected & predicted)
-            totals["false_positive_count"] += len(predicted - expected)
-            totals["missed_support_count"] += len(expected - predicted)
-            if all(row["content_characters"] is not None for row in candidates):
-                totals["context_measured_cases"] += 1
-                totals["original_context_characters"] += sum(
-                    row["content_characters"] for row in candidates
-                )
-                totals["kept_context_characters"] += sum(
-                    row["content_characters"] for row in candidates
-                    if row["memory_id"] in predicted
-                )
-        original = totals["original_candidate_count"]
-        original_chars = totals["original_context_characters"]
-        predicted_positive = totals["true_positive_count"] + totals["false_positive_count"]
-        expected_positive = totals["true_positive_count"] + totals["missed_support_count"]
-        totals.update({
-            "excluded_latest_reviews": totals["reviewed_cases"] - totals["labeled_cases"],
-            "removed_candidate_count": original - totals["kept_candidate_count"],
-            "candidate_reduction_rate": (
-                None if not original else round(
-                    (original - totals["kept_candidate_count"]) / original, 6,
-                )
-            ),
-            "context_character_reduction_rate": (
-                None if not original_chars else round(
-                    (original_chars - totals["kept_context_characters"]) / original_chars, 6,
-                )
-            ),
-            "candidate_precision": (
-                None if not predicted_positive else round(
-                    totals["true_positive_count"] / predicted_positive, 6,
-                )
-            ),
-            "candidate_recall": (
-                None if not expected_positive else round(
-                    totals["true_positive_count"] / expected_positive, 6,
-                )
-            ),
-        })
-        totals["readiness"] = assess_l1_gate_readiness(totals)
-        return totals
 
     def get(self, user_message_id: str) -> dict | None:
         if not isinstance(user_message_id, str) or not user_message_id.strip():

@@ -197,7 +197,8 @@ def test_sufficiency_shadow_routes_validate_identity_and_closed_reviews(tmp_path
         def review_l2_sufficiency_shadow(self, message_id, **values):
             assert message_id == "turn-a"
             assert values == {"verdict": "correct", "reason_code": "agreement",
-                              "expected_review_revision": 0}
+                              "expected_review_revision": 0,
+                              "expected_supported_scenario_ids": []}
             return {**values, "review_revision": 1}
 
         def list_l1_sufficiency_shadow(self, *, limit):
@@ -295,7 +296,8 @@ def test_sufficiency_shadow_routes_validate_identity_and_closed_reviews(tmp_path
             response = await client.post(
                 base + "/api/l2-sufficiency-shadow/turn-a/reviews",
                 headers=headers, json={"verdict": "correct", "reason_code": "agreement",
-                                       "expected_review_revision": 0},
+                                       "expected_review_revision": 0,
+                                       "expected_supported_scenario_ids": []},
             )
             assert response.status == 200
             assert (await response.json())["review_revision"] == 1

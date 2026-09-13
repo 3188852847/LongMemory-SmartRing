@@ -88,6 +88,7 @@ export function MemoryQualityApp() {
   const [shadowBusy,setShadowBusy] = useState(false);
   const [shadowReview,setShadowReview] = useState<L2SufficiencyShadowVerdict|null>(null);
   const [shadowReviewReason,setShadowReviewReason] = useState('');
+  const [shadowExpectedIds,setShadowExpectedIds] = useState<string[]>([]);
   const [shadowReviewBusy,setShadowReviewBusy] = useState(false);
   const [extractionAudit,setExtractionAudit] = useState<L1ExtractionAuditPage|null>(null);
   const [retryingAttempt,setRetryingAttempt] = useState<string|null>(null);
@@ -191,6 +192,9 @@ export function MemoryQualityApp() {
   function beginShadowReview(verdict:L2SufficiencyShadowVerdict) {
     setShadowReview(verdict);
     setShadowReviewReason(shadowReasonOptions[verdict][0].value);
+    setShadowExpectedIds(verdict==='uncertain'?[]:(shadowDetail?.candidates
+      .filter(candidate=>candidate.supports_answer===1)
+      .map(candidate=>candidate.scenario_id)??[]));
   }
 
   async function saveShadowReview() {
@@ -200,6 +204,7 @@ export function MemoryQualityApp() {
       await api.request(`/api/l2-sufficiency-shadow/${encodeURIComponent(shadowDetail.user_message_id)}/reviews`,'POST',{
         verdict:shadowReview,reason_code:shadowReviewReason,
         expected_review_revision:shadowDetail.review.review_revision,
+        expected_supported_scenario_ids:shadowReview==='uncertain'?null:shadowExpectedIds,
       });
       setShadowReview(null);
       setNotice('人工复核已追加；机器原判、正式回答和长期记忆均未修改。');
@@ -244,6 +249,13 @@ export function MemoryQualityApp() {
   const l1ReviewSelectionValid=l1ShadowReview==='uncertain'
     || l1ShadowReview==='correct'&&l1SelectionMatchesMachine
     || l1ShadowReview==='incorrect'&&!l1SelectionMatchesMachine;
+  const machineL2SupportIds=(shadowDetail?.candidates??[])
+    .filter(candidate=>candidate.supports_answer===1).map(candidate=>candidate.scenario_id);
+  const l2SelectionMatchesMachine=machineL2SupportIds.length===shadowExpectedIds.length
+    && machineL2SupportIds.every(id=>shadowExpectedIds.includes(id));
+  const l2ReviewSelectionValid=shadowReview==='uncertain'
+    || shadowReview==='correct'&&l2SelectionMatchesMachine
+    || shadowReview==='incorrect'&&!l2SelectionMatchesMachine;
 
   return <AppShell subtitle="跨日期的记忆诊断样本" className="quality-shell" sidebar={sidebar}>
     <PageHeader eyebrow="长期记忆" title="记忆质量样本" description="集中查看日常 L1 提取、网页人工复核、圆屏明确反馈和只观察不生效的 L1/L2 影子判断。" action={<Button loading={busy} onClick={()=>void Promise.all([load(filter,page.offset),loadL1Shadow(),loadShadow(),loadExtractionAudit()])}>刷新</Button>}/>
@@ -307,6 +319,7 @@ export function MemoryQualityApp() {
     <Card className="quality-list-card" title="L2 证据充分性影子记录" extra={<Tag color={shadow?.runtime?.enabled?'cyan':'default'}>{shadow?.runtime?.enabled?'本次已启用':'本次未启用'}</Tag>}>
       <Alert showIcon type="info" title="这里只显示‘如果门控生效会怎样’" description="影子判断不会过滤本轮 L2、不会修改回答或记忆。默认关闭；历史记录即使当前未启用也会保留。"/>
       {shadow&&<Space wrap className="quality-shadow-counts"><Tag>已完成 {shadow.review_counts.completed}</Tag><Tag color="blue">待复核 {shadow.review_counts.unreviewed}</Tag><Tag color="green">正确 {shadow.review_counts.correct}</Tag><Tag color="red">错误 {shadow.review_counts.incorrect}</Tag><Tag color="gold">不确定 {shadow.review_counts.uncertain}</Tag></Space>}
+      {shadow&&<Alert showIcon type="info" title={`精确人工标签 ${shadow.policy_metrics.labeled_cases} 轮`} description={`有支持证据 ${shadow.policy_metrics.answerable_labeled_cases}/60；无支持证据 ${shadow.policy_metrics.unsupported_labeled_cases}/60；误拦截 ${shadow.policy_metrics.false_block_cases}；无证据误放行 ${shadow.policy_metrics.unsupported_pass_cases}。这些仍只是旁路指标。`}/>}
       {!shadow?<Empty description="当前数据库没有可读取的 V42 影子记录，或聊天入口未启用"/>:<List dataSource={shadow.items} locale={{emptyText:<Empty description="还没有影子样本"/>}} renderItem={item=><List.Item actions={[<Button key="detail" type="link" onClick={()=>void inspectShadow(item.user_message_id)}>查看候选判断</Button>,<Link key="source" to={`/memories?l0_message_id=${encodeURIComponent(item.user_message_id)}`}>问题 L0</Link>]}>
         <List.Item.Meta title={<Space wrap><Tag color={item.status==='completed'?'green':item.status==='failed'?'red':'gold'}>{item.status==='completed'?'已完成':item.status==='failed'?'失败':'处理中'}</Tag>{item.review_verdict&&<Tag color={item.review_verdict==='correct'?'green':item.review_verdict==='incorrect'?'red':'gold'}>{item.review_verdict==='correct'?'人工确认正确':item.review_verdict==='incorrect'?'人工确认错误':'人工暂不确定'}</Tag>}<span>{item.query}</span></Space>} description={<Space wrap><span>{new Date(item.requested_at).toLocaleString('zh-CN')}</span><span>候选 {item.candidate_count} · 判定支持 {item.supported_count}</span><code>{item.model}</code>{item.error_code&&<code>{item.error_code}</code>}</Space>}/>
       </List.Item>}/>}
@@ -360,8 +373,14 @@ export function MemoryQualityApp() {
         {shadowDetail.status==='completed'&&<Space wrap><Button onClick={()=>beginShadowReview('correct')}>判断正确</Button><Button danger onClick={()=>beginShadowReview('incorrect')}>判断错误</Button><Button onClick={()=>beginShadowReview('uncertain')}>暂不确定</Button></Space>}
       </>:<Empty description="没有可显示的影子详情"/>}
     </Drawer>
-    <Modal title="复核 L2 影子判断" open={shadowReview!==null} confirmLoading={shadowReviewBusy} okText="保存人工复核" cancelText="取消" onOk={()=>void saveShadowReview()} onCancel={()=>!shadowReviewBusy&&setShadowReview(null)}>
+    <Modal title="复核 L2 影子判断" open={shadowReview!==null} confirmLoading={shadowReviewBusy} okText="保存人工复核" cancelText="取消" okButtonProps={{disabled:!l2ReviewSelectionValid}} onOk={()=>void saveShadowReview()} onCancel={()=>!shadowReviewBusy&&setShadowReview(null)}>
       <p>复核的是这一轮完整的支持集合；只追加审计事件，不会改变回答或记忆。</p>
+      {shadowReview!=='uncertain'&&<>
+        <p className="subtle">勾选你认为真正包含问题答案的 L2 场景。全部不选表示候选都不足以回答。</p>
+        <Checkbox.Group aria-label="L2 人工支持集合" value={shadowExpectedIds} onChange={values=>setShadowExpectedIds(values.map(String))}>
+          <Space direction="vertical">{(shadowDetail?.candidates??[]).map(candidate=><Checkbox key={candidate.scenario_id} value={candidate.scenario_id}>#{candidate.rank} {candidate.current_title??candidate.scenario_id}</Checkbox>)}</Space>
+        </Checkbox.Group>
+      </>}
       <Select aria-label="L2 影子复核原因" value={shadowReviewReason} style={{width:'100%'}} options={shadowReview?shadowReasonOptions[shadowReview]:[]} onChange={setShadowReviewReason}/>
     </Modal>
     <Modal title="复核 L1 影子判断" open={l1ShadowReview!==null} confirmLoading={l1ShadowReviewBusy} okText="保存 L1 复核" cancelText="取消" okButtonProps={{disabled:!l1ReviewSelectionValid}} onOk={()=>void saveL1ShadowReview()} onCancel={()=>!l1ShadowReviewBusy&&setL1ShadowReview(null)}>

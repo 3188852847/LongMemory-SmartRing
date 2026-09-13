@@ -68,7 +68,7 @@ class MemoryFeedbackReviewRequest(BaseModel):
         return value
 
 
-class L2SufficiencyShadowReviewRequest(BaseModel):
+class SufficiencyShadowReviewRequest(BaseModel):
     """所有者评价一整轮影子门控；不携带问题或场景正文。"""
 
     model_config = ConfigDict(extra="forbid", strict=True)
@@ -81,24 +81,39 @@ class L2SufficiencyShadowReviewRequest(BaseModel):
     expected_review_revision: int = Field(ge=0)
 
 
-class L1SufficiencyShadowReviewRequest(L2SufficiencyShadowReviewRequest):
+def _support_ids_are_unique_and_clean(value: list[str] | None):
+    if value is None:
+        return value
+    if (len(value) != len(set(value))
+            or any(not item.strip() or len(item) > 200
+                   or any(ord(character) < 32 for character in item)
+                   for item in value)):
+        raise ValueError("invalid support ids")
+    return value
+
+
+class L2SufficiencyShadowReviewRequest(SufficiencyShadowReviewRequest):
+    """L2 复核额外冻结人工认为真正支持回答的场景。"""
+
+    expected_supported_scenario_ids: list[str] | None = Field(
+        default=None, max_length=100,
+    )
+
+    _validate_support_ids = field_validator(
+        "expected_supported_scenario_ids",
+    )(_support_ids_are_unique_and_clean)
+
+
+class L1SufficiencyShadowReviewRequest(SufficiencyShadowReviewRequest):
     """L1 复核额外冻结人工认为真正支持回答的候选集合。"""
 
     expected_supported_memory_ids: list[str] | None = Field(
         default=None, max_length=100,
     )
 
-    @field_validator("expected_supported_memory_ids")
-    @classmethod
-    def support_ids_are_unique_and_clean(cls, value: list[str] | None):
-        if value is None:
-            return value
-        if (len(value) != len(set(value))
-                or any(not item.strip() or len(item) > 200
-                       or any(ord(character) < 32 for character in item)
-                       for item in value)):
-            raise ValueError("invalid support ids")
-        return value
+    _validate_support_ids = field_validator(
+        "expected_supported_memory_ids",
+    )(_support_ids_are_unique_and_clean)
 
 
 class L1ExtractionRetryRequest(BaseModel):

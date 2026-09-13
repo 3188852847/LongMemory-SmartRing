@@ -83,7 +83,7 @@ describe('记忆质量样本工作台',()=>{
       review_counts:{open:0,resolved:0,dismissed:0},items:[],
     };
     const shadow:L2SufficiencyShadowPage={
-      limit:20,runtime:{enabled:true,state:'completed'},review_counts:{completed:1,unreviewed:1,correct:0,incorrect:0,uncertain:0},items:[{
+      limit:20,runtime:{enabled:true,state:'completed'},review_counts:{completed:1,unreviewed:1,correct:0,incorrect:0,uncertain:0},policy_metrics:{reviewed_cases:0,labeled_cases:0,answerable_labeled_cases:0,unsupported_labeled_cases:0,excluded_latest_reviews:0,false_block_cases:0,unsupported_pass_cases:0,incomplete_allow_cases:0,overinclusive_allow_cases:0,original_candidate_count:0,kept_candidate_count:0,removed_candidate_count:0,candidate_reduction_rate:null,context_measured_cases:0,original_context_characters:0,kept_context_characters:0,context_character_reduction_rate:null,candidate_precision:null,candidate_recall:null,readiness:{policy_id:'l2-sufficiency-controlled-trial-readiness-v1',status:'not_ready',automatic_activation:false,minimum_cases_per_stratum:60,confidence_level:0.95,answerable_zero_error_upper_bound:null,unsupported_zero_error_upper_bound:null,conditions:[],limitations:[]}},items:[{
         user_message_id:'turn-shadow',query:'我的猫是什么颜色',
         retrieval_strategy:'l2_keyword_v1',reviewer_version:'gate-v2',
         provider:'openai_compatible',model:'deepseek-v4-flash',status:'completed',
@@ -94,11 +94,11 @@ describe('记忆质量样本工作台',()=>{
     };
     const detail:L2SufficiencyShadowDetail={
       ...shadow.items[0],prompt_sha256:'a'.repeat(64),candidates:[{
-        scenario_id:'scene-cat',rank:1,content_sha256:'b'.repeat(64),keyword_score:2,
+        scenario_id:'scene-cat',rank:1,content_sha256:'b'.repeat(64),content_characters:20,keyword_score:2,
         supports_answer:0,reason_code:'missing_attribute',current_title:'猫咪',
         current_summary:'用户养了一只叫豆包的猫。',current_status:'active',
         content_matches_snapshot:true,
-      }],review:{verdict:null,reason_code:null,review_revision:0,occurred_at:null},
+      }],review:{verdict:null,reason_code:null,review_revision:0,occurred_at:null,expected_supported_scenario_ids:null},
     };
     vi.spyOn(ChatApi.prototype,'bootstrap').mockResolvedValue(undefined);
     vi.spyOn(ChatApi.prototype,'request').mockImplementation(async path=>{
@@ -115,10 +115,12 @@ describe('记忆质量样本工作台',()=>{
     expect(screen.getByRole('link',{name:'打开 L2'}).getAttribute('href')).toBe('/scenarios?scenario_id=scene-cat');
     fireEvent.click(screen.getByRole('button',{name:'判断错误'}));
     expect(screen.getByText('复核的是这一轮完整的支持集合；只追加审计事件，不会改变回答或记忆。')).toBeTruthy();
+    fireEvent.click(screen.getByRole('checkbox',{name:/#1 猫咪/}));
     fireEvent.click(screen.getByRole('button',{name:'保存人工复核'}));
     await waitFor(()=>expect(ChatApi.prototype.request).toHaveBeenCalledWith(
       '/api/l2-sufficiency-shadow/turn-shadow/reviews','POST',{
         verdict:'incorrect',reason_code:'missed_support',expected_review_revision:0,
+        expected_supported_scenario_ids:['scene-cat'],
       },
     ));
   });
