@@ -1,7 +1,14 @@
 import type {MemoryFeedback} from './memory';
 
 export interface WriteTrace {operation:string; item_id?:string; source_event_ids?:string[] | null}
-export interface RetrievedTrace {item_id:string; content:string; source_event_ids?:string[] | null}
+export interface RetrievedTrace {
+  item_id:string;
+  content:string;
+  source_event_ids?:string[] | null;
+  temporal_role?:'historical' | null;
+  valid_from?:string | null;
+  valid_to?:string | null;
+}
 export interface Turn {
   request_id?:string; input:string; answer?:string; status:string; writes:WriteTrace[] | null;
   answer_source?:'model'|'application_command'|null; user_saved:boolean; duration_ms:number;

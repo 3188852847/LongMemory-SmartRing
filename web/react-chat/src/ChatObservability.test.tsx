@@ -43,6 +43,17 @@ describe('TurnMemoryEvidence', () => {
     render(<MemoryRouter><TurnMemoryEvidence turn={turn}/></MemoryRouter>);
     expect(screen.getByText('本轮没有召回长期记忆；不等于用户从未说过')).toBeTruthy();
   });
+
+  it('把退役变化链证据明确标为历史事实', () => {
+    const turn:Turn = {input:'我以前住在哪里',answer:'南京',status:'completed',user_saved:true,duration_ms:2,writes:[],retrieved:[
+      {item_id:'current',content:'用户住在合肥。',source_event_ids:['source-current']},
+      {item_id:'old',content:'用户住在南京。',source_event_ids:['source-old'],temporal_role:'historical',valid_from:null,valid_to:'2026-05-01T00:00:00+00:00'},
+    ]};
+    render(<MemoryRouter><TurnMemoryEvidence turn={turn}/></MemoryRouter>);
+    expect(screen.getByText('历史事实')).toBeTruthy();
+    expect(screen.getByText(/结束.*2026/)).toBeTruthy();
+    expect(screen.getByText('用户住在南京。')).toBeTruthy();
+  });
 });
 
 describe('MemoryFeedbackControls', () => {

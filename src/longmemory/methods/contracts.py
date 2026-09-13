@@ -82,6 +82,11 @@ class RetrievedTrace:
     keyword_score: int | None = None
     dense_score: float | None = None
     fused_score: float | None = None
+    # 历史事实问答会把已退役、但属于明确事实变化链的 L1 作为附加证据。
+    # 该标记防止控制台把旧事实伪装成当前召回结果；普通召回保持 None。
+    temporal_role: Literal["historical"] | None = None
+    valid_from: str | None = None
+    valid_to: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

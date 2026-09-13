@@ -334,6 +334,7 @@ def main():
         from longmemory.application.memory_runtime import MemoryRuntime
         from longmemory.adapters.storage.sqlite_scenario_recall import SQLiteScenarioRecallProvider
         from longmemory.adapters.storage.sqlite_persona_recall import SQLitePersonaRecallProvider
+        from longmemory.adapters.storage.sqlite_temporal_recall import SQLiteTemporalRecallProvider
         from longmemory.adapters.storage.sqlite_natural_memory_commands import SQLiteNaturalMemoryCommandHandler
         from longmemory.adapters.storage.sqlite_temporary_interaction import SQLiteTemporaryInteractionProvider
         from longmemory.core.memory.retrieval.service import HybridMemoryRetriever
@@ -452,6 +453,7 @@ def main():
                 runtime = MemoryRuntime(args.database, method=method,
                                         scenario_provider=SQLiteScenarioRecallProvider(args.database),
                                         persona_provider=SQLitePersonaRecallProvider(args.database),
+                                        temporal_provider=SQLiteTemporalRecallProvider(args.database),
                                         memory_command_handler=SQLiteNaturalMemoryCommandHandler(args.database),
                                         temporary_interaction_provider=SQLiteTemporaryInteractionProvider(args.database),
                                         consolidation_scheduler=consolidation_scheduler,
@@ -465,6 +467,7 @@ def main():
                 runtime = MemoryRuntime(args.database, method=method,
                                         scenario_provider=SQLiteScenarioRecallProvider(args.database),
                                         persona_provider=SQLitePersonaRecallProvider(args.database),
+                                        temporal_provider=SQLiteTemporalRecallProvider(args.database),
                                         memory_command_handler=SQLiteNaturalMemoryCommandHandler(args.database),
                                         temporary_interaction_provider=SQLiteTemporaryInteractionProvider(args.database),
                                         consolidation_scheduler=consolidation_scheduler,
@@ -478,6 +481,7 @@ def main():
                     args.database, method=method,
                     scenario_provider=SQLiteScenarioRecallProvider(args.database),
                     persona_provider=SQLitePersonaRecallProvider(args.database),
+                    temporal_provider=SQLiteTemporalRecallProvider(args.database),
                     memory_command_handler=SQLiteNaturalMemoryCommandHandler(args.database),
                     temporary_interaction_provider=SQLiteTemporaryInteractionProvider(args.database),
                     consolidation_scheduler=consolidation_scheduler,

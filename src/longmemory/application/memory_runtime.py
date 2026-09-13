@@ -17,6 +17,7 @@ from longmemory.methods.contracts import (
 )
 from longmemory.application.scenario_recall import ScenarioRecallItem, ScenarioRecallResult
 from longmemory.application.persona_recall import PersonaRecallItem, PersonaRecallResult
+from longmemory.application.temporal_recall import TemporalRecallResult
 from longmemory.application.natural_memory_commands import NaturalMemoryCommandResult
 from longmemory.application.natural_companion_commands import NaturalCompanionCommandResult
 from longmemory.application.follow_up_suggestions import FollowUpSuggestionResult
@@ -80,7 +81,7 @@ class MemoryRuntime:
     """
 
     def __init__(self, database: Path, *, method: MemoryMethod, scenario_provider=None,
-                 persona_provider=None, memory_command_handler=None,
+                 persona_provider=None, temporal_provider=None, memory_command_handler=None,
                  temporary_interaction_provider: TemporaryInteractionProvider | None = None,
                  consolidation_scheduler: LowFrequencyConsolidationScheduler | None = None,
                  l1_sufficiency_shadow=None,
@@ -99,6 +100,9 @@ class MemoryRuntime:
         self._scenario_use_enabled = False
         self._persona_provider = persona_provider
         self._persona_use_enabled = False
+        # 时间补充器不是第二套检索器：它只能从当前 L1 锚点沿显式事实变化链
+        # 读取旧状态，并且必须由明确历史问句触发。
+        self._temporal_provider = temporal_provider
         self._memory_command_handler = memory_command_handler
         self._temporary_interaction_provider = temporary_interaction_provider
         # “下一轮”是进程内、至多消费一次的会话控制，不进入长期记忆层。
@@ -218,6 +222,44 @@ class MemoryRuntime:
             # 证据不属于这个评估单元，不能混入候选快照。
             l1_shadow_candidates = tuple(support.retrieved or ())
             l1_shadow_strategy = support.retrieval_strategy or "unspecified"
+            temporal_result = TemporalRecallResult("", (), None)
+            if (
+                self._use_enabled
+                and self._temporal_provider is not None
+                and l1_shadow_candidates
+            ):
+                temporal_result = self._temporal_provider.recall(
+                    text,
+                    current_memory_ids=tuple(
+                        item.item_id for item in l1_shadow_candidates
+                    ),
+                )
+                if temporal_result.context:
+                    combined = "\n\n".join(
+                        value for value in (
+                            support.context, temporal_result.context,
+                        ) if value
+                    )
+                    retrieved = tuple(support.retrieved or ()) + tuple(
+                        RetrievedTrace(
+                            item.memory_id,
+                            item.content,
+                            item.source_message_ids,
+                            temporal_role="historical",
+                            valid_from=item.valid_from,
+                            valid_to=item.valid_to,
+                        )
+                        for item in temporal_result.items
+                    )
+                    strategy = "+".join(
+                        value for value in (
+                            support.retrieval_strategy, temporal_result.strategy,
+                        ) if value
+                    )
+                    support = MemorySupport(
+                        support.call_id, combined, retrieved,
+                        strategy, support.warning_code,
+                    )
             recall_finished = perf_counter()
             scenario_started = perf_counter()
             scenario_result = ScenarioRecallResult("", ())
@@ -508,6 +550,7 @@ class MemoryRuntime:
                 "scenario_available": self._scenario_provider is not None,
                 "persona_use_enabled": self._persona_use_enabled,
                 "persona_available": self._persona_provider is not None,
+                "temporal_history_available": self._temporal_provider is not None,
                 "temporary_interaction_available": (
                     self._temporary_interaction_provider is not None
                 ),
@@ -595,6 +638,8 @@ class MemoryRuntime:
                         self._scenario_provider.close()
                     if self._persona_provider is not None:
                         self._persona_provider.close()
+                    if self._temporal_provider is not None:
+                        self._temporal_provider.close()
                     if self._memory_command_handler is not None:
                         self._memory_command_handler.close()
                     self._closed = True

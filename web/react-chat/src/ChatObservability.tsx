@@ -39,6 +39,12 @@ function operationLabel(operation:string) {
   return operation;
 }
 
+function displayTime(value?:string|null) {
+  if (!value) return '未记录';
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? '时间格式异常' : parsed.toLocaleString('zh-CN');
+}
+
 export function memoryTraceSummary(turn?:Turn) {
   if (!turn) return {kind:'waiting', code:'WAITING', text:'发送消息后显示本轮记忆过程'};
   const l1 = turn.retrieved?.length ?? 0;
@@ -97,7 +103,7 @@ export function TurnMemoryEvidence({turn}: {turn?:Turn}) {
   return <section className={`turn-evidence trace-${summary.kind}`} aria-label="本轮记忆证据">
     <header><span>[ {summary.code} ]</span><p>{summary.text}</p></header>
     {!turn ? <p className="trace-empty">这里会显示回答实际使用的 L1、L2、L3 和本轮写入，而不是模型声称自己记住了什么。</p> : <>
-      {Boolean(turn.retrieved?.length) && <div className="trace-group"><h3>L1 原子记忆</h3>{turn.retrieved!.map(item => <article key={item.item_id}><p>{item.content}</p><code>{item.item_id}</code><footer><small>{item.source_event_ids?.length ?? 0} 条 L0 来源</small><Link className="trace-source-link" to={`/memories?memory_id=${encodeURIComponent(item.item_id)}`}>核对 L0 原话</Link></footer></article>)}</div>}
+      {Boolean(turn.retrieved?.length) && <div className="trace-group"><h3>L1 原子记忆</h3>{turn.retrieved!.map(item => <article key={item.item_id}>{item.temporal_role==='historical'&&<p><Tag color="gold">历史事实</Tag>生效 {displayTime(item.valid_from)} · 结束 {displayTime(item.valid_to)}</p>}<p>{item.content}</p><code>{item.item_id}</code><footer><small>{item.source_event_ids?.length ?? 0} 条 L0 来源</small><Link className="trace-source-link" to={`/memories?memory_id=${encodeURIComponent(item.item_id)}`}>核对 L0 原话</Link></footer></article>)}</div>}
       {Boolean(turn.scenario_retrieved?.length) && <div className="trace-group"><h3>L2 生活场景</h3>{turn.scenario_retrieved!.map(item => <article key={item.scenario_id}><strong>{item.title}</strong><p>{item.summary}</p><code>{item.scenario_id}</code><footer><small>{item.source_memory_ids.length} 条 L1 来源</small><Link className="trace-source-link" to={`/scenarios?scenario_id=${encodeURIComponent(item.scenario_id)}`}>核对场景依据</Link></footer></article>)}</div>}
       {Boolean(turn.persona_retrieved?.length) && <div className="trace-group"><h3>L3 用户画像</h3>{turn.persona_retrieved!.map(item => <article key={item.persona_id}><strong>{item.label}</strong><p>{item.statement}</p><code>{item.persona_id}</code><footer><small>已接受画像</small><Link className="trace-source-link" to={`/personas?persona_id=${encodeURIComponent(item.persona_id)}`}>核对画像依据</Link></footer></article>)}</div>}
       {Boolean(turn.writes?.length) && <div className="trace-group"><h3>本轮记忆写入</h3><p className="trace-tags">{turn.writes!.map((item, index) => <Tag key={`${item.item_id ?? index}-${item.operation}`}>{operationLabel(item.operation)}</Tag>)}</p></div>}
