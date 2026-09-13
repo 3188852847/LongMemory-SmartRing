@@ -1,5 +1,17 @@
 # 已确认故障记录
 
+## Playwright 启动 Chromium 报 `spawn EPERM`
+
+2026-09-13 的 V1 RC 自动验收中，生产构建成功，但受限执行沙箱禁止创建已安装的
+`chrome-headless-shell.exe` 进程，三个用例均在运行断言前以 `browserType.launch:
+spawn EPERM` 结束。使用相同提交、pnpm 锁、Chromium 和 `pnpm test:e2e` 在获准的
+沙箱外执行后 3 项全部通过。
+
+先检查 `test-results/*/error-context.md` 是否明确是浏览器进程 `spawn EPERM`。若是，
+这不是浏览器缺失，也不应删除锁文件、改测试或重新下载浏览器；在允许启动本机测试
+进程的环境重跑同一命令。只有错误明确表示 executable 不存在时，才按 React 指南由
+用户安装与锁定 Playwright 版本配套的 Chromium。
+
 ## 历史召回误开放与来源读快照错配
 
 - 发现时间：2026-09-13，接续 ADR-0151 后的合成边界回归。
