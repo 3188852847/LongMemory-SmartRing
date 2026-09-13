@@ -122,10 +122,58 @@ def test_retrieval_groups_and_replay_parent_history(backend):
     with pytest.raises(ExperimentError, match="answers_required"): backend.save_review(run_id,body(backend))
 
 
+def _l1_sufficiency_source(backend, suffix="d"):
+    run_id = "l1-sufficiency-rescore-" + suffix * 32
+    folder = backend.runs / run_id
+    folder.mkdir()
+    report = {
+        "manifest": {
+            "protocol": "l1-evidence-sufficiency-rescore-v1",
+            "created_at": "2026-09-13T12:00:00Z",
+            "target_dataset_id": "l1-synthetic-v2",
+            "target_dataset_sha256": "e" * 64,
+            "model": {"provider": "synthetic"},
+        },
+        "status": "completed",
+        "rows": [{
+            "case_id": "cat-color", "category": "missing_attribute",
+            "status": "completed",
+            "candidates": [{"id": "cat-name", "content": "用户的猫叫豆包。"}],
+            "expected_supported_ids": [], "predicted_supported_ids": [],
+        }],
+    }
+    (folder / "report.json").write_text(
+        json.dumps(report, ensure_ascii=False), encoding="utf-8",
+    )
+    return run_id
+
+
+def test_l1_policy_replay_is_local_idempotent_and_path_bounded(backend):
+    source_id = _l1_sufficiency_source(backend)
+    options = backend.l1_policy_replay_options()
+    assert options["sources"][0]["id"] == source_id
+    request_id = str(uuid4())
+    first = backend.run_l1_policy_replay({
+        "source_id": source_id, "request_id": request_id,
+    })
+    second = backend.run_l1_policy_replay({
+        "source_id": source_id, "request_id": request_id,
+    })
+    assert first["status"] == "completed" and not first["replayed"]
+    assert second["id"] == first["id"] and second["replayed"]
+    assert first["summary"]["false_block_cases"] == 0
+    assert first["summary"]["unsupported_pass_cases"] == 0
+    assert backend.l1_policy_replay_options()["replays"][0]["id"] == first["id"]
+    for bad in ("../source", RUN, "l1-sufficiency-rescore-short"):
+        with pytest.raises(ExperimentError, match="invalid_l1_policy_replay"):
+            backend.run_l1_policy_replay({"source_id": bad, "request_id": str(uuid4())})
+
+
 def test_http_session_csrf_static_no_arbitrary_files_or_execution(backend):
     aiohttp = pytest.importorskip("aiohttp")
     from aiohttp import web
     from longmemory.entrypoints.api.server import create_app
+    l1_source = _l1_sufficiency_source(backend)
     class Bridge:
         async def close(self): pass
     async def run():
@@ -139,10 +187,20 @@ def test_http_session_csrf_static_no_arbitrary_files_or_execution(backend):
                     response=await client.get(base+url);assert response.status==200
                     assert "script-src 'self'" in response.headers["Content-Security-Policy"]
                 assert (await client.get(base+'/api/experiments')).status==401
+                assert (await client.get(base+'/api/l1-policy-replay')).status==401
                 login=await client.get(base+'/api/session',headers={"X-Console-Bootstrap":"1"})
                 csrf=(await login.json())["csrf"]
                 headers={"Origin":base,"X-Console-CSRF":csrf}
                 assert (await client.get(base+'/api/experiments')).status==200
+                replay_options = await (await client.get(base+'/api/l1-policy-replay')).json()
+                assert replay_options["sources"][0]["id"] == l1_source
+                replay_body = {"source_id": l1_source, "request_id": str(uuid4())}
+                assert (await client.post(base+'/api/l1-policy-replay',json=replay_body)).status==403
+                replay_response = await client.post(
+                    base+'/api/l1-policy-replay', json=replay_body, headers=headers,
+                )
+                assert replay_response.status == 200
+                assert (await replay_response.json())["status"] == "completed"
                 path=base+f'/api/experiments/{RUN}/reviews'
                 assert (await client.post(path,json=body(backend))).status==403
                 assert (await client.post(path,json=body(backend),headers={**headers,"Origin":"http://hostile.test"})).status==403

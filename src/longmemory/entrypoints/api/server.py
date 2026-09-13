@@ -24,6 +24,7 @@ from .routes.memory_mode import register_memory_mode_routes
 from .routes.memory_commands import register_memory_command_routes
 from .routes.l2_sufficiency_shadow import register_l2_sufficiency_shadow_routes
 from .routes.l1_sufficiency_shadow import register_l1_sufficiency_shadow_routes
+from .routes.l1_policy_replay import register_l1_policy_replay_routes
 from .routes.l1_extraction_audit import register_l1_extraction_audit_routes
 from .routes.model_profiles import register_model_profile_routes
 from .xiaozhi_model_profiles import XiaozhiModelProfiles
@@ -217,6 +218,7 @@ def create_app(*, port=8765, bridge=None, web_root=None, database=None, allow_me
         app.on_cleanup.append(stop_wallpaper_delivery)
     experiments = experiment_backend if experiment_backend is not None else ExperimentBackend(ROOT / "experiments")
     register_experiment_routes(app, experiments)
+    register_l1_policy_replay_routes(app, experiments)
     register_job_routes(app, job_backend if job_backend is not None else ExperimentJobs(experiments))
     app.on_cleanup.append(close)
     return app

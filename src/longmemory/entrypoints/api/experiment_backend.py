@@ -9,12 +9,18 @@ import threading
 from uuid import UUID
 
 from longmemory.evaluation.comparison.review import RUBRIC, summarize_review
+from longmemory.evaluation.l1_sufficiency_policy_replay import (
+    SUPPORTED_SOURCE_PROTOCOLS as L1_REPLAY_SOURCE_PROTOCOLS,
+    replay_l1_sufficiency_policy,
+)
 
 RUN_ID = re.compile(r"(?:comparison|retrieval|retrieval-answers)-[0-9a-f]{32}\Z")
 PROTOCOLS = {"history-replay-frozen-qa-v1": "comparison",
              "frozen-l1-retrieval-ablation-v1": "retrieval",
              "frozen-retrieval-answer-replay-v1": "answers"}
 MAX_BYTES = 8 * 1024 * 1024
+L1_SOURCE_ID = re.compile(r"l1-sufficiency-(?:rescore-)?[0-9a-f]{32}\Z")
+L1_REPLAY_ID = re.compile(r"l1-sufficiency-policy-replay-[0-9a-f]{32}\Z")
 
 
 class ExperimentError(ValueError):
@@ -100,6 +106,94 @@ class ExperimentBackend:
                 skipped += 1
         items.sort(key=lambda x: (str(x["started_at"] or ""), x["id"]), reverse=True)
         return {"items": items, "skipped": skipped, "limited": len(candidates) > 500}
+
+    def l1_policy_replay_options(self):
+        """列出可回放来源和既有结果；不执行模型，也不读个人数据库。"""
+
+        sources, replays, skipped = [], [], 0
+        if not self.runs.exists():
+            return {"sources": [], "replays": [], "skipped": 0}
+        safe_file(self.root, self.runs)
+        for path in sorted(self.runs.iterdir()):
+            try:
+                if L1_SOURCE_ID.fullmatch(path.name):
+                    report, digest = read_json(self.root, path / "report.json")
+                    manifest = report.get("manifest", {})
+                    rows = report.get("rows")
+                    if (report.get("status") != "completed"
+                            or manifest.get("protocol") not in L1_REPLAY_SOURCE_PROTOCOLS
+                            or not isinstance(rows, list) or not rows):
+                        raise ValueError("invalid source")
+                    sources.append({
+                        "id": path.name,
+                        "created_at": manifest.get("created_at") or manifest.get("started_at"),
+                        "protocol": manifest["protocol"],
+                        "dataset": manifest.get("target_dataset_id") or manifest.get("dataset_id"),
+                        "total": len(rows),
+                        "report_sha256": digest,
+                    })
+                elif L1_REPLAY_ID.fullmatch(path.name):
+                    report, digest = read_json(self.root, path / "report.json")
+                    manifest = report.get("manifest", {})
+                    summary = report.get("summary")
+                    if (manifest.get("protocol") != "l1-sufficiency-policy-replay-v1"
+                            or not isinstance(summary, dict)):
+                        raise ValueError("invalid replay")
+                    replays.append({
+                        "id": path.name,
+                        "created_at": manifest.get("created_at"),
+                        "status": report.get("status"),
+                        "source_report_sha256": manifest.get("source_report_sha256"),
+                        "report_sha256": digest,
+                        "summary": {key: summary.get(key) for key in (
+                            "total_cases", "completed_cases", "false_block_cases",
+                            "unsupported_pass_cases", "original_candidate_count",
+                            "kept_candidate_count", "removed_candidate_count",
+                            "candidate_reduction_rate", "context_character_reduction_rate",
+                        )},
+                    })
+            except (OSError, ValueError, KeyError, TypeError, AttributeError):
+                if L1_SOURCE_ID.fullmatch(path.name) or L1_REPLAY_ID.fullmatch(path.name):
+                    skipped += 1
+        sources.sort(key=lambda item: str(item["created_at"] or ""), reverse=True)
+        replays.sort(key=lambda item: str(item["created_at"] or ""), reverse=True)
+        return {"sources": sources[:100], "replays": replays[:100], "skipped": skipped}
+
+    def run_l1_policy_replay(self, body):
+        """以持久 request_id 幂等创建本地回放报告；不接收任意路径。"""
+
+        if (not isinstance(body, dict) or set(body) != {"source_id", "request_id"}
+                or not isinstance(body["source_id"], str)
+                or not L1_SOURCE_ID.fullmatch(body["source_id"])):
+            raise ExperimentError("invalid_l1_policy_replay")
+        try:
+            request_id = UUID(body["request_id"]).hex
+        except (ValueError, TypeError, AttributeError):
+            raise ExperimentError("invalid_l1_policy_replay") from None
+        source_path = safe_file(
+            self.root, self.runs / body["source_id"] / "report.json",
+        )
+        _source, source_digest = read_json(self.root, source_path)
+        run_id = "l1-sufficiency-policy-replay-" + request_id
+        destination = safe_file(self.root, self.runs / run_id / "report.json")
+        with self.lock:
+            if destination.exists():
+                report, _digest = read_json(self.root, destination)
+                if report.get("manifest", {}).get("source_report_sha256") != source_digest:
+                    raise ExperimentError("l1_policy_replay_request_conflict", 409)
+                return {"id": run_id, "replayed": True, "status": report.get("status"),
+                        "summary": report.get("summary")}
+            # 重新读取哈希，避免预检和写报告之间来源被替换。
+            if read_json(self.root, source_path)[1] != source_digest:
+                raise ExperimentError("report_changed", 409)
+            try:
+                _directory, report = replay_l1_sufficiency_policy(
+                    source_path, output_root=self.runs, run_id=run_id,
+                )
+            except (OSError, ValueError, KeyError, TypeError, json.JSONDecodeError) as error:
+                raise ExperimentError("l1_policy_replay_failed") from error
+            return {"id": run_id, "replayed": False, "status": report["status"],
+                    "summary": report["summary"]}
 
     def _reviews(self, run_id, digest, report):
         if not self.results.exists():

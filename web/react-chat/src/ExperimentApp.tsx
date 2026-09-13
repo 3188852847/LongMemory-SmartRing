@@ -5,6 +5,7 @@ import {ChatApi} from './api';
 import {AppShell, ConsoleNav} from './AppShell';
 import {PageHeader} from './PageHeader';
 import {ExperimentJobs} from './ExperimentJobs';
+import {L1PolicyReplayCard} from './L1PolicyReplayCard';
 import {evidenceLabel, filterRuns, groupLabel, statusLabel, verdictLabel} from '../../assets/experiment-view.mjs';
 import {experimentFailure} from './experimentFailure';
 
@@ -87,6 +88,7 @@ export function ExperimentApp() {
       <div><small>逐题人工复核</small><strong className={detail.data?.review_enabled ? 'is-positive' : ''}>{detail.data?.review_enabled ? '可用' : '未开放'}</strong></div>
     </section>
     <ExperimentJobs api={api} ready={session.isSuccess} onOpen={reportId => void openResult(reportId)}/>
+    <L1PolicyReplayCard api={api} ready={session.isSuccess}/>
     <div className="experiment-layout">
       <Card className="experiment-archive-card" title="实验档案">
         <Input.Search aria-label="搜索实验" allowClear value={query} onChange={event => {setQuery(event.target.value); setPage(0);}} placeholder="模型、数据集或编号"/>
