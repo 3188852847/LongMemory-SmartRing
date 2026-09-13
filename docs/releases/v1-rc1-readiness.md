@@ -65,3 +65,19 @@ Git 忽略目录，不提交或分享。
 
 完成前四项且没有未解决阻塞项后，才能把本记录状态改为 RC1 通过，并进入版本号、
 CLI 文案和最终 CHANGELOG 收口。Git 标签和发布仍需单独授权。
+
+## RC1 通过后的版本收口清单
+
+当前继续保留 `0.1.0`，避免把未完成观察的代码冒充正式版。RC1 通过后一次完成：
+
+1. 将 `pyproject.toml`、`src/longmemory/__init__.py` 和
+   `web/react-chat/package.json` 的产品版本同步为 `1.0.0`，同时更新
+   `tests/test_project_skeleton.py` 的发行包断言。
+2. 将 `pyproject.toml` 的项目描述及 `src/longmemory/entrypoints/cli/app.py` 的用户可见
+   标题从 V0.1 原型改为个人日用 V1.0；CLI 仍使用规则提取和关键词检索，因此不能把
+   控制台可选的模型提取或混合召回写成 CLI 能力。
+3. 更新 README、Roadmap、CHANGELOG 和本记录的正式状态，并在最终提交上重跑 Python
+   全量、React 单元测试、生产构建和 Playwright。
+4. 不改 SQLite `SCHEMA_VERSION = 48`、各策略/提示词协议版本、历史 ADR 中的 V0.1
+   事实，也不把独立 VoxCPM2 辅助项目的 `0.1.0` 当成主产品版本。
+5. 检查差异和敏感内容后提交推送。创建 Git 标签或正式发布仍需用户单独授权。
