@@ -80,7 +80,8 @@ def create_app(*, port=8765, bridge=None, web_root=None, database=None, allow_me
                memory_backend_store=None, xiaozhi_memory_backends=None,
                tts_backend_store=None,
                round_skin_store=None, round_wallpaper_library=None,
-               round_wallpaper_delivery=None, launcher_status_file=None):
+               round_wallpaper_delivery=None, launcher_status_file=None,
+               semantic_relation_previewer=None):
     sessions = Sessions()
     assets = web_root or ROOT / "web"
     client = bridge if bridge is not None else XiaozhiControlClient(ROOT / "data/control/device-control.token")
@@ -139,6 +140,7 @@ def create_app(*, port=8765, bridge=None, web_root=None, database=None, allow_me
         persona_model=persona_model,
         consolidation_background_enabled=consolidation_background_enabled,
         clock=proactive_clock,
+        semantic_relation_previewer=semantic_relation_previewer,
     )
 
     async def scheduled_tick():
@@ -309,6 +311,7 @@ def main():
     persona_model = None
     l1_sufficiency_shadow = None
     l2_sufficiency_shadow = None
+    semantic_relation_previewer = None
     if args.enable_experiment_runs:
         from longmemory.infrastructure.config.settings import load_model_settings
         try:
@@ -419,6 +422,17 @@ def main():
                 from longmemory.adapters.llm.local_embedding import LocalBGEEncoder
                 encoder = LocalBGEEncoder(args.embedding_model_dir)
                 retriever_factory = lambda store: HybridMemoryRetriever(store, encoder)
+                if settings.provider == "openai_compatible":
+                    from longmemory.adapters.llm.semantic_relation import (
+                        OpenAICompatibleSemanticRelationReviewer,
+                    )
+                    from longmemory.application.memory_management.semantic_relation_preview import (
+                        SemanticRelationPreviewService,
+                    )
+                    semantic_relation_previewer = SemanticRelationPreviewService(
+                        encoder=encoder,
+                        reviewer=OpenAICompatibleSemanticRelationReviewer(settings),
+                    )
             if args.memory_extraction == "llm":
                 method = DailyLLMMemory(
                     args.database,
@@ -553,7 +567,8 @@ def main():
                                    ffmpeg_dir=args.ffmpeg_dir,
                                ),
                                round_wallpaper_delivery=wallpaper_delivery,
-                               launcher_status_file=args.launcher_status_file),
+                               launcher_status_file=args.launcher_status_file,
+                               semantic_relation_previewer=semantic_relation_previewer),
                     host="127.0.0.1", port=args.port, access_log=None, print=None)
     except OSError:
         parser.exit(1, f"控制台未能绑定 127.0.0.1:{args.port}。请检查旧控制台是否仍在运行或端口权限；未自动停止其他进程、未换端口。\n")

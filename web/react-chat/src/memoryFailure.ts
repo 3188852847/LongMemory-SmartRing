@@ -15,6 +15,8 @@ const memoryFailureText: Record<string, string> = {
   memory_database_unavailable: '暂时无法访问记忆库。请确认文件仍可用，并检查是否被其他程序占用。',
   memory_database_invalid: '记忆库无法安全读取。请停止写入，并先使用一致性备份核查数据库。',
   memory_busy: '记忆库正被其他操作占用。本次没有自动重试，请稍后刷新核对。',
+  semantic_relation_preview_unavailable: '语义关系预览未启用。请用兼容模型和本地 BGE 混合召回模式启动控制台。',
+  semantic_relation_preview_failed: '语义关系预览失败；可能是本地编码或当前模型请求异常。本次没有自动重试，也没有修改记忆。',
   memory_read_only: '当前服务未开放删除权限。请在启动面板中启用所有者删除能力后重启。',
   memory_correction_disabled: '当前服务未开放纠正与事实变化权限。请在启动面板中启用后重启。',
   memory_not_found: '这条 L1 已不存在，可能已在其他页面处理。请刷新列表。',

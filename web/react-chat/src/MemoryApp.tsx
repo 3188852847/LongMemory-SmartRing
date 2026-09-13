@@ -17,6 +17,7 @@ type MemoryConfig = {
   allow_change: boolean;
   allow_promote_source: boolean;
   allow_l1_quality_review: boolean;
+  semantic_relation_preview_available: boolean;
 };
 type RuntimeMode = {write_enabled: boolean; use_enabled: boolean; scenario_use_enabled: boolean; scenario_available: boolean; persona_use_enabled: boolean; persona_available: boolean; persistent: boolean; l0_archived_when_write_disabled: boolean};
 type L1Summary = {id: string; content: string; truncated: boolean; state: 'active' | 'retired'; effective_state?: 'current'|'expired'|'not_started'|'retired'; recorded_at: string; subject_id: string};
@@ -40,6 +41,9 @@ type L1QualityCandidate = {kind:'normalized_duplicate'|'lexical_near_duplicate'|
 type L1MergeEvidence = {source_message_id:string;source_type:string;linked_at:string};
 type L1MergeHistory = {id:string;kept_memory_id:string;retired_memory_id:string;candidate_kind:'normalized_duplicate'|'lexical_near_duplicate';copied_evidence_count:number;evidence_ledger_count:number;evidence_ledger_complete:boolean;evidence_ledger:L1MergeEvidence[];merged_at:string;kept_content:string;retired_content:string;state:'merged'|'restored';state_revision:number;state_changed_at:string|null;restore_available:boolean};
 type L1QualityCandidates = {items:L1QualityCandidate[];total:number;scanned_memory_count:number;memory_scan_limited:boolean;candidate_limit:number;candidate_limit_reached:boolean;lexical_threshold:number;detector_version:string;generated_at:string;merge_history:L1MergeHistory[];merge_history_total:number;merge_history_limited:boolean};
+type SemanticRelation = 'equivalent'|'possible_conflict'|'possible_change'|'compatible'|'uncertain';
+type SemanticRelationItem = {pair_id:string;cosine_similarity:number;left:{id:string;content:string;recorded_at:string};right:{id:string;content:string;recorded_at:string};relation:SemanticRelation;reason_code:string;left_quote:string;right_quote:string};
+type SemanticRelationPreview = {status:'completed'|'insufficient_memories'|'no_same_subject_pairs';items:SemanticRelationItem[];scanned_memory_count:number;memory_scan_limited:boolean;candidate_limit:number;generated_at:string;pairing_version:string;reviewer_version:string;persistent:false;automatic_actions:false;model_request_count:0|1};
 
 const api = new ChatApi();
 const displayTime = (value?: string | null) => value ? new Date(value).toLocaleString('zh-CN') : '未记录';
@@ -48,6 +52,14 @@ const localDateText = (date=new Date()) => `${date.getFullYear()}-${String(date.
 const feedbackLabel:Record<MemoryFeedbackKind,string> = {
   memory_ok:'记忆使用正常', recall_miss:'没想起已有记忆',
   wrong_memory:'使用了错误记忆', memory_irrelevant:'回答与记忆无关',
+};
+const semanticRelationLabel:Record<SemanticRelation,string> = {
+  equivalent:'可能等价', possible_conflict:'可能冲突', possible_change:'可能发生变化',
+  compatible:'可以并存', uncertain:'证据不足',
+};
+const semanticRelationColor:Record<SemanticRelation,string> = {
+  equivalent:'gold', possible_conflict:'red', possible_change:'blue',
+  compatible:'green', uncertain:'default',
 };
 
 function DailyFeedbackReview({feedback}:{feedback:DailyMemoryFeedback}) {
@@ -103,6 +115,8 @@ export function MemoryApp() {
   const [promotedContent, setPromotedContent] = useState('');
   const [qualityCandidates, setQualityCandidates] = useState<L1QualityCandidates>();
   const [qualityScanning, setQualityScanning] = useState(false);
+  const [semanticPreview, setSemanticPreview] = useState<SemanticRelationPreview>();
+  const [semanticPreviewing, setSemanticPreviewing] = useState(false);
   const [mergeChoice, setMergeChoice] = useState<{item:L1QualityCandidate;kept:'left'|'right'}>();
   const [restoreChoice, setRestoreChoice] = useState<L1MergeHistory>();
   const locked = useRef(false);
@@ -228,6 +242,22 @@ export function MemoryApp() {
           : candidate)} : current);
       setNotice(action==='dismiss'?'已把这组候选标为误报；两条 L1 均未修改。':'已恢复这组候选，等待再次复核。');
     },'write');
+  }
+  async function previewSemanticRelations() {
+    if (semanticPreviewing) return;
+    setSemanticPreviewing(true);
+    try {
+      const result = await api.request<SemanticRelationPreview>(
+        '/api/memories/semantic-relations/preview', 'POST',
+      );
+      setSemanticPreview(result);
+      setNotice(result.status === 'completed'
+        ? `语义预览完成：复核了 ${result.items.length} 组候选；没有修改或保存任何记忆。`
+        : result.status === 'insufficient_memories'
+          ? '当前有效 L1 少于两条，未运行本地编码或模型复核。'
+          : '当前 L1 没有同一主体的可配对项，未调用模型。');
+    } catch (error) {setNotice(memoryFailure(error, 'read'));}
+    finally {setSemanticPreviewing(false);}
   }
   async function mergeL1Quality() {
     if (!mergeChoice) return;
@@ -452,6 +482,21 @@ export function MemoryApp() {
           </List.Item>}/>
         </>}
         {qualityCandidates&&qualityCandidates.merge_history.length>0&&<details className="quality-merge-history"><summary>查看重复合并历史（{qualityCandidates.merge_history_total}）</summary><List size="small" dataSource={qualityCandidates.merge_history} renderItem={event=><List.Item actions={event.restore_available?[<Button key="restore" size="small" onClick={()=>setRestoreChoice(event)}>恢复被合并项</Button>]:undefined}><Space direction="vertical" size={2}><Space wrap><Tag color={event.state==='merged'?'green':'blue'}>{event.state==='merged'?'合并生效中':'已恢复'}</Tag><span><Button type="link" size="small" onClick={()=>void openL1(event.kept_memory_id)}>保留：{event.kept_content}</Button></span></Space><span className="subtle">{event.state==='merged'?'已取代':'曾取代'}：{event.retired_content}</span><small className="subtle">首次合并 {displayTime(event.merged_at)} · 当前状态修订 {event.state_revision}{event.state_changed_at?` · 状态更新 ${displayTime(event.state_changed_at)}`:''} · 汇入 {event.copied_evidence_count} 条来源 · {event.evidence_ledger_complete?`账本完整 ${event.evidence_ledger_count}/${event.copied_evidence_count}`:'旧合并无逐条账本'}</small>{event.evidence_ledger.length>0&&<Space wrap size={4}>{event.evidence_ledger.map(source=><Button key={`${source.source_message_id}:${source.source_type}`} type="link" size="small" onClick={()=>void openL0(source.source_message_id)}>L0 {source.source_message_id.slice(0,8)} · {sourceName(source.source_type)} · {displayTime(source.linked_at)}</Button>)}</Space>}</Space></List.Item>}/>{qualityCandidates.merge_history_limited&&<p className="subtle">这里只显示最近 25 次合并。</p>}</details>}
+      </Card>
+      <Card className="mode-card l1-quality-card" title={<span>语义关系实验预览 <Tag>不保存</Tag></span>} extra={<Button size="small" loading={semanticPreviewing} disabled={!config?.semantic_relation_preview_available} onClick={() => void previewSemanticRelations()}>{semanticPreview ? '重新运行' : '运行一次预览'}</Button>}>
+        <p className="subtle">仅在点击后读取最多 500 条当前有效 L1：本地 BGE 选出最多 20 对，再用当前兼容模型单次复核。分数只代表语义接近程度；模型结果不会写入数据库，也不会自动纠正、合并、取代或删除。</p>
+        {!config?.semantic_relation_preview_available&&<Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="需要以兼容模型 + 本地 BGE 混合召回模式启动控制台"/>}
+        {config?.semantic_relation_preview_available&&!semanticPreview&&<Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="尚未运行；打开页面不会自动调用模型"/>}
+        {semanticPreview&&semanticPreview.status!=='completed'&&<Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={semanticPreview.status==='insufficient_memories'?'当前有效 L1 少于两条':'没有同一主体的可配对记忆'}/>}
+        {semanticPreview?.status==='completed'&&<>
+          <Space wrap><Tag color="blue">临时复核 {semanticPreview.items.length} 组</Tag><Tag>扫描 {semanticPreview.scanned_memory_count} 条 L1</Tag><Tag>模型请求 {semanticPreview.model_request_count} 次</Tag>{semanticPreview.memory_scan_limited&&<Tag color="red">只读取前 500 条</Tag>}</Space>
+          <List size="small" dataSource={semanticPreview.items} renderItem={item=><List.Item className="quality-candidate-item"><Space direction="vertical" size={6} className="quality-candidate-body">
+            <Space wrap><Tag color={semanticRelationColor[item.relation]}>{semanticRelationLabel[item.relation]}</Tag><code>语义接近 {Math.round(item.cosine_similarity*100)}%</code><small className="subtle">{item.reason_code}</small></Space>
+            <div className="quality-candidate-pair"><Button type="text" onClick={()=>void openL1(item.left.id)}><Tag color="magenta">A</Tag>{item.left.content}</Button><Button type="text" onClick={()=>void openL1(item.right.id)}><Tag color="magenta">B</Tag>{item.right.content}</Button></div>
+            <small className="subtle">模型引用：A「{item.left_quote}」 · B「{item.right_quote}」</small>
+          </Space></List.Item>}/>
+          <p className="subtle">生成于 {displayTime(semanticPreview.generated_at)}；刷新页面后结果消失。若要处理候选，请另行核对 L0 来源后使用现有人工操作。</p>
+        </>}
       </Card>
       {mode && <Card className="mode-card" title={<span>本次运行的记忆模式 <Tag>临时设置</Tag></span>} extra={<Button type="primary" disabled={busy || (mode.write_enabled === modeDraft.write_enabled && mode.use_enabled === modeDraft.use_enabled && mode.scenario_use_enabled === modeDraft.scenario_use_enabled && mode.persona_use_enabled === modeDraft.persona_use_enabled)} onClick={() => void saveMode()}>应用到网页与圆屏</Button>}>
         <div className="memory-mode-grid">

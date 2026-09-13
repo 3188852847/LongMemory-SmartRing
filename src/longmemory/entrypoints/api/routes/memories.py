@@ -37,6 +37,11 @@ def register_memory_routes(app, backend):
             raise web.HTTPBadRequest()
         return await invoke(backend.quality_candidates)
 
+    async def semantic_relation_preview(request):
+        if request.query or request.content_length not in (None, 0):
+            raise web.HTTPBadRequest()
+        return await invoke(backend.semantic_relation_preview)
+
     async def review_quality_candidate(request):
         if request.content_type != "application/json":
             raise web.HTTPBadRequest()
@@ -577,6 +582,9 @@ def register_memory_routes(app, backend):
     app.router.add_get("/api/memory-config", config, allow_head=False)
     app.router.add_get("/api/memories", listing, allow_head=False)
     app.router.add_get("/api/memories/quality-candidates", quality_candidates, allow_head=False)
+    app.router.add_post(
+        "/api/memories/semantic-relations/preview", semantic_relation_preview,
+    )
     app.router.add_post("/api/memories/quality-candidates/reviews", review_quality_candidate)
     app.router.add_post("/api/memories/quality-candidates/merge", merge_quality_candidate)
     app.router.add_post(

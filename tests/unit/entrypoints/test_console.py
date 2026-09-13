@@ -135,7 +135,8 @@ async def console(database=None, allow_memory_delete=False, chat_backend=None,
                   memory_backend_store=None, xiaozhi_memory_backends=None,
                   tts_backend_store=None,
                   round_skin_store=None, round_wallpaper_library=None,
-                  round_wallpaper_delivery=None):
+                  round_wallpaper_delivery=None,
+                  semantic_relation_previewer=None):
     # 先占用随机回环端口，再把精确 Host 交给应用，避免探测后抢占端口。
     sock = socket.socket()
     sock.bind(("127.0.0.1", 0))
@@ -160,7 +161,8 @@ async def console(database=None, allow_memory_delete=False, chat_backend=None,
                                      tts_backend_store=tts_backend_store,
                                      round_skin_store=round_skin_store,
                                      round_wallpaper_library=round_wallpaper_library,
-                                     round_wallpaper_delivery=round_wallpaper_delivery), access_log=None)
+                                     round_wallpaper_delivery=round_wallpaper_delivery,
+                                     semantic_relation_previewer=semantic_relation_previewer), access_log=None)
     await runner.setup()
     await web.SockSite(runner, sock).start()
     try:
@@ -743,6 +745,81 @@ def test_console_exposes_read_only_l1_quality_candidates(tmp_path):
         assert connection.execute("SELECT count(*) FROM l1_quality_review_events").fetchone()[0] == 1
 
 
+def test_console_runs_semantic_relation_preview_only_on_explicit_post(tmp_path):
+    from longmemory.application.memory_management.semantic_relation_preview import (
+        SemanticRelationPreviewService,
+    )
+    from longmemory.core.memory.quality.semantic_relations import (
+        SemanticRelation,
+        SemanticRelationDecision,
+        SemanticRelationReason,
+        SemanticRelationReview,
+    )
+    from longmemory.methods.longmemory_v1.method import LongMemoryV1
+
+    class Encoder:
+        def encode_documents(self, texts):
+            assert texts == ["用户喜欢乌龙茶。", "用户喜欢咖啡。"]
+            return [[1.0, 0.0], [0.8, 0.2]]
+
+    class Reviewer:
+        version = "semantic-reviewer-test-v1"
+        calls = 0
+
+        def review(self, pairs):
+            self.calls += 1
+            assert len(pairs) == 1
+            pair = pairs[0]
+            return SemanticRelationReview(self.version, (
+                SemanticRelationDecision(
+                    pair.pair_id, SemanticRelation.COMPATIBLE,
+                    SemanticRelationReason.COEXISTING_CLAIMS,
+                    "喜欢乌龙茶", "喜欢咖啡",
+                ),
+            ))
+
+    database = tmp_path / "semantic-preview.db"
+    LongMemoryV1(database).close()
+    with sqlite3.connect(database) as connection:
+        connection.executemany(
+            "INSERT INTO atomic_memories "
+            "(id,subject_id,content,recorded_at,valid_from,valid_to,retired_at,superseded_by_id) "
+            "VALUES (?, 'user:self', ?, '2026-09-13T00:00:00+00:00', NULL, NULL, NULL, NULL)",
+            [("memory-a", "用户喜欢乌龙茶。"), ("memory-b", "用户喜欢咖啡。")],
+        )
+    reviewer = Reviewer()
+    previewer = SemanticRelationPreviewService(encoder=Encoder(), reviewer=reviewer)
+
+    async def run():
+        async with console(
+            database, semantic_relation_previewer=previewer,
+        ) as (client, base, _bridge):
+            headers = await login(client, base)
+            config = await (await client.get(base + "/api/memory-config")).json()
+            assert config["semantic_relation_preview_available"] is True
+            assert reviewer.calls == 0
+            unauthorized = await client.post(
+                base + "/api/memories/semantic-relations/preview"
+            )
+            assert unauthorized.status == 403
+            response = await client.post(
+                base + "/api/memories/semantic-relations/preview", headers=headers,
+            )
+            data = await response.json()
+            assert response.status == 200
+            assert reviewer.calls == 1
+            assert data["status"] == "completed"
+            assert data["persistent"] is False
+            assert data["automatic_actions"] is False
+            assert data["model_request_count"] == 1
+            assert data["items"][0]["relation"] == "compatible"
+            assert data["items"][0]["reason_code"] == "coexisting_claims"
+
+    asyncio.run(run())
+    with sqlite3.connect(database) as connection:
+        assert connection.execute("SELECT count(*) FROM atomic_memories").fetchone()[0] == 2
+
+
 def test_console_merges_duplicate_l1_without_deleting_history_or_sources(tmp_path):
     from longmemory.methods.longmemory_v1.method import LongMemoryV1
 
@@ -1208,6 +1285,7 @@ def test_memory_without_config_is_not_a_fake_empty_database():
                               "allow_correction": False, "allow_change": False,
                               "allow_promote_source": False,
                               "allow_l1_quality_review": False,
+                              "semantic_relation_preview_available": False,
                               "allow_scenario_management": False,
                               "allow_persona_management": False,
                               "scenario_model_preview_available": False,

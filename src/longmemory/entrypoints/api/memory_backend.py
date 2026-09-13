@@ -25,7 +25,8 @@ class MemoryBackend:
                  allow_scenario_management=False, allow_persona_management=False,
                  scenario_producer=None,
                  scenario_model=None, persona_producer=None, persona_model=None,
-                 consolidation_background_enabled=False, clock=None):
+                 consolidation_background_enabled=False, clock=None,
+                 semantic_relation_previewer=None):
         # 路径只来自启动参数；任何 HTTP 请求都不能选文件或切换数据库。
         self.database = database.resolve() if database is not None else None
         self.allow_delete = allow_delete
@@ -36,6 +37,7 @@ class MemoryBackend:
         self.scenario_model = scenario_model
         self.persona_producer = persona_producer
         self.persona_model = persona_model
+        self.semantic_relation_previewer = semantic_relation_previewer
         self.consolidation_background_enabled = consolidation_background_enabled
         self.clock = clock or (lambda: datetime.now(UTC))
         self.scenarios = ScenarioBackend(
@@ -68,6 +70,7 @@ class MemoryBackend:
             service_factory=self._service,
             clock=self.clock,
             consolidation_background_enabled=self.consolidation_background_enabled,
+            semantic_relation_previewer=semantic_relation_previewer,
         )
 
     def info(self):
@@ -81,6 +84,10 @@ class MemoryBackend:
                 "allow_change": self.allow_correction and self.database is not None,
                 "allow_promote_source": self.allow_correction and self.database is not None,
                 "allow_l1_quality_review": self.allow_correction and self.database is not None,
+                "semantic_relation_preview_available": (
+                    self.database is not None
+                    and self.semantic_relation_previewer is not None
+                ),
                 "allow_scenario_management": (
                     self.allow_scenario_management and self.database is not None
                 ),
@@ -307,6 +314,9 @@ class MemoryBackend:
 
     def quality_candidates(self):
         return self.atomic_memories.quality_candidates()
+
+    def semantic_relation_preview(self):
+        return self.atomic_memories.semantic_relation_preview()
 
     def review_quality_candidate(self, **kwargs):
         return self.atomic_memories.review_quality_candidate(**kwargs)

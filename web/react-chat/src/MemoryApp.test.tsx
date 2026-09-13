@@ -250,4 +250,32 @@ describe('L1 质量候选',()=>{
     expect(screen.getByRole('button',{name:'保留 B，合并 A'}).hasAttribute('disabled')).toBe(true);
     expect(screen.getByRole('button',{name:'重新保留 A，合并 B'}).hasAttribute('disabled')).toBe(false);
   },15000);
+
+  test('语义关系预览只在点击后请求且明确不持久化',async()=>{
+    const calls:Array<{path:string;method:string}>=[];
+    vi.spyOn(ChatApi.prototype,'bootstrap').mockResolvedValue(undefined);
+    vi.spyOn(ChatApi.prototype,'request').mockImplementation(async(path,method='GET')=>{
+      calls.push({path,method});
+      if(path==='/api/memory-config') return {configured:true,database:'synthetic.db',allow_delete:true,allow_clear:true,allow_correction:true,allow_change:true,allow_promote_source:true,allow_l1_quality_review:true,semantic_relation_preview_available:true} as never;
+      if(path==='/api/memory-mode') return {write_enabled:true,use_enabled:true,scenario_use_enabled:false,scenario_available:true,persona_use_enabled:false,persona_available:true,persistent:false,l0_archived_when_write_disabled:true} as never;
+      if(path==='/api/consolidation-status') return {background_enabled:false,stages:[]} as never;
+      if(path.startsWith('/api/memories/daily-review')) return {local_date:'2026-09-13',utc_offset_minutes:480,items:[],total:0,limited:false,activity_counts:{added:0,corrected:0,changed:0,deleted:0},message_counts:{user:0,assistant:0,total:0,unlinked_user:0},quality_counts:{owner_confirmed_missed_extraction:0},deletions:[],deletions_limited:false} as never;
+      if(path.startsWith('/api/chat-memory-feedback/daily')) return {local_date:'2026-09-13',utc_offset_minutes:480,total:0,limited:false,action_counts:{memory_ok:0,recall_miss:0,wrong_memory:0,memory_irrelevant:0},items:[],current_total:0,current_limited:false,current_counts:{memory_ok:0,recall_miss:0,wrong_memory:0,memory_irrelevant:0},current_items:[]} as never;
+      if(path.startsWith('/api/memories?')) return {items:[],total:2,limit:25,offset:0} as never;
+      if(path==='/api/memories/semantic-relations/preview'&&method==='POST') return {status:'completed',items:[{pair_id:'pair-a',cosine_similarity:.83,left:{id:'memory-a',content:'用户喜欢乌龙茶。',recorded_at:'2026-09-13T00:00:00Z'},right:{id:'memory-b',content:'用户喜欢咖啡。',recorded_at:'2026-09-13T00:01:00Z'},relation:'compatible',reason_code:'coexisting_claims',left_quote:'喜欢乌龙茶',right_quote:'喜欢咖啡'}],scanned_memory_count:2,memory_scan_limited:false,candidate_limit:20,generated_at:'2026-09-13T00:02:00Z',pairing_version:'l1-semantic-pairing-v1',reviewer_version:'l1-semantic-relation-review-v1',persistent:false,automatic_actions:false,model_request_count:1} as never;
+      throw new Error(`unexpected test path: ${path}`);
+    });
+    const client=new QueryClient({defaultOptions:{queries:{retry:false}}});
+    render(<QueryClientProvider client={client}><MemoryRouter><MemoryApp/></MemoryRouter></QueryClientProvider>);
+    const button=await screen.findByRole('button',{name:'运行一次预览'});
+    expect(calls.some(call=>call.path.includes('semantic-relations'))).toBe(false);
+    fireEvent.click(button);
+    expect(await screen.findByText('可以并存')).toBeTruthy();
+    expect(screen.getByText('语义接近 83%')).toBeTruthy();
+    expect(screen.getByText(/模型引用：A「喜欢乌龙茶」/)).toBeTruthy();
+    expect(screen.getByText(/没有修改或保存任何记忆/)).toBeTruthy();
+    expect(calls.filter(call=>call.path.includes('semantic-relations'))).toEqual([{
+      path:'/api/memories/semantic-relations/preview',method:'POST',
+    }]);
+  });
 });

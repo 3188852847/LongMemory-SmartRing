@@ -30,6 +30,7 @@ from longmemory.core.memory.quality.l1_candidates import (
     DETECTOR_VERSION,
     find_l1_quality_candidates,
 )
+from longmemory.core.memory.quality.semantic_relations import SemanticRelationError
 from longmemory.core.memory.retrieval.service import is_memory_effective
 
 from .errors import MemoryAccessError
@@ -46,11 +47,13 @@ class AtomicMemoryBackend:
         service_factory,
         clock,
         consolidation_background_enabled,
+        semantic_relation_previewer=None,
     ):
         self._open_database = open_database
         self._service_factory = service_factory
         self._clock = clock
         self._consolidation_background_enabled = consolidation_background_enabled
+        self._semantic_relation_previewer = semantic_relation_previewer
 
 
     def list_page(self, *, query="", state="active", limit=25, offset=0):
@@ -167,6 +170,55 @@ class AtomicMemoryBackend:
                 "merge_history_total": merge_total,
                 "merge_history_limited": merge_total > len(merge_rows),
             }
+
+    def semantic_relation_preview(self):
+        """读取当前有效 L1 后关闭数据库，再执行本地配对和一次模型复核。"""
+
+        if self._semantic_relation_previewer is None:
+            raise MemoryAccessError("semantic_relation_preview_unavailable", 503)
+        with self._open_database() as connection:
+            now = self._clock()
+            active = tuple(
+                memory for memory in SQLiteMemoryStore(connection).list_active()
+                if is_memory_effective(memory, now)
+            )
+        try:
+            result = self._semantic_relation_previewer.preview(
+                active, generated_at=now,
+            )
+        except (SemanticRelationError, RuntimeError, ValueError, KeyError):
+            # 不把模型响应、URL、密钥或个人记忆正文拼进稳定错误码。
+            raise MemoryAccessError("semantic_relation_preview_failed", 502) from None
+        return {
+            "status": result.status,
+            "items": [{
+                "pair_id": candidate.pair.pair_id,
+                "cosine_similarity": round(candidate.cosine_similarity, 4),
+                "left": {
+                    "id": candidate.pair.left_memory_id,
+                    "content": candidate.pair.left_content,
+                    "recorded_at": candidate.pair.left_recorded_at,
+                },
+                "right": {
+                    "id": candidate.pair.right_memory_id,
+                    "content": candidate.pair.right_content,
+                    "recorded_at": candidate.pair.right_recorded_at,
+                },
+                "relation": decision.relation.value,
+                "reason_code": decision.reason.value,
+                "left_quote": decision.left_quote,
+                "right_quote": decision.right_quote,
+            } for candidate, decision in result.candidates],
+            "scanned_memory_count": result.scanned_memory_count,
+            "memory_scan_limited": result.memory_scan_limited,
+            "candidate_limit": 20,
+            "generated_at": result.generated_at.isoformat(),
+            "pairing_version": result.pairing_version,
+            "reviewer_version": result.reviewer_version,
+            "persistent": False,
+            "automatic_actions": False,
+            "model_request_count": 1 if result.status == "completed" else 0,
+        }
 
     @staticmethod
     def _find_quality_candidates(connection, now):
