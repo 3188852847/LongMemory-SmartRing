@@ -21,6 +21,10 @@ from longmemory.application.consolidation.l2_to_l3_service import L3_TRIGGER_CON
 from longmemory.application.consolidation.status_service import (
     ConsolidationStatusService,
 )
+from longmemory.application.memory_management.temporal_history import (
+    TemporalHistoryError,
+    build_temporal_fact_history,
+)
 from longmemory.core.common.identifiers import MemoryId, MessageId
 from longmemory.core.memory.consolidation.trigger_policy import (
     ConsolidationTriggerConfig,
@@ -219,6 +223,25 @@ class AtomicMemoryBackend:
             "automatic_actions": False,
             "model_request_count": 1 if result.status == "completed" else 0,
         }
+
+    def temporal_history(self, memory_id):
+        """只读返回明确事实变化链；不把纠错或重复合并解释成历史。"""
+
+        with self._open_database() as connection:
+            store = SQLiteMemoryStore(connection)
+            try:
+                history = build_temporal_fact_history(
+                    store.list_all(), MemoryId(memory_id),
+                )
+            except LookupError:
+                raise MemoryAccessError("memory_not_found", 404) from None
+            except TemporalHistoryError:
+                raise MemoryAccessError("temporal_history_ambiguous", 409) from None
+            return {
+                "selected_memory_id": str(history.selected_memory_id),
+                "has_explicit_change": history.has_explicit_change,
+                "items": [memory_json(item) for item in history.entries],
+            }
 
     @staticmethod
     def _find_quality_candidates(connection, now):

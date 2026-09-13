@@ -123,6 +123,37 @@ describe('每日记忆回顾',()=>{
   });
 });
 
+describe('事实变化时间线',()=>{
+  test('只在详情中显式读取并按有效期展示变化链',async()=>{
+    const oldMemory={id:'old-place',content:'用户住在南京。',truncated:false,state:'retired' as const,effective_state:'retired' as const,recorded_at:'2026-01-01T00:00:00Z',subject_id:'user:self',valid_from:null,valid_to:'2026-05-01T00:00:00Z',retired_at:'2026-09-13T00:00:00Z',superseded_by_id:'new-place'};
+    const newMemory={id:'new-place',content:'用户住在合肥。',truncated:false,state:'active' as const,effective_state:'current' as const,recorded_at:'2026-09-13T00:00:00Z',subject_id:'user:self',valid_from:'2026-05-01T00:00:00Z',valid_to:null,retired_at:null,superseded_by_id:null};
+    const calls:string[]=[];
+    vi.spyOn(ChatApi.prototype,'bootstrap').mockResolvedValue(undefined);
+    vi.spyOn(ChatApi.prototype,'request').mockImplementation(async path=>{
+      calls.push(path);
+      if(path==='/api/memory-config') return {configured:true,database:'synthetic.db',allow_delete:true,allow_clear:true,allow_correction:true,allow_change:true,allow_promote_source:true,allow_l1_quality_review:true,semantic_relation_preview_available:false} as never;
+      if(path==='/api/memory-mode') return {write_enabled:true,use_enabled:true,scenario_use_enabled:false,scenario_available:true,persona_use_enabled:false,persona_available:true,persistent:false,l0_archived_when_write_disabled:true} as never;
+      if(path==='/api/consolidation-status') return {background_enabled:false,stages:[]} as never;
+      if(path.startsWith('/api/memories/daily-review')) return {local_date:'2026-09-13',utc_offset_minutes:480,items:[],total:0,limited:false,activity_counts:{added:0,corrected:0,changed:0,deleted:0},message_counts:{user:0,assistant:0,total:0,unlinked_user:0},quality_counts:{owner_confirmed_missed_extraction:0},deletions:[],deletions_limited:false} as never;
+      if(path.startsWith('/api/chat-memory-feedback/daily')) return {local_date:'2026-09-13',utc_offset_minutes:480,total:0,limited:false,action_counts:{memory_ok:0,recall_miss:0,wrong_memory:0,memory_irrelevant:0},items:[],current_total:0,current_limited:false,current_counts:{memory_ok:0,recall_miss:0,wrong_memory:0,memory_irrelevant:0},current_items:[]} as never;
+      if(path.startsWith('/api/memories?')) return {items:[newMemory],total:1,limit:25,offset:0} as never;
+      if(path==='/api/memories/new-place') return {...newMemory,revision:'a'.repeat(64),sources:[]} as never;
+      if(path==='/api/memories/new-place/temporal-history') return {selected_memory_id:'new-place',has_explicit_change:true,items:[oldMemory,newMemory]} as never;
+      throw new Error(`unexpected test path: ${path}`);
+    });
+    const client=new QueryClient({defaultOptions:{queries:{retry:false}}});
+    render(<QueryClientProvider client={client}><MemoryRouter><MemoryApp/></MemoryRouter></QueryClientProvider>);
+    fireEvent.click(await screen.findByText('用户住在合肥。'));
+    const timeline=await screen.findByRole('button',{name:'事实时间线'});
+    expect(calls).not.toContain('/api/memories/new-place/temporal-history');
+    fireEvent.click(timeline);
+    expect(await screen.findByText('事实变化时间线')).toBeTruthy();
+    expect(screen.getByText('用户住在南京。')).toBeTruthy();
+    expect(screen.getByText(/第 2\/2 段/)).toBeTruthy();
+    expect(calls).toContain('/api/memories/new-place/temporal-history');
+  });
+});
+
 describe('开发期记忆重置',()=>{
   test('先展示影响范围，再通过固定短语清空 L1 并保留 L0',async()=>{
     const calls:Array<{path:string;method:string;body:unknown}>=[];

@@ -820,6 +820,50 @@ def test_console_runs_semantic_relation_preview_only_on_explicit_post(tmp_path):
         assert connection.execute("SELECT count(*) FROM atomic_memories").fetchone()[0] == 2
 
 
+def test_console_exposes_only_explicit_temporal_fact_change_history(tmp_path):
+    from longmemory.methods.longmemory_v1.method import LongMemoryV1
+
+    database = tmp_path / "temporal-history.db"
+    LongMemoryV1(database).close()
+    with sqlite3.connect(database) as connection:
+        connection.executemany(
+            "INSERT INTO atomic_memories "
+            "(id,subject_id,content,recorded_at,valid_from,valid_to,retired_at,superseded_by_id) "
+            "VALUES (?, 'user:self', ?, ?, ?, ?, ?, ?)",
+            [
+                ("old-place", "用户住在南京。", "2026-01-01T00:00:00+00:00", None,
+                 "2026-05-01T00:00:00+00:00", "2026-09-13T00:00:00+00:00", "new-place"),
+                ("new-place", "用户住在合肥。", "2026-09-13T00:00:00+00:00",
+                 "2026-05-01T00:00:00+00:00", None, None, None),
+                ("corrected", "用户喜欢乌龙茶。", "2026-09-13T00:01:00+00:00",
+                 None, None, None, None),
+                ("wrong", "用户喜欢咖啡。", "2026-01-01T00:01:00+00:00",
+                 None, None, "2026-09-13T00:01:00+00:00", "corrected"),
+            ],
+        )
+
+    async def run():
+        async with console(database) as (client, base, _bridge):
+            await login(client, base)
+            response = await client.get(
+                base + "/api/memories/new-place/temporal-history"
+            )
+            data = await response.json()
+            assert response.status == 200
+            assert data["has_explicit_change"] is True
+            assert [item["id"] for item in data["items"]] == ["old-place", "new-place"]
+            correction = await (await client.get(
+                base + "/api/memories/corrected/temporal-history"
+            )).json()
+            assert correction["has_explicit_change"] is False
+            assert [item["id"] for item in correction["items"]] == ["corrected"]
+            assert (await client.get(
+                base + "/api/memories/missing/temporal-history"
+            )).status == 404
+
+    asyncio.run(run())
+
+
 def test_console_merges_duplicate_l1_without_deleting_history_or_sources(tmp_path):
     from longmemory.methods.longmemory_v1.method import LongMemoryV1
 

@@ -42,6 +42,11 @@ def register_memory_routes(app, backend):
             raise web.HTTPBadRequest()
         return await invoke(backend.semantic_relation_preview)
 
+    async def temporal_history(request):
+        if request.query:
+            raise web.HTTPBadRequest()
+        return await invoke(backend.temporal_history, request.match_info["memory_id"])
+
     async def review_quality_candidate(request):
         if request.content_type != "application/json":
             raise web.HTTPBadRequest()
@@ -601,6 +606,10 @@ def register_memory_routes(app, backend):
     app.router.add_post("/api/source-messages/{source_id}/promote", promote_source)
     app.router.add_get("/api/source-messages/{source_id}", source_detail, allow_head=False)
     app.router.add_get("/api/memories/{memory_id}", detail, allow_head=False)
+    app.router.add_get(
+        "/api/memories/{memory_id}/temporal-history", temporal_history,
+        allow_head=False,
+    )
     app.router.add_delete("/api/memories/{memory_id}", detail)
     app.router.add_post("/api/memories/{memory_id}/corrections", correction)
     app.router.add_post("/api/memories/{memory_id}/changes", change)

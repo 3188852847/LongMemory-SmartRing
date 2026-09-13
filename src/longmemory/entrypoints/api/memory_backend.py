@@ -318,6 +318,9 @@ class MemoryBackend:
     def semantic_relation_preview(self):
         return self.atomic_memories.semantic_relation_preview()
 
+    def temporal_history(self, memory_id):
+        return self.atomic_memories.temporal_history(memory_id)
+
     def review_quality_candidate(self, **kwargs):
         return self.atomic_memories.review_quality_candidate(**kwargs)
 

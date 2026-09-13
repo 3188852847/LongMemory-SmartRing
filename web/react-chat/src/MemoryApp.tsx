@@ -44,6 +44,8 @@ type L1QualityCandidates = {items:L1QualityCandidate[];total:number;scanned_memo
 type SemanticRelation = 'equivalent'|'possible_conflict'|'possible_change'|'compatible'|'uncertain';
 type SemanticRelationItem = {pair_id:string;cosine_similarity:number;left:{id:string;content:string;recorded_at:string};right:{id:string;content:string;recorded_at:string};relation:SemanticRelation;reason_code:string;left_quote:string;right_quote:string};
 type SemanticRelationPreview = {status:'completed'|'insufficient_memories'|'no_same_subject_pairs';items:SemanticRelationItem[];scanned_memory_count:number;memory_scan_limited:boolean;candidate_limit:number;generated_at:string;pairing_version:string;reviewer_version:string;persistent:false;automatic_actions:false;model_request_count:0|1};
+type TemporalHistoryItem = L1Summary & {valid_from:string|null;valid_to:string|null;retired_at:string|null;superseded_by_id:string|null};
+type TemporalHistory = {selected_memory_id:string;has_explicit_change:boolean;items:TemporalHistoryItem[]};
 
 const api = new ChatApi();
 const displayTime = (value?: string | null) => value ? new Date(value).toLocaleString('zh-CN') : '未记录';
@@ -117,6 +119,8 @@ export function MemoryApp() {
   const [qualityScanning, setQualityScanning] = useState(false);
   const [semanticPreview, setSemanticPreview] = useState<SemanticRelationPreview>();
   const [semanticPreviewing, setSemanticPreviewing] = useState(false);
+  const [temporalHistory, setTemporalHistory] = useState<TemporalHistory>();
+  const [temporalHistoryOpen, setTemporalHistoryOpen] = useState(false);
   const [mergeChoice, setMergeChoice] = useState<{item:L1QualityCandidate;kept:'left'|'right'}>();
   const [restoreChoice, setRestoreChoice] = useState<L1MergeHistory>();
   const locked = useRef(false);
@@ -200,6 +204,8 @@ export function MemoryApp() {
 
   function closeL1() {
     setSelectedL1(undefined);
+    setTemporalHistoryOpen(false);
+    setTemporalHistory(undefined);
     if (searchParams.has('memory_id')) {
       const next = new URLSearchParams(searchParams);
       next.delete('memory_id');
@@ -215,6 +221,14 @@ export function MemoryApp() {
   }
   async function openL1(id: string) {
     await guarded(async () => {setSelectedL1(await api.request<L1Detail>(`/api/memories/${encodeURIComponent(id)}`));});
+  }
+  async function openTemporalHistory() {
+    if (!selectedL1) return;
+    await guarded(async()=>{
+      const history=await api.request<TemporalHistory>(`/api/memories/${encodeURIComponent(selectedL1.id)}/temporal-history`);
+      setTemporalHistory(history);setTemporalHistoryOpen(true);
+      setNotice(history.has_explicit_change?'已读取明确事实变化时间线；没有修改记忆。':'这条 L1 没有可证明的事实变化链；纠错和重复合并不会冒充历史。');
+    });
   }
   async function scanL1Quality() {
     if (qualityScanning) return;
@@ -519,10 +533,19 @@ export function MemoryApp() {
       <div className="pagination"><Button disabled={busy || page.offset === 0} onClick={() => void refresh(Math.max(0, page.offset - page.limit))}>上一页</Button><span>{page.total ? `${page.offset + 1}–${Math.min(page.offset + page.limit, page.total)} / ${page.total}` : '0 条'}</span><Button disabled={busy || page.offset + page.limit >= page.total} onClick={() => void refresh(page.offset + page.limit)}>下一页</Button></div>
       </section><p className="memory-status" role="status">{notice}</p>
     </AppShell>
-    <Drawer width={620} title="L1 原子记忆" open={Boolean(selectedL1)} onClose={closeL1} extra={<Space><Button disabled={!config?.allow_correction || selectedL1?.state !== 'active'} onClick={() => setCorrecting(true)}>纠正错误</Button><Button disabled={!config?.allow_change || selectedL1?.state !== 'active'} onClick={openChange}>记录变化</Button><Button danger disabled={!config?.allow_delete} onClick={() => setDeleting(true)}>删除</Button></Space>}>
+    <Drawer width={620} title="L1 原子记忆" open={Boolean(selectedL1)} onClose={closeL1} extra={<Space><Button onClick={()=>void openTemporalHistory()}>事实时间线</Button><Button disabled={!config?.allow_correction || selectedL1?.state !== 'active'} onClick={() => setCorrecting(true)}>纠正错误</Button><Button disabled={!config?.allow_change || selectedL1?.state !== 'active'} onClick={openChange}>记录变化</Button><Button danger disabled={!config?.allow_delete} onClick={() => setDeleting(true)}>删除</Button></Space>}>
       {selectedL1 && <><p className="detail-content">{selectedL1.content}</p><Descriptions column={1} size="small" items={[{key:'state',label:'层级与状态',children:<Space><Tag color="magenta">L1</Tag><Tag>{selectedL1.effective_state === 'expired' ? '已到期' : selectedL1.effective_state === 'not_started' ? '未生效' : selectedL1.state === 'active' ? '当前' : '已退役'}</Tag></Space>},{key:'id',label:'记忆 ID',children:selectedL1.id},{key:'time',label:'系统记录时间',children:displayTime(selectedL1.recorded_at)},{key:'validFrom',label:'事实开始生效',children:displayTime(selectedL1.valid_from)},{key:'validTo',label:'事实结束生效',children:displayTime(selectedL1.valid_to)},{key:'superseded',label:'取代它的记忆',children:selectedL1.superseded_by_id ?? '无'}]}/>
         <h3>L0 原始来源</h3>{selectedL1.sources.length ? selectedL1.sources.map(source => <Card size="small" className="source-card" key={`${source.source_message_id}:${source.source_type}`} title={<Space><Tag color="blue">L0</Tag><span>{sourceName(source.source_type)}</span></Space>}><p>{source.message?.content ?? '原始来源缺失，无法核对原文。'}</p><small>{source.message ? `${source.message.role === 'user' ? '用户' : '助手'} · ${displayTime(source.message.created_at)}` : source.source_message_id}</small></Card>) : <Empty description="这条 L1 没有可用来源，需要核查"/>}</>}
     </Drawer>
+    <Modal title="事实变化时间线" open={temporalHistoryOpen} footer={null} onCancel={()=>setTemporalHistoryOpen(false)}>
+      {temporalHistory&&!temporalHistory.has_explicit_change?<Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="没有明确的事实变化链；这可能是独立事实、纠错或重复合并"/>:temporalHistory&&<>
+        <p className="subtle">只展示由“记录变化”形成且时间边界精确衔接的历史，不按系统记录先后猜测现实顺序。</p>
+        <List dataSource={temporalHistory.items} renderItem={(item,index)=><List.Item><Space direction="vertical" size={2}>
+          <Space wrap><Tag color={item.id===temporalHistory.selected_memory_id?'blue':'default'}>{item.id===temporalHistory.selected_memory_id?'当前查看':'链上记录'}</Tag><strong>{item.content}</strong></Space>
+          <small className="subtle">{item.valid_from?`从 ${displayTime(item.valid_from)} 生效`:'开始时间未记录'} · {item.valid_to?`到 ${displayTime(item.valid_to)} 结束`:'目前仍有效'} · 第 {index+1}/{temporalHistory.items.length} 段</small>
+        </Space></List.Item>}/>
+      </>}
+    </Modal>
     <Drawer
       width={620}
       title="L0 原始记录"
