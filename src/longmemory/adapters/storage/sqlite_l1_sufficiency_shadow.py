@@ -206,6 +206,10 @@ class SQLiteL1SufficiencyShadowStore:
     def _policy_metrics(connection) -> dict:
         """只用每轮最新且带精确人工集合的复核计算离线门控代理。"""
 
+        from longmemory.core.memory.quality.l1_gate_readiness import (
+            assess_l1_gate_readiness,
+        )
+
         latest = connection.execute(
             "SELECT e.id,e.user_message_id,e.support_set_recorded FROM "
             "l1_sufficiency_shadow_review_events e JOIN ("
@@ -216,6 +220,7 @@ class SQLiteL1SufficiencyShadowStore:
         ).fetchall()
         totals = {
             "reviewed_cases": len(latest), "labeled_cases": 0,
+            "answerable_labeled_cases": 0, "unsupported_labeled_cases": 0,
             "false_block_cases": 0, "unsupported_pass_cases": 0,
             "incomplete_allow_cases": 0, "overinclusive_allow_cases": 0,
             "original_candidate_count": 0, "kept_candidate_count": 0,
@@ -241,6 +246,10 @@ class SQLiteL1SufficiencyShadowStore:
                 row["memory_id"] for row in candidates if row["supports_answer"] == 1
             }
             totals["labeled_cases"] += 1
+            totals[
+                "answerable_labeled_cases" if expected
+                else "unsupported_labeled_cases"
+            ] += 1
             totals["false_block_cases"] += bool(expected) and not predicted
             totals["unsupported_pass_cases"] += not expected and bool(predicted)
             totals["incomplete_allow_cases"] += bool(expected and predicted and expected - predicted)
@@ -287,6 +296,7 @@ class SQLiteL1SufficiencyShadowStore:
                 )
             ),
         })
+        totals["readiness"] = assess_l1_gate_readiness(totals)
         return totals
 
     def get(self, user_message_id: str) -> dict | None:

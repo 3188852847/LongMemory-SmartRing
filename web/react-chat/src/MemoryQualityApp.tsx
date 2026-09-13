@@ -46,6 +46,15 @@ const extractionOutcomeLabel:Record<L1ExtractionOutcome|'incomplete',string>={
   extraction_failed:'模型提取失败',persistence_failed:'L1 落库失败',
   incomplete:'未完成',
 };
+const l1ReadinessConditionLabel:Record<string,string>={
+  answerable_sample_floor:'有证据问题样本',
+  unsupported_sample_floor:'无证据问题样本',
+  zero_false_blocks:'误拦截',
+  zero_unsupported_passes:'无证据误放行',
+  zero_incomplete_allows:'支持集漏选',
+  all_labeled_context_lengths_measured:'上下文长度覆盖',
+  positive_candidate_reduction:'候选缩减收益',
+};
 
 function evidencePath(layer:'l1'|'l2'|'l3',itemId:string) {
   const key=layer==='l1'?'memory_id':layer==='l2'?'scenario_id':'persona_id';
@@ -286,9 +295,11 @@ export function MemoryQualityApp() {
     <Card className="quality-list-card" title="L1 证据充分性影子记录" extra={<Tag color={l1Shadow?.runtime?.enabled?'cyan':'default'}>{l1Shadow?.runtime?.enabled?'本次已启用':'本次未启用'}</Tag>}>
       <Alert showIcon type="info" title="语义相关不等于足以回答" description="影子判断只记录如果增加证据门控会发生什么；它不过滤当轮 L1，不修改回答或记忆。"/>
       {l1Shadow&&<Space wrap className="quality-shadow-counts"><Tag>已完成 {l1Shadow.review_counts.completed}</Tag><Tag color="blue">待复核 {l1Shadow.review_counts.unreviewed}</Tag><Tag color="green">正确 {l1Shadow.review_counts.correct}</Tag><Tag color="red">错误 {l1Shadow.review_counts.incorrect}</Tag><Tag color="gold">不确定 {l1Shadow.review_counts.uncertain}</Tag></Space>}
-      {l1Shadow&&<Alert showIcon type={l1Shadow.policy_metrics.labeled_cases?'success':'warning'} title={`可计算门控代理 ${l1Shadow.policy_metrics.labeled_cases} 轮`} description={l1Shadow.policy_metrics.labeled_cases
-        ? `误拦截 ${l1Shadow.policy_metrics.false_block_cases}；无证据误放行 ${l1Shadow.policy_metrics.unsupported_pass_cases}；候选减少 ${l1Shadow.policy_metrics.removed_candidate_count}/${l1Shadow.policy_metrics.original_candidate_count}。这些是人工标注样本上的离线代理，尚未改变回答。`
-        : '需要先在详情中保存精确人工支持集合；旧复核和“不确定”不会被伪造成标签。'}/>}
+      {l1Shadow&&<Alert showIcon type={l1Shadow.policy_metrics.readiness.status==='ready_for_controlled_trial'?'success':'warning'} title={l1Shadow.policy_metrics.readiness.status==='ready_for_controlled_trial'?'已具备评审受控试验的证据':'正式 L1 门控未就绪'} description={<>
+        <p>精确人工标签 {l1Shadow.policy_metrics.labeled_cases} 轮：有支持证据 {l1Shadow.policy_metrics.answerable_labeled_cases}/{l1Shadow.policy_metrics.readiness.minimum_cases_per_stratum}，无支持证据 {l1Shadow.policy_metrics.unsupported_labeled_cases}/{l1Shadow.policy_metrics.readiness.minimum_cases_per_stratum}。</p>
+        <p>误拦截 {l1Shadow.policy_metrics.false_block_cases}；无证据误放行 {l1Shadow.policy_metrics.unsupported_pass_cases}；候选减少 {l1Shadow.policy_metrics.removed_candidate_count}/{l1Shadow.policy_metrics.original_candidate_count}。达标也只允许考虑受控试验，永不自动开启。</p>
+        <details><summary>查看 {l1Shadow.policy_metrics.readiness.conditions.filter(item=>!item.passed).length} 项未达条件</summary><ul>{l1Shadow.policy_metrics.readiness.conditions.filter(item=>!item.passed).map(item=><li key={item.code}>{l1ReadinessConditionLabel[item.code]??item.code}：当前 {String(item.actual??'无')}，要求 {String(item.required)}</li>)}</ul></details>
+      </>}/>}
       {!l1Shadow?<Empty description="当前数据库没有可读取的 V46 L1 影子记录，或聊天入口未启用"/>:<List dataSource={l1Shadow.items} locale={{emptyText:<Empty description="还没有 L1 影子样本"/>}} renderItem={item=><List.Item actions={[<Button key="detail" type="link" onClick={()=>void inspectL1Shadow(item.user_message_id)}>查看 L1 候选判断</Button>,<Link key="source" to={`/memories?l0_message_id=${encodeURIComponent(item.user_message_id)}`}>问题 L0</Link>]}>
         <List.Item.Meta title={<Space wrap><Tag color={item.status==='completed'?'green':item.status==='failed'?'red':'gold'}>{item.status==='completed'?'已完成':item.status==='failed'?'失败':'处理中'}</Tag>{item.review_verdict&&<Tag color={item.review_verdict==='correct'?'green':item.review_verdict==='incorrect'?'red':'gold'}>{item.review_verdict==='correct'?'人工确认正确':item.review_verdict==='incorrect'?'人工确认错误':'人工暂不确定'}</Tag>}<span>{item.query}</span></Space>} description={<Space wrap><span>{new Date(item.requested_at).toLocaleString('zh-CN')}</span><span>候选 {item.candidate_count} · 判定支持 {item.supported_count}</span><code>{item.retrieval_strategy}</code><code>{item.model}</code>{item.error_code&&<code>{item.error_code}</code>}</Space>}/>
       </List.Item>}/>}
