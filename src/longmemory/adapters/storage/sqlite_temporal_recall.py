@@ -11,11 +11,13 @@ from longmemory.application.memory_management.temporal_history import (
     build_temporal_fact_history,
 )
 from longmemory.application.temporal_recall import (
+    TemporalDateTarget,
     TemporalRecallItem,
     TemporalRecallResult,
-    classify_temporal_query,
+    analyze_temporal_query,
 )
 from longmemory.core.common.identifiers import MemoryId
+from longmemory.core.memory.l1_atomic.models import AtomicMemory
 from longmemory.core.memory.retrieval.service import is_memory_effective
 
 
@@ -34,9 +36,14 @@ class SQLiteTemporalRecallProvider:
     ) -> TemporalRecallResult:
         if type(limit) is not int or not 1 <= limit <= 20:
             raise ValueError("temporal_recall_limit_invalid")
-        intent = classify_temporal_query(query)
+        now = self._clock()
+        query_analysis = analyze_temporal_query(query, now=now)
+        intent = query_analysis.intent if query_analysis is not None else None
+        date_target = (
+            query_analysis.date_target if query_analysis is not None else None
+        )
         if intent is None or not current_memory_ids:
-            return TemporalRecallResult("", (), intent)
+            return TemporalRecallResult("", (), intent, date_target=date_target)
         if len(current_memory_ids) > 10 or len(set(current_memory_ids)) != len(current_memory_ids):
             raise ValueError("temporal_recall_anchor_ids_invalid")
 
@@ -52,9 +59,9 @@ class SQLiteTemporalRecallProvider:
             store = SQLiteMemoryStore(connection)
             memories = store.list_all()
             by_id = {str(item.id): item for item in memories}
-            now = self._clock()
             selected = []
             seen = set(current_memory_ids)
+            target_matches_current = False
             for anchor_id in current_memory_ids:
                 anchor = by_id.get(anchor_id)
                 # 调用方给的是先前召回的 ID，不能当作永久有效的授权。
@@ -73,11 +80,18 @@ class SQLiteTemporalRecallProvider:
                 except TemporalHistoryError:
                     # 一条损坏链不能放开为历史上下文；其他锚点仍可独立检查。
                     continue
+                if date_target is not None and _overlaps_target(anchor, date_target):
+                    target_matches_current = True
                 if not history.has_explicit_change:
                     continue
                 for memory in history.entries:
                     key = str(memory.id)
                     if key in seen:
+                        continue
+                    if (
+                        date_target is not None
+                        and not _overlaps_target(memory, date_target)
+                    ):
                         continue
                     selected.append((memory, anchor_id))
                     seen.add(key)
@@ -93,18 +107,56 @@ class SQLiteTemporalRecallProvider:
             ) for memory, _anchor_id in selected)
         finally:
             connection.close()
+        if date_target is not None:
+            if not items and not target_matches_current:
+                context = (
+                    f"问题指定了{date_target.label}，但当前召回的明确事实变化链没有"
+                    "提供覆盖该区间的证据。不得用现在事实或其他时段事实替代；"
+                    "回答只能说明现有记忆不足以确定。"
+                )
+                return TemporalRecallResult(
+                    context, (), intent, "explicit_temporal_date_v1", date_target,
+                )
+            if not items:
+                context = (
+                    f"问题指定了{date_target.label}；当前已召回事实的可证区间覆盖"
+                    "该目标。回答时仍须按目标日期表述，不要推广到其他时间。"
+                )
+                return TemporalRecallResult(
+                    context, (), intent, "explicit_temporal_date_v1", date_target,
+                )
         if not items:
-            return TemporalRecallResult("", (), intent)
+            return TemporalRecallResult("", (), intent, date_target=date_target)
         lines = "\n".join(
             f"- {item.content}（生效：{item.valid_from or '未记录'}；结束：{item.valid_to or '仍有效'}）"
             for item in items
         )
+        if date_target is None:
+            context = (
+                "以下仅是与当前已召回事实属于同一条明确变化链的历史 L1；"
+                "它们不代表现在仍然成立。回答历史问题时必须区分生效区间，"
+                "不要用旧事实回答普通当前状态：\n" + lines
+            )
+            return TemporalRecallResult(context, items, intent)
         context = (
-            "以下仅是与当前已召回事实属于同一条明确变化链的历史 L1；"
-            "它们不代表现在仍然成立。回答历史问题时必须区分生效区间，"
-            "不要用旧事实回答普通当前状态：\n" + lines
+            f"问题指定了{date_target.label}。以下历史 L1 的可证区间与目标区间"
+            "重叠；目标可能跨越事实变化边界，回答必须逐条核对生效区间，"
+            "不得用现在事实或其他时段事实替代：\n" + lines
         )
-        return TemporalRecallResult(context, items, intent)
+        return TemporalRecallResult(
+            context, items, intent, "explicit_temporal_date_v1", date_target,
+        )
 
     def close(self) -> None:
         """每次调用使用短连接，不持有数据库资源。"""
+
+
+def _overlaps_target(
+    memory: AtomicMemory, target: TemporalDateTarget,
+) -> bool:
+    """用首次记录时刻补未知起点，只把可证的左闭右开区间用于日期回答。"""
+
+    start = memory.valid_from or memory.recorded_at
+    return start < target.end and (
+        memory.valid_to is None or memory.valid_to > target.start
+    )

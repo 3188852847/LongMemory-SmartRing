@@ -111,3 +111,28 @@ def test_runtime_adds_historical_trace_after_current_recall(tmp_path):
     finally:
         runtime.close()
     assert provider.closed is True
+
+
+def test_runtime_keeps_date_no_evidence_guard_without_fake_trace(tmp_path):
+    class DateProvider(_HistoricalProvider):
+        def recall(self, query, *, current_memory_ids, limit=10):
+            self.calls.append((query, current_memory_ids, limit))
+            return TemporalRecallResult(
+                "问题指定了2025年，但现有记忆不足以确定。", (),
+                TemporalQueryIntent.DATE, "explicit_temporal_date_v1",
+            )
+
+    provider = DateProvider()
+    runtime = MemoryRuntime(
+        tmp_path / "unused.db", method=_CurrentMemoryMethod(),
+        temporal_provider=provider,
+    )
+    try:
+        prepared = runtime.prepare_user("2025年我住在哪里？")
+        assert "现有记忆不足以确定" in prepared.support.context
+        assert [item.item_id for item in prepared.support.retrieved] == ["new-place"]
+        assert prepared.support.retrieval_strategy == (
+            "current-only+explicit_temporal_date_v1"
+        )
+    finally:
+        runtime.close()

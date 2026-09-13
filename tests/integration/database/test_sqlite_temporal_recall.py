@@ -59,6 +59,65 @@ def test_expands_only_explicit_history_from_current_anchor(temporal_database):
         assert check.execute("SELECT count(*) FROM atomic_memories").fetchone()[0] == 2
 
 
+def test_date_target_selects_only_history_covering_local_month(temporal_database):
+    provider = SQLiteTemporalRecallProvider(
+        temporal_database, clock=lambda: datetime(2026, 9, 13, tzinfo=UTC),
+    )
+
+    april = provider.recall(
+        "2026年4月我住在哪里？", current_memory_ids=("new-place",),
+    )
+    may = provider.recall(
+        "2026年5月我住在哪里？", current_memory_ids=("new-place",),
+    )
+
+    assert [item.memory_id for item in april.items] == ["old-place"]
+    assert april.strategy == "explicit_temporal_date_v1"
+    assert april.date_target is not None and april.date_target.label == "2026年4月"
+    assert "目标区间" in april.context
+    # 变化发生在 UTC 00:00，即本地 5 月 1 日 08:00；五月同时覆盖
+    # 旧事实的最后八小时和当前事实，不能把整月压成单一答案。
+    assert [item.memory_id for item in may.items] == ["old-place"]
+    assert "目标可能跨越事实变化边界" in may.context
+
+
+def test_date_target_without_covered_evidence_forbids_current_substitution(
+    temporal_database,
+):
+    provider = SQLiteTemporalRecallProvider(
+        temporal_database, clock=lambda: datetime(2026, 9, 13, tzinfo=UTC),
+    )
+    result = provider.recall(
+        "2025年我住在哪里？", current_memory_ids=("new-place",),
+    )
+
+    assert result.items == ()
+    assert result.strategy == "explicit_temporal_date_v1"
+    assert "现有记忆不足以确定" in result.context
+    assert "用户住在合肥" not in result.context
+
+
+def test_local_date_spanning_change_returns_both_time_segments(temporal_database):
+    provider = SQLiteTemporalRecallProvider(
+        temporal_database, clock=lambda: datetime(2026, 9, 13, tzinfo=UTC),
+    )
+    before = provider.recall(
+        "2026年4月30日我住在哪里？", current_memory_ids=("new-place",),
+    )
+    boundary = provider.recall(
+        "2026年5月1日我住在哪里？", current_memory_ids=("new-place",),
+    )
+    after = provider.recall(
+        "2026年5月2日我住在哪里？", current_memory_ids=("new-place",),
+    )
+
+    assert [item.memory_id for item in before.items] == ["old-place"]
+    assert [item.memory_id for item in boundary.items] == ["old-place"]
+    assert "目标可能跨越事实变化边界" in boundary.context
+    assert after.items == ()
+    assert "当前已召回事实的可证区间覆盖" in after.context
+
+
 def test_retired_anchor_cannot_label_current_successor_as_historical(temporal_database):
     result = SQLiteTemporalRecallProvider(temporal_database).recall(
         "我以前住在哪里？", current_memory_ids=("old-place",),
@@ -123,6 +182,8 @@ def test_anchor_valid_from_is_inclusive(temporal_database, at, expected):
     ("", ("new-place",)),
     ("我以前住在南京。今天吃什么？", ("new-place",)),
     ("我以前住在哪里？", ()),
+    ("2026年13月我住哪里？", ("new-place",)),
+    ("我2025年住在南京。今天吃什么？", ("new-place",)),
 ])
 def test_closed_gate_does_not_open_database(tmp_path, query, anchors):
     database = tmp_path / "must-not-exist.db"
