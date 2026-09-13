@@ -44,6 +44,7 @@ class MemoryProvider(MemoryProviderBase):
                 raise ValueError("LongMemory 必须使用 data 下的 xiaozhi-demo 专用文件")
         self._lock = threading.Lock()
         self._pending_completion = None
+        self._suppressed_internal_queries = []
 
     def init_memory(self, role_id, llm, **kwargs):
         # device_id 只是路由限制，不是可信身份认证；此演示不提供多人隔离。
@@ -118,6 +119,14 @@ class MemoryProvider(MemoryProviderBase):
 
     def _request(self, query):
         query = self._validate_query(query)
+        with self._lock:
+            normalized_query = query.strip()
+            if normalized_query in self._suppressed_internal_queries:
+                self._suppressed_internal_queries.remove(normalized_query)
+                logger.bind(tag="LongMemory").info(
+                    "已跳过一条由小智服务生成的内部输入；未归档、未召回"
+                )
+                return ""
         transport = os.environ.get("LONGMEMORY_MEMORY_TRANSPORT", "subprocess")
         if transport == "runtime":
             response = self._runtime_request(query)
@@ -246,6 +255,17 @@ class MemoryProvider(MemoryProviderBase):
         # 固定版本上游把 memory_str 直接作为 re.sub 替换字符串，必须转义
         # 反斜杠，否则 C:\\new 等用户内容会被当作正则替换转义。
         return context.replace("\\", "\\\\")
+
+    def suppress_internal_query_once(self, query: str) -> None:
+        """按适配层可信来源标记跳过一次；不检查具体提示文案。"""
+
+        if not isinstance(query, str) or not query.strip() or len(query) > 16000:
+            raise ValueError("LongMemory 内部输入标记无效")
+        with self._lock:
+            # 单连接正常只有一个超时结束提示；有限队列避免异常上游无限堆积。
+            if len(self._suppressed_internal_queries) >= 4:
+                raise RuntimeError("LongMemory 内部输入标记过多")
+            self._suppressed_internal_queries.append(query.strip())
 
     def record_completed_turn(self, answer: str) -> bool:
         """至多回传一次最终文本；失败不重试，避免重复或错配回答。"""

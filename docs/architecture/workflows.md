@@ -627,6 +627,15 @@ IP 变化时：刷新本机地址 → 选择圆屏可达网卡 → 显式确认�
 
 具体边界见 [ADR-0140](../adr/0140-append-only-l1-extraction-attempt-ledger.md)。
 
-## 42. 维护规则
+## 42. 当前实现：小智内部结束提示来源隔离
+
+1. 真实 ASR 与设备文字继续通过各自已绑定的 `startToChat` 入口进入普通记忆流程。
+2. 静默超时只在上游 `no_voice_close_connect` 任务内设置内部来源标记，再调用结束提示入口。
+3. LongMemory 提供器消费一次标记并返回空记忆上下文，不调用 Runtime，因此不产生 L0/L1、召回或完成回执。
+4. 过滤依据是调用来源而非提示内容；相同文字由用户说出时不会被过滤。
+
+具体边界见 [ADR-0141](../adr/0141-structural-xiaozhi-internal-input-boundary.md)。
+
+## 43. 维护规则
 
 功能上线时将对应“拟议”改为“当前”，写入实际限制和验证范围，并同步架构、需求与使用说明。历史 V0.1 流程见 [memory-pipeline.md](memory-pipeline.md)，不把历史说明当作全部入口的现状。

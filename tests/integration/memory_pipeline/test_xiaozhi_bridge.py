@@ -224,6 +224,59 @@ def test_provider_uses_runtime_transport_without_starting_subprocess(provider_cl
     assert completion_body["answer"] == "这是最终回答"
 
 
+def test_provider_skips_only_once_for_structurally_marked_internal_query(
+        provider_class, config, monkeypatch):
+    provider = provider_class(config)
+    provider.init_memory(config["allowed_device_id"], None)
+    calls = []
+    response = dict(
+        version=1, context="", turn_id="turn-user", added=0, retrieved=0,
+    )
+    monkeypatch.setattr(subprocess, "run", lambda *_args, **_kwargs: (
+        calls.append("called") or SimpleNamespace(
+            returncode=0, stdout=json.dumps(response).encode(),
+        )
+    ))
+
+    provider.suppress_internal_query_once("synthetic end prompt")
+    assert asyncio.run(provider.query_memory("synthetic end prompt")) == ""
+    assert calls == []
+    asyncio.run(provider.query_memory("synthetic end prompt"))
+    assert calls == ["called"]
+
+
+def test_launch_wrapper_marks_only_no_voice_end_prompt_boundary():
+    wrapper = load_script("launch_with_memory")
+    suppressed = []
+    started = []
+
+    class Memory:
+        def suppress_internal_query_once(self, text):
+            suppressed.append(text)
+
+    connection = SimpleNamespace(memory=Memory())
+
+    async def start_to_chat(_connection, text):
+        started.append(text)
+
+    async def no_voice_close_connect(target, _have_voice):
+        await receive.startToChat(target, "server generated end")
+
+    receive = SimpleNamespace(
+        startToChat=start_to_chat,
+        no_voice_close_connect=no_voice_close_connect,
+    )
+    # 模拟其他模块在安装前捕获的真实用户入口；它不经过该内部边界包装。
+    user_entry = receive.startToChat
+    wrapper.install_internal_end_prompt_boundary(receive)
+
+    asyncio.run(user_entry(connection, "real user speech"))
+    asyncio.run(receive.no_voice_close_connect(connection, False))
+
+    assert started == ["real user speech", "server generated end"]
+    assert suppressed == ["server generated end"]
+
+
 def test_launch_wrapper_reports_answer_when_upstream_returns_none():
     wrapper = load_script("launch_with_memory")
     recorded = []

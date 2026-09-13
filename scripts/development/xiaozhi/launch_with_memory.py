@@ -5,6 +5,7 @@
 
 from pathlib import Path
 import argparse
+from contextvars import ContextVar
 import runpy
 import sys
 import time
@@ -105,6 +106,41 @@ def install_answer_completion(connection_class):
     connection_class._longmemory_completion_installed = True
 
 
+def install_internal_end_prompt_boundary(receive_audio_module):
+    """标记上游静默超时生成的结束提示，不按用户输入写入记忆。
+
+    ContextVar 让并发设备任务彼此隔离；这里只绑定上游
+    no_voice_close_connect -> startToChat 的结构化调用来源，不匹配中文内容。
+    """
+
+    if getattr(receive_audio_module, "_longmemory_end_boundary_installed", False):
+        return
+    original_no_voice = receive_audio_module.no_voice_close_connect
+    original_start = receive_audio_module.startToChat
+    internal_end = ContextVar("longmemory_internal_end_prompt", default=False)
+
+    async def no_voice_close_connect(connection, have_voice):
+        token = internal_end.set(True)
+        try:
+            return await original_no_voice(connection, have_voice)
+        finally:
+            internal_end.reset(token)
+
+    async def start_to_chat(connection, text):
+        if internal_end.get():
+            suppress = getattr(
+                getattr(connection, "memory", None),
+                "suppress_internal_query_once", None,
+            )
+            if callable(suppress):
+                suppress(text)
+        return await original_start(connection, text)
+
+    receive_audio_module.no_voice_close_connect = no_voice_close_connect
+    receive_audio_module.startToChat = start_to_chat
+    receive_audio_module._longmemory_end_boundary_installed = True
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--device-control", action="store_true")
@@ -115,6 +151,7 @@ def main():
         verify_control_snapshot(root)
     sys.path.insert(0, str(root))
     from core.connection import ConnectionHandler
+    import core.handle.receiveAudioHandle as receive_audio_handle
     from core.providers.memory.longmemory.longmemory import MemoryProvider
     from direct_ws_v2 import install_direct_ws_v2
     from voice_latency import install_audio_send_observer, install_voice_latency
@@ -123,6 +160,7 @@ def main():
     install_voice_latency(ConnectionHandler)
     install_audio_send_observer()
     install_answer_completion(ConnectionHandler)
+    install_internal_end_prompt_boundary(receive_audio_handle)
     if args.device_control:
         from core.websocket_server import WebSocketServer
         from control_http import install_control_server
