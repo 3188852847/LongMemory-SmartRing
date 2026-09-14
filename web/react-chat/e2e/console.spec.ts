@@ -81,6 +81,13 @@ test('文字聊天可保存并在刷新后恢复，React 页面可统一导航',
   await expect(page.getByText('变化已保存：旧事实保留历史有效期，新事实从指定时间开始生效。')).toBeVisible();
   await expect(page.locator('.detail-content')).toHaveText('用户现在养了一只叫年糕的猫。');
   await expect(page.locator('.ant-modal-wrap:visible')).toHaveCount(0);
+  await memoryDetail.getByRole('button', {name:'事实时间线'}).click();
+  const temporalHistory = page.getByRole('dialog', {name:'事实变化时间线'});
+  await expect(temporalHistory).toContainText('用户养了一只叫豆包的猫。');
+  await expect(temporalHistory).toContainText('用户现在养了一只叫年糕的猫。');
+  await expect(temporalHistory).toContainText('第 1/2 段');
+  await expect(temporalHistory).toContainText('第 2/2 段');
+  await temporalHistory.locator('.ant-modal-close').click();
 
   await memoryDetail.getByRole('button', {name:'纠正错误'}).click();
   await page.getByRole('textbox', {name:'纠正后的完整事实'}).fill('用户现在养了一只叫布丁的猫。');
@@ -88,6 +95,18 @@ test('文字聊天可保存并在刷新后恢复，React 页面可统一导航',
   await expect(page.getByText('纠正已保存：新 L1 生效，旧 L1 保留为已取代历史。')).toBeVisible();
   await expect(page.locator('.detail-content')).toHaveText('用户现在养了一只叫布丁的猫。');
   await expect(page.locator('.ant-modal-wrap:visible')).toHaveCount(0);
+  const dailyReview = page.locator('.ant-card').filter({hasText:'每日记忆回顾'}).first();
+  await expect(dailyReview).toContainText('纠正 1');
+  await expect(dailyReview).toContainText('事实变化 1');
+  await expect(dailyReview.locator('.ant-list-item').filter({
+    hasText:'用户现在养了一只叫年糕的猫。',
+  })).toContainText('已退役');
+  await expect(dailyReview.locator('.ant-list-item').filter({
+    hasText:'用户现在养了一只叫布丁的猫。',
+  })).toContainText('当前');
+  const deletedMemoryId = await memoryDetail.locator('.ant-descriptions-item').filter({
+    hasText:'记忆 ID',
+  }).locator('.ant-descriptions-item-content').innerText();
 
   await memoryDetail.getByRole('button', {name:/删\s*除/}).click();
   const deleteDialog = page.getByRole('dialog', {name:'删除这条 L1 记忆？'});
@@ -97,6 +116,14 @@ test('文字聊天可保存并在刷新后恢复，React 页面可统一导航',
   await expect(page.getByText('L1 已删除；L0 原始对话仍保留。')).toBeVisible();
   await expect(page.locator('.ant-drawer-mask:visible')).toHaveCount(0);
   await expect(page.getByRole('tab', {name:'L1 原子记忆 · 0'})).toBeVisible();
+  await expect(dailyReview).toContainText('事实变化 1');
+  await expect(dailyReview).toContainText('删除 1');
+  await dailyReview.getByText('查看删除审计（1）').click();
+  await expect(dailyReview.getByText(/已删除 L1：/).locator('code')).toHaveText(deletedMemoryId);
+  await page.getByRole('tab', {name:/^L0 原始记录/}).click();
+  await expect(page.locator('.memory-browser .memory-item').filter({
+    hasText:'我养了一只叫豆包的猫',
+  })).toHaveCount(1);
   await page.getByRole('link', {name:'用户画像'}).click();
   await expect(page).toHaveURL(/\/personas$/);
   await expect(page.getByRole('heading', {name:'用户画像（L3）'})).toBeVisible();
