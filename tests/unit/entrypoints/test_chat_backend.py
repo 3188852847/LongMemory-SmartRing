@@ -48,6 +48,68 @@ def test_web_and_other_method_share_memory_without_sharing_session_history(datab
         assert connection.execute("SELECT count(*) FROM conversation_messages").fetchone()[0] == 4
 
 
+def test_explicit_date_answers_cannot_substitute_current_fact(database):
+    with sqlite3.connect(database) as connection:
+        connection.executemany(
+            "INSERT INTO conversation_messages VALUES (?, 'user', ?, ?)",
+            [
+                ("source-old-cat", "我以前养的猫叫豆包。", "2026-01-01T00:00:00+00:00"),
+                ("source-new-cat", "我的猫现在叫年糕。", "2026-09-13T00:00:00+00:00"),
+            ],
+        )
+        connection.executemany(
+            "INSERT INTO atomic_memories "
+            "(id,subject_id,content,recorded_at,valid_from,valid_to,retired_at,superseded_by_id) "
+            "VALUES (?, 'user:self', ?, ?, ?, ?, ?, ?)",
+            [
+                (
+                    "old-cat", "用户养了一只叫豆包的猫。",
+                    "2026-01-01T00:00:00+00:00", None,
+                    "2026-05-01T00:00:00+00:00",
+                    "2026-09-13T00:00:00+00:00", "new-cat",
+                ),
+                (
+                    "new-cat", "用户养了一只叫年糕的猫。",
+                    "2026-09-13T00:00:00+00:00",
+                    "2026-05-01T00:00:00+00:00", None, None, None,
+                ),
+            ],
+        )
+        connection.executemany(
+            "INSERT INTO memory_evidence VALUES (?, ?, 'user_stated', ?)",
+            [
+                ("old-cat", "source-old-cat", "2026-01-01T00:00:00+00:00"),
+                ("new-cat", "source-new-cat", "2026-09-13T00:00:00+00:00"),
+            ],
+        )
+
+    backend = ChatBackend(
+        database, FakeAnswerGenerator(), runtime=build_memory_runtime(database),
+    )
+    try:
+        unknown = backend.run("2025年我的猫叫什么？", ())
+        assert unknown["answer"] == "我还没有找到相关记忆。"
+        assert unknown["retrieved"] == []
+        assert "年糕" not in unknown["memory_context"]
+
+        historical = backend.run("2026年4月我的猫叫什么？", ())
+        assert historical["answer"] == "你的猫叫豆包。"
+        assert [item["item_id"] for item in historical["retrieved"]] == ["old-cat"]
+        assert historical["retrieved"][0]["temporal_role"] == "historical"
+        assert "年糕" not in historical["memory_context"]
+
+        current_date = backend.run("2026年6月我的猫叫什么？", ())
+        assert current_date["answer"] == "你的猫叫年糕。"
+        assert [item["item_id"] for item in current_date["retrieved"]] == ["new-cat"]
+        assert "豆包" not in current_date["memory_context"]
+
+        current = backend.run("我的猫现在叫什么？", ())
+        assert current["answer"] == "你的猫叫年糕。"
+        assert [item["item_id"] for item in current["retrieved"]] == ["new-cat"]
+    finally:
+        backend.close()
+
+
 def test_model_failure_preserves_actual_write_trace_but_not_assistant_fact(database):
     class Broken:
         def generate(self, **kwargs):

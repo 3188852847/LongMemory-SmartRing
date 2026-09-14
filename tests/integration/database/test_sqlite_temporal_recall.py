@@ -74,10 +74,12 @@ def test_date_target_selects_only_history_covering_local_month(temporal_database
     assert [item.memory_id for item in april.items] == ["old-place"]
     assert april.strategy == "explicit_temporal_date_v1"
     assert april.date_target is not None and april.date_target.label == "2026年4月"
+    assert april.current_target_ids == ()
     assert "目标区间" in april.context
     # 变化发生在 UTC 00:00，即本地 5 月 1 日 08:00；五月同时覆盖
     # 旧事实的最后八小时和当前事实，不能把整月压成单一答案。
     assert [item.memory_id for item in may.items] == ["old-place"]
+    assert may.current_target_ids == ("new-place",)
     assert "目标可能跨越事实变化边界" in may.context
 
 
@@ -92,6 +94,7 @@ def test_date_target_without_covered_evidence_forbids_current_substitution(
     )
 
     assert result.items == ()
+    assert result.current_target_ids == ()
     assert result.strategy == "explicit_temporal_date_v1"
     assert "现有记忆不足以确定" in result.context
     assert "用户住在合肥" not in result.context
@@ -113,8 +116,10 @@ def test_local_date_spanning_change_returns_both_time_segments(temporal_database
 
     assert [item.memory_id for item in before.items] == ["old-place"]
     assert [item.memory_id for item in boundary.items] == ["old-place"]
+    assert boundary.current_target_ids == ("new-place",)
     assert "目标可能跨越事实变化边界" in boundary.context
     assert after.items == ()
+    assert after.current_target_ids == ("new-place",)
     assert "当前已召回事实的可证区间覆盖" in after.context
 
 
@@ -189,4 +194,16 @@ def test_closed_gate_does_not_open_database(tmp_path, query, anchors):
     database = tmp_path / "must-not-exist.db"
     result = SQLiteTemporalRecallProvider(database).recall(query, current_memory_ids=anchors)
     assert result.context == "" and result.items == ()
+    assert not database.exists()
+
+
+def test_date_without_current_anchor_returns_guard_without_opening_database(tmp_path):
+    database = tmp_path / "must-not-exist.db"
+    result = SQLiteTemporalRecallProvider(database).recall(
+        "2025年我住在哪里？", current_memory_ids=(),
+    )
+
+    assert "不得用现在事实" in result.context
+    assert result.items == ()
+    assert result.current_target_ids == ()
     assert not database.exists()

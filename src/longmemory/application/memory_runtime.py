@@ -47,6 +47,17 @@ class MemoryPreparationTimings:
     total_ms: float
 
 
+def _dated_current_context(items: tuple[RetrievedTrace, ...]) -> str:
+    """只把可证明覆盖目标日期的当前 L1 重新组装为模型上下文。"""
+
+    if not items:
+        return ""
+    return (
+        "以下当前长期记忆的可证区间覆盖问题指定的日期：\n"
+        + "\n".join(f"- {item.content}" for item in items)
+    )
+
+
 @dataclass(frozen=True, slots=True)
 class PreparedMemoryTurn:
     """一次用户输入的实际写入与召回结果，供不同入口统一消费。"""
@@ -223,24 +234,31 @@ class MemoryRuntime:
             l1_shadow_candidates = tuple(support.retrieved or ())
             l1_shadow_strategy = support.retrieval_strategy or "unspecified"
             temporal_result = TemporalRecallResult("", (), None)
-            if (
-                self._use_enabled
-                and self._temporal_provider is not None
-                and l1_shadow_candidates
-            ):
+            date_restricted = False
+            if self._use_enabled and self._temporal_provider is not None:
                 temporal_result = self._temporal_provider.recall(
                     text,
                     current_memory_ids=tuple(
                         item.item_id for item in l1_shadow_candidates
                     ),
                 )
-                if temporal_result.context:
+                date_restricted = temporal_result.date_target is not None
+                current_retrieved = tuple(support.retrieved or ())
+                current_context = support.context
+                if date_restricted:
+                    eligible_ids = set(temporal_result.current_target_ids or ())
+                    current_retrieved = tuple(
+                        item for item in current_retrieved
+                        if item.item_id in eligible_ids
+                    )
+                    current_context = _dated_current_context(current_retrieved)
+                if temporal_result.context or date_restricted:
                     combined = "\n\n".join(
                         value for value in (
-                            support.context, temporal_result.context,
+                            current_context, temporal_result.context,
                         ) if value
                     )
-                    retrieved = tuple(support.retrieved or ()) + tuple(
+                    retrieved = current_retrieved + tuple(
                         RetrievedTrace(
                             item.memory_id,
                             item.content,
@@ -263,7 +281,12 @@ class MemoryRuntime:
             recall_finished = perf_counter()
             scenario_started = perf_counter()
             scenario_result = ScenarioRecallResult("", ())
-            if self._use_enabled and self._scenario_use_enabled and self._scenario_provider:
+            if (
+                self._use_enabled
+                and self._scenario_use_enabled
+                and self._scenario_provider
+                and not date_restricted
+            ):
                 scenario_result = self._scenario_provider.recall(text)
                 if scenario_result.context:
                     combined = "\n\n".join(value for value in (support.context, scenario_result.context) if value)
@@ -289,7 +312,12 @@ class MemoryRuntime:
             scenario_finished = perf_counter()
             persona_started = perf_counter()
             persona_result = PersonaRecallResult("", ())
-            if self._use_enabled and self._persona_use_enabled and self._persona_provider:
+            if (
+                self._use_enabled
+                and self._persona_use_enabled
+                and self._persona_provider
+                and not date_restricted
+            ):
                 persona_result = self._persona_provider.recall(text)
                 if persona_result.context:
                     combined = "\n\n".join(

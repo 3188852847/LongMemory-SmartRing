@@ -24,8 +24,9 @@ test('文字聊天可保存并在刷新后恢复，React 页面可统一导航',
   await expect(page.getByRole('region', {name:'本轮记忆证据'})).toContainText('用户养了一只叫豆包的猫。');
   await page.getByRole('link', {name:'核对 L0 原话'}).click();
   await expect(page).toHaveURL(/\/memories\?memory_id=/);
-  await expect(page.getByRole('heading', {name:'L1 原子记忆'})).toBeVisible();
-  await expect(page.getByRole('heading', {name:'L0 原始来源'})).toBeVisible();
+  const memoryDetail = page.getByRole('dialog', {name:'L1 原子记忆'});
+  await expect(memoryDetail).toBeVisible();
+  await expect(memoryDetail.getByRole('heading', {name:'L0 原始来源'})).toBeVisible();
   await expect(page.getByText('我养了一只叫豆包的猫', {exact:true})).toBeVisible();
   await page.locator('.ant-drawer-close:visible').click();
   await expect(page).toHaveURL(/\/memories$/);
@@ -68,7 +69,11 @@ test('文字聊天可保存并在刷新后恢复，React 页面可统一导航',
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'future');
   await page.getByRole('link', {name:'原始与原子记忆'}).click();
   await expect(page.getByRole('heading', {name:'原始与原子记忆'})).toBeVisible();
-  await page.getByText('用户养了一只叫豆包的猫。', {exact:true}).click();
+  const l1Row = page.locator('.memory-browser .memory-item').filter({
+    hasText:'用户养了一只叫豆包的猫。',
+  });
+  await expect(l1Row).toHaveCount(1);
+  await l1Row.click();
   await page.getByRole('button', {name:'记录变化'}).click();
   await page.getByRole('textbox', {name:'变化后的完整事实'}).fill('用户现在养了一只叫年糕的猫。');
   await page.getByLabel('变化生效时间').fill('2026-09-03T12:00');

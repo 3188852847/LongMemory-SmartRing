@@ -42,7 +42,14 @@ class SQLiteTemporalRecallProvider:
         date_target = (
             query_analysis.date_target if query_analysis is not None else None
         )
-        if intent is None or not current_memory_ids:
+        if intent is None:
+            return TemporalRecallResult("", (), intent, date_target=date_target)
+        if not current_memory_ids:
+            if date_target is not None:
+                return TemporalRecallResult(
+                    _missing_date_context(date_target), (), intent,
+                    "explicit_temporal_date_v1", date_target, (),
+                )
             return TemporalRecallResult("", (), intent, date_target=date_target)
         if len(current_memory_ids) > 10 or len(set(current_memory_ids)) != len(current_memory_ids):
             raise ValueError("temporal_recall_anchor_ids_invalid")
@@ -61,7 +68,7 @@ class SQLiteTemporalRecallProvider:
             by_id = {str(item.id): item for item in memories}
             selected = []
             seen = set(current_memory_ids)
-            target_matches_current = False
+            current_target_ids = []
             for anchor_id in current_memory_ids:
                 anchor = by_id.get(anchor_id)
                 # 调用方给的是先前召回的 ID，不能当作永久有效的授权。
@@ -81,7 +88,7 @@ class SQLiteTemporalRecallProvider:
                     # 一条损坏链不能放开为历史上下文；其他锚点仍可独立检查。
                     continue
                 if date_target is not None and _overlaps_target(anchor, date_target):
-                    target_matches_current = True
+                    current_target_ids.append(anchor_id)
                 if not history.has_explicit_change:
                     continue
                 for memory in history.entries:
@@ -108,14 +115,11 @@ class SQLiteTemporalRecallProvider:
         finally:
             connection.close()
         if date_target is not None:
-            if not items and not target_matches_current:
-                context = (
-                    f"问题指定了{date_target.label}，但当前召回的明确事实变化链没有"
-                    "提供覆盖该区间的证据。不得用现在事实或其他时段事实替代；"
-                    "回答只能说明现有记忆不足以确定。"
-                )
+            eligible_current = tuple(current_target_ids)
+            if not items and not eligible_current:
                 return TemporalRecallResult(
-                    context, (), intent, "explicit_temporal_date_v1", date_target,
+                    _missing_date_context(date_target), (), intent,
+                    "explicit_temporal_date_v1", date_target, eligible_current,
                 )
             if not items:
                 context = (
@@ -124,6 +128,7 @@ class SQLiteTemporalRecallProvider:
                 )
                 return TemporalRecallResult(
                     context, (), intent, "explicit_temporal_date_v1", date_target,
+                    eligible_current,
                 )
         if not items:
             return TemporalRecallResult("", (), intent, date_target=date_target)
@@ -145,6 +150,7 @@ class SQLiteTemporalRecallProvider:
         )
         return TemporalRecallResult(
             context, items, intent, "explicit_temporal_date_v1", date_target,
+            tuple(current_target_ids),
         )
 
     def close(self) -> None:
@@ -159,4 +165,12 @@ def _overlaps_target(
     start = memory.valid_from or memory.recorded_at
     return start < target.end and (
         memory.valid_to is None or memory.valid_to > target.start
+    )
+
+
+def _missing_date_context(target: TemporalDateTarget) -> str:
+    return (
+        f"问题指定了{target.label}，但当前召回的明确事实变化链没有"
+        "提供覆盖该区间的证据。不得用现在事实或其他时段事实替代；"
+        "回答只能说明现有记忆不足以确定。"
     )

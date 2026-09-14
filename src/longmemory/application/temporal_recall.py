@@ -192,6 +192,9 @@ class TemporalRecallResult:
     intent: TemporalQueryIntent | None
     strategy: str = "explicit_temporal_history_v2"
     date_target: TemporalDateTarget | None = None
+    # 只有这些当前 L1 的可证区间与明确日期相交。None 表示并非日期问题；
+    # 日期问题使用空元组表示当前候选都不能作为目标时段证据。
+    current_target_ids: tuple[str, ...] | None = None
 
 
 class TemporalRecallProvider(Protocol):

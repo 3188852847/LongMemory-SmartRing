@@ -16,7 +16,7 @@
 
 ## 当前状态
 
-时间感知历史问答已支持沿当前 L1 的明确事实变化链补充旧事实，并保留有效区间、L0 来源与圆屏历史回执。历史召回 V2 要求同一分句具有明确问句与历史表达，读取时复核锚点仍有效，并让历史内容与来源来自同一只读快照；明确日期版还能将唯一的年、月或日转换为 UTC+8 目标区间，只补充相交的可证历史，日期无效、含糊、多义或没有覆盖证据时不拿当前事实替代。通用时间推理仍未实现。见 [ADR-0153](docs/adr/0153-temporal-recall-question-and-snapshot-boundaries.md)与 [ADR-0155](docs/adr/0155-explicit-date-bounded-temporal-recall.md)。
+时间感知历史问答已支持沿当前 L1 的明确事实变化链补充旧事实，并保留有效区间、L0 来源与圆屏历史回执。历史召回 V2 要求同一分句具有明确问句与历史表达，读取时复核锚点仍有效，并让历史内容与来源来自同一只读快照；明确日期版还能将唯一的年、月或日转换为 UTC+8 目标区间，只向回答保留与目标相交的当前/历史 L1，证据空档会移除现状并明确拒答。日期无效、含糊和多义时保持关闭，通用时间推理仍未实现。见 [ADR-0153](docs/adr/0153-temporal-recall-question-and-snapshot-boundaries.md)与 [ADR-0155](docs/adr/0155-explicit-date-bounded-temporal-recall.md)。
 
 声音链已支持 EdgeTTS、VoxCPM2、sanoTTS 和 CosyVoice3 四个可替换后端。VoxCPM2 提供本地参考声线与风格参数；sanoTTS 保留为 Node/WASM 快速基线；CosyVoice3 使用项目外独立 Python 环境和 Fun-CosyVoice3-0.5B，并通过本机专用长度前缀 WAV 通道向圆屏逐块交付。用户已确认声音质量、连续性、当前速度和播放期间自然插话达到日用门槛；取消仍是模型在下一块产出时观察断开的协作式取消。EdgeTTS 保留稳定回退。见 [声音设置](docs/guides/声音设置.md)、[ADR-0025](docs/adr/0025-local-voxcpm2-tts-adapter.md)、[ADR-0118](docs/adr/0118-external-sanotts-node-wasm-adapter.md)、[ADR-0123](docs/adr/0123-isolated-cosyvoice3-buffered-adapter.md)与 [ADR-0126](docs/adr/0126-cosyvoice3-loopback-streaming-bridge.md)。
 
