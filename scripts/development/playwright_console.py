@@ -56,6 +56,7 @@ def main():
                 chat_backend=backend,
                 experiment_backend=ExperimentBackend(root / "experiments"),
                 allow_memory_correction=True,
+                allow_memory_delete=True,
             )
             web.run_app(app, host="127.0.0.1", port=args.port, access_log=None, print=None)
         finally:
