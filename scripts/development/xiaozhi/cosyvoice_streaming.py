@@ -6,12 +6,16 @@ WAV 块组成。任何协议错误都在尚未播放时回退现有完整 WAV；
 """
 
 import struct
+from pathlib import Path
 
 import requests
+
+from fast_voice_responses import fast_asset_for_text
 
 
 STREAM_URL = "http://127.0.0.1:18770/v1/audio/stream"
 MAX_CHUNK_BYTES = 16 * 1024 * 1024
+PRESET_ROOT = Path(__file__).resolve().parents[3] / "assets/audio/voice-fastpath/cosyvoice3"
 
 
 def _read_exact(raw, size):
@@ -57,11 +61,29 @@ def install_cosyvoice_streaming(tts, connection):
         pattern = getattr(tts, "_correct_words_pattern", None)
         if pattern:
             cleaned = pattern.sub(lambda match: tts.correct_words[match.group(0)], cleaned)
+        preset_name = fast_asset_for_text(cleaned)
+        preset = PRESET_ROOT / preset_name if preset_name else None
+        if preset is not None and preset.is_file():
+            tts.tts_audio_queue.put((
+                SentenceType.FIRST,
+                None,
+                original_text,
+                getattr(tts, "current_sentence_id", None),
+            ))
+            audio_bytes_to_data_stream(
+                preset.read_bytes(),
+                file_type="wav",
+                is_opus=True,
+                callback=opus_handler,
+                sample_rate=connection.sample_rate,
+                opus_encoder=tts.opus_encoder,
+            )
+            return None
         delivered = False
         try:
             with requests.post(
                 STREAM_URL,
-                json={"input": cleaned, "response_format": "wav", "stream": True, "cache": False},
+                json={"input": cleaned, "response_format": "wav", "stream": True, "cache": True},
                 timeout=(3, tts.tts_timeout),
                 stream=True,
             ) as response:

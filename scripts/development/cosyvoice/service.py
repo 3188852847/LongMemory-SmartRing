@@ -88,6 +88,7 @@ class CosyVoiceSynthesizer:
         self._lock = threading.Lock()
         self._cache_entries = cache_entries
         self._cache: OrderedDict[str, bytes] = OrderedDict()
+        self._stream_cache: OrderedDict[str, tuple[bytes, ...]] = OrderedDict()
         load_started = perf_counter()
         self._model = CosyVoice3(str(model_dir), fp16=True)
         self.load_seconds = perf_counter() - load_started
@@ -169,10 +170,17 @@ class CosyVoiceSynthesizer:
         )
         return output.getvalue()
 
-    def stream_chunks(self, text: str):
-        """串行占用模型，但不再等待整段语音生成完才交付第一个音频块。"""
+    def stream_chunks(self, text: str, *, use_cache: bool = True):
+        """逐块交付音频；完全相同的近期回复可复用本次进程内结果。"""
         with self._lock:
+            if use_cache:
+                cached = self._stream_cache.pop(text, None)
+                if cached is not None:
+                    self._stream_cache[text] = cached
+                    yield from cached
+                    return
             self._prepare_stream()
+            generated = []
             for item in self._model.inference_zero_shot(
                 text,
                 PROMPT_TEXT,
@@ -183,7 +191,13 @@ class CosyVoiceSynthesizer:
                 speech = item.get("tts_speech")
                 if speech is None:
                     raise RuntimeError("empty audio chunk")
-                yield self._wave_bytes(speech)
+                chunk = self._wave_bytes(speech)
+                generated.append(chunk)
+                yield chunk
+            if use_cache and generated:
+                self._stream_cache[text] = tuple(generated)
+                while len(self._stream_cache) > self._cache_entries:
+                    self._stream_cache.popitem(last=False)
 
     def synthesize(self, text: str, *, use_cache: bool = True) -> bytes:
         with self._lock:
@@ -300,7 +314,9 @@ class CosyVoiceHandler(BaseHTTPRequestHandler):
                 # HTTP/1.0 会以连接关闭标记响应结束。每个 WAV 前的无符号大端长度
                 # 让客户端不依赖 TCP 分包边界，最大块仍由客户端再次限制。
                 self.end_headers()
-                for chunk in self.server.synthesizer.stream_chunks(text.strip()):
+                for chunk in self.server.synthesizer.stream_chunks(
+                    text.strip(), use_cache=body.get("cache", True)
+                ):
                     self.wfile.write(struct.pack("!I", len(chunk)))
                     self.wfile.write(chunk)
                     self.wfile.flush()

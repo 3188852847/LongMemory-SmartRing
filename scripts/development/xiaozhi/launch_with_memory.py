@@ -179,9 +179,12 @@ def main():
     import core.handle.receiveAudioHandle as receive_audio_handle
     from core.providers.memory.longmemory.longmemory import MemoryProvider
     from direct_ws_v2 import install_direct_ws_v2
+    from fast_voice_responses import install_fast_voice_responses
     from voice_latency import install_audio_send_observer, install_voice_latency
     isolate_memory_initialization(ConnectionHandler, MemoryProvider)
     install_direct_ws_v2(ConnectionHandler)
+    # 快速通道必须位于时序包装器内部，才能像普通回答一样记录真实首包。
+    install_fast_voice_responses(ConnectionHandler)
     install_voice_latency(ConnectionHandler)
     install_audio_send_observer()
     install_answer_completion(ConnectionHandler)

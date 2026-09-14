@@ -34,8 +34,8 @@ class FakeSynthesizer:
         self.calls.append((text, use_cache))
         return b"RIFF-cosyvoice-wave"
 
-    def stream_chunks(self, text):
-        self.calls.append((text, "stream"))
+    def stream_chunks(self, text, *, use_cache=True):
+        self.calls.append((text, "stream", use_cache))
         yield b"RIFF-stream-one"
         yield b"RIFF-stream-two"
 
@@ -95,7 +95,7 @@ def test_health_capabilities_and_synthesis_contract(local_service):
     second_offset = 4 + first_size
     second_size = struct.unpack("!I", body[second_offset:second_offset + 4])[0]
     assert body[second_offset + 4:second_offset + 4 + second_size] == b"RIFF-stream-two"
-    assert synth.calls[-1] == ("分块测试", "stream")
+    assert synth.calls[-1] == ("分块测试", "stream", False)
 
 
 @pytest.mark.parametrize("body", [
@@ -145,6 +145,8 @@ def test_stream_uses_cached_reference_and_resets_hop_before_inference():
     synth = object.__new__(service.CosyVoiceSynthesizer)
     synth._model = Model()
     synth._lock = threading.Lock()
+    synth._stream_cache = service.OrderedDict()
+    synth._cache_entries = 4
     synth._prompt_wav = Path("fixed-reference.wav")
     synth.stream_token_hop_len = 25
     synth._wave_bytes = lambda _speech: b"RIFF-chunk"
@@ -157,3 +159,7 @@ def test_stream_uses_cached_reference_and_resets_hop_before_inference():
         "stream": True,
     }
     assert hop_at_call == 25
+
+    # 第二次完全相同的回答复用进程内 WAV 块，不再调用模型。
+    assert list(synth.stream_chunks("短句")) == [b"RIFF-chunk"]
+    assert len(calls) == 1
