@@ -780,6 +780,31 @@ def test_panel_constructs_without_starting_services(monkeypatch):
     app.main()
 
 
+@pytest.mark.skipif(os.name != "nt", reason="Windows Tk panel")
+def test_boolean_option_uses_explicit_live_state_instead_of_checkbox_glyph(monkeypatch):
+    monkeypatch.syspath_prepend(str(DIRECTORY))
+    import tkinter as tk
+    from tkinter import ttk
+    spec = importlib.util.spec_from_file_location("launcher_app_toggle_test", DIRECTORY / "app.py")
+    app = importlib.util.module_from_spec(spec)
+    monkeypatch.setitem(sys.modules, "runtime", runtime)
+    spec.loader.exec_module(app)
+
+    window = tk.Tk()
+    window.withdraw()
+    try:
+        value = tk.BooleanVar(window, value=False)
+        _row, button = app._boolean_option(
+            ttk.Frame(window), value, title="合成开关", description="只验证呈现。",
+        )
+        assert button.cget("text") == "已关闭"
+        button.invoke()
+        assert value.get() is True
+        assert button.cget("text") == "已开启"
+    finally:
+        window.destroy()
+
+
 def test_daily_summary_uses_human_labels_instead_of_internal_enums(monkeypatch):
     monkeypatch.syspath_prepend(str(DIRECTORY))
     spec = importlib.util.spec_from_file_location("launcher_app_summary_test", DIRECTORY / "app.py")

@@ -85,6 +85,49 @@ def _scrollable_tab(parent):
     return shell, content, canvas
 
 
+def _boolean_option(
+    parent,
+    variable,
+    *,
+    title,
+    description,
+    enabled_text="已开启",
+    disabled_text="已关闭",
+):
+    """用明确状态按钮代替主题相关的复选框字形。
+
+    Windows 的 clam 主题会用 ``×`` 绘制已选中的 Checkbutton，容易被理解成
+    禁用或错误。这里继续复用 BooleanVar，只把呈现改成标题、影响说明和实时状态。
+    """
+
+    row = ttk.Frame(parent, padding=(12, 9), style="Option.TFrame")
+    copy = ttk.Frame(row, style="Option.TFrame")
+    copy.pack(side="left", fill="x", expand=True)
+    ttk.Label(copy, text=title, style="OptionTitle.TLabel").pack(anchor="w")
+    ttk.Label(
+        copy,
+        text=description,
+        wraplength=500,
+        justify="left",
+        style="OptionHint.TLabel",
+    ).pack(anchor="w", pady=(2, 0))
+    button = ttk.Button(row, width=10)
+    button.pack(side="right", padx=(14, 0))
+
+    def render(*_):
+        enabled = bool(variable.get())
+        button.configure(
+            text=enabled_text if enabled else disabled_text,
+            style="ToggleOn.TButton" if enabled else "ToggleOff.TButton",
+        )
+
+    button.configure(command=lambda: variable.set(not variable.get()))
+    variable.trace_add("write", render)
+    render()
+    row.pack(fill="x", pady=(0, 6))
+    return row, button
+
+
 def main():
     window = tk.Tk()
     window.title("LongMemory · 日常启动")
@@ -146,6 +189,24 @@ def main():
                     indicatorcolor=SURFACE_MUTED, focuscolor=ACCENT)
     style.map("TRadiobutton", indicatorcolor=[("selected", ACCENT)])
     style.map("TCheckbutton", indicatorcolor=[("selected", ACCENT)])
+    style.configure("Option.TFrame", background=SURFACE_MUTED, borderwidth=1,
+                    relief="solid")
+    style.configure("OptionTitle.TLabel", background=SURFACE_MUTED,
+                    foreground=TEXT_STRONG, font=("Microsoft YaHei UI", 9, "bold"))
+    style.configure("OptionHint.TLabel", background=SURFACE_MUTED,
+                    foreground=TEXT_MUTED, font=("Microsoft YaHei UI", 8))
+    style.configure("Selection.TLabel", foreground=ACCENT,
+                    font=("Microsoft YaHei UI", 9, "bold"))
+    style.configure("ToggleOn.TButton", background="#0d5a47", foreground=TEXT_STRONG,
+                    bordercolor=SUCCESS, font=("Microsoft YaHei UI", 9, "bold"),
+                    padding=(10, 7))
+    style.map("ToggleOn.TButton", background=[("active", "#11725a")],
+              foreground=[("disabled", TEXT_MUTED)])
+    style.configure("ToggleOff.TButton", background=CARD_BACKGROUND,
+                    foreground=TEXT_MUTED, bordercolor=BORDER,
+                    font=("Microsoft YaHei UI", 9), padding=(10, 7))
+    style.map("ToggleOff.TButton", background=[("active", "#10304a")],
+              foreground=[("disabled", TEXT_MUTED)])
     style.configure("TScrollbar", background=SURFACE_MUTED, troughcolor=APP_BACKGROUND,
                     bordercolor=BORDER, arrowcolor=TEXT_MUTED)
     style.configure("Section.TLabelframe", padding=16, background=CARD_BACKGROUND,
@@ -213,7 +274,10 @@ def main():
     database = tk.StringVar(value=saved["database"] or str(ROOT / "data/databases/xiaozhi-demo-v1.db"))
     server = tk.StringVar(value=saved["voice_root"] or str(VOICE_ROOT))
     ip = tk.StringVar(value=saved["lan_ip"])
-    role = tk.StringVar(value=saved["role"])
+    role_labels = {"爱莉希雅风格": "elysia_v1", "普通助手": "plain_v1"}
+    role = tk.StringVar(value=next(
+        label for label, value in role_labels.items() if value == saved["role"]
+    ))
     extraction_labels = {"rules": "规则提取（基础/对照）", "llm": "模型辅助提取（日常推荐）"}
     retrieval_labels = {"keyword": "关键词召回（基础/对照）", "hybrid": "关键词＋BGE 混合召回（日常推荐）"}
     tts_labels = {
@@ -270,6 +334,9 @@ def main():
     def selected_model_profile():
         return model_profile_labels[model_profile.get()]
 
+    def selected_role():
+        return role_labels[role.get()]
+
     def selected_voice_model_profile():
         return model_profile_labels[voice_model_profile.get()]
 
@@ -313,7 +380,7 @@ def main():
             "database": database.get().strip(),
             "voice_root": server.get().strip(),
             "lan_ip": ip.get().strip(),
-            "role": role.get(),
+            "role": selected_role(),
             "memory_extraction": selected_extraction(),
             "memory_retrieval": selected_retrieval(),
             "memory_consolidation": memory_consolidation.get(),
@@ -328,6 +395,10 @@ def main():
 
     mode_box = ttk.LabelFrame(daily, text="今天怎么使用", style="Section.TLabelframe")
     mode_box.pack(fill="x", pady=(0, 12))
+    mode_selection = tk.StringVar()
+    ttk.Label(mode_box, textvariable=mode_selection, style="Selection.TLabel").pack(
+        anchor="w", pady=(0, 7)
+    )
     ttk.Radiobutton(mode_box, text="文字聊天", variable=voice, value=False).pack(anchor="w", pady=(2, 1))
     ttk.Label(mode_box, text="只启动网页控制台，不启动小智语音服务。", style="Hint.TLabel").pack(anchor="w", padx=(24, 0), pady=(0, 8))
     ttk.Radiobutton(mode_box, text="文字聊天＋圆屏语音", variable=voice, value=True).pack(anchor="w", pady=(1, 1))
@@ -388,14 +459,15 @@ def main():
     row = ttk.Frame(behavior_box)
     row.pack(fill="x", pady=8)
     ttk.Label(row, text="网页角色：").pack(side="left")
-    ttk.Combobox(row, textvariable=role, values=("elysia_v1", "plain_v1"), state="readonly", width=18).pack(side="left")
+    ttk.Combobox(row, textvariable=role, values=tuple(role_labels),
+                 state="readonly", width=18).pack(side="left")
     ttk.Label(row, text="  不自动改变小智角色；控制台端口 8767").pack(side="left")
     model_row = ttk.Frame(behavior_box)
     model_row.pack(fill="x", pady=8)
-    ttk.Label(model_row, text="大模型配置：").pack(side="left")
+    ttk.Label(model_row, text="网页与记忆模型：").pack(side="left")
     ttk.Combobox(model_row, textvariable=model_profile, values=tuple(model_profile_labels),
                  state="readonly", width=31).pack(side="left")
-    ttk.Label(model_row, text="  网页聊天、提取与整理").pack(side="left")
+    ttk.Label(model_row, text="  用于网页聊天、提取与低频整理").pack(side="left")
     voice_model_row = ttk.Frame(behavior_box)
     voice_model_row.pack(fill="x", pady=8)
     ttk.Label(voice_model_row, text="圆屏语音模型：").pack(side="left")
@@ -421,26 +493,32 @@ def main():
     ttk.Combobox(retrieval_row, textvariable=memory_retrieval,
                  values=("关键词召回（基础/对照）", "关键词＋BGE 混合召回（日常推荐）"),
                  state="readonly", width=36).pack(side="left")
-    ttk.Checkbutton(
+    _boolean_option(
         behavior_box,
-        text="允许 L1 删除与清空（本机日常默认开启；仍保留 L0 原话）",
-        variable=allow_memory_delete,
-    ).pack(anchor="w", pady=(0, 4))
-    ttk.Checkbutton(
+        allow_memory_delete,
+        title="L1 删除与清空",
+        description="网页仍需逐条确认；会保留 L0 原话、备份和日志。本机日常每次打开面板默认允许。",
+        enabled_text="已允许",
+        disabled_text="未允许",
+    )
+    _boolean_option(
         behavior_box,
-        text="启用低频自动整理（L1→L2→L3；有预算与风险复核，默认关闭）",
-        variable=memory_consolidation,
-    ).pack(anchor="w", pady=(0, 4))
-    ttk.Checkbutton(
+        memory_consolidation,
+        title="低频自动整理",
+        description="后台按预算和风险规则尝试 L1 → L2 → L3；个人日用默认关闭。",
+    )
+    _boolean_option(
         behavior_box,
-        text="记录 L1 证据旁路质检（增加模型请求；不改变回答，默认关闭）",
-        variable=l1_sufficiency_shadow,
-    ).pack(anchor="w", pady=(0, 4))
-    ttk.Checkbutton(
+        l1_sufficiency_shadow,
+        title="L1 证据旁路质检",
+        description="增加模型请求并记录证据充分性判断；不改变正式召回或回答，默认关闭。",
+    )
+    _boolean_option(
         behavior_box,
-        text="记录 L2 证据旁路质检（增加模型请求；不改变回答，默认关闭）",
-        variable=l2_sufficiency_shadow,
-    ).pack(anchor="w", pady=(0, 4))
+        l2_sufficiency_shadow,
+        title="L2 证据旁路质检",
+        description="增加模型请求并记录场景证据判断；不改变正式召回或回答，默认关闭。",
+    )
     ttk.Label(behavior_box, text="BGE 本地快照（仅混合召回使用）").pack(anchor="w", pady=(4, 0))
     embedding_row = ttk.Frame(behavior_box)
     embedding_row.pack(fill="x")
@@ -504,8 +582,12 @@ def main():
     summary = tk.StringVar()
 
     def update_summary(*_):
+        mode_selection.set(
+            "当前选择：文字聊天＋圆屏语音" if voice.get()
+            else "当前选择：文字聊天"
+        )
         summary.set(_summary_text(
-            voice.get(), start_page_labels[start_page.get()], role.get(), selected_extraction(), selected_retrieval(),
+            voice.get(), start_page_labels[start_page.get()], selected_role(), selected_extraction(), selected_retrieval(),
             selected_tts(), allow_memory_delete.get(), memory_consolidation.get(),
             selected_memory_backend(),
             selected_vad_profile(),
@@ -535,11 +617,14 @@ def main():
             style="Subtitle.TLabel",
         ).pack(anchor="w", pady=8)
     else:
-        ttk.Checkbutton(
+        _boolean_option(
             daily,
-            variable=consent,
-            text="我已了解校园模型 HTTP 明文传输风险；以后不再每次询问",
-        ).pack(anchor="w", pady=8)
+            consent,
+            title="校园模型 HTTP 风险确认",
+            description="凭据与对话内容会明文传输；确认后记住选择，不再每次询问。",
+            enabled_text="已了解",
+            disabled_text="待确认",
+        )
     status = tk.StringVar(value="尚未启动。学校模型是否可用需你在校园网自行验证。")
     status_box = ttk.LabelFrame(daily, text="运行状态", style="Section.TLabelframe")
     status_box.pack(fill="x", pady=12)
@@ -671,7 +756,7 @@ def main():
                 set_tts_backend(next_tts)
                 tts_pointer_seen["backend"] = next_tts
             options = Options(database=Path(database.get()), voice=voice.get(), voice_root=Path(server.get()),
-                              lan_ip=ip.get().strip(), role=role.get(), consent=consent.get(),
+                              lan_ip=ip.get().strip(), role=selected_role(), consent=consent.get(),
                               tts_backend=selected_tts(),
                               sanotts_source_root=Path(sanotts_source.get()),
                               vad_profile=selected_vad_profile(),
