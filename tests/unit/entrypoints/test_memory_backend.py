@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 import pytest
 
 from longmemory.bootstrap import build_application
+from longmemory.entrypoints.api.atomic_memory_backend import AtomicMemoryBackend
 from longmemory.entrypoints.api.memory_backend import MemoryBackend, MemoryAccessError
 from longmemory.infrastructure.database.definition import SCHEMA_VERSION
 
@@ -260,6 +261,43 @@ def test_wipe_memories_removes_l0_to_l3_creates_backup_and_preserves_settings(re
         assert connection.execute("SELECT count(*) FROM atomic_memories").fetchone()[0] == 0
         assert connection.execute("SELECT count(*) FROM proactive_policy_settings").fetchone()[0] == 1
         assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
+
+
+def test_wipe_memories_does_not_create_backup_for_stale_preview(recorded):
+    path, _, _ = recorded
+    backend = MemoryBackend(path, allow_delete=True)
+    preview = backend.wipe_preview()
+    backup_root = path.parent / "backups"
+    before = set(backup_root.glob("*-pre-memory-wipe-*.db")) if backup_root.exists() else set()
+
+    with sqlite3.connect(path) as connection:
+        connection.execute(
+            "INSERT INTO conversation_messages VALUES (?,?,?,?)",
+            ("later-message", "user", "后来新增的合成原话。", "2026-09-14T00:00:00+00:00"),
+        )
+
+    with pytest.raises(MemoryAccessError, match="memory_wipe_changed"):
+        backend.wipe_memories(preview["revision"])
+
+    after = set(backup_root.glob("*-pre-memory-wipe-*.db")) if backup_root.exists() else set()
+    assert after == before
+
+
+def test_wipe_scope_classifies_every_business_table(recorded):
+    path, _, _ = recorded
+    with sqlite3.connect(path) as connection:
+        business_tables = {
+            row[0] for row in connection.execute(
+                "SELECT name FROM sqlite_master "
+                "WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+            )
+        }
+
+    # 当前库只有这两张表属于用户选择的产品设置；其余业务表都含有
+    # L0–L3、交互派生状态或审计证据，彻底清除时必须显式纳入。
+    assert business_tables - set(AtomicMemoryBackend._WIPE_TABLES) == {
+        "proactive_policy_settings", "proactive_schedule_overrides",
+    }
 
 
 def test_pagination_filter_and_literal_search(recorded):

@@ -408,6 +408,11 @@ class MemoryBackend:
                 source.close()
 
     def wipe_memories(self, expected_revision):
+        # 先做一次只读预检。确认范围已经过期时不应创建“清除前”备份，
+        # 否则用户每次重新确认都会留下一个实际上没有发生清除的恢复点。
+        preview = self.atomic_memories.wipe_preview()
+        if preview["revision"] != expected_revision:
+            raise MemoryAccessError("memory_wipe_changed", 409)
         backup = self._backup_before_wipe()
         result = self.atomic_memories.wipe_memories(expected_revision)
         return {**result, "backup": backup}

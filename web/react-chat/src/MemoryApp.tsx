@@ -1,7 +1,7 @@
 import {useEffect, useRef, useState} from 'react';
-import {Button, Card, Checkbox, Descriptions, Drawer, Empty, Input, List, Modal, Select, Space, Switch, Tabs, Tag} from 'antd';
+import {Alert, Button, Card, Checkbox, Descriptions, Drawer, Empty, Input, List, Modal, Select, Space, Switch, Tabs, Tag} from 'antd';
 import {Link, useSearchParams} from 'react-router-dom';
-import {ChatApi, type DailyMemoryFeedback, type MemoryFeedbackKind} from './api';
+import {ApiError, ChatApi, type DailyMemoryFeedback, type MemoryFeedbackKind} from './api';
 import {AppShell, ConsoleNav} from './AppShell';
 import {PageHeader} from './PageHeader';
 import {ManualMemoryAdd} from './ManualMemoryAdd';
@@ -114,6 +114,7 @@ export function MemoryApp() {
   const [wiping, setWiping] = useState(false);
   const [wipePreview, setWipePreview] = useState<WipePreview>();
   const [wipePhrase, setWipePhrase] = useState('');
+  const [wipeNotice, setWipeNotice] = useState('');
   const [promoting, setPromoting] = useState(false);
   const [promotedContent, setPromotedContent] = useState('');
   const [qualityCandidates, setQualityCandidates] = useState<L1QualityCandidates>();
@@ -448,21 +449,39 @@ export function MemoryApp() {
   async function openWipeMemories() {
     await guarded(async () => {
       const preview = await api.request<WipePreview>('/api/memories/wipe-preview');
-      setWipePreview(preview); setWipePhrase(''); setWiping(true);
+      setWipePreview(preview); setWipePhrase(''); setWipeNotice(''); setWiping(true);
       setNotice(`已核对当前库：L0 ${preview.l0_total} 条，L1 ${preview.l1_total} 条。尚未删除。`);
     });
   }
   async function wipeMemories() {
-    if (!wipePreview || wipePhrase !== '彻底清除当前记忆库') return;
-    await guarded(async () => {
+    if (!wipePreview || wipePhrase !== '彻底清除当前记忆库' || locked.current) return;
+    locked.current = true; setBusy(true); setWipeNotice('正在创建恢复点并清除，请稍候…');
+    try {
       const result = await api.request<{l0_total:number;l1_total:number;l2_total:number;l3_total:number;backup:{path:string;sha256:string}}>(
         '/api/memories/wipe', 'POST', {revision: wipePreview.revision, confirm_wipe: true},
       );
-      setWiping(false); setWipePreview(undefined); setWipePhrase('');
+      setWiping(false); setWipePreview(undefined); setWipePhrase(''); setWipeNotice('');
       setSelectedL1(undefined); setSelectedL0(undefined); setTab('l1'); setQuery(''); setL1State('active');
+      setL0({items:[], total:0, limit:25, offset:0}); setL0Loaded(true);
       await fetchL1(0, '', 'active'); await fetchDaily();
       setNotice(`已清除当前库的 L0 ${result.l0_total}、L1 ${result.l1_total}、L2 ${result.l2_total}、L3 ${result.l3_total} 条；操作前恢复点已保存。网页会话档案和既有备份未删除。`);
-    }, 'write');
+    } catch (error) {
+      const message = memoryFailure(error, 'write');
+      if (error instanceof ApiError && error.code === 'memory_wipe_changed') {
+        try {
+          setWipePreview(await api.request<WipePreview>('/api/memories/wipe-preview'));
+          setWipePhrase('');
+          setWipeNotice('确认期间记忆库新增或改变了记录，本次没有删除。已重新核对数量，请再次输入确认短语。');
+        } catch {
+          setWipeNotice(message);
+        }
+      } else {
+        setWipeNotice(message);
+      }
+      setNotice(message);
+    } finally {
+      locked.current = false; setBusy(false);
+    }
   }
 
   const page = tab === 'l1' ? l1 : l0;
@@ -605,7 +624,7 @@ export function MemoryApp() {
     </Modal>
     <Modal title="清除当前记忆库中的 L0–L3？" open={wiping} okText="清除当前库" cancelText="取消" confirmLoading={busy}
       okButtonProps={{danger:true,disabled:!wipePreview || wipePhrase !== '彻底清除当前记忆库'}}
-      onCancel={() => {if (!busy) {setWiping(false); setWipePreview(undefined); setWipePhrase('');}}}
+      onCancel={() => {if (!busy) {setWiping(false); setWipePreview(undefined); setWipePhrase(''); setWipeNotice('');}}}
       onOk={() => void wipeMemories()}>
       <p>这会清除当前 SQLite 记忆库中的原始对话、原子记忆、场景、用户画像，以及依赖它们的圆屏回答证据和陪伴学习记录。清除后系统不能再从当前库的 L0 重新提取这些内容。</p>
       {wipePreview&&<Descriptions column={1} size="small" items={[
@@ -616,6 +635,7 @@ export function MemoryApp() {
         {key:'related',label:'相关派生与审计记录',children:`${wipePreview.related_record_total} 条`},
       ]}/>}
       <p className="subtle">模型、声音和主动交流规则等产品设置会保留。系统会先创建一致性恢复点；网页聊天会话旁库和所有既有备份不会删除，所以这不是磁盘级隐私擦除。</p>
+      {wipeNotice&&<Alert showIcon type={wipeNotice.startsWith('正在')?'info':'error'} message={wipeNotice}/>}
       <label className="field-label" htmlFor="wipe-memory-phrase">请输入“彻底清除当前记忆库”确认</label>
       <Input id="wipe-memory-phrase" aria-label="彻底清除确认短语" autoComplete="off" value={wipePhrase} onChange={event=>setWipePhrase(event.target.value)}/>
     </Modal>
