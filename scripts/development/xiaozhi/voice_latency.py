@@ -309,11 +309,13 @@ def install_edge_first_chunk_policy(tts, *, maximum_chars=18):
     )
 
 
-def install_cosyvoice_first_chunk_policy(tts, *, maximum_chars=14):
-    """CosyVoice3 提前接收首段，随后继续使用模型原生音频分块。"""
-    install_first_chunk_policy(
-        tts, maximum_chars=maximum_chars, marker="cosyvoice3"
-    )
+def install_cosyvoice_punctuation_policy(tts):
+    """让 CosyVoice 后续片段也在逗号、顿号等自然边界结束。"""
+    if getattr(tts, "_longmemory_punctuation_policy", None) == "cosyvoice3":
+        return
+    punctuations = tuple(getattr(tts, "punctuations", ()))
+    tts.punctuations = tuple(dict.fromkeys((*punctuations, "，", ",", "、")))
+    tts._longmemory_punctuation_policy = "cosyvoice3"
 
 
 def _model_failure_code(error):
@@ -383,9 +385,9 @@ def _observe_components(connection):
         # 先把缓冲实现替换为分块实现，再由下面的通用计时器包住最终入口。
         from cosyvoice_streaming import install_cosyvoice_streaming
         install_cosyvoice_streaming(tts, connection)
-        # 回答模型可能连续输出一段没有标点的文字。达到 14 个字符后先合成
-        # 第一段，减少等待断句的时间；后续仍完全沿用上游标点切句。
-        install_cosyvoice_first_chunk_policy(tts)
+        # 当前模型在长片段中会发生秒级播放欠载。取消固定 14 字硬切，并让
+        # 后续文本也接受逗号/顿号边界，把不可避免的等待留在自然停顿处。
+        install_cosyvoice_punctuation_policy(tts)
     original_stream = getattr(tts, "to_tts_stream", None)
     original_opus = getattr(tts, "handle_opus", None)
     if callable(original_stream):

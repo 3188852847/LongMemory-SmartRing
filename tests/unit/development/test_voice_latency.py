@@ -132,24 +132,28 @@ def test_edge_first_chunk_policy_flushes_only_first_unpunctuated_chunk():
     assert tts._get_segment_text() is None
 
 
-def test_cosyvoice_first_chunk_policy_uses_shorter_safe_threshold():
+def test_cosyvoice_uses_natural_punctuation_without_fixed_character_split():
     class TTS:
         def __init__(self):
             self.tts_text_buff = []
             self.processed_chars = 0
             self.is_first_sentence = True
+            self.punctuations = ("。", "？")
 
         def _get_segment_text(self):
             return None
 
     tts = TTS()
-    voice_latency.install_cosyvoice_first_chunk_policy(tts)
+    original = tts._get_segment_text.__func__
+    voice_latency.install_cosyvoice_punctuation_policy(tts)
     text = "这是模型已经输出但暂时还没有标点的一段回答"
     tts.tts_text_buff.append(text)
-    assert tts._get_segment_text() == text[:14]
-    assert tts.processed_chars == 14
-    assert tts.is_first_sentence is False
-    assert tts._longmemory_first_chunk_policies == {"cosyvoice3"}
+    assert tts._get_segment_text.__func__ is original
+    assert tts._get_segment_text() is None
+    assert tts.processed_chars == 0
+    assert tts.is_first_sentence is True
+    assert tts.punctuations == ("。", "？", "，", ",", "、")
+    assert tts._longmemory_punctuation_policy == "cosyvoice3"
 
 
 def test_first_chunk_policy_keeps_ascii_words_whole():

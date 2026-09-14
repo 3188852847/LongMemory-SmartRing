@@ -96,6 +96,7 @@ def install_cosyvoice_streaming(tts, connection):
             )
             return None
         delivered = False
+        pcm_parts = []
 
         def deliver_opus(packet):
             """直到拿到完整 Opus 帧才宣布开始，避免空模型块造成假首包。"""
@@ -126,14 +127,11 @@ def install_cosyvoice_streaming(tts, connection):
                         # 未满一帧的 PCM 属于已取消话轮，不能混入下一次合成。
                         _reset_opus_encoder(tts.opus_encoder)
                         return None
-                    pcm = _wav_chunk_to_pcm(wav, connection.sample_rate)
-                    # 模型块不是语音流结束。跨块保留不足 60 ms 的 PCM，凑满完整帧
-                    # 就立即编码；只在下面的真实末尾补零一次。
-                    tts.opus_encoder.encode_pcm_to_opus_stream(
-                        pcm, end_of_stream=False, callback=deliver_opus
-                    )
+                    pcm_parts.append(_wav_chunk_to_pcm(wav, connection.sample_rate))
+                # 当前 PyTorch 后端的模型块供给慢于播放。一个标点片段完整生成后再
+                # 连续编码，停顿只可能出现在文本切段边界，不会落在词语中间。
                 tts.opus_encoder.encode_pcm_to_opus_stream(
-                    b"", end_of_stream=True, callback=deliver_opus
+                    b"".join(pcm_parts), end_of_stream=True, callback=deliver_opus
                 )
                 if not delivered:
                     raise ValueError("cosyvoice_stream_empty")

@@ -85,7 +85,17 @@ def test_stream_keeps_partial_pcm_across_model_chunks_and_flushes_once(monkeypat
     monkeypatch.setitem(sys.modules, "core.providers.tts.dto.dto", dto)
     monkeypatch.setitem(sys.modules, "core.utils.tts", cleaner)
     monkeypatch.setitem(sys.modules, "core.utils.util", util)
-    monkeypatch.setattr(streaming, "_wav_chunk_to_pcm", lambda wav, _rate: wav)
+    decode_count = 0
+
+    def decode(wav, _rate):
+        nonlocal decode_count
+        decode_count += 1
+        # 第一块解码完成时仍不得播放；必须等同一标点片段全部准备好。
+        if decode_count == 2:
+            assert packets == []
+        return wav
+
+    monkeypatch.setattr(streaming, "_wav_chunk_to_pcm", decode)
     monkeypatch.setattr(streaming, "fast_asset_for_text", lambda _text: None)
 
     class Response:
