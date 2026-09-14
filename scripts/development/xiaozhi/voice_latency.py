@@ -246,15 +246,17 @@ class VoiceLatencyTracker:
             return self._snapshot_item(self.current)
 
 
-def install_edge_first_chunk_policy(tts, *, maximum_chars=18):
-    """让 Edge 的首个无标点长片段提前进入合成，后续切句保持上游行为。
+def install_first_chunk_policy(tts, *, maximum_chars, marker):
+    """让首个无标点长片段提前进入合成，后续切句保持上游行为。
 
-    Edge 适配器会先收完整段音频再转 Opus；这里不伪装成流式 TTS，只缩短
-    “模型已有文字但仍在等标点”的时间。补丁仅作用于当前连接的 Edge 实例。
+    这项策略只消费回答模型已经输出的文字，不预测或改写回答。它缩短
+    “模型已有足够文字但 TTS 仍在等标点”的空等时间，并且只拆第一段，
+    避免整段回答被机械地按固定字数切碎。
     """
     if maximum_chars < 8:
-        raise ValueError("edge_first_chunk_limit_invalid")
-    if getattr(tts, "_longmemory_edge_first_chunk_installed", False):
+        raise ValueError("first_chunk_limit_invalid")
+    installed = getattr(tts, "_longmemory_first_chunk_policies", set())
+    if marker in installed:
         return
     original = getattr(tts, "_get_segment_text", None)
     if not callable(original):
@@ -284,7 +286,21 @@ def install_edge_first_chunk_policy(tts, *, maximum_chars=18):
         return raw.strip()
 
     tts._get_segment_text = get_segment_text
-    tts._longmemory_edge_first_chunk_installed = True
+    tts._longmemory_first_chunk_policies = {*installed, marker}
+
+
+def install_edge_first_chunk_policy(tts, *, maximum_chars=18):
+    """Edge 首段仍使用原有 18 字保守阈值。"""
+    install_first_chunk_policy(
+        tts, maximum_chars=maximum_chars, marker="edge"
+    )
+
+
+def install_cosyvoice_first_chunk_policy(tts, *, maximum_chars=14):
+    """CosyVoice3 提前接收首段，随后继续使用模型原生音频分块。"""
+    install_first_chunk_policy(
+        tts, maximum_chars=maximum_chars, marker="cosyvoice3"
+    )
 
 
 def _model_failure_code(error):
@@ -354,6 +370,9 @@ def _observe_components(connection):
         # 先把缓冲实现替换为分块实现，再由下面的通用计时器包住最终入口。
         from cosyvoice_streaming import install_cosyvoice_streaming
         install_cosyvoice_streaming(tts, connection)
+        # 回答模型可能连续输出一段没有标点的文字。达到 14 个字符后先合成
+        # 第一段，减少等待断句的时间；后续仍完全沿用上游标点切句。
+        install_cosyvoice_first_chunk_policy(tts)
     original_stream = getattr(tts, "to_tts_stream", None)
     original_opus = getattr(tts, "handle_opus", None)
     if callable(original_stream):
