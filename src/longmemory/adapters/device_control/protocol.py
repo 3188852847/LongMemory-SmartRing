@@ -55,7 +55,7 @@ VOICE_INPUT_TIMING_FIELDS = {"vad_endpoint_ms", "asr_processing_ms"}
 def voice_latency(value: object) -> dict:
     """验证小智内存中的脱敏时序；开放字段不能直接穿透到浏览器。"""
 
-    if not isinstance(value, dict) or value.get("version") not in {1, 2, 3, 4, 5}:
+    if not isinstance(value, dict) or value.get("version") not in {1, 2, 3, 4, 5, 6}:
         raise BridgeError("bridge_invalid_response", 502)
     fields = {"version", "state", "started_at", "tts_backend", "timings_ms"}
     if value["version"] >= 2:
@@ -64,7 +64,7 @@ def voice_latency(value: object) -> dict:
         fields.add("failure")
     if value["version"] >= 4:
         fields.add("response_path")
-    if value["version"] == 5 and "input_timings_ms" in value:
+    if value["version"] >= 5 and "input_timings_ms" in value:
         fields.add("input_timings_ms")
     if set(value) != fields:
         raise BridgeError("bridge_invalid_response", 502)
@@ -109,6 +109,8 @@ def voice_latency(value: object) -> dict:
     if value["version"] >= 2:
         segments = value.get("tts_segments")
         segment_fields = {"index", "started_ms", "completed_ms", "duration_ms"}
+        if value["version"] >= 6:
+            segment_fields |= {"opus_packets", "audio_duration_ms"}
         if not isinstance(segments, list) or len(segments) > 64:
             raise BridgeError("bridge_invalid_response", 502)
         for expected_index, segment in enumerate(segments, start=1):
@@ -127,6 +129,13 @@ def voice_latency(value: object) -> dict:
             if segment["completed_ms"] is not None and (
                 segment["completed_ms"] < segment["started_ms"]
                 or segment["duration_ms"] != segment["completed_ms"] - segment["started_ms"]
+            ):
+                raise BridgeError("bridge_invalid_response", 502)
+            if value["version"] >= 6 and (
+                type(segment.get("opus_packets")) is not int
+                or not 0 <= segment["opus_packets"] <= 1_000_000
+                or type(segment.get("audio_duration_ms")) is not int
+                or segment["audio_duration_ms"] != segment["opus_packets"] * 60
             ):
                 raise BridgeError("bridge_invalid_response", 502)
         result["tts_segments"] = [dict(segment) for segment in segments]

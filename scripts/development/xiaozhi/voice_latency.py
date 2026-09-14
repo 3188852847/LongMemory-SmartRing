@@ -105,7 +105,7 @@ class VoiceLatencyTracker:
         with self.lock:
             self.sequence += 1
             self.current = {
-                "version": 5,
+                "version": 6,
                 # token 只在进程内用于拒绝上一轮迟到的 finally 回调，绝不暴露给 API。
                 "token": self.sequence,
                 # chat() 会在进入上游实现后才生成新 sentence_id。记录旧值可防止
@@ -208,10 +208,32 @@ class VoiceLatencyTracker:
                 "started_ms": elapsed,
                 "completed_ms": None,
                 "duration_ms": None,
+                # Xiaozhi 当前链路固定使用 60ms Opus 帧。计数足以推导可播放
+                # 时长，同时不会保留语音、文本或编码数据。
+                "opus_packets": 0,
+                "audio_duration_ms": 0,
             })
             if item["timings"]["tts_started_ms"] is None:
                 item["timings"]["tts_started_ms"] = elapsed
             return item["token"], index
+
+    def record_tts_audio_packet(self, handle, *, sentence_id=None):
+        """给所属 TTS 片段累计一帧 60ms Opus 音频。"""
+        if handle is None:
+            return
+        token, index = handle
+        with self.lock:
+            item = self.current
+            if item is None or token != item["token"]:
+                return
+            expected = item["sentence_id"]
+            if sentence_id is not None and (expected is None or sentence_id != expected):
+                return
+            if not 1 <= index <= len(item["tts_segments"]):
+                return
+            segment = item["tts_segments"][index - 1]
+            segment["opus_packets"] += 1
+            segment["audio_duration_ms"] = segment["opus_packets"] * 60
 
     def complete_tts_segment(self, handle, *, sentence_id=None):
         """完成当前段计时；上一轮迟到的回调不能写入新一轮。"""
@@ -413,22 +435,29 @@ def _observe_components(connection):
         install_cosyvoice_punctuation_policy(tts)
     original_stream = getattr(tts, "to_tts_stream", None)
     original_opus = getattr(tts, "handle_opus", None)
+    active_segment = threading.local()
     if callable(original_stream):
         def measured_stream(*args, **kwargs):
             tracker = connection._longmemory_voice_latency
             tracker.bind_sentence()
             sentence_id = getattr(tts, "current_sentence_id", None)
             handle = tracker.begin_tts_segment(sentence_id=sentence_id)
+            active_segment.handle = handle
             try:
                 return original_stream(*args, **kwargs)
             finally:
                 tracker.complete_tts_segment(handle, sentence_id=sentence_id)
+                active_segment.handle = None
         tts.to_tts_stream = measured_stream
     if callable(original_opus):
         def measured_opus(*args, **kwargs):
             tracker = connection._longmemory_voice_latency
             tracker.bind_sentence()
-            tracker.mark("audio_ready_ms", sentence_id=getattr(tts, "current_sentence_id", None))
+            sentence_id = getattr(tts, "current_sentence_id", None)
+            tracker.record_tts_audio_packet(
+                getattr(active_segment, "handle", None), sentence_id=sentence_id
+            )
+            tracker.mark("audio_ready_ms", sentence_id=sentence_id)
             return original_opus(*args, **kwargs)
         tts.handle_opus = measured_opus
     if backend == "edge":
