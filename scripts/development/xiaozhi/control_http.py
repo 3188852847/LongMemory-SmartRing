@@ -133,6 +133,11 @@ def create_app(control, token, port=PORT):
             raise ControlError("invalid_fields", 400)
         return web.json_response(await control.rollback_round_wallpaper())
 
+    async def deactivate_round_wallpaper(request):
+        if request.content_length not in (None, 0):
+            raise ControlError("invalid_fields", 400)
+        return web.json_response(await control.deactivate_round_wallpaper())
+
     async def announce(request):
         if request.content_type != "application/json":
             raise ControlError("json_required", 415)
@@ -163,6 +168,7 @@ def create_app(control, token, port=PORT):
     app.router.add_get("/api/device/round-wallpaper", get_round_wallpaper, allow_head=False)
     app.router.add_post("/api/device/round-wallpaper/activate", activate_round_wallpaper)
     app.router.add_post("/api/device/round-wallpaper/rollback", rollback_round_wallpaper)
+    app.router.add_post("/api/device/round-wallpaper/deactivate", deactivate_round_wallpaper)
     app.router.add_post("/api/device/announcement", announce)
     app.router.add_post("/api/device/speech/stop", stop_speech)
     return app

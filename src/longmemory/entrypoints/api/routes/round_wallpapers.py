@@ -172,6 +172,17 @@ def register_round_wallpaper_routes(app, library, bridge=None, delivery=None, op
         except BridgeError as error:
             return web.json_response({"error": error.code}, status=error.status)
 
+    async def deactivate(_request):
+        if bridge is None or operation_lock is None:
+            return web.json_response({"error": "round_wallpaper_delivery_unavailable"}, status=503)
+        if operation_lock.locked():
+            return web.json_response({"error": "operation_busy"}, status=409)
+        try:
+            async with operation_lock:
+                return web.json_response(await bridge.deactivate_round_wallpaper())
+        except BridgeError as error:
+            return web.json_response({"error": error.code}, status=error.status)
+
     async def device_status(_request):
         if bridge is None:
             return web.json_response({"error": "round_wallpaper_delivery_unavailable"}, status=503)
@@ -186,4 +197,5 @@ def register_round_wallpaper_routes(app, library, bridge=None, delivery=None, op
     app.router.add_post("/api/round-wallpapers/{item_id}/stage", stage)
     app.router.add_post("/api/round-wallpapers/{item_id}/publish", publish)
     app.router.add_post("/api/round-wallpapers/rollback", rollback)
+    app.router.add_post("/api/round-wallpapers/deactivate", deactivate)
     app.router.add_get("/api/round-wallpapers/device", device_status, allow_head=False)

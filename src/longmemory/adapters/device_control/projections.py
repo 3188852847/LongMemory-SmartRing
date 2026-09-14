@@ -178,7 +178,6 @@ def wallpaper_status(data: dict) -> dict:
             and data.get("active_wallpaper_id") == ""
             and data.get("active_sha256") == ""
             and data.get("active_size_bytes") == 0
-            and data.get("rollback_available") is False
         )
     if not valid:
         raise BridgeError("bridge_invalid_response", 502)
@@ -209,6 +208,30 @@ def rolled_back_wallpaper(data: dict) -> dict:
         or data.get("wallpaper_api") != 1
         or data.get("slot") not in {"a", "b"}
         or data.get("state") != "rollback_restarting"
+        or not re.fullmatch(
+            r"wallpaper-[0-9a-f]{20}", str(data.get("wallpaper_id", "")),
+        )
+        or not re.fullmatch(r"[0-9a-f]{64}", str(data.get("sha256", "")))
+        or type(data.get("size_bytes")) is not int
+        or not 0 < data["size_bytes"] <= 4 * 1024 * 1024
+        or not re.fullmatch(r"[0-9a-f]{32}", str(data.get("operation_id", "")))
+    ):
+        raise BridgeError("bridge_invalid_response", 502)
+    return data
+
+
+def deactivated_wallpaper(data: dict) -> dict:
+    """验证“保留槽位但切回几何皮肤”的重启前回执。"""
+
+    fields = {
+        "wallpaper_api", "slot", "wallpaper_id", "sha256", "size_bytes",
+        "state", "operation_id",
+    }
+    if (
+        set(data) != fields
+        or data.get("wallpaper_api") != 1
+        or data.get("slot") not in {"a", "b"}
+        or data.get("state") != "skin_mode_restarting"
         or not re.fullmatch(
             r"wallpaper-[0-9a-f]{20}", str(data.get("wallpaper_id", "")),
         )

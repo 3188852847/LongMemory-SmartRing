@@ -393,6 +393,14 @@ def test_round_wallpaper_activation_and_rollback_require_exact_restart_results(t
     assert asyncio.run(client.activate_round_wallpaper(staged)) == activated
     assert client._session.calls[0][1]["timeout"].total == 120
 
+    deactivated = {**activated, "slot": "a", "state": "skin_mode_restarting"}
+    client = client_for(tmp_path, deactivated)
+    assert asyncio.run(client.deactivate_round_wallpaper()) == deactivated
+    assert client._session.calls[0][0] == (
+        "POST", "http://127.0.0.1:8766/api/device/round-wallpaper/deactivate",
+    )
+    assert client._session.calls[0][1]["timeout"].total == 120
+
     rollback = {**activated, "slot": "a", "state": "rollback_restarting"}
     client = client_for(tmp_path, rollback)
     assert asyncio.run(client.rollback_round_wallpaper()) == rollback
@@ -408,6 +416,14 @@ def test_round_wallpaper_status_requires_verified_active_record(tmp_path):
     }
     client = client_for(tmp_path, response)
     assert asyncio.run(client.read_round_wallpaper()) == response
+
+    skin_mode = {
+        "wallpaper_api": 1, "active_valid": False, "active_slot": "",
+        "active_wallpaper_id": "", "active_sha256": "", "active_size_bytes": 0,
+        "rollback_available": True,
+    }
+    client = client_for(tmp_path, skin_mode)
+    assert asyncio.run(client.read_round_wallpaper()) == skin_mode
 
 
 @pytest.mark.parametrize("change", [

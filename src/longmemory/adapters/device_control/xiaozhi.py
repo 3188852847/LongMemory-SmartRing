@@ -12,6 +12,7 @@ from .protocol import BridgeError, round_skin, safe_reason
 from .projections import (
     activated_wallpaper,
     announcement_queued,
+    deactivated_wallpaper,
     device_status,
     hardware_status,
     read_volume,
@@ -153,6 +154,12 @@ class XiaozhiControlClient:
             "POST", "/api/device/round-wallpaper/rollback", timeout_seconds=120,
         )
         return rolled_back_wallpaper(data)
+
+    async def deactivate_round_wallpaper(self) -> dict:
+        data = await self._request(
+            "POST", "/api/device/round-wallpaper/deactivate", timeout_seconds=120,
+        )
+        return deactivated_wallpaper(data)
 
     async def announce(self, text: str, expires_at: datetime) -> dict:
         """请求现有小智 TTS 队列接收短文本，不声称设备已经播放。"""

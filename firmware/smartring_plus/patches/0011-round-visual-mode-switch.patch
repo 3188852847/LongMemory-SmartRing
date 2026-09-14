@@ -1,0 +1,76 @@
+diff --git a/main/boards/viewe-smartring-plus/viewe-smartring-plus.cc b/main/boards/viewe-smartring-plus/viewe-smartring-plus.cc
+index eca17a0..bf0e2f5 100644
+--- a/main/boards/viewe-smartring-plus/viewe-smartring-plus.cc
++++ b/main/boards/viewe-smartring-plus/viewe-smartring-plus.cc
+@@ -884 +884,9 @@ public:
+-        const char* slot = has_active && active.slot == "a" ? "b" : "a";
++        std::string protected_slot = has_active ? active.slot : "";
++        if (!has_active) {
++            Settings current("round_wallpaper");
++            const std::string previous = current.GetString("previous_slot");
++            RoundWallpaperRecord retained;
++            if (GetSlot(previous, retained)) protected_slot = previous;
++        }
++        // 皮肤模式仍保护 previous_slot 中保留的壁纸，后续发布只能写另一槽。
++        const char* slot = protected_slot == "a" ? "b" : "a";
+@@ -971,0 +980,19 @@ public:
++    bool Deactivate(RoundWallpaperRecord& result) {
++        Settings current("round_wallpaper");
++        const std::string active = current.GetString("active_slot");
++        RoundWallpaperRecord candidate;
++        if ((active != "a" && active != "b") || !GetSlot(active, candidate)) {
++            ESP_LOGE(TAG, "No verified active wallpaper to deactivate");
++            return false;
++        }
++        // 只改变 NVS 中的显示模式指针。A/B 分区内容保持不变，用户之后
++        // 可以通过 rollback 工具恢复刚才的壁纸，无需再次下载或擦写媒体。
++        Settings writable("round_wallpaper", true);
++        writable.SetString("previous_slot", active);
++        writable.SetString("active_slot", "");
++        result = candidate;
++        ESP_LOGI(TAG, "Wallpaper slot %s retained; skin mode selected; restart required",
++                 active.c_str());
++        return true;
++    }
++
+@@ -977,2 +1004 @@ public:
+-        if ((active != "a" && active != "b") || (previous != "a" && previous != "b") ||
+-            active == previous || !GetSlot(previous, candidate)) {
++        if ((previous != "a" && previous != "b") || !GetSlot(previous, candidate)) {
+@@ -982,0 +1009,11 @@ public:
++        // 皮肤模式下 active_slot 为空，previous_slot 保存切换前的壁纸。
++        // 此时 rollback 的含义是恢复保留壁纸，而不是交换两个活动槽。
++        if (active != "a" && active != "b") {
++            writable.SetString("active_slot", previous);
++            writable.SetString("previous_slot", "");
++            result = candidate;
++            ESP_LOGI(TAG, "Retained wallpaper restored from slot %s; restart required",
++                     previous.c_str());
++            return true;
++        }
++        if (active == previous) return false;
+@@ -1663,0 +1701,21 @@ private:
++        mcp.AddUserOnlyTool("self.screen.deactivate_round_wallpaper",
++            "Keep the active wallpaper slot but select geometric skin mode; a separate reboot applies it",
++            PropertyList({Property("wallpaper_api", kPropertyTypeInteger, 1, 1)}),
++            [](const PropertyList& properties) -> ReturnValue {
++                if (properties["wallpaper_api"].value<int>() != 1) {
++                    throw std::invalid_argument("Unsupported wallpaper API");
++                }
++                RoundWallpaperRecord record;
++                if (!RoundWallpaperStore::GetInstance().Deactivate(record)) {
++                    throw std::runtime_error("Wallpaper deactivation failed");
++                }
++                cJSON* json = cJSON_CreateObject();
++                cJSON_AddNumberToObject(json, "wallpaper_api", record.api);
++                cJSON_AddStringToObject(json, "slot", record.slot.c_str());
++                cJSON_AddStringToObject(json, "wallpaper_id", record.id.c_str());
++                cJSON_AddStringToObject(json, "sha256", record.sha256.c_str());
++                cJSON_AddNumberToObject(json, "size_bytes", record.size);
++                cJSON_AddStringToObject(json, "state", "deactivation_pending_restart");
++                return json;
++            });
++
+@@ -1665 +1723 @@ private:
+-            "Select the previously active verified wallpaper; a separate reboot applies it",
++            "Restore the retained or previously active verified wallpaper; a separate reboot applies it",

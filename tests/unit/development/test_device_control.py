@@ -42,6 +42,10 @@ class FakeClient:
                     "type": "integer", "minimum": 0, "maximum": 100}}, "required": ["brightness"]}},
             "theme": {"name": control.THEME_TOOL, "inputSchema": {
                 "type": "object", "properties": {"theme": {"type": "string"}}, "required": ["theme"]}},
+            "deactivate_wallpaper": {
+                "name": control.DEACTIVATE_ROUND_WALLPAPER_TOOL,
+                "inputSchema": {"type": "object"},
+            },
         }
 
     async def get_next_id(self):
@@ -123,6 +127,13 @@ class FakeSocket:
                 "wallpaper_id": "wallpaper-" + "a" * 20,
                 "sha256": "b" * 64, "size_bytes": 2321851,
                 "state": "rollback_pending_restart",
+            }
+        elif name == control.DEACTIVATE_ROUND_WALLPAPER_TOOL:
+            value = {
+                "wallpaper_api": 1, "slot": "a",
+                "wallpaper_id": "wallpaper-" + "a" * 20,
+                "sha256": "b" * 64, "size_bytes": 2321851,
+                "state": "deactivation_pending_restart",
             }
         elif name == control.REBOOT_TOOL:
             value = True
@@ -256,6 +267,12 @@ def test_round_wallpaper_activation_and_rollback_use_fixed_tools_then_reboot():
         assert rolled_back["state"] == "rollback_restarting"
         assert [call["params"]["name"] for call in socket.calls[-2:]] == [
             control.ROLLBACK_ROUND_WALLPAPER_TOOL, control.REBOOT_TOOL,
+        ]
+
+        deactivated = await bridge.deactivate_round_wallpaper()
+        assert deactivated["state"] == "skin_mode_restarting"
+        assert [call["params"]["name"] for call in socket.calls[-2:]] == [
+            control.DEACTIVATE_ROUND_WALLPAPER_TOOL, control.REBOOT_TOOL,
         ]
 
     asyncio.run(run())

@@ -23,6 +23,7 @@ STAGE_ROUND_WALLPAPER_TOOL = "self.screen.stage_round_wallpaper"
 GET_ROUND_WALLPAPER_TOOL = "self.screen.get_round_wallpaper"
 ACTIVATE_ROUND_WALLPAPER_TOOL = "self.screen.activate_round_wallpaper"
 ROLLBACK_ROUND_WALLPAPER_TOOL = "self.screen.rollback_round_wallpaper"
+DEACTIVATE_ROUND_WALLPAPER_TOOL = "self.screen.deactivate_round_wallpaper"
 REBOOT_TOOL = "self.reboot"
 MIN_VOLUME, MAX_VOLUME = 5, 60  # 技术验证阶段限制，非硬件音量范围。
 MIN_BRIGHTNESS, MAX_BRIGHTNESS = 5, 100
@@ -153,9 +154,12 @@ def validate_wallpaper_status(value):
                  and type(value.get("active_size_bytes")) is int
                  and 0 < value["active_size_bytes"] <= MAX_WALLPAPER_BYTES)
     else:
-        valid = (value.get("active_slot") == "" and value.get("active_wallpaper_id") == ""
-                 and value.get("active_sha256") == "" and value.get("active_size_bytes") == 0
-                 and value.get("rollback_available") is False)
+        valid = (
+            value.get("active_slot") == ""
+            and value.get("active_wallpaper_id") == ""
+            and value.get("active_sha256") == ""
+            and value.get("active_size_bytes") == 0
+        )
     if not valid:
         raise ControlError("round_wallpaper_readback_invalid", 502)
     return value
@@ -361,14 +365,16 @@ class DeviceControl:
         if name not in (STATUS_TOOL, VOLUME_TOOL, BRIGHTNESS_TOOL, THEME_TOOL,
                         GET_ROUND_SKIN_TOOL, SET_ROUND_SKIN_TOOL,
                         GET_ROUND_WALLPAPER_TOOL, STAGE_ROUND_WALLPAPER_TOOL, ACTIVATE_ROUND_WALLPAPER_TOOL,
-                        ROLLBACK_ROUND_WALLPAPER_TOOL, REBOOT_TOOL):
+                        ROLLBACK_ROUND_WALLPAPER_TOOL, DEACTIVATE_ROUND_WALLPAPER_TOOL,
+                        REBOOT_TOOL):
             raise ControlError("tool_not_allowed", 403)
         client = conn.mcp_client
         # 皮肤工具在固件中标为 user-only，避免语言模型擅自修改外观；因此不会
         # 出现在普通 tools/list 中。只有本机窄控制通道能按固定契约直接调用。
         if name not in (GET_ROUND_SKIN_TOOL, SET_ROUND_SKIN_TOOL,
                         GET_ROUND_WALLPAPER_TOOL, STAGE_ROUND_WALLPAPER_TOOL, ACTIVATE_ROUND_WALLPAPER_TOOL,
-                        ROLLBACK_ROUND_WALLPAPER_TOOL, REBOOT_TOOL):
+                        ROLLBACK_ROUND_WALLPAPER_TOOL, DEACTIVATE_ROUND_WALLPAPER_TOOL,
+                        REBOOT_TOOL):
             tool_schema(client, name)
         call_id = await client.get_next_id()
         while call_id < 3:
@@ -664,6 +670,57 @@ class DeviceControl:
                     raise
                 await self._confirm_round_wallpaper_after_restart(selected, reboot_connection)
             return {**selected, "state": "rollback_restarting", "operation_id": uuid4().hex}
+
+    async def deactivate_round_wallpaper(self):
+        """保留已校验壁纸槽，只清除活动指针以显示几何皮肤。"""
+
+        if self.operation_lock.locked():
+            raise ControlError("control_busy")
+        async with self.operation_lock:
+            selected = validate_wallpaper_result(await self._call(
+                self._connection(), DEACTIVATE_ROUND_WALLPAPER_TOOL,
+                {"wallpaper_api": 1},
+            ), "deactivation_pending_restart")
+            reboot_connection = self._connection()
+            try:
+                if await self._call(reboot_connection, REBOOT_TOOL, {}) is not True:
+                    raise ControlError("round_wallpaper_restart_not_acknowledged", 502)
+            except ControlError as exc:
+                if exc.code not in {
+                    "device_timeout_outcome_unknown", "device_call_failed_outcome_unknown",
+                    "device_connection_changed",
+                }:
+                    raise
+                await self._confirm_skin_mode_after_restart(reboot_connection)
+            return {**selected, "state": "skin_mode_restarting", "operation_id": uuid4().hex}
+
+    async def _confirm_skin_mode_after_restart(self, previous_connection):
+        """重启回执不确定时，要求新连接明确报告壁纸未激活且仍可恢复。"""
+
+        deadline = asyncio.get_running_loop().time() + WALLPAPER_RESTART_CONFIRM_SECONDS
+        transient = {
+            "device_offline", "device_not_ready", "tools_not_ready",
+            "device_connection_changed", "device_timeout_outcome_unknown",
+            "device_call_failed_outcome_unknown",
+        }
+        while asyncio.get_running_loop().time() < deadline:
+            try:
+                connection = self._connection()
+                if connection is previous_connection:
+                    await asyncio.sleep(0.5)
+                    continue
+                status = validate_wallpaper_status(await self._call(
+                    connection, GET_ROUND_WALLPAPER_TOOL, {}, timeout=self.timeout,
+                ))
+            except ControlError as exc:
+                if exc.code in transient:
+                    await asyncio.sleep(0.5)
+                    continue
+                raise
+            if not status["active_valid"] and status["rollback_available"]:
+                return status
+            raise ControlError("round_wallpaper_readback_mismatch", 502)
+        raise ControlError("device_timeout_outcome_unknown", 504)
 
     async def _confirm_round_wallpaper_after_restart(self, selected, previous_connection):
         """重启回执不确定时，仅用新连接的活动槽做最终确认，不重发写操作。"""

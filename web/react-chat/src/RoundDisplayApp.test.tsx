@@ -30,12 +30,13 @@ describe('圆屏状态协议与模拟器', () => {
       delivery:{console_preview:true, upstream_assets_ota_detected:true, device_apply_supported:false,
         device_delivery_implemented:true, reason:'device_capability_probe_required', known_firmware_baseline:'round-face-0004'},
     };
-    const request=vi.spyOn(ChatApi.prototype, 'request').mockImplementation(async path =>
-      path==='/api/round-wallpapers'
-        ? {enabled:true,tool_state:'ready',max_upload_bytes:805306368,items:[],
-          device_delivery:{enabled:false,requires_online_device:true,restart_after_publish:true}}
-        : skinPayload
-    );
+    const request=vi.spyOn(ChatApi.prototype, 'request').mockImplementation(async path => {
+      if(path==='/api/round-wallpapers') return {enabled:true,tool_state:'ready',max_upload_bytes:805306368,items:[],
+        device_delivery:{enabled:true,requires_online_device:true,restart_after_publish:true}};
+      if(path==='/api/round-wallpapers/device') return {wallpaper_api:1,active_valid:true,active_slot:'a',
+        active_wallpaper_id:`wallpaper-${'b'.repeat(20)}`,active_sha256:'c'.repeat(64),active_size_bytes:1234,rollback_available:true};
+      return skinPayload;
+    });
     render(<QueryClientProvider client={createConsoleQueryClient()}><MemoryRouter><RoundDisplayApp/></MemoryRouter></QueryClientProvider>);
     expect(screen.getByRole('heading', {name: '圆屏状态预览'})).toBeTruthy();
     expect(screen.getByText(/画布：360 × 360 px/)).toBeTruthy();
@@ -48,12 +49,22 @@ describe('圆屏状态协议与模拟器', () => {
     expect(screen.getByText('当前编辑/预览')).toBeTruthy();
     expect(screen.getByText('网页保存选择')).toBeTruthy();
     expect(screen.getByText('最近真机回读')).toBeTruthy();
+    expect(screen.getByText('真机显示模式')).toBeTruthy();
+    expect(await screen.findByText('动态壁纸')).toBeTruthy();
+    expect(screen.getByText('皮肤当前被覆盖')).toBeTruthy();
+    const useSkinDisplay=screen.getByRole('button', {name:'切换为皮肤显示（会重启）'});
+    expect(useSkinDisplay).toBeTruthy();
     expect(screen.getByText('不会自动检测')).toBeTruthy();
     expect(screen.getByText('5. 真机五态观察')).toBeTruthy();
     expect(screen.getByText('6. 动态壁纸素材库')).toBeTruthy();
     expect(screen.getByText('先检测真机皮肤能力')).toBeTruthy();
     expect(screen.getByRole('button', {name:'检测真机皮肤能力'})).toBeTruthy();
     expect((screen.getByRole('button', {name:'应用到真机'}) as HTMLButtonElement).disabled).toBe(true);
+    request.mockResolvedValueOnce({wallpaper_api:1,slot:'a',wallpaper_id:`wallpaper-${'b'.repeat(20)}`,
+      sha256:'c'.repeat(64),size_bytes:1234,state:'skin_mode_restarting',operation_id:'d'.repeat(32)});
+    fireEvent.click(useSkinDisplay);
+    await waitFor(()=>expect(request).toHaveBeenCalledWith('/api/round-wallpapers/deactivate','POST'));
+    expect(await screen.findByText('已切换为皮肤显示并安排重启')).toBeTruthy();
     const edit = screen.getByRole('button', {name:'从当前皮肤开始编辑'}) as HTMLButtonElement;
     await waitFor(() => expect(edit.disabled).toBe(false));
     fireEvent.click(edit);

@@ -110,6 +110,15 @@ class FakeBridge:
                 "size_bytes": 1234, "state": "rollback_restarting",
                 "operation_id": "e" * 32}
 
+    async def deactivate_round_wallpaper(self):
+        self.calls.append("deactivate-round-wallpaper")
+        if self.error:
+            raise self.error
+        return {"wallpaper_api": 1, "slot": "a",
+                "wallpaper_id": "wallpaper-" + "a" * 20, "sha256": "d" * 64,
+                "size_bytes": 1234, "state": "skin_mode_restarting",
+                "operation_id": "f" * 32}
+
     @staticmethod
     def round_skin():
         return {
@@ -471,6 +480,24 @@ def test_round_wallpaper_publish_stages_then_activates_and_revokes_ticket(tmp_pa
                 assert delivery.revoked == ["e" * 64]
         finally:
             await runner.cleanup()
+
+    asyncio.run(run())
+
+
+def test_round_wallpaper_deactivate_is_csrf_protected_and_keeps_slot_metadata(tmp_path):
+    async def run():
+        library = FakeWallpaperLibrary(tmp_path / "wallpapers")
+        async with console(round_wallpaper_library=library) as (client, base, bridge):
+            headers = await login(client, base)
+            assert (await client.post(base + "/api/round-wallpapers/deactivate")).status == 403
+            response = await client.post(
+                base + "/api/round-wallpapers/deactivate", headers=headers,
+            )
+            data = await response.json()
+            assert response.status == 200
+            assert data["state"] == "skin_mode_restarting"
+            assert data["wallpaper_id"] == "wallpaper-" + "a" * 20
+            assert bridge.calls[-1] == "deactivate-round-wallpaper"
 
     asyncio.run(run())
 

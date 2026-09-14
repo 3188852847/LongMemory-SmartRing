@@ -37,8 +37,8 @@ export function RoundWallpaperLibrary({api,sessionReady}:{api:ChatApi;sessionRea
     ? errorCopy[(publish.error instanceof ApiError?publish.error:rollback.error as ApiError).code]??'圆屏没有完成壁纸操作；原壁纸仍可回退。'
     : '圆屏没有完成壁纸操作；原壁纸仍可回退。';
   const deviceReady=library.data?.device_delivery.enabled&&device.isSuccess;
-  return <Card title="6. 动态壁纸素材库" extra={<Space><Tag color="cyan">local media</Tag><Button size="small" disabled={!deviceReady||!device.data.rollback_available} loading={rollback.isPending} onClick={()=>rollback.mutate()}>回退上一壁纸</Button></Space>}>
-    <p className="subtle">上传原视频后，本机会验证内容并产生 360×360 GIF。素材仅存在项目数据目录，不会进入 Git。</p>
+  return <Card title="6. 动态壁纸素材库" extra={<Space><Tag color="cyan">local media</Tag><Button size="small" disabled={!deviceReady||!device.data.rollback_available} loading={rollback.isPending} onClick={()=>rollback.mutate()}>{device.data?.active_valid?'回退上一壁纸':'恢复保留的壁纸'}</Button></Space>}>
+    <p className="subtle">上传原视频后，本机会验证内容并产生 360×360 GIF。活动壁纸会覆盖几何皮肤；切换为皮肤显示只停用活动指针，不会擦除这里的 A/B 壁纸槽。</p>
     {library.isError&&<Alert type="error" showIcon title="素材库不可用" description="请刷新页面；其他圆屏功能不受影响。"/>}
     {library.data&&!library.data.enabled&&<Alert type="warning" showIcon title="没有找到本机 FFmpeg" description="从启动面板重新启动后再试；控制台不会自动下载依赖。"/>}
     {library.data?.device_delivery.enabled&&device.isError&&<Alert type="warning" showIcon title="当前圆屏不支持运行时壁纸发布" description="设备离线或仍是旧固件时会看到此提示；不会写入 Flash。"/>}

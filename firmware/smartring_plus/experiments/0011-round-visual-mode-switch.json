@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "captured_on": "2026-09-14",
+  "experiment": "0011-round-visual-mode-switch",
+  "depends_on": "0010-server-aec-websocket-v2",
+  "board": "viewe-smartring-plus",
+  "application_version": "2.2.3",
+  "esp_idf_version": "5.5.4",
+  "decision": {
+    "visual_modes": ["dynamic_wallpaper", "geometric_skin"],
+    "skin_mode_clears_active_pointer_only": true,
+    "wallpaper_slots_preserved": true,
+    "retained_slot_protected_from_next_stage": true,
+    "restart_required": true,
+    "reason": "an active 0008+ wallpaper intentionally covers skin geometry even after skin parameters are written"
+  },
+  "source": {
+    "patch_sha256": "64A5BBDA6572DBB1D3C1F2331F90751E9402EFE0F04E2529AA4DAA9F363299A9",
+    "board_source_sha256_before": "AD82FAB5F79A11078CA268DC2272BCB5D2EF4326F784A3640170CB62CB82757B",
+    "board_source_sha256_after": "0E6FF07AF543CA65B957077CE34BF674618E02AE66A4B0110CE351773F07E7BD",
+    "clean_apply": true,
+    "reverse_apply_check": true,
+    "pre_build_backup_created": true
+  },
+  "application": {
+    "length_bytes": 3983664,
+    "sha256": "5C58143B2EC3F8FE2940FC1D3EF1CDAF8A520968FAB963A0DF64B8340B4579B7",
+    "previous_length_bytes": 3981136,
+    "previous_sha256": "E326B281F2DD4868E9F745D62B7A01C0E8C592D74F1076EE41BFCA7389AF118E",
+    "partition_length_bytes": 4128768,
+    "remaining_bytes": 145104,
+    "image_validation_hash_valid": true
+  },
+  "unchanged_artifacts": {
+    "partition_table_sha256": "D46BD51980CD6E15F0BF0C86F530D87A0BBC207144BD9442937B3C1A618A3FFD",
+    "base_assets_sha256": "C31A144A0DF77BFD8F70545D3AF12E3B23F1501CC3B4865EBD91E0FCAC965478"
+  },
+  "offline_verification": {
+    "firmware_build": "passed",
+    "image_type": "ESP32-S3",
+    "image_checksum": "valid",
+    "image_validation_hash": "valid",
+    "deactivate_tool_present_in_binary": true,
+    "retained_wallpaper_restore_present_in_binary": true,
+    "retained_slot_stage_protection_reviewed": true
+  },
+  "flash": {
+    "result": "pending_user_authorization",
+    "required_offsets": ["0x20000"],
+    "application_only": true,
+    "nvs_write_required": false,
+    "assets_write_required": false,
+    "partition_table_write_required": false,
+    "rollback_image": "D:\\sr-bv2-lvgl-assets\\backups\\0010-pre-server-aec\\xiaozhi-v1.bin"
+  },
+  "runtime": {
+    "skin_mode_status_readback": "pending_device_validation",
+    "retained_wallpaper_restore": "pending_device_validation",
+    "skin_visible_after_switch": "pending_device_validation"
+  }
+}

@@ -1,9 +1,9 @@
 import {useEffect, useMemo, useState, type CSSProperties} from 'react';
-import {useMutation, useQuery} from '@tanstack/react-query';
+import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {Alert, Button, Card, Checkbox, Descriptions, Input, InputNumber, Segmented, Select, Space, Tag} from 'antd';
 import {AppShell, ConsoleNav} from './AppShell';
 import {PageHeader} from './PageHeader';
-import {ChatApi, type RoundDeviceSkin, type RoundSkin, type RoundSkinApply, type RoundSkins} from './api';
+import {ChatApi, type RoundDeviceSkin, type RoundSkin, type RoundSkinApply, type RoundSkins, type RoundWallpaperDeployment, type RoundWallpaperDeviceStatus} from './api';
 import {readRoundObservations, roundObservationKey, roundObservationStates, type RoundObservations, type RoundObservationState, writeRoundObservations} from './roundDisplayObservations';
 import {RoundWallpaperLibrary} from './RoundWallpaperLibrary';
 
@@ -106,6 +106,7 @@ function skinStyle(skin?: RoundSkin): CSSProperties {
 }
 
 export function RoundDisplayApp() {
+  const queryClient = useQueryClient();
   const [interaction, setInteraction] = useState<InteractionState>('idle');
   const [emotion, setEmotion] = useState<EmotionState>('warm');
   const [system, setSystem] = useState<SystemState>('normal');
@@ -116,6 +117,12 @@ export function RoundDisplayApp() {
   const [observationNotice,setObservationNotice] = useState('');
   const session = useQuery({queryKey:['round-skin-session'], queryFn:async () => {await api.bootstrap(); return true;}, staleTime:Infinity});
   const skins = useQuery({queryKey:['round-skins'], queryFn:() => api.request<RoundSkins>('/api/round-skins'), enabled:session.isSuccess});
+  const wallpaperDevice = useQuery({
+    queryKey:['round-wallpapers','device'],
+    queryFn:()=>api.request<RoundWallpaperDeviceStatus>('/api/round-wallpapers/device'),
+    enabled:session.isSuccess,
+    retry:false,
+  });
   useEffect(() => {if (skins.data?.selected_skin) setSelectedSkin(skins.data.selected_skin);}, [skins.data?.selected_skin]);
   const saveSkin = useMutation({
     mutationFn:(skin_id:string) => api.request<RoundSkins>('/api/round-skins/selection', 'PUT', {skin_id}),
@@ -127,6 +134,12 @@ export function RoundDisplayApp() {
   const applySkin = useMutation({
     mutationFn:(skin_id:string) => api.request<RoundSkinApply>('/api/round-skins/device', 'POST', {skin_id}),
     onSuccess:value => {if (value.verified) skins.refetch();},
+  });
+  const useSkinDisplay = useMutation({
+    mutationFn:() => api.request<RoundWallpaperDeployment>('/api/round-wallpapers/deactivate', 'POST'),
+    onSuccess:() => window.setTimeout(
+      () => void queryClient.invalidateQueries({queryKey:['round-wallpapers','device']}), 5000,
+    ),
   });
   const saveCustom = useMutation({
     mutationFn:(value:SkinDraft) => api.request<RoundSkins>('/api/round-skins/custom', 'PUT', {
@@ -206,13 +219,16 @@ export function RoundDisplayApp() {
           <p>{blocked ? '系统覆盖层正在接管主画面。' : '当前显示交互状态，系统没有阻塞。'}</p>
         </Card>
         <Card title="4. 皮肤档案" extra={<Tag color="blue">skin_api=1</Tag>}>
-          <p className="subtle">“保存预览选择”只改网页；“应用到真机”会写入设备 NVS 并立即回读核对。语言模型看不到这两个固件管理工具。</p>
+          <p className="subtle">“保存预览选择”只改网页；“应用到真机”会写入设备 NVS 并立即回读核对。动态壁纸是独立的主视觉，活动时会覆盖几何皮肤，需另行切换为皮肤显示。</p>
           <Descriptions className="round-skin-state-map" bordered size="small" column={{xs:1,sm:1,md:3}} items={[
             {key:'working',label:'当前编辑/预览',children:<><strong>{skin?.name ?? selectedSkin}</strong><br/><Tag color={draft?'gold':'blue'}>{draft?'未保存编辑草稿':'已加载档案'}</Tag></>},
             {key:'saved',label:'网页保存选择',children:<><strong>{savedSkin?.name ?? skins.data?.selected_skin ?? '读取中'}</strong><br/><Tag>只影响预览默认值</Tag></>},
             {key:'device',label:'最近真机回读',children:deviceSkin.isSuccess
               ? <><strong>{deviceSkin.data.skin_id}</strong><br/><Tag color={deviceMatchesPreview?'success':'warning'}>{deviceMatchesPreview?'与当前预览一致':'与当前预览不同'}</Tag></>
               : <><strong>尚未读取</strong><br/><Tag>不会自动检测</Tag></>},
+            {key:'mode',label:'真机显示模式',children:wallpaperDevice.isSuccess
+              ? <><strong>{wallpaperDevice.data.active_valid?'动态壁纸':'几何皮肤'}</strong><br/><Tag color={wallpaperDevice.data.active_valid?'gold':'success'}>{wallpaperDevice.data.active_valid?'皮肤当前被覆盖':'皮肤可以显示'}</Tag></>
+              : <><strong>尚未读取</strong><br/><Tag>圆屏在线后刷新</Tag></>},
           ]}/>
           {(session.isError || skins.isError || saveSkin.isError) && <Alert type="error" showIcon title="皮肤档案不可用" description="请确认控制台使用最新代码启动，并刷新页面。"/>}
           <Space wrap className="round-skin-actions">
@@ -223,6 +239,8 @@ export function RoundDisplayApp() {
             <Button loading={deviceSkin.isPending} onClick={() => deviceSkin.mutate()}>检测真机皮肤能力</Button>
             <Button danger loading={applySkin.isPending} disabled={!deviceSkin.isSuccess || !skin}
               onClick={() => applySkin.mutate(selectedSkin)}>应用到真机</Button>
+            <Button loading={useSkinDisplay.isPending} disabled={!wallpaperDevice.data?.active_valid}
+              onClick={() => useSkinDisplay.mutate()}>切换为皮肤显示（会重启）</Button>
             <Button disabled={!skin} onClick={() => skin && setDraft(createDraft(skin))}>从当前皮肤开始编辑</Button>
           </Space>
           {skin && <Descriptions bordered size="small" column={1} items={[
@@ -238,11 +256,15 @@ export function RoundDisplayApp() {
           {deviceSkin.isError && <Alert className="settings-model-alert" type="warning" showIcon
             title="当前真机没有响应皮肤协议" description="旧固件、设备离线或小智控制桥未更新都会出现此结果；不会自动写入或重试。"/>}
           {applySkin.isSuccess && (
-            <Alert className="settings-model-alert" type={applySkin.data.verified ? 'success' : 'error'} showIcon
-              title={applySkin.data.verified ? '真机皮肤已写入并通过回读核对' : '设备已应答，但回读核对未通过'}
-              description={applySkin.data.verified ? '重启后设备会从 NVS 恢复同一皮肤。' : `原因：${applySkin.data.reason ?? 'readback_mismatch'}`}/>
+            <Alert className="settings-model-alert" type={applySkin.data.verified ? (wallpaperDevice.data?.active_valid?'warning':'success') : 'error'} showIcon
+              title={applySkin.data.verified ? (wallpaperDevice.data?.active_valid?'皮肤参数已写入，但动态壁纸仍在显示':'真机皮肤已写入并通过回读核对') : '设备已应答，但回读核对未通过'}
+              description={applySkin.data.verified ? (wallpaperDevice.data?.active_valid?'点击“切换为皮肤显示”后设备会重启；壁纸槽仍保留，可随时恢复。':'重启后设备会从 NVS 恢复同一皮肤。') : `原因：${applySkin.data.reason ?? 'readback_mismatch'}`}/>
           )}
           {applySkin.isError && <Alert className="settings-model-alert" type="error" showIcon title="真机皮肤写入失败" description="未把本机选择冒充成设备成功；请先重新检测设备能力。"/>}
+          {useSkinDisplay.isSuccess && <Alert className="settings-model-alert" type="success" showIcon
+            title="已切换为皮肤显示并安排重启" description="圆屏重连后将显示刚才写入的几何皮肤；动态壁纸文件仍保留。"/>}
+          {useSkinDisplay.isError && <Alert className="settings-model-alert" type="error" showIcon
+            title="未能切换为皮肤显示" description="请确认圆屏在线且运行支持显示模式切换的新固件；不会删除现有壁纸。"/>}
           {draft && <div className="round-skin-editor" role="region" aria-label="本机自定义皮肤编辑器">
             <h3>我的自定义皮肤</h3>
             <p className="subtle">修改会立即出现在左侧预览；保存后生成新的 SHA-256，但不会自动写入圆屏。</p>
