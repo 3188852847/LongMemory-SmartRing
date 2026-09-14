@@ -45,13 +45,26 @@
     "retained_slot_stage_protection_reviewed": true
   },
   "flash": {
-    "result": "pending_user_authorization",
+    "result": "passed",
+    "flashed_on": "2026-09-14",
+    "port": "COM3",
+    "chip": "ESP32-S3 revision v0.2",
+    "mac_suffix": "6d:38",
+    "esptool_version": "4.12.0",
     "required_offsets": ["0x20000"],
     "application_only": true,
     "nvs_write_required": false,
     "assets_write_required": false,
     "partition_table_write_required": false,
-    "rollback_image": "D:\\sr-bv2-lvgl-assets\\backups\\0010-pre-server-aec\\xiaozhi-v1.bin"
+    "erased_range": "0x00020000-0x003ecfff",
+    "written_bytes": 3983664,
+    "write_hash_verification": "passed",
+    "independent_verify_flash": "digest_matched",
+    "rollback_image": "D:\\sr-bv2-lvgl-assets\\backups\\0011-pre-visual-mode\\device-app-0010.bin",
+    "rollback_image_length_bytes": 4128768,
+    "rollback_image_sha256": "FCFA313AFD1150283D60808090F1F704AFFA6056C06B2191A40D6ECBC3FAF0A7",
+    "rollback_application_prefix_length_bytes": 3981136,
+    "rollback_application_prefix_sha256": "E326B281F2DD4868E9F745D62B7A01C0E8C592D74F1076EE41BFCA7389AF118E"
   },
   "runtime": {
     "skin_mode_status_readback": "pending_device_validation",
