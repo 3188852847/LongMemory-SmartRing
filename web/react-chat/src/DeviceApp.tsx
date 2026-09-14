@@ -21,6 +21,9 @@ const delta = (end:number|null, start:number|null) => end === null || start === 
 
 function VoiceLatencyCard({value}:{value:VoiceLatency}) {
   const timing=value.timings_ms;
+  const input=value.input_timings_ms;
+  const inputTotal=(input?.vad_endpoint_ms??0)+(input?.asr_processing_ms??0);
+  const perceivedTotal=timing.first_audio_sent_ms===null?null:timing.first_audio_sent_ms+(input?inputTotal:0);
   const preset=value.response_path==='preset';
   const stateLabels:Record<VoiceLatency['state'],string>={
     preparing_memory:'准备记忆', waiting_for_model:'等待模型', waiting_for_sentence:'组织首句',
@@ -56,12 +59,15 @@ function VoiceLatencyCard({value}:{value:VoiceLatency}) {
       description={`${elapsed(longest.value)}。这是观测到的最长区段，不等于已经证明它是性能根因。`}
     />}
     <Descriptions column={{xs:1,sm:2,lg:3}} size="small" items={[
+      {key:'vad',label:'停嘴 → VAD 结束',children:input?elapsed(input.vad_endpoint_ms):'旧样本未测'},
+      {key:'asr',label:'ASR 识别处理',children:input?elapsed(input.asr_processing_ms):'旧样本未测'},
       {key:'memory',label:'入口 → 记忆完成',children:elapsed(timing.memory_ready_ms)},
       {key:'model',label:'模型首个有效输出',children:preset?'已跳过（本地预置）':delta(timing.llm_first_output_ms,timing.llm_requested_ms)},
       {key:'sentence',label:'输出 → 攒成首句',children:preset?'已跳过（本地预置）':delta(timing.tts_started_ms,timing.llm_first_output_ms)},
       {key:'tts',label:'TTS 生成与编码',children:delta(timing.audio_ready_ms,timing.tts_started_ms)},
       {key:'delivery',label:'音频就绪 → 首包发送',children:delta(timing.first_audio_sent_ms,timing.audio_ready_ms)},
       {key:'total',label:'入口 → 首包发送',children:<strong>{elapsed(timing.first_audio_sent_ms)}</strong>},
+      {key:'perceived',label:'停嘴 → 首包发送',children:<strong>{input?elapsed(perceivedTotal):'旧样本未测'}</strong>},
     ]}/>
     {value.tts_segments&&value.tts_segments.length>0&&<div className="device-segment-timings">
       <h4>TTS 分段</h4>
@@ -70,7 +76,7 @@ function VoiceLatencyCard({value}:{value:VoiceLatency}) {
       </Tag>)}</Space>
       <p className="subtle">这里只记录每段进入 TTS 到完成音频编码的时间，不保存该段文字或音频。连续多段都慢，通常表示短句固定开销被重复支付。</p>
     </div>}
-    <p className="subtle">样本开始于 {new Date(value.started_at).toLocaleString('zh-CN', {hour12:false})}。计时起点是服务端收到已识别文本并进入回答流程；不含录音与 ASR，也不代表扬声器真正开始出声。当前后端：{value.tts_backend==='edge'?'EdgeTTS':value.tts_backend==='voxcpm2'?'VoxCPM2':value.tts_backend==='sanotts'?'sanoTTS':value.tts_backend==='cosyvoice3'?'CosyVoice 3':'其他'}。</p>
+    <p className="subtle">样本开始于 {new Date(value.started_at).toLocaleString('zh-CN', {hour12:false})}。V5 样本从最后语音帧估算停嘴到 VAD 结束，并测量 ASR 处理；旧样本仍从识别文本进入回答流程开始。不包含设备上行网络，也不代表扬声器真正开始出声。当前后端：{value.tts_backend==='edge'?'EdgeTTS':value.tts_backend==='voxcpm2'?'VoxCPM2':value.tts_backend==='sanotts'?'sanoTTS':value.tts_backend==='cosyvoice3'?'CosyVoice 3':'其他'}。</p>
   </Card>;
 }
 

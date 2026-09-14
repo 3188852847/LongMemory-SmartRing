@@ -49,20 +49,23 @@ VOICE_TIMING_FIELDS = {
     "tts_started_ms", "audio_ready_ms", "first_audio_sent_ms",
     "response_completed_ms",
 }
+VOICE_INPUT_TIMING_FIELDS = {"vad_endpoint_ms", "asr_processing_ms"}
 
 
 def voice_latency(value: object) -> dict:
     """验证小智内存中的脱敏时序；开放字段不能直接穿透到浏览器。"""
 
-    if not isinstance(value, dict) or value.get("version") not in {1, 2, 3, 4}:
+    if not isinstance(value, dict) or value.get("version") not in {1, 2, 3, 4, 5}:
         raise BridgeError("bridge_invalid_response", 502)
     fields = {"version", "state", "started_at", "tts_backend", "timings_ms"}
     if value["version"] >= 2:
         fields.add("tts_segments")
     if value["version"] >= 3 and "failure" in value:
         fields.add("failure")
-    if value["version"] == 4:
+    if value["version"] >= 4:
         fields.add("response_path")
+    if value["version"] == 5 and "input_timings_ms" in value:
+        fields.add("input_timings_ms")
     if set(value) != fields:
         raise BridgeError("bridge_invalid_response", 502)
     if value.get("state") not in {
@@ -72,7 +75,7 @@ def voice_latency(value: object) -> dict:
         raise BridgeError("bridge_invalid_response", 502)
     if not isinstance(value.get("started_at"), str) or len(value["started_at"]) > 64:
         raise BridgeError("bridge_invalid_response", 502)
-    if value["version"] == 4 and value.get("response_path") not in {"model", "preset"}:
+    if value["version"] >= 4 and value.get("response_path") not in {"model", "preset"}:
         raise BridgeError("bridge_invalid_response", 502)
     try:
         started = datetime.fromisoformat(value["started_at"])
@@ -90,6 +93,19 @@ def voice_latency(value: object) -> dict:
     ):
         raise BridgeError("bridge_invalid_response", 502)
     result = {**value, "timings_ms": dict(timings)}
+    if "input_timings_ms" in value:
+        input_timings = value["input_timings_ms"]
+        if (
+            not isinstance(input_timings, dict)
+            or set(input_timings) != VOICE_INPUT_TIMING_FIELDS
+            or any(
+                item is not None
+                and (type(item) is not int or not 0 <= item <= 30_000)
+                for item in input_timings.values()
+            )
+        ):
+            raise BridgeError("bridge_invalid_response", 502)
+        result["input_timings_ms"] = dict(input_timings)
     if value["version"] >= 2:
         segments = value.get("tts_segments")
         segment_fields = {"index", "started_ms", "completed_ms", "duration_ms"}

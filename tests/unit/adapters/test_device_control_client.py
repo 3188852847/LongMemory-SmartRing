@@ -270,6 +270,30 @@ def test_status_accepts_v4_preset_timing_and_prediction_shadow(tmp_path):
     assert result["voice_prediction_shadow"] == shadow
 
 
+def test_status_accepts_v5_bounded_input_timing(tmp_path):
+    latency = {
+        "version": 5, "state": "first_audio_sent", "response_path": "model",
+        "started_at": "2026-09-14T10:00:00+00:00", "tts_backend": "cosyvoice3",
+        "input_timings_ms": {"vad_endpoint_ms": 700, "asr_processing_ms": 320},
+        "timings_ms": {
+            "memory_ready_ms": 40, "llm_requested_ms": 45,
+            "llm_first_output_ms": 900, "tts_started_ms": 950,
+            "audio_ready_ms": 2300, "first_audio_sent_ms": 2310,
+            "response_completed_ms": 1500,
+        },
+        "tts_segments": [
+            {"index": 1, "started_ms": 950, "completed_ms": 2300, "duration_ms": 1350},
+        ],
+    }
+    client = client_for(tmp_path, {
+        "connection_count": 1, "ready": True,
+        "read_volume_supported": True, "set_volume_supported": True,
+        "announcement_supported": True, "announcement_ready": True,
+        "user_session_active": False, "voice_latency": latency,
+    })
+    assert asyncio.run(client.status())["voice_latency"] == latency
+
+
 @pytest.mark.parametrize("shadow", [
     {"version": 1, "state": "observing", "opportunities": 1, "evaluated": 1,
      "hits": 1, "misses": 0, "last_result": "hit_affirmative",

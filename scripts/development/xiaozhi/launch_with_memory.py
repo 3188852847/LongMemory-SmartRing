@@ -181,9 +181,12 @@ def main():
     from direct_ws_v2 import install_direct_ws_v2
     from fast_voice_responses import install_fast_voice_responses
     from voice_latency import install_audio_send_observer, install_voice_latency
+    from voice_input_latency import install_voice_input_latency
     from voice_prediction import install_voice_prediction_shadow
     isolate_memory_initialization(ConnectionHandler, MemoryProvider)
     install_direct_ws_v2(ConnectionHandler)
+    from core.providers.asr import base as asr_base
+    install_voice_input_latency(asr_base)
     # 快速通道必须位于时序包装器内部，才能像普通回答一样记录真实首包。
     install_fast_voice_responses(ConnectionHandler)
     install_voice_latency(ConnectionHandler)

@@ -84,16 +84,28 @@ class VoiceLatencyTracker:
             "timings_ms": timings,
             "tts_segments": [dict(segment) for segment in item["tts_segments"]],
         }
+        if item.get("input_timings_ms") is not None:
+            result["input_timings_ms"] = dict(item["input_timings_ms"])
         if item["failure"] is not None:
             result["failure"] = dict(item["failure"])
         return result
 
     def begin(self):
         now = self.clock()
+        pending = getattr(self.connection, "_longmemory_voice_input_pending", None)
+        self.connection.__dict__.pop("_longmemory_voice_input_pending", None)
+        input_timings = None
+        if (
+            isinstance(pending, dict)
+            and type(pending.get("expires_at")) in {int, float}
+            and now <= pending["expires_at"]
+            and isinstance(pending.get("input_timings_ms"), dict)
+        ):
+            input_timings = dict(pending["input_timings_ms"])
         with self.lock:
             self.sequence += 1
             self.current = {
-                "version": 4,
+                "version": 5,
                 # token 只在进程内用于拒绝上一轮迟到的 finally 回调，绝不暴露给 API。
                 "token": self.sequence,
                 # chat() 会在进入上游实现后才生成新 sentence_id。记录旧值可防止
@@ -106,6 +118,7 @@ class VoiceLatencyTracker:
                 "started": now,
                 "tts_backend": _backend(self.connection),
                 "response_path": "model",
+                "input_timings_ms": input_timings,
                 "timings": {field: None for field in TIMING_FIELDS},
                 # 只保留固定阶段、分类码和相对时间，绝不把供应商响应正文、
                 # 请求内容、地址或密钥暴露给控制台。

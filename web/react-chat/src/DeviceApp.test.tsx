@@ -59,7 +59,7 @@ describe('设备与状态页', () => {
     client.clear();
   });
 
-  test('展示脱敏的圆屏首句分段而不声称包含 ASR 或真实播放', async () => {
+  test('展示旧版脱敏首句分段并明确输入侧尚未测量', async () => {
     vi.spyOn(ChatApi.prototype, 'bootstrap').mockResolvedValue(undefined);
     vi.spyOn(ChatApi.prototype, 'request').mockResolvedValue({
       connection_count:1, ready:true, read_volume_supported:true, set_volume_supported:true,
@@ -80,11 +80,31 @@ describe('设备与状态页', () => {
     expect(screen.getByText(/这是观测到的最长区段，不等于已经证明它是性能根因/)).toBeTruthy();
     expect(screen.getByText('1.00 秒')).toBeTruthy();
     expect(screen.getByText(/样本开始于/)).toBeTruthy();
-    expect(screen.getByText(/不含录音与 ASR，也不代表扬声器真正开始出声/)).toBeTruthy();
+    expect(screen.getAllByText('旧样本未测').length).toBeGreaterThanOrEqual(3);
+    expect(screen.getByText(/不包含设备上行网络，也不代表扬声器真正开始出声/)).toBeTruthy();
     expect(screen.getByText(/当前后端：VoxCPM2/)).toBeTruthy();
     expect(screen.getByText('第 1 段 · 1.00 秒')).toBeTruthy();
     expect(screen.getByText('第 2 段 · 2.40 秒')).toBeTruthy();
     expect(screen.getByText(/不保存该段文字或音频/)).toBeTruthy();
+    view.unmount(); client.clear();
+  });
+
+  test('V5 显示停嘴、VAD、ASR 和体感总时长', async () => {
+    vi.spyOn(ChatApi.prototype, 'bootstrap').mockResolvedValue(undefined);
+    vi.spyOn(ChatApi.prototype, 'request').mockResolvedValue({
+      connection_count:1,ready:true,read_volume_supported:true,set_volume_supported:true,
+      voice_latency:{version:5,state:'first_audio_sent',response_path:'model',started_at:'2026-09-14T10:00:00+00:00',tts_backend:'cosyvoice3',
+        input_timings_ms:{vad_endpoint_ms:700,asr_processing_ms:300},timings_ms:{
+          memory_ready_ms:50,llm_requested_ms:55,llm_first_output_ms:1055,tts_started_ms:1100,
+          audio_ready_ms:2500,first_audio_sent_ms:2510,response_completed_ms:1800,
+        },tts_segments:[{index:1,started_ms:1100,completed_ms:2500,duration_ms:1400}]},
+    });
+    const client=createConsoleQueryClient();
+    const view=render(<QueryClientProvider client={client}><MemoryRouter><DeviceApp/></MemoryRouter></QueryClientProvider>);
+    expect(await screen.findByText('停嘴 → VAD 结束')).toBeTruthy();
+    expect(screen.getByText('ASR 识别处理')).toBeTruthy();
+    expect(screen.getByText('停嘴 → 首包发送')).toBeTruthy();
+    expect(screen.getByText('3.51 秒')).toBeTruthy();
     view.unmount(); client.clear();
   });
 
