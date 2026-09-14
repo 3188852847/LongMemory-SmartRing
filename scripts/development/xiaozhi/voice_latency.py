@@ -309,12 +309,35 @@ def install_edge_first_chunk_policy(tts, *, maximum_chars=18):
     )
 
 
-def install_cosyvoice_punctuation_policy(tts):
-    """让 CosyVoice 后续片段也在逗号、顿号等自然边界结束。"""
+def install_cosyvoice_punctuation_policy(tts, *, minimum_chars=18):
+    """首段尽快开口；后续合并短分句，再在自然标点边界结束。"""
+    if minimum_chars < 8:
+        raise ValueError("punctuation_segment_limit_invalid")
     if getattr(tts, "_longmemory_punctuation_policy", None) == "cosyvoice3":
         return
-    punctuations = tuple(getattr(tts, "punctuations", ()))
-    tts.punctuations = tuple(dict.fromkeys((*punctuations, "，", ",", "、")))
+    original = getattr(tts, "_get_segment_text", None)
+    if not callable(original):
+        return
+    boundaries = frozenset("，,、。？?！!；;：:")
+
+    def get_segment_text():
+        # 首个逗号或句末标点仍沿用上游快速策略，维持当前可接受的首声。
+        if getattr(tts, "is_first_sentence", False):
+            return original()
+        full_text = "".join(getattr(tts, "tts_text_buff", ()))
+        processed = getattr(tts, "processed_chars", 0)
+        current = full_text[processed:]
+        # 不把每个逗号变成一次新模型请求。累计到最小长度后，选择遇到的第一个
+        # 自然边界；没有标点时继续等待，绝不按固定字符从词语中间硬切。
+        for index, char in enumerate(current):
+            if index + 1 >= minimum_chars and char in boundaries:
+                raw = current[:index + 1]
+                tts.processed_chars += len(raw)
+                return raw.strip()
+        return None
+
+    tts._get_segment_text = get_segment_text
+    tts._longmemory_punctuation_minimum_chars = minimum_chars
     tts._longmemory_punctuation_policy = "cosyvoice3"
 
 

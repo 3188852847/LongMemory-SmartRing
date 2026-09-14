@@ -2,6 +2,8 @@ import asyncio
 import importlib.util
 from pathlib import Path
 
+import pytest
+
 
 SCRIPT = Path(__file__).resolve().parents[3] / "scripts/development/xiaozhi/voice_latency.py"
 SPEC = importlib.util.spec_from_file_location("voice_latency_test", SCRIPT)
@@ -141,19 +143,31 @@ def test_cosyvoice_uses_natural_punctuation_without_fixed_character_split():
             self.punctuations = ("。", "？")
 
         def _get_segment_text(self):
+            if self.is_first_sentence and self.tts_text_buff:
+                self.is_first_sentence = False
+                self.processed_chars = len(self.tts_text_buff[0])
+                return self.tts_text_buff[0]
             return None
 
     tts = TTS()
-    original = tts._get_segment_text.__func__
     voice_latency.install_cosyvoice_punctuation_policy(tts)
-    text = "这是模型已经输出但暂时还没有标点的一段回答"
-    tts.tts_text_buff.append(text)
-    assert tts._get_segment_text.__func__ is original
+    tts.tts_text_buff.append("你好，")
+    assert tts._get_segment_text() == "你好，"
+    # 后续短逗号不立即创建新 TTS 请求；累计足够内容后仍只在标点处切。
+    tts.tts_text_buff.extend(["今天辛苦了，", "我们先休息一下，", "再慢慢聊聊吧。"])
+    assert tts._get_segment_text() == "今天辛苦了，我们先休息一下，再慢慢聊聊吧。"
+    assert tts.processed_chars == len("你好，今天辛苦了，我们先休息一下，再慢慢聊聊吧。")
     assert tts._get_segment_text() is None
-    assert tts.processed_chars == 0
-    assert tts.is_first_sentence is True
-    assert tts.punctuations == ("。", "？", "，", ",", "、")
+    # 没有标点的长文本也不能按固定字数硬切。
+    tts.tts_text_buff.append("这部分即使很长也要继续等待自然语言边界")
+    assert tts._get_segment_text() is None
     assert tts._longmemory_punctuation_policy == "cosyvoice3"
+    assert tts._longmemory_punctuation_minimum_chars == 18
+
+
+def test_cosyvoice_punctuation_policy_rejects_too_small_segments():
+    with pytest.raises(ValueError, match="punctuation_segment_limit_invalid"):
+        voice_latency.install_cosyvoice_punctuation_policy(object(), minimum_chars=7)
 
 
 def test_first_chunk_policy_keeps_ascii_words_whole():
