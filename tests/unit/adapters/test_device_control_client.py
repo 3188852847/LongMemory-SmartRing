@@ -193,6 +193,28 @@ def test_status_accepts_v2_voice_latency_segments(tmp_path):
     assert asyncio.run(client.status())["voice_latency"] == latency
 
 
+def test_status_accepts_sanitized_v3_model_failure(tmp_path):
+    latency = {
+        "version": 3, "state": "failed",
+        "started_at": "2026-09-14T07:37:18+00:00", "tts_backend": "cosyvoice3",
+        "timings_ms": {
+            "memory_ready_ms": 2, "llm_requested_ms": 3,
+            "llm_first_output_ms": None, "tts_started_ms": 1773,
+            "audio_ready_ms": 5939, "first_audio_sent_ms": 5941,
+            "response_completed_ms": 1770,
+        },
+        "tts_segments": [],
+        "failure": {"stage": "model", "code": "model_http_404", "at_ms": 1768},
+    }
+    client = client_for(tmp_path, {
+        "connection_count": 0, "ready": False,
+        "read_volume_supported": False, "set_volume_supported": False,
+        "announcement_supported": False, "announcement_ready": False,
+        "user_session_active": False, "voice_latency": latency, "reason": "device_offline",
+    })
+    assert asyncio.run(client.status())["voice_latency"] == latency
+
+
 def test_status_rejects_inconsistent_v2_voice_latency_segment(tmp_path):
     latency = {
         "version": 2, "state": "tts_running",

@@ -286,7 +286,8 @@ class Manager:
             return "exited"
         return "ready" if ready else "running"
 
-    def publish_status(self, phase, *, console_ready=False, tts_ready=False):
+    def publish_status(self, phase, *, console_ready=False, voice_ready=False,
+                       tts_ready=False):
         """原子发布不含正文/密钥的本机诊断快照；失败不能影响主服务。"""
         if self.status_path is None or not self.instance:
             return
@@ -298,7 +299,7 @@ class Manager:
             "phase": phase,
             "services": {
                 "console": self._service_state("console", ready=console_ready),
-                "voice": self._service_state("voice"),
+                "voice": self._service_state("voice", ready=voice_ready),
                 "voxcpm2": self._service_state(
                     "voxcpm2", ready=tts_ready and self.options is not None
                     and self.options.tts_backend == "voxcpm2"
@@ -450,8 +451,47 @@ class Manager:
             response = conn.getresponse()
             response.read(1024 * 1024)
             # 实例标识不是认证令牌，仅避免把占用端口的别的服务误判为本次实例。
-            return response.status == 200 and response.getheader("X-LongMemory-Instance") == self.instance
+            console_ready = (
+                response.status == 200
+                and response.getheader("X-LongMemory-Instance") == self.instance
+            )
         except (OSError, http.client.HTTPException):
+            return False
+        finally:
+            conn.close()
+        if not console_ready:
+            return False
+        return not self.options.voice or self.voice_bridge_ready()
+
+    def voice_bridge_ready(self):
+        """验权读取本机桥状态；只证明语音控制面已监听，不要求圆屏在线。"""
+        if (self.options is None or not self.options.voice
+                or "voice" not in self.services
+                or self.services["voice"].process.poll() is not None):
+            return False
+        try:
+            token = (self.options.root.resolve() / "data/control/device-control.token").read_text(
+                encoding="ascii"
+            ).strip()
+            if len(token) != 64 or any(char not in "0123456789abcdef" for char in token):
+                return False
+        except OSError:
+            return False
+        conn = http.client.HTTPConnection("127.0.0.1", 8766, timeout=0.25)
+        try:
+            conn.request("GET", "/api/device", headers={
+                "Authorization": "Bearer " + token,
+                "Host": "127.0.0.1:8766",
+            })
+            response = conn.getresponse()
+            body = json.loads(response.read(32_768))
+            return (
+                response.status == 200
+                and isinstance(body, dict)
+                and type(body.get("connection_count")) is int
+                and type(body.get("ready")) is bool
+            )
+        except (OSError, http.client.HTTPException, json.JSONDecodeError):
             return False
         finally:
             conn.close()

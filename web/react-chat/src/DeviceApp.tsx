@@ -23,8 +23,15 @@ function VoiceLatencyCard({value}:{value:VoiceLatency}) {
   const timing=value.timings_ms;
   const stateLabels:Record<VoiceLatency['state'],string>={
     preparing_memory:'准备记忆', waiting_for_model:'等待模型', waiting_for_sentence:'组织首句',
-    tts_running:'生成语音', audio_ready:'音频已就绪', first_audio_sent:'首包已发送',
+    tts_running:'生成语音', audio_ready:'音频已就绪', first_audio_sent:'首包已发送', failed:'回答失败',
   };
+  const failureLabels={
+    model_http_404:{title:'模型接口返回 404',description:'当前圆屏模型的地址、模型名或聊天路由不可用。请先在设置页检测圆屏模型；这不是声音模型故障。'},
+    model_http_error:{title:'模型接口返回错误',description:'模型服务拒绝了本次请求。请在设置页重新检测圆屏模型。'},
+    model_connection_failed:{title:'无法连接圆屏模型',description:'校园模型服务当前不可达或网络连接失败。圆屏没有取得可朗读的正常回答。'},
+    model_timeout:{title:'圆屏模型请求超时',description:'模型在时限内没有返回回答。请检查校园网与模型服务状态。'},
+    model_request_failed:{title:'圆屏模型请求失败',description:'模型调用在生成回答前失败。请在设置页重新检测圆屏模型。'},
+  } as const;
   const measuredStages=[
     {label:'记忆准备',value:timing.memory_ready_ms},
     {label:'模型首个有效输出',value:timing.llm_first_output_ms === null || timing.llm_requested_ms === null ? null : Math.max(0,timing.llm_first_output_ms-timing.llm_requested_ms)},
@@ -33,7 +40,11 @@ function VoiceLatencyCard({value}:{value:VoiceLatency}) {
     {label:'音频发送准备',value:timing.first_audio_sent_ms === null || timing.audio_ready_ms === null ? null : Math.max(0,timing.first_audio_sent_ms-timing.audio_ready_ms)},
   ].filter((item):item is {label:string;value:number}=>item.value !== null);
   const longest=measuredStages.reduce<{label:string;value:number}|undefined>((current,item)=>!current||item.value>current.value?item:current,undefined);
-  return <Card className="device-latency-card" title="最近一次圆屏首句时序" extra={<Tag color={value.state==='first_audio_sent'?'green':'processing'}>{stateLabels[value.state]}</Tag>}>
+  return <Card className="device-latency-card" title="最近一次圆屏首句时序" extra={<Tag color={value.state==='failed'?'red':value.state==='first_audio_sent'?'green':'processing'}>{stateLabels[value.state]}</Tag>}>
+    {value.failure&&<Alert
+      showIcon type="error" title={failureLabels[value.failure.code].title}
+      description={`${failureLabels[value.failure.code].description} 失败发生在进入回答流程后的 ${elapsed(value.failure.at_ms)}。`}
+    />}
     {longest&&<Alert
       showIcon
       type="info"

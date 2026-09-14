@@ -88,6 +88,23 @@ describe('设备与状态页', () => {
     view.unmount(); client.clear();
   });
 
+  test('把模型 404 显示为回答故障而不是声音故障', async () => {
+    vi.spyOn(ChatApi.prototype, 'bootstrap').mockResolvedValue(undefined);
+    vi.spyOn(ChatApi.prototype, 'request').mockResolvedValue({
+      connection_count:0, ready:false, read_volume_supported:false, set_volume_supported:false,
+      voice_latency:{version:3,state:'failed',started_at:'2026-09-14T07:37:18+00:00',tts_backend:'cosyvoice3',timings_ms:{
+        memory_ready_ms:2,llm_requested_ms:3,llm_first_output_ms:null,tts_started_ms:1773,
+        audio_ready_ms:5939,first_audio_sent_ms:5941,response_completed_ms:1770,
+      },tts_segments:[],failure:{stage:'model',code:'model_http_404',at_ms:1768}},
+    });
+    const client=createConsoleQueryClient();
+    const view=render(<QueryClientProvider client={client}><MemoryRouter><DeviceApp/></MemoryRouter></QueryClientProvider>);
+    expect(await screen.findByText('模型接口返回 404')).toBeTruthy();
+    expect(screen.getByText(/这不是声音模型故障/)).toBeTruthy();
+    expect(screen.getByText('回答失败')).toBeTruthy();
+    view.unmount(); client.clear();
+  });
+
   test('停止当前回答只声称服务端中止而不伪造设备回执', async () => {
     vi.spyOn(ChatApi.prototype, 'bootstrap').mockResolvedValue(undefined);
     const request=vi.spyOn(ChatApi.prototype, 'request').mockImplementation(async (path) => {

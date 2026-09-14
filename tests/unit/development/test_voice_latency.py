@@ -12,6 +12,7 @@ SPEC.loader.exec_module(voice_latency)
 class BoundLogger:
     def __init__(self, lines): self.lines = lines
     def info(self, line): self.lines.append(line)
+    def error(self, line): self.lines.append(line)
 
 
 class Logger:
@@ -35,7 +36,7 @@ def test_tracker_exposes_only_fixed_timing_fields_and_not_content():
     tracker.mark("llm_requested_ms")
     tracker.mark("llm_first_output_ms")
     result = tracker.snapshot()
-    assert result["version"] == 2
+    assert result["version"] == 3
     assert result["tts_backend"] == "edge"
     assert result["timings_ms"]["llm_requested_ms"] == 200
     assert result["timings_ms"]["llm_first_output_ms"] == 500
@@ -142,3 +143,36 @@ def test_installed_observer_measures_model_tts_and_audio_without_text_in_logs():
     measured = voice_latency.observed_audio_sender(original)
     assert asyncio.run(measured(connection, object(), b"packet", None, "turn-1")) == "sent"
     assert connection._longmemory_voice_latency.snapshot()["timings_ms"]["first_audio_sent_ms"] is not None
+
+
+def test_model_stream_failure_is_classified_without_exposing_error_text():
+    class PrivateHttpError(Exception):
+        status_code = 404
+
+    class LLM:
+        def response(self, *_args, **_kwargs):
+            yield ""
+            raise PrivateHttpError("private provider response")
+
+    class Connection:
+        def chat(self, _query, depth=0):
+            self.sentence_id = "turn-failed"
+            list(self.llm.response("session", []))
+
+    voice_latency.install_voice_latency(Connection)
+    connection = Connection()
+    connection.config = {"selected_module": {"TTS": "EdgeTTS"}}
+    connection.logger = Logger()
+    connection.llm, connection.tts = LLM(), None
+
+    try:
+        connection.chat("private question")
+    except PrivateHttpError:
+        pass
+
+    result = connection._longmemory_voice_latency.snapshot()
+    assert result["version"] == 3
+    assert result["state"] == "failed"
+    assert result["failure"]["stage"] == "model"
+    assert result["failure"]["code"] == "model_http_404"
+    assert "private" not in repr(result) + " ".join(connection.logger.lines)

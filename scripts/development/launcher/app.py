@@ -1134,6 +1134,7 @@ def main():
                 manager.publish_status(
                     "ready",
                     console_ready=True,
+                    voice_ready=manager.options.voice,
                     tts_ready=local_tts_ready,
                 )
             elif time.monotonic() - state["started"] > 90:

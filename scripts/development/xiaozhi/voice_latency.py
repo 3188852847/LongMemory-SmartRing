@@ -61,7 +61,9 @@ class VoiceLatencyTracker:
     @staticmethod
     def _snapshot_item(item):
         timings = dict(item["timings"])
-        if timings["first_audio_sent_ms"] is not None:
+        if item["failure"] is not None:
+            state = "failed"
+        elif timings["first_audio_sent_ms"] is not None:
             state = "first_audio_sent"
         elif timings["audio_ready_ms"] is not None:
             state = "audio_ready"
@@ -73,7 +75,7 @@ class VoiceLatencyTracker:
             state = "waiting_for_model"
         else:
             state = "preparing_memory"
-        return {
+        result = {
             "version": item["version"],
             "state": state,
             "started_at": item["started_at"],
@@ -81,13 +83,16 @@ class VoiceLatencyTracker:
             "timings_ms": timings,
             "tts_segments": [dict(segment) for segment in item["tts_segments"]],
         }
+        if item["failure"] is not None:
+            result["failure"] = dict(item["failure"])
+        return result
 
     def begin(self):
         now = self.clock()
         with self.lock:
             self.sequence += 1
             self.current = {
-                "version": 2,
+                "version": 3,
                 # token 只在进程内用于拒绝上一轮迟到的 finally 回调，绝不暴露给 API。
                 "token": self.sequence,
                 # chat() 会在进入上游实现后才生成新 sentence_id。记录旧值可防止
@@ -100,11 +105,31 @@ class VoiceLatencyTracker:
                 "started": now,
                 "tts_backend": _backend(self.connection),
                 "timings": {field: None for field in TIMING_FIELDS},
+                # 只保留固定阶段、分类码和相对时间，绝不把供应商响应正文、
+                # 请求内容、地址或密钥暴露给控制台。
+                "failure": None,
                 # 每个元素只记录顺序与时间，不保存本段文本或音频。短句模型具有
                 # 固定启动开销时，这能区分“首段慢”和“每段都慢”。
                 "tts_segments": [],
             }
             return self.sequence
+
+    def fail(self, code, *, stage="model"):
+        allowed = {
+            "model_http_404", "model_http_error", "model_connection_failed",
+            "model_timeout", "model_request_failed",
+        }
+        if code not in allowed or stage != "model":
+            raise ValueError("voice_failure_invalid")
+        with self.lock:
+            item = self.current
+            if item is None or item["failure"] is not None:
+                return
+            elapsed = max(0, round((self.clock() - item["started"]) * 1000))
+            item["failure"] = {"stage": stage, "code": code, "at_ms": elapsed}
+        self.connection.logger.bind(tag="voice-latency").error(
+            f"圆屏回答失败 stage={stage} code={code} elapsed={elapsed}ms"
+        )
 
     def bind_sentence(self, sentence_id=None):
         with self.lock:
@@ -194,7 +219,8 @@ class VoiceLatencyTracker:
                 return None
             # 心跳、空识别或未进入模型的轮次可能紧随真实回答开始。控制面优先返回
             # 最近一次已经发出音频的样本，避免可诊断的慢回答被空轮次覆盖。
-            if self.current["timings"]["first_audio_sent_ms"] is not None:
+            if (self.current["failure"] is not None
+                    or self.current["timings"]["first_audio_sent_ms"] is not None):
                 return self._snapshot_item(self.current)
             if self.last_audible is not None:
                 return {
@@ -248,11 +274,29 @@ def install_edge_first_chunk_policy(tts, *, maximum_chars=18):
     tts._longmemory_edge_first_chunk_installed = True
 
 
+def _model_failure_code(error):
+    status = getattr(error, "status_code", None)
+    if status == 404:
+        return "model_http_404"
+    if isinstance(status, int):
+        return "model_http_error"
+    name = type(error).__name__.lower()
+    if "timeout" in name:
+        return "model_timeout"
+    if "connection" in name:
+        return "model_connection_failed"
+    return "model_request_failed"
+
+
 def _observe_generator(connection, responses):
-    for response in responses:
-        if _has_output(response):
-            connection._longmemory_voice_latency.mark("llm_first_output_ms")
-        yield response
+    try:
+        for response in responses:
+            if _has_output(response):
+                connection._longmemory_voice_latency.mark("llm_first_output_ms")
+            yield response
+    except Exception as error:
+        connection._longmemory_voice_latency.fail(_model_failure_code(error))
+        raise
 
 
 class _ObservedLLM:
@@ -269,7 +313,11 @@ class _ObservedLLM:
         tracker = self._connection._longmemory_voice_latency
         tracker.bind_sentence()
         tracker.mark("llm_requested_ms")
-        responses = getattr(self._provider, method_name)(*args, **kwargs)
+        try:
+            responses = getattr(self._provider, method_name)(*args, **kwargs)
+        except Exception as error:
+            tracker.fail(_model_failure_code(error))
+            raise
         return _observe_generator(self._connection, responses)
 
     def response(self, *args, **kwargs):

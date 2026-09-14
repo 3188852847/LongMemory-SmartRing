@@ -54,16 +54,18 @@ VOICE_TIMING_FIELDS = {
 def voice_latency(value: object) -> dict:
     """验证小智内存中的脱敏时序；开放字段不能直接穿透到浏览器。"""
 
-    if not isinstance(value, dict) or value.get("version") not in {1, 2}:
+    if not isinstance(value, dict) or value.get("version") not in {1, 2, 3}:
         raise BridgeError("bridge_invalid_response", 502)
     fields = {"version", "state", "started_at", "tts_backend", "timings_ms"}
-    if value["version"] == 2:
+    if value["version"] in {2, 3}:
         fields.add("tts_segments")
+    if value["version"] == 3 and "failure" in value:
+        fields.add("failure")
     if set(value) != fields:
         raise BridgeError("bridge_invalid_response", 502)
     if value.get("state") not in {
         "preparing_memory", "waiting_for_model", "waiting_for_sentence",
-        "tts_running", "audio_ready", "first_audio_sent",
+        "tts_running", "audio_ready", "first_audio_sent", "failed",
     } or value.get("tts_backend") not in {"edge", "voxcpm2", "sanotts", "cosyvoice3", "other"}:
         raise BridgeError("bridge_invalid_response", 502)
     if not isinstance(value.get("started_at"), str) or len(value["started_at"]) > 64:
@@ -84,7 +86,7 @@ def voice_latency(value: object) -> dict:
     ):
         raise BridgeError("bridge_invalid_response", 502)
     result = {**value, "timings_ms": dict(timings)}
-    if value["version"] == 2:
+    if value["version"] in {2, 3}:
         segments = value.get("tts_segments")
         segment_fields = {"index", "started_ms", "completed_ms", "duration_ms"}
         if not isinstance(segments, list) or len(segments) > 64:
@@ -108,6 +110,24 @@ def voice_latency(value: object) -> dict:
             ):
                 raise BridgeError("bridge_invalid_response", 502)
         result["tts_segments"] = [dict(segment) for segment in segments]
+    if value["version"] == 3 and "failure" in value:
+        failure = value["failure"]
+        if (
+            value["state"] != "failed"
+            or not isinstance(failure, dict)
+            or set(failure) != {"stage", "code", "at_ms"}
+            or failure.get("stage") != "model"
+            or failure.get("code") not in {
+                "model_http_404", "model_http_error", "model_connection_failed",
+                "model_timeout", "model_request_failed",
+            }
+            or type(failure.get("at_ms")) is not int
+            or not 0 <= failure["at_ms"] <= 3_600_000
+        ):
+            raise BridgeError("bridge_invalid_response", 502)
+        result["failure"] = dict(failure)
+    elif value.get("state") == "failed":
+        raise BridgeError("bridge_invalid_response", 502)
     return result
 
 

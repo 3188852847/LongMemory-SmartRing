@@ -169,6 +169,43 @@ def test_launcher_status_snapshot_contains_only_bounded_runtime_facts(options):
     }
 
 
+def test_voice_bridge_readiness_requires_authenticated_bounded_status(options, monkeypatch):
+    selected = replace(options, voice=True)
+    token_path = selected.root / "data/control/device-control.token"
+    token_path.parent.mkdir(parents=True)
+    token_path.write_text("a" * 64, encoding="ascii")
+
+    class Process:
+        @staticmethod
+        def poll(): return None
+
+    class Owned:
+        process = Process()
+
+    class Response:
+        status = 200
+        @staticmethod
+        def read(_limit): return b'{"connection_count":0,"ready":false}'
+
+    class Connection:
+        def __init__(self, host, port, timeout):
+            assert (host, port, timeout) == ("127.0.0.1", 8766, 0.25)
+        def request(self, method, path, headers):
+            assert (method, path) == ("GET", "/api/device")
+            assert headers == {"Authorization": "Bearer " + "a" * 64,
+                               "Host": "127.0.0.1:8766"}
+        @staticmethod
+        def getresponse(): return Response()
+        @staticmethod
+        def close(): pass
+
+    manager = runtime.Manager()
+    manager.options = selected
+    manager.services = {"voice": Owned()}
+    monkeypatch.setattr(runtime.http.client, "HTTPConnection", Connection)
+    assert manager.voice_bridge_ready() is True
+
+
 def test_explicit_launcher_choice_enables_l1_delete_capability(options):
     cmd = runtime.build_commands(
         replace(options, allow_memory_delete=True), uv="synthetic-uv"
