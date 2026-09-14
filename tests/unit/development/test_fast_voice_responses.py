@@ -92,6 +92,8 @@ def test_cosyvoice_greeting_archives_l0_and_queues_preset_without_model(monkeypa
     connection.memory = SimpleNamespace(query_memory=query_memory)
     connection.dialogue = SimpleNamespace(put=messages.append)
     connection.tts = SimpleNamespace(tts_text_queue=SimpleNamespace(put=queued.append))
+    paths = []
+    connection._longmemory_voice_latency = SimpleNamespace(set_response_path=paths.append)
     connection.logger = SimpleNamespace(bind=lambda **_kw: SimpleNamespace(
         info=logs.append, warning=logs.append,
     ))
@@ -99,6 +101,7 @@ def test_cosyvoice_greeting_archives_l0_and_queues_preset_without_model(monkeypa
     assert connection.chat("你好！") is True
     assert original == []
     assert archived == ["你好！"]
+    assert paths == ["preset"]
     assert [item.role for item in messages] == ["user", "assistant"]
     assert [item.sentence_type for item in queued] == ["first", "middle", "last"]
     assert queued[1].content_detail == "你好呀，我在呢。"

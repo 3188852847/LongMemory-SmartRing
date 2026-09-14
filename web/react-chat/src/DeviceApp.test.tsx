@@ -105,6 +105,23 @@ describe('设备与状态页', () => {
     view.unmount(); client.clear();
   });
 
+  test('把封闭寒暄显示为本地预置成功路径', async () => {
+    vi.spyOn(ChatApi.prototype, 'bootstrap').mockResolvedValue(undefined);
+    vi.spyOn(ChatApi.prototype, 'request').mockResolvedValue({
+      connection_count:1, ready:true, read_volume_supported:true, set_volume_supported:true,
+      voice_latency:{version:4,state:'first_audio_sent',response_path:'preset',started_at:'2026-09-14T09:00:00+00:00',tts_backend:'cosyvoice3',timings_ms:{
+        memory_ready_ms:55,llm_requested_ms:null,llm_first_output_ms:null,tts_started_ms:60,
+        audio_ready_ms:95,first_audio_sent_ms:105,response_completed_ms:65,
+      },tts_segments:[{index:1,started_ms:60,completed_ms:95,duration_ms:35}]},
+    });
+    const client=createConsoleQueryClient();
+    const view=render(<QueryClientProvider client={client}><MemoryRouter><DeviceApp/></MemoryRouter></QueryClientProvider>);
+    expect(await screen.findByText('本地预置语音')).toBeTruthy();
+    expect(screen.getByText('本轮命中封闭寒暄快速通道')).toBeTruthy();
+    expect(screen.getAllByText('已跳过（本地预置）')).toHaveLength(2);
+    view.unmount(); client.clear();
+  });
+
   test('明确显示记忆协议失败发生在模型请求之前', async () => {
     vi.spyOn(ChatApi.prototype, 'bootstrap').mockResolvedValue(undefined);
     vi.spyOn(ChatApi.prototype, 'request').mockResolvedValue({

@@ -21,6 +21,7 @@ const delta = (end:number|null, start:number|null) => end === null || start === 
 
 function VoiceLatencyCard({value}:{value:VoiceLatency}) {
   const timing=value.timings_ms;
+  const preset=value.response_path==='preset';
   const stateLabels:Record<VoiceLatency['state'],string>={
     preparing_memory:'准备记忆', waiting_for_model:'等待模型', waiting_for_sentence:'组织首句',
     tts_running:'生成语音', audio_ready:'音频已就绪', first_audio_sent:'首包已发送', failed:'回答失败',
@@ -42,7 +43,8 @@ function VoiceLatencyCard({value}:{value:VoiceLatency}) {
     {label:'音频发送准备',value:timing.first_audio_sent_ms === null || timing.audio_ready_ms === null ? null : Math.max(0,timing.first_audio_sent_ms-timing.audio_ready_ms)},
   ].filter((item):item is {label:string;value:number}=>item.value !== null);
   const longest=measuredStages.reduce<{label:string;value:number}|undefined>((current,item)=>!current||item.value>current.value?item:current,undefined);
-  return <Card className="device-latency-card" title="最近一次圆屏首句时序" extra={<Tag color={value.state==='failed'?'red':value.state==='first_audio_sent'?'green':'processing'}>{stateLabels[value.state]}</Tag>}>
+  return <Card className="device-latency-card" title="最近一次圆屏首句时序" extra={<Space wrap>{preset&&<Tag color="cyan">本地预置语音</Tag>}<Tag color={value.state==='failed'?'red':value.state==='first_audio_sent'?'green':'processing'}>{stateLabels[value.state]}</Tag></Space>}>
+    {preset&&<Alert showIcon type="success" title="本轮命中封闭寒暄快速通道" description="用户原话仍进入记忆归档；回答模型和实时 TTS 已跳过，音频来自同一 CosyVoice3 声线的本地预置文件。"/>}
     {value.failure&&<Alert
       showIcon type="error" title={failureLabels[value.failure.code].title}
       description={`${failureLabels[value.failure.code].description} 失败发生在进入回答流程后的 ${elapsed(value.failure.at_ms)}。`}
@@ -55,8 +57,8 @@ function VoiceLatencyCard({value}:{value:VoiceLatency}) {
     />}
     <Descriptions column={{xs:1,sm:2,lg:3}} size="small" items={[
       {key:'memory',label:'入口 → 记忆完成',children:elapsed(timing.memory_ready_ms)},
-      {key:'model',label:'模型首个有效输出',children:delta(timing.llm_first_output_ms,timing.llm_requested_ms)},
-      {key:'sentence',label:'输出 → 攒成首句',children:delta(timing.tts_started_ms,timing.llm_first_output_ms)},
+      {key:'model',label:'模型首个有效输出',children:preset?'已跳过（本地预置）':delta(timing.llm_first_output_ms,timing.llm_requested_ms)},
+      {key:'sentence',label:'输出 → 攒成首句',children:preset?'已跳过（本地预置）':delta(timing.tts_started_ms,timing.llm_first_output_ms)},
       {key:'tts',label:'TTS 生成与编码',children:delta(timing.audio_ready_ms,timing.tts_started_ms)},
       {key:'delivery',label:'音频就绪 → 首包发送',children:delta(timing.first_audio_sent_ms,timing.audio_ready_ms)},
       {key:'total',label:'入口 → 首包发送',children:<strong>{elapsed(timing.first_audio_sent_ms)}</strong>},

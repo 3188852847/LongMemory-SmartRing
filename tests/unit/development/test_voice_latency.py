@@ -36,7 +36,8 @@ def test_tracker_exposes_only_fixed_timing_fields_and_not_content():
     tracker.mark("llm_requested_ms")
     tracker.mark("llm_first_output_ms")
     result = tracker.snapshot()
-    assert result["version"] == 3
+    assert result["version"] == 4
+    assert result["response_path"] == "model"
     assert result["tts_backend"] == "edge"
     assert result["timings_ms"]["llm_requested_ms"] == 200
     assert result["timings_ms"]["llm_first_output_ms"] == 500
@@ -61,6 +62,16 @@ def test_tracker_rejects_late_completion_from_previous_turn():
     assert tracker.snapshot()["timings_ms"]["response_completed_ms"] is None
     tracker.mark("response_completed_ms", token=new_token, sentence_id="turn-2")
     assert tracker.snapshot()["timings_ms"]["response_completed_ms"] == 1000
+
+
+def test_tracker_marks_preset_path_without_content():
+    connection = type("Connection", (), {})()
+    connection.config = {"selected_module": {"TTS": "EdgeTTS"}}
+    connection.logger = Logger()
+    tracker = voice_latency.VoiceLatencyTracker(connection)
+    tracker.begin()
+    tracker.set_response_path("preset")
+    assert tracker.snapshot()["response_path"] == "preset"
 
 
 def test_tracker_keeps_latest_audible_turn_when_empty_turn_follows():
@@ -171,7 +182,7 @@ def test_model_stream_failure_is_classified_without_exposing_error_text():
         pass
 
     result = connection._longmemory_voice_latency.snapshot()
-    assert result["version"] == 3
+    assert result["version"] == 4
     assert result["state"] == "failed"
     assert result["failure"]["stage"] == "model"
     assert result["failure"]["code"] == "model_http_404"

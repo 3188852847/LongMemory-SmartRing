@@ -74,6 +74,9 @@ def install_fast_voice_responses(connection_class):
         sentence_id = uuid4().hex
         connection.sentence_id = sentence_id
         connection.client_abort = False
+        tracker = getattr(connection, "_longmemory_voice_latency", None)
+        if tracker is not None:
+            tracker.set_response_path("preset")
         connection.dialogue.put(Message(role="user", content=query))
 
         # Memory 查询对简单寒暄会走 NOOP，但仍负责保存 L0 和提取审计。
