@@ -812,14 +812,35 @@ def test_daily_summary_uses_human_labels_instead_of_internal_enums(monkeypatch):
     monkeypatch.setitem(sys.modules, "runtime", runtime)
     spec.loader.exec_module(app)
 
-    summary = app._summary_text(True, "memories", "elysia_v1", "llm", "hybrid", "voxcpm2", True, False, "xiaozhi_local")
+    summary = app._summary_text(
+        True, "memories", "elysia_v1", "llm", "hybrid", "voxcpm2",
+        True, False, "xiaozhi_local", model_profile="official",
+        voice_model_profile="campus",
+    )
     assert summary == (
         "网页＋圆屏语音  ·  打开记忆管理  ·  爱莉希雅风格\n"
-        "模型辅助提取  ·  关键词＋语义召回  ·  VoxCPM2 本地声音  ·  普通拾音\n"
-        "允许单条删除  ·  低频整理关闭  ·  L1 旁路质检关闭  ·  "
-        "L2 旁路质检关闭  ·  圆屏：小智本地摘要"
+        "网页：官方 DeepSeek  ·  模型辅助提取  ·  关键词＋语义召回\n"
+        "圆屏：学校模型  ·  小智本地摘要  ·  VoxCPM2 本地声音  ·  普通拾音\n"
+        "记忆管理：允许单条删除  ·  实验开关：均关闭"
     )
     assert not {"elysia_v1", "llm", "hybrid", "voxcpm2"}.intersection(summary.split())
+
+
+def test_daily_recommendation_keeps_experimental_work_disabled():
+    recommended = view_model.daily_recommendation()
+
+    assert recommended == {
+        "model_profile": "campus",
+        "voice_model_profile": "campus",
+        "memory_backend": "longmemory",
+        "memory_extraction": "llm",
+        "memory_retrieval": "hybrid",
+        "tts_backend": "cosyvoice3",
+        "vad_profile": "normal",
+        "memory_consolidation": False,
+        "l1_sufficiency_shadow": False,
+        "l2_sufficiency_shadow": False,
+    }
 
 
 def test_launcher_failure_hint_is_actionable_without_copying_process_output(monkeypatch):

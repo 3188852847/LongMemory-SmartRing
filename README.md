@@ -6,7 +6,7 @@
 
 > SmartRing-Plus 是基于 ESP32-S3 的智能圆形显示屏开发板，不是可穿戴戒指。
 
-**日常启动：双击根目录 `Start.cmd`**，在小面板选择文字或文字＋圆屏，确认后启动并打开控制台。系统总览会分开显示启动器受管进程、模型、记忆和圆屏连接，不把进程存活冒充业务可用。见[统一启动指南](docs/guides/统一启动.md)。不知道该和圆屏说什么时，可使用[圆屏真实日用聊天脚本](docs/guides/圆屏聊天体验脚本.md)：先走约 30 分钟的首次路线，再按早中晚场景分散完成 7 个实际使用日，不向个人库集中灌入虚构测试事实。原[终端使用说明](docs/guides/使用说明.md)保留用于实验与排障。
+**日常启动：双击根目录 `Start.cmd`**，在小面板选择文字或文字＋圆屏，确认后启动并打开控制台。系统总览会分开显示启动器受管进程、模型、记忆和圆屏连接，不把进程存活冒充业务可用；本机自动化还可经随机令牌接口查询状态、按面板当前选择启动或停止，见 [ADR-0158](docs/adr/0158-authenticated-local-launcher-control.md)。具体操作见[统一启动指南](docs/guides/统一启动.md)。不知道该和圆屏说什么时，可使用[圆屏真实日用聊天脚本](docs/guides/圆屏聊天体验脚本.md)：先走约 30 分钟的首次路线，再按早中晚场景分散完成 7 个实际使用日，不向个人库集中灌入虚构测试事实。原[终端使用说明](docs/guides/使用说明.md)保留用于实验与排障。
 
 圆屏记忆算法现在可在 LongMemory、小智本地摘要和无长期记忆速度基线之间选择；只在下次统一启动时生效，不重刷固件、不迁移或混用数据。小智原厂默认实际是 `nomem`，不是另一套隐藏在圆屏里的长期记忆。见[圆屏记忆后端切换](docs/guides/圆屏记忆后端切换.md)和 [ADR-0092](docs/adr/0092-switchable-round-screen-memory-backends.md)。
 
@@ -18,7 +18,7 @@
 
 时间感知历史问答已支持沿当前 L1 的明确事实变化链补充旧事实，并保留有效区间、L0 来源与圆屏历史回执。历史召回 V2 要求同一分句具有明确问句与历史表达，读取时复核锚点仍有效，并让历史内容与来源来自同一只读快照；明确日期版还能将唯一的年、月或日转换为 UTC+8 目标区间，只向回答保留与目标相交的当前/历史 L1，证据空档会移除现状并明确拒答。日期无效、含糊和多义时保持关闭，通用时间推理仍未实现。见 [ADR-0153](docs/adr/0153-temporal-recall-question-and-snapshot-boundaries.md)与 [ADR-0155](docs/adr/0155-explicit-date-bounded-temporal-recall.md)。
 
-声音链已支持 EdgeTTS、VoxCPM2、sanoTTS 和 CosyVoice3 四个可替换后端。VoxCPM2 提供本地参考声线与风格参数；sanoTTS 保留为 Node/WASM 快速基线；CosyVoice3 使用项目外独立 Python 环境和 Fun-CosyVoice3-0.5B，并通过本机专用长度前缀 WAV 通道向圆屏逐块交付。用户已确认声音质量、连续性和播放期间自然插话，但最新日用反馈表明首声仍偏慢；服务现已预计算固定参考音色并在每次请求前恢复原始流式步长，本机隔离复测的短句首块约为 1.14～1.29 秒，真实圆屏仍待统一启动后复测。取消仍是模型在下一块产出时观察断开的协作式取消，EdgeTTS 保留稳定回退。见 [声音设置](docs/guides/声音设置.md)、[ADR-0025](docs/adr/0025-local-voxcpm2-tts-adapter.md)、[ADR-0118](docs/adr/0118-external-sanotts-node-wasm-adapter.md)、[ADR-0123](docs/adr/0123-isolated-cosyvoice3-buffered-adapter.md)、[ADR-0126](docs/adr/0126-cosyvoice3-loopback-streaming-bridge.md)与 [ADR-0157](docs/adr/0157-cosyvoice3-reference-cache-and-stream-reset.md)。
+声音链已支持 EdgeTTS、VoxCPM2、sanoTTS 和 CosyVoice3 四个可替换后端。VoxCPM2 提供本地参考声线与风格参数；sanoTTS 保留为音质较低的 Node/WASM 实验速度基线；CosyVoice3 是当前首次默认和日常推荐，使用项目外独立 Python 环境和 Fun-CosyVoice3-0.5B，并通过本机专用长度前缀 WAV 通道向圆屏逐块交付。用户已确认声音质量、连续性和播放期间自然插话，但最新日用反馈表明首声仍偏慢；服务现已预计算固定参考音色并在每次请求前恢复原始流式步长，本机隔离复测的短句首块约为 1.14～1.29 秒，真实圆屏仍待统一启动后复测。取消仍是模型在下一块产出时观察断开的协作式取消，EdgeTTS 保留稳定回退。见 [声音设置](docs/guides/声音设置.md)、[ADR-0025](docs/adr/0025-local-voxcpm2-tts-adapter.md)、[ADR-0118](docs/adr/0118-external-sanotts-node-wasm-adapter.md)、[ADR-0123](docs/adr/0123-isolated-cosyvoice3-buffered-adapter.md)、[ADR-0126](docs/adr/0126-cosyvoice3-loopback-streaming-bridge.md)、[ADR-0157](docs/adr/0157-cosyvoice3-reference-cache-and-stream-reset.md)与 [ADR-0159](docs/adr/0159-cosyvoice-daily-default-and-immediate-launcher-preferences.md)。
 
 P2 新增声音设置：四种 Edge TTS 音色、固定文本联网试听和确认保存。入口为“设置中心 → 声音”，保存 Edge 音色后需重启小智；实机听感待验收。见[声音设置](docs/guides/声音设置.md)。
 
@@ -44,7 +44,7 @@ P1 网页会话恢复已实现：列表、新建、切换、重命名，同一�
 
 2026-09-04 用户决定：先做愿意日常使用的可定制陪伴助手，再研究论文。已有文字/语音最小闭环、记忆管理、音量控制与实验中心保留；研究优先顺序已被产品主线取代。当前日常默认仍是规则提取＋关键词召回；P3.2 已增加显式可选的模型辅助提取和关键词＋本地 BGE 混合召回。
 
-当前产品顺序：**P1 日常入口 → P2 个性化体验 → P3 日常记忆 → P4 可控主动交流 → P5 习惯驱动陪伴**。P1–P4 已形成可运行基础闭环；P5.3 已能记录时间证据、形成候选、离线回放、版本化激活/回滚并安全运行，且每次习惯问候可追溯到当时策略来源。这些证据仍不等于因果回复或满意度。第一轮阶段性体验优化已经收束：Web 控制台完成分组导航、响应式布局、统一页面任务说明和设置标签化；Windows 启动面板改为人类可读摘要、明确主操作和分级运行状态；个性化入口已有称呼、回答长度、互动方式、表情频率、声音方案和所有者明确补录。未列入既有决定的候选功能不自动开工。
+当前产品顺序：**P1 日常入口 → P2 个性化体验 → P3 日常记忆 → P4 可控主动交流 → P5 习惯驱动陪伴**。P1–P4 已形成可运行基础闭环；P5.3 已能记录时间证据、形成候选、离线回放、版本化激活/回滚并安全运行，且每次习惯问候可追溯到当时策略来源。这些证据仍不等于因果回复或满意度。第一轮阶段性体验优化已经收束：Web 控制台完成分组导航、响应式布局、统一页面任务说明和设置标签化；Windows 启动面板按日常启动、模型与记忆、圆屏与声音、本机维护分为四页，提供任务化摘要、实验开关提醒、始终可见的保存回执和主操作；个性化入口已有称呼、回答长度、互动方式、表情频率、声音方案和所有者明确补录。未列入既有决定的候选功能不自动开工。
 
 P3 采用四层个人记忆：L0 原始证据、L1 原子记忆、L2 场景、L3 用户画像。P3.1–P3.9 已完成共享 Runtime、可选模型提取、混合召回、明确记住/跳过、纠正/变化/来源/双轮删除、L2/L3 候选与来源追溯、确定性低风险门控、受控回答使用和默认关闭的低频整理调度。L3 对用户呈现一份读取时聚合的统一画像，但底层保留可追溯原子断言。当前未完成任意语义冲突自动发现、L2/L3 语义召回、撤销、跨层重建和隐私级彻底删除；低频整理在个人库中保持默认关闭。见 [ADR-0026](docs/adr/0026-layered-memory-and-knowledge-plane.md)至 [ADR-0057](docs/adr/0057-single-owner-consolidation-scheduler.md)，以及 [ADR-0086](docs/adr/0086-explicit-l1-exclusion-command.md)、[ADR-0087](docs/adr/0087-explicit-l1-inclusion-command.md)。
 

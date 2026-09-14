@@ -222,7 +222,7 @@ def build_commands(options, uv=None):
 
 
 class Singleton:
-    """无 PID 文件的本机锁；进程退出自动释放，不存在陈旧锁文件。"""
+    """持有本机单实例端口；控制桥复用这个监听 socket，不增加端口。"""
     def __init__(self, port=18767):
         self.socket = socket.socket()
         try:

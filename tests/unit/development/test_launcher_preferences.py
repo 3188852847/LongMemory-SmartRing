@@ -54,6 +54,11 @@ def test_local_launcher_delete_default_is_explicit_but_not_persisted():
     assert "allow_memory_delete" not in preferences.DEFAULTS
 
 
+def test_fresh_launcher_uses_daily_cosyvoice_default(tmp_path):
+    assert preferences.DEFAULTS["tts_backend"] == "cosyvoice3"
+    assert preferences.load_tts_backend(tmp_path / "missing-selection.json") == "cosyvoice3"
+
+
 def test_legacy_ip_only_file_and_broken_file_are_safe(tmp_path):
     path = tmp_path / "launcher.json"
     path.write_text('{"lan_ip":"192.168.1.9"}', encoding="utf-8")

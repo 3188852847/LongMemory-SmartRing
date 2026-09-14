@@ -8,14 +8,14 @@ from pathlib import Path
 
 
 BACKENDS = {
-    "edge": {"label": "EdgeTTS（联网标准音色）", "local_service": False,
+    "edge": {"label": "EdgeTTS（联网稳定回退）", "local_service": False,
              "description": "资源占用低，需要联网；当前是整段音频缓冲。"},
     "voxcpm2": {"label": "VoxCPM2（本地参考音色）", "local_service": True,
                 "description": "可使用参考 WAV 和表达指令，但首声慢且占用显存。"},
-    "sanotts": {"label": "sanoTTS（本地中文小雅）", "local_service": True,
-                "description": "本地 Node/WASM 后端，生成快、资源较轻；当前只有小雅音色。"},
-    "cosyvoice3": {"label": "CosyVoice 3（本地高质量）", "local_service": True,
-                   "description": "本地 0.5B 模型，常驻预热；当前小智适配仍返回完整 WAV。"},
+    "sanotts": {"label": "sanoTTS（实验速度基线，音质较低）", "local_service": True,
+                "description": "本地 Node/WASM 快速基线，资源较轻；音质较低且当前只有小雅音色。"},
+    "cosyvoice3": {"label": "CosyVoice 3（本地高质量，日常推荐）", "local_service": True,
+                   "description": "V1 日常声音；本地 0.5B 模型常驻预热并向圆屏分块交付。"},
 }
 
 

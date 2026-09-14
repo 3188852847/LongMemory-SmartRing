@@ -23,7 +23,9 @@ DEFAULTS = {
     "l1_sufficiency_shadow": False,
     "l2_sufficiency_shadow": False,
     "embedding_model_dir": "",
-    "tts_backend": "edge",
+    # 当前 V1 日用声音以 CosyVoice 3 为正式选择；Edge 仍是显式联网回退，
+    # sanoTTS 只保留作速度基线。已有共享指针始终优先于这个首次默认值。
+    "tts_backend": "cosyvoice3",
     "sanotts_source_root": "",
     "vad_profile": "normal",
     "http_risk_ack": False,
@@ -184,7 +186,7 @@ def save_memory_backend(path: Path, backend: str) -> None:
         temporary.unlink(missing_ok=True)
 
 
-def load_tts_backend(path: Path, fallback: str = "edge") -> str:
+def load_tts_backend(path: Path, fallback: str = "cosyvoice3") -> str:
     """读取网页与启动面板共用的 TTS 指针；首次兼容旧 launcher.json。"""
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
@@ -193,7 +195,7 @@ def load_tts_backend(path: Path, fallback: str = "edge") -> str:
         value = None
     if value in _CHOICES["tts_backend"]:
         return value
-    return fallback if fallback in _CHOICES["tts_backend"] else "edge"
+    return fallback if fallback in _CHOICES["tts_backend"] else "cosyvoice3"
 
 
 def save_tts_backend(path: Path, backend: str) -> None:

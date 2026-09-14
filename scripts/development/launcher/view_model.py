@@ -1,6 +1,22 @@
 """启动面板的纯显示决策；不依赖 Tk，也不管理任何进程。"""
 
 
+def daily_recommendation():
+    """返回已验收的日用组合；界面只负责把枚举映射到控件。"""
+    return {
+        "model_profile": "campus",
+        "voice_model_profile": "campus",
+        "memory_backend": "longmemory",
+        "memory_extraction": "llm",
+        "memory_retrieval": "hybrid",
+        "tts_backend": "cosyvoice3",
+        "vad_profile": "normal",
+        "memory_consolidation": False,
+        "l1_sufficiency_shadow": False,
+        "l2_sufficiency_shadow": False,
+    }
+
+
 def summary_text(
     voice,
     start_page,
@@ -14,8 +30,10 @@ def summary_text(
     vad_profile="normal",
     l2_sufficiency_shadow=False,
     l1_sufficiency_shadow=False,
+    model_profile="campus",
+    voice_model_profile="campus",
 ):
-    """把内部启动枚举翻译为日常首页可理解的三行摘要。"""
+    """把内部启动枚举翻译为按网页、圆屏和实验边界分行的摘要。"""
 
     mode = "网页＋圆屏语音" if voice else "网页文字聊天"
     page_label = {
@@ -37,25 +55,37 @@ def summary_text(
         "cosyvoice3": "CosyVoice 3 本地高质量声音",
     }[tts]
     delete_label = "允许单条删除" if allow_delete else "不开放删除"
-    consolidation_label = "低频整理已开启" if consolidation else "低频整理关闭"
-    l1_shadow_label = "L1 旁路质检已开启" if l1_sufficiency_shadow else "L1 旁路质检关闭"
-    l2_shadow_label = "L2 旁路质检已开启" if l2_sufficiency_shadow else "L2 旁路质检关闭"
+    experimental = []
+    if consolidation:
+        experimental.append("低频整理")
+    if l1_sufficiency_shadow:
+        experimental.append("L1 旁路质检")
+    if l2_sufficiency_shadow:
+        experimental.append("L2 旁路质检")
+    experimental_label = "、".join(experimental) + "已开启" if experimental else "均关闭"
     backend_label = {
-        "longmemory": "圆屏：LongMemory",
-        "xiaozhi_local": "圆屏：小智本地摘要",
-        "none": "圆屏：无长期记忆",
+        "longmemory": "LongMemory",
+        "xiaozhi_local": "小智本地摘要",
+        "none": "无长期记忆",
     }[memory_backend]
     vad_label = {
         "normal": "普通拾音",
         "noisy": "嘈杂环境拾音",
         "close_talk": "近讲严格拾音",
     }[vad_profile]
+    web_model_label = "学校模型" if model_profile == "campus" else "官方 DeepSeek"
+    voice_model_label = (
+        "学校模型" if voice_model_profile == "campus" else "官方 DeepSeek"
+    )
+    round_screen = (
+        f"圆屏：{voice_model_label}  ·  {backend_label}  ·  {sound_label}  ·  {vad_label}"
+        if voice else f"圆屏：本次不启动  ·  下次声音 {sound_label}"
+    )
     return (
         f"{mode}  ·  打开{page_label}  ·  {role_label}\n"
-        f"{extraction_label}  ·  {retrieval_label}  ·  "
-        f"{sound_label}  ·  {vad_label}\n"
-        f"{delete_label}  ·  {consolidation_label}  ·  {l1_shadow_label}  ·  "
-        f"{l2_shadow_label}  ·  {backend_label}"
+        f"网页：{web_model_label}  ·  {extraction_label}  ·  {retrieval_label}\n"
+        f"{round_screen}\n"
+        f"记忆管理：{delete_label}  ·  实验开关：{experimental_label}"
     )
 
 

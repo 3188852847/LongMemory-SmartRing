@@ -24,11 +24,13 @@ from preferences import (
     save_tts_backend,
 )
 from firewall_panel import open_panel
+from control import CONTROL_FILE_NAME, LauncherControl
 from tts import config_action as tts_config_action
 from voice_recovery import close_stale_tts, close_stale_voice
 from view_model import failure_hint as _failure_hint
 from view_model import summary_text as _summary_text
 from view_model import (
+    daily_recommendation,
     failed_services,
     readiness_timeout,
     ready_services,
@@ -85,6 +87,21 @@ def _scrollable_tab(parent):
     return shell, content, canvas
 
 
+def _page_heading(parent, title, description):
+    """给每个任务页提供稳定标题和用途说明，减少只靠页签猜测。"""
+    block = ttk.Frame(parent, style="Page.TFrame")
+    block.pack(fill="x", pady=(0, 14))
+    ttk.Label(block, text=title, style="PageTitle.TLabel").pack(anchor="w")
+    ttk.Label(
+        block,
+        text=description,
+        style="Subtitle.TLabel",
+        wraplength=760,
+        justify="left",
+    ).pack(anchor="w", pady=(3, 0))
+    return block
+
+
 def _boolean_option(
     parent,
     variable,
@@ -131,8 +148,8 @@ def _boolean_option(
 def main():
     window = tk.Tk()
     window.title("LongMemory · 日常启动")
-    window.geometry("960x760")
-    window.minsize(680, 460)
+    window.geometry("1040x800")
+    window.minsize(760, 560)
     window.configure(background=APP_BACKGROUND)
     style = ttk.Style(window)
     # Clam 允许同一套颜色和间距在不同 Windows 主题下保持稳定；这里只
@@ -148,6 +165,13 @@ def main():
                     font=("Microsoft YaHei UI", 9))
     style.configure("Title.TLabel", background=APP_BACKGROUND, foreground=TEXT_STRONG,
                     font=("Microsoft YaHei UI", 22, "bold"))
+    style.configure("PageTitle.TLabel", background=APP_BACKGROUND,
+                    foreground=TEXT_STRONG, font=("Microsoft YaHei UI", 14, "bold"))
+    style.configure("Card.TFrame", background=CARD_BACKGROUND)
+    style.configure("CardSelection.TLabel", background=CARD_BACKGROUND,
+                    foreground=ACCENT, font=("Microsoft YaHei UI", 9, "bold"))
+    style.configure("CardHint.TLabel", background=CARD_BACKGROUND,
+                    foreground=TEXT_MUTED, font=("Microsoft YaHei UI", 9))
     style.configure("Eyebrow.TLabel", foreground=ACCENT, font=("Microsoft YaHei UI", 9, "bold"))
     style.configure("Subtitle.TLabel", foreground=TEXT_MUTED)
     style.configure("Hint.TLabel", foreground=TEXT_MUTED, font=("Microsoft YaHei UI", 9))
@@ -197,6 +221,14 @@ def main():
                     foreground=TEXT_MUTED, font=("Microsoft YaHei UI", 8))
     style.configure("Selection.TLabel", foreground=ACCENT,
                     font=("Microsoft YaHei UI", 9, "bold"))
+    style.configure("Save.TFrame", background=SURFACE_MUTED, borderwidth=1,
+                    relief="solid")
+    style.configure("Save.TLabel", background=SURFACE_MUTED, foreground=SUCCESS,
+                    font=("Microsoft YaHei UI", 9, "bold"))
+    style.configure("SaveError.TLabel", background=SURFACE_MUTED, foreground=DANGER,
+                    font=("Microsoft YaHei UI", 9, "bold"))
+    style.configure("WarningHint.TLabel", background=CARD_BACKGROUND,
+                    foreground=WARNING, font=("Microsoft YaHei UI", 9))
     style.configure("ToggleOn.TButton", background="#0d5a47", foreground=TEXT_STRONG,
                     bordercolor=SUCCESS, font=("Microsoft YaHei UI", 9, "bold"),
                     padding=(10, 7))
@@ -232,6 +264,7 @@ def main():
     model_profile_path = ROOT / 'data/control/model-profile.json'
     memory_backend_path = ROOT / 'data/control/memory-backend.json'
     tts_backend_path = ROOT / 'data/control/tts-backend.json'
+    control = LauncherControl(lock.socket, ROOT / 'data/control' / CONTROL_FILE_NAME)
     saved = load_preferences(choice_path)
     saved["tts_backend"] = load_tts_backend(tts_backend_path, saved["tts_backend"])
     header = ttk.Frame(box, style="Header.TFrame")
@@ -249,9 +282,14 @@ def main():
     tabs = ttk.Notebook(box)
     tabs.pack(fill="both", expand=True)
     daily_tab, daily, daily_canvas = _scrollable_tab(tabs)
-    advanced_tab, advanced, advanced_canvas = _scrollable_tab(tabs)
+    intelligence_tab, intelligence, intelligence_canvas = _scrollable_tab(tabs)
+    device_tab, device, device_canvas = _scrollable_tab(tabs)
+    maintenance_tab, maintenance, maintenance_canvas = _scrollable_tab(tabs)
     tabs.add(daily_tab, text="日常启动")
-    tabs.add(advanced_tab, text="高级设置")
+    tabs.add(intelligence_tab, text="模型与记忆")
+    tabs.add(device_tab, text="圆屏与声音")
+    tabs.add(maintenance_tab, text="本机维护")
+    canvases = (daily_canvas, intelligence_canvas, device_canvas, maintenance_canvas)
     # 高频操作固定在页签外。窗口变矮或高级设置内容较长时，用户依然可以
     # 立即启动、停止或重新打开网页，不必先滚动到页面末尾。
     footer = ttk.Frame(box, style="Footer.TFrame")
@@ -259,7 +297,7 @@ def main():
 
     def scroll_current_tab(event):
         """鼠标位于面板任意控件上时，滚动当前可见页签。"""
-        canvas = daily_canvas if tabs.index("current") == 0 else advanced_canvas
+        canvas = canvases[tabs.index("current")]
         if not event.delta:
             return
         units = -int(event.delta / 120)
@@ -281,10 +319,10 @@ def main():
     extraction_labels = {"rules": "规则提取（基础/对照）", "llm": "模型辅助提取（日常推荐）"}
     retrieval_labels = {"keyword": "关键词召回（基础/对照）", "hybrid": "关键词＋BGE 混合召回（日常推荐）"}
     tts_labels = {
-        "edge": "EdgeTTS（联网标准音色）",
+        "edge": "EdgeTTS（联网稳定回退）",
         "voxcpm2": "VoxCPM2（本地 plain）",
-        "sanotts": "sanoTTS（本地中文小雅）",
-        "cosyvoice3": "CosyVoice 3（本地高质量）",
+        "sanotts": "sanoTTS（实验速度基线，音质较低）",
+        "cosyvoice3": "CosyVoice 3（本地高质量，日常推荐）",
     }
     memory_extraction = tk.StringVar(value=extraction_labels[saved["memory_extraction"]])
     memory_retrieval = tk.StringVar(value=retrieval_labels[saved["memory_retrieval"]])
@@ -320,6 +358,10 @@ def main():
     active_voice_model_profile = load_model_profile(model_profile_path, "voice")
     voice_model_profile = tk.StringVar(value=next(label for label, value in model_profile_labels.items()
                                                    if value == active_voice_model_profile))
+    model_pointer_seen = {
+        "web": active_model_profile,
+        "voice": active_voice_model_profile,
+    }
     memory_backend_labels = {
         "LongMemory（分层、可追溯）": "longmemory",
         "小智本地摘要（轻量对照）": "xiaozhi_local",
@@ -330,6 +372,7 @@ def main():
         label for label, value in memory_backend_labels.items()
         if value == active_memory_backend
     ))
+    memory_backend_pointer_seen = {"backend": active_memory_backend}
 
     def selected_model_profile():
         return model_profile_labels[model_profile.get()]
@@ -393,6 +436,78 @@ def main():
             "http_risk_ack": consent.get(),
         }
 
+    _page_heading(
+        daily,
+        "开始今天的陪伴",
+        "这里只保留每次最常用的选择和运行状态；模型、记忆、声音与维护分别放在后续页签。",
+    )
+    _page_heading(
+        intelligence,
+        "模型与记忆",
+        "设置网页和圆屏使用的模型、记忆写入与召回方式。有限选择会立即保存，但运行中的服务不会热切换。",
+    )
+    _page_heading(
+        device,
+        "圆屏与声音",
+        "选择日常声音和拾音环境。CosyVoice 3 是当前日常推荐；切换后需重新启动语音服务。",
+    )
+    _page_heading(
+        maintenance,
+        "本机维护",
+        "路径、局域网地址和防火墙只在环境变化或排障时使用，日常启动通常无需进入本页。",
+    )
+
+    def apply_daily_recommendation():
+        """恢复已验收的日用组合；不改变角色、路径、IP 或风险确认。"""
+        recommended = daily_recommendation()
+        model_profile.set(next(
+            label for label, value in model_profile_labels.items()
+            if value == recommended["model_profile"]
+        ))
+        voice_model_profile.set(next(
+            label for label, value in model_profile_labels.items()
+            if value == recommended["voice_model_profile"]
+        ))
+        set_memory_backend(recommended["memory_backend"])
+        memory_extraction.set(extraction_labels[recommended["memory_extraction"]])
+        memory_retrieval.set(retrieval_labels[recommended["memory_retrieval"]])
+        set_tts_backend(recommended["tts_backend"])
+        vad_profile.set(next(
+            label for label, value in vad_profile_labels.items()
+            if value == recommended["vad_profile"]
+        ))
+        memory_consolidation.set(recommended["memory_consolidation"])
+        l1_sufficiency_shadow.set(recommended["l1_sufficiency_shadow"])
+        l2_sufficiency_shadow.set(recommended["l2_sufficiency_shadow"])
+        embedding_model.set(str(DEFAULT_BGE_MODEL))
+        try:
+            save_preferences(choice_path, current_preferences())
+        except (OSError, ValueError):
+            settings_status.set("日常推荐已显示，但未能保存；请检查 data/control 是否可写。")
+            return
+        settings_status.set("已应用并保存日常推荐；实验开关已关闭，下次启动生效。")
+
+    quick_box = ttk.LabelFrame(daily, text="快捷方案", style="Section.TLabelframe")
+    quick_box.pack(fill="x", pady=(0, 12))
+    quick_copy = ttk.Frame(quick_box, style="Card.TFrame")
+    quick_copy.pack(side="left", fill="x", expand=True)
+    ttk.Label(
+        quick_copy,
+        text="日常推荐：学校模型 · 模型辅助提取 · 混合召回 · LongMemory · CosyVoice 3",
+        style="CardSelection.TLabel",
+    ).pack(anchor="w")
+    ttk.Label(
+        quick_copy,
+        text="会关闭低频整理和两项旁路质检；不改变角色、数据库、IP 或 HTTP 风险确认。",
+        style="CardHint.TLabel",
+    ).pack(anchor="w", pady=(3, 0))
+    ttk.Button(
+        quick_box,
+        text="应用日常推荐",
+        command=apply_daily_recommendation,
+        style="Secondary.TButton",
+    ).pack(side="right", padx=(16, 0))
+
     mode_box = ttk.LabelFrame(daily, text="今天怎么使用", style="Section.TLabelframe")
     mode_box.pack(fill="x", pady=(0, 12))
     mode_selection = tk.StringVar()
@@ -408,12 +523,12 @@ def main():
     ttk.Label(open_row, text="启动后打开：").pack(side="left")
     ttk.Combobox(open_row, textvariable=start_page, values=tuple(start_page_labels), state="readonly", width=16).pack(side="left")
 
-    paths_box = ttk.LabelFrame(advanced, text="本机路径", style="Section.TLabelframe")
+    paths_box = ttk.LabelFrame(maintenance, text="本机路径", style="Section.TLabelframe")
     paths_box.pack(fill="x", pady=(0, 10))
     for label, variable in [("日常数据库（已有文件）", database), ("小智目录（仅语音模式）", server)]:
         ttk.Label(paths_box, text=label).pack(anchor="w", pady=(5, 0))
         ttk.Entry(paths_box, textvariable=variable).pack(fill="x")
-    network_box = ttk.LabelFrame(advanced, text="圆屏网络", style="Section.TLabelframe")
+    network_box = ttk.LabelFrame(maintenance, text="圆屏网络", style="Section.TLabelframe")
     network_box.pack(fill="x", pady=10)
     ttk.Label(network_box, text='电脑局域网 IP（多网卡时请选择圆屏能访问的地址）').pack(anchor='w')
     address_row = ttk.Frame(network_box)
@@ -454,14 +569,14 @@ def main():
     ttk.Button(address_row, text='网络与防火墙', command=lambda: open_panel(window, ip.get(), ROOT)).pack(side='left', padx=8)
     ttk.Label(network_box, textvariable=network_status, wraplength=760).pack(anchor='w', pady=(8, 0))
     refresh()
-    behavior_box = ttk.LabelFrame(advanced, text="助手与长期记忆", style="Section.TLabelframe")
+    behavior_box = ttk.LabelFrame(intelligence, text="日常智能", style="Section.TLabelframe")
     behavior_box.pack(fill="x", pady=10)
     row = ttk.Frame(behavior_box)
     row.pack(fill="x", pady=8)
     ttk.Label(row, text="网页角色：").pack(side="left")
     ttk.Combobox(row, textvariable=role, values=tuple(role_labels),
                  state="readonly", width=18).pack(side="left")
-    ttk.Label(row, text="  不自动改变小智角色；控制台端口 8767").pack(side="left")
+    ttk.Label(row, text="  只影响网页回答；圆屏角色需在设置中心明确同步").pack(side="left")
     model_row = ttk.Frame(behavior_box)
     model_row.pack(fill="x", pady=8)
     ttk.Label(model_row, text="网页与记忆模型：").pack(side="left")
@@ -496,47 +611,132 @@ def main():
     _boolean_option(
         behavior_box,
         allow_memory_delete,
-        title="L1 删除与清空",
+        title="L1 单条删除权限",
         description="网页仍需逐条确认；会保留 L0 原话、备份和日志。本机日常每次打开面板默认允许。",
         enabled_text="已允许",
         disabled_text="未允许",
     )
+    experiment_box = ttk.LabelFrame(
+        intelligence, text="实验与质检开关", style="Section.TLabelframe"
+    )
+    experiment_box.pack(fill="x", pady=10)
+    ttk.Label(
+        experiment_box,
+        text="通常保持关闭。开启会增加模型请求或后台工作，但不会自动提高正式回答质量。",
+        style="WarningHint.TLabel",
+        wraplength=760,
+    ).pack(anchor="w", pady=(0, 9))
     _boolean_option(
-        behavior_box,
+        experiment_box,
         memory_consolidation,
         title="低频自动整理",
         description="后台按预算和风险规则尝试 L1 → L2 → L3；个人日用默认关闭。",
     )
     _boolean_option(
-        behavior_box,
+        experiment_box,
         l1_sufficiency_shadow,
         title="L1 证据旁路质检",
         description="增加模型请求并记录证据充分性判断；不改变正式召回或回答，默认关闭。",
     )
     _boolean_option(
-        behavior_box,
+        experiment_box,
         l2_sufficiency_shadow,
         title="L2 证据旁路质检",
         description="增加模型请求并记录场景证据判断；不改变正式召回或回答，默认关闭。",
     )
-    ttk.Label(behavior_box, text="BGE 本地快照（仅混合召回使用）").pack(anchor="w", pady=(4, 0))
-    embedding_row = ttk.Frame(behavior_box)
+    model_resource_box = ttk.LabelFrame(
+        maintenance, text="模型资源（仅排障）", style="Section.TLabelframe"
+    )
+    model_resource_box.pack(fill="x", pady=10)
+    ttk.Label(model_resource_box, text="BGE 本地快照（仅混合召回使用）").pack(
+        anchor="w", pady=(0, 4)
+    )
+    embedding_row = ttk.Frame(model_resource_box)
     embedding_row.pack(fill="x")
     ttk.Entry(embedding_row, textvariable=embedding_model).pack(side="left", fill="x", expand=True)
     ttk.Button(embedding_row, text="选择目录", command=lambda: (
         embedding_model.set(path) if (path := filedialog.askdirectory(
             parent=window, initialdir=embedding_model.get() or str(ROOT))) else None
     )).pack(side="left", padx=(8, 0))
-    sound_box = ttk.LabelFrame(advanced, text="圆屏声音", style="Section.TLabelframe")
+    sound_box = ttk.LabelFrame(device, text="圆屏声音", style="Section.TLabelframe")
     sound_box.pack(fill="x", pady=10)
     tts_row = ttk.Frame(sound_box)
     tts_row.pack(fill="x")
     ttk.Label(tts_row, text="圆屏声音：").pack(side="left")
     ttk.Combobox(tts_row, textvariable=tts_backend,
                  values=tuple(tts_labels.values()),
-                 state="readonly", width=27).pack(side="left")
+                 state="readonly", width=42).pack(side="left")
 
-    settings_status = tk.StringVar(value="高级设置只在下次启动时生效。")
+    tts_description = tk.StringVar()
+    tts_note = ttk.Frame(sound_box, padding=(12, 10), style="Option.TFrame")
+    tts_note.pack(fill="x", pady=(10, 0))
+    ttk.Label(tts_note, text="当前选择", style="OptionTitle.TLabel").pack(anchor="w")
+    ttk.Label(
+        tts_note,
+        textvariable=tts_description,
+        style="OptionHint.TLabel",
+        wraplength=760,
+        justify="left",
+    ).pack(anchor="w", pady=(3, 0))
+
+    def update_tts_description(*_):
+        tts_description.set({
+            "cosyvoice3": "日常推荐。声音质量和连续性已通过实机体验；首声速度仍在优化，需要本地模型与显卡。",
+            "edge": "联网稳定回退。资源占用低，但依赖公网并按完整音频段返回。",
+            "voxcpm2": "本地参考声线实验方案。可调表达，首声较慢且占用更多显存。",
+            "sanotts": "实验速度基线。资源较轻、生成较快，但当前小雅音色质量不作为日常推荐。",
+        }[selected_tts()])
+
+    tts_backend.trace_add("write", update_tts_description)
+    update_tts_description()
+
+    settings_status = tk.StringVar(value="选择会立即保存；运行中的服务不会热切换。")
+
+    def persist_launcher_choices(*_):
+        """枚举选择即刻保存；启动失败或直接关窗也不再丢失用户意图。"""
+        try:
+            save_preferences(choice_path, current_preferences())
+            settings_status.set("当前选择已保存；运行中的服务不热切换，下次启动生效。")
+        except (OSError, ValueError):
+            settings_status.set("当前选择未能保存；请勿关闭面板，并检查 data/control 是否可写。")
+
+    def persist_model_profile(target):
+        try:
+            value = (selected_model_profile() if target == "web"
+                     else selected_voice_model_profile())
+            save_model_profile(model_profile_path, value, target)
+            settings_status.set("模型选择已保存；运行中的服务不热切换，下次启动生效。")
+        except (OSError, ValueError):
+            settings_status.set("模型选择未能保存；请勿关闭面板，并检查 data/control 是否可写。")
+
+    def persist_memory_backend(*_):
+        try:
+            save_memory_backend(memory_backend_path, selected_memory_backend())
+            settings_status.set("圆屏记忆后端已保存；下次启动生效。")
+        except (OSError, ValueError):
+            settings_status.set("圆屏记忆后端未能保存；请检查 data/control 是否可写。")
+
+    def persist_tts_backend(*_):
+        try:
+            save_tts_backend(tts_backend_path, selected_tts())
+            # launcher.json 中仍保留兼容副本；共享指针是下次启动的权威值。
+            save_preferences(choice_path, current_preferences())
+            settings_status.set("圆屏声音已保存；运行中的声音不热切换，下次启动生效。")
+        except (OSError, ValueError):
+            settings_status.set("圆屏声音未能保存；请检查 data/control 是否可写。")
+
+    # 路径输入仍在启动或显式同步时保存，避免每次键入都写磁盘；下面这些
+    # 有限枚举和布尔选择则在用户操作时立即落盘。
+    for variable in (
+        voice, start_page, role, memory_extraction, memory_retrieval,
+        memory_consolidation, l1_sufficiency_shadow, l2_sufficiency_shadow,
+        vad_profile, consent,
+    ):
+        variable.trace_add("write", persist_launcher_choices)
+    model_profile.trace_add("write", lambda *_: persist_model_profile("web"))
+    voice_model_profile.trace_add("write", lambda *_: persist_model_profile("voice"))
+    memory_backend.trace_add("write", persist_memory_backend)
+    tts_backend.trace_add("write", persist_tts_backend)
 
     def sync_tts():
         if manager.services:
@@ -563,8 +763,12 @@ def main():
             messagebox.showerror("未完成同步", "TTS 配置检查或同步失败；未显示私有配置内容。")
 
     ttk.Button(tts_row, text="检查并同步", command=sync_tts).pack(side="left", padx=8)
-    sano_row = ttk.Frame(sound_box)
-    sano_row.pack(fill="x", pady=(10, 0))
+    sano_resource_box = ttk.LabelFrame(
+        maintenance, text="实验声音资源（仅排障）", style="Section.TLabelframe"
+    )
+    sano_resource_box.pack(fill="x", pady=10)
+    sano_row = ttk.Frame(sano_resource_box)
+    sano_row.pack(fill="x")
     ttk.Label(sano_row, text="sanoTTS 外部目录：").pack(side="left")
     ttk.Entry(sano_row, textvariable=sanotts_source).pack(side="left", fill="x", expand=True)
     ttk.Button(sano_row, text="选择目录", command=lambda: (
@@ -577,11 +781,43 @@ def main():
     ttk.Combobox(vad_row, textvariable=vad_profile,
                  values=tuple(vad_profile_labels), state="readonly", width=31).pack(side="left")
     ttk.Label(vad_row, text="  下次统一启动前自动备份并同步").pack(side="left")
-    ttk.Label(advanced, textvariable=settings_status, style="Subtitle.TLabel").pack(anchor="w")
+    save_bar = ttk.Frame(footer, padding=(12, 8), style="Save.TFrame")
+    save_bar.pack(fill="x", pady=(0, 9))
+    save_marker = ttk.Label(save_bar, text="●  本机保存", style="Save.TLabel")
+    save_marker.pack(side="left")
+    save_message = ttk.Label(
+        save_bar,
+        textvariable=settings_status,
+        style="Save.TLabel",
+        wraplength=760,
+    )
+    save_message.pack(side="left", padx=(10, 0), fill="x", expand=True)
+
+    def render_save_status(*_):
+        style_name = (
+            "SaveError.TLabel"
+            if any(word in settings_status.get() for word in ("未能", "失败"))
+            else "Save.TLabel"
+        )
+        save_marker.configure(style=style_name)
+        save_message.configure(style=style_name)
+
+    settings_status.trace_add("write", render_save_status)
+    render_save_status()
 
     summary = tk.StringVar()
 
     def update_summary(*_):
+        experimental_count = sum((
+            bool(memory_consolidation.get()),
+            bool(l1_sufficiency_shadow.get()),
+            bool(l2_sufficiency_shadow.get()),
+        ))
+        tabs.tab(
+            intelligence_tab,
+            text=(f"模型与记忆 · 实验 {experimental_count}"
+                  if experimental_count else "模型与记忆"),
+        )
         mode_selection.set(
             "当前选择：文字聊天＋圆屏语音" if voice.get()
             else "当前选择：文字聊天"
@@ -593,6 +829,8 @@ def main():
             selected_vad_profile(),
             l2_sufficiency_shadow.get(),
             l1_sufficiency_shadow.get(),
+            model_profile=selected_model_profile(),
+            voice_model_profile=selected_voice_model_profile(),
         ))
 
     summary_box = ttk.LabelFrame(daily, text="本次配置", style="Section.TLabelframe")
@@ -600,11 +838,12 @@ def main():
     ttk.Label(summary_box, textvariable=summary, wraplength=760, style="Summary.TLabel").pack(anchor="w")
     ttk.Label(
         summary_box,
-        text="详细路径和算法选项在“高级设置”；成功启动后自动记住常用选择。",
+        text="详细路径和算法选项在“高级设置”；有限选项选择后立即保存，路径在成功启动后保存。",
         style="Subtitle.TLabel",
     ).pack(anchor="w", pady=(4, 0))
-    for variable in (voice, start_page, role, memory_extraction, memory_retrieval,
-                     tts_backend, vad_profile, memory_backend, allow_memory_delete,
+    for variable in (voice, start_page, role, model_profile, voice_model_profile,
+                     memory_extraction, memory_retrieval, tts_backend, vad_profile,
+                     memory_backend, allow_memory_delete,
                      memory_consolidation, l1_sufficiency_shadow,
                      l2_sufficiency_shadow):
         variable.trace_add("write", update_summary)
@@ -709,7 +948,9 @@ def main():
             return False
         state.update(opened=False, failed=False)
         if panel_unchanged:
-            set_memory_backend(load_memory_backend(memory_backend_path))
+            next_memory_backend = load_memory_backend(memory_backend_path)
+            set_memory_backend(next_memory_backend)
+            memory_backend_pointer_seen["backend"] = next_memory_backend
         if tts_panel_unchanged:
             next_tts = load_tts_backend(tts_backend_path, running_tts)
             set_tts_backend(next_tts)
@@ -749,8 +990,28 @@ def main():
         else:
             set_status("小智和当前所选声音后端均无遗留监听，无需清理。", "good")
 
-    def start():
+    def start(show_dialog=True):
         try:
+            # 网页设置也能修改下次启动指针。若面板自打开后没有亲自改过
+            # 对应下拉框，启动瞬间吸收外部新值；否则保留面板上的用户选择。
+            if selected_model_profile() == model_pointer_seen["web"]:
+                next_model = load_model_profile(model_profile_path, "web")
+                model_profile.set(next(
+                    label for label, value in model_profile_labels.items()
+                    if value == next_model
+                ))
+                model_pointer_seen["web"] = next_model
+            if selected_voice_model_profile() == model_pointer_seen["voice"]:
+                next_voice_model = load_model_profile(model_profile_path, "voice")
+                voice_model_profile.set(next(
+                    label for label, value in model_profile_labels.items()
+                    if value == next_voice_model
+                ))
+                model_pointer_seen["voice"] = next_voice_model
+            if selected_memory_backend() == memory_backend_pointer_seen["backend"]:
+                next_memory_backend = load_memory_backend(memory_backend_path)
+                set_memory_backend(next_memory_backend)
+                memory_backend_pointer_seen["backend"] = next_memory_backend
             if selected_tts() == tts_pointer_seen["backend"]:
                 next_tts = load_tts_backend(tts_backend_path, selected_tts())
                 set_tts_backend(next_tts)
@@ -777,6 +1038,9 @@ def main():
                 save_model_profile(model_profile_path, selected_voice_model_profile(), "voice")
                 save_memory_backend(memory_backend_path, selected_memory_backend())
                 save_tts_backend(tts_backend_path, selected_tts())
+                model_pointer_seen["web"] = selected_model_profile()
+                model_pointer_seen["voice"] = selected_voice_model_profile()
+                memory_backend_pointer_seen["backend"] = selected_memory_backend()
                 tts_pointer_seen["backend"] = selected_tts()
             except OSError:
                 settings_status.set("服务已启动，但本机首选项未保存；下次仍可手动选择。")
@@ -789,12 +1053,59 @@ def main():
                 voice_model_profile=selected_voice_model_profile(),
                 memory_backend=selected_memory_backend(),
             ))
+            return True
         except ValueError as error:
-            messagebox.showerror("无法启动", str(error))
+            if show_dialog:
+                messagebox.showerror("无法启动", str(error))
+            else:
+                set_status(str(error), "error")
         except Exception:
-            messagebox.showerror("无法启动", "无法建立受管进程。未关闭外部程序；请查看启动指南。")
+            message = "无法建立受管进程。未关闭外部程序；请查看启动指南。"
+            if show_dialog:
+                messagebox.showerror("无法启动", message)
+            else:
+                set_status(message, "error")
+        return False
+
+    def dispatch_control(action):
+        """本机接口复用面板当前选择；不开放配置、清理或窗口关闭。"""
+        if action == "status":
+            return {
+                "ok": True,
+                "state": "running" if manager.services else "stopped",
+                "ready": bool(manager.services and manager.ready()),
+                "selection": {
+                    "voice": bool(voice.get()),
+                    "start_page": start_page_labels[start_page.get()],
+                    "model_profile": selected_model_profile(),
+                    "voice_model_profile": selected_voice_model_profile(),
+                    "memory_backend": selected_memory_backend(),
+                    "memory_extraction": selected_extraction(),
+                    "memory_retrieval": selected_retrieval(),
+                    "tts_backend": selected_tts(),
+                    "vad_profile": selected_vad_profile(),
+                    "memory_consolidation": bool(memory_consolidation.get()),
+                    "l1_sufficiency_shadow": bool(l1_sufficiency_shadow.get()),
+                    "l2_sufficiency_shadow": bool(l2_sufficiency_shadow.get()),
+                },
+            }
+        if action == "start":
+            if manager.services:
+                return {"ok": True, "state": "already_running"}
+            started = start(False)
+            return {
+                "ok": started,
+                "state": "starting" if started else "start_failed",
+            }
+        if action == "stop":
+            if not manager.services:
+                return {"ok": True, "state": "already_stopped"}
+            stopped = stop(False)
+            return {"ok": stopped, "state": "stopped" if stopped else "stop_failed"}
+        return {"ok": False, "error": "action_not_allowed"}
 
     def tick():
+        control.poll(dispatch_control)
         if manager.services and not state["failed"]:
             exited = [(name, service.process.poll()) for name, service in manager.services.items()
                       if service.process.poll() is not None]
@@ -850,8 +1161,11 @@ def main():
     try:
         window.mainloop()
     finally:
-        manager.stop()
-        lock.close()
+        try:
+            manager.stop()
+        finally:
+            control.close()
+            lock.close()
 
 
 if __name__ == "__main__":
