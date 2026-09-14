@@ -31,6 +31,8 @@ function VoiceLatencyCard({value}:{value:VoiceLatency}) {
     model_connection_failed:{title:'无法连接圆屏模型',description:'校园模型服务当前不可达或网络连接失败。圆屏没有取得可朗读的正常回答。'},
     model_timeout:{title:'圆屏模型请求超时',description:'模型在时限内没有返回回答。请检查校园网与模型服务状态。'},
     model_request_failed:{title:'圆屏模型请求失败',description:'模型调用在生成回答前失败。请在设置页重新检测圆屏模型。'},
+    memory_response_invalid:{title:'圆屏记忆协议不匹配',description:'记忆服务已经返回，但圆屏适配器无法识别响应格式；回答模型尚未收到请求。'},
+    memory_runtime_failed:{title:'圆屏记忆处理失败',description:'长期记忆阶段没有正常完成，回答模型尚未收到请求。请重启服务后再试。'},
   } as const;
   const measuredStages=[
     {label:'记忆准备',value:timing.memory_ready_ms},

@@ -27,6 +27,8 @@ CUSTOM_TTS_URLS = {
     "cosyvoice3": "http://127.0.0.1:18770/v1/audio/speech",
 }
 LEGACY_MEMORY_PROVIDER_SHA256 = {
+    # 明确日期历史证据字段加入 Runtime、但薄适配器尚未同步契约的已发布版本。
+    "47ce4e06f4841fa47c1c7e5f32bc8996bec5ed0e10c646f109348164c9c6f131",
     # 日常 L1 提取账本加入前的已发布提供器；用户现场当前正使用此精确版本。
     "631569ac42c2cd623590d4f26958747c59e6fd812a25c3c22601418ec2c79991",
     # 召回策略回执校验加入前的上一版；已在用户当前小智目录精确核对。

@@ -176,3 +176,18 @@ def test_model_stream_failure_is_classified_without_exposing_error_text():
     assert result["failure"]["stage"] == "model"
     assert result["failure"]["code"] == "model_http_404"
     assert "private" not in repr(result) + " ".join(connection.logger.lines)
+
+
+def test_memory_failure_is_recorded_with_fixed_code():
+    ticks = iter([1.0, 1.25])
+    connection = type("Connection", (), {})()
+    connection.config = {"selected_module": {"TTS": "EdgeTTS"}}
+    connection.logger = Logger()
+    tracker = voice_latency.VoiceLatencyTracker(connection, clock=lambda: next(ticks))
+    tracker.begin()
+    tracker.fail("memory_response_invalid", stage="memory")
+    result = tracker.snapshot()
+    assert result["state"] == "failed"
+    assert result["failure"] == {
+        "stage": "memory", "code": "memory_response_invalid", "at_ms": 250,
+    }

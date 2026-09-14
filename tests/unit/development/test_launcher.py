@@ -9,6 +9,8 @@ import socket
 import subprocess
 import sys
 import time
+import types
+from types import SimpleNamespace
 import asyncio
 
 import pytest
@@ -540,6 +542,81 @@ def test_memory_observer_records_provider_and_timing_without_content():
     joined = " ".join(connection.logger.lines)
     assert "mem_local_short" in joined and "记忆查询" in joined and "记忆保存" in joined
     assert "secret" not in joined and "private-memory" not in joined
+
+
+def test_memory_observer_ends_speaking_and_records_sanitized_failure(monkeypatch):
+    script = DIRECTORY.parent / "xiaozhi/launch_with_memory.py"
+    spec = importlib.util.spec_from_file_location("launch_memory_failure_test", script)
+    wrapper = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(wrapper)
+
+    class Provider:
+        async def query_memory(self, _query):
+            raise RuntimeError("LongMemory 返回协议无效")
+        async def save_memory(self, _dialogue, _session_id): return None
+
+    class DTO:
+        def __init__(self, **values): self.__dict__.update(values)
+
+    dto_module = types.ModuleType("core.providers.tts.dto.dto")
+    dto_module.ContentType = SimpleNamespace(ACTION="action")
+    dto_module.SentenceType = SimpleNamespace(LAST="last")
+    dto_module.TTSMessageDTO = DTO
+    for name in ("core", "core.providers", "core.providers.tts", "core.providers.tts.dto"):
+        monkeypatch.setitem(sys.modules, name, types.ModuleType(name))
+    monkeypatch.setitem(sys.modules, "core.providers.tts.dto.dto", dto_module)
+
+    class Tracker:
+        def __init__(self): self.calls = []
+        def bind_sentence(self, value): self.calls.append(("bind", value))
+        def mark(self, field, **_kwargs): self.calls.append(("mark", field))
+        def fail(self, code, *, stage): self.calls.append(("fail", stage, code))
+
+    queued = []
+    connection = SimpleNamespace(
+        memory=Provider(), sentence_id="turn-failed",
+        config={"selected_module": {"Memory": "LongMemory"}},
+        logger=SimpleNamespace(bind=lambda **_kw: SimpleNamespace(info=lambda *_a: None)),
+        tts=SimpleNamespace(tts_text_queue=SimpleNamespace(put=queued.append)),
+        _longmemory_voice_latency=Tracker(),
+    )
+    wrapper.observe_memory_operations(connection)
+    with pytest.raises(RuntimeError, match="返回协议无效"):
+        asyncio.run(connection.memory.query_memory("private-query"))
+
+    assert connection._longmemory_voice_latency.calls == [
+        ("bind", "turn-failed"),
+        ("fail", "memory", "memory_response_invalid"),
+    ]
+    assert len(queued) == 1
+    assert queued[0].sentence_id == "turn-failed"
+    assert queued[0].sentence_type == "last"
+
+
+def test_launcher_control_republishes_missing_descriptor_without_overwriting(tmp_path):
+    spec = importlib.util.spec_from_file_location(
+        "launcher_control_republish_test", DIRECTORY / "control.py",
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    LauncherControl = module.LauncherControl
+
+    listener = socket.socket()
+    listener.bind(("127.0.0.1", 0))
+    listener.listen(1)
+    path = tmp_path / "launcher-control.json"
+    control = LauncherControl(listener, path, token="a" * 43)
+    try:
+        path.unlink()
+        assert control.poll(lambda _action: {"ok": True}) == 0
+        assert json.loads(path.read_text(encoding="utf-8"))["token"] == "a" * 43
+
+        path.write_text('{"owner":"unknown"}', encoding="utf-8")
+        assert control.poll(lambda _action: {"ok": True}) == 0
+        assert path.read_text(encoding="utf-8") == '{"owner":"unknown"}'
+    finally:
+        control.close()
+        listener.close()
 
 
 def test_singleton_and_occupied_port_are_non_destructive():

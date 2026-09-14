@@ -113,6 +113,14 @@ class LauncherControl:
 
     def poll(self, dispatch) -> int:
         """由 Tk 主线程调用；单次排空有限队列，所有 UI 操作保持线程归属。"""
+        # 文件可能被手工清理或被一次失败的外部维护误删。监听器与令牌仍只
+        # 属于当前进程；缺失时原子重发，使控制入口无需重启面板即可恢复。
+        # 已存在的文件绝不覆盖，避免抢占另一个实例或掩盖未知内容。
+        if not self.path.exists():
+            try:
+                self._publish()
+            except OSError:
+                pass
         handled = 0
         while handled < 8:
             with self._pending_lock:

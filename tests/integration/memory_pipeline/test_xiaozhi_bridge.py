@@ -183,9 +183,14 @@ def test_provider_uses_runtime_transport_without_starting_subprocess(provider_cl
                                    "content_sha256": "a" * 64,
                                    "keyword_score": 1, "dense_score": 0.8,
                                    "fused_score": 0.03,
+                                   "temporal_role": "historical",
+                                   "valid_from": "2025-01-01T00:00:00+08:00",
+                                   "valid_to": "2026-01-01T00:00:00+08:00",
                                }, {
                                    "layer": "l2", "item_id": "l2-a", "rank": 1,
                                    "content_sha256": "b" * 64,
+                                   "keyword_score": 1, "dense_score": None,
+                                   "fused_score": None,
                                }],
                                "scenario_retrieved": [{"id": "l2"}],
                                "persona_retrieved": []}).encode()
@@ -222,6 +227,38 @@ def test_provider_uses_runtime_transport_without_starting_subprocess(provider_cl
     assert [item["item_id"] for item in completion_body["retrieval_evidence"]] == ["l1-a", "l2-a"]
     assert completion_body["retrieval_strategy"] == "keyword_dense_rrf_v1"
     assert completion_body["answer"] == "这是最终回答"
+
+
+def test_provider_rejects_invalid_temporal_evidence(provider_class, config, monkeypatch):
+    provider = provider_class(config)
+    provider.init_memory(config["allowed_device_id"], None)
+
+    class Response:
+        status = 200
+        def __enter__(self): return self
+        def __exit__(self, *_args): return None
+        def read(self, _limit):
+            return json.dumps({
+                "version": 1, "context": "", "turn_id": "turn-invalid",
+                "added": 0, "retrieved": 1,
+                "retrieval_evidence": [{
+                    "layer": "l1", "item_id": "l1-a", "rank": 1,
+                    "content_sha256": "a" * 64, "keyword_score": 1,
+                    "dense_score": None, "fused_score": None,
+                    "temporal_role": "historical", "valid_from": None,
+                    "valid_to": "not-a-time",
+                }],
+            }).encode()
+
+    monkeypatch.setenv("LONGMEMORY_MEMORY_TRANSPORT", "runtime")
+    monkeypatch.setenv(
+        "LONGMEMORY_RUNTIME_URL",
+        "http://127.0.0.1:8767/api/internal/memory/prepare",
+    )
+    monkeypatch.setenv("LONGMEMORY_RUNTIME_TOKEN", "d" * 64)
+    monkeypatch.setattr("urllib.request.urlopen", lambda *_a, **_k: Response())
+    with pytest.raises(RuntimeError, match="返回协议无效"):
+        asyncio.run(provider.query_memory("合成问题"))
 
 
 def test_provider_skips_only_once_for_structurally_marked_internal_query(

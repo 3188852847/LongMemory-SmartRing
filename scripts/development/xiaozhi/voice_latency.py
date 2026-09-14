@@ -116,10 +116,13 @@ class VoiceLatencyTracker:
 
     def fail(self, code, *, stage="model"):
         allowed = {
-            "model_http_404", "model_http_error", "model_connection_failed",
-            "model_timeout", "model_request_failed",
+            "model": {
+                "model_http_404", "model_http_error", "model_connection_failed",
+                "model_timeout", "model_request_failed",
+            },
+            "memory": {"memory_response_invalid", "memory_runtime_failed"},
         }
-        if code not in allowed or stage != "model":
+        if stage not in allowed or code not in allowed[stage]:
             raise ValueError("voice_failure_invalid")
         with self.lock:
             item = self.current

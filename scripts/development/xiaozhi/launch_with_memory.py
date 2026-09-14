@@ -26,13 +26,38 @@ def observe_memory_operations(connection):
         sentence_id = getattr(connection, "sentence_id", None)
         started = time.perf_counter()
         try:
-            return await original_query(*args, **kwargs)
-        finally:
-            elapsed_ms = (time.perf_counter() - started) * 1000
+            result = await original_query(*args, **kwargs)
+        except Exception as error:
+            tracker = getattr(connection, "_longmemory_voice_latency", None)
+            if tracker is not None:
+                code = ("memory_response_invalid"
+                        if str(error) == "LongMemory 返回协议无效"
+                        else "memory_runtime_failed")
+                tracker.bind_sentence(sentence_id)
+                tracker.fail(code, stage="memory")
+            # 固定上游在查询记忆前已发送 FIRST，却会在这里的异常分支直接
+            # return，遗漏 LAST。补发同一 sentence_id 的结束动作，避免圆屏
+            # 永久停留在“说话中”；不把异常正文送往设备或控制台。
+            tts = getattr(connection, "tts", None)
+            queue = getattr(tts, "tts_text_queue", None)
+            if queue is not None and sentence_id is not None:
+                from core.providers.tts.dto.dto import (
+                    ContentType, SentenceType, TTSMessageDTO,
+                )
+                queue.put(TTSMessageDTO(
+                    sentence_id=sentence_id,
+                    sentence_type=SentenceType.LAST,
+                    content_type=ContentType.ACTION,
+                ))
+            raise
+        else:
             tracker = getattr(connection, "_longmemory_voice_latency", None)
             if tracker is not None:
                 tracker.bind_sentence(sentence_id)
                 tracker.mark("memory_ready_ms", sentence_id=sentence_id)
+            return result
+        finally:
+            elapsed_ms = (time.perf_counter() - started) * 1000
             connection.logger.bind(tag="memory-comparison").info(
                 f"记忆查询后端={provider} 耗时={elapsed_ms:.1f}ms"
             )

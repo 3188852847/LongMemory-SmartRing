@@ -5,6 +5,7 @@
 """
 
 import asyncio
+from datetime import datetime
 import html
 import json
 import math
@@ -187,8 +188,12 @@ class MemoryProvider(MemoryProviderBase):
             for item in retrieval_evidence:
                 basic_fields = {"layer", "item_id", "rank", "content_sha256"}
                 score_fields = {"keyword_score", "dense_score", "fused_score"}
+                temporal_fields = {"temporal_role", "valid_from", "valid_to"}
                 if (not isinstance(item, dict) or set(item) not in (
-                        basic_fields, basic_fields | score_fields)):
+                        basic_fields,
+                        basic_fields | score_fields,
+                        basic_fields | score_fields | temporal_fields,
+                )):
                     raise RuntimeError("LongMemory 返回协议无效")
                 layer = item["layer"]
                 item_id = item["item_id"]
@@ -201,18 +206,32 @@ class MemoryProvider(MemoryProviderBase):
                         or re.fullmatch(r"[0-9a-f]{64}", digest) is None
                         or (layer, item_id) in seen):
                     raise RuntimeError("LongMemory 返回协议无效")
-                if set(item) == basic_fields | score_fields:
-                    keyword_score = item["keyword_score"]
-                    dense_score = item["dense_score"]
-                    fused_score = item["fused_score"]
-                    if (layer != "l1"
-                            or (keyword_score is not None and (
-                                type(keyword_score) is not int or keyword_score < 0))
-                            or any(value is not None and (
-                                type(value) not in (int, float)
-                                or not math.isfinite(value))
-                                for value in (dense_score, fused_score))):
+                keyword_score = item.get("keyword_score")
+                dense_score = item.get("dense_score")
+                fused_score = item.get("fused_score")
+                if ((keyword_score is not None and (
+                        type(keyword_score) is not int or keyword_score < 0))
+                        or any(value is not None and (
+                            type(value) not in (int, float) or not math.isfinite(value))
+                            for value in (dense_score, fused_score))
+                        or (layer == "l2" and any(
+                            value is not None for value in (dense_score, fused_score)))
+                        or (layer == "l3" and any(
+                            value is not None
+                            for value in (keyword_score, dense_score, fused_score)))):
+                    raise RuntimeError("LongMemory 返回协议无效")
+                temporal_role = item.get("temporal_role")
+                valid_from = item.get("valid_from")
+                valid_to = item.get("valid_to")
+                if temporal_role is None:
+                    if valid_from is not None or valid_to is not None:
                         raise RuntimeError("LongMemory 返回协议无效")
+                elif (temporal_role != "historical" or layer != "l1"
+                        or valid_to is None
+                        or not all(self._valid_timestamp(value) for value in (
+                            valid_from, valid_to,
+                        ) if value is not None)):
+                    raise RuntimeError("LongMemory 返回协议无效")
                 seen.add((layer, item_id))
                 layer_counts[layer] += 1
                 layer_ranks[layer].append(rank)
@@ -255,6 +274,18 @@ class MemoryProvider(MemoryProviderBase):
         # 固定版本上游把 memory_str 直接作为 re.sub 替换字符串，必须转义
         # 反斜杠，否则 C:\\new 等用户内容会被当作正则替换转义。
         return context.replace("\\", "\\\\")
+
+    @staticmethod
+    def _valid_timestamp(value):
+        """限制历史证据时间为短、带时区的 ISO 文本，保持薄适配器独立。"""
+
+        if not isinstance(value, str) or not 1 <= len(value) <= 64:
+            return False
+        try:
+            parsed = datetime.fromisoformat(value)
+        except ValueError:
+            return False
+        return parsed.tzinfo is not None and parsed.utcoffset() is not None
 
     def suppress_internal_query_once(self, query: str) -> None:
         """按适配层可信来源标记跳过一次；不检查具体提示文案。"""

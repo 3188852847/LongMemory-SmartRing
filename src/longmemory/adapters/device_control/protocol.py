@@ -112,15 +112,19 @@ def voice_latency(value: object) -> dict:
         result["tts_segments"] = [dict(segment) for segment in segments]
     if value["version"] == 3 and "failure" in value:
         failure = value["failure"]
+        failure_codes = {
+            "model": {
+                "model_http_404", "model_http_error", "model_connection_failed",
+                "model_timeout", "model_request_failed",
+            },
+            "memory": {"memory_response_invalid", "memory_runtime_failed"},
+        }
         if (
             value["state"] != "failed"
             or not isinstance(failure, dict)
             or set(failure) != {"stage", "code", "at_ms"}
-            or failure.get("stage") != "model"
-            or failure.get("code") not in {
-                "model_http_404", "model_http_error", "model_connection_failed",
-                "model_timeout", "model_request_failed",
-            }
+            or failure.get("stage") not in failure_codes
+            or failure.get("code") not in failure_codes.get(failure.get("stage"), set())
             or type(failure.get("at_ms")) is not int
             or not 0 <= failure["at_ms"] <= 3_600_000
         ):

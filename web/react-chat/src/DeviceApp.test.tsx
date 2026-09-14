@@ -105,6 +105,22 @@ describe('设备与状态页', () => {
     view.unmount(); client.clear();
   });
 
+  test('明确显示记忆协议失败发生在模型请求之前', async () => {
+    vi.spyOn(ChatApi.prototype, 'bootstrap').mockResolvedValue(undefined);
+    vi.spyOn(ChatApi.prototype, 'request').mockResolvedValue({
+      connection_count:1, ready:true, read_volume_supported:true, set_volume_supported:true,
+      voice_latency:{version:3,state:'failed',started_at:'2026-09-14T08:08:15+00:00',tts_backend:'cosyvoice3',timings_ms:{
+        memory_ready_ms:null,llm_requested_ms:null,llm_first_output_ms:null,tts_started_ms:null,
+        audio_ready_ms:null,first_audio_sent_ms:null,response_completed_ms:35,
+      },tts_segments:[],failure:{stage:'memory',code:'memory_response_invalid',at_ms:34}},
+    });
+    const client=createConsoleQueryClient();
+    const view=render(<QueryClientProvider client={client}><MemoryRouter><DeviceApp/></MemoryRouter></QueryClientProvider>);
+    expect(await screen.findByText('圆屏记忆协议不匹配')).toBeTruthy();
+    expect(screen.getByText(/回答模型尚未收到请求/)).toBeTruthy();
+    view.unmount(); client.clear();
+  });
+
   test('停止当前回答只声称服务端中止而不伪造设备回执', async () => {
     vi.spyOn(ChatApi.prototype, 'bootstrap').mockResolvedValue(undefined);
     const request=vi.spyOn(ChatApi.prototype, 'request').mockImplementation(async (path) => {
