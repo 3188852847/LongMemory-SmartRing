@@ -1,6 +1,7 @@
 """为 Playwright 启动一次性 Fake 控制台，不读取真实配置或个人数据。"""
 
 import argparse
+import sqlite3
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -36,6 +37,43 @@ class OfflineBridge:
         return None
 
 
+def seed_owner_review_cases(database: Path) -> None:
+    """只给一次性库写入可判定的重复与矛盾样例，验证所有者复核护栏。"""
+
+    sources = [
+        ("source-duplicate-a", "我喜欢乌龙茶。", "2026-09-13T00:00:00+00:00"),
+        ("source-duplicate-b", "我确实喜欢乌龙茶", "2026-09-13T00:01:00+00:00"),
+        ("source-conflict-a", "我喜欢喝咖啡。", "2026-09-13T00:02:00+00:00"),
+        ("source-conflict-b", "我不喜欢喝咖啡。", "2026-09-13T00:03:00+00:00"),
+    ]
+    memories = [
+        ("memory-duplicate-a", "用户喜欢乌龙茶。", sources[0][2]),
+        ("memory-duplicate-b", "此人喜欢乌龙茶", sources[1][2]),
+        ("memory-conflict-a", "用户喜欢喝咖啡。", sources[2][2]),
+        ("memory-conflict-b", "用户不喜欢喝咖啡。", sources[3][2]),
+    ]
+    with sqlite3.connect(database) as connection:
+        connection.executemany(
+            "INSERT INTO conversation_messages(id,role,content,created_at) "
+            "VALUES (?,'user',?,?)",
+            sources,
+        )
+        connection.executemany(
+            "INSERT INTO atomic_memories "
+            "(id,subject_id,content,recorded_at,valid_from,valid_to,retired_at,"
+            "superseded_by_id) VALUES (?,'user:self',?,?,NULL,NULL,NULL,NULL)",
+            memories,
+        )
+        connection.executemany(
+            "INSERT INTO memory_evidence(memory_id,source_message_id,source_type,linked_at) "
+            "VALUES (?,?,'user_stated',?)",
+            [
+                (memory[0], source[0], source[2])
+                for memory, source in zip(memories, sources, strict=True)
+            ],
+        )
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", type=int, required=True)
@@ -47,6 +85,7 @@ def main():
         root = Path(directory)
         database = root / "synthetic.db"
         LongMemoryV1(database).close()
+        seed_owner_review_cases(database)
         backend = ChatBackend(database, FakeAnswerGenerator())
         try:
             app = create_app(

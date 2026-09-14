@@ -115,7 +115,10 @@ test('文字聊天可保存并在刷新后恢复，React 页面可统一导航',
   await deleteDialog.getByRole('button', {name:'确认删除 L1'}).click();
   await expect(page.getByText('L1 已删除；L0 原始对话仍保留。')).toBeVisible();
   await expect(page.locator('.ant-drawer-mask:visible')).toHaveCount(0);
-  await expect(page.getByRole('tab', {name:'L1 原子记忆 · 0'})).toBeVisible();
+  await expect(page.getByRole('tab', {name:'L1 原子记忆 · 4'})).toBeVisible();
+  await expect(page.locator('.memory-browser .memory-item').filter({
+    hasText:'用户现在养了一只叫布丁的猫。',
+  })).toHaveCount(0);
   await expect(dailyReview).toContainText('事实变化 1');
   await expect(dailyReview).toContainText('删除 1');
   await dailyReview.getByText('查看删除审计（1）').click();
@@ -159,4 +162,41 @@ test('只读实验服务不能误启动模型作业', async ({page}) => {
   await expect(page.getByText(/当前服务仅查看档案/)).toBeVisible();
   await expect(page.getByRole('button', {name:'预检与核对预算'})).toBeDisabled();
   expect(starts).toEqual([]);
+});
+
+test('所有者可合并并恢复重复 L1，矛盾候选没有合并入口', async ({page}) => {
+  await page.goto('/memories');
+  await expect(page.getByRole('heading', {name:'原始与原子记忆'})).toBeVisible();
+  await page.getByRole('button', {name:'扫描当前 L1'}).click();
+
+  const duplicate = page.locator('.quality-candidate-item').filter({hasText:'规范化重复'});
+  await expect(duplicate).toContainText('用户喜欢乌龙茶。');
+  await expect(duplicate).toContainText('此人喜欢乌龙茶');
+  await duplicate.getByRole('button', {name:'保留 A，合并 B'}).click();
+  const mergeDialog = page.getByRole('dialog', {name:'确认合并这两条重复 L1？'});
+  await expect(mergeDialog).toBeVisible();
+  await mergeDialog.getByRole('button', {name:'确认合并'}).click();
+  await expect(page.getByText(/重复 L1 已合并/)).toBeVisible();
+  const keptMemoryDetail = page.getByRole('dialog', {name:'L1 原子记忆'});
+  await expect(keptMemoryDetail).toContainText('我喜欢乌龙茶。');
+  await expect(keptMemoryDetail).toContainText('我确实喜欢乌龙茶');
+  await keptMemoryDetail.locator('.ant-drawer-close').click();
+  await expect(page.locator('.ant-drawer-mask:visible')).toHaveCount(0);
+
+  await page.getByText('查看重复合并历史（1）').click();
+  await expect(page.getByText(/账本完整 1\/1/)).toBeVisible();
+  await expect(page.getByRole('button', {name:/L0 source-d · 用户陈述/})).toBeVisible();
+  await page.getByRole('button', {name:'恢复被合并项'}).click();
+  const restoreDialog = page.getByRole('dialog', {name:'恢复这条被合并的 L1？'});
+  await expect(restoreDialog).toBeVisible();
+  await restoreDialog.getByRole('button', {name:'确认恢复'}).click();
+  await expect(page.getByText(/被合并的 L1 已恢复为当前记忆/)).toBeVisible();
+  await expect(page.getByText('已恢复', {exact:true})).toBeVisible();
+  await expect(page.getByRole('button', {name:'重新保留 A，合并 B'})).toBeEnabled();
+  await expect(page.getByRole('button', {name:'保留 B，合并 A'})).toBeDisabled();
+
+  const conflict = page.locator('.quality-candidate-item').filter({hasText:'可能矛盾'});
+  await expect(conflict).toContainText('用户喜欢喝咖啡。');
+  await expect(conflict).toContainText('用户不喜欢喝咖啡。');
+  await expect(conflict.getByRole('button', {name:/合并/})).toHaveCount(0);
 });
