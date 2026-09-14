@@ -122,6 +122,22 @@ describe('设备与状态页', () => {
     view.unmount(); client.clear();
   });
 
+  test('显示不播放且不保存正文的预测影子统计', async () => {
+    vi.spyOn(ChatApi.prototype, 'bootstrap').mockResolvedValue(undefined);
+    vi.spyOn(ChatApi.prototype, 'request').mockResolvedValue({
+      connection_count:1,ready:true,read_volume_supported:true,set_volume_supported:true,
+      voice_prediction_shadow:{version:1,state:'candidate_waiting',opportunities:3,
+        evaluated:2,hits:1,misses:1,last_result:'pending'},
+    });
+    const client=createConsoleQueryClient();
+    const view=render(<QueryClientProvider client={client}><MemoryRouter><DeviceApp/></MemoryRouter></QueryClientProvider>);
+    expect(await screen.findByText('预测式语音 · 影子观察')).toBeTruthy();
+    expect(screen.getByText('当前不会提前播放')).toBeTruthy();
+    expect(screen.getByText('50%')).toBeTruthy();
+    expect(screen.getByText('等待下一句')).toBeTruthy();
+    view.unmount(); client.clear();
+  });
+
   test('明确显示记忆协议失败发生在模型请求之前', async () => {
     vi.spyOn(ChatApi.prototype, 'bootstrap').mockResolvedValue(undefined);
     vi.spyOn(ChatApi.prototype, 'request').mockResolvedValue({

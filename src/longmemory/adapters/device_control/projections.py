@@ -7,6 +7,7 @@ from .protocol import (
     round_skin,
     safe_reason,
     voice_latency,
+    voice_prediction_shadow,
     volume_value,
 )
 
@@ -335,6 +336,10 @@ def device_status(data: dict) -> dict:
         result["natural_interruption"] = diagnostic
     if "voice_latency" in data:
         result["voice_latency"] = voice_latency(data["voice_latency"])
+    if "voice_prediction_shadow" in data:
+        result["voice_prediction_shadow"] = voice_prediction_shadow(
+            data["voice_prediction_shadow"]
+        )
     if "reason" in data:
         result["reason"] = safe_reason(data["reason"])
     if "announcement_reason" in data:

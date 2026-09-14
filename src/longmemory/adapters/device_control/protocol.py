@@ -54,13 +54,15 @@ VOICE_TIMING_FIELDS = {
 def voice_latency(value: object) -> dict:
     """验证小智内存中的脱敏时序；开放字段不能直接穿透到浏览器。"""
 
-    if not isinstance(value, dict) or value.get("version") not in {1, 2, 3}:
+    if not isinstance(value, dict) or value.get("version") not in {1, 2, 3, 4}:
         raise BridgeError("bridge_invalid_response", 502)
     fields = {"version", "state", "started_at", "tts_backend", "timings_ms"}
-    if value["version"] in {2, 3}:
+    if value["version"] >= 2:
         fields.add("tts_segments")
-    if value["version"] == 3 and "failure" in value:
+    if value["version"] >= 3 and "failure" in value:
         fields.add("failure")
+    if value["version"] == 4:
+        fields.add("response_path")
     if set(value) != fields:
         raise BridgeError("bridge_invalid_response", 502)
     if value.get("state") not in {
@@ -69,6 +71,8 @@ def voice_latency(value: object) -> dict:
     } or value.get("tts_backend") not in {"edge", "voxcpm2", "sanotts", "cosyvoice3", "other"}:
         raise BridgeError("bridge_invalid_response", 502)
     if not isinstance(value.get("started_at"), str) or len(value["started_at"]) > 64:
+        raise BridgeError("bridge_invalid_response", 502)
+    if value["version"] == 4 and value.get("response_path") not in {"model", "preset"}:
         raise BridgeError("bridge_invalid_response", 502)
     try:
         started = datetime.fromisoformat(value["started_at"])
@@ -86,7 +90,7 @@ def voice_latency(value: object) -> dict:
     ):
         raise BridgeError("bridge_invalid_response", 502)
     result = {**value, "timings_ms": dict(timings)}
-    if value["version"] in {2, 3}:
+    if value["version"] >= 2:
         segments = value.get("tts_segments")
         segment_fields = {"index", "started_ms", "completed_ms", "duration_ms"}
         if not isinstance(segments, list) or len(segments) > 64:
@@ -110,7 +114,7 @@ def voice_latency(value: object) -> dict:
             ):
                 raise BridgeError("bridge_invalid_response", 502)
         result["tts_segments"] = [dict(segment) for segment in segments]
-    if value["version"] == 3 and "failure" in value:
+    if value["version"] >= 3 and "failure" in value:
         failure = value["failure"]
         failure_codes = {
             "model": {
@@ -133,6 +137,37 @@ def voice_latency(value: object) -> dict:
     elif value.get("state") == "failed":
         raise BridgeError("bridge_invalid_response", 502)
     return result
+
+
+def voice_prediction_shadow(value: object) -> dict:
+    """验证预测影子统计；该契约不允许携带对话正文或候选文本。"""
+    fields = {
+        "version", "state", "opportunities", "evaluated", "hits", "misses",
+        "last_result",
+    }
+    if (
+        not isinstance(value, dict)
+        or set(value) != fields
+        or value.get("version") != 1
+        or value.get("state") not in {"observing", "candidate_waiting"}
+        or value.get("last_result") not in {
+            "none", "pending", "hit_affirmative", "hit_negative", "miss",
+        }
+    ):
+        raise BridgeError("bridge_invalid_response", 502)
+    counts = [value.get(name) for name in ("opportunities", "evaluated", "hits", "misses")]
+    if any(type(item) is not int or not 0 <= item <= 1_000_000 for item in counts):
+        raise BridgeError("bridge_invalid_response", 502)
+    opportunities, evaluated, hits, misses = counts
+    pending = value["state"] == "candidate_waiting"
+    if (
+        evaluated != hits + misses
+        or opportunities != evaluated + int(pending)
+        or pending != (value["last_result"] == "pending")
+        or (evaluated == 0 and not pending and value["last_result"] != "none")
+    ):
+        raise BridgeError("bridge_invalid_response", 502)
+    return dict(value)
 
 
 def round_skin(value: object) -> dict:

@@ -1,7 +1,7 @@
 import {useEffect, useState} from 'react';
 import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {Alert, Button, Card, Descriptions, InputNumber, Select, Slider, Space, Tag} from 'antd';
-import {ApiError, ChatApi, type DeviceStatus, type NaturalInterruptionDiagnostic, type VoiceLatency} from './api';
+import {ApiError, ChatApi, type DeviceStatus, type NaturalInterruptionDiagnostic, type VoiceLatency, type VoicePredictionShadow} from './api';
 import {AppShell, ConsoleNav} from './AppShell';
 import {PageHeader} from './PageHeader';
 import {errorMessage, resultView, statusView, validTarget} from '../../assets/state.mjs';
@@ -71,6 +71,22 @@ function VoiceLatencyCard({value}:{value:VoiceLatency}) {
       <p className="subtle">这里只记录每段进入 TTS 到完成音频编码的时间，不保存该段文字或音频。连续多段都慢，通常表示短句固定开销被重复支付。</p>
     </div>}
     <p className="subtle">样本开始于 {new Date(value.started_at).toLocaleString('zh-CN', {hour12:false})}。计时起点是服务端收到已识别文本并进入回答流程；不含录音与 ASR，也不代表扬声器真正开始出声。当前后端：{value.tts_backend==='edge'?'EdgeTTS':value.tts_backend==='voxcpm2'?'VoxCPM2':value.tts_backend==='sanotts'?'sanoTTS':value.tts_backend==='cosyvoice3'?'CosyVoice 3':'其他'}。</p>
+  </Card>;
+}
+
+function VoicePredictionShadowCard({value}:{value:VoicePredictionShadow}) {
+  const rate=value.evaluated===0?null:Math.round(value.hits/value.evaluated*100);
+  const latest={none:'尚无样本',pending:'等待下一句',hit_affirmative:'命中肯定分支',hit_negative:'命中否定分支',miss:'未命中封闭分支'}[value.last_result];
+  return <Card className="device-latency-card" title="预测式语音 · 影子观察" extra={<Tag color={value.state==='candidate_waiting'?'processing':'default'}>{value.state==='candidate_waiting'?'已有候选':'观察中'}</Tag>}>
+    <Alert showIcon type="info" title="当前不会提前播放" description="系统只观察助手提出封闭问题后，下一句是否为肯定或否定短答；不保存对话正文，也不调用额外模型或占用 TTS。"/>
+    <Descriptions column={{xs:1,sm:2,lg:4}} size="small" items={[
+      {key:'opportunities',label:'候选机会',children:value.opportunities},
+      {key:'evaluated',label:'已核对',children:value.evaluated},
+      {key:'hits',label:'命中',children:value.hits},
+      {key:'rate',label:'命中率',children:rate===null?'等待样本':`${rate}%`},
+      {key:'latest',label:'最近结果',children:latest},
+    ]}/>
+    <p className="subtle">影子结果只用于判断是否值得进入预合成阶段。候选足够多且命中稳定后，才会评估空闲时合成和命中校验。</p>
   </Card>;
 }
 
@@ -192,6 +208,7 @@ export function DeviceApp() {
       </div><div className="device-refresh-meta"><span>{status.data?.connection_count ?? 0} 个活动连接</span><span>{status.dataUpdatedAt ? `刷新于 ${new Date(status.dataUpdatedAt).toLocaleTimeString('zh-CN', {hour12:false})}` : '尚未刷新'}</span><span>每 5 秒检查连接，不轮询音量</span></div>
     </Card>
     {status.data?.voice_latency ? <VoiceLatencyCard value={status.data.voice_latency}/> : <Card className="device-latency-card" title="最近一次圆屏首句时序"><p className="subtle">当前连接还没有可用的完整时序。与圆屏完成一轮语音对话后，本页会分开显示记忆、模型、首句组织、TTS 和发送等待。</p></Card>}
+    {status.data?.voice_prediction_shadow&&<VoicePredictionShadowCard value={status.data.voice_prediction_shadow}/>}
     {status.data?.natural_interruption && <NaturalInterruptionCard value={status.data.natural_interruption}/>}
     <Card className="device-snapshot-card" title="设备快照" extra={<Tag color={snapshot ? (status.data?.ready && !status.error ? 'blue' : 'gold') : 'default'}>{readSnapshot.isPending?'读取中':snapshot?(status.data?.ready && !status.error?'单次读取':'历史读数'):'等待读取'}</Tag>}><Descriptions column={{xs:1,sm:3}} items={[
       {key:'battery',label:'电池与充电',children:snapshotValue(Boolean(snapshot?.battery), snapshot?.battery ? `${snapshot.battery.level}% · ${snapshot.battery.charging?'充电中':'未充电'}` : unsupported)},

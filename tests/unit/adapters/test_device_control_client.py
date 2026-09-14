@@ -239,6 +239,55 @@ def test_status_accepts_sanitized_v3_memory_failure(tmp_path):
     assert asyncio.run(client.status())["voice_latency"] == latency
 
 
+def test_status_accepts_v4_preset_timing_and_prediction_shadow(tmp_path):
+    latency = {
+        "version": 4, "state": "first_audio_sent", "response_path": "preset",
+        "started_at": "2026-09-14T09:00:00+00:00", "tts_backend": "cosyvoice3",
+        "timings_ms": {
+            "memory_ready_ms": 40, "llm_requested_ms": None,
+            "llm_first_output_ms": None, "tts_started_ms": 45,
+            "audio_ready_ms": 70, "first_audio_sent_ms": 75,
+            "response_completed_ms": 50,
+        },
+        "tts_segments": [
+            {"index": 1, "started_ms": 45, "completed_ms": 70, "duration_ms": 25},
+        ],
+    }
+    shadow = {
+        "version": 1, "state": "observing", "opportunities": 3,
+        "evaluated": 3, "hits": 2, "misses": 1,
+        "last_result": "hit_affirmative",
+    }
+    client = client_for(tmp_path, {
+        "connection_count": 1, "ready": True,
+        "read_volume_supported": True, "set_volume_supported": True,
+        "announcement_supported": True, "announcement_ready": True,
+        "user_session_active": False, "voice_latency": latency,
+        "voice_prediction_shadow": shadow,
+    })
+    result = asyncio.run(client.status())
+    assert result["voice_latency"] == latency
+    assert result["voice_prediction_shadow"] == shadow
+
+
+@pytest.mark.parametrize("shadow", [
+    {"version": 1, "state": "observing", "opportunities": 1, "evaluated": 1,
+     "hits": 1, "misses": 0, "last_result": "hit_affirmative",
+     "candidate_text": "must-not-escape"},
+    {"version": 1, "state": "observing", "opportunities": 2, "evaluated": 1,
+     "hits": 1, "misses": 1, "last_result": "miss"},
+])
+def test_status_rejects_private_or_inconsistent_prediction_shadow(tmp_path, shadow):
+    client = client_for(tmp_path, {
+        "connection_count": 1, "ready": True,
+        "read_volume_supported": True, "set_volume_supported": True,
+        "announcement_supported": True, "announcement_ready": True,
+        "user_session_active": False, "voice_prediction_shadow": shadow,
+    })
+    with pytest.raises(BridgeError, match="bridge_invalid_response"):
+        asyncio.run(client.status())
+
+
 def test_status_rejects_inconsistent_v2_voice_latency_segment(tmp_path):
     latency = {
         "version": 2, "state": "tts_running",
