@@ -8,6 +8,25 @@ import {MemoryApp} from './MemoryApp';
 afterEach(()=>vi.restoreAllMocks());
 
 describe('每日记忆回顾',()=>{
+  test('首次打开就用真实 L0 总数，不把尚未加载显示为 0',async()=>{
+    vi.spyOn(ChatApi.prototype,'bootstrap').mockResolvedValue(undefined);
+    vi.spyOn(ChatApi.prototype,'request').mockImplementation(async path=>{
+      if(path==='/api/memory-config') return {configured:true,database:'synthetic.db',allow_delete:true,allow_correction:true,allow_change:true,allow_promote_source:true} as never;
+      if(path==='/api/memory-mode') return {write_enabled:true,use_enabled:true,scenario_use_enabled:false,scenario_available:true,persona_use_enabled:false,persona_available:true,persistent:false,l0_archived_when_write_disabled:true} as never;
+      if(path==='/api/consolidation-status') return {background_enabled:false,stages:[]} as never;
+      if(path.startsWith('/api/memories/daily-review')) return {local_date:'2026-09-14',utc_offset_minutes:480,items:[],total:0,limited:false,activity_counts:{added:0,corrected:0,changed:0,deleted:0},message_counts:{user:20,assistant:15,total:35,unlinked_user:19},quality_counts:{owner_confirmed_missed_extraction:0},deletions:[],deletions_limited:false} as never;
+      if(path.startsWith('/api/chat-memory-feedback/daily')) return {local_date:'2026-09-14',utc_offset_minutes:480,total:0,limited:false,action_counts:{memory_ok:0,recall_miss:0,wrong_memory:0,memory_irrelevant:0},items:[],current_total:0,current_limited:false,current_counts:{memory_ok:0,recall_miss:0,wrong_memory:0,memory_irrelevant:0},current_items:[]} as never;
+      if(path.startsWith('/api/memories?')) return {items:[],total:1,limit:25,offset:0} as never;
+      if(path.startsWith('/api/source-messages?')) return {items:[],total:35,limit:25,offset:0} as never;
+      throw new Error(`unexpected test path: ${path}`);
+    });
+    const client=new QueryClient({defaultOptions:{queries:{retry:false}}});
+    render(<QueryClientProvider client={client}><MemoryRouter><MemoryApp/></MemoryRouter></QueryClientProvider>);
+    expect(screen.getByText('L0 原始记录 · —')).toBeTruthy();
+    expect(await screen.findByText('L0 原始记录 · 35')).toBeTruthy();
+    expect(screen.queryByText('L0 原始记录 · 0')).toBeNull();
+  });
+
   test('从圆屏质量样本直达指定用户 L0',async()=>{
     vi.spyOn(ChatApi.prototype,'bootstrap').mockResolvedValue(undefined);
     vi.spyOn(ChatApi.prototype,'request').mockImplementation(async path=>{

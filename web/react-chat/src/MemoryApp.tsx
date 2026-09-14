@@ -87,6 +87,7 @@ export function MemoryApp() {
   const [tab, setTab] = useState<'l1' | 'l0'>('l1');
   const [l1, setL1] = useState<Page<L1Summary>>({items: [], total: 0, limit: 25, offset: 0});
   const [l0, setL0] = useState<Page<L0Summary>>({items: [], total: 0, limit: 25, offset: 0});
+  const [l0Loaded, setL0Loaded] = useState(false);
   const [daily,setDaily] = useState<DailyReview>();
   const [dailyFeedback,setDailyFeedback] = useState<DailyMemoryFeedback>();
   const [reviewDate,setReviewDate] = useState(localDateText());
@@ -137,7 +138,7 @@ export function MemoryApp() {
       params.set('utc_offset_minutes',String(-new Date().getTimezoneOffset()));
     }
     const data = await api.request<Page<L0Summary>>(`/api/source-messages?${params}`);
-    setL0(data); setSelectedL0(undefined);
+    setL0(data); setL0Loaded(true); setSelectedL0(undefined);
   }
   async function fetchDaily(date=reviewDate) {
     const params=new URLSearchParams({local_date:date,utc_offset_minutes:String(-new Date().getTimezoneOffset())});
@@ -176,7 +177,12 @@ export function MemoryApp() {
         } catch {setNotice('记忆库可浏览，但聊天 Runtime 未启用，运行期开关不可用。');}
         const params = new URLSearchParams({q: '', state: 'active', offset: '0', limit: '25'});
         setL1(await api.request<Page<L1Summary>>(`/api/memories?${params}`));
-        await fetchDaily();
+        // 页签标题必须来自真实查询。L0 尚未读取时不能用初始 state 的 0
+        // 冒充数据库统计；同时预载第一页也让首次切换无需再等待空白列表。
+        await Promise.all([
+          fetchL0(0, '', 'all', 'all', '').catch(() => undefined),
+          fetchDaily(),
+        ]);
         const linkedMemoryId = searchParams.get('memory_id')?.trim();
         const linkedL0Id = searchParams.get('l0_message_id')?.trim();
         if (linkedL0Id && linkedL0Id.length <= 128 && !/[\u0000-\u001f\u007f]/.test(linkedL0Id)) {
@@ -519,7 +525,7 @@ export function MemoryApp() {
           <label><Switch checked={modeDraft.scenario_use_enabled} disabled={busy || !mode.scenario_available} onChange={value => setModeDraft({...modeDraft, scenario_use_enabled: value})}/><span><strong>使用 L2</strong><small>注入已接受生活场景</small></span></label>
           <label><Switch checked={modeDraft.persona_use_enabled} disabled={busy || !mode.persona_available} onChange={value => setModeDraft({...modeDraft, persona_use_enabled: value})}/><span><strong>使用 L3</strong><small>注入已接受用户画像</small></span></label>
         </div><p className="subtle">关闭 L1 写入仍保留 L0。L2/L3 只使用当前有效且与问题相关的内容，设置在服务重启后恢复默认。</p></Card>}
-      <section className="memory-browser"><Tabs activeKey={tab} onChange={switchTab} items={[{key: 'l1', label: `L1 原子记忆 · ${l1.total}`}, {key: 'l0', label: `L0 原始记录 · ${l0.total}`}]}/>
+      <section className="memory-browser"><Tabs activeKey={tab} onChange={switchTab} items={[{key: 'l1', label: `L1 原子记忆 · ${l1.total}`}, {key: 'l0', label: `L0 原始记录 · ${l0Loaded ? l0.total : '—'}`}]}/>
       <div className="memory-toolbar"><Input.Search aria-label="搜索当前层级" value={query} maxLength={200} allowClear disabled={busy || !config?.configured} placeholder={tab === 'l1' ? '搜索原子事实' : '搜索原始对话'} onChange={e => setQuery(e.target.value)} onSearch={value => void refresh(0, value.trim())}/>
         {tab === 'l1' ? <Select aria-label="L1 状态" value={l1State} disabled={busy || !config?.configured} onChange={value => {setL1State(value); void guarded(async () => {await fetchL1(0, query, value); setNotice('L1 状态筛选已应用。');});}} options={[{value:'active',label:'当前记忆'},{value:'retired',label:'已退役'},{value:'all',label:'全部 L1'}]}/>
           : <><Select aria-label="L0 角色" value={role} disabled={busy || !config?.configured} onChange={value => {setRole(value); void guarded(async () => {await fetchL0(0, query, value, linkState); setNotice('L0 角色筛选已应用。');});}} options={[{value:'all',label:'全部角色'},{value:'user',label:'用户原话'},{value:'assistant',label:'助手原话'}]}/>
