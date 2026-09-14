@@ -62,6 +62,27 @@ def test_tracker_rejects_late_completion_from_previous_turn():
     assert tracker.snapshot()["timings_ms"]["response_completed_ms"] == 1000
 
 
+def test_tracker_keeps_latest_audible_turn_when_empty_turn_follows():
+    ticks = iter([1.0, 1.3, 2.0, 2.2])
+    connection = type("Connection", (), {})()
+    connection.config = {"selected_module": {"TTS": "EdgeTTS"}}
+    connection.logger = Logger()
+    connection.sentence_id = "turn-0"
+    tracker = voice_latency.VoiceLatencyTracker(connection, clock=lambda: next(ticks))
+    tracker.begin()
+    connection.sentence_id = "turn-1"
+    tracker.bind_sentence()
+    tracker.mark("first_audio_sent_ms", sentence_id="turn-1")
+    audible = tracker.snapshot()
+    assert audible["timings_ms"]["first_audio_sent_ms"] == 300
+
+    tracker.begin()
+    connection.sentence_id = "turn-2"
+    tracker.bind_sentence()
+    tracker.mark("memory_ready_ms", sentence_id="turn-2")
+    assert tracker.snapshot() == audible
+
+
 def test_edge_first_chunk_policy_flushes_only_first_unpunctuated_chunk():
     class TTS:
         def __init__(self):

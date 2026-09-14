@@ -24,6 +24,8 @@ sys.path.pop(0)
 class FakeSynthesizer:
     load_seconds = 9.0
     warmup_seconds = 3.0
+    stream_token_hop_len = 25
+    reference_cached = True
 
     def __init__(self):
         self.calls = []
@@ -71,6 +73,8 @@ def test_health_capabilities_and_synthesis_contract(local_service):
     health = json.loads(body)
     assert status == 200 and health["provider"] == "cosyvoice3"
     assert health["load_seconds"] == 9.0 and health["warmup_seconds"] == 3.0
+    assert health["stream_token_hop_len"] == 25
+    assert health["reference_cached"] is True
     assert health["capabilities"]["delivery_modes"] == ["buffered", "audio_stream"]
     assert health["capabilities"]["cancellation"] == "cooperative"
 
@@ -117,3 +121,39 @@ def test_rejects_browser_origin_and_non_loopback(local_service):
     assert status == 403
     with pytest.raises(argparse.ArgumentTypeError):
         service.loopback_address("192.168.1.2")
+
+
+def test_stream_preparation_restores_initial_model_hop():
+    synth = object.__new__(service.CosyVoiceSynthesizer)
+    runtime = type("Runtime", (), {"token_hop_len": 100})()
+    synth._model = type("Cosy", (), {"model": runtime})()
+    synth.stream_token_hop_len = 25
+    synth._prepare_stream()
+    assert runtime.token_hop_len == 25
+
+
+def test_stream_uses_cached_reference_and_resets_hop_before_inference():
+    calls = []
+
+    class Model:
+        model = type("Runtime", (), {"token_hop_len": 100})()
+
+        def inference_zero_shot(self, *args, **kwargs):
+            calls.append((args, kwargs, self.model.token_hop_len))
+            yield {"tts_speech": object()}
+
+    synth = object.__new__(service.CosyVoiceSynthesizer)
+    synth._model = Model()
+    synth._lock = threading.Lock()
+    synth._prompt_wav = Path("fixed-reference.wav")
+    synth.stream_token_hop_len = 25
+    synth._wave_bytes = lambda _speech: b"RIFF-chunk"
+
+    assert list(synth.stream_chunks("短句")) == [b"RIFF-chunk"]
+    args, kwargs, hop_at_call = calls[0]
+    assert args == ("短句", service.PROMPT_TEXT, synth._prompt_wav)
+    assert kwargs == {
+        "zero_shot_spk_id": service.REFERENCE_SPEAKER_ID,
+        "stream": True,
+    }
+    assert hop_at_call == 25

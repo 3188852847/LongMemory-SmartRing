@@ -55,7 +55,32 @@ class VoiceLatencyTracker:
         self.clock = clock
         self.lock = threading.Lock()
         self.current = None
+        self.last_audible = None
         self.sequence = 0
+
+    @staticmethod
+    def _snapshot_item(item):
+        timings = dict(item["timings"])
+        if timings["first_audio_sent_ms"] is not None:
+            state = "first_audio_sent"
+        elif timings["audio_ready_ms"] is not None:
+            state = "audio_ready"
+        elif timings["tts_started_ms"] is not None:
+            state = "tts_running"
+        elif timings["llm_first_output_ms"] is not None:
+            state = "waiting_for_sentence"
+        elif timings["llm_requested_ms"] is not None:
+            state = "waiting_for_model"
+        else:
+            state = "preparing_memory"
+        return {
+            "version": item["version"],
+            "state": state,
+            "started_at": item["started_at"],
+            "tts_backend": item["tts_backend"],
+            "timings_ms": timings,
+            "tts_segments": [dict(segment) for segment in item["tts_segments"]],
+        }
 
     def begin(self):
         now = self.clock()
@@ -109,6 +134,8 @@ class VoiceLatencyTracker:
                     return
             elapsed = max(0, round((self.clock() - item["started"]) * 1000))
             item["timings"][field] = elapsed
+            if item["timings"]["first_audio_sent_ms"] is not None:
+                self.last_audible = self._snapshot_item(item)
         # 日志只含固定阶段名和毫秒数，不含问题、回答、记忆或音色提示词。
         self.connection.logger.bind(tag="voice-latency").info(
             f"圆屏首句计时 stage={field} elapsed={elapsed}ms"
@@ -155,6 +182,8 @@ class VoiceLatencyTracker:
             elapsed = max(0, round((self.clock() - item["started"]) * 1000))
             segment["completed_ms"] = elapsed
             segment["duration_ms"] = max(0, elapsed - segment["started_ms"])
+            if item["timings"]["first_audio_sent_ms"] is not None:
+                self.last_audible = self._snapshot_item(item)
         self.connection.logger.bind(tag="voice-latency").info(
             f"圆屏分段计时 segment={index} duration={segment['duration_ms']}ms"
         )
@@ -163,27 +192,19 @@ class VoiceLatencyTracker:
         with self.lock:
             if self.current is None:
                 return None
-            timings = dict(self.current["timings"])
-            if timings["first_audio_sent_ms"] is not None:
-                state = "first_audio_sent"
-            elif timings["audio_ready_ms"] is not None:
-                state = "audio_ready"
-            elif timings["tts_started_ms"] is not None:
-                state = "tts_running"
-            elif timings["llm_first_output_ms"] is not None:
-                state = "waiting_for_sentence"
-            elif timings["llm_requested_ms"] is not None:
-                state = "waiting_for_model"
-            else:
-                state = "preparing_memory"
-            return {
-                "version": self.current["version"],
-                "state": state,
-                "started_at": self.current["started_at"],
-                "tts_backend": self.current["tts_backend"],
-                "timings_ms": timings,
-                "tts_segments": [dict(segment) for segment in self.current["tts_segments"]],
-            }
+            # 心跳、空识别或未进入模型的轮次可能紧随真实回答开始。控制面优先返回
+            # 最近一次已经发出音频的样本，避免可诊断的慢回答被空轮次覆盖。
+            if self.current["timings"]["first_audio_sent_ms"] is not None:
+                return self._snapshot_item(self.current)
+            if self.last_audible is not None:
+                return {
+                    **self.last_audible,
+                    "timings_ms": dict(self.last_audible["timings_ms"]),
+                    "tts_segments": [
+                        dict(segment) for segment in self.last_audible["tts_segments"]
+                    ],
+                }
+            return self._snapshot_item(self.current)
 
 
 def install_edge_first_chunk_policy(tts, *, maximum_chars=18):

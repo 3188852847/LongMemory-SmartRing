@@ -40,6 +40,7 @@ DEFAULT_PORT = 18770
 MAX_REQUEST_BYTES = 32 * 1024
 MAX_TEXT_CHARS = 600
 WARMUP_TEXT = "你好，我准备好了。"
+REFERENCE_SPEAKER_ID = "longmemory-official-zero-shot-v1"
 CAPABILITIES = {
     "contract_version": 2,
     "provider_id": "cosyvoice3",
@@ -91,15 +92,44 @@ class CosyVoiceSynthesizer:
         self._model = CosyVoice3(str(model_dir), fp16=True)
         self.load_seconds = perf_counter() - load_started
         self._sample_rate = int(self._model.sample_rate)
+        # 官方参考音频与提示词在服务生命周期内固定。CosyVoice 默认会在每次请求中
+        # 重算提示词 token、语音特征、语音 token 和说话人向量；先注册为命名音色，
+        # 后续推理即可复用预计算结果，同时仍保持原来的零样本音色。
+        if not self._model.add_zero_shot_spk(
+            PROMPT_TEXT, self._prompt_wav, REFERENCE_SPEAKER_ID
+        ):
+            raise RuntimeError("reference speaker registration failed")
+        if REFERENCE_SPEAKER_ID not in self._model.list_available_spks():
+            raise RuntimeError("reference speaker unavailable")
+        runtime_model = getattr(self._model, "model", None)
+        stream_token_hop_len = getattr(runtime_model, "token_hop_len", None)
+        if type(stream_token_hop_len) is not int or stream_token_hop_len <= 0:
+            raise RuntimeError("stream token hop unavailable")
+        # 上游流式实现会在产出音频后把实例字段从 25 逐步放大到 50/100；如果不在
+        # 新请求前恢复，后续短句会等到整句完成才只返回一个块。保存模型初始值，
+        # 不擅自使用低于训练 static_chunk_size 的分块长度。
+        self.stream_token_hop_len = stream_token_hop_len
+        self.reference_cached = True
         # 服务只有在懒初始化路径也跑过之后才宣告 ready，避免首位用户承担额外冷启动。
         warmup_started = perf_counter()
         self._generate(WARMUP_TEXT)
         self.warmup_seconds = perf_counter() - warmup_started
 
+    def _prepare_stream(self) -> None:
+        runtime_model = getattr(self._model, "model", None)
+        if runtime_model is None:
+            raise RuntimeError("stream runtime unavailable")
+        runtime_model.token_hop_len = self.stream_token_hop_len
+
     def _generate(self, text: str) -> bytes:
+        self._prepare_stream()
         chunks = []
         for item in self._model.inference_zero_shot(
-            text, PROMPT_TEXT, self._prompt_wav, stream=True
+            text,
+            PROMPT_TEXT,
+            self._prompt_wav,
+            zero_shot_spk_id=REFERENCE_SPEAKER_ID,
+            stream=True,
         ):
             speech = item.get("tts_speech")
             if speech is None or speech.numel() == 0:
@@ -142,8 +172,13 @@ class CosyVoiceSynthesizer:
     def stream_chunks(self, text: str):
         """串行占用模型，但不再等待整段语音生成完才交付第一个音频块。"""
         with self._lock:
+            self._prepare_stream()
             for item in self._model.inference_zero_shot(
-                text, PROMPT_TEXT, self._prompt_wav, stream=True
+                text,
+                PROMPT_TEXT,
+                self._prompt_wav,
+                zero_shot_spk_id=REFERENCE_SPEAKER_ID,
+                stream=True,
             ):
                 speech = item.get("tts_speech")
                 if speech is None:
@@ -199,10 +234,13 @@ class CosyVoiceHandler(BaseHTTPRequestHandler):
             self._json(404, {"error": "not_found"})
             return
         body = {"ready": True, "provider": "cosyvoice3", "capabilities": CAPABILITIES}
-        for name in ("load_seconds", "warmup_seconds"):
+        for name in ("load_seconds", "warmup_seconds", "stream_token_hop_len"):
             value = getattr(self.server.synthesizer, name, None)
             if isinstance(value, (int, float)):
                 body[name] = round(value, 3)
+        reference_cached = getattr(self.server.synthesizer, "reference_cached", None)
+        if isinstance(reference_cached, bool):
+            body["reference_cached"] = reference_cached
         self._json(200, body)
 
     def do_OPTIONS(self):
