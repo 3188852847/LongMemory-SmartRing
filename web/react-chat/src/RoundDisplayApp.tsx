@@ -3,7 +3,7 @@ import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {Alert, Button, Card, Checkbox, Descriptions, Input, InputNumber, Segmented, Select, Space, Tag} from 'antd';
 import {AppShell, ConsoleNav} from './AppShell';
 import {PageHeader} from './PageHeader';
-import {ChatApi, type RoundDeviceSkin, type RoundSkin, type RoundSkinApply, type RoundSkins, type RoundWallpaperDeployment, type RoundWallpaperDeviceStatus} from './api';
+import {ApiError, ChatApi, type RoundDeviceSkin, type RoundSkin, type RoundSkinApply, type RoundSkins, type RoundWallpaperDeployment, type RoundWallpaperDeviceStatus} from './api';
 import {readRoundObservations, roundObservationKey, roundObservationStates, type RoundObservations, type RoundObservationState, writeRoundObservations} from './roundDisplayObservations';
 import {RoundWallpaperLibrary} from './RoundWallpaperLibrary';
 
@@ -74,6 +74,24 @@ type SkinDraft = {
   face:RoundSkin['face'];
 };
 
+type SkinModeSwitchState = 'idle' | 'waiting' | 'confirmed' | 'unconfirmed';
+
+export function deviceSkinErrorCopy(error: unknown): {title:string; description:string; type:'info'|'warning'} {
+  const code = error instanceof ApiError ? error.code : '';
+  if (code === 'operation_busy' || code === 'control_busy') return {
+    type:'info', title:'设备操作尚未结束', description:'请等待当前切换或重启完成，页面会自动刷新真机状态。',
+  };
+  if (code === 'device_offline' || code === 'bridge_unavailable' || code === 'bridge_timeout') return {
+    type:'info', title:'圆屏当前离线', description:'设备可能仍在重启；重连后再检测即可，不能据此判断皮肤协议不可用。',
+  };
+  if (code === 'device_not_ready' || code === 'tools_not_ready' || code === 'device_connection_changed') return {
+    type:'info', title:'圆屏正在恢复控制连接', description:'设备已经连接或正在换连接，但控制工具尚未就绪，请稍后再检测。',
+  };
+  return {
+    type:'warning', title:'未能读取真机皮肤能力', description:'请确认圆屏在线且运行支持 skin_api=1 的固件；本次检测没有修改设备。',
+  };
+}
+
 function createDraft(skin:RoundSkin):SkinDraft {
   return {
     base_skin_id:skin.id,
@@ -115,6 +133,7 @@ export function RoundDisplayApp() {
   const [draft, setDraft] = useState<SkinDraft>();
   const [observations,setObservations] = useState<RoundObservations>({});
   const [observationNotice,setObservationNotice] = useState('');
+  const [skinModeSwitch,setSkinModeSwitch] = useState<SkinModeSwitchState>('idle');
   const session = useQuery({queryKey:['round-skin-session'], queryFn:async () => {await api.bootstrap(); return true;}, staleTime:Infinity});
   const skins = useQuery({queryKey:['round-skins'], queryFn:() => api.request<RoundSkins>('/api/round-skins'), enabled:session.isSuccess});
   const wallpaperDevice = useQuery({
@@ -122,6 +141,8 @@ export function RoundDisplayApp() {
     queryFn:()=>api.request<RoundWallpaperDeviceStatus>('/api/round-wallpapers/device'),
     enabled:session.isSuccess,
     retry:false,
+    refetchInterval:skinModeSwitch === 'waiting' ? 2000 : false,
+    refetchIntervalInBackground:true,
   });
   useEffect(() => {if (skins.data?.selected_skin) setSelectedSkin(skins.data.selected_skin);}, [skins.data?.selected_skin]);
   const saveSkin = useMutation({
@@ -137,9 +158,12 @@ export function RoundDisplayApp() {
   });
   const useSkinDisplay = useMutation({
     mutationFn:() => api.request<RoundWallpaperDeployment>('/api/round-wallpapers/deactivate', 'POST'),
-    onSuccess:() => window.setTimeout(
-      () => void queryClient.invalidateQueries({queryKey:['round-wallpapers','device']}), 5000,
-    ),
+    onMutate:() => setSkinModeSwitch('idle'),
+    onSuccess:() => {
+      deviceSkin.reset();
+      setSkinModeSwitch('waiting');
+      void queryClient.invalidateQueries({queryKey:['round-wallpapers','device']});
+    },
   });
   const saveCustom = useMutation({
     mutationFn:(value:SkinDraft) => api.request<RoundSkins>('/api/round-skins/custom', 'PUT', {
@@ -164,6 +188,17 @@ export function RoundDisplayApp() {
     setObservations(observationKey ? readRoundObservations(localStorage, observationKey) : {});
     setObservationNotice('');
   }, [observationKey]);
+  useEffect(() => {
+    if (skinModeSwitch !== 'waiting') return;
+    const timer=window.setTimeout(() => setSkinModeSwitch('unconfirmed'), 90000);
+    return () => window.clearTimeout(timer);
+  }, [skinModeSwitch]);
+  useEffect(() => {
+    if (skinModeSwitch !== 'waiting' || !wallpaperDevice.data
+        || wallpaperDevice.data.active_valid || !wallpaperDevice.data.rollback_available) return;
+    setSkinModeSwitch('confirmed');
+    deviceSkin.mutate();
+  }, [skinModeSwitch, wallpaperDevice.data?.active_valid, wallpaperDevice.data?.rollback_available]);
 
   function updateObservation(state:RoundObservationState, observed?:boolean, note?:string) {
     if (!observationKey) return;
@@ -236,11 +271,11 @@ export function RoundDisplayApp() {
               options={skins.data?.skins.map(item => ({value:item.id, label:item.name}))}/>
             <Button type="primary" loading={saveSkin.isPending} disabled={!skins.data?.enabled || selectedSkin === skins.data?.selected_skin}
               onClick={() => saveSkin.mutate(selectedSkin)}>保存预览选择</Button>
-            <Button loading={deviceSkin.isPending} onClick={() => deviceSkin.mutate()}>检测真机皮肤能力</Button>
+            <Button loading={deviceSkin.isPending} disabled={skinModeSwitch === 'waiting'} onClick={() => deviceSkin.mutate()}>检测真机皮肤能力</Button>
             <Button danger loading={applySkin.isPending} disabled={!deviceSkin.isSuccess || !skin}
               onClick={() => applySkin.mutate(selectedSkin)}>应用到真机</Button>
-            <Button loading={useSkinDisplay.isPending} disabled={!wallpaperDevice.data?.active_valid}
-              onClick={() => useSkinDisplay.mutate()}>切换为皮肤显示（会重启）</Button>
+            <Button loading={useSkinDisplay.isPending} disabled={!wallpaperDevice.data?.active_valid || skinModeSwitch === 'waiting'}
+              onClick={() => useSkinDisplay.mutate()}>{skinModeSwitch === 'waiting' ? '等待圆屏重连' : '切换为皮肤显示（会重启）'}</Button>
             <Button disabled={!skin} onClick={() => skin && setDraft(createDraft(skin))}>从当前皮肤开始编辑</Button>
           </Space>
           {skin && <Descriptions bordered size="small" column={1} items={[
@@ -253,16 +288,20 @@ export function RoundDisplayApp() {
               title={`真机支持皮肤协议，当前为 ${deviceSkin.data.skin_id}`}
               description={`设备清单指纹：${deviceSkin.data.manifest_sha256.slice(0, 16)}…`}/>
           )}
-          {deviceSkin.isError && <Alert className="settings-model-alert" type="warning" showIcon
-            title="当前真机没有响应皮肤协议" description="旧固件、设备离线或小智控制桥未更新都会出现此结果；不会自动写入或重试。"/>}
+          {deviceSkin.isError && (() => {const copy=deviceSkinErrorCopy(deviceSkin.error); return <Alert className="settings-model-alert" type={copy.type} showIcon
+            title={copy.title} description={copy.description}/>;})()}
           {applySkin.isSuccess && (
             <Alert className="settings-model-alert" type={applySkin.data.verified ? (wallpaperDevice.data?.active_valid?'warning':'success') : 'error'} showIcon
               title={applySkin.data.verified ? (wallpaperDevice.data?.active_valid?'皮肤参数已写入，但动态壁纸仍在显示':'真机皮肤已写入并通过回读核对') : '设备已应答，但回读核对未通过'}
               description={applySkin.data.verified ? (wallpaperDevice.data?.active_valid?'点击“切换为皮肤显示”后设备会重启；壁纸槽仍保留，可随时恢复。':'重启后设备会从 NVS 恢复同一皮肤。') : `原因：${applySkin.data.reason ?? 'readback_mismatch'}`}/>
           )}
           {applySkin.isError && <Alert className="settings-model-alert" type="error" showIcon title="真机皮肤写入失败" description="未把本机选择冒充成设备成功；请先重新检测设备能力。"/>}
-          {useSkinDisplay.isSuccess && <Alert className="settings-model-alert" type="success" showIcon
-            title="已切换为皮肤显示并安排重启" description="圆屏重连后将显示刚才写入的几何皮肤；动态壁纸文件仍保留。"/>}
+          {useSkinDisplay.isSuccess && skinModeSwitch === 'waiting' && <Alert className="settings-model-alert" type="info" showIcon
+            title="切换指令已发送，正在等待圆屏重连" description="提交已经结束；页面会自动只读检查显示模式，不会重复发送切换或重启指令。"/>}
+          {useSkinDisplay.isSuccess && skinModeSwitch === 'confirmed' && <Alert className="settings-model-alert" type="success" showIcon
+            title="已确认切换为皮肤显示" description="圆屏重连后的状态表明动态壁纸已停用；皮肤能力也已自动重新检测。"/>}
+          {useSkinDisplay.isSuccess && skinModeSwitch === 'unconfirmed' && <Alert className="settings-model-alert" type="warning" showIcon
+            title="切换指令已发送，但尚未确认重连状态" description="设备可能仍离线；页面没有重复执行写入或重启，圆屏在线后可刷新状态。"/>}
           {useSkinDisplay.isError && <Alert className="settings-model-alert" type="error" showIcon
             title="未能切换为皮肤显示" description="请确认圆屏在线且运行支持显示模式切换的新固件；不会删除现有壁纸。"/>}
           {draft && <div className="round-skin-editor" role="region" aria-label="本机自定义皮肤编辑器">

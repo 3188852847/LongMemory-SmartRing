@@ -69,6 +69,8 @@
   "runtime": {
     "skin_mode_status_readback": "pending_device_validation",
     "retained_wallpaper_restore": "pending_device_validation",
-    "skin_visible_after_switch": "pending_device_validation"
+    "skin_visible_after_switch": "verified_by_user",
+    "skin_visible_after_switch_observed_on": "2026-09-14",
+    "control_reconnect_after_switch": "not_observed"
   }
 }

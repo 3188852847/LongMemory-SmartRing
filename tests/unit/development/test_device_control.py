@@ -312,6 +312,27 @@ def test_round_wallpaper_activation_reconciles_ambiguous_reboot_without_retry(mo
     asyncio.run(run())
 
 
+def test_skin_mode_returns_restarting_when_reboot_reply_is_lost(monkeypatch):
+    async def run():
+        bridge, _, socket = rig()
+        original_call = bridge._call
+
+        async def call(conn, name, arguments, timeout=None):
+            if name == control.REBOOT_TOOL:
+                raise control.ControlError("device_connection_changed", 502)
+            return await original_call(conn, name, arguments, timeout=timeout)
+
+        monkeypatch.setattr(bridge, "_call", call)
+        result = await bridge.deactivate_round_wallpaper()
+
+        assert result["state"] == "skin_mode_restarting"
+        assert [item["params"]["name"] for item in socket.calls] == [
+            control.DEACTIVATE_ROUND_WALLPAPER_TOOL,
+        ]
+
+    asyncio.run(run())
+
+
 def test_round_wallpaper_restart_confirmation_requires_exact_new_connection_readback():
     async def run():
         bridge, previous_connection, _ = rig()

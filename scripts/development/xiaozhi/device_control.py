@@ -691,36 +691,11 @@ class DeviceControl:
                     "device_connection_changed",
                 }:
                     raise
-                await self._confirm_skin_mode_after_restart(reboot_connection)
+                # 清除活动指针已经得到设备的精确回执。设备随后可能先重启、来不及
+                # 回复 reboot；这里立即交还“正在重启”，由网页在新连接上只读核对。
+                # 若继续占用请求同步等 90 秒，用户会看到按钮一直旋转，其他只读检测
+                # 也会被操作锁误报为协议不可用。
             return {**selected, "state": "skin_mode_restarting", "operation_id": uuid4().hex}
-
-    async def _confirm_skin_mode_after_restart(self, previous_connection):
-        """重启回执不确定时，要求新连接明确报告壁纸未激活且仍可恢复。"""
-
-        deadline = asyncio.get_running_loop().time() + WALLPAPER_RESTART_CONFIRM_SECONDS
-        transient = {
-            "device_offline", "device_not_ready", "tools_not_ready",
-            "device_connection_changed", "device_timeout_outcome_unknown",
-            "device_call_failed_outcome_unknown",
-        }
-        while asyncio.get_running_loop().time() < deadline:
-            try:
-                connection = self._connection()
-                if connection is previous_connection:
-                    await asyncio.sleep(0.5)
-                    continue
-                status = validate_wallpaper_status(await self._call(
-                    connection, GET_ROUND_WALLPAPER_TOOL, {}, timeout=self.timeout,
-                ))
-            except ControlError as exc:
-                if exc.code in transient:
-                    await asyncio.sleep(0.5)
-                    continue
-                raise
-            if not status["active_valid"] and status["rollback_available"]:
-                return status
-            raise ControlError("round_wallpaper_readback_mismatch", 502)
-        raise ControlError("device_timeout_outcome_unknown", 504)
 
     async def _confirm_round_wallpaper_after_restart(self, selected, previous_connection):
         """重启回执不确定时，仅用新连接的活动槽做最终确认，不重发写操作。"""

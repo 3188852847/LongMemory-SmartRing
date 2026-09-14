@@ -1,9 +1,9 @@
 import {describe, expect, test, vi} from 'vitest';
-import {fireEvent, render, screen, waitFor} from '@testing-library/react';
+import {act, fireEvent, render, screen, waitFor} from '@testing-library/react';
 import {MemoryRouter} from 'react-router-dom';
 import {QueryClientProvider} from '@tanstack/react-query';
-import {RoundDisplayApp, resolveRoundDisplay} from './RoundDisplayApp';
-import {ChatApi} from './api';
+import {deviceSkinErrorCopy, RoundDisplayApp, resolveRoundDisplay} from './RoundDisplayApp';
+import {ApiError, ChatApi} from './api';
 import {createConsoleQueryClient} from './queryClient';
 
 describe('圆屏状态协议与模拟器', () => {
@@ -15,6 +15,12 @@ describe('圆屏状态协议与模拟器', () => {
   test('充电与低电量不覆盖当前交互焦点', () => {
     expect(resolveRoundDisplay('listening', 'charging').title).toBe('聆听中');
     expect(resolveRoundDisplay('speaking', 'low_battery').title).toBe('回应中');
+  });
+
+  test('能力检测区分重启离线、操作占用和协议读取失败', () => {
+    expect(deviceSkinErrorCopy(new ApiError('device_offline', 409)).title).toBe('圆屏当前离线');
+    expect(deviceSkinErrorCopy(new ApiError('operation_busy', 409)).title).toBe('设备操作尚未结束');
+    expect(deviceSkinErrorCopy(new ApiError('round_skin_readback_invalid', 409)).title).toBe('未能读取真机皮肤能力');
   });
 
   test('默认页面明确模拟边界并提供受限的本机皮肤编辑器', async () => {
@@ -37,7 +43,8 @@ describe('圆屏状态协议与模拟器', () => {
         active_wallpaper_id:`wallpaper-${'b'.repeat(20)}`,active_sha256:'c'.repeat(64),active_size_bytes:1234,rollback_available:true};
       return skinPayload;
     });
-    render(<QueryClientProvider client={createConsoleQueryClient()}><MemoryRouter><RoundDisplayApp/></MemoryRouter></QueryClientProvider>);
+    const queryClient=createConsoleQueryClient();
+    render(<QueryClientProvider client={queryClient}><MemoryRouter><RoundDisplayApp/></MemoryRouter></QueryClientProvider>);
     expect(screen.getByRole('heading', {name: '圆屏状态预览'})).toBeTruthy();
     expect(screen.getByText(/画布：360 × 360 px/)).toBeTruthy();
     expect(screen.getByText('预览与真机采用同一版皮肤清单')).toBeTruthy();
@@ -64,7 +71,9 @@ describe('圆屏状态协议与模拟器', () => {
       sha256:'c'.repeat(64),size_bytes:1234,state:'skin_mode_restarting',operation_id:'d'.repeat(32)});
     fireEvent.click(useSkinDisplay);
     await waitFor(()=>expect(request).toHaveBeenCalledWith('/api/round-wallpapers/deactivate','POST'));
-    expect(await screen.findByText('已切换为皮肤显示并安排重启')).toBeTruthy();
+    expect(await screen.findByText('切换指令已发送，正在等待圆屏重连')).toBeTruthy();
+    const reconnecting=screen.getByRole('button', {name:'等待圆屏重连'});
+    expect(reconnecting.classList.contains('ant-btn-loading')).toBe(false);
     const edit = screen.getByRole('button', {name:'从当前皮肤开始编辑'}) as HTMLButtonElement;
     await waitFor(() => expect(edit.disabled).toBe(false));
     fireEvent.click(edit);
@@ -73,7 +82,11 @@ describe('圆屏状态协议与模拟器', () => {
     expect(screen.getByRole('button', {name:'保存为“我的自定义皮肤”'})).toBeTruthy();
 
     request.mockResolvedValueOnce({skin_api:1,skin_id:'rose-night-v1',manifest_sha256:'a'.repeat(64)});
-    fireEvent.click(screen.getByRole('button',{name:'检测真机皮肤能力'}));
+    act(() => queryClient.setQueryData(['round-wallpapers','device'], {
+      wallpaper_api:1,active_valid:false,active_slot:'',active_wallpaper_id:'',
+      active_sha256:'',active_size_bytes:0,rollback_available:true,
+    }));
+    expect(await screen.findByText('已确认切换为皮肤显示')).toBeTruthy();
     await screen.findByText(/真机支持皮肤协议/);
     expect(screen.getByText('与当前预览一致')).toBeTruthy();
     fireEvent.click(screen.getByRole('checkbox',{name:'待机'}));
