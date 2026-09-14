@@ -71,3 +71,62 @@ def test_preset_audio_bypasses_http_and_reuses_opus_pipeline(tmp_path, monkeypat
     assert queued == [("first", None, "你好呀，我在呢。", "turn-1")]
     assert delivered[0][0] == b"synthetic-wave"
     assert delivered[0][1]["callback"] == "callback"
+
+
+def test_stream_keeps_partial_pcm_across_model_chunks_and_flushes_once(monkeypatch):
+    dto = types.ModuleType("core.providers.tts.dto.dto")
+    dto.SentenceType = SimpleNamespace(FIRST="first")
+    cleaner = types.ModuleType("core.utils.tts")
+    cleaner.MarkdownCleaner = SimpleNamespace(clean_markdown=lambda text: text)
+    util = types.ModuleType("core.utils.util")
+    util.audio_bytes_to_data_stream = lambda *_args, **_kwargs: None
+    for name in ("core", "core.providers", "core.providers.tts", "core.providers.tts.dto", "core.utils"):
+        monkeypatch.setitem(sys.modules, name, types.ModuleType(name))
+    monkeypatch.setitem(sys.modules, "core.providers.tts.dto.dto", dto)
+    monkeypatch.setitem(sys.modules, "core.utils.tts", cleaner)
+    monkeypatch.setitem(sys.modules, "core.utils.util", util)
+    monkeypatch.setattr(streaming, "_wav_chunk_to_pcm", lambda wav, _rate: wav)
+    monkeypatch.setattr(streaming, "fast_asset_for_text", lambda _text: None)
+
+    class Response:
+        headers = {"Content-Type": "application/vnd.longmemory.wav-chunks"}
+
+        def __init__(self):
+            self.raw = BytesIO(framed(b"aaaa", b"bbbb"))
+
+        def __enter__(self): return self
+        def __exit__(self, *_args): return False
+        def raise_for_status(self): return None
+
+    monkeypatch.setattr(streaming.requests, "post", lambda *_args, **_kwargs: Response())
+
+    class Encoder:
+        def __init__(self):
+            self.buffer = bytearray()
+
+        def encode_pcm_to_opus_stream(self, pcm, end_of_stream, callback):
+            self.buffer.extend(pcm)
+            while len(self.buffer) >= 6:
+                callback(bytes(self.buffer[:6]))
+                del self.buffer[:6]
+            if end_of_stream and self.buffer:
+                callback(bytes(self.buffer) + b"\x00" * (6 - len(self.buffer)))
+                self.buffer.clear()
+
+        def reset_state(self):
+            self.buffer.clear()
+
+    queued = []
+    packets = []
+    tts = SimpleNamespace(
+        to_tts_stream=lambda *_args, **_kwargs: pytest.fail("stream must not fall back"),
+        tts_audio_queue=SimpleNamespace(put=queued.append),
+        current_sentence_id="turn-2", _correct_words_pattern=None,
+        opus_encoder=Encoder(), tts_timeout=90, tts_stop_request=False,
+    )
+    connection = SimpleNamespace(sample_rate=16000, client_abort=False)
+    streaming.install_cosyvoice_streaming(tts, connection)
+    tts.to_tts_stream("连续分块", opus_handler=packets.append)
+
+    assert queued == [("first", None, "连续分块", "turn-2")]
+    assert packets == [b"aaaabb", b"bb\x00\x00\x00\x00"]

@@ -6,6 +6,7 @@ WAV 块组成。任何协议错误都在尚未播放时回退现有完整 WAV；
 """
 
 import struct
+from io import BytesIO
 from pathlib import Path
 
 import requests
@@ -41,6 +42,21 @@ def iter_wav_chunks(raw):
         if not 0 < size <= MAX_CHUNK_BYTES:
             raise ValueError("cosyvoice_stream_chunk_invalid")
         yield _read_exact(raw, size)
+
+
+def _wav_chunk_to_pcm(wav: bytes, sample_rate: int) -> bytes:
+    """把模型的独立 WAV 块统一为可连续拼接的单声道 PCM16。"""
+    from pydub import AudioSegment
+
+    audio = AudioSegment.from_file(BytesIO(wav), format="wav", parameters=["-nostdin"])
+    audio = audio.set_channels(1).set_frame_rate(sample_rate).set_sample_width(2)
+    return audio.raw_data
+
+
+def _reset_opus_encoder(opus_encoder) -> None:
+    reset = getattr(opus_encoder, "reset_state", None)
+    if callable(reset):
+        reset()
 
 
 def install_cosyvoice_streaming(tts, connection):
@@ -80,6 +96,20 @@ def install_cosyvoice_streaming(tts, connection):
             )
             return None
         delivered = False
+
+        def deliver_opus(packet):
+            """直到拿到完整 Opus 帧才宣布开始，避免空模型块造成假首包。"""
+            nonlocal delivered
+            if not delivered:
+                tts.tts_audio_queue.put((
+                    SentenceType.FIRST,
+                    None,
+                    original_text,
+                    getattr(tts, "current_sentence_id", None),
+                ))
+            opus_handler(packet)
+            delivered = True
+
         try:
             with requests.post(
                 STREAM_URL,
@@ -93,26 +123,23 @@ def install_cosyvoice_streaming(tts, connection):
                     raise ValueError("cosyvoice_stream_content_type_invalid")
                 for wav in iter_wav_chunks(response.raw):
                     if connection.client_abort or tts.tts_stop_request:
+                        # 未满一帧的 PCM 属于已取消话轮，不能混入下一次合成。
+                        _reset_opus_encoder(tts.opus_encoder)
                         return None
-                    if not delivered:
-                        tts.tts_audio_queue.put((
-                            SentenceType.FIRST,
-                            None,
-                            original_text,
-                            getattr(tts, "current_sentence_id", None),
-                        ))
-                    audio_bytes_to_data_stream(
-                        wav,
-                        file_type="wav",
-                        is_opus=True,
-                        callback=opus_handler,
-                        sample_rate=connection.sample_rate,
-                        opus_encoder=tts.opus_encoder,
+                    pcm = _wav_chunk_to_pcm(wav, connection.sample_rate)
+                    # 模型块不是语音流结束。跨块保留不足 60 ms 的 PCM，凑满完整帧
+                    # 就立即编码；只在下面的真实末尾补零一次。
+                    tts.opus_encoder.encode_pcm_to_opus_stream(
+                        pcm, end_of_stream=False, callback=deliver_opus
                     )
-                    delivered = True
+                tts.opus_encoder.encode_pcm_to_opus_stream(
+                    b"", end_of_stream=True, callback=deliver_opus
+                )
                 if not delivered:
                     raise ValueError("cosyvoice_stream_empty")
         except Exception as error:
+            # 解码、协议或发送失败时清除残留 PCM，避免污染回退或下一句话。
+            _reset_opus_encoder(tts.opus_encoder)
             if not delivered:
                 connection.logger.bind(tag="cosyvoice-stream").warning(
                     f"分块通道在首个音频前失败，回退完整 WAV：{type(error).__name__}"
