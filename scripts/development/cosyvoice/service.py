@@ -117,6 +117,10 @@ class CosyVoiceSynthesizer:
             from runtime_optimizations import install_qwen2_hidden_only
             encoder = getattr(getattr(runtime_model, "llm", None), "llm", None)
             self.runtime_optimization = install_qwen2_hidden_only(encoder)
+        # 先安装输出等价优化，再观察四个阶段；不逐 token 计时，不做 CUDA 同步。
+        # 计数包括暖机，固定合成的开销由请求前后的 health 差值取得。
+        from runtime_diagnostics import install_runtime_diagnostics
+        self.runtime_diagnostics = install_runtime_diagnostics(self._model)
         import transformers
         self.runtime_info = {
             "service_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
@@ -124,6 +128,7 @@ class CosyVoiceSynthesizer:
             "transformers_version": str(transformers.__version__),
             "fp16": bool(runtime_model.fp16),
             "model_streaming": self.model_streaming,
+            "text_frontend": str(getattr(getattr(self._model, "frontend", None), "text_frontend", "")),
             "torch_threads": torch.get_num_threads(),
             "interop_threads": torch.get_num_interop_threads(),
             "hidden_only": bool(self.runtime_optimization and self.runtime_optimization.applied),
@@ -289,6 +294,10 @@ class CosyVoiceHandler(BaseHTTPRequestHandler):
         runtime_info = getattr(self.server.synthesizer, "runtime_info", None)
         if isinstance(runtime_info, dict):
             body["runtime"] = runtime_info
+        diagnostics = getattr(self.server.synthesizer, "runtime_diagnostics", None)
+        snapshot = getattr(diagnostics, "snapshot", None)
+        if callable(snapshot):
+            body["diagnostics"] = snapshot()
         self._json(200, body)
 
     def do_OPTIONS(self):

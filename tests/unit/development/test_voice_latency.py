@@ -170,6 +170,85 @@ def test_cosyvoice_punctuation_policy_rejects_too_small_segments():
         voice_latency.install_cosyvoice_punctuation_policy(object(), minimum_chars=7)
 
 
+@pytest.mark.parametrize("single_increment", [False, True])
+def test_cosyvoice_final_flush_respects_boundaries_for_large_llm_increments(single_increment):
+    first = "好的，"
+    segments = [
+        "我们先把今天最重要的事情慢慢说清楚，",
+        "接下来再一起决定应该怎样安排后面的事情，",
+        "最后也记得给自己留下一点安静休息的时间。",
+    ]
+    tail = "就这样"
+
+    class TTS:
+        def __init__(self):
+            self.tts_text_buff = [first]
+            self.processed_chars = len(first)
+            self.is_first_sentence = False
+            self.tts_stop_request = False
+            self.spoken = []
+
+        def _get_segment_text(self):
+            return None
+
+        def to_tts_stream(self, text, opus_handler=None):
+            self.spoken.append(text)
+
+        def _process_remaining_text_stream(self, opus_handler=None):
+            full_text = "".join(self.tts_text_buff)
+            remaining = full_text[self.processed_chars:]
+            if not remaining:
+                return False
+            self.to_tts_stream(remaining, opus_handler=opus_handler)
+            # 保留当前 Xiaozhi 上游的全缓冲累加语义，不能在替身里先修好它。
+            self.processed_chars += len(full_text)
+            return True
+
+    tts = TTS()
+    voice_latency.install_cosyvoice_punctuation_policy(tts)
+    rest = "".join(segments) + tail
+    for increment in [rest] if single_increment else list(rest):
+        tts.tts_text_buff.append(increment)
+        segment = tts._get_segment_text()
+        if segment:
+            tts.to_tts_stream(segment)
+    # 模拟上游 LAST/FILE；不能把整份剩余文字绕过自然切段一次合成。
+    assert tts._process_remaining_text_stream()
+    assert tts.spoken == [*segments, tail]
+    assert tts.processed_chars == len(first + rest)
+    assert tts._process_remaining_text_stream() is False
+    # 同一轮 FILE 会清空余文但不重置文本缓冲；后续 TEXT 仍应完整合成。
+    continuation = "播放插入的音频之后继续说话"
+    tts.tts_text_buff.append(continuation)
+    assert tts._process_remaining_text_stream() is True
+    assert tts.spoken == [*segments, tail, continuation]
+    assert tts.processed_chars == len(first + rest + continuation)
+    assert tts._process_remaining_text_stream() is False
+
+
+def test_cosyvoice_final_flush_stops_when_cancelled_between_segments():
+    class TTS:
+        tts_text_buff = ["我们先把今天最重要的事情慢慢说清楚，后面这一部分不应该继续合成。"]
+        processed_chars = 0
+        is_first_sentence = False
+        tts_stop_request = False
+
+        def _get_segment_text(self):
+            return None
+
+        def to_tts_stream(self, text, opus_handler=None):
+            self.spoken = text
+            self.tts_stop_request = True
+
+        def _process_remaining_text_stream(self, opus_handler=None):
+            pytest.fail("cancelled flush must not synthesize the tail")
+
+    tts = TTS()
+    voice_latency.install_cosyvoice_punctuation_policy(tts)
+    assert tts._process_remaining_text_stream() is True
+    assert tts.spoken == "我们先把今天最重要的事情慢慢说清楚，"
+
+
 def test_first_chunk_policy_keeps_ascii_words_whole():
     class TTS:
         tts_text_buff = ["please remember LongMemory project details"]

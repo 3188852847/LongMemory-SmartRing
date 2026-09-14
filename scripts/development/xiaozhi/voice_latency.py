@@ -359,6 +359,33 @@ def install_cosyvoice_punctuation_policy(tts, *, minimum_chars=18):
         return None
 
     tts._get_segment_text = get_segment_text
+    original_remaining = getattr(tts, "_process_remaining_text_stream", None)
+    if callable(original_remaining):
+        def flush_remaining(opus_handler=None):
+            # 上游在 LAST/FILE 时把全部余文一次合成；当一个 LLM 增量包含多个
+            # 分句时，这会绕过本策略，让第二段突然变长。先逐段耗尽已有自然
+            # 边界，最后只有不足阈值或无标点的尾文交回原方法，保持文本顺序。
+            emitted = False
+            while not getattr(tts, "tts_stop_request", False):
+                before = tts.processed_chars
+                segment = get_segment_text()
+                if tts.processed_chars <= before:
+                    break
+                if segment:
+                    tts.to_tts_stream(segment, opus_handler=opus_handler)
+                    emitted = True
+            if getattr(tts, "tts_stop_request", False):
+                return emitted
+            tail_end = len("".join(getattr(tts, "tts_text_buff", ())))
+            tail_emitted = bool(original_remaining(opus_handler=opus_handler))
+            if tail_emitted:
+                # 上游尾文方法累加的是全缓冲长度，会重复计入已经处理的前缀。
+                # FILE 后还可能继续收到 TEXT，因此成功后对齐到本次真实末尾，
+                # 避免偏移越界而漏掉后续文字；失败或异常不擅自消费尾文。
+                tts.processed_chars = tail_end
+            return tail_emitted or emitted
+
+        tts._process_remaining_text_stream = flush_remaining
     tts._longmemory_punctuation_minimum_chars = minimum_chars
     tts._longmemory_punctuation_policy = "cosyvoice3"
 

@@ -9,6 +9,9 @@ from __future__ import annotations
 
 import argparse
 from datetime import datetime, timezone
+from functools import wraps
+from importlib import import_module
+import inspect
 import json
 import os
 from pathlib import Path
@@ -38,6 +41,82 @@ PROMPT_TEXT = (
     "You are a helpful assistant.<|endofprompt|>"
     "希望你以后能够做的比我还好呦。"
 )
+WETEXT_MODEL_ID = "pengzhendong/wetext"
+WETEXT_REQUIRED_FILES = (
+    "en/tn/tagger.fst",
+    "en/tn/verbalizer.fst",
+    "zh/tn/tagger.fst",
+    "zh/tn/verbalizer.fst",
+)
+
+
+def install_modelscope_offline() -> None:
+    """只读使用已知的 WeText 缓存，封住本进程的 ModelScope 隐式下载入口。
+
+    已安装的 ModelScope 1.20.0 没有 MODELSCOPE_OFFLINE 开关。它虽然支持
+    local_files_only=True，却会先创建临时目录、重写 .mdl，再检查离线分支。
+    因此这里直接核对既有 FST 文件，不实例化该库会写入元数据的缓存对象。
+    不迁移用户缓存；缺少可选前端时仍由 CosyVoice 原有异常处理决定回退。
+    """
+
+    version = import_module("modelscope.version").__version__
+    snapshot_module = import_module("modelscope.hub.snapshot_download")
+    file_module = import_module("modelscope.hub.file_download")
+    file_utils = import_module("modelscope.utils.file_utils")
+
+    def local_path(arguments):
+        if version != "1.20.0":
+            raise RuntimeError("未经验证的 ModelScope 版本；已拒绝隐式联网。")
+        if arguments.get("repo_type") not in (None, "model"):
+            raise ValueError("CosyVoice 离线入口不解析 ModelScope 数据集。")
+        if arguments.get("repo_id") != WETEXT_MODEL_ID:
+            # 主模型已由 validate_local_files 验证本地路径；当前唯一需要从
+            # ModelScope 缓存解析的辅助资源是 WeText，未知资源不能自动下载。
+            raise ValueError("CosyVoice 离线入口只解析既有 WeText 资源。")
+        local_dir = arguments.get("local_dir")
+        if local_dir is not None:
+            directory = Path(local_dir)
+        else:
+            cache_dir = arguments.get("cache_dir")
+            if cache_dir is None:
+                # 保留 ModelScope 原本的 MODELSCOPE_CACHE / 用户缓存选择，
+                # 该 API 只计算路径，不创建目录、不读取账号或网络元数据。
+                cache_dir = file_utils.get_model_cache_root()
+            directory = Path(cache_dir) / WETEXT_MODEL_ID
+        if not all((directory / name).is_file() for name in WETEXT_REQUIRED_FILES):
+            raise FileNotFoundError("WeText 本地中英文 FST 不完整；已禁止自动下载。")
+        file_path = arguments.get("file_path")
+        if file_path is not None:
+            if file_path not in WETEXT_REQUIRED_FILES:
+                raise FileNotFoundError("未验证的 WeText 文件；已禁止自动下载。")
+            return str(directory / file_path)
+        return str(directory)
+
+    def offline_wrapper(original):
+        signature = inspect.signature(original)
+
+        @wraps(original)
+        def offline(*args, **kwargs):
+            # bind 同时处理位置参数和关键字；即使调用方显式传 False，
+            # 也不可能绕过离线规则。不要调用 original，避免缓存写入副作用。
+            arguments = signature.bind(*args, **kwargs).arguments
+            return local_path(arguments)
+
+        offline._longmemory_offline_only = True
+        return offline
+
+    # 公共 snapshot_download / model_file_download 及它们已经被第三方
+    # from-import 的别名都会调用这两个模块入口，故无须扫描或改写外部类。
+    # 私有入口限于已核对的 1.20.0；未知版本仅保留明确拒绝，不静默联网。
+    for module, name in (
+        (snapshot_module, "_snapshot_download"),
+        (file_module, "_repo_file_download"),
+    ):
+        original = getattr(module, name, None)
+        if not callable(original):
+            raise RuntimeError("ModelScope 下载入口不兼容；无法保证离线，停止启动。")
+        if not getattr(original, "_longmemory_offline_only", False):
+            setattr(module, name, offline_wrapper(original))
 
 
 def validate_local_files(source_root: Path, model_dir: Path) -> dict[str, object]:
@@ -68,7 +147,7 @@ def load_cases():
 
 
 def configure_runtime_cache() -> None:
-    """把第三方运行缓存限制在项目内的 Git 忽略目录。"""
+    """集中可写运行缓存，并在导入 CosyVoice 前安装离线资源保护。"""
 
     runtime_cache = ROOT / "data" / "control" / "cosyvoice-runtime-cache"
     runtime_cache.mkdir(parents=True, exist_ok=True)
@@ -79,6 +158,7 @@ def configure_runtime_cache() -> None:
     os.environ["HF_HOME"] = str(runtime_cache / "huggingface")
     os.environ["HF_HUB_OFFLINE"] = "1"
     os.environ["HF_HUB_DISABLE_TELEMETRY"] = "1"
+    install_modelscope_offline()
 
 
 def generate(source_root: Path, model_dir: Path) -> Path:

@@ -206,6 +206,7 @@ def constructor_runtime(monkeypatch):
     state.runtime = SimpleNamespace(
         llm=SimpleNamespace(llm=state.encoder), fp16=True, token_hop_len=25,
     )
+    state.frontend = SimpleNamespace(text_frontend="wetext")
     state.prompt = Path("synthetic-reference.wav")
 
     def validate(source_root, model_dir):
@@ -218,6 +219,7 @@ def constructor_runtime(monkeypatch):
         def __init__(self, model_dir, *, fp16):
             state.model_arguments = (model_dir, fp16)
             self.model = state.runtime
+            self.frontend = state.frontend
 
         def add_zero_shot_spk(self, text, wave, speaker_id):
             state.registrations.append((text, wave, speaker_id))
@@ -290,6 +292,7 @@ def test_constructor_reports_selected_optimization_and_generation_mode(
     info = constructor_health(synth)["runtime"]
     assert info["hidden_only"] is hidden_only
     assert info["model_streaming"] is model_streaming
+    assert info["text_frontend"] == "wetext"
     assert info["optimization_reason"] == (
         "qwen2_unused_text_head_bypassed" if hidden_only else "disabled"
     )
@@ -306,6 +309,35 @@ def test_constructor_defaults_enable_hidden_only_and_complete_segments(construct
     info = constructor_health(synth)["runtime"]
     assert state.installations == [state.encoder]
     assert info["hidden_only"] is True and info["model_streaming"] is False
+
+
+def test_constructor_installs_diagnostics_after_optimization_and_health_returns_fresh_counts(
+    constructor_runtime, monkeypatch,
+):
+    state = constructor_runtime
+    state.runtime.llm_job = lambda: "llm result"
+    state.runtime.flow = SimpleNamespace(inference=lambda: "flow result")
+    state.runtime.hift = SimpleNamespace(inference=lambda: "hift result")
+    state.frontend.text_normalize = lambda text: text
+
+    def install(encoder):
+        assert not hasattr(state.runtime.llm_job, "__wrapped__")
+        return state.install(encoder)
+
+    monkeypatch.setattr(state.optimizations, "install_qwen2_hidden_only", install)
+    synth = service.CosyVoiceSynthesizer(Path("synthetic-source"), Path("synthetic-model"))
+    before = constructor_health(synth)["diagnostics"]
+    assert set(before) == {"llm_job", "flow", "hift", "text_normalize"}
+    assert all(record["calls"] == 0 for record in before.values())
+
+    assert state.runtime.llm_job() == "llm result"
+    assert state.runtime.flow.inference() == "flow result"
+    assert state.runtime.hift.inference() == "hift result"
+    assert state.frontend.text_normalize("synthetic input") == "synthetic input"
+    after = constructor_health(synth)["diagnostics"]
+    assert all(record["calls"] == 1 and record["wall_ms"] >= 0 for record in after.values())
+    assert all(record["calls"] == 0 for record in before.values())
+    assert "synthetic input" not in json.dumps(after)
 
 
 @pytest.mark.parametrize("missing_encoder", [False, True])
