@@ -11,6 +11,7 @@ from collections import OrderedDict
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from io import BytesIO
 import importlib.util
+import hashlib
 import ipaddress
 import json
 from pathlib import Path
@@ -71,6 +72,8 @@ class CosyVoiceSynthesizer:
         model_dir: Path = DEFAULT_MODEL,
         *,
         cache_entries: int = 24,
+        hidden_only: bool = True,
+        model_streaming: bool = False,
     ):
         paths = validate_local_files(source_root, model_dir)
         configure_runtime_cache()
@@ -89,6 +92,10 @@ class CosyVoiceSynthesizer:
         self._cache_entries = cache_entries
         self._cache: OrderedDict[str, bytes] = OrderedDict()
         self._stream_cache: OrderedDict[str, tuple[bytes, ...]] = OrderedDict()
+        # 圆屏已经按自然标点收齐片段后播放。完整生成该片段可省去内部流式
+        # Flow/HiFT 对累计前缀的重复计算；HTTP 仍沿用相同 WAV 长度前缀协议。
+        # 保留显式恢复内部流式的开关，以便隔离对照与回退。
+        self.model_streaming = model_streaming
         load_started = perf_counter()
         self._model = CosyVoice3(str(model_dir), fp16=True)
         self.load_seconds = perf_counter() - load_started
@@ -103,6 +110,25 @@ class CosyVoiceSynthesizer:
         if REFERENCE_SPEAKER_ID not in self._model.list_available_spks():
             raise RuntimeError("reference speaker unavailable")
         runtime_model = getattr(self._model, "model", None)
+        # 只跳过语音生成没有使用的文本词表输出；不改权重、精度或语音采样。
+        # 适配器对源码与版本做严格检查，不兼容时自然使用原路径。
+        self.runtime_optimization = None
+        if hidden_only:
+            from runtime_optimizations import install_qwen2_hidden_only
+            encoder = getattr(getattr(runtime_model, "llm", None), "llm", None)
+            self.runtime_optimization = install_qwen2_hidden_only(encoder)
+        import transformers
+        self.runtime_info = {
+            "service_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+            "torch_version": str(torch.__version__),
+            "transformers_version": str(transformers.__version__),
+            "fp16": bool(runtime_model.fp16),
+            "model_streaming": self.model_streaming,
+            "torch_threads": torch.get_num_threads(),
+            "interop_threads": torch.get_num_interop_threads(),
+            "hidden_only": bool(self.runtime_optimization and self.runtime_optimization.applied),
+            "optimization_reason": self.runtime_optimization.reason if self.runtime_optimization else "disabled",
+        }
         stream_token_hop_len = getattr(runtime_model, "token_hop_len", None)
         if type(stream_token_hop_len) is not int or stream_token_hop_len <= 0:
             raise RuntimeError("stream token hop unavailable")
@@ -130,7 +156,7 @@ class CosyVoiceSynthesizer:
             PROMPT_TEXT,
             self._prompt_wav,
             zero_shot_spk_id=REFERENCE_SPEAKER_ID,
-            stream=True,
+            stream=self.model_streaming,
         ):
             speech = item.get("tts_speech")
             if speech is None or speech.numel() == 0:
@@ -186,14 +212,19 @@ class CosyVoiceSynthesizer:
                 PROMPT_TEXT,
                 self._prompt_wav,
                 zero_shot_spk_id=REFERENCE_SPEAKER_ID,
-                stream=True,
+                stream=self.model_streaming,
             ):
                 speech = item.get("tts_speech")
                 if speech is None:
                     raise RuntimeError("empty audio chunk")
                 chunk = self._wave_bytes(speech)
                 generated.append(chunk)
-                yield chunk
+                if self.model_streaming:
+                    yield chunk
+            if not self.model_streaming:
+                # 上游请求字典的清理位于生成器最后一次 yield 之后。完整片段模式
+                # 先耗尽模型迭代再写 HTTP，避免客户端此时断开跳过上游清理。
+                yield from generated
             if use_cache and generated:
                 self._stream_cache[text] = tuple(generated)
                 while len(self._stream_cache) > self._cache_entries:
@@ -255,6 +286,9 @@ class CosyVoiceHandler(BaseHTTPRequestHandler):
         reference_cached = getattr(self.server.synthesizer, "reference_cached", None)
         if isinstance(reference_cached, bool):
             body["reference_cached"] = reference_cached
+        runtime_info = getattr(self.server.synthesizer, "runtime_info", None)
+        if isinstance(runtime_info, dict):
+            body["runtime"] = runtime_info
         self._json(200, body)
 
     def do_OPTIONS(self):
@@ -356,10 +390,15 @@ def main() -> None:
     parser.add_argument("--port", type=int, default=DEFAULT_PORT)
     parser.add_argument("--source-root", type=Path, default=DEFAULT_SOURCE)
     parser.add_argument("--model-dir", type=Path, default=DEFAULT_MODEL)
+    parser.add_argument("--no-hidden-only", action="store_true", help="恢复上游 Qwen 完整文本输出路径")
+    parser.add_argument("--model-streaming", action="store_true", help="恢复模型内部流式分块生成")
     args = parser.parse_args()
     if not 1024 <= args.port <= 65535:
         parser.error("端口必须在 1024–65535")
-    synthesizer = CosyVoiceSynthesizer(args.source_root, args.model_dir)
+    synthesizer = CosyVoiceSynthesizer(
+        args.source_root, args.model_dir,
+        hidden_only=not args.no_hidden_only, model_streaming=args.model_streaming,
+    )
     server = CosyVoiceHTTPServer((args.host, args.port), synthesizer)
     print(
         "CosyVoice 3 已就绪："
