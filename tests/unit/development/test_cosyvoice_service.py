@@ -42,6 +42,48 @@ class FakeSynthesizer:
         yield b"RIFF-stream-two"
 
 
+@pytest.mark.parametrize("system_qos,applied", [(False, True), (False, False), (True, False)])
+def test_main_applies_qos_before_model_and_exposes_result(monkeypatch, system_qos, applied):
+    events = []
+    result = {"applied": applied, "reason": "applied" if applied else "unsupported",
+              "before": None, "after": None}
+    qos_module = ModuleType("windows_qos")
+
+    def configure():
+        events.append("qos")
+        return result
+
+    qos_module.apply_current_process_high_qos = configure
+    monkeypatch.setitem(sys.modules, "windows_qos", qos_module)
+    synth = SimpleNamespace(runtime_info={}, load_seconds=0, warmup_seconds=0)
+
+    def create_synth(*args, **kwargs):
+        events.append("model")
+        return synth
+
+    class Server:
+        def __init__(self, address, selected):
+            assert selected is synth
+            assert "windows_qos" in selected.runtime_info
+            events.append("server")
+
+        def serve_forever(self, **kwargs):
+            events.append("serve")
+
+        def server_close(self):
+            events.append("close")
+
+    monkeypatch.setattr(service, "CosyVoiceSynthesizer", create_synth)
+    monkeypatch.setattr(service, "CosyVoiceHTTPServer", Server)
+    monkeypatch.setattr(sys, "argv", ["service.py"] + (["--system-qos"] if system_qos else []))
+    service.main()
+    assert events == ([] if system_qos else ["qos"]) + ["model", "server", "serve", "close"]
+    if system_qos:
+        assert synth.runtime_info["windows_qos"]["reason"] == "disabled"
+    else:
+        assert synth.runtime_info["windows_qos"] is result
+
+
 @pytest.fixture
 def local_service():
     synth = FakeSynthesizer()

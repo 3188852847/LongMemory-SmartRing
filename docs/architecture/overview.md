@@ -10,6 +10,8 @@ P2 声音设置有两条边界：React → 本机认证/CSRF API → 当前 TTS�
 切段、短开头合并、已就绪片段调度、过期话轮过滤与 V6 观察。GPU 合成仍串行，设备
 发送与后续合成并行；这些职责不进入 Memory Core。LiveKit/云端实时语音仍是候选，
 未接入日用。见 [ADR-0168](../adr/0168-cosyvoice-short-opening-continuity.md)。
+CosyVoice 的 Windows HighQoS 设置只存在于独立声音进程入口，服务负责状态回读与
+回退；不进入启动面板的全局电源控制，也不进入 Memory Core。见 [ADR-0169](../adr/0169-cosyvoice-windows-process-qos.md)。
 
 ## 1. 定位与现状
 

@@ -401,13 +401,23 @@ def main() -> None:
     parser.add_argument("--model-dir", type=Path, default=DEFAULT_MODEL)
     parser.add_argument("--no-hidden-only", action="store_true", help="恢复上游 Qwen 完整文本输出路径")
     parser.add_argument("--model-streaming", action="store_true", help="恢复模型内部流式分块生成")
+    parser.add_argument("--system-qos", action="store_true", help="恢复 Windows 默认进程调度，不显式申请 HighQoS")
     args = parser.parse_args()
     if not 1024 <= args.port <= 65535:
         parser.error("端口必须在 1024–65535")
+    # 日用后台进程在本机对照中明显慢于实时；仅对当前声音服务声明需要
+    # HighQoS，避免依赖窗口前后台状态。必须早于模型加载及工作线程创建。
+    # 不修改系统电源计划、CPU 优先级、模型或 Memory Core；失败继续原路径。
+    from windows_qos import apply_current_process_high_qos
+    windows_qos = (
+        {"applied": False, "reason": "disabled", "before": None, "after": None}
+        if args.system_qos else apply_current_process_high_qos()
+    )
     synthesizer = CosyVoiceSynthesizer(
         args.source_root, args.model_dir,
         hidden_only=not args.no_hidden_only, model_streaming=args.model_streaming,
     )
+    synthesizer.runtime_info["windows_qos"] = windows_qos
     server = CosyVoiceHTTPServer((args.host, args.port), synthesizer)
     print(
         "CosyVoice 3 已就绪："
