@@ -227,6 +227,11 @@ def main():
     install_fast_voice_responses(ConnectionHandler)
     install_voice_latency(ConnectionHandler)
     install_audio_send_observer()
+    if args.voice_latency_mode == "realtime":
+        from voice_waiting import install_waiting_sender
+        from core.handle import sendAudioHandle
+        install_waiting_sender(sendAudioHandle)
+        ConnectionHandler._longmemory_waiting_enabled = True
     install_answer_completion(ConnectionHandler)
     # 第一版只做无正文、无播放的封闭分支影子统计，为是否值得预合成提供证据。
     install_voice_prediction_shadow(ConnectionHandler)

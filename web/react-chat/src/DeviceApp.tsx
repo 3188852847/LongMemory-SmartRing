@@ -220,6 +220,15 @@ export function DeviceApp() {
     </Card>
     {status.data?.voice_latency ? <VoiceLatencyCard value={status.data.voice_latency} prefetch={status.data.voice_asr_prefetch}/> : <Card className="device-latency-card" title="最近一次圆屏首句时序"><p className="subtle">当前连接还没有可用的完整时序。与圆屏完成一轮语音对话后，本页会分开显示记忆、模型、首句组织、TTS 和发送等待。</p></Card>}
     {status.data?.voice_prediction_shadow&&<VoicePredictionShadowCard value={status.data.voice_prediction_shadow}/>}
+    {status.data?.voice_feedback&&<Card title="等待反馈与真正答案">
+      <Descriptions column={3} items={[
+        {key:'feedback',label:'入口 → 提示首包',children:elapsed(status.data.voice_feedback.first_feedback_ms)},
+        {key:'answer',label:'入口 → 真正答案首包',children:elapsed(status.data.voice_feedback.first_answer_ms)},
+        {key:'search',label:'联网查询',children:status.data.voice_feedback.kind==='web'?elapsed(status.data.voice_feedback.query_ms):'本轮未发起'},
+      ]}/>
+      <p className="subtle">两项首包均在实际发送时记录，尚不包含设备缓冲。等待提示不算作真正答案；快速回答会跳过提示。联网时模型首次输出可能是搜索决定。</p>
+      {status.data.voice_feedback.status==='query_failed'&&<Alert type="warning" title="本轮联网查询未成功，不能据此声称已查到最新信息。"/>}
+    </Card>}
     {status.data?.natural_interruption && <NaturalInterruptionCard value={status.data.natural_interruption}/>}
     <Card className="device-snapshot-card" title="设备快照" extra={<Tag color={snapshot ? (status.data?.ready && !status.error ? 'blue' : 'gold') : 'default'}>{readSnapshot.isPending?'读取中':snapshot?(status.data?.ready && !status.error?'单次读取':'历史读数'):'等待读取'}</Tag>}><Descriptions column={{xs:1,sm:3}} items={[
       {key:'battery',label:'电池与充电',children:snapshotValue(Boolean(snapshot?.battery), snapshot?.battery ? `${snapshot.battery.level}% · ${snapshot.battery.charging?'充电中':'未充电'}` : unsupported)},

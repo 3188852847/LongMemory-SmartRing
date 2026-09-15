@@ -14,6 +14,7 @@ from cosyvoice_segments import (
     install_cosyvoice_ready_segment_drain,
 )
 from voice_response_policy import prepare_voice_dialogue
+from voice_waiting import WaitingPacket, AnswerPacket, begin_waiting, mark_answer_ready
 
 
 TIMING_FIELDS = (
@@ -351,15 +352,29 @@ def _model_failure_code(error):
     return "model_request_failed"
 
 
-def _observe_generator(connection, responses):
+def _observe_generator(connection, responses, waiting=None):
+    produced_output = False
     try:
         for response in responses:
+            if waiting is not None and not waiting.current():
+                return
             if _has_output(response):
+                produced_output = True
                 connection._longmemory_voice_latency.mark("llm_first_output_ms")
             yield response
     except Exception as error:
-        connection._longmemory_voice_latency.fail(_model_failure_code(error))
+        is_current = waiting is None or waiting.current()
+        if waiting is not None:
+            waiting.cancel()
+        if is_current:
+            connection._longmemory_voice_latency.fail(_model_failure_code(error))
         raise
+    finally:
+        if waiting is not None and not produced_output:
+            waiting.cancel()  # 空回答不能在 LAST 之后才补出一条迟到提示。
+        close = getattr(responses, "close", None)
+        if callable(close):
+            close()
 
 
 class _ObservedLLM:
@@ -375,19 +390,35 @@ class _ObservedLLM:
     def _call(self, method_name, *args, **kwargs):
         tracker = self._connection._longmemory_voice_latency
         tracker.bind_sentence()
-        tracker.mark("llm_requested_ms")
         # 只在圆屏本次请求中鼓励尽早形成可朗读的完整首句。共享 provider、
         # 网页角色和原会话消息均不修改；两条流式接口使用同一表达策略。
         if len(args) >= 2:
-            args = (args[0], prepare_voice_dialogue(args[1]), *args[2:])
+            dialogue = begin_waiting(self._connection, args[1])
+            if dialogue is None:
+                return iter(())
+            args = (args[0], prepare_voice_dialogue(dialogue), *args[2:])
         elif "dialogue" in kwargs:
-            kwargs = {**kwargs, "dialogue": prepare_voice_dialogue(kwargs["dialogue"])}
+            dialogue = begin_waiting(self._connection, kwargs["dialogue"])
+            if dialogue is None:
+                return iter(())
+            kwargs = {**kwargs, "dialogue": prepare_voice_dialogue(dialogue)}
+        # 首次模型请求同时决定是否搜索；工具查询和最终答案另行计时。
+        tracker.mark("llm_requested_ms")
         try:
-            responses = getattr(self._provider, method_name)(*args, **kwargs)
+            waiting = getattr(self._connection, "_longmemory_waiting", None)
+            if method_name == "response" and waiting is not None and waiting.current():
+                from voice_web_search import web_response
+                responses = web_response(self._connection, self._provider, *args, **kwargs)
+            else:
+                responses = getattr(self._provider, method_name)(*args, **kwargs)
         except Exception as error:
-            tracker.fail(_model_failure_code(error))
+            is_current = waiting is None or waiting.current()
+            if waiting is not None:
+                waiting.cancel()
+            if is_current:
+                tracker.fail(_model_failure_code(error))
             raise
-        return _observe_generator(self._connection, responses)
+        return _observe_generator(self._connection, responses, waiting)
 
     def response(self, *args, **kwargs):
         return self._call("response", *args, **kwargs)
@@ -437,6 +468,11 @@ def _observe_components(connection):
                 getattr(active_segment, "handle", None), sentence_id=sentence_id
             )
             tracker.mark("audio_ready_ms", sentence_id=sentence_id)
+            waiting = getattr(connection, "_longmemory_waiting", None)
+            if waiting is not None and waiting.current() and sentence_id == waiting.sentence_id:
+                mark_answer_ready(connection)
+                if args and isinstance(args[0], bytes):
+                    args = (AnswerPacket(args[0], waiting), *args[1:])
             return original_opus(*args, **kwargs)
         tts.handle_opus = measured_opus
     if backend == "edge":
@@ -454,6 +490,11 @@ def install_voice_latency(connection_class):
     original = connection_class.chat
 
     def chat(connection, query, depth=0):
+        if depth == 0:
+            old_waiting = getattr(connection, "_longmemory_waiting", None)
+            if old_waiting is not None:
+                old_waiting.cancel()
+                del connection._longmemory_waiting
         if not hasattr(connection, "_longmemory_voice_latency"):
             connection._longmemory_voice_latency = VoiceLatencyTracker(connection)
         tracker = connection._longmemory_voice_latency
@@ -473,11 +514,21 @@ def install_voice_latency(connection_class):
 def observed_audio_sender(original):
     """在现有发送协程真正返回后标记首包；空的 FIRST/LAST 控制帧不计。"""
     async def send(connection, sentence_type, audios, text, sentence_id=None):
+        first_packet = audios[0] if isinstance(audios, (list, tuple)) and audios else audios
+        if isinstance(first_packet, WaitingPacket):
+            state = first_packet.state
+            if not state.current():
+                return
+            if not isinstance(first_packet, AnswerPacket) and state.answer_ready and state.first_feedback_ms is None:
+                state.cue_state = "skipped"
+                return
         result = await original(connection, sentence_type, audios, text, sentence_id)
         has_audio = isinstance(audios, bytes) and bool(audios)
         has_audio = has_audio or (isinstance(audios, (list, tuple)) and len(audios) > 0)
         tracker = getattr(connection, "_longmemory_voice_latency", None)
-        if has_audio and tracker is not None:
+        is_waiting = isinstance(first_packet, WaitingPacket) and not isinstance(first_packet, AnswerPacket)
+        # 实时模式的答案交给最终 socket 包装器计时；这里返回可能只是入流控队列。
+        if has_audio and tracker is not None and not is_waiting and not isinstance(first_packet, AnswerPacket):
             tracker.bind_sentence()
             tracker.mark("first_audio_sent_ms", sentence_id=sentence_id)
         return result

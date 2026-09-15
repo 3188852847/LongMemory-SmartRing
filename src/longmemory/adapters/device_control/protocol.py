@@ -195,6 +195,20 @@ def voice_prediction_shadow(value: object) -> dict:
     return dict(value)
 
 
+def voice_feedback(value: object) -> dict:
+    """等待提示与真答案的最终发送计时；拒绝查询正文及任意附加字段。"""
+    timings = {"query_ms", "first_feedback_ms", "first_answer_ms"}
+    if (not isinstance(value, dict) or set(value) != timings | {"version", "kind", "status", "cue_state"}
+            or type(value.get("version")) is not int or value["version"] != 1
+            or value.get("kind") not in ("model", "web")
+            or value.get("status") not in ("querying", "answering", "query_ready", "query_failed")
+            or value.get("cue_state") not in ("pending", "queued", "sent", "skipped", "unavailable")
+            or any(value[k] is not None and (type(value[k]) is not int or not 0 <= value[k] <= 3_600_000)
+                   for k in timings)):
+        raise BridgeError("bridge_invalid_response", 502)
+    return dict(value)
+
+
 def voice_asr_prefetch(value: object) -> dict:
     """验证语音适配进程的预识别统计，不允许正文、音频或身份信息穿透。"""
     if (not isinstance(value, dict) or type(value.get("version")) is not int

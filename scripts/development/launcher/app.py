@@ -54,6 +54,15 @@ WARNING = "#ffbd4a"
 DANGER = "#ff647c"
 
 
+def open_web_search_configuration(parent):
+    import sys
+    directory = str(ROOT / "scripts/development/xiaozhi")
+    if directory not in sys.path:
+        sys.path.insert(0, directory)
+    from voice_web_settings import open_search_configuration
+    return open_search_configuration(parent)
+
+
 def open_doubao_configuration(parent, path, on_saved=None):
     """密钥只在用户打开的本机对话框中输入，不回填已保存密钥或写入偏好。"""
     dialog = tk.Toplevel(parent)
@@ -752,6 +761,7 @@ def main():
     latency_selector = ttk.Combobox(latency_row, textvariable=voice_latency_mode,
                                    values=tuple(voice_latency_labels), state="readonly", width=28)
     latency_selector.pack(side="left")
+    ttk.Button(latency_row, text="配置联网搜索", command=lambda: open_web_search_configuration(window)).pack(side="left", padx=8)
     ttk.Label(latency_row, text="  停止并重新启动后生效；只影响现有语音链路").pack(side="left")
 
     tts_description = tk.StringVar()

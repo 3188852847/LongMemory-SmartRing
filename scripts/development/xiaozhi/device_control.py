@@ -321,6 +321,9 @@ class DeviceControl:
             conn = self._connection()
             result["ready"] = True
             result["voice_mode"] = getattr(conn, "voice_mode", "pipeline")
+            waiting = getattr(conn, "_longmemory_waiting", None)
+            if waiting is not None:
+                result["voice_feedback"] = waiting.snapshot()
             # 仅查询当前连接的内存统计；不沿用已断开连接的候选或计数。
             prefetch_snapshot = getattr(conn, "_longmemory_asr_prefetch_snapshot", None)
             result["voice_asr_prefetch"] = (

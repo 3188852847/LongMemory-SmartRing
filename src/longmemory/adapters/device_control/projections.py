@@ -7,6 +7,7 @@ from .protocol import (
     round_skin,
     safe_reason,
     voice_asr_prefetch,
+    voice_feedback,
     voice_latency,
     voice_prediction_shadow,
     volume_value,
@@ -343,6 +344,8 @@ def device_status(data: dict) -> dict:
         )
     if "voice_asr_prefetch" in data:
         result["voice_asr_prefetch"] = voice_asr_prefetch(data["voice_asr_prefetch"])
+    if "voice_feedback" in data:
+        result["voice_feedback"] = voice_feedback(data["voice_feedback"])
     if "voice_latency_mode" in data:
         mode = data["voice_latency_mode"]
         if type(mode) is not str or mode not in {"realtime", "original"}:

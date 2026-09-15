@@ -9,6 +9,24 @@ import {createConsoleQueryClient} from './queryClient';
 afterEach(() => vi.restoreAllMocks());
 
 describe('设备与状态页', () => {
+  test('等待提示与真正答案单独展示且搜索失败不冒充成功', async () => {
+    vi.spyOn(ChatApi.prototype, 'bootstrap').mockResolvedValue(undefined);
+    vi.spyOn(ChatApi.prototype, 'request').mockResolvedValue({
+      connection_count:1, ready:true, read_volume_supported:false, set_volume_supported:false,
+      voice_feedback:{version:1,kind:'web',status:'query_failed',cue_state:'sent',
+        query_ms:2500,first_feedback_ms:910,first_answer_ms:4900},
+    });
+    const client=createConsoleQueryClient();
+    const view=render(<QueryClientProvider client={client}><MemoryRouter><DeviceApp/></MemoryRouter></QueryClientProvider>);
+    expect(await screen.findByText('等待反馈与真正答案')).toBeTruthy();
+    expect(screen.getByText('0.91 秒')).toBeTruthy();
+    expect(screen.getByText('4.90 秒')).toBeTruthy();
+    expect(screen.getByText('2.50 秒')).toBeTruthy();
+    expect(screen.getByText(/不能据此声称已查到最新信息/)).toBeTruthy();
+    expect(screen.getByText(/等待提示不算作真正答案/)).toBeTruthy();
+    view.unmount(); client.clear();
+  });
+
   test('设备离线时显示唤醒提示并禁止音量操作', async () => {
     vi.spyOn(ChatApi.prototype, 'bootstrap').mockResolvedValue(undefined);
     vi.spyOn(ChatApi.prototype, 'request').mockResolvedValue({
