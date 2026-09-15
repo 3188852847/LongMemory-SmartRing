@@ -147,6 +147,12 @@ CosyVoice 分块桥已改为跨模型 WAV 块连续积累 PCM，完整 60 ms 帧
 切句规则的路径，并补充离线资源保护及四阶段累计计时；日用进程相对新进程的额外变慢
 仍未确诊，须重启加载诊断后定位，不能用切句修复代替连续播放验收。暂不新增加速依赖。
 见 [首段衔接与诊断](docs/adr/0167-cosyvoice-first-segment-handoff.md)。
+2026-09-15 衔接修复已通过软件与隔离合成验证：只合并过短开头，够长首分句照常开口；
+已到齐片段在合成返回后立即调度，完整寒暄恢复命中预置。固定短开头样本的预计欠载
+由约 1.5～2.5 秒变为 0，首声则通常延后约 1 秒；真实圆屏连续性、自然度和整轮首声
+仍待验收。下一步先核对真实反馈与 V6，不直接安装运行时或迁移 LiveKit。
+见 [ADR-0168](docs/adr/0168-cosyvoice-short-opening-continuity.md)与
+[衔接实测](docs/research/cosyvoice-short-opening-2026-09-15.md)。
 见 [欠载定位](docs/research/cosyvoice-stream-underflow-2026-09-14.md)与
 [运行优化实测](docs/research/cosyvoice-runtime-optimization-2026-09-14.md)。
 Hugging Face `speech-to-speech` 评估确认，V5 数据后的优先候选应是“推测式结束判定”而非

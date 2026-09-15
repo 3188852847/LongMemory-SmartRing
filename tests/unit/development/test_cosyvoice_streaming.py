@@ -37,7 +37,14 @@ def test_iter_wav_chunks_rejects_truncated_or_unbounded_frames(body):
         list(streaming.iter_wav_chunks(BytesIO(body)))
 
 
-def test_preset_audio_bypasses_http_and_reuses_opus_pipeline(tmp_path, monkeypatch):
+@pytest.mark.parametrize("text,filename", [
+    ("你好呀，我在呢。", "hello.wav"),
+    ("我在，听得到。", "present.wav"),
+    ("不用客气。", "thanks.wav"),
+    ("晚安，做个好梦。", "goodnight.wav"),
+])
+def test_preset_audio_bypasses_http_and_reuses_opus_pipeline(tmp_path, monkeypatch, text, filename):
+    from cosyvoice_segments import install_cosyvoice_punctuation_policy, install_cosyvoice_ready_segment_drain
     dto = types.ModuleType("core.providers.tts.dto.dto")
     dto.SentenceType = SimpleNamespace(FIRST="first")
     cleaner = types.ModuleType("core.utils.tts")
@@ -54,7 +61,7 @@ def test_preset_audio_bypasses_http_and_reuses_opus_pipeline(tmp_path, monkeypat
     monkeypatch.setitem(sys.modules, "core.utils.tts", cleaner)
     monkeypatch.setitem(sys.modules, "core.utils.util", util)
     monkeypatch.setattr(streaming, "PRESET_ROOT", tmp_path)
-    (tmp_path / "hello.wav").write_bytes(b"synthetic-wave")
+    (tmp_path / filename).write_bytes(b"synthetic-wave")
     monkeypatch.setattr(
         streaming.requests, "post",
         lambda *_args, **_kwargs: pytest.fail("preset must not call HTTP"),
@@ -66,13 +73,26 @@ def test_preset_audio_bypasses_http_and_reuses_opus_pipeline(tmp_path, monkeypat
         tts_audio_queue=SimpleNamespace(put=queued.append),
         current_sentence_id="turn-1", _correct_words_pattern=None,
         opus_encoder=object(), tts_timeout=90, tts_stop_request=False,
+        tts_text_buff=[], processed_chars=0, is_first_sentence=True,
+        _get_segment_text=lambda: pytest.fail("must not use upstream rfind"),
+        _process_remaining_text_stream=lambda **_kwargs: pytest.fail("must preserve complete preset"),
     )
-    connection = SimpleNamespace(sample_rate=16000, client_abort=False)
+    connection = SimpleNamespace(sample_rate=16000, client_abort=False, sentence_id="turn-1")
     streaming.install_cosyvoice_streaming(tts, connection)
+    install_cosyvoice_punctuation_policy(tts)
+    install_cosyvoice_ready_segment_drain(tts, connection)
     packets = []
-    tts.to_tts_stream("你好呀，我在呢。", opus_handler=packets.append)
+    # 经过真实切段入口；旧首逗号策略会拆坏 hello/present/goodnight 的完整命中键。
+    for char in text:
+        tts.tts_text_buff.append(char)
+        segment = tts._get_segment_text()
+        if segment:
+            tts.to_tts_stream(segment, opus_handler=packets.append)
+    assert tts._process_remaining_text_stream(opus_handler=packets.append)
+    assert not tts._process_remaining_text_stream(opus_handler=packets.append)
 
-    assert queued == [("first", None, "你好呀，我在呢。", "turn-1")]
+    assert queued == [("first", None, text, "turn-1")]
+    assert len(delivered) == 1
     assert delivered[0][0] == b"synthetic-wave"
     assert packets == [b"preset-opus"]
 

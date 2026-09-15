@@ -9,6 +9,11 @@ from datetime import datetime, timezone
 import threading
 import time
 
+from cosyvoice_segments import (
+    install_cosyvoice_punctuation_policy,
+    install_cosyvoice_ready_segment_drain,
+)
+
 
 TIMING_FIELDS = (
     "memory_ready_ms",
@@ -331,65 +336,6 @@ def install_edge_first_chunk_policy(tts, *, maximum_chars=18):
     )
 
 
-def install_cosyvoice_punctuation_policy(tts, *, minimum_chars=18):
-    """首段尽快开口；后续合并短分句，再在自然标点边界结束。"""
-    if minimum_chars < 8:
-        raise ValueError("punctuation_segment_limit_invalid")
-    if getattr(tts, "_longmemory_punctuation_policy", None) == "cosyvoice3":
-        return
-    original = getattr(tts, "_get_segment_text", None)
-    if not callable(original):
-        return
-    boundaries = frozenset("，,、。？?！!；;：:")
-
-    def get_segment_text():
-        # 首个逗号或句末标点仍沿用上游快速策略，维持当前可接受的首声。
-        if getattr(tts, "is_first_sentence", False):
-            return original()
-        full_text = "".join(getattr(tts, "tts_text_buff", ()))
-        processed = getattr(tts, "processed_chars", 0)
-        current = full_text[processed:]
-        # 不把每个逗号变成一次新模型请求。累计到最小长度后，选择遇到的第一个
-        # 自然边界；没有标点时继续等待，绝不按固定字符从词语中间硬切。
-        for index, char in enumerate(current):
-            if index + 1 >= minimum_chars and char in boundaries:
-                raw = current[:index + 1]
-                tts.processed_chars += len(raw)
-                return raw.strip()
-        return None
-
-    tts._get_segment_text = get_segment_text
-    original_remaining = getattr(tts, "_process_remaining_text_stream", None)
-    if callable(original_remaining):
-        def flush_remaining(opus_handler=None):
-            # 上游在 LAST/FILE 时把全部余文一次合成；当一个 LLM 增量包含多个
-            # 分句时，这会绕过本策略，让第二段突然变长。先逐段耗尽已有自然
-            # 边界，最后只有不足阈值或无标点的尾文交回原方法，保持文本顺序。
-            emitted = False
-            while not getattr(tts, "tts_stop_request", False):
-                before = tts.processed_chars
-                segment = get_segment_text()
-                if tts.processed_chars <= before:
-                    break
-                if segment:
-                    tts.to_tts_stream(segment, opus_handler=opus_handler)
-                    emitted = True
-            if getattr(tts, "tts_stop_request", False):
-                return emitted
-            tail_end = len("".join(getattr(tts, "tts_text_buff", ())))
-            tail_emitted = bool(original_remaining(opus_handler=opus_handler))
-            if tail_emitted:
-                # 上游尾文方法累加的是全缓冲长度，会重复计入已经处理的前缀。
-                # FILE 后还可能继续收到 TEXT，因此成功后对齐到本次真实末尾，
-                # 避免偏移越界而漏掉后续文字；失败或异常不擅自消费尾文。
-                tts.processed_chars = tail_end
-            return tail_emitted or emitted
-
-        tts._process_remaining_text_stream = flush_remaining
-    tts._longmemory_punctuation_minimum_chars = minimum_chars
-    tts._longmemory_punctuation_policy = "cosyvoice3"
-
-
 def _model_failure_code(error):
     status = getattr(error, "status_code", None)
     if status == 404:
@@ -457,8 +403,7 @@ def _observe_components(connection):
         # 先把缓冲实现替换为分块实现，再由下面的通用计时器包住最终入口。
         from cosyvoice_streaming import install_cosyvoice_streaming
         install_cosyvoice_streaming(tts, connection)
-        # 当前模型在长片段中会发生秒级播放欠载。取消固定 14 字硬切，并让
-        # 后续文本也接受逗号/顿号边界，把不可避免的等待留在自然停顿处。
+        # 首段合并短开头，后续保留自然边界；模型与记忆核心不承担切段职责。
         install_cosyvoice_punctuation_policy(tts)
     original_stream = getattr(tts, "to_tts_stream", None)
     original_opus = getattr(tts, "handle_opus", None)
@@ -489,6 +434,9 @@ def _observe_components(connection):
         tts.handle_opus = measured_opus
     if backend == "edge":
         install_edge_first_chunk_policy(tts)
+    elif backend == "cosyvoice3":
+        # 必须最后安装：外层调度每次调用内层单段计时，不能把预取的多段记成一段。
+        install_cosyvoice_ready_segment_drain(tts, connection)
     tts._longmemory_latency_observed = True
 
 

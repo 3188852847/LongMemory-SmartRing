@@ -1,11 +1,13 @@
 import asyncio
 import importlib.util
 from pathlib import Path
+import sys
 
 import pytest
 
 
 SCRIPT = Path(__file__).resolve().parents[3] / "scripts/development/xiaozhi/voice_latency.py"
+sys.path.insert(0, str(SCRIPT.parent))
 SPEC = importlib.util.spec_from_file_location("voice_latency_test", SCRIPT)
 voice_latency = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(voice_latency)
@@ -152,11 +154,11 @@ def test_cosyvoice_uses_natural_punctuation_without_fixed_character_split():
     tts = TTS()
     voice_latency.install_cosyvoice_punctuation_policy(tts)
     tts.tts_text_buff.append("你好，")
-    assert tts._get_segment_text() == "你好，"
-    # 后续短逗号不立即创建新 TTS 请求；累计足够内容后仍只在标点处切。
+    assert tts._get_segment_text() is None
+    # 首段也合并过短开头，累计足够内容后仍只在标点处切。
     tts.tts_text_buff.extend(["今天辛苦了，", "我们先休息一下，", "再慢慢聊聊吧。"])
-    assert tts._get_segment_text() == "今天辛苦了，我们先休息一下，再慢慢聊聊吧。"
-    assert tts.processed_chars == len("你好，今天辛苦了，我们先休息一下，再慢慢聊聊吧。")
+    assert tts._get_segment_text() == "你好，今天辛苦了，我们先休息一下，"
+    assert tts.processed_chars == len("你好，今天辛苦了，我们先休息一下，")
     assert tts._get_segment_text() is None
     # 没有标点的长文本也不能按固定字数硬切。
     tts.tts_text_buff.append("这部分即使很长也要继续等待自然语言边界")
