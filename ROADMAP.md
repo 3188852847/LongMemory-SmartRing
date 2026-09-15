@@ -158,6 +158,10 @@ CosyVoice 分块桥已改为跨模型 WAV 块连续积累 PCM，完整 60 ms 帧
 5.8 秒降至 2.2～2.4 秒，回退默认又变慢。保持既有模型、自然声线与分段策略，暂不
 更换 TTS 或安装运行时。下一步验收真实圆屏连续性，并单独处理约 2.4 秒的回答首字
 等待；不把固定合成提速等同于整轮实时对话达标。见 [ADR-0169](docs/adr/0169-cosyvoice-windows-process-qos.md)。
+调度修复后的内部流式已重新独立测量：相同日用切段下，较长陪伴句约提前 620ms，
+数字句仅约 147ms，中英混合仍可能跨段欠载。当前不全面切换，下一候选是短句完整、
+较长片段内部流式的独立对照，再验证真实编解码、打断和圆屏听感。固定缓冲会抵消
+部分首声收益，不作为无条件加速。见[流式复验](docs/research/cosyvoice-streaming-revalidation-2026-09-15.md)。
 见 [欠载定位](docs/research/cosyvoice-stream-underflow-2026-09-14.md)与
 [运行优化实测](docs/research/cosyvoice-runtime-optimization-2026-09-14.md)。
 Hugging Face `speech-to-speech` 评估确认，V5 数据后的优先候选应是“推测式结束判定”而非

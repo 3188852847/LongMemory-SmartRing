@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 from contextlib import ExitStack
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import replace
 from datetime import datetime, timezone
 import hashlib
 from io import BytesIO
@@ -26,6 +27,15 @@ from service import (
 )
 
 ROOT = Path(__file__).resolve().parents[3]
+
+
+def synthesis_units(case, *, punctuation_segments=False):
+    """可复用当前实际切段，避免把整条长答当成日用首段而夸大流式收益。"""
+    if not punctuation_segments:
+        return [case]
+    from benchmark_handoff import plan
+    return [replace(case, id=f"{case.id}-segment{index}", text=text)
+            for index, text in enumerate(plan(case.text), 1)]
 
 
 class StageTrace:
@@ -84,7 +94,7 @@ def git_revision(root):
     return result.stdout.strip() if result.returncode == 0 else None
 
 
-def run_case(synth, case, *, variant, repeat, stream, profile, output, service_path=False):
+def run_case(synth, case, *, variant, repeat, stream, profile, output, service_path=False, timeline_started=None):
     import numpy as np
     import torch
     from runtime_optimizations import install_qwen2_hidden_only
@@ -136,6 +146,7 @@ def run_case(synth, case, *, variant, repeat, stream, profile, output, service_p
                 arrivals.append({
                     "at_ms": round((perf_counter() - started) * 1000, 3),
                     "audio_ms": round(speech.shape[-1] / synth._sample_rate * 1000, 3),
+                    "samples": int(speech.shape[-1]),
                 })
             torch.cuda.synchronize()
             completed_ms = (perf_counter() - started) * 1000
@@ -156,6 +167,9 @@ def run_case(synth, case, *, variant, repeat, stream, profile, output, service_p
             "peak_allocated_bytes": torch.cuda.max_memory_allocated(),
             "peak_reserved_bytes": torch.cuda.max_memory_reserved(),
             "audio_file": name, "audio_sha256": hashlib.sha256(target.read_bytes()).hexdigest(),
+            # 在模型计时真正开始处取全局偏移，避免把线程创建/随机种子准备
+            # 错减到块到达时刻；供串行标点片段的统一库存时间轴使用。
+            "sequence_offset_ms": round((started - timeline_started) * 1000, 3) if timeline_started is not None else 0.0,
         }
     finally:
         synth.model_streaming = previous_streaming
@@ -174,6 +188,8 @@ def main():
     parser.add_argument("--worker-thread", action="store_true", help="在新请求线程中生成，复核HTTP线程与主线程差异")
     parser.add_argument("--torch-threads", type=int, choices=(1, 2, 4, 8), default=None)
     parser.add_argument("--service-path", action="store_true", help="包含服务WAV封装与缓存关闭路径")
+    parser.add_argument("--system-qos", action="store_true", help="对照系统默认调度；默认与日用服务一样申请 HighQoS")
+    parser.add_argument("--punctuation-segments", action="store_true", help="复用当前标点切段，连续测各段供给；文字预先给定")
     args = parser.parse_args()
     if args.compare_modes and args.complete:
         parser.error("--compare-modes 与 --complete 不可同用")
@@ -192,12 +208,21 @@ def main():
         "reply_cache": False, "reference_cache": True, "profile": args.profile,
         "limitations": ["固定合成输入；不含回答模型、HTTP、Opus或设备播放", "分项时间嵌套且可能重叠，不能相加", "随机种子不保证并行路径逐采样一致", "当前工作区代码可能尚未提交"],
         "records": [],
+        "sequences": [],
         "source_sha256": {
             name: hashlib.sha256(Path(__file__).with_name(name).read_bytes()).hexdigest()
-            for name in ("service.py", "runtime_optimizations.py", "benchmark_runtime.py")
+            for name in ("service.py", "runtime_optimizations.py", "benchmark_runtime.py", "windows_qos.py")
         },
     }
     print(json.dumps({"output": str(output)}, ensure_ascii=False), flush=True)
+    # 基准直接构造合成器，不经过 service.main；必须显式复现当前日用 QoS，
+    # 避免把后台调度差异误当成完整/流式模式的差异。只设置本实验进程。
+    from windows_qos import apply_current_process_high_qos
+    report["windows_qos"] = (
+        {"applied": False, "reason": "disabled", "before": None, "after": None}
+        if args.system_qos else apply_current_process_high_qos()
+    )
+    print(json.dumps({"windows_qos": report["windows_qos"]}), flush=True)
     import torch
     if args.torch_threads is not None:
         torch.set_num_threads(args.torch_threads)
@@ -205,7 +230,10 @@ def main():
     synth = CosyVoiceSynthesizer(hidden_only=False, model_streaming=True)
     report.update(torch=str(torch.__version__), gpu=torch.cuda.get_device_name(), sample_rate=synth._sample_rate,
                   torch_threads=torch.get_num_threads(), interop_threads=torch.get_num_interop_threads(),
-                  worker_thread=args.worker_thread, service_path=args.service_path)
+                  worker_thread=args.worker_thread, service_path=args.service_path,
+                  punctuation_segments=args.punctuation_segments)
+    if args.punctuation_segments:
+        report["limitations"].append("切段序列已预先给定；段间含实验归档开销，不能冒充真实LLM输入或设备播放")
     for repeat in range(args.repeat):
         variants = args.variants if repeat % 2 == 0 else list(reversed(args.variants))
         modes = [True, False] if args.compare_modes else [not args.complete]
@@ -214,17 +242,25 @@ def main():
         for name in args.cases:
             for stream in modes:
                 for variant in variants:
-                    kwargs = dict(variant=variant, repeat=repeat, stream=stream, profile=args.profile, output=output, service_path=args.service_path)
-                    if args.worker_thread:
-                        with ThreadPoolExecutor(max_workers=1) as executor:
-                            record = executor.submit(run_case, synth, cases[name], **kwargs).result()
-                    else:
-                        record = run_case(synth, cases[name], **kwargs)
-                    report["records"].append(record)
-                    # 每轮单独落盘便于失败定位；最终报告只在全部完成后排他创建。
-                    with (output / f"record-{len(report['records']):03}.json").open("x", encoding="utf-8") as handle:
-                        json.dump(record, handle, ensure_ascii=False, indent=2)
-                    print(json.dumps(record, ensure_ascii=False), flush=True)
+                    sequence = {"case": name, "variant": variant, "repeat": repeat,
+                                "stream": stream, "segments": []}
+                    sequence_started = perf_counter()
+                    for index, unit in enumerate(synthesis_units(cases[name], punctuation_segments=args.punctuation_segments), 1):
+                        kwargs = dict(variant=variant, repeat=repeat, stream=stream, profile=args.profile, output=output, service_path=args.service_path, timeline_started=sequence_started)
+                        if args.worker_thread:
+                            with ThreadPoolExecutor(max_workers=1) as executor:
+                                record = executor.submit(run_case, synth, unit, **kwargs).result()
+                        else:
+                            record = run_case(synth, unit, **kwargs)
+                        record.update(source_case=name, segment_index=index)
+                        sequence["segments"].append(record)
+                        report["records"].append(record)
+                        # 每轮单独落盘便于失败定位；最终报告只在全部完成后排他创建。
+                        with (output / f"record-{len(report['records']):03}.json").open("x", encoding="utf-8") as handle:
+                            json.dump(record, handle, ensure_ascii=False, indent=2)
+                        print(json.dumps(record, ensure_ascii=False), flush=True)
+                    sequence["completed_ms"] = round((perf_counter() - sequence_started) * 1000, 3)
+                    report["sequences"].append(sequence)
     with (output / "report.json").open("x", encoding="utf-8") as handle:
         json.dump(report, handle, ensure_ascii=False, indent=2)
 

@@ -22,6 +22,8 @@
 
 2026-09-15 最新声音修复：在短开头合并与已就绪片段调度之后，真实日用仍出现秒级欠载。保留同一个慢进程的可逆对照确认，Windows 显式 HighQoS 可让固定数字句由约 5.8 秒生成降到 2.2～2.4 秒，恢复默认则再次变慢。CosyVoice 服务现于加载前仅对自身申请该调度偏好，保留失败回退及 `--system-qos` 开关；不改模型、声线、全局电源计划或记忆核心。回答模型首字约 2.4 秒仍是独立等待，实际圆屏首声、连续性和自然度继续验收。见 [ADR-0169](docs/adr/0169-cosyvoice-windows-process-qos.md)与[调度实测](docs/research/cosyvoice-windows-qos-2026-09-15.md)；先前分段证据见 [ADR-0168](docs/adr/0168-cosyvoice-short-opening-continuity.md)。
 
+调度修复后的[内部流式复验](docs/research/cosyvoice-streaming-revalidation-2026-09-15.md)已完成模型供给与相同日用切段对照：较长小句可以更早交付，短句收益有限，中英混合仍有预计跨段空档。当前继续使用原日用播放方式；实验工具与 486 项开发测试通过，不把首块提前直接当作圆屏连续性和自然度验收。
+
 此前已完成完整自然片段生成、未使用输出层优化、过期音频过滤、最终余文切句、阶段计时和离线资源保护。旧日用进程比新进程额外慢的原因仍未确诊；该进程现已停止，不能把进程差异算作本轮代码收益。历史依据见 [ADR-0166](docs/adr/0166-cosyvoice-measured-runtime-optimization.md)、[运行实测](docs/research/cosyvoice-runtime-optimization-2026-09-14.md)与 [ADR-0167](docs/adr/0167-cosyvoice-first-segment-handoff.md)。
 
 P2 新增声音设置：四种 Edge TTS 音色、固定文本联网试听和确认保存。入口为“设置中心 → 声音”，保存 Edge 音色后需重启小智；实机听感待验收。见[声音设置](docs/guides/声音设置.md)。
