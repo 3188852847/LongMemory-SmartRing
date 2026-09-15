@@ -48,6 +48,24 @@ def test_web_and_other_method_share_memory_without_sharing_session_history(datab
         assert connection.execute("SELECT count(*) FROM conversation_messages").fetchone()[0] == 4
 
 
+def test_related_memory_does_not_supply_an_unrecorded_attribute(database):
+    """同主题召回只能提供已记录属性；不能把猫名当成猫颜色证据。"""
+    backend = ChatBackend(database, FakeAnswerGenerator())
+    try:
+        written = backend.run("我养了一只叫豆包的猫。", ())
+        assert written["status"] == "completed"
+
+        # 这次不是空召回。相关 L1 已进入回答上下文，但其中没有颜色。
+        unknown = backend.run("我的猫是什么颜色？", ())
+        assert unknown["status"] == "completed"
+        assert unknown["retrieved"]
+        assert "豆包" in unknown["memory_context"]
+        assert unknown["answer"] == "我还没有找到相关记忆。"
+        assert unknown["writes"] == []
+    finally:
+        backend.close()
+
+
 def test_explicit_date_answers_cannot_substitute_current_fact(database):
     with sqlite3.connect(database) as connection:
         connection.executemany(
