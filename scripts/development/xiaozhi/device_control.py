@@ -190,6 +190,10 @@ def validate_wallpaper_url(value):
 
 async def abort_current_response(connection):
     """复用小智已有的中止语义：停止模型/TTS工作、清空队列并向设备发 tts stop。"""
+    bridge = getattr(connection, "_doubao_bridge", None)
+    if bridge is not None:
+        await bridge.interrupt()
+        return
     from core.handle.abortHandle import handleAbortMessage
     await handleAbortMessage(connection)
 
@@ -316,6 +320,7 @@ class DeviceControl:
         try:
             conn = self._connection()
             result["ready"] = True
+            result["voice_mode"] = getattr(conn, "voice_mode", "pipeline")
             # AEC 是自由说话打断的必要基础之一，但仅凭握手字段不能证明整条打断链路可用。
             result["aec_advertised"] = getattr(conn, "features", {}).get("aec") is True
             result["natural_interruption"] = natural_interruption_diagnostics(conn)
@@ -330,6 +335,14 @@ class DeviceControl:
                 except ControlError:
                     pass
             tts = getattr(conn, "tts", None)
+            bridge = getattr(conn, "_doubao_bridge", None)
+            if bridge is not None:
+                result["realtime"] = bridge.snapshot()
+                result["stop_speech_supported"] = bridge.ready
+                result["user_session_active"] = bool(
+                    getattr(conn, "client_is_speaking", False)
+                    or getattr(conn, "client_have_voice", False))
+                result["announcement_reason"] = "realtime_announcement_unsupported"
             if (tts is not None and getattr(conn, "loop", None) is not None
                     and hasattr(tts, "tts_text_queue")
                     and hasattr(tts, "tts_audio_queue")):
@@ -500,6 +513,19 @@ class DeviceControl:
             raise ControlError("control_busy")
         async with self.operation_lock:
             conn = self._connection()
+            bridge = getattr(conn, "_doubao_bridge", None)
+            if bridge is not None:
+                if not bridge.ready:
+                    raise ControlError("stop_speech_unavailable")
+                active = bool(getattr(conn, "client_is_speaking", False)
+                              or bridge.response_id is not None)
+                operation_id = uuid4().hex
+                if active:
+                    await self.response_aborter(conn)
+                return {"operation_id": operation_id,
+                        "state": "stop_sent" if active else "already_idle",
+                        "server_interrupted": active,
+                        "device_acknowledgement": "unavailable" if active else "not_requested"}
             if getattr(conn, "tts", None) is None or getattr(conn, "loop", None) is None:
                 raise ControlError("stop_speech_unavailable")
             active = (

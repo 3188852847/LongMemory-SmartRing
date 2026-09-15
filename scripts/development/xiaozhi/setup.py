@@ -2,7 +2,8 @@
 
 用小智自己的 .venv 执行本文件。init/check-config 不发请求；
 check-stream 才访问用户配置的模型，start 才启动本机服务。
-真实密钥始终只在外部服务的 data/.config.yaml 中，不复制进本仓库。
+三段式密钥位于外部服务 data/.config.yaml；实时模式使用项目已忽略的
+.env.doubao.local。两种配置都不输出到日志或复制到示例。
 """
 
 import argparse
@@ -17,6 +18,7 @@ from urllib.parse import urlsplit
 
 
 DEFAULT_SERVER = Path(r"D:\ESP32-Workspace\xiaozhi-esp32-server\main\xiaozhi-server")
+DEFAULT_DOUBAO_ENV = Path(__file__).resolve().parents[3] / ".env.doubao.local"
 DEFAULT_FFMPEG = Path(
     r"C:\Users\12280\AppData\Local\Microsoft\WinGet\Packages"
     r"\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\ffmpeg-8.1.2-full_build\bin"
@@ -107,7 +109,8 @@ def validate_tts_config(config: dict, backend: str) -> None:
         raise SetupError(f"当前启动选择 {backend}，但 CustomTTS 配置与本机适配服务契约不一致。")
 
 
-def validate_config(config: dict, lan_ip: str | None = None, tts_backend: str = "edge") -> dict:
+def validate_config(config: dict, lan_ip: str | None = None, tts_backend: str = "edge",
+                    voice_mode: str = "pipeline") -> dict:
     """检查本阶段边界，避免沿用上游默认公网监听或默认模型。"""
     server = config.get("server", {})
     expected_ip = validate_lan_ip(lan_ip) if lan_ip else "127.0.0.1"
@@ -125,6 +128,16 @@ def validate_config(config: dict, lan_ip: str | None = None, tts_backend: str = 
             raise SetupError("局域网模式要求 auth.enabled: true 且 allowed_devices: []，不使用免鉴权名单。")
     if config.get("manager-api", {}).get("url"):
         raise SetupError("本阶段不使用智控台配置。")
+    if voice_mode not in {"pipeline", "doubao_realtime"}:
+        raise SetupError("语音模式无效。")
+    if voice_mode == "doubao_realtime":
+        if config.get("read_config_from_api", False):
+            raise SetupError("实时语音备用模式只支持本地设备配置。")
+        allowed = config.get("Memory", {}).get("LongMemory", {}).get("allowed_device_id", "")
+        if not re.fullmatch(r"[0-9a-fA-F]{2}(?::[0-9a-fA-F]{2}){5}", str(allowed)):
+            raise SetupError("实时语音需要保留已核实的单设备 allowed_device_id。")
+        # 这里只沿用设备身份；不加载Memory，也不要求三段式模型/TTS配置。
+        return {}
     selected = config.get("selected_module", {})
     memory_name = selected.get("Memory")
     if memory_name not in ("nomem", "mem_local_short", "LongMemory"):
@@ -205,12 +218,18 @@ def require_transport_consent(model: dict, allowed: bool) -> None:
         raise SetupError("HTTP 明文传输密钥和内容；接受校园网合成测试风险后显式加 --allow-insecure-http。")
 
 
-def prepare_environment(server_dir: Path, ffmpeg_dir: Path) -> dict:
+def prepare_environment(server_dir: Path, ffmpeg_dir: Path, voice_mode="pipeline") -> dict:
     """只改变子进程环境，不修改用户/系统永久 PATH。"""
+    if voice_mode not in {"pipeline", "doubao_realtime"}:
+        raise SetupError("语音模式无效。")
     opus_dir = server_dir / "native" / "libopus-1.6.1" / "Library" / "bin"
-    for path in (opus_dir / "opus.dll", ffmpeg_dir / "ffmpeg.exe", ffmpeg_dir / "ffprobe.exe",
-                 server_dir / "models" / "SenseVoiceSmall" / "model.pt",
-                 server_dir / "models" / "snakers4_silero-vad" / "src" / "silero_vad" / "data" / "silero_vad.onnx"):
+    paths = [opus_dir / "opus.dll", ffmpeg_dir / "ffmpeg.exe", ffmpeg_dir / "ffprobe.exe"]
+    if voice_mode == "pipeline":
+        paths.extend([
+            server_dir / "models" / "SenseVoiceSmall" / "model.pt",
+            server_dir / "models" / "snakers4_silero-vad" / "src" / "silero_vad" / "data" / "silero_vad.onnx",
+        ])
+    for path in paths:
         if not path.is_file():
             raise SetupError(f"缺少运行文件：{path}")
     env = os.environ.copy()
@@ -251,6 +270,8 @@ def main() -> int:
     parser.add_argument("--allow-insecure-http", action="store_true")
     parser.add_argument("--lan-ip", help="显式启用局域网演示，填写电脑有线 IPv4 地址")
     parser.add_argument("--device-control", action="store_true", help="显式开启本机 8766 音量验证接口")
+    parser.add_argument("--voice-mode", choices=["pipeline", "doubao_realtime"], default="pipeline")
+    parser.add_argument("--doubao-env", "--doubao-env-file", type=Path, default=DEFAULT_DOUBAO_ENV)
     parser.add_argument("--tts-backend", choices=["edge", "voxcpm2", "sanotts", "cosyvoice3"], default="edge",
                         help="核对本次实际选择的声音后端；默认 edge")
     args = parser.parse_args()
@@ -271,12 +292,21 @@ def main() -> int:
             config = yaml.safe_load(handle)
         if not isinstance(config, dict):
             raise SetupError("私有配置必须是 YAML 映射，不能是空文件。")
-        model = validate_config(config, args.lan_ip, args.tts_backend)
+        model = validate_config(config, args.lan_ip, args.tts_backend, args.voice_mode)
+        realtime = args.voice_mode == "doubao_realtime"
+        if realtime:
+            if args.action == "check-stream":
+                raise SetupError("实时模式不使用三段式 check-stream；请先完成账号配置与独立云端验收。")
+            from doubao_realtime.config import load_config, ConfigError
+            try:
+                load_config(args.doubao_env)  # 离线校验，不建立云连接，不输出密钥。
+            except ConfigError as exc:
+                raise SetupError(str(exc)) from None
         if args.device_control and args.action != "start":
             raise SetupError("--device-control 仅支持 start 操作。")
         if args.device_control:
             control_memory = config.get("Memory", {}).get("LongMemory", {})
-            if (control_memory.get("type") != "longmemory" or
+            if ((not realtime and control_memory.get("type") != "longmemory") or
                     not re.fullmatch(r"[0-9a-fA-F]{2}(?::[0-9a-fA-F]{2}){5}",
                                      str(control_memory.get("allowed_device_id", "")))):
                 raise SetupError("设备控制需要保留已核实的 LongMemory.allowed_device_id；当前记忆算法可以不是 LongMemory。")
@@ -285,18 +315,19 @@ def main() -> int:
                 verify_control_snapshot(server_dir)
             except ValueError as exc:
                 raise SetupError(str(exc)) from None
-        if "LongMemory" in config.get("Memory", {}):
+        if not realtime and "LongMemory" in config.get("Memory", {}):
             installed = server_dir / "core/providers/memory/longmemory/longmemory.py"
             if not installed.is_file() or installed.read_bytes() != Path(__file__).with_name("longmemory_provider.py").read_bytes():
                 raise SetupError("LongMemory 提供器未安装或版本不一致，请执行 install-memory。")
         if args.lan_ip:
             reject_ota_binaries(server_dir)
         if args.action == "check-config":
-            prepare_environment(server_dir, args.ffmpeg_dir)
+            prepare_environment(server_dir, args.ffmpeg_dir, args.voice_mode)
             print("本地配置与文件检查通过；未调用模型、未启动服务。")
             return 0
-        require_transport_consent(model, args.allow_insecure_http)
-        if urlsplit(model["base_url"]).scheme == "http":
+        if not realtime:
+            require_transport_consent(model, args.allow_insecure_http)
+        if not realtime and urlsplit(model["base_url"]).scheme == "http":
             print("警告：HTTP 会明文传输密钥和内容，只用于已确认风险的校园网合成测试。", flush=True)
         if args.action == "check-stream":
             from openai import OpenAI
@@ -309,15 +340,17 @@ def main() -> int:
             raise SetupError("请使用小智 .venv 的 python.exe 启动，不使用 LongMemory 或 ESP-IDF 解释器。")
         if args.lan_ip:
             print("临时局域网演示：请限制防火墙来源，结束后撤销规则；上游令牌不是可信设备准入。", flush=True)
-        memory_name = config['selected_module']['Memory']
-        print(f"仅在 {config['server']['ip']} 启动；Memory={memory_name}。Ctrl+C 停止。", flush=True)
+        memory_name = "disabled" if realtime else config['selected_module']['Memory']
+        print(f"仅在 {config['server']['ip']} 启动；Voice={args.voice_mode}；Memory={memory_name}。Ctrl+C 停止。", flush=True)
         entry = (str(Path(__file__).with_name("launch_with_memory.py"))
-                 if memory_name == "LongMemory" or args.device_control else "app.py")
+                 if realtime or memory_name == "LongMemory" or args.device_control else "app.py")
         command = [sys.executable, entry]
+        if realtime:
+            command.extend(["--voice-mode", args.voice_mode, "--doubao-env", str(args.doubao_env.resolve())])
         if args.device_control:
             command.append("--device-control")
         return subprocess.call(command, cwd=server_dir,
-                               env=prepare_environment(server_dir, args.ffmpeg_dir))
+                               env=prepare_environment(server_dir, args.ffmpeg_dir, args.voice_mode))
     except FileExistsError:
         print("已有私有配置，未覆盖。请直接检查或手动编辑。", file=sys.stderr)
     except SetupError as exc:

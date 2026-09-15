@@ -169,22 +169,35 @@ def install_internal_end_prompt_boundary(receive_audio_module):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--device-control", action="store_true")
+    parser.add_argument("--voice-mode", choices=["pipeline", "doubao_realtime"], default="pipeline")
+    parser.add_argument("--doubao-env", "--doubao-env-file", type=Path,
+                        default=Path(__file__).resolve().parents[3] / ".env.doubao.local")
     args = parser.parse_args()
     root = Path.cwd()
-    if args.device_control:
+    if args.device_control or args.voice_mode == "doubao_realtime":
         from control_compatibility import verify_control_snapshot
         verify_control_snapshot(root)
     sys.path.insert(0, str(root))
     from core.connection import ConnectionHandler
+    from direct_ws_v2 import install_direct_ws_v2
+    install_direct_ws_v2(ConnectionHandler)
+    if args.voice_mode == "doubao_realtime":
+        from doubao_realtime.config import load_config
+        from doubao_realtime.bootstrap import install_realtime_mode
+        install_realtime_mode(ConnectionHandler, load_config(args.doubao_env))
+        if args.device_control:
+            from core.websocket_server import WebSocketServer
+            from control_http import install_control_server
+            install_control_server(WebSocketServer, ConnectionHandler)
+        runpy.run_path(str(root / "app.py"), run_name="__main__")
+        return
     import core.handle.receiveAudioHandle as receive_audio_handle
     from core.providers.memory.longmemory.longmemory import MemoryProvider
-    from direct_ws_v2 import install_direct_ws_v2
     from fast_voice_responses import install_fast_voice_responses
     from voice_latency import install_audio_send_observer, install_voice_latency
     from voice_input_latency import install_voice_input_latency
     from voice_prediction import install_voice_prediction_shadow
     isolate_memory_initialization(ConnectionHandler, MemoryProvider)
-    install_direct_ws_v2(ConnectionHandler)
     from core.providers.asr import base as asr_base
     install_voice_input_latency(asr_base)
     # 快速通道必须位于时序包装器内部，才能像普通回答一样记录真实首包。

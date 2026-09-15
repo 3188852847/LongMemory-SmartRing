@@ -167,6 +167,32 @@ def test_environment_does_not_modify_parent(tmp_path, monkeypatch):
     assert env["HF_HUB_OFFLINE"] == "1"
 
 
+def test_realtime_environment_needs_codec_but_not_local_model_weights(tmp_path):
+    ffmpeg = tmp_path / "ffmpeg"
+    for path in [ffmpeg / "ffmpeg.exe", ffmpeg / "ffprobe.exe",
+                 tmp_path / "native/libopus-1.6.1/Library/bin/opus.dll"]:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.touch()
+    assert setup.prepare_environment(tmp_path, ffmpeg, "doubao_realtime")["HF_HUB_OFFLINE"] == "1"
+    with pytest.raises(setup.SetupError, match="缺少运行文件"):
+        setup.prepare_environment(tmp_path, ffmpeg)
+
+
+def test_realtime_config_does_not_require_pipeline_credentials_or_memory_files(config):
+    config.pop("LLM")
+    config.pop("selected_module")
+    config["Memory"] = {"LongMemory": {"allowed_device_id": "aa:bb:cc:dd:ee:ff"}}
+    assert setup.validate_config(config, voice_mode="doubao_realtime") == {}
+    config["read_config_from_api"] = True
+    with pytest.raises(setup.SetupError, match="只支持本地设备配置"):
+        setup.validate_config(config, voice_mode="doubao_realtime")
+
+
+def test_realtime_config_still_checks_single_device_boundary(config):
+    with pytest.raises(setup.SetupError, match="单设备"):
+        setup.validate_config(config, voice_mode="doubao_realtime")
+
+
 @pytest.fixture
 def lan_config(config):
     config['server'].update(ip='192.168.124.45',

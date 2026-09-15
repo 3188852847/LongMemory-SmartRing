@@ -1,6 +1,7 @@
 """在小智现有环境中核对共享路径，再复用旧启动工具；不输出配置内容。"""
 
 from pathlib import Path
+import argparse
 import http.client
 import json
 import sys
@@ -76,9 +77,21 @@ def main():
     try:
         root, server, database = (Path(value).resolve() for value in sys.argv[1:4])
         lan_ip, tts_backend, memory_backend = sys.argv[4:7]
+        parser = argparse.ArgumentParser(add_help=False)
+        parser.add_argument("--voice-mode", choices=("pipeline", "doubao_realtime"), default="pipeline")
+        parser.add_argument("--doubao-env", type=Path)
+        arguments = parser.parse_args(sys.argv[7:])
         sys.path.insert(0, str(root / "scripts/development/xiaozhi"))
-        import yaml
         import setup
+        if arguments.voice_mode == "doubao_realtime":
+            # 独立云端会话保留设备协议和控制桥，由 setup 核对身份与环境。
+            # 不检查、同步或加载现有 ASR / LLM / TTS / 记忆提供器。
+            sys.argv = [str(root / "scripts/development/xiaozhi/setup.py"), "start",
+                        "--server-dir", str(server), "--lan-ip", lan_ip,
+                        "--device-control", "--voice-mode", "doubao_realtime",
+                        "--doubao-env", str(arguments.doubao_env or root / ".env.doubao.local")]
+            return setup.main()
+        import yaml
         config = yaml.safe_load((server / "data/.config.yaml").read_text(encoding="utf-8"))
         setup.validate_config(config, lan_ip, tts_backend)
         if (not memory_contract_matches(config, root, database, memory_backend)

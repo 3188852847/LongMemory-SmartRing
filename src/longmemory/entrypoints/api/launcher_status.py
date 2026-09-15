@@ -11,6 +11,7 @@ LEGACY_SERVICES = {"console", "voice", "voxcpm2", "sanotts"}
 ALLOWED_STATES = {"disabled", "running", "ready", "exited"}
 ALLOWED_VAD_PROFILES = {"normal", "noisy", "close_talk"}
 ALLOWED_TTS_BACKENDS = {"edge", "voxcpm2", "sanotts", "cosyvoice3"}
+ALLOWED_VOICE_MODES = {"pipeline", "doubao_realtime"}
 
 
 def read_launcher_status(path: Path | None, expected_instance: str | None, *, now=None,
@@ -34,26 +35,32 @@ def read_launcher_status(path: Path | None, expected_instance: str | None, *, no
         services = raw["services"]
         schema_version = raw.get("schema_version")
         startup = raw.get("startup", {})
+        # V5 把完整云端对话模式与单独 TTS 区分开；旧快照保留原严格结构。
+        pipeline_voice = (isinstance(startup, dict) and startup.get("voice_enabled")
+                          and startup.get("voice_mode", "pipeline") == "pipeline")
         if (
-            schema_version not in {1, 2, 3, 4}
+            schema_version not in {1, 2, 3, 4, 5}
             or raw.get("launcher_instance") != expected_instance
             or raw.get("phase") not in ALLOWED_PHASES
             or not isinstance(services, dict)
             or set(services) != (
-                ALLOWED_SERVICES if schema_version == 4 else LEGACY_SERVICES
+                ALLOWED_SERVICES if schema_version in {4, 5} else LEGACY_SERVICES
             )
             or any(value not in ALLOWED_STATES for value in services.values())
             or not isinstance(startup, dict)
             or (schema_version == 2 and set(startup) != {"voice_enabled", "vad_profile"})
             or (schema_version in {3, 4} and set(startup) != {"voice_enabled", "vad_profile", "tts_backend"})
+            or (schema_version == 5 and set(startup) !=
+                {"voice_enabled", "voice_mode", "vad_profile", "tts_backend"})
+            or (schema_version == 5 and startup.get("voice_mode") not in ALLOWED_VOICE_MODES)
             or (schema_version == 2 and type(startup.get("voice_enabled")) is not bool)
-            or (schema_version in {3, 4} and type(startup.get("voice_enabled")) is not bool)
+            or (schema_version in {3, 4, 5} and type(startup.get("voice_enabled")) is not bool)
             or (schema_version == 2 and startup.get("vad_profile") not in
                 (ALLOWED_VAD_PROFILES if startup.get("voice_enabled") else {None}))
-            or (schema_version in {3, 4} and startup.get("vad_profile") not in
-                (ALLOWED_VAD_PROFILES if startup.get("voice_enabled") else {None}))
-            or (schema_version in {3, 4} and startup.get("tts_backend") not in
-                (ALLOWED_TTS_BACKENDS if startup.get("voice_enabled") else {None}))
+            or (schema_version in {3, 4, 5} and startup.get("vad_profile") not in
+                (ALLOWED_VAD_PROFILES if pipeline_voice else {None}))
+            or (schema_version in {3, 4, 5} and startup.get("tts_backend") not in
+                (ALLOWED_TTS_BACKENDS if pipeline_voice else {None}))
         ):
             return unavailable
     except (OSError, ValueError, TypeError, KeyError, json.JSONDecodeError):
@@ -76,5 +83,5 @@ def read_launcher_status(path: Path | None, expected_instance: str | None, *, no
         "updated_at": raw["updated_at"],
         "age_seconds": round(age, 1),
         "services": services,
-        "startup": startup if schema_version in {2, 3, 4} else {},
+        "startup": startup if schema_version in {2, 3, 4, 5} else {},
     }

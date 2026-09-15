@@ -8,12 +8,19 @@ P2 声音设置有两条边界：React → 本机认证/CSRF API → 当前 TTS�
 
 声音边界更新（2026-09-15）：CosyVoice3 常驻独立环境，Xiaozhi 项目适配层负责自然
 切段、短开头合并、已就绪片段调度、过期话轮过滤与 V6 观察。GPU 合成仍串行，设备
-发送与后续合成并行；这些职责不进入 Memory Core。LiveKit/云端实时语音仍是候选，
-未接入日用。见 [ADR-0168](../adr/0168-cosyvoice-short-opening-continuity.md)。
+发送与后续合成并行；这些职责不进入 Memory Core。LiveKit 未接入；新增独立的
+豆包实时语音备用入口，账号与实机验收待完成。见 [ADR-0168](../adr/0168-cosyvoice-short-opening-continuity.md)
+与 [ADR-0170](../adr/0170-doubao-realtime-fallback-mode.md)。
 CosyVoice 的 Windows HighQoS 设置只存在于独立声音进程入口，服务负责状态回读与
 回退；不进入启动面板的全局电源控制，也不进入 Memory Core。见 [ADR-0169](../adr/0169-cosyvoice-windows-process-qos.md)。
 
 ## 1. 定位与现状
+
+豆包备用模式边界：圆屏 Opus → Xiaozhi 项目侧实时桥 → 豆包 3.0 → PCM/Opus →
+现有设备发送层。该模式跳过本地识别、回答模型、TTS 与圆屏记忆提供器；网页
+LongMemory Runtime 继续独立运行。启动面板显式选择模式，本机专用 env 保存
+凭据，切换需停止重启。第一版不注入私人角色、历史和个人长期记忆，不提供记忆
+主动播报；不把云会话上下文视为研究记忆核心。离线通过与真实服务可用分开报告。
 
 当前优先建设单用户、可定制的日常陪伴助手；独立记忆核心和研究接口保留。SmartRing-Plus 是 ESP32-S3 智能圆屏，不是戒指。已跑通的合成演示不等于长期陪伴质量验收。
 

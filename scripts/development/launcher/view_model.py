@@ -6,6 +6,7 @@ def daily_recommendation():
     return {
         "model_profile": "campus",
         "voice_model_profile": "campus",
+        "voice_mode": "pipeline",
         "memory_backend": "longmemory",
         "memory_extraction": "llm",
         "memory_retrieval": "hybrid",
@@ -32,6 +33,7 @@ def summary_text(
     l1_sufficiency_shadow=False,
     model_profile="campus",
     voice_model_profile="campus",
+    voice_mode="pipeline",
 ):
     """把内部启动枚举翻译为按网页、圆屏和实验边界分行的摘要。"""
 
@@ -81,6 +83,11 @@ def summary_text(
         f"圆屏：{voice_model_label}  ·  {backend_label}  ·  {sound_label}  ·  {vad_label}"
         if voice else f"圆屏：本次不启动  ·  下次声音 {sound_label}"
     )
+    if voice_mode == "doubao_realtime":
+        round_screen = (
+            "圆屏：豆包实时语音（备用） · 语音发往云端 · 长期记忆暂不接入"
+            if voice else "圆屏：本次不启动 · 下次使用豆包实时语音（备用）"
+        )
     return (
         f"{mode}  ·  打开{page_label}  ·  {role_label}\n"
         f"网页：{web_model_label}  ·  {extraction_label}  ·  {retrieval_label}\n"
@@ -89,13 +96,15 @@ def summary_text(
     )
 
 
-def failure_hint(exited, tts_backend=None):
+def failure_hint(exited, tts_backend=None, voice_mode="pipeline"):
     """把稳定退出码翻译为排障提示，不读取或复制子进程输出。"""
 
     hints = []
     for name, code in exited:
         if name == "console" and code == 2:
             hint = "控制台参数或本机配置未通过检查；先核对数据库、模型配置和高级设置"
+        elif name == "voice" and voice_mode == "doubao_realtime":
+            hint = "豆包实时语音未启动；请核对实时语音配置、小智设备身份和局域网地址；云端权限与连接需实测"
         elif name == "voice" and code == 3:
             hint = "圆屏语音的共享路径或配置未通过检查；先核对小智目录、数据库和所选模型"
         elif name == "voice" and code == 4:
@@ -123,7 +132,7 @@ def failure_hint(exited, tts_backend=None):
     return "；".join(hints) + "。" if hints else "请打开使用指南核对本机配置。"
 
 
-def failed_services(exited, tts_backend=None):
+def failed_services(exited, tts_backend=None, voice_mode="pipeline"):
     details = "、".join(f"{name}（退出码 {code}）" for name, code in exited)
     return {
         "components": {
@@ -134,14 +143,14 @@ def failed_services(exited, tts_backend=None):
         },
         "message": (
             f"服务已退出：{details}。已停止其他受管服务。"
-            f"{failure_hint(exited, tts_backend)}"
+            f"{failure_hint(exited, tts_backend, voice_mode)}"
         ),
         "tone": "error",
     }
 
 
 def starting_services(*, voice, tts_backend, model_profile, voice_model_profile,
-                      memory_backend):
+                      memory_backend, voice_mode="pipeline"):
     """生成启动阶段呈现；这里只翻译选项，不执行配置同步或启动进程。"""
 
     speech = {
@@ -162,6 +171,11 @@ def starting_services(*, voice, tts_backend, model_profile, voice_model_profile,
     voice_detail = (
         f"，圆屏使用 {voice_model_label} / {memory_label}。" if voice else "。"
     )
+    note = "语音模式已自动核对并备份同步配置；首次加载语音模型可能较慢。"
+    if voice and voice_mode == "doubao_realtime":
+        speech = "豆包实时语音桥启动中"
+        voice_detail = "，圆屏使用豆包实时语音（备用）。"
+        note = "语音发往云端，长期记忆暂不接入；不会加载本地声音模型。"
     return {
         "components": {
             "console": ("启动中", "busy"),
@@ -171,7 +185,7 @@ def starting_services(*, voice, tts_backend, model_profile, voice_model_profile,
         },
         "message": (
             f"正在启动；网页使用 {model_label}{voice_detail}"
-            "语音模式已自动核对并备份同步配置；首次加载语音模型可能较慢。"
+            f"{note}"
         ),
         "tone": "busy",
     }
@@ -190,10 +204,13 @@ def stopped_services():
     }
 
 
-def ready_services(*, voice, tts_backend, local_tts_ready, opened):
+def ready_services(*, voice, tts_backend, local_tts_ready, opened, voice_mode="pipeline"):
     """生成服务就绪视图；设备是否连接仍由网页实时状态负责。"""
 
-    if voice and tts_backend in {"voxcpm2", "sanotts", "cosyvoice3"}:
+    if voice and voice_mode == "doubao_realtime":
+        suffix = "；豆包语音桥运行中，云端会话在圆屏连接后建立"
+        speech = ("豆包语音桥已启动，云端连接待实测", "good")
+    elif voice and tts_backend in {"voxcpm2", "sanotts", "cosyvoice3"}:
         label = {"voxcpm2": "VoxCPM2", "sanotts": "sanoTTS",
                  "cosyvoice3": "CosyVoice 3"}[tts_backend]
         suffix = (

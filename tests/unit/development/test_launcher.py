@@ -161,8 +161,9 @@ def test_launcher_status_snapshot_contains_only_bounded_runtime_facts(options):
         "console": "ready", "voice": "running", "voxcpm2": "disabled",
         "sanotts": "disabled", "cosyvoice3": "disabled",
     }
-    assert saved["schema_version"] == 4
+    assert saved["schema_version"] == 5
     assert saved["startup"] == {"voice_enabled": options.voice,
+                                 "voice_mode": "pipeline",
                                  "vad_profile": options.vad_profile if options.voice else None,
                                  "tts_backend": options.tts_backend if options.voice else None}
     assert set(saved) == {
@@ -946,6 +947,7 @@ def test_daily_recommendation_keeps_experimental_work_disabled():
     assert recommended == {
         "model_profile": "campus",
         "voice_model_profile": "campus",
+        "voice_mode": "pipeline",
         "memory_backend": "longmemory",
         "memory_extraction": "llm",
         "memory_retrieval": "hybrid",

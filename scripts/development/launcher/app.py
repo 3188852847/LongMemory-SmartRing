@@ -9,7 +9,7 @@ from pathlib import Path
 
 from runtime import (
     DEFAULT_BGE_MODEL, DEFAULT_SANOTTS_SOURCE, Manager, Options, ROOT, Singleton,
-    VOICE_ROOT, console_url,
+    VOICE_ROOT, console_url, doubao_config_module,
 )
 from network import local_addresses, config_action
 from preferences import (
@@ -52,6 +52,50 @@ BORDER = "#1c4b69"
 SUCCESS = "#38e5a3"
 WARNING = "#ffbd4a"
 DANGER = "#ff647c"
+
+
+def open_doubao_configuration(parent, path, on_saved=None):
+    """密钥只在用户打开的本机对话框中输入，不回填已保存密钥或写入偏好。"""
+    dialog = tk.Toplevel(parent)
+    dialog.title("豆包实时语音配置")
+    dialog.transient(parent)
+    dialog.resizable(False, False)
+    body = ttk.Frame(dialog, padding=20)
+    body.pack(fill="both", expand=True)
+    ttk.Label(body, text="开通豆包实时语音服务后，填写该服务的 API Key。",
+              wraplength=510).pack(anchor="w")
+    ttk.Label(body, text="凭据仅保存到本机 .env.doubao.local；不会进行联网验证。",
+              wraplength=510).pack(anchor="w", pady=(4, 12))
+    secret = tk.StringVar(dialog, value="")
+    ttk.Label(body, text="实时语音 API Key（已保存的内容不会回显）").pack(anchor="w")
+    entry = ttk.Entry(body, textvariable=secret, show="●", width=65)
+    entry.pack(fill="x", pady=(4, 12))
+    status = tk.StringVar(dialog, value="未开通时可直接关闭，语音模式选择仍会保留。")
+    ttk.Label(body, textvariable=status, wraplength=510).pack(anchor="w")
+
+    def close():
+        secret.set("")
+        dialog.destroy()
+
+    def save():
+        try:
+            doubao_config_module().save_credentials(path, api_key=secret.get().strip())
+        except (OSError, ValueError):
+            status.set("未能保存。请检查凭据是否完整、是否含换行，以及配置目录是否可写。")
+            return
+        secret.set("")
+        if on_saved is not None:
+            on_saved()
+        dialog.destroy()
+
+    buttons = ttk.Frame(body)
+    buttons.pack(fill="x", pady=(16, 0))
+    ttk.Button(buttons, text="保存到本机", command=save).pack(side="right")
+    ttk.Button(buttons, text="关闭", command=close).pack(side="right", padx=8)
+    dialog.protocol("WM_DELETE_WINDOW", close)
+    entry.focus_set()
+    dialog.grab_set()
+    return dialog
 
 
 def _scrollable_tab(parent):
@@ -306,6 +350,10 @@ def main():
     window.bind_all("<MouseWheel>", scroll_current_tab, add="+")
 
     voice = tk.BooleanVar(value=saved["voice"])
+    voice_mode_labels = {"现有语音链路": "pipeline", "豆包实时语音（备用）": "doubao_realtime"}
+    voice_mode = tk.StringVar(value=next(
+        label for label, value in voice_mode_labels.items() if value == saved["voice_mode"]
+    ))
     start_page_labels = {"系统总览": "overview", "聊天": "chat", "设备状态": "device", "记忆管理": "memories", "设置中心": "settings"}
     start_page = tk.StringVar(value=next(label for label, value in start_page_labels.items() if value == saved["start_page"]))
     consent = tk.BooleanVar(value=saved["http_risk_ack"])
@@ -383,6 +431,9 @@ def main():
     def selected_voice_model_profile():
         return model_profile_labels[voice_model_profile.get()]
 
+    def selected_voice_mode():
+        return voice_mode_labels[voice_mode.get()]
+
     def selected_memory_backend():
         return memory_backend_labels[memory_backend.get()]
 
@@ -419,6 +470,7 @@ def main():
         # 删除能力有意不进入此字典：每次打开面板都按本机日常约定重新设置。
         return {
             "voice": voice.get(),
+            "voice_mode": selected_voice_mode(),
             "start_page": start_page_labels[start_page.get()],
             "database": database.get().strip(),
             "voice_root": server.get().strip(),
@@ -449,7 +501,7 @@ def main():
     _page_heading(
         device,
         "圆屏与声音",
-        "选择日常声音和拾音环境。CosyVoice 3 是当前日常推荐；切换后需重新启动语音服务。",
+        "选择现有链路或豆包实时语音备用模式。选择会保存，切换需停止后重新启动。",
     )
     _page_heading(
         maintenance,
@@ -460,6 +512,8 @@ def main():
     def apply_daily_recommendation():
         """恢复已验收的日用组合；不改变角色、路径、IP 或风险确认。"""
         recommended = daily_recommendation()
+        voice_mode.set(next(label for label, value in voice_mode_labels.items()
+                            if value == recommended["voice_mode"]))
         model_profile.set(next(
             label for label, value in model_profile_labels.items()
             if value == recommended["model_profile"]
@@ -585,15 +639,17 @@ def main():
     ttk.Label(model_row, text="  用于网页聊天、提取与低频整理").pack(side="left")
     voice_model_row = ttk.Frame(behavior_box)
     voice_model_row.pack(fill="x", pady=8)
-    ttk.Label(voice_model_row, text="圆屏语音模型：").pack(side="left")
-    ttk.Combobox(voice_model_row, textvariable=voice_model_profile,
-                 values=tuple(model_profile_labels), state="readonly", width=31).pack(side="left")
+    ttk.Label(voice_model_row, text="现有链路模型：").pack(side="left")
+    voice_model_selector = ttk.Combobox(voice_model_row, textvariable=voice_model_profile,
+                                        values=tuple(model_profile_labels), state="readonly", width=31)
+    voice_model_selector.pack(side="left")
     ttk.Label(voice_model_row, text="  启动语音前自动备份并同步小智配置").pack(side="left")
     backend_row = ttk.Frame(behavior_box)
     backend_row.pack(fill="x", pady=8)
-    ttk.Label(backend_row, text="圆屏记忆后端：").pack(side="left")
-    ttk.Combobox(backend_row, textvariable=memory_backend,
-                 values=tuple(memory_backend_labels), state="readonly", width=31).pack(side="left")
+    ttk.Label(backend_row, text="现有链路记忆：").pack(side="left")
+    memory_backend_selector = ttk.Combobox(backend_row, textvariable=memory_backend,
+                                           values=tuple(memory_backend_labels), state="readonly", width=31)
+    memory_backend_selector.pack(side="left")
     ttk.Label(backend_row, text="  下次启动生效；各后端数据隔离").pack(side="left")
     memory_row = ttk.Frame(behavior_box)
     memory_row.pack(fill="x", pady=8)
@@ -660,12 +716,27 @@ def main():
     )).pack(side="left", padx=(8, 0))
     sound_box = ttk.LabelFrame(device, text="圆屏声音", style="Section.TLabelframe")
     sound_box.pack(fill="x", pady=10)
+    voice_mode_row = ttk.Frame(sound_box)
+    voice_mode_row.pack(fill="x", pady=(0, 10))
+    ttk.Label(voice_mode_row, text="语音模式：").pack(side="left")
+    ttk.Combobox(voice_mode_row, textvariable=voice_mode,
+                 values=tuple(voice_mode_labels), state="readonly", width=28).pack(side="left")
+    ttk.Button(voice_mode_row, text="配置豆包 API", command=lambda: open_doubao_configuration(
+        window, ROOT / ".env.doubao.local",
+        lambda: settings_status.set("豆包配置已保存到本机，尚未验证云端权限和实际通话。"),
+    )).pack(side="left", padx=8)
+    ttk.Button(voice_mode_row, text="配置指南", command=lambda: os.startfile(
+        ROOT / "docs/guides/豆包实时语音备用模式.md"
+    )).pack(side="left")
+    ttk.Label(sound_box,
+              text="豆包备用模式由云端负责听、回答和说话，圆屏长期记忆暂不接入；网页记忆功能保持现状。",
+              wraplength=760, style="Subtitle.TLabel").pack(anchor="w", pady=(0, 10))
     tts_row = ttk.Frame(sound_box)
     tts_row.pack(fill="x")
-    ttk.Label(tts_row, text="圆屏声音：").pack(side="left")
-    ttk.Combobox(tts_row, textvariable=tts_backend,
-                 values=tuple(tts_labels.values()),
-                 state="readonly", width=42).pack(side="left")
+    ttk.Label(tts_row, text="现有链路声音：").pack(side="left")
+    tts_selector = ttk.Combobox(tts_row, textvariable=tts_backend,
+                                values=tuple(tts_labels.values()), state="readonly", width=42)
+    tts_selector.pack(side="left")
 
     tts_description = tk.StringVar()
     tts_note = ttk.Frame(sound_box, padding=(12, 10), style="Option.TFrame")
@@ -680,6 +751,9 @@ def main():
     ).pack(anchor="w", pady=(3, 0))
 
     def update_tts_description(*_):
+        if selected_voice_mode() == "doubao_realtime":
+            tts_description.set("已选择豆包实时语音备用模式。需先开通并配置专用凭据；不会加载本地 ASR、声音模型或访问圆屏长期记忆。下方声音与拾音选项仅在切回现有链路后生效。")
+            return
         tts_description.set({
             "cosyvoice3": "日常推荐。声音质量和连续性已通过实机体验；首声速度仍在优化，需要本地模型与显卡。",
             "edge": "联网稳定回退。资源占用低，但依赖公网并按完整音频段返回。",
@@ -688,6 +762,7 @@ def main():
         }[selected_tts()])
 
     tts_backend.trace_add("write", update_tts_description)
+    voice_mode.trace_add("write", update_tts_description)
     update_tts_description()
 
     settings_status = tk.StringVar(value="选择会立即保存；运行中的服务不会热切换。")
@@ -728,7 +803,7 @@ def main():
     # 路径输入仍在启动或显式同步时保存，避免每次键入都写磁盘；下面这些
     # 有限枚举和布尔选择则在用户操作时立即落盘。
     for variable in (
-        voice, start_page, role, memory_extraction, memory_retrieval,
+        voice, voice_mode, start_page, role, memory_extraction, memory_retrieval,
         memory_consolidation, l1_sufficiency_shadow, l2_sufficiency_shadow,
         vad_profile, consent,
     ):
@@ -739,6 +814,9 @@ def main():
     tts_backend.trace_add("write", persist_tts_backend)
 
     def sync_tts():
+        if selected_voice_mode() == "doubao_realtime":
+            messagebox.showinfo("豆包实时语音", "当前选择豆包模式，无需同步本地声音配置。")
+            return
         if manager.services:
             messagebox.showinfo("请先停止", "请先停止本面板服务；也请结束外部终端中的小智服务。")
             return
@@ -778,9 +856,18 @@ def main():
     vad_row = ttk.Frame(sound_box)
     vad_row.pack(fill="x", pady=(10, 0))
     ttk.Label(vad_row, text="拾音环境：").pack(side="left")
-    ttk.Combobox(vad_row, textvariable=vad_profile,
-                 values=tuple(vad_profile_labels), state="readonly", width=31).pack(side="left")
+    vad_selector = ttk.Combobox(vad_row, textvariable=vad_profile,
+                                values=tuple(vad_profile_labels), state="readonly", width=31)
+    vad_selector.pack(side="left")
     ttk.Label(vad_row, text="  下次统一启动前自动备份并同步").pack(side="left")
+
+    def update_voice_controls(*_):
+        selector_state = "readonly" if selected_voice_mode() == "pipeline" else "disabled"
+        for selector in (voice_model_selector, memory_backend_selector, tts_selector, vad_selector):
+            selector.configure(state=selector_state)
+
+    voice_mode.trace_add("write", update_voice_controls)
+    update_voice_controls()
     save_bar = ttk.Frame(footer, padding=(12, 8), style="Save.TFrame")
     save_bar.pack(fill="x", pady=(0, 9))
     save_marker = ttk.Label(save_bar, text="●  本机保存", style="Save.TLabel")
@@ -831,6 +918,7 @@ def main():
             l1_sufficiency_shadow.get(),
             model_profile=selected_model_profile(),
             voice_model_profile=selected_voice_model_profile(),
+            voice_mode=selected_voice_mode(),
         ))
 
     summary_box = ttk.LabelFrame(daily, text="本次配置", style="Section.TLabelframe")
@@ -841,7 +929,7 @@ def main():
         text="详细路径和算法选项在“高级设置”；有限选项选择后立即保存，路径在成功启动后保存。",
         style="Subtitle.TLabel",
     ).pack(anchor="w", pady=(4, 0))
-    for variable in (voice, start_page, role, model_profile, voice_model_profile,
+    for variable in (voice, voice_mode, start_page, role, model_profile, voice_model_profile,
                      memory_extraction, memory_retrieval, tts_backend, vad_profile,
                      memory_backend, allow_memory_delete,
                      memory_consolidation, l1_sufficiency_shadow,
@@ -936,10 +1024,12 @@ def main():
         # 网页可在服务运行时保存“下次启动”项。只有面板下拉框仍等于本次
         # 运行值时才吸收网页选择；若用户已在面板手动改过，则保留面板意图。
         running_backend = (manager.options.memory_backend
-                           if manager.options is not None else None)
+                           if manager.options is not None
+                           and manager.options.voice_mode == "pipeline" else None)
         panel_unchanged = (running_backend is not None
                            and selected_memory_backend() == running_backend)
-        running_tts = manager.options.tts_backend if manager.options is not None else None
+        running_tts = (manager.options.tts_backend if manager.options is not None
+                       and manager.options.voice_mode == "pipeline" else None)
         tts_panel_unchanged = running_tts is not None and selected_tts() == running_tts
         try:
             manager.stop()
@@ -966,7 +1056,8 @@ def main():
             return
         try:
             voice_result = close_stale_voice(ip.get().strip())
-            tts_result = close_stale_tts(selected_tts())
+            tts_result = (close_stale_tts(selected_tts()) if selected_voice_mode() == "pipeline"
+                          else {"state": "free"})
         except ValueError as error:
             set_status(str(error), "error")
             return
@@ -988,7 +1079,9 @@ def main():
         elif stopped:
             set_status("已安全停止 " + "、".join(stopped) + "；未批量结束其他 Python/Node。", "good")
         else:
-            set_status("小智和当前所选声音后端均无遗留监听，无需清理。", "good")
+            message = ("小智无遗留监听，无需清理。" if selected_voice_mode() == "doubao_realtime"
+                       else "小智和当前所选声音后端均无遗留监听，无需清理。")
+            set_status(message, "good")
 
     def start(show_dialog=True):
         try:
@@ -1001,22 +1094,26 @@ def main():
                     if value == next_model
                 ))
                 model_pointer_seen["web"] = next_model
-            if selected_voice_model_profile() == model_pointer_seen["voice"]:
+            if (selected_voice_mode() == "pipeline"
+                    and selected_voice_model_profile() == model_pointer_seen["voice"]):
                 next_voice_model = load_model_profile(model_profile_path, "voice")
                 voice_model_profile.set(next(
                     label for label, value in model_profile_labels.items()
                     if value == next_voice_model
                 ))
                 model_pointer_seen["voice"] = next_voice_model
-            if selected_memory_backend() == memory_backend_pointer_seen["backend"]:
+            if (selected_voice_mode() == "pipeline"
+                    and selected_memory_backend() == memory_backend_pointer_seen["backend"]):
                 next_memory_backend = load_memory_backend(memory_backend_path)
                 set_memory_backend(next_memory_backend)
                 memory_backend_pointer_seen["backend"] = next_memory_backend
-            if selected_tts() == tts_pointer_seen["backend"]:
+            if (selected_voice_mode() == "pipeline"
+                    and selected_tts() == tts_pointer_seen["backend"]):
                 next_tts = load_tts_backend(tts_backend_path, selected_tts())
                 set_tts_backend(next_tts)
                 tts_pointer_seen["backend"] = next_tts
             options = Options(database=Path(database.get()), voice=voice.get(), voice_root=Path(server.get()),
+                              voice_mode=selected_voice_mode(),
                               lan_ip=ip.get().strip(), role=selected_role(), consent=consent.get(),
                               tts_backend=selected_tts(),
                               sanotts_source_root=Path(sanotts_source.get()),
@@ -1035,9 +1132,10 @@ def main():
             try:
                 save_preferences(choice_path, current_preferences())
                 save_model_profile(model_profile_path, selected_model_profile())
-                save_model_profile(model_profile_path, selected_voice_model_profile(), "voice")
-                save_memory_backend(memory_backend_path, selected_memory_backend())
-                save_tts_backend(tts_backend_path, selected_tts())
+                if selected_voice_mode() == "pipeline":
+                    save_model_profile(model_profile_path, selected_voice_model_profile(), "voice")
+                    save_memory_backend(memory_backend_path, selected_memory_backend())
+                    save_tts_backend(tts_backend_path, selected_tts())
                 model_pointer_seen["web"] = selected_model_profile()
                 model_pointer_seen["voice"] = selected_voice_model_profile()
                 memory_backend_pointer_seen["backend"] = selected_memory_backend()
@@ -1048,6 +1146,7 @@ def main():
             start_button.config(state="disabled")
             apply_presentation(starting_services(
                 voice=voice.get(),
+                voice_mode=selected_voice_mode(),
                 tts_backend=selected_tts(),
                 model_profile=selected_model_profile(),
                 voice_model_profile=selected_voice_model_profile(),
@@ -1076,6 +1175,7 @@ def main():
                 "ready": bool(manager.services and manager.ready()),
                 "selection": {
                     "voice": bool(voice.get()),
+                    "voice_mode": selected_voice_mode(),
                     "start_page": start_page_labels[start_page.get()],
                     "model_profile": selected_model_profile(),
                     "voice_model_profile": selected_voice_model_profile(),
@@ -1116,6 +1216,7 @@ def main():
                     apply_presentation(failed_services(
                         exited,
                         manager.options.tts_backend if manager.options else None,
+                        manager.options.voice_mode if manager.options else "pipeline",
                     ))
             elif manager.ready():
                 if not state["opened"]:
@@ -1123,10 +1224,12 @@ def main():
                     open_page()
                 local_tts_ready = (manager.local_tts_ready()
                                    if manager.options.voice
+                                   and manager.options.voice_mode == "pipeline"
                                    and manager.options.tts_backend in {"voxcpm2", "sanotts", "cosyvoice3"}
                                    else False)
                 apply_presentation(ready_services(
                     voice=manager.options.voice,
+                    voice_mode=manager.options.voice_mode,
                     tts_backend=manager.options.tts_backend,
                     local_tts_ready=local_tts_ready,
                     opened=state["opened"],

@@ -31,6 +31,28 @@ DEFAULT_FFMPEG_DIR = Path(r"D:\Tools\ffmpeg\bin")
 LAUNCHER_STATUS_NAME = "launcher-status.json"
 
 
+def doubao_config_module():
+    """复用项目语音适配层的纯配置模块；不加载模型或访问网络。"""
+    directory = str(Path(__file__).resolve().parents[1] / "xiaozhi")
+    sys.path.insert(0, directory)
+    try:
+        from doubao_realtime import config
+        return config
+    finally:
+        sys.path.remove(directory)
+
+
+def validate_doubao_config(path):
+    """启动前只核对本地配置格式；有效凭据与服务权限留待真实接入验证。"""
+    try:
+        doubao_config_module().load_config(path)
+    except (OSError, ValueError):
+        raise ValueError(
+            "豆包实时语音尚未完成配置。请在“圆屏与声音”填写实时语音凭据；"
+            "普通豆包文字模型的密钥不能替代此配置。未启动服务。"
+        ) from None
+
+
 def console_url(port: int, page: str = "chat") -> str:
     """只允许打开控制台内的固定页面，不能从首选项注入任意网址。"""
     if page not in CONSOLE_PATHS:
@@ -52,6 +74,8 @@ class Options:
     enable_l2_sufficiency_shadow: bool = False
     embedding_model_dir: Path = DEFAULT_BGE_MODEL
     voice: bool = False
+    voice_mode: str = "pipeline"
+    doubao_env: Path | None = None
     tts_backend: str = "edge"
     sanotts_source_root: Path = DEFAULT_SANOTTS_SOURCE
     vad_profile: str = "normal"
@@ -93,10 +117,13 @@ def build_commands(options, uv=None):
         raise ValueError("未知模型配置档。")
     if options.voice_model_profile not in {"campus", "official"}:
         raise ValueError("未知圆屏模型配置档。")
+    if options.voice_mode not in {"pipeline", "doubao_realtime"}:
+        raise ValueError("未知圆屏语音模式。")
     if options.memory_backend not in {"longmemory", "xiaozhi_local", "none"}:
         raise ValueError("未知圆屏记忆后端。")
     if (options.model_profile == "campus" or
-            (options.voice and options.voice_model_profile == "campus")) and not options.consent:
+            (options.voice and options.voice_mode == "pipeline"
+             and options.voice_model_profile == "campus")) and not options.consent:
         raise ValueError("请先确认聊天写入及当前 HTTP 传输风险。")
     if not 1024 <= options.port <= 65535 or options.port in {8000, 8003, 8766, WALLPAPER_DELIVERY_PORT}:
         raise ValueError("控制台端口需在 1024–65535 且不占用小智端口。")
@@ -177,7 +204,9 @@ def build_commands(options, uv=None):
         python = options.voice_root / ".venv/Scripts/python.exe"
         if not python.is_file():
             raise ValueError("未找到小智自己的 Python 环境。")
-        if options.tts_backend == "voxcpm2":
+        if options.voice_mode == "doubao_realtime":
+            validate_doubao_config(options.doubao_env or root / ".env.doubao.local")
+        elif options.tts_backend == "voxcpm2":
             voxcpm_python = root / "scripts/development/voxcpm/.venv/Scripts/python.exe"
             service = root / "scripts/development/voxcpm/service.py"
             if not voxcpm_python.is_file() or not service.is_file():
@@ -215,9 +244,14 @@ def build_commands(options, uv=None):
                                               "--source-root", str(DEFAULT_COSYVOICE_SOURCE),
                                               "--model-dir", str(DEFAULT_COSYVOICE_MODEL)],
                              service.parent))
-        commands.append(("voice", [str(python), str(Path(__file__).with_name("voice.py")),
+        voice_command = [str(python), str(Path(__file__).with_name("voice.py")),
                                   str(root), str(options.voice_root.resolve()), str(options.database.resolve()),
-                                  str(ip), options.tts_backend, options.memory_backend], options.voice_root.resolve()))
+                                  str(ip), options.tts_backend, options.memory_backend]
+        if options.voice_mode == "doubao_realtime":
+            voice_command.extend(["--voice-mode", "doubao_realtime", "--doubao-env", str(
+                (options.doubao_env or root / ".env.doubao.local").resolve()
+            )])
+        commands.append(("voice", voice_command, options.voice_root.resolve()))
     return commands
 
 
@@ -292,7 +326,7 @@ class Manager:
         if self.status_path is None or not self.instance:
             return
         snapshot = {
-            "schema_version": 4,
+            "schema_version": 5,
             "launcher_instance": self.instance,
             "launcher_pid": os.getpid(),
             "updated_at": datetime.now(timezone.utc).isoformat(),
@@ -316,13 +350,16 @@ class Manager:
             # 只记录启动时的非敏感选项，不记录地址、密钥、模型或对话。
             "startup": {
                 "voice_enabled": bool(self.options and self.options.voice),
+                "voice_mode": self.options.voice_mode if self.options is not None else "pipeline",
                 "vad_profile": (
                     self.options.vad_profile
-                    if self.options is not None and self.options.voice else None
+                    if self.options is not None and self.options.voice
+                    and self.options.voice_mode == "pipeline" else None
                 ),
                 "tts_backend": (
                     self.options.tts_backend
-                    if self.options is not None and self.options.voice else None
+                    if self.options is not None and self.options.voice
+                    and self.options.voice_mode == "pipeline" else None
                 ),
             },
         }
@@ -345,7 +382,9 @@ class Manager:
                                (options.lan_ip, WALLPAPER_DELIVERY_PORT),
                                ("127.0.0.1", 8766)]:
                 require_free(host, port)
-            if options.tts_backend == "voxcpm2":
+            if options.voice_mode == "doubao_realtime":
+                pass  # 云端模式没有本地 TTS 服务，不探测或占用这些端口。
+            elif options.tts_backend == "voxcpm2":
                 require_no_listener("127.0.0.1", VOXCPM_PORT)
             elif options.tts_backend == "sanotts":
                 require_no_listener("127.0.0.1", SANOTTS_PORT)
@@ -355,70 +394,74 @@ class Manager:
             # 语音服务换地址、声音、模型、记忆后端或拾音档位。先完成只读检查，
             # 再逐项备份写入；格式错误不会造成“改了一半才发现无法检查”。
             from network import config_action as network_config_action
-            from tts import config_action as tts_config_action
-            from model import config_action as model_config_action
-            from memory import config_action as memory_config_action
-            from vad import config_action as vad_config_action
             network_checked = network_config_action(options.voice_root, options.lan_ip)
-            tts_checked = tts_config_action(
-                options.voice_root, options.root, options.tts_backend
-            )
-            model_checked = model_config_action(
-                options.voice_root, options.root, options.voice_model_profile
-            )
-            memory_checked = memory_config_action(
-                options.voice_root, options.root, options.memory_backend
-            )
-            vad_checked = vad_config_action(
-                options.voice_root, options.root, options.vad_profile
-            )
-            config_changed = False
-            if network_checked["changed"]:
-                network_config_action(options.voice_root, options.lan_ip, apply=True)
-                config_changed = True
-            # 五个配置域共用同一个私有 YAML。上一个域一旦写入，后面预检时
-            # 取得的摘要就已经陈旧；写入前重新检查既保留“全部先预检”的安全
-            # 边界，也避免启动器被自己的前序修改触发并发保护。
-            if config_changed:
+            if options.voice_mode == "doubao_realtime":
+                if network_checked["changed"]:
+                    network_config_action(options.voice_root, options.lan_ip, apply=True)
+            else:
+                from tts import config_action as tts_config_action
+                from model import config_action as model_config_action
+                from memory import config_action as memory_config_action
+                from vad import config_action as vad_config_action
                 tts_checked = tts_config_action(
                     options.voice_root, options.root, options.tts_backend
                 )
-            if not tts_checked["config_matches"]:
-                tts_config_action(
-                    options.voice_root, options.root, options.tts_backend,
-                    apply=True, expected_digest=tts_checked["digest"],
-                )
-                config_changed = True
-            if config_changed:
                 model_checked = model_config_action(
                     options.voice_root, options.root, options.voice_model_profile
                 )
-            if not model_checked["config_matches"]:
-                model_config_action(options.voice_root, options.root,
-                                    options.voice_model_profile, apply=True,
-                                    expected_digest=model_checked["digest"])
-                config_changed = True
-            # 记忆后端与模型/TTS 一样只在端口空闲后同步。切换只改变提供器
-            # 指针及缺失的内置配置，不读取、迁移或删除任何后端数据。
-            if config_changed:
                 memory_checked = memory_config_action(
                     options.voice_root, options.root, options.memory_backend
                 )
-            if not memory_checked["config_matches"]:
-                memory_config_action(
-                    options.voice_root, options.root, options.memory_backend,
-                    apply=True, expected_digest=memory_checked["digest"],
-                )
-                config_changed = True
-            if config_changed:
                 vad_checked = vad_config_action(
                     options.voice_root, options.root, options.vad_profile
                 )
-            if not vad_checked["config_matches"]:
-                vad_config_action(
-                    options.voice_root, options.root, options.vad_profile,
-                    apply=True, expected_digest=vad_checked["digest"],
-                )
+                config_changed = False
+                if network_checked["changed"]:
+                    network_config_action(options.voice_root, options.lan_ip, apply=True)
+                    config_changed = True
+                # 五个配置域共用同一个私有 YAML。上一个域一旦写入，后面预检时
+                # 取得的摘要就已经陈旧；写入前重新检查既保留“全部先预检”的安全
+                # 边界，也避免启动器被自己的前序修改触发并发保护。
+                if config_changed:
+                    tts_checked = tts_config_action(
+                        options.voice_root, options.root, options.tts_backend
+                    )
+                if not tts_checked["config_matches"]:
+                    tts_config_action(
+                        options.voice_root, options.root, options.tts_backend,
+                        apply=True, expected_digest=tts_checked["digest"],
+                    )
+                    config_changed = True
+                if config_changed:
+                    model_checked = model_config_action(
+                        options.voice_root, options.root, options.voice_model_profile
+                    )
+                if not model_checked["config_matches"]:
+                    model_config_action(options.voice_root, options.root,
+                                        options.voice_model_profile, apply=True,
+                                        expected_digest=model_checked["digest"])
+                    config_changed = True
+                # 记忆后端与模型/TTS 一样只在端口空闲后同步。切换只改变提供器
+                # 指针及缺失的内置配置，不读取、迁移或删除任何后端数据。
+                if config_changed:
+                    memory_checked = memory_config_action(
+                        options.voice_root, options.root, options.memory_backend
+                    )
+                if not memory_checked["config_matches"]:
+                    memory_config_action(
+                        options.voice_root, options.root, options.memory_backend,
+                        apply=True, expected_digest=memory_checked["digest"],
+                    )
+                    config_changed = True
+                if config_changed:
+                    vad_checked = vad_config_action(
+                        options.voice_root, options.root, options.vad_profile
+                    )
+                if not vad_checked["config_matches"]:
+                    vad_config_action(
+                        options.voice_root, options.root, options.vad_profile,
+                        apply=True, expected_digest=vad_checked["digest"],
+                    )
         self.options = options
         self.instance = secrets.token_hex(24)
         self.status_path = options.root.resolve() / "data/control" / LAUNCHER_STATUS_NAME
@@ -436,7 +479,14 @@ class Manager:
         )
         try:
             for name, command, cwd in commands:
-                self.services[name] = OwnedService(command, cwd, env)
+                child_env = env
+                if name == "voice" and options.voice_mode == "doubao_realtime":
+                    # 云端备用入口不领取个人记忆内部接口凭据。
+                    child_env = {key: value for key, value in env.items() if key not in {
+                        "LONGMEMORY_MEMORY_TRANSPORT", "LONGMEMORY_RUNTIME_URL",
+                        "LONGMEMORY_RUNTIME_TOKEN",
+                    }}
+                self.services[name] = OwnedService(command, cwd, child_env)
                 self.publish_status("starting")
         except Exception:
             self.stop()
@@ -497,6 +547,8 @@ class Manager:
             conn.close()
 
     def local_tts_ready(self):
+        if self.options is not None and self.options.voice_mode != "pipeline":
+            return False
         backend = self.options.tts_backend if self.options else ""
         port = {"voxcpm2": VOXCPM_PORT, "sanotts": SANOTTS_PORT,
                 "cosyvoice3": COSYVOICE_PORT}.get(backend)

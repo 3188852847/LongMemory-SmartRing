@@ -3,6 +3,8 @@
 from datetime import datetime, timedelta, timezone
 import json
 
+import pytest
+
 from longmemory.entrypoints.api.launcher_status import read_launcher_status
 
 
@@ -107,3 +109,38 @@ def test_v4_snapshot_accepts_cosyvoice_without_changing_legacy_shape(tmp_path):
 
     assert result["services"]["cosyvoice3"] == "ready"
     assert result["startup"]["tts_backend"] == "cosyvoice3"
+
+
+@pytest.mark.parametrize("voice,mode,vad,tts", [
+    (True, "doubao_realtime", None, None),
+    (True, "pipeline", "normal", "cosyvoice3"),
+    (False, "doubao_realtime", None, None),
+])
+def test_v5_distinguishes_cloud_voice_from_local_tts(tmp_path, voice, mode, vad, tts):
+    now = datetime(2026, 9, 15, tzinfo=timezone.utc)
+    snapshot = _snapshot(now)
+    snapshot.update(schema_version=5,
+                    services=snapshot["services"] | {"cosyvoice3": "disabled"},
+                    startup={"voice_enabled": voice, "voice_mode": mode,
+                             "vad_profile": vad, "tts_backend": tts})
+    path = tmp_path / "status.json"
+    path.write_text(json.dumps(snapshot), encoding="utf-8")
+    result = read_launcher_status(path, "current", now=now)
+    assert result["state"] == "ready"
+    assert result["startup"] == snapshot["startup"]
+
+
+@pytest.mark.parametrize("overrides", [
+    {"voice_mode": "unknown"}, {"voice_enabled": "yes"},
+    {"tts_backend": "cosyvoice3"}, {"vad_profile": "normal"}, {"api_key": "synthetic"},
+])
+def test_v5_rejects_misleading_or_unbounded_cloud_status(tmp_path, overrides):
+    now = datetime(2026, 9, 15, tzinfo=timezone.utc)
+    snapshot = _snapshot(now)
+    snapshot.update(schema_version=5,
+                    services=snapshot["services"] | {"cosyvoice3": "disabled"},
+                    startup={"voice_enabled": True, "voice_mode": "doubao_realtime",
+                             "vad_profile": None, "tts_backend": None} | overrides)
+    path = tmp_path / "status.json"
+    path.write_text(json.dumps(snapshot), encoding="utf-8")
+    assert read_launcher_status(path, "current", now=now)["state"] == "launcher_unavailable"

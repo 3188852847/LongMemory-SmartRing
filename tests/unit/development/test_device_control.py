@@ -154,6 +154,31 @@ def rig():
     return bridge, conn, socket
 
 
+def test_realtime_control_can_stop_without_tts_and_never_advertises_announcements():
+    async def run():
+        controller, conn, socket = rig()
+        cancelled = []
+        async def interrupt():
+            cancelled.append(True)
+        conn.voice_mode = "doubao_realtime"
+        conn.tts = None
+        conn.client_is_speaking = True
+        conn._doubao_bridge = SimpleNamespace(
+            ready=True, response_id="synthetic-response", interrupt=interrupt,
+            snapshot=lambda: {"ready": True, "memory_enabled": False},
+        )
+        status = controller.status()
+        assert status["voice_mode"] == "doubao_realtime"
+        assert status["stop_speech_supported"] is True
+        assert status["announcement_supported"] is False
+        assert status["announcement_ready"] is False
+        result = await controller.stop_speech()
+        assert result["server_interrupted"] is True
+        assert cancelled == [True]
+        assert not socket.calls
+    asyncio.run(run())
+
+
 def announcement_rig():
     queued = []
 
