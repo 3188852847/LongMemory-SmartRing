@@ -1,7 +1,7 @@
 import {useEffect, useState} from 'react';
 import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {Alert, Button, Card, Descriptions, InputNumber, Select, Slider, Space, Tag} from 'antd';
-import {ApiError, ChatApi, type DeviceStatus, type NaturalInterruptionDiagnostic, type VoiceLatency, type VoicePredictionShadow} from './api';
+import {ApiError, ChatApi, type DeviceStatus, type NaturalInterruptionDiagnostic, type VoiceAsrPrefetch, type VoiceLatency, type VoicePredictionShadow} from './api';
 import {AppShell, ConsoleNav} from './AppShell';
 import {PageHeader} from './PageHeader';
 import {errorMessage, resultView, statusView, validTarget} from '../../assets/state.mjs';
@@ -19,9 +19,11 @@ const codeOf = (error: unknown) => error instanceof ApiError ? error.code : 'req
 const elapsed = (value:number|null|undefined) => value === null || value === undefined ? '尚未到达' : `${(value / 1000).toFixed(2)} 秒`;
 const delta = (end:number|null, start:number|null) => end === null || start === null ? '尚未测得' : elapsed(Math.max(0, end - start));
 
-function VoiceLatencyCard({value}:{value:VoiceLatency}) {
+function VoiceLatencyCard({value,prefetch}:{value:VoiceLatency;prefetch?:VoiceAsrPrefetch}) {
   const timing=value.timings_ms;
   const input=value.input_timings_ms;
+  // 预识别的计算已与停嘴等待重叠，不能把正式端点后的等待当成模型全部耗时。
+  const prefetched=prefetch?.enabled&&prefetch.latest_prefetch_ms!==null?prefetch:undefined;
   const inputTotal=(input?.vad_endpoint_ms??0)+(input?.asr_processing_ms??0);
   const perceivedTotal=timing.first_audio_sent_ms===null?null:timing.first_audio_sent_ms+(input?inputTotal:0);
   const preset=value.response_path==='preset';
@@ -60,7 +62,7 @@ function VoiceLatencyCard({value}:{value:VoiceLatency}) {
     />}
     <Descriptions column={{xs:1,sm:2,lg:3}} size="small" items={[
       {key:'vad',label:'停嘴 → VAD 结束',children:input?elapsed(input.vad_endpoint_ms):'旧样本未测'},
-      {key:'asr',label:'ASR 识别处理',children:input?elapsed(input.asr_processing_ms):'旧样本未测'},
+      {key:'asr',label:prefetched?'停嘴确认后的听写等待':'ASR 识别处理',children:input?elapsed(input.asr_processing_ms):'旧样本未测'},
       {key:'memory',label:'入口 → 记忆完成',children:elapsed(timing.memory_ready_ms)},
       {key:'model',label:'模型首个有效输出',children:preset?'已跳过（本地预置）':delta(timing.llm_first_output_ms,timing.llm_requested_ms)},
       {key:'sentence',label:'输出 → 攒成首句',children:preset?'已跳过（本地预置）':delta(timing.tts_started_ms,timing.llm_first_output_ms)},
@@ -69,6 +71,9 @@ function VoiceLatencyCard({value}:{value:VoiceLatency}) {
       {key:'total',label:'入口 → 首包发送',children:<strong>{elapsed(timing.first_audio_sent_ms)}</strong>},
       {key:'perceived',label:'停嘴 → 首包发送',children:<strong>{input?elapsed(perceivedTotal):'旧样本未测'}</strong>},
     ]}/>
+    {prefetched&&<p className="subtle">
+      {prefetched.latest_overlap_ms===null?`最近预识别计算 ${prefetched.latest_prefetch_ms} ms`:`已提前计算 ${prefetched.latest_overlap_ms} ms`}，当前连接已复用 {prefetched.reused} 次。听写可以与停嘴等待重叠；上方只显示停嘴确认后的剩余等待，0 秒不代表模型没有耗时。
+    </p>}
     {value.tts_segments&&value.tts_segments.length>0&&<div className="device-segment-timings">
       <h4>TTS 分段</h4>
       <Space wrap>{value.tts_segments.map(segment=><Tag key={segment.index} color={segment.duration_ms!==null&&segment.duration_ms>=3000?'gold':'default'}>
@@ -213,7 +218,7 @@ export function DeviceApp() {
         <div><small>说话打断基础</small><strong>{status.data?.aec_advertised?'固件已上报 AEC':'未上报 AEC'}</strong></div>
       </div><div className="device-refresh-meta"><span>{status.data?.connection_count ?? 0} 个活动连接</span><span>{status.dataUpdatedAt ? `刷新于 ${new Date(status.dataUpdatedAt).toLocaleTimeString('zh-CN', {hour12:false})}` : '尚未刷新'}</span><span>每 5 秒检查连接，不轮询音量</span></div>
     </Card>
-    {status.data?.voice_latency ? <VoiceLatencyCard value={status.data.voice_latency}/> : <Card className="device-latency-card" title="最近一次圆屏首句时序"><p className="subtle">当前连接还没有可用的完整时序。与圆屏完成一轮语音对话后，本页会分开显示记忆、模型、首句组织、TTS 和发送等待。</p></Card>}
+    {status.data?.voice_latency ? <VoiceLatencyCard value={status.data.voice_latency} prefetch={status.data.voice_asr_prefetch}/> : <Card className="device-latency-card" title="最近一次圆屏首句时序"><p className="subtle">当前连接还没有可用的完整时序。与圆屏完成一轮语音对话后，本页会分开显示记忆、模型、首句组织、TTS 和发送等待。</p></Card>}
     {status.data?.voice_prediction_shadow&&<VoicePredictionShadowCard value={status.data.voice_prediction_shadow}/>}
     {status.data?.natural_interruption && <NaturalInterruptionCard value={status.data.natural_interruption}/>}
     <Card className="device-snapshot-card" title="设备快照" extra={<Tag color={snapshot ? (status.data?.ready && !status.error ? 'blue' : 'gold') : 'default'}>{readSnapshot.isPending?'读取中':snapshot?(status.data?.ready && !status.error?'单次读取':'历史读数'):'等待读取'}</Tag>}><Descriptions column={{xs:1,sm:3}} items={[

@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 
 
-PREFERENCES_VERSION = 5
+PREFERENCES_VERSION = 6
 RISK_ACK_VERSION = "campus-http-v1"
 # 只影响当前本机启动面板，不写入偏好文件，也不改变服务端安全默认。
 DEFAULT_SESSION_ALLOW_MEMORY_DELETE = True
@@ -13,6 +13,7 @@ DEFAULT_SESSION_ALLOW_MEMORY_DELETE = True
 DEFAULTS = {
     "voice": False,
     "voice_mode": "pipeline",
+    "voice_latency_mode": "realtime",
     "start_page": "chat",
     "database": "",
     "voice_root": "",
@@ -34,6 +35,7 @@ DEFAULTS = {
 
 _CHOICES = {
     "voice_mode": {"pipeline", "doubao_realtime"},
+    "voice_latency_mode": {"realtime", "original"},
     "start_page": {"overview", "chat", "device", "memories", "settings"},
     "role": {"elysia_v1", "plain_v1"},
     "memory_extraction": {"rules", "llm"},
@@ -83,6 +85,7 @@ def save_preferences(path: Path, values: dict) -> None:
         "version": PREFERENCES_VERSION,
         "voice": bool(values.get("voice", False)),
         "voice_mode": values.get("voice_mode", DEFAULTS["voice_mode"]),
+        "voice_latency_mode": values.get("voice_latency_mode", DEFAULTS["voice_latency_mode"]),
         "start_page": values.get("start_page", DEFAULTS["start_page"]),
         "database": str(values.get("database", ""))[:2048],
         "voice_root": str(values.get("voice_root", ""))[:2048],

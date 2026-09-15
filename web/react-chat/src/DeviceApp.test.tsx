@@ -108,6 +108,50 @@ describe('设备与状态页', () => {
     view.unmount(); client.clear();
   });
 
+  test('预识别后零等待不显示为听写模型零耗时，也不展示候选正文', async () => {
+    vi.spyOn(ChatApi.prototype, 'bootstrap').mockResolvedValue(undefined);
+    vi.spyOn(ChatApi.prototype, 'request').mockResolvedValue({
+      connection_count:1,ready:true,read_volume_supported:true,set_volume_supported:true,
+      voice_latency:{version:6,state:'first_audio_sent',response_path:'model',started_at:'2026-09-15T10:00:00+00:00',tts_backend:'cosyvoice3',
+        input_timings_ms:{vad_endpoint_ms:700,asr_processing_ms:0},timings_ms:{
+          memory_ready_ms:50,llm_requested_ms:55,llm_first_output_ms:1055,tts_started_ms:1100,
+          audio_ready_ms:2500,first_audio_sent_ms:2510,response_completed_ms:1800,
+        },tts_segments:[]},
+      voice_asr_prefetch:{version:1,enabled:true,started:2,reused:1,invalidated:0,skipped_busy:0,failed:0,fallback:0,
+        latest_status:'reused',latest_prefetch_ms:230,latest_formal_wait_ms:0,latest_model_queue_ms:0,latest_overlap_ms:230,
+        text:'SYNTHETIC_PRIVATE_CANDIDATE'},
+    });
+    const client=createConsoleQueryClient();
+    const view=render(<QueryClientProvider client={client}><MemoryRouter><DeviceApp/></MemoryRouter></QueryClientProvider>);
+    expect(await screen.findByText('停嘴确认后的听写等待')).toBeTruthy();
+    expect(screen.queryByText('ASR 识别处理')).toBeNull();
+    expect(screen.getByText(/已提前计算 230 ms，当前连接已复用 1 次/)).toBeTruthy();
+    expect(screen.getByText(/0 秒不代表模型没有耗时/)).toBeTruthy();
+    expect(screen.getByText('3.21 秒')).toBeTruthy();
+    expect(screen.queryByText(/SYNTHETIC_PRIVATE_CANDIDATE/)).toBeNull();
+    view.unmount(); client.clear();
+  });
+
+  test.each([undefined,{version:1,enabled:false},{version:1,enabled:true,latest_prefetch_ms:null}])(
+    '未启用或尚无预识别记录时保留原计时视图：%j', async (prefetch) => {
+      vi.spyOn(ChatApi.prototype, 'bootstrap').mockResolvedValue(undefined);
+      vi.spyOn(ChatApi.prototype, 'request').mockResolvedValue({
+        connection_count:1,ready:true,read_volume_supported:true,set_volume_supported:true,
+        voice_latency:{version:5,state:'first_audio_sent',response_path:'model',started_at:'2026-09-15T10:00:00+00:00',tts_backend:'cosyvoice3',
+          input_timings_ms:{vad_endpoint_ms:700,asr_processing_ms:230},timings_ms:{
+            memory_ready_ms:50,llm_requested_ms:55,llm_first_output_ms:1055,tts_started_ms:1100,
+            audio_ready_ms:2500,first_audio_sent_ms:2510,response_completed_ms:1800,
+          },tts_segments:[]},voice_asr_prefetch:prefetch,
+      });
+      const client=createConsoleQueryClient();
+      const view=render(<QueryClientProvider client={client}><MemoryRouter><DeviceApp/></MemoryRouter></QueryClientProvider>);
+      expect(await screen.findByText('ASR 识别处理')).toBeTruthy();
+      expect(screen.queryByText('停嘴确认后的听写等待')).toBeNull();
+      expect(screen.queryByText(/0 秒不代表模型没有耗时/)).toBeNull();
+      view.unmount(); client.clear();
+    },
+  );
+
   test('把模型 404 显示为回答故障而不是声音故障', async () => {
     vi.spyOn(ChatApi.prototype, 'bootstrap').mockResolvedValue(undefined);
     vi.spyOn(ChatApi.prototype, 'request').mockResolvedValue({

@@ -354,6 +354,10 @@ def main():
     voice_mode = tk.StringVar(value=next(
         label for label, value in voice_mode_labels.items() if value == saved["voice_mode"]
     ))
+    voice_latency_labels = {"实时优先": "realtime", "原策略（对照）": "original"}
+    voice_latency_mode = tk.StringVar(value=next(
+        label for label, value in voice_latency_labels.items() if value == saved["voice_latency_mode"]
+    ))
     start_page_labels = {"系统总览": "overview", "聊天": "chat", "设备状态": "device", "记忆管理": "memories", "设置中心": "settings"}
     start_page = tk.StringVar(value=next(label for label, value in start_page_labels.items() if value == saved["start_page"]))
     consent = tk.BooleanVar(value=saved["http_risk_ack"])
@@ -434,6 +438,9 @@ def main():
     def selected_voice_mode():
         return voice_mode_labels[voice_mode.get()]
 
+    def selected_voice_latency_mode():
+        return voice_latency_labels[voice_latency_mode.get()]
+
     def selected_memory_backend():
         return memory_backend_labels[memory_backend.get()]
 
@@ -471,6 +478,7 @@ def main():
         return {
             "voice": voice.get(),
             "voice_mode": selected_voice_mode(),
+            "voice_latency_mode": selected_voice_latency_mode(),
             "start_page": start_page_labels[start_page.get()],
             "database": database.get().strip(),
             "voice_root": server.get().strip(),
@@ -738,6 +746,14 @@ def main():
                                 values=tuple(tts_labels.values()), state="readonly", width=42)
     tts_selector.pack(side="left")
 
+    latency_row = ttk.Frame(sound_box)
+    latency_row.pack(fill="x", pady=(10, 0))
+    ttk.Label(latency_row, text="响应策略：").pack(side="left")
+    latency_selector = ttk.Combobox(latency_row, textvariable=voice_latency_mode,
+                                   values=tuple(voice_latency_labels), state="readonly", width=28)
+    latency_selector.pack(side="left")
+    ttk.Label(latency_row, text="  停止并重新启动后生效；只影响现有语音链路").pack(side="left")
+
     tts_description = tk.StringVar()
     tts_note = ttk.Frame(sound_box, padding=(12, 10), style="Option.TFrame")
     tts_note.pack(fill="x", pady=(10, 0))
@@ -803,7 +819,7 @@ def main():
     # 路径输入仍在启动或显式同步时保存，避免每次键入都写磁盘；下面这些
     # 有限枚举和布尔选择则在用户操作时立即落盘。
     for variable in (
-        voice, voice_mode, start_page, role, memory_extraction, memory_retrieval,
+        voice, voice_mode, voice_latency_mode, start_page, role, memory_extraction, memory_retrieval,
         memory_consolidation, l1_sufficiency_shadow, l2_sufficiency_shadow,
         vad_profile, consent,
     ):
@@ -863,7 +879,7 @@ def main():
 
     def update_voice_controls(*_):
         selector_state = "readonly" if selected_voice_mode() == "pipeline" else "disabled"
-        for selector in (voice_model_selector, memory_backend_selector, tts_selector, vad_selector):
+        for selector in (voice_model_selector, memory_backend_selector, tts_selector, vad_selector, latency_selector):
             selector.configure(state=selector_state)
 
     voice_mode.trace_add("write", update_voice_controls)
@@ -1114,6 +1130,7 @@ def main():
                 tts_pointer_seen["backend"] = next_tts
             options = Options(database=Path(database.get()), voice=voice.get(), voice_root=Path(server.get()),
                               voice_mode=selected_voice_mode(),
+                              voice_latency_mode=selected_voice_latency_mode(),
                               lan_ip=ip.get().strip(), role=selected_role(), consent=consent.get(),
                               tts_backend=selected_tts(),
                               sanotts_source_root=Path(sanotts_source.get()),

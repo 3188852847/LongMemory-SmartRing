@@ -321,6 +321,15 @@ class DeviceControl:
             conn = self._connection()
             result["ready"] = True
             result["voice_mode"] = getattr(conn, "voice_mode", "pipeline")
+            # 仅查询当前连接的内存统计；不沿用已断开连接的候选或计数。
+            prefetch_snapshot = getattr(conn, "_longmemory_asr_prefetch_snapshot", None)
+            result["voice_asr_prefetch"] = (
+                prefetch_snapshot() if callable(prefetch_snapshot)
+                else {"version": 1, "enabled": False}
+            )
+            latency_mode = getattr(conn, "_longmemory_voice_latency_mode", None)
+            if type(latency_mode) is str and latency_mode in {"realtime", "original"}:
+                result["voice_latency_mode"] = latency_mode
             # AEC 是自由说话打断的必要基础之一，但仅凭握手字段不能证明整条打断链路可用。
             result["aec_advertised"] = getattr(conn, "features", {}).get("aec") is True
             result["natural_interruption"] = natural_interruption_diagnostics(conn)

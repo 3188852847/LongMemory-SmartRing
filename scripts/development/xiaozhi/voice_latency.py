@@ -13,6 +13,7 @@ from cosyvoice_segments import (
     install_cosyvoice_punctuation_policy,
     install_cosyvoice_ready_segment_drain,
 )
+from voice_response_policy import prepare_voice_dialogue
 
 
 TIMING_FIELDS = (
@@ -375,6 +376,12 @@ class _ObservedLLM:
         tracker = self._connection._longmemory_voice_latency
         tracker.bind_sentence()
         tracker.mark("llm_requested_ms")
+        # 只在圆屏本次请求中鼓励尽早形成可朗读的完整首句。共享 provider、
+        # 网页角色和原会话消息均不修改；两条流式接口使用同一表达策略。
+        if len(args) >= 2:
+            args = (args[0], prepare_voice_dialogue(args[1]), *args[2:])
+        elif "dialogue" in kwargs:
+            kwargs = {**kwargs, "dialogue": prepare_voice_dialogue(kwargs["dialogue"])}
         try:
             responses = getattr(self._provider, method_name)(*args, **kwargs)
         except Exception as error:

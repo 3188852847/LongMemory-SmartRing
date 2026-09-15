@@ -13,6 +13,14 @@ EXPECTED = {
     "core/handle/sendAudioHandle.py": "6b610cc04bf05a75964f5fe668bfda7fd17b087ef8f2a938e1bc8ed9b0c52387",
     "core/providers/tts/base.py": "8c9c6d9da3774d2f78d05e5d0e7c5081d750752466f36a593733911430bac00f",
     "core/providers/tts/dto/dto.py": "6ba9742e4778bcd31980f1f9347d20aecbed065f152735ef407516b7b70d756c",
+    # 提前听写依赖 PCM、正式端点及重置顺序；上游变化后先复核，不能继续复用旧候选。
+    "core/providers/asr/base.py": "929532c379d18598eff6fbecb991089f25a0c62cd77f74a25a0d1a5b8d13a713",
+    "core/providers/asr/fun_local.py": "1f8df28ee5f0a1dd23948211e92c2caddf0d440191f7d0b82b2b0e13788ebf6a",
+    "core/providers/asr/utils.py": "64db7ba4523d494b27e8b25bd84261ec1fcfee6816b4720d84776cda4e7cedcf",
+    "core/providers/vad/silero.py": "aa375cd237c262338b391f8826f35bfe9b3c9e4c77a197bfe75490806d825114",
+    "core/handle/receiveAudioHandle.py": "4493dfd77c1bfa7be1a79bb293dbdbf8cad64a6eb2bc53efca3e30efefcb47f1",
+    "core/handle/textHandler/listenMessageHandler.py": "4337bf92e55adeafbd0bf3411b59b74cadf1561bac47ef96e6b80c02d0d1dd3c",
+    "core/providers/llm/openai/openai.py": "5dfec38041d28436362b4a1b0f5946d1bdff7bb9afb3501c6417037a6bd3b006",
 }
 
 

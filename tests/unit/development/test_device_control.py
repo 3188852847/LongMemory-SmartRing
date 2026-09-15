@@ -677,6 +677,40 @@ def test_last_voice_latency_remains_visible_after_device_disconnects():
     assert status["voice_latency"] == snapshot
 
 
+def test_prefetch_status_is_current_connection_only_and_disabled_by_default():
+    bridge, conn, _, _ = announcement_rig()
+    assert bridge.status()["voice_asr_prefetch"] == {"version": 1, "enabled": False}
+    assert "voice_latency_mode" not in bridge.status()
+    snapshot = {"version": 1, "enabled": True, "started": 2, "reused": 1,
+                "invalidated": 1, "skipped_busy": 0, "failed": 0, "fallback": 1,
+                "latest_status": "reused", "latest_prefetch_ms": 230,
+                "latest_formal_wait_ms": 0, "latest_model_queue_ms": 0, "latest_overlap_ms": 230}
+    conn._longmemory_asr_prefetch_snapshot = lambda: dict(snapshot)
+    conn._longmemory_voice_latency_mode = "realtime"
+    conn.private_transcript = "synthetic-must-not-escape"
+    status = bridge.status()
+    assert status["voice_asr_prefetch"] == snapshot
+    assert status["voice_latency_mode"] == "realtime"
+    assert "synthetic-must-not-escape" not in repr(status)
+    bridge.detach(conn)
+    offline = bridge.status()
+    assert "voice_asr_prefetch" not in offline
+    assert "voice_latency_mode" not in offline
+
+
+@pytest.mark.parametrize("mode", ["realtime", "original"])
+def test_status_reads_latency_mode_from_connection_class(mode):
+    bridge, conn, _, _ = announcement_rig()
+
+    class WithMode(SimpleNamespace):
+        _longmemory_voice_latency_mode = mode
+
+    replacement = WithMode(**vars(conn))
+    bridge.detach(conn)
+    bridge.attach(replacement, bridge.allowed_device_id)
+    assert bridge.status()["voice_latency_mode"] == mode
+
+
 @pytest.mark.parametrize("text", ["", " leading", "trailing ", "line\nbreak", "x" * 81])
 def test_announcement_rejects_invalid_text(text):
     async def run():

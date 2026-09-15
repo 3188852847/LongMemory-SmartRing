@@ -6,9 +6,27 @@
 from pathlib import Path
 import argparse
 from contextvars import ContextVar
+import os
 import runpy
 import sys
 import time
+
+
+def install_pipeline_latency_policy(connection_class, *, mode, enable_asr_prefetch=False,
+                                    enable_http_keepalive=False):
+    """语音策略只在独立服务进程内生效；各项优化经过独立基准后才接入。"""
+    if mode not in {"realtime", "original"}:
+        raise ValueError("voice_latency_mode_invalid")
+    os.environ["LONGMEMORY_VOICE_RESPONSE_STYLE"] = mode
+    connection_class._longmemory_voice_latency_mode = mode
+    if mode == "realtime" and enable_http_keepalive:
+        from core.providers.llm.openai import openai as provider_module
+        from voice_http_transport import install_voice_http_transport
+        install_voice_http_transport(provider_module, enabled=True)
+    if mode == "realtime" and enable_asr_prefetch:
+        from core.providers.asr import fun_local
+        from voice_asr_prefetch import install_voice_asr_prefetch
+        install_voice_asr_prefetch(connection_class, fun_local, enabled=True)
 
 
 def observe_memory_operations(connection):
@@ -170,6 +188,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--device-control", action="store_true")
     parser.add_argument("--voice-mode", choices=["pipeline", "doubao_realtime"], default="pipeline")
+    parser.add_argument("--voice-latency-mode", choices=["realtime", "original"], default="realtime")
     parser.add_argument("--doubao-env", "--doubao-env-file", type=Path,
                         default=Path(__file__).resolve().parents[3] / ".env.doubao.local")
     args = parser.parse_args()
@@ -200,6 +219,10 @@ def main():
     isolate_memory_initialization(ConnectionHandler, MemoryProvider)
     from core.providers.asr import base as asr_base
     install_voice_input_latency(asr_base)
+    # 子类预识别须捕获已经加过输入计时的基类方法。这里只改小智子进程，
+    # 不改系统环境或网页策略；面板选择在重启时生效。
+    install_pipeline_latency_policy(ConnectionHandler, mode=args.voice_latency_mode,
+                                    enable_asr_prefetch=True, enable_http_keepalive=True)
     # 快速通道必须位于时序包装器内部，才能像普通回答一样记录真实首包。
     install_fast_voice_responses(ConnectionHandler)
     install_voice_latency(ConnectionHandler)

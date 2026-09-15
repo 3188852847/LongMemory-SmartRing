@@ -271,6 +271,7 @@ def main() -> int:
     parser.add_argument("--lan-ip", help="显式启用局域网演示，填写电脑有线 IPv4 地址")
     parser.add_argument("--device-control", action="store_true", help="显式开启本机 8766 音量验证接口")
     parser.add_argument("--voice-mode", choices=["pipeline", "doubao_realtime"], default="pipeline")
+    parser.add_argument("--voice-latency-mode", choices=["realtime", "original"], default="realtime")
     parser.add_argument("--doubao-env", "--doubao-env-file", type=Path, default=DEFAULT_DOUBAO_ENV)
     parser.add_argument("--tts-backend", choices=["edge", "voxcpm2", "sanotts", "cosyvoice3"], default="edge",
                         help="核对本次实际选择的声音后端；默认 edge")
@@ -347,6 +348,8 @@ def main() -> int:
         command = [sys.executable, entry]
         if realtime:
             command.extend(["--voice-mode", args.voice_mode, "--doubao-env", str(args.doubao_env.resolve())])
+        elif entry != "app.py":
+            command.extend(["--voice-latency-mode", args.voice_latency_mode])
         if args.device_control:
             command.append("--device-control")
         return subprocess.call(command, cwd=server_dir,

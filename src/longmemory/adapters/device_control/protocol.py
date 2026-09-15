@@ -195,6 +195,31 @@ def voice_prediction_shadow(value: object) -> dict:
     return dict(value)
 
 
+def voice_asr_prefetch(value: object) -> dict:
+    """验证语音适配进程的预识别统计，不允许正文、音频或身份信息穿透。"""
+    if (not isinstance(value, dict) or type(value.get("version")) is not int
+            or value.get("version") != 1 or type(value.get("enabled")) is not bool):
+        raise BridgeError("bridge_invalid_response", 502)
+    if value["enabled"] is False:
+        if set(value) != {"version", "enabled"}:
+            raise BridgeError("bridge_invalid_response", 502)
+        return dict(value)
+    counts = {"started", "reused", "invalidated", "skipped_busy", "failed", "fallback"}
+    timings = {"latest_prefetch_ms", "latest_formal_wait_ms", "latest_model_queue_ms", "latest_overlap_ms"}
+    statuses = {
+        "idle", "scheduled", "ready", "busy", "empty", "invalidated", "failed",
+        "unavailable", "reused", "reset", "closed", "unsupported", "speech_resumed", "input_changed",
+    }
+    if (set(value) != {"version", "enabled", "latest_status"} | counts | timings
+            or type(value.get("latest_status")) is not str
+            or value.get("latest_status") not in statuses
+            or any(type(value[key]) is not int or not 0 <= value[key] <= 1_000_000 for key in counts)
+            or any(value[key] is not None and
+                   (type(value[key]) is not int or not 0 <= value[key] <= 3_600_000) for key in timings)):
+        raise BridgeError("bridge_invalid_response", 502)
+    return dict(value)
+
+
 def round_skin(value: object) -> dict:
     """验证圆屏皮肤清单；颜色和尺寸全部使用有限范围。"""
 

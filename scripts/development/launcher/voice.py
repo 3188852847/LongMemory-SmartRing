@@ -79,6 +79,7 @@ def main():
         lan_ip, tts_backend, memory_backend = sys.argv[4:7]
         parser = argparse.ArgumentParser(add_help=False)
         parser.add_argument("--voice-mode", choices=("pipeline", "doubao_realtime"), default="pipeline")
+        parser.add_argument("--voice-latency-mode", choices=("realtime", "original"), default="realtime")
         parser.add_argument("--doubao-env", type=Path)
         arguments = parser.parse_args(sys.argv[7:])
         sys.path.insert(0, str(root / "scripts/development/xiaozhi"))
@@ -104,7 +105,8 @@ def main():
             return 4
         sys.argv = [str(root / "scripts/development/xiaozhi/setup.py"), "start", "--server-dir", str(server),
                     "--lan-ip", lan_ip, "--allow-insecure-http", "--device-control",
-                    "--tts-backend", tts_backend]
+                    "--tts-backend", tts_backend,
+                    "--voice-latency-mode", arguments.voice_latency_mode]
         return setup.main()
     except Exception:
         return 3  # 私有配置/路径错误，绝不回传 YAML 或第三方异常正文。

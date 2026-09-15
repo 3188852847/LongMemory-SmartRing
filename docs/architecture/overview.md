@@ -1,5 +1,11 @@
 # 系统架构总览
 
+实时优先语音（2026-09-15）：Xiaozhi 适配层可在正式停嘴前预识别一次有限 PCM
+快照，正式端点校验通过才沿原路径提交 LongMemory。语音表达规则只追加到当前
+回答请求副本；候选、音频、调度及供应商连接管理均不进入记忆核心。原策略可回退，
+豆包模式独立。官方 DeepSeek 的 HTTP/2 和 120 秒连接复用只在语音 provider 的
+客户端构造生效，不替换全局 SDK。见 [ADR-0171](../adr/0171-realtime-first-voice-pipeline.md)。
+
 代码边界的阶段性检查、热点和渐进拆分顺序见[代码健康检查与渐进重构](code-health.md)。
 
 P2 声音设置有两条边界：React → 本机认证/CSRF API → 当前 TTS，用于网页朗读、停止、浏览器本地说话打断和保存下次启动的后端指针；启动面板 → 可替换的本机 TTS 进程 → Xiaozhi `CustomTTS` → WAV 转 Opus → 圆屏。VoxCPM2 使用独立 Python/CUDA 环境并支持受控参考声线；sanoTTS 使用项目外 Node/WASM 中文模型和固定组合指纹；EdgeTTS 继续作为联网回退。音频不入库，后端选择不热切换，启动器仍负责外部服务、私有配置摘要、备份和明确重启，不改 Memory Core。见 ADR-0024、ADR-0025、ADR-0083、ADR-0118、ADR-0121。

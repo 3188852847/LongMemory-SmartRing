@@ -312,7 +312,7 @@ def test_voice_command_uses_own_environment(options):
     assert cmd[0] == str(voice / ".venv/Scripts/python.exe")
     assert cmd[1].endswith("voice.py")
     assert str(options.database.resolve()) in cmd
-    assert cmd[-1] == "longmemory"
+    assert cmd[7] == "longmemory"  # 后面可追加独立语音策略选项。
 
 
 def test_default_console_url_opens_react_chat():
@@ -335,7 +335,7 @@ def test_voxcpm_commands_use_isolated_environment_and_start_before_voice(options
     assert [item[0] for item in commands] == ["console", "voxcpm2", "voice"]
     assert commands[1][1][0] == str(voxcpm / ".venv/Scripts/python.exe")
     assert commands[1][1][1] == str(voxcpm / "service.py")
-    assert commands[2][1][-2:] == ["voxcpm2", "longmemory"]
+    assert commands[2][1][6:8] == ["voxcpm2", "longmemory"]
 
 
 def test_sanotts_commands_use_external_source_and_start_before_voice(options, monkeypatch):
@@ -359,7 +359,7 @@ def test_sanotts_commands_use_external_source_and_start_before_voice(options, mo
     assert commands[1][1][:2] == ["synthetic-node", str(service)]
     assert commands[1][1][-4:-2] == ["--source", str(source.resolve())]
     assert commands[1][1][-2:] == ["--expected-fingerprint", runtime.EXPECTED_SANOTTS_FINGERPRINT]
-    assert commands[2][1][-2:] == ["sanotts", "longmemory"]
+    assert commands[2][1][6:8] == ["sanotts", "longmemory"]
 
 
 def test_cosyvoice3_commands_use_isolated_environment_and_start_before_voice(options, monkeypatch):
@@ -385,7 +385,7 @@ def test_cosyvoice3_commands_use_isolated_environment_and_start_before_voice(opt
     assert commands[1][1][1] == str(service)
     assert commands[1][1][commands[1][1].index("--port") + 1] == "18770"
     assert commands[2][1][0] == str(voice_python)
-    assert commands[2][1][-2:] == ["cosyvoice3", "longmemory"]
+    assert commands[2][1][6:8] == ["cosyvoice3", "longmemory"]
 
 
 @pytest.mark.parametrize("role", ["plain_v1", "elysia_v1"])
@@ -457,7 +457,7 @@ def test_role_memory_and_tts_domains_compose_independently(
 
     assert console[console.index("--assistant-role") + 1] == role
     assert console[console.index("--memory-backend") + 1] == memory_backend
-    assert voice[-2:] == [tts_backend, memory_backend]
+    assert voice[6:8] == [tts_backend, memory_backend]
     expected_services = {
         "edge": {"console", "voice"},
         "voxcpm2": {"console", "voxcpm2", "voice"},

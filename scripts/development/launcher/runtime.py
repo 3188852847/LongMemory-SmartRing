@@ -75,6 +75,7 @@ class Options:
     embedding_model_dir: Path = DEFAULT_BGE_MODEL
     voice: bool = False
     voice_mode: str = "pipeline"
+    voice_latency_mode: str = "realtime"
     doubao_env: Path | None = None
     tts_backend: str = "edge"
     sanotts_source_root: Path = DEFAULT_SANOTTS_SOURCE
@@ -119,6 +120,8 @@ def build_commands(options, uv=None):
         raise ValueError("未知圆屏模型配置档。")
     if options.voice_mode not in {"pipeline", "doubao_realtime"}:
         raise ValueError("未知圆屏语音模式。")
+    if options.voice_latency_mode not in {"realtime", "original"}:
+        raise ValueError("未知圆屏响应策略。")
     if options.memory_backend not in {"longmemory", "xiaozhi_local", "none"}:
         raise ValueError("未知圆屏记忆后端。")
     if (options.model_profile == "campus" or
@@ -251,6 +254,8 @@ def build_commands(options, uv=None):
             voice_command.extend(["--voice-mode", "doubao_realtime", "--doubao-env", str(
                 (options.doubao_env or root / ".env.doubao.local").resolve()
             )])
+        else:
+            voice_command.extend(["--voice-latency-mode", options.voice_latency_mode])
         commands.append(("voice", voice_command, options.voice_root.resolve()))
     return commands
 

@@ -6,6 +6,7 @@ from .protocol import (
     BridgeError,
     round_skin,
     safe_reason,
+    voice_asr_prefetch,
     voice_latency,
     voice_prediction_shadow,
     volume_value,
@@ -340,6 +341,13 @@ def device_status(data: dict) -> dict:
         result["voice_prediction_shadow"] = voice_prediction_shadow(
             data["voice_prediction_shadow"]
         )
+    if "voice_asr_prefetch" in data:
+        result["voice_asr_prefetch"] = voice_asr_prefetch(data["voice_asr_prefetch"])
+    if "voice_latency_mode" in data:
+        mode = data["voice_latency_mode"]
+        if type(mode) is not str or mode not in {"realtime", "original"}:
+            raise BridgeError("bridge_invalid_response", 502)
+        result["voice_latency_mode"] = mode
     if "reason" in data:
         result["reason"] = safe_reason(data["reason"])
     if "announcement_reason" in data:

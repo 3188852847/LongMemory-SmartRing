@@ -114,6 +114,69 @@ def test_status_projects_only_runtime_flags(tmp_path):
     assert "private_network" not in value
 
 
+def prefetch_snapshot():
+    return {"version": 1, "enabled": True, "started": 2, "reused": 1,
+            "invalidated": 1, "skipped_busy": 0, "failed": 0, "fallback": 1,
+            "latest_status": "reused", "latest_prefetch_ms": 230,
+            "latest_formal_wait_ms": 0, "latest_model_queue_ms": 0, "latest_overlap_ms": 230}
+
+
+def status_with_prefetch(snapshot, **extra):
+    return {"connection_count": 1, "ready": True,
+            "read_volume_supported": True, "set_volume_supported": True,
+            "announcement_supported": True, "announcement_ready": True,
+            "user_session_active": False, "voice_asr_prefetch": snapshot, **extra}
+
+
+@pytest.mark.parametrize("snapshot", [{"version": 1, "enabled": False}, prefetch_snapshot(),
+                                      {**prefetch_snapshot(), "latest_overlap_ms": None}])
+def test_status_accepts_strict_optional_asr_prefetch(tmp_path, snapshot):
+    client = client_for(tmp_path, status_with_prefetch(snapshot))
+    assert asyncio.run(client.status())["voice_asr_prefetch"] == snapshot
+
+
+@pytest.mark.parametrize("change", [
+    {"text": "synthetic-private-text"}, {"audio": "synthetic-base64"}, {"session_id": "private"},
+    {"version": True}, {"version": 2}, {"enabled": 1}, {"enabled": False},
+    {"latest_status": "candidate transcript"}, {"latest_status": []},
+    {"started": True}, {"started": -1}, {"started": 1_000_001},
+    {"reused": 1.5}, {"failed": None}, {"latest_prefetch_ms": "230"},
+    {"latest_formal_wait_ms": -1}, {"latest_model_queue_ms": True},
+    {"latest_overlap_ms": 3_600_001},
+])
+def test_status_rejects_extra_or_malformed_asr_prefetch_data(tmp_path, change):
+    client = client_for(tmp_path, status_with_prefetch({**prefetch_snapshot(), **change}))
+    with pytest.raises(BridgeError, match="bridge_invalid_response"):
+        asyncio.run(client.status())
+
+
+@pytest.mark.parametrize("snapshot", [None, [], {"version": 1}, {"version": 1, "enabled": True},
+                                      {"version": 1, "enabled": False, "text": "private"}])
+def test_status_rejects_missing_or_disabled_extra_asr_prefetch_fields(tmp_path, snapshot):
+    client = client_for(tmp_path, status_with_prefetch(snapshot))
+    with pytest.raises(BridgeError, match="bridge_invalid_response"):
+        asyncio.run(client.status())
+
+
+@pytest.mark.parametrize("mode", ["realtime", "original"])
+def test_status_projects_actual_latency_mode_and_keeps_older_bridge_compatible(tmp_path, mode):
+    data = status_with_prefetch({"version": 1, "enabled": False}, voice_latency_mode=mode)
+    client = client_for(tmp_path, data)
+    assert asyncio.run(client.status())["voice_latency_mode"] == mode
+    data.pop("voice_asr_prefetch")
+    data.pop("voice_latency_mode")
+    older = asyncio.run(client_for(tmp_path, data).status())
+    assert "voice_asr_prefetch" not in older
+    assert "voice_latency_mode" not in older
+
+
+@pytest.mark.parametrize("mode", ["fast", "private-transcript", None, True, []])
+def test_status_rejects_unrecognized_latency_mode(tmp_path, mode):
+    client = client_for(tmp_path, status_with_prefetch({"version": 1, "enabled": False}, voice_latency_mode=mode))
+    with pytest.raises(BridgeError, match="bridge_invalid_response"):
+        asyncio.run(client.status())
+
+
 @pytest.mark.parametrize("change", [
     {"state": "ready"},
     {"state": "trial_ready"},
