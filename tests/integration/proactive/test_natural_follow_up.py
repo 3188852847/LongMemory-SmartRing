@@ -1,6 +1,10 @@
 from datetime import UTC, datetime, timedelta
+import json
 import sqlite3
 
+from longmemory.adapters.storage.sqlite_natural_memory_commands import (
+    SQLiteNaturalMemoryCommandHandler,
+)
 from longmemory.adapters.storage.sqlite_proactive_policy_store import (
     SQLiteProactivePolicyStore,
 )
@@ -8,9 +12,11 @@ from longmemory.adapters.storage.sqlite_proactive_outreach_store import (
     SQLiteProactiveOutreachStore,
 )
 from longmemory.bootstrap import build_memory_runtime
+from longmemory.application.memory_runtime import MemoryRuntime
 from longmemory.core.proactive import OutreachPolicyConfig, ProactivePolicySettings
 from longmemory.infrastructure.database.connection import open_database
 from longmemory.infrastructure.database.schema import initialize_schema
+from longmemory.methods.daily_llm.method import DailyLLMMemory
 
 
 NOW = datetime(2026, 9, 10, 1, 0, tzinfo=UTC)
@@ -235,3 +241,80 @@ def test_vague_plan_keeps_memory_but_does_not_create_candidate(tmp_path):
         "SELECT count(*) FROM companion_follow_up_candidates"
     ).fetchone()[0] == 0
     connection.close()
+
+
+def test_explicit_round_screen_follow_up_finishes_llm_write_before_reply(tmp_path):
+    """明确跟进不能先让回答模型否认能力、再在后台静默创建候选。"""
+
+    path = tmp_path / "synchronous-round-screen-follow-up.db"
+    prepare(path)
+    connection = open_database(path)
+    SQLiteProactivePolicyStore(connection).save(
+        ProactivePolicySettings(
+            "user:self",
+            OutreachPolicyConfig(
+                enabled=True, daily_limit=2, minimum_interval=timedelta(0),
+            ),
+            revision=1,
+            updated_at=NOW,
+        ),
+        expected_revision=0,
+    )
+    connection.close()
+
+    class Producer:
+        def propose(self, **_kwargs):
+            return json.dumps({
+                "schema_version": 1,
+                "operation": "ADD",
+                "facts": [{
+                    "content": "用户明天下午三点要提交毕业设计汇报。",
+                    "quote": "我明天下午三点要提交毕业设计汇报",
+                }],
+            }, ensure_ascii=False)
+
+    method = DailyLLMMemory(
+        path, producer=Producer(), allow_cross_thread=True,
+    )
+    runtime = MemoryRuntime(
+        path,
+        method=method,
+        memory_command_handler=SQLiteNaturalMemoryCommandHandler(path),
+        clock=lambda: NOW,
+    )
+    try:
+        prepared = runtime.prepare_user(
+            "我明天下午三点要提交毕业设计汇报，到时候问我汇报进展",
+            defer_slow_observation=True,
+        )
+        assert prepared.observation.processing_status == "completed"
+        assert prepared.observation.warning_code is None
+        assert prepared.follow_up_suggestion is not None
+        assert prepared.follow_up_suggestion.status == "candidate_armed"
+        assert (
+            runtime.status()["deferred_observation"]["running_or_queued"] == 0
+        )
+    finally:
+        runtime.close()
+
+
+def test_explicit_follow_up_reports_not_created_when_memory_write_is_disabled(
+    tmp_path,
+):
+    path = tmp_path / "write-disabled-round-screen-follow-up.db"
+    prepare(path)
+    runtime = build_memory_runtime(path, clock=lambda: NOW)
+    try:
+        runtime.configure(write_enabled=False, use_enabled=True)
+        prepared = runtime.prepare_user(
+            "我明天下午三点要提交毕业设计汇报，到时候问我汇报进展",
+            defer_slow_observation=True,
+        )
+        assert prepared.observation.writes == ()
+        assert prepared.follow_up_suggestion is not None
+        assert prepared.follow_up_suggestion.status == "not_created"
+        assert prepared.follow_up_suggestion.warning_code == (
+            "follow_up_memory_write_disabled"
+        )
+    finally:
+        runtime.close()

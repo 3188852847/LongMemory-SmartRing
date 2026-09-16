@@ -235,6 +235,7 @@ describe('主动交流设置', () => {
     const client = createConsoleQueryClient();
     const view = render(<QueryClientProvider client={client}><ProactiveSettings api={new ChatApi()} ready={true}/></QueryClientProvider>);
     expect(await screen.findByText('今天已经聊过，今天的定时问候会跳过')).toBeTruthy();
+    expect(screen.getByText(/不影响手动验证或你明确授权的一次性事项跟进/)).toBeTruthy();
     expect(screen.getByText('上一条主动问候之后还没有收到新的用户消息')).toBeTruthy();
     view.unmount(); client.clear();
   });

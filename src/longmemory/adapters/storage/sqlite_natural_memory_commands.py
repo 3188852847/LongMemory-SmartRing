@@ -107,6 +107,7 @@ class SQLiteNaturalMemoryCommandHandler:
         added = tuple(item for item in (writes or ()) if item.operation == "add")
         if len(added) != 1:
             return None
+
         try:
             settings = SQLiteProactivePolicyStore(self._connection).get("user:self")
             draft = parse_explicit_follow_up(
@@ -202,6 +203,25 @@ class SQLiteNaturalMemoryCommandHandler:
             candidate.prompt_text, candidate.follow_up_at.isoformat(),
             outreach_id=(outreach.id if outreach is not None else None),
         )
+
+    def recognizes_follow_up(self, event) -> bool:
+        """判断本轮是否必须先形成 L1，避免圆屏在安排结果前否认真实能力。
+
+        普通圆屏对话仍可延后模型提取。只有同时包含明确日期、时刻和
+        “到时候问我”的严格请求进入同步路径；这里只识别，不写数据库。
+        """
+
+        try:
+            settings = SQLiteProactivePolicyStore(self._connection).get(
+                "user:self"
+            )
+            return parse_explicit_follow_up(
+                event.content,
+                occurred_at=event.occurred_at,
+                utc_offset_minutes=settings.config.utc_offset_minutes,
+            ) is not None
+        except (ValueError, KeyError, sqlite3.Error):
+            return False
 
     def _cancel_recent_follow_up(
         self, *, subject_id, before, not_before,

@@ -83,20 +83,37 @@ def register_memory_runtime_routes(app, backend):
                 ),
             }[feedback.kind]
         follow_up_notice = None
-        if (prepared.follow_up_suggestion is not None
-                and prepared.follow_up_suggestion.status == "candidate_armed"):
+        if (
+            prepared.follow_up_suggestion is not None
+            and (
+                prepared.follow_up_suggestion.status == "candidate_armed"
+                or (
+                    prepared.follow_up_suggestion.status == "replayed"
+                    and prepared.follow_up_suggestion.outreach_id is not None
+                )
+            )
+        ):
             follow_up_notice = (
                 "好，这次跟进已经按你说的时间安排。"
                 "到点时仍会遵守勿扰时段、频率限制和设备状态。"
             )
         elif (
             prepared.follow_up_suggestion is not None
-            and prepared.follow_up_suggestion.status
-            == "candidate_created_requires_proactive_enabled"
+            and prepared.follow_up_suggestion.status in {
+                "candidate_created_requires_proactive_enabled", "replayed",
+            }
         ):
             follow_up_notice = (
                 "我记下了这次跟进，但主动交流总开关目前关闭，所以它还不会播报。"
                 "你可以稍后在控制台开启总开关，再核对这条候选。"
+            )
+        elif (
+            prepared.follow_up_suggestion is not None
+            and prepared.follow_up_suggestion.status == "not_created"
+        ):
+            follow_up_notice = (
+                "我识别到你想安排一次跟进，但本轮没有成功建立可追溯的长期事项，"
+                "所以目前还没有安排。请到控制台核对，或稍后重新告诉我。"
             )
         command_reply = (
             prepared.memory_command.notice

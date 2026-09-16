@@ -193,6 +193,19 @@ class MemoryRuntime:
                         command = self._memory_command_handler.handle(event)
             command_finished = perf_counter()
             observe_started = perf_counter()
+            # 一次性跟进必须在回答前知道是否真正创建。否则圆屏的延后 L1
+            # 路径会让回答模型先声称“无法主动开口”，随后后台才悄悄创建候选。
+            # 严格识别只影响明确日期、时刻和“到时候问我”的少数控制轮次。
+            explicit_follow_up_requested = False
+            if (
+                command is None
+                and self._memory_command_handler is not None
+            ):
+                recognizes_follow_up = getattr(
+                    self._memory_command_handler, "recognizes_follow_up", None,
+                )
+                if recognizes_follow_up is not None:
+                    explicit_follow_up_requested = recognizes_follow_up(event)
             if isinstance(command, TemporaryInteractionCommandResult):
                 # 一次性设置句是控制证据，只保留 L0，不能被规则或 LLM
                 # 提取器误写成长期用户偏好。
@@ -203,6 +216,7 @@ class MemoryRuntime:
                 defer_slow_observation
                 and self._write_enabled
                 and self._method.capabilities.deferred_observation
+                and not explicit_follow_up_requested
             ):
                 # 本轮回答不需要等模型把“当前这句话”派生为 L1；先保存
                 # L0，再用此前已经完成的记忆召回。回答完成回执会触发补写。
@@ -217,12 +231,30 @@ class MemoryRuntime:
                                else self._method.archive(event))
             observe_finished = perf_counter()
             follow_up_suggestion = None
-            if command is None and observation.writes:
-                suggester = getattr(
-                    self._memory_command_handler, "suggest_follow_up", None,
+            if command is None:
+                if observation.writes:
+                    suggester = getattr(
+                        self._memory_command_handler, "suggest_follow_up", None,
+                    )
+                    if suggester is not None:
+                        follow_up_suggestion = suggester(
+                            event, observation.writes,
+                        )
+            if (
+                command is None
+                and explicit_follow_up_requested
+                and follow_up_suggestion is None
+            ):
+                # 请求已被严格识别，但没有形成唯一的新 L1，不能让模型自由
+                # 承诺，也不能谎称产品不具备该能力。
+                follow_up_suggestion = FollowUpSuggestionResult(
+                    "not_created",
+                    warning_code=(
+                        "follow_up_source_not_created"
+                        if self._write_enabled
+                        else "follow_up_memory_write_disabled"
+                    ),
                 )
-                if suggester is not None:
-                    follow_up_suggestion = suggester(event, observation.writes)
             recall_started = perf_counter()
             support = (
                 self._method.recall(text)

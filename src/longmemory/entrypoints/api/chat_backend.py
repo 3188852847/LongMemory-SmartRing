@@ -294,6 +294,32 @@ class ChatBackend:
             )):
                 answer = prepared.memory_command.notice
                 result["answer_source"] = "application_command"
+            elif prepared.follow_up_suggestion is not None:
+                follow_up = prepared.follow_up_suggestion
+                if (
+                    follow_up.status == "candidate_armed"
+                    or (
+                        follow_up.status == "replayed"
+                        and follow_up.outreach_id is not None
+                    )
+                ):
+                    answer = (
+                        "好，这次跟进已经按你说的时间安排。"
+                        "到点时仍会遵守勿扰时段、频率限制和设备状态。"
+                    )
+                elif follow_up.status in {
+                    "candidate_created_requires_proactive_enabled", "replayed",
+                }:
+                    answer = (
+                        "我记下了这次跟进，但主动交流总开关目前关闭，所以它还不会播报。"
+                        "你可以在设置中心开启总开关，再核对并启用这条候选。"
+                    )
+                else:
+                    answer = (
+                        "我识别到你想安排一次跟进，但本轮没有成功建立可追溯的长期事项，"
+                        "所以目前还没有安排。请到设置中心核对，或稍后重新告诉我。"
+                    )
+                result["answer_source"] = "application_command"
             # Fake 只验证工程闭环，页面明确标出它不模拟角色/多轮语义能力。
             elif self.provider == "fake":
                 answer = generator.generate(query=text, memory_context=support.context)

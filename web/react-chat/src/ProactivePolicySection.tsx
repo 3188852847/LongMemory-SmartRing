@@ -40,7 +40,7 @@ export function ProactivePolicySection(props:Props) {
       title={draft.automatic_enabled ? '后台定时问候已开启' : (draft.enabled ? '主动联系许可已打开，定时问候仍关闭' : '主动交流当前关闭')}
       description="定时问候只在所选星期的指定分钟检查：当天已经聊过、设备离线或忙碌、处于勿扰或错过时刻都会跳过，之后不补发。"/>
     {schedule?.user_chatted_today && <Alert type="info" showIcon title="今天已经聊过，今天的定时问候会跳过"
-      description="这是避免刚聊完又主动打扰的既定规则；修改定时时刻不会绕过它。手动验证仍可使用。"/>}
+      description="这只影响每天固定时刻的自动问候，不影响手动验证或你明确授权的一次性事项跟进；修改定时时刻不会绕过定时问候规则。"/>}
     {schedule?.awaiting_user_response && <Alert type="warning" showIcon title="上一条主动问候之后还没有收到新的用户消息"
       description="自动定时会继续停止追问；真正说出并保存一条新消息后会解除。所有者手动验证不受这一项限制。"/>}
     {props.scheduleFailed && <Alert type="error" showIcon title="暂时无法读取今天的定时状态"/>}

@@ -156,6 +156,46 @@ def test_application_command_reply_does_not_depend_on_model_wording(database):
         backend.close()
 
 
+def test_web_follow_up_reply_reports_application_result_instead_of_model_denial(
+    database,
+):
+    class MustNotRun:
+        def generate(self, **_kwargs):
+            raise AssertionError("一次性跟进结果不应交给模型自由改写")
+
+    backend = ChatBackend(database, MustNotRun())
+    try:
+        result = backend.run(
+            "我明天下午三点要提交毕业设计汇报，到时候问我汇报进展",
+            (),
+        )
+        assert result["status"] == "completed"
+        assert result["answer_source"] == "application_command"
+        assert result["follow_up_suggestion"]["status"] == (
+            "candidate_created_requires_proactive_enabled"
+        )
+        assert "主动交流总开关目前关闭" in result["answer"]
+
+        duplicate = backend.run(
+            "我明天下午三点要提交毕业设计汇报，到时候问我汇报进展",
+            (),
+        )
+        assert duplicate["status"] == "completed"
+        assert duplicate["answer_source"] == "application_command"
+        assert duplicate["follow_up_suggestion"] == {
+            "status": "not_created",
+            "candidate_id": None,
+            "source_memory_id": None,
+            "prompt_text": None,
+            "follow_up_at": None,
+            "warning_code": "follow_up_source_not_created",
+            "outreach_id": None,
+        }
+        assert "目前还没有安排" in duplicate["answer"]
+    finally:
+        backend.close()
+
+
 def test_next_turn_interaction_setting_is_an_application_reply(database):
     class MustNotRun:
         def generate(self, **_kwargs):
