@@ -25,7 +25,9 @@ ACTIVATE_ROUND_WALLPAPER_TOOL = "self.screen.activate_round_wallpaper"
 ROLLBACK_ROUND_WALLPAPER_TOOL = "self.screen.rollback_round_wallpaper"
 DEACTIVATE_ROUND_WALLPAPER_TOOL = "self.screen.deactivate_round_wallpaper"
 REBOOT_TOOL = "self.reboot"
-MIN_VOLUME, MAX_VOLUME = 5, 60  # 技术验证阶段限制，非硬件音量范围。
+# 固件工具声明的范围是 0–100。日用入口仍保留 5 的下限，避免把“静音”
+# 混入普通音量调节；上限使用设备完整范围，不再沿用早期验证阶段的 60。
+MIN_VOLUME, MAX_VOLUME = 5, 100
 MIN_BRIGHTNESS, MAX_BRIGHTNESS = 5, 100
 MAX_ANNOUNCEMENT_CHARS = 80
 MAX_ANNOUNCEMENT_TTL_SECONDS = 300

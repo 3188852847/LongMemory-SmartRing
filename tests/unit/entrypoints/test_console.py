@@ -31,7 +31,7 @@ class FakeBridge:
         return {"connection_count": 1, "ready": True, "read_volume_supported": True,
                 "set_volume_supported": True, "announcement_supported": True,
                 "announcement_ready": True, "user_session_active": False,
-                "allowed_volume": {"minimum": 5, "maximum": 60}}
+                "allowed_volume": {"minimum": 5, "maximum": 100}}
 
     async def read_volume(self):
         self.calls.append("read")
@@ -524,13 +524,13 @@ def test_console_serves_only_local_assets_and_protected_device_actions():
             assert (await response.json())["ready"] is True
             assert bridge.calls == []  # 连接轮询不发设备命令。
             assert (await (await client.get(base + "/api/device/volume")).json()) == {"volume": 25}
-            response = await client.post(base + "/api/device/volume", headers=headers, json={"volume": 30})
+            response = await client.post(base + "/api/device/volume", headers=headers, json={"volume": 100})
             assert response.status == 200
             assert (await response.json())["verified"] is True
             response = await client.post(base + "/api/device/speech/stop", headers=headers)
             assert response.status == 200
             assert (await response.json())["state"] == "stop_sent"
-            assert bridge.calls == ["read", 30, "stop-speech"]
+            assert bridge.calls == ["read", 100, "stop-speech"]
     asyncio.run(run())
 
 
@@ -1042,7 +1042,7 @@ def test_console_rejects_browser_attacks_without_calling_device(attack):
     asyncio.run(run())
 
 
-@pytest.mark.parametrize("body", [{"volume": True}, {"volume": 4}, {"volume": 61}, {"volume": 30.1}, {"volume": "30"}, {}, [], {"volume": 30, "tool": "evil"}])
+@pytest.mark.parametrize("body", [{"volume": True}, {"volume": 4}, {"volume": 101}, {"volume": 30.1}, {"volume": "30"}, {}, [], {"volume": 30, "tool": "evil"}])
 def test_console_rejects_invalid_volume(body):
     async def run():
         async with console() as (client, base, bridge):

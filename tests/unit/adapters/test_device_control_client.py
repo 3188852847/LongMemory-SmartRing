@@ -250,7 +250,7 @@ def test_status_accepts_v2_voice_latency_segments(tmp_path):
     client = client_for(tmp_path, {"connection_count": 1, "ready": True,
         "read_volume_supported": True, "set_volume_supported": True,
         "read_status_supported": True, "set_brightness_supported": False,
-        "set_theme_supported": False, "allowed_volume": {"minimum": 5, "maximum": 60},
+        "set_theme_supported": False, "allowed_volume": {"minimum": 5, "maximum": 100},
         "announcement_supported": True, "announcement_ready": True,
         "user_session_active": False, "voice_latency": latency})
     assert asyncio.run(client.status())["voice_latency"] == latency

@@ -44,9 +44,9 @@
           <p id="volume-freshness" class="muted">还没有读取设备音量。</p>
           <form id="volume-form">
             <fieldset id="volume-controls" disabled>
-              <div class="target-heading"><label for="volume-slider">目标音量</label><div class="number-input"><input id="volume-number" name="volume" type="number" min="5" max="60" step="1" value="30" required aria-label="目标音量数值"><span>/ 100</span></div></div>
-              <input id="volume-slider" type="range" min="5" max="60" step="1" value="30" aria-describedby="volume-help">
-              <div class="range-labels"><span>5 · 轻声</span><span>60 · 本阶段上限</span></div>
+              <div class="target-heading"><label for="volume-slider">目标音量</label><div class="number-input"><input id="volume-number" name="volume" type="number" min="5" max="100" step="1" value="30" required aria-label="目标音量数值"><span>/ 100</span></div></div>
+              <input id="volume-slider" type="range" min="5" max="100" step="1" value="30" aria-describedby="volume-help">
+              <div class="range-labels"><span>5 · 轻声</span><span>100 · 最大</span></div>
               <p id="volume-help" class="hint">拖动只选择数值，点击“应用音量”才发送。不会改变语速或音色。</p>
               <button id="apply-volume" class="button primary" type="submit">应用音量</button>
             </fieldset>

@@ -15,9 +15,9 @@ test("only a single ready device with both tools enables writes", () => {
   assert.equal(statusView({...status, connection_count: 2}).set, false);
   assert.equal(statusView({...status, read_volume_supported: false}).set, false);
 });
-test("target range is integer 5 through 60", () => {
-  for (const v of [5, 30, 60]) assert.equal(validTarget(v), true);
-  for (const v of [4, 61, 30.1, NaN, "30", true]) assert.equal(validTarget(v), false);
+test("target range is integer 5 through 100", () => {
+  for (const v of [5, 30, 60, 100]) assert.equal(validTarget(v), true);
+  for (const v of [4, 101, 30.1, NaN, "30", true]) assert.equal(validTarget(v), false);
 });
 test("ack without matching readback is not displayed as success", () => {
   const result = {requested_volume: 30, acknowledged: true, verified: false, readback_volume: null};

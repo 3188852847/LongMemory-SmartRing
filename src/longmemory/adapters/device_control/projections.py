@@ -296,7 +296,7 @@ def device_status(data: dict) -> dict:
         **{key: data[key] for key in required_flags},
         **{key: data.get(key, False) for key in optional_flags},
     }
-    result["allowed_volume"] = {"minimum": 5, "maximum": 60}
+    result["allowed_volume"] = {"minimum": 5, "maximum": 100}
     if "natural_interruption" in data:
         diagnostic = data["natural_interruption"]
         fields = {

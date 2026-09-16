@@ -144,7 +144,7 @@ async def run():
                                             json={"volume": 30}) as response:
                         assert response.status == expected
                 assert not device.sent
-                for payload, expected in [({"volume": True}, 400), ({"volume": 99}, 400),
+                for payload, expected in [({"volume": True}, 400), ({"volume": 101}, 400),
                                           ({"volume": 30, "tool": "arbitrary"}, 400)]:
                     async with session.post(base + "/api/device/volume", headers=auth,
                                             json=payload) as response:

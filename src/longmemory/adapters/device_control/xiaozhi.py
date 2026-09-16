@@ -92,7 +92,7 @@ class XiaozhiControlClient:
         return read_volume(data)
 
     async def set_volume(self, volume: int) -> dict:
-        if type(volume) is not int or not 5 <= volume <= 60:
+        if type(volume) is not int or not 5 <= volume <= 100:
             raise BridgeError("invalid_volume", 400)
         data = await self._request("POST", "/api/device/volume", {"volume": volume})
         return volume_update(data, volume)

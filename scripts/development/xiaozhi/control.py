@@ -54,8 +54,8 @@ def main(argv=None):
             volume = int(args.value)
         except (TypeError, ValueError):
             volume = None
-        if volume is None or not 5 <= volume <= 60:
-            parser.error("set-volume 必须指定 5 到 60 的整数，验证阶段不允许静音或高音量。")
+        if volume is None or not 5 <= volume <= 100:
+            parser.error("set-volume 必须指定 5 到 100 的整数；普通音量调节不包含静音。")
     elif args.action == "announce":
         volume = None
         if (args.value is None or args.value != args.value.strip() or not args.value

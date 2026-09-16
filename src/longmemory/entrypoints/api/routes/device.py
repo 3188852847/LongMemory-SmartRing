@@ -31,7 +31,7 @@ def register_device_routes(app, client, operation_lock):
                     except (ValueError, UnicodeError):
                         return web.json_response({"error": "invalid_body"}, status=400)
                     if (not isinstance(body, dict) or set(body) != {"volume"}
-                            or type(body["volume"]) is not int or not 5 <= body["volume"] <= 60):
+                            or type(body["volume"]) is not int or not 5 <= body["volume"] <= 100):
                         return web.json_response({"error": "invalid_volume"}, status=400)
                     data = await client.set_volume(body["volume"])
                 return web.json_response(data)

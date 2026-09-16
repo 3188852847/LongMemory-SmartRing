@@ -150,6 +150,8 @@ export function DeviceApp() {
   });
   // 轮询失败后不能继续展示旧的“可控制”状态，否则用户可能对离线设备发出写操作。
   const view = statusView(status.error ? {error: codeOf(status.error)} : status.data);
+  const volumeMinimum = status.data?.allowed_volume?.minimum ?? 5;
+  const volumeMaximum = status.data?.allowed_volume?.maximum ?? 100;
 
   useEffect(() => {
     if (!view.read || (reading && Date.now() - reading.at > 30000)) setReading(undefined);
@@ -240,11 +242,11 @@ export function DeviceApp() {
     <div className="device-grid">
       <Card className="device-control-card" title="扬声器音量" extra={<Tag color={view.set ? 'green' : 'default'}>{view.set ? '可控' : '不可控'}</Tag>}>
         <div className="device-card-action"><Button disabled={!view.read || busy} loading={readVolume.isPending} onClick={() => readVolume.mutate()}>读取当前值</Button></div>
-        <div className="volume-value"><strong>{reading?.value ?? '—'}</strong><span>/ {status.data?.allowed_volume?.maximum ?? 60}</span></div>
+        <div className="volume-value"><strong>{reading?.value ?? '—'}</strong><span>/ {volumeMaximum}</span></div>
         <p className="subtle">{reading ? `最近读取于 ${new Date(reading.at).toLocaleTimeString('zh-CN', {hour12:false})}；不是持续监测。` : '还没有可用的设备音量读数。'}</p>
         <label htmlFor="device-volume">目标音量</label>
-        <Space.Compact block><Slider id="device-volume" className="volume-slider" min={5} max={60} value={target ?? 30} disabled={!view.set || busy} onChange={setTarget}/><InputNumber min={5} max={60} value={target} disabled={!view.set || busy} onChange={setTarget}/></Space.Compact>
-        <p className="subtle">选择数值不会发送；点击后才设置。范围 5–60，不改变语速或音色。</p>
+        <Space.Compact block><Slider id="device-volume" className="volume-slider" min={volumeMinimum} max={volumeMaximum} value={target ?? 30} disabled={!view.set || busy} onChange={setTarget}/><InputNumber min={volumeMinimum} max={volumeMaximum} value={target} disabled={!view.set || busy} onChange={setTarget}/></Space.Compact>
+        <p className="subtle">选择数值不会发送；点击后才设置。范围 {volumeMinimum}–{volumeMaximum}，不改变语速或音色。</p>
         <Button type="primary" loading={setVolume.isPending} disabled={!view.set || busy || !validTarget(target)} onClick={() => {if (validTarget(target)) setVolume.mutate(target!);}}>应用音量</Button>
       </Card>
       <Card className="device-control-card" title="屏幕显示" extra={<Tag color={status.data?.set_brightness_supported || status.data?.set_theme_supported ? 'green' : 'default'}>{status.data?.set_brightness_supported || status.data?.set_theme_supported ? '部分可控' : '不可控'}</Tag>}>

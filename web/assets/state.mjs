@@ -1,6 +1,6 @@
 // 纯状态映射可在 Node 中独立测试；不接触 DOM、令牌或真实圆屏。
 export function validTarget(value) {
-  return Number.isInteger(value) && value >= 5 && value <= 60;
+  return Number.isInteger(value) && value >= 5 && value <= 100;
 }
 
 export function statusView(data) {
@@ -39,7 +39,7 @@ export function errorMessage(code) {
     control_busy: "另一个控制操作正在执行，请等待完成后再读取。",
     stop_speech_unavailable: "当前小智连接没有可用的语音中止通道。",
     operation_busy: "另一个控制操作正在执行，请等待完成后再读取。",
-    invalid_volume: "目标音量必须是 5–60 之间的整数。",
+    invalid_volume: "目标音量必须是 5–100 之间的整数。",
     readback_mismatch: "设备读回值与目标不一致，不能确认设置成功。",
   };
   return messages[code] || "未能确认操作结果，音量可能已改变。请先读取核对，不要连续重试。";

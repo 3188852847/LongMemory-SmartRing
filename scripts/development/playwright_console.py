@@ -23,7 +23,7 @@ class OfflineBridge:
             "ready": False,
             "read_volume_supported": False,
             "set_volume_supported": False,
-            "allowed_volume": {"minimum": 5, "maximum": 60},
+            "allowed_volume": {"minimum": 5, "maximum": 100},
             "reason": "device_offline",
         }
 

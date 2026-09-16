@@ -49,7 +49,7 @@ class ReadyBridge:
             "announcement_supported": True,
             "announcement_ready": True,
             "user_session_active": False,
-            "allowed_volume": {"minimum": 5, "maximum": 60},
+            "allowed_volume": {"minimum": 5, "maximum": 100},
         }
 
     async def announce(self, text, expires_at):

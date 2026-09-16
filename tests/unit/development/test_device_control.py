@@ -420,13 +420,24 @@ def test_round_wallpaper_rejects_unscoped_delivery_before_sending(change):
     asyncio.run(run())
 
 
-@pytest.mark.parametrize("value", [True, False, None, "30", 30.5, 0, 4, 61, 100])
+@pytest.mark.parametrize("value", [True, False, None, "30", 30.5, 0, 4, 101])
 def test_rejects_invalid_or_unsafe_volume_without_sending(value):
     async def run():
         bridge, _, socket = rig()
         with pytest.raises(control.ControlError, match="volume_out_of_range"):
             await bridge.set_volume(value)
         assert not socket.calls
+    asyncio.run(run())
+
+
+def test_full_device_volume_range_is_available():
+    async def run():
+        bridge, _, socket = rig()
+        result = await bridge.set_volume(100)
+        assert result["verified"] is True
+        assert result["readback_volume"] == 100
+        assert socket.calls[1]["params"]["arguments"] == {"volume": 100}
+
     asyncio.run(run())
 
 

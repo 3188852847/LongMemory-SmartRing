@@ -34,7 +34,7 @@ describe('设备与状态页', () => {
       ready: false,
       read_volume_supported: false,
       set_volume_supported: false,
-      allowed_volume: {minimum: 5, maximum: 60},
+      allowed_volume: {minimum: 5, maximum: 100},
     });
     const client = createConsoleQueryClient();
     const view = render(<QueryClientProvider client={client}><MemoryRouter><DeviceApp/></MemoryRouter></QueryClientProvider>);
@@ -59,14 +59,14 @@ describe('设备与状态页', () => {
       return {
         connection_count: 1, ready: true, read_volume_supported: true, set_volume_supported: true,
         read_status_supported: true, set_brightness_supported: false, set_theme_supported: false,
-        allowed_volume: {minimum: 5, maximum: 60},
+        allowed_volume: {minimum: 5, maximum: 100},
       };
     });
     const client = createConsoleQueryClient();
     const view = render(<QueryClientProvider client={client}><MemoryRouter><DeviceApp/></MemoryRouter></QueryClientProvider>);
 
     await waitFor(() => expect(screen.getByText('已连接')).toBeTruthy());
-    expect(screen.getByText('/ 60')).toBeTruthy();
+    expect(screen.getByText('/ 100')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', {name: '读取设备快照'}));
     expect(await screen.findByText('72% · 充电中')).toBeTruthy();
     expect(screen.getAllByText('固件未上报').length).toBeGreaterThanOrEqual(3);
@@ -82,7 +82,7 @@ describe('设备与状态页', () => {
     vi.spyOn(ChatApi.prototype, 'request').mockResolvedValue({
       connection_count:1, ready:true, read_volume_supported:true, set_volume_supported:true,
       read_status_supported:true, set_brightness_supported:false, set_theme_supported:false,
-      allowed_volume:{minimum:5,maximum:60},
+      allowed_volume:{minimum:5,maximum:100},
       voice_latency:{version:2,state:'first_audio_sent',started_at:'2026-09-10T01:00:00+00:00',tts_backend:'voxcpm2',timings_ms:{
         memory_ready_ms:80,llm_requested_ms:90,llm_first_output_ms:590,tts_started_ms:790,
         audio_ready_ms:1790,first_audio_sent_ms:1810,response_completed_ms:2100,
@@ -246,7 +246,7 @@ describe('设备与状态页', () => {
       return {
         connection_count:1,ready:true,read_volume_supported:true,set_volume_supported:true,
         read_status_supported:true,set_brightness_supported:false,set_theme_supported:false,
-        stop_speech_supported:true,allowed_volume:{minimum:5,maximum:60},
+        stop_speech_supported:true,allowed_volume:{minimum:5,maximum:100},
       };
     });
     const client=createConsoleQueryClient();
@@ -265,7 +265,7 @@ describe('设备与状态页', () => {
     vi.spyOn(ChatApi.prototype, 'request').mockResolvedValue({
       connection_count:1,ready:true,read_volume_supported:true,set_volume_supported:true,
       read_status_supported:true,set_brightness_supported:false,set_theme_supported:false,
-      allowed_volume:{minimum:5,maximum:60},
+      allowed_volume:{minimum:5,maximum:100},
       natural_interruption:{version:1,state:'blocked',device_aec_advertised:true,
         server_aec_active:true,timestamped_audio_supported:false,listen_mode:'realtime',
         reason:'timestamp_transport_unavailable'},
