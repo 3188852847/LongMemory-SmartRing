@@ -69,10 +69,11 @@
   "runtime": {
     "firmware_boot": "verified_from_serial_log",
     "wifi_and_ota": "verified",
-    "capability_negotiated": "pending_device_validation",
-    "idle_without_disconnect": "pending_device_validation",
+    "capability_negotiated": "verified_from_server_hello",
+    "idle_without_disconnect": "not_confirmed_disconnect_observed_at_2026-09-16T21:46:13+08:00",
     "wake_reuses_connection": "pending_device_validation",
     "failed_connect_returns_idle": "pending_device_validation",
-    "real_network_drop_recovers": "pending_device_validation"
+    "real_network_drop_recovers": "pending_device_validation",
+    "acceptance_note": "The device advertised persistent_session and stayed connected through 21:46:09, but the server logged a disconnect at 21:46:13. Root cause was not investigated further because the owner chose normal-use observation instead of continued dedicated testing."
   }
 }
