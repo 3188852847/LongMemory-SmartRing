@@ -14,6 +14,12 @@ TOOL = {"type": "function", "function": {
         "time_range": {"type": "string", "enum": ["any", "day", "week", "month", "year"]},
     }, "required": ["query", "time_range"], "additionalProperties": False}}}
 ENDPOINTS = {"tavily": "https://api.tavily.com/search", "metaso": "https://metaso.cn/api/v1/search"}
+CAPABILITY_QUESTIONS = frozenset({
+    "你有联网功能吗", "你有没有联网功能", "你是否有联网功能",
+    "你能联网吗", "你可以联网吗", "你能上网吗",
+    "你能联网搜索吗", "你可以联网搜索吗", "你有联网搜索能力吗",
+    "你能搜索网页吗", "你可以搜索网页吗",
+})
 
 
 def current_question(dialogue):
@@ -31,6 +37,17 @@ def current_question(dialogue):
     if not 1 <= len(text.strip()) <= 300:
         raise ValueError("search_question_invalid")
     return text.strip()
+
+
+def is_capability_question(dialogue):
+    """只识别明确的联网能力询问，避免让模型猜测当前系统配置。"""
+
+    try:
+        text = current_question(dialogue)
+    except ValueError:
+        return False
+    normalized = text.strip().rstrip("。！？!? ")
+    return normalized in CAPABILITY_QUESTIONS
 
 
 def search_web(config, arguments, *, cancelled=lambda: False):
@@ -121,8 +138,22 @@ def web_response(connection, provider, session_id, dialogue, **kwargs):
     except (ValueError, OSError):
         config = None
     configured = config is not None and config.provider in ENDPOINTS
+    tool_available = configured and callable(
+        getattr(provider, "response_with_functions", None)
+    )
+    # 产品能力属于运行时事实，不应交给角色提示或回答模型自由判断。
+    # 这里只回答是否具备工具，不执行搜索，也不把配置细节或密钥说给用户。
+    if is_capability_question(dialogue):
+        if tool_available:
+            yield (
+                "有。我可以通过只读网页搜索查询公开互联网信息，"
+                "但不会替你操作网站；需要最新信息时可以直接让我搜索。"
+            )
+        else:
+            yield "当前没有可用的联网搜索配置，所以这次不能联网查询。"
+        return
     messages = [*[dict(message) for message in dialogue], {"role": "system", "content": _instruction(configured)}]
-    if not configured or not callable(getattr(provider, "response_with_functions", None)):
+    if not tool_available:
         yield from current_output(state, provider.response(session_id, messages, **kwargs))
         return
     calls = {}

@@ -26,4 +26,5 @@ def test_elysia_attribution_and_explicit_limits_exist():
     text = (PERSONAS / 'elysia_v1.txt').read_text(encoding='utf-8')
     assert 'AI 角色扮演助手' in text
     assert '没有依据时明确说不知道' in text
-    assert '本配置没有新增联网搜索' in text
+    assert '角色配置本身不授予联网搜索' in text
+    assert '若本轮系统实际提供搜索或其他工具' in text

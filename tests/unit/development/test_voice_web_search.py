@@ -134,6 +134,35 @@ def test_normal_question_streams_without_search_or_second_model_call(monkeypatch
     assert len(p.calls) == 1
 
 
+def test_capability_question_uses_runtime_tool_fact_without_model_guessing(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        web, "load_config",
+        lambda: config.SearchConfig("tavily", "synthetic-key"),
+    )
+    p = Provider([])
+    answer = "".join(web.web_response(
+        connection(), p, "s",
+        [{"role": "user", "content": "你是否有联网功能？"}],
+    ))
+    assert "有" in answer and "只读网页搜索" in answer
+    assert p.calls == []
+
+
+def test_capability_question_reports_unavailable_without_configuration(
+    monkeypatch,
+):
+    monkeypatch.setattr(web, "load_config", lambda: config.SearchConfig())
+    p = Provider([])
+    answer = "".join(web.web_response(
+        connection(), p, "s",
+        [{"role": "user", "content": "你可以联网搜索吗"}],
+    ))
+    assert "没有可用的联网搜索配置" in answer
+    assert p.calls == []
+
+
 def test_unconfigured_never_claims_to_search(monkeypatch):
     monkeypatch.setattr(web, "load_config", lambda: config.SearchConfig())
     p = Provider([])
