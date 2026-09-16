@@ -1,6 +1,7 @@
 """自然语言记忆操作的 SQLite 原子事务适配器。"""
 
 from pathlib import Path
+from datetime import datetime
 import hashlib
 import sqlite3
 from uuid import uuid4
@@ -76,6 +77,7 @@ class SQLiteNaturalMemoryCommandHandler:
             ),
             feedback_store=SQLiteCompanionFeedbackStore(self._connection),
             cancel_recent_follow_up=self._cancel_recent_follow_up,
+            reschedule_recent_follow_up=self._reschedule_recent_follow_up,
         )
 
     def handle(self, event):
@@ -269,6 +271,107 @@ class SQLiteNaturalMemoryCommandHandler:
         if not changed:
             raise ValueError("follow_up_cancel_conflict")
         return "applied"
+
+    def _reschedule_recent_follow_up(
+        self, *, subject_id, before, not_before, hour, minute,
+        source_message_id,
+    ):
+        """原子取消最近唯一未执行跟进，并以同一来源建立新时刻。"""
+
+        rows = self._connection.execute(
+            "SELECT f.id,f.source_memory_id,f.source_content_sha256,"
+            "f.prompt_text,f.follow_up_at,f.revision,"
+            "o.id AS outreach_id,o.state AS outreach_state,"
+            "o.revision AS outreach_revision "
+            "FROM companion_follow_up_candidates f "
+            "LEFT JOIN proactive_outreach o ON o.follow_up_candidate_id=f.id "
+            "WHERE f.subject_id=? "
+            "AND f.creation_kind='explicit_conversation_request' "
+            "AND f.status='candidate' AND julianday(f.created_at)>=julianday(?) "
+            "AND julianday(f.created_at)<julianday(?) "
+            "AND julianday(f.follow_up_at)>julianday(?) "
+            "ORDER BY julianday(f.created_at) DESC,f.id DESC LIMIT 2",
+            (
+                subject_id, not_before.isoformat(), before.isoformat(),
+                before.isoformat(),
+            ),
+        ).fetchall()
+        if not rows:
+            return "target_not_found", None
+        if len(rows) != 1:
+            return "target_ambiguous", None
+        row = rows[0]
+        if (
+            row["outreach_id"] is not None
+            and row["outreach_state"] != "candidate"
+        ):
+            return "already_attempted", None
+        previous_time = datetime.fromisoformat(row["follow_up_at"])
+        scheduled_for = previous_time.replace(
+            hour=hour, minute=minute, second=0, microsecond=0,
+        )
+        if scheduled_for <= before:
+            return "time_not_future", None
+        if scheduled_for == previous_time:
+            return "unchanged", scheduled_for
+
+        settings = SQLiteProactivePolicyStore(self._connection).get(subject_id)
+        if row["outreach_id"] is not None:
+            ProactiveOutreachLedger(
+                SQLiteProactiveOutreachStore(
+                    self._connection, commit_changes=False,
+                ),
+                clock=lambda: before,
+            ).record_transition(
+                row["outreach_id"],
+                expected_revision=row["outreach_revision"],
+                new_state=OutreachState.CANCELLED,
+                reason_code="user_rescheduled_recent_follow_up",
+                evidence=OutreachEvidence.POLICY_DECISION,
+            )
+        changed = SQLiteFollowUpCandidateStore(
+            self._connection, commit_changes=False,
+        ).cancel(row["id"], expected_revision=row["revision"], now=before)
+        if not changed:
+            raise ValueError("follow_up_reschedule_conflict")
+
+        candidate = FollowUpCandidate(
+            id=uuid4().hex,
+            subject_id=subject_id,
+            source_memory_id=row["source_memory_id"],
+            source_content_sha256=row["source_content_sha256"],
+            prompt_text=row["prompt_text"],
+            follow_up_at=scheduled_for,
+            status=FollowUpCandidateStatus.CANDIDATE,
+            created_at=before,
+            updated_at=before,
+            creation_kind="explicit_conversation_request",
+            source_message_id=source_message_id,
+        )
+        SQLiteFollowUpCandidateStore(
+            self._connection, commit_changes=False,
+        ).create(candidate)
+        if row["outreach_id"] is not None:
+            ProactiveOutreachLedger(
+                SQLiteProactiveOutreachStore(
+                    self._connection, commit_changes=False,
+                ),
+                clock=lambda: before,
+            ).create_candidate(
+                subject_id=subject_id,
+                trigger=OutreachTrigger.EXPLICIT_SCHEDULE,
+                trigger_reason_code="conversation_rescheduled_l1_follow_up",
+                content=candidate.prompt_text,
+                scheduled_for=scheduled_for,
+                expires_at=(
+                    scheduled_for + settings.config.maximum_lifetime
+                ),
+                idempotency_key=f"follow-up:{candidate.id}",
+                policy_version=settings.config.policy_version,
+                follow_up_candidate_id=candidate.id,
+                follow_up_candidate_revision=candidate.revision,
+            )
+        return "applied", scheduled_for
 
     def _execute(self, event, *, companion_command: bool, write_enabled=True):
         self._connection.execute("BEGIN IMMEDIATE")

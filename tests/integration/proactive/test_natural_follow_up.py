@@ -184,6 +184,94 @@ def test_explicit_voice_cancellation_stops_the_only_recent_follow_up(tmp_path):
     connection.close()
 
 
+def test_explicit_voice_reschedule_replaces_recent_follow_up_atomically(tmp_path):
+    path = tmp_path / "natural-follow-up-reschedule.db"
+    prepare(path)
+    connection = open_database(path)
+    SQLiteProactivePolicyStore(connection).save(
+        ProactivePolicySettings(
+            "user:self", OutreachPolicyConfig(enabled=True),
+            revision=1, updated_at=NOW,
+        ),
+        expected_revision=0,
+    )
+    connection.close()
+    runtime = build_memory_runtime(path, clock=lambda: NOW)
+    original = runtime.prepare_user(
+        "我明天下午三点要提交毕业设计汇报，到时候问我汇报进展"
+    )
+    runtime.close()
+    assert original.follow_up_suggestion.status == "candidate_armed"
+
+    changed_at = NOW + timedelta(minutes=1)
+    runtime = build_memory_runtime(path, clock=lambda: changed_at)
+    changed = runtime.prepare_user("请把时间改成16点30分。")
+    runtime.close()
+
+    assert changed.memory_command is not None
+    assert changed.memory_command.kind == "reschedule_follow_up"
+    assert changed.memory_command.status == "applied"
+    assert "16:30" in changed.memory_command.notice
+    assert changed.observation.writes == ()
+    connection = open_database(path)
+    candidates = connection.execute(
+        "SELECT status,revision,follow_up_at,source_memory_id "
+        "FROM companion_follow_up_candidates ORDER BY created_at,id"
+    ).fetchall()
+    assert [tuple(row[:3]) for row in candidates] == [
+        ("cancelled", 2, "2026-09-11T15:00:00+08:00"),
+        ("candidate", 1, "2026-09-11T16:30:00+08:00"),
+    ]
+    assert candidates[0][3] == candidates[1][3]
+    outreach = connection.execute(
+        "SELECT state,revision,scheduled_for FROM proactive_outreach "
+        "ORDER BY created_at,id"
+    ).fetchall()
+    assert [tuple(row) for row in outreach] == [
+        ("cancelled", 2, "2026-09-11T15:00:00+08:00"),
+        ("candidate", 1, "2026-09-11T16:30:00+08:00"),
+    ]
+    assert connection.execute(
+        "SELECT reason_code FROM proactive_outreach_events "
+        "WHERE outreach_id=? AND sequence=2",
+        (original.follow_up_suggestion.outreach_id,),
+    ).fetchone()[0] == "user_rescheduled_recent_follow_up"
+    assert connection.execute(
+        "SELECT count(*) FROM atomic_memories"
+    ).fetchone()[0] == 1
+    assert connection.execute(
+        "SELECT count(*) FROM conversation_messages "
+        "WHERE content='请把时间改成16点30分。'"
+    ).fetchone()[0] == 1
+    connection.close()
+
+
+def test_follow_up_reschedule_rejects_past_time_without_changing_original(tmp_path):
+    path = tmp_path / "natural-follow-up-reschedule-past.db"
+    prepare(path)
+    runtime = build_memory_runtime(path, clock=lambda: NOW)
+    runtime.prepare_user(
+        "我今天下午三点要提交毕业设计汇报，到时候问我汇报进展"
+    )
+    runtime.close()
+
+    runtime = build_memory_runtime(
+        path, clock=lambda: NOW + timedelta(minutes=1),
+    )
+    result = runtime.prepare_user("请把时间改成上午八点。")
+    runtime.close()
+
+    assert result.memory_command is not None
+    assert result.memory_command.kind == "reschedule_follow_up"
+    assert result.memory_command.status == "time_not_future"
+    connection = open_database(path)
+    assert tuple(connection.execute(
+        "SELECT status,revision,follow_up_at "
+        "FROM companion_follow_up_candidates"
+    ).fetchone()) == ("candidate", 1, "2026-09-10T15:00:00+08:00")
+    connection.close()
+
+
 def test_voice_cancellation_refuses_to_guess_between_two_recent_follow_ups(tmp_path):
     path = tmp_path / "natural-follow-up-ambiguous-cancel.db"
     prepare(path)

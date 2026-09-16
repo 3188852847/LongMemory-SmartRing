@@ -13,6 +13,12 @@ _PATTERN = re.compile(
     rf"(?:(?P<minute>{_NUMBER})\s*分?)?[^。！？!?]{{0,80}}?"
     rf"(?:到时候|届时)\s*(?:再)?问我(?:一下)?[：:，,\s]*(?P<prompt>[^。！？!?]{{2,120}})"
 )
+_TIME_CHANGE_PATTERN = re.compile(
+    rf"^(?:请)?把(?:刚才(?:的)?(?:跟进|提醒))?时间改(?:成|到)"
+    rf"(?P<period>上午|中午|下午|晚上|夜里)?\s*"
+    rf"(?P<hour>{_NUMBER})\s*(?:点|时)"
+    rf"(?:(?P<minute>{_NUMBER})\s*分?)?$"
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -97,3 +103,26 @@ def parse_explicit_follow_up(
     if not prompt.endswith(("？", "?")):
         prompt += "？"
     return FollowUpSuggestionDraft(prompt[:160], follow_up_at)
+
+
+def parse_follow_up_time_change(text: str) -> tuple[int, int] | None:
+    """解析最近一次跟进的明确改时请求；不在这里猜测目标或日期。"""
+
+    normalized = text.strip().rstrip("。！？!? ")
+    match = _TIME_CHANGE_PATTERN.fullmatch(normalized)
+    if match is None:
+        return None
+    hour = _number(match.group("hour"))
+    minute = _number(match.group("minute")) if match.group("minute") else 0
+    period = match.group("period")
+    if period is None and hour < 13:
+        return None
+    if period is not None and not 1 <= hour <= 12:
+        return None
+    if period in {"下午", "晚上", "夜里"} and hour < 12:
+        hour += 12
+    elif period == "中午" and hour < 11:
+        hour += 12
+    if hour > 23 or minute > 59:
+        return None
+    return hour, minute

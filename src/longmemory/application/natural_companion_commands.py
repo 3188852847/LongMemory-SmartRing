@@ -1,7 +1,7 @@
 """圆屏可直接表达的高精度陪伴控制命令。"""
 
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import datetime, timedelta
 from collections.abc import Callable
 from uuid import uuid4
 
@@ -10,6 +10,9 @@ from longmemory.core.common.identifiers import MessageId
 from longmemory.core.conversation.contracts import ConversationStore
 from longmemory.core.conversation.models import ConversationMessage, MessageRole
 from longmemory.methods.contracts import MemoryEvent, WriteTrace
+from longmemory.application.follow_up_suggestions import (
+    parse_follow_up_time_change,
+)
 
 
 _REJECT_TOPIC = frozenset({
@@ -39,16 +42,21 @@ class NaturalCompanionCommandService:
 
     def __init__(self, *, conversation_store: ConversationStore,
                  feedback_store: CompanionFeedbackStore,
-                 cancel_recent_follow_up: Callable[..., str]) -> None:
+                 cancel_recent_follow_up: Callable[..., str],
+                 reschedule_recent_follow_up: Callable[
+                     ..., tuple[str, datetime | None]
+                 ]) -> None:
         self._conversation_store = conversation_store
         self._feedback_store = feedback_store
         self._cancel_recent_follow_up = cancel_recent_follow_up
+        self._reschedule_recent_follow_up = reschedule_recent_follow_up
 
     @staticmethod
     def recognizes(event: MemoryEvent) -> bool:
         normalized = event.content.strip().rstrip("。！？!? ")
-        return event.role == "user" and normalized in (
-            _REJECT_TOPIC | _CANCEL_FOLLOW_UP
+        return event.role == "user" and (
+            normalized in (_REJECT_TOPIC | _CANCEL_FOLLOW_UP)
+            or parse_follow_up_time_change(normalized) is not None
         )
 
     def handle(self, event: MemoryEvent) -> NaturalCompanionCommandResult:
@@ -58,6 +66,35 @@ class NaturalCompanionCommandService:
         )
         self._conversation_store.save(message)
         normalized = event.content.strip().rstrip("。！？!? ")
+        time_change = parse_follow_up_time_change(normalized)
+        if time_change is not None:
+            hour, minute = time_change
+            outcome, scheduled_for = self._reschedule_recent_follow_up(
+                subject_id="user:self",
+                before=event.occurred_at,
+                not_before=event.occurred_at - timedelta(minutes=30),
+                hour=hour,
+                minute=minute,
+                source_message_id=event.event_id,
+            )
+            notices = {
+                "target_not_found": "最近没有仍可修改的一次性跟进，因此没有改动任何安排。",
+                "target_ambiguous": (
+                    "最近有多条仍未执行的跟进，无法确定你指哪一条，因此没有修改。"
+                    "请在控制台选择具体事项。"
+                ),
+                "already_attempted": "刚才的跟进已经开始处理或结束，不能再修改时间。",
+                "time_not_future": "你指定的新时间已经过去，因此原安排没有改动。",
+                "unchanged": "新时间与原安排相同，因此没有重复创建跟进。",
+            }
+            notice = (
+                f"好的，已把刚才的一次性跟进改到"
+                f"{scheduled_for.strftime('%Y年%m月%d日 %H:%M')}，原时间不会再触发。"
+                if outcome == "applied" else notices[outcome]
+            )
+            return NaturalCompanionCommandResult(
+                "reschedule_follow_up", outcome, notice,
+            )
         if normalized in _CANCEL_FOLLOW_UP:
             outcome = self._cancel_recent_follow_up(
                 subject_id="user:self",
