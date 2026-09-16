@@ -78,7 +78,7 @@ pnpm test:e2e
 if ($LASTEXITCODE -ne 0) { throw "Playwright 浏览器验收失败，请查看 test-results" }
 ```
 
-该命令会先构建生产资源，再自动启动 `127.0.0.1:18777` 的临时 Fake 控制台。它创建临时 SQLite，不读 `.env`、个人数据库、校园模型或圆屏。通过时终端显示 `3 passed`；其中包含桌面关键路径、只读实验流程和窄屏无页面横向溢出检查。失败截图和 trace 位于 `web/react-chat/test-results/`，HTML 报告位于 `web/react-chat/playwright-report/`，二者都被 Git 忽略。若提示浏览器不存在，只安装与锁定版本配套的 Chromium：`pnpm exec playwright install chromium`；这一步需要联网。
+该命令会先构建生产资源，再自动启动 `127.0.0.1:18777` 的临时 Fake 控制台。它创建临时 SQLite，不读 `.env`、个人数据库、校园模型或圆屏。当前通过时终端显示 `4 passed`；其中包含桌面关键路径、只读实验流程、窄屏无页面横向溢出，以及重复 L1 合并/恢复与矛盾候选边界。失败截图和 trace 位于 `web/react-chat/test-results/`，HTML 报告位于 `web/react-chat/playwright-report/`，二者都被 Git 忽略。若提示浏览器不存在，只安装与锁定版本配套的 Chromium：`pnpm exec playwright install chromium`；这一步需要联网。
 
 助手当前使用的随附 pnpm 不代表用户终端已有 `pnpm` 命令。若提示找不到命令，先核对开发工具路径，不重新安装 Python 或删除项目。
 
