@@ -21,10 +21,20 @@ MAX_REQUEST_BYTES = 4096
 class LauncherControl:
     """在既有单实例 socket 上验权，并把操作交回 Tk 主线程。"""
 
-    def __init__(self, listener: socket.socket, path: Path, *, token: str | None = None):
+    def __init__(
+        self,
+        listener: socket.socket,
+        path: Path,
+        *,
+        token: str | None = None,
+        response_timeout_seconds: float = 30,
+    ):
+        if response_timeout_seconds <= 0:
+            raise ValueError("launcher_control_timeout_invalid")
         self.listener = listener
         self.path = path
         self.token = token or secrets.token_urlsafe(32)
+        self.response_timeout_seconds = response_timeout_seconds
         self._pending = deque()
         self._pending_lock = threading.Lock()
         self._closed = threading.Event()
@@ -96,14 +106,28 @@ class LauncherControl:
                     elif not isinstance(action, str) or action not in ALLOWED_ACTIONS:
                         response = {"ok": False, "error": "action_not_allowed"}
                     else:
-                        completed = threading.Event()
-                        box = {}
+                        pending = {
+                            "action": action,
+                            "completed": threading.Event(),
+                            "state": "queued",
+                            "response": None,
+                        }
                         with self._pending_lock:
-                            self._pending.append((action, completed, box))
-                        if not completed.wait(timeout=30):
-                            response = {"ok": False, "error": "launcher_busy"}
-                        else:
-                            response = box["response"]
+                            self._pending.append(pending)
+                        pending["completed"].wait(timeout=self.response_timeout_seconds)
+                        # 超时与主线程取队列之间存在竞争，因此必须在同一把锁下决定
+                        # 最终语义：尚未开始的请求取消，已经开始的请求只报告结果未知。
+                        with self._pending_lock:
+                            if pending["state"] == "completed":
+                                response = pending["response"]
+                            elif pending["state"] == "queued":
+                                pending["state"] = "cancelled"
+                                response = {"ok": False, "error": "launcher_busy"}
+                            else:
+                                response = {
+                                    "ok": False,
+                                    "error": "launcher_action_outcome_unknown",
+                                }
                 except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError):
                     response = {"ok": False, "error": "invalid_request"}
                 try:
@@ -122,19 +146,26 @@ class LauncherControl:
             except OSError:
                 pass
         handled = 0
-        while handled < 8:
+        inspected = 0
+        while inspected < 8:
             with self._pending_lock:
                 if not self._pending:
                     break
-                action, completed, box = self._pending.popleft()
+                pending = self._pending.popleft()
+                inspected += 1
+                if pending["state"] != "queued":
+                    continue
+                pending["state"] = "running"
             try:
-                response = dispatch(action)
+                response = dispatch(pending["action"])
                 if not isinstance(response, dict) or type(response.get("ok")) is not bool:
                     response = {"ok": False, "error": "invalid_dispatch_result"}
             except Exception:
                 response = {"ok": False, "error": "launcher_action_failed"}
-            box["response"] = response
-            completed.set()
+            with self._pending_lock:
+                pending["response"] = response
+                pending["state"] = "completed"
+            pending["completed"].set()
             handled += 1
         return handled
 
@@ -142,6 +173,13 @@ class LauncherControl:
         if self._closed.is_set():
             return
         self._closed.set()
+        # 关闭面板时让仍在排队的客户端立即得到确定结果，避免后台线程继续等待。
+        with self._pending_lock:
+            for pending in self._pending:
+                if pending["state"] == "queued":
+                    pending["state"] = "completed"
+                    pending["response"] = {"ok": False, "error": "launcher_closed"}
+                    pending["completed"].set()
         self._thread.join(timeout=1)
         try:
             saved = json.loads(self.path.read_text(encoding="utf-8"))

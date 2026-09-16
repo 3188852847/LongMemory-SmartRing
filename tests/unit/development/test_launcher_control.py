@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 import socket
 import sys
+import threading
 import time
 
 
@@ -124,3 +125,53 @@ def test_client_rejects_non_loopback_discovery_and_unknown_action(tmp_path):
         assert str(error) == "launcher_control_action_invalid"
     else:
         raise AssertionError("unlisted action must be rejected")
+
+
+def test_timed_out_queued_request_is_cancelled_instead_of_running_later(tmp_path):
+    listener = _listener()
+    path = tmp_path / "launcher-control.json"
+    bridge = control_module.LauncherControl(
+        listener, path, token="q" * 43, response_timeout_seconds=0.05,
+    )
+    dispatched = []
+    try:
+        result = control_module.request_control(path, "start", timeout=1)
+        assert result == {"ok": False, "error": "launcher_busy"}
+        assert bridge.poll(lambda action: dispatched.append(action) or {"ok": True}) == 0
+        assert dispatched == []
+    finally:
+        bridge.close()
+        listener.close()
+
+
+def test_request_that_already_started_reports_unknown_outcome_on_timeout(tmp_path):
+    listener = _listener()
+    path = tmp_path / "launcher-control.json"
+    bridge = control_module.LauncherControl(
+        listener, path, token="r" * 43, response_timeout_seconds=0.05,
+    )
+    release = threading.Event()
+    dispatched = []
+
+    def dispatch(action):
+        dispatched.append(action)
+        release.wait(timeout=1)
+        return {"ok": True, "state": "starting"}
+
+    try:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+            request = executor.submit(control_module.request_control, path, "start", timeout=1)
+            deadline = time.monotonic() + 1
+            while not bridge._pending and time.monotonic() < deadline:
+                time.sleep(0.005)
+            polling = executor.submit(bridge.poll, dispatch)
+            assert request.result(timeout=1) == {
+                "ok": False, "error": "launcher_action_outcome_unknown",
+            }
+            release.set()
+            assert polling.result(timeout=1) == 1
+        assert dispatched == ["start"]
+    finally:
+        release.set()
+        bridge.close()
+        listener.close()
