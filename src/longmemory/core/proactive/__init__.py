@@ -25,6 +25,7 @@ from .schedule import (
     ScheduledTriggerDecision,
     ScheduledTriggerReason,
     decide_scheduled_trigger,
+    next_interval_anchor_minute,
     scheduled_trigger_slot,
 )
 
@@ -50,6 +51,7 @@ __all__ = [
     "OutreachPolicyState",
     "decide_outreach",
     "decide_scheduled_trigger",
+    "next_interval_anchor_minute",
     "scheduled_trigger_slot",
     "transition_outreach",
 ]

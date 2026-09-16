@@ -34,6 +34,28 @@ class ScheduledTriggerDecision:
     idempotency_key: str | None = None
 
 
+def next_interval_anchor_minute(config, *, now: datetime) -> int:
+    """短周期从保存后的下一个允许分钟开始，锚点不再由用户管理。"""
+
+    if now.tzinfo is None or now.utcoffset() is None:
+        raise ValueError("interval_anchor_now_timezone_required")
+    local_zone = timezone(timedelta(minutes=config.utc_offset_minutes))
+    local_now = now.astimezone(local_zone).replace(second=0, microsecond=0)
+    for offset in range(1, 24 * 60 + 1):
+        candidate = local_now + timedelta(minutes=offset)
+        minute = candidate.hour * 60 + candidate.minute
+        start = config.allowed_start_minute
+        end = config.allowed_end_minute
+        inside = (
+            start <= minute < end
+            if start < end
+            else minute >= start or minute < end
+        )
+        if inside:
+            return minute
+    raise ValueError("interval_anchor_allowed_window_empty")
+
+
 def scheduled_trigger_slot(
     settings: ProactivePolicySettings, *, now: datetime,
 ) -> tuple[datetime, str] | None:
@@ -61,6 +83,11 @@ def scheduled_trigger_slot(
             if settings.updated_at is not None
             else local_now.date()
         )
+        if settings.updated_at is not None:
+            updated_local = settings.updated_at.astimezone(local_zone)
+            updated_minute = updated_local.hour * 60 + updated_local.minute
+            if settings.scheduled_minute <= updated_minute:
+                anchor_date += timedelta(days=1)
         anchor_local = datetime.combine(
             anchor_date, datetime.min.time(), tzinfo=local_zone,
         ) + timedelta(minutes=settings.scheduled_minute)

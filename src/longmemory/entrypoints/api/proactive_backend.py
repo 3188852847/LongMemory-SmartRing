@@ -8,7 +8,7 @@
 import hashlib
 import secrets
 import sqlite3
-from datetime import UTC, datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone
 
 from longmemory.adapters.storage.sqlite_proactive_outreach_store import (
     SQLiteProactiveOutreachStore,
@@ -42,6 +42,7 @@ from longmemory.core.proactive import (
     ProactiveTopicSeed,
     TopicSeedStatus,
     decide_scheduled_trigger,
+    next_interval_anchor_minute,
     scheduled_trigger_slot,
 )
 
@@ -256,18 +257,6 @@ class ProactiveBackend:
                 minimum_interval=timedelta(seconds=request.minimum_interval_seconds),
                 maximum_lifetime=timedelta(seconds=request.maximum_lifetime_seconds),
             )
-            ProactivePolicySettings(
-                "user:self",
-                config,
-                request.quiet_until,
-                automatic_enabled=request.automatic_enabled,
-                scheduled_minute=request.scheduled_minute,
-                greeting_text=request.greeting_text,
-                topic_enabled=request.topic_enabled,
-                automatic_interval_seconds=(
-                    request.automatic_interval_seconds or 24 * 60 * 60
-                ),
-            )
         except ValueError:
             raise MemoryAccessError("invalid_proactive_policy", 400) from None
         with self._open_database(write_capability="proactive") as connection:
@@ -280,13 +269,20 @@ class ProactiveBackend:
                 if request.automatic_interval_seconds is not None
                 else current.automatic_interval_seconds
             )
-            updated = ProactivePolicySettings(
-                "user:self", config, request.quiet_until,
-                current.revision + 1, datetime.now(UTC),
-                request.automatic_enabled, request.scheduled_minute,
-                request.greeting_text, request.topic_enabled,
-                interval_seconds,
-            )
+            now = self._clock()
+            scheduled_minute = request.scheduled_minute
+            if request.automatic_enabled and interval_seconds < 24 * 60 * 60:
+                scheduled_minute = next_interval_anchor_minute(config, now=now)
+            try:
+                updated = ProactivePolicySettings(
+                    "user:self", config, request.quiet_until,
+                    current.revision + 1, now,
+                    request.automatic_enabled, scheduled_minute,
+                    request.greeting_text, request.topic_enabled,
+                    interval_seconds,
+                )
+            except ValueError:
+                raise MemoryAccessError("invalid_proactive_policy", 400) from None
             return proactive_policy_json(
                 store.save(updated, expected_revision=current.revision)
             )

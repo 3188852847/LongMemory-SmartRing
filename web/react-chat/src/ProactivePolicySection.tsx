@@ -53,9 +53,9 @@ export function ProactivePolicySection(props:Props) {
       <div className="proactive-fields">
         <div><label htmlFor="proactive-start">开始时间</label><Input id="proactive-start" type="time" value={minuteText(draft.allowed_start_minute)} onChange={event=>props.onChange({allowed_start_minute:parseMinute(event.target.value)})}/></div>
         <div><label htmlFor="proactive-end">结束时间</label><Input id="proactive-end" type="time" value={minuteText(draft.allowed_end_minute)} onChange={event=>props.onChange({allowed_end_minute:parseMinute(event.target.value)})}/></div>
-        <div><label htmlFor="proactive-schedule">首个检查时刻</label><Input id="proactive-schedule" type="time" value={minuteText(draft.scheduled_minute)} onChange={event=>props.onChange({scheduled_minute:parseMinute(event.target.value)})}/></div>
+        {dailyMode&&<div><label htmlFor="proactive-schedule">每日问候时刻</label><Input id="proactive-schedule" type="time" value={minuteText(draft.scheduled_minute)} onChange={event=>props.onChange({scheduled_minute:parseMinute(event.target.value)})}/></div>}
       </div>
-      <p className="subtle">从首个检查时刻开始按所选频率检查；只在允许星期与时段内运行。当前每日上限随频率自动设为 {draft.daily_limit} 次。</p>
+      <p className="subtle">{dailyMode?'每天在所选时刻检查一次。':'短周期会在保存并开启后，从下一个允许分钟自动开始，不需要设置锚点。'}只在允许星期与时段内运行。当前每日上限随频率自动设为 {draft.daily_limit} 次。</p>
       <div className="setting-line"><span>{quietActive ? `临时勿扰至 ${new Date(draft.quiet_until!).toLocaleString()}` : '临时勿扰未开启'}</span><Space>
         <Button onClick={()=>props.onChange({quiet_until:new Date(Date.now()+60*60*1000).toISOString()})}>勿扰 1 小时</Button>
         <Button disabled={!draft.quiet_until} onClick={()=>props.onChange({quiet_until:null})}>解除勿扰</Button>
@@ -98,14 +98,16 @@ export function ProactivePolicySection(props:Props) {
       <label htmlFor="proactive-frequency">主动交流频率</label>
       <InputNumber id="proactive-frequency" aria-label="主动交流频率（分钟）" min={1} max={1440} step={1} value={intervalMinutes} onChange={setFrequency}/>
       <small>{proactiveFrequencyText(draft.automatic_interval_seconds)}；可设置 1 分钟到 24 小时。语音可说“把主动交流频率改成每十分钟一次”。</small>
+      {!dailyMode&&<small>保存并开启后会从下一个允许分钟自动开始，不需要设置周期锚点。</small>}
+      {!draft.automatic_enabled&&<Alert type="info" showIcon title="频率已设置，但周期问候尚未开启" description="打开上方开关并保存后，短周期会从下一个允许分钟自动开始。"/>}
       {intervalMinutes<=5&&<Alert type="warning" showIcon title="当前是高频主动交流" description="一分钟级频率可能频繁打断你；上一条仍待回应、勿扰、设备忙碌或不在允许时段时仍会停止播报。"/>}
       <label htmlFor="proactive-greeting">问候内容</label>
       <Input id="proactive-greeting" maxLength={80} showCount value={draft.greeting_text} onChange={event=>props.onChange({greeting_text:event.target.value})}/>
-      {draft.automatic_enabled&&!scheduleInsideWindow&&<Alert type="error" showIcon title="首个检查时刻必须位于允许时段内"/>}
+      {dailyMode&&draft.automatic_enabled&&!scheduleInsideWindow&&<Alert type="error" showIcon title="每日问候时刻必须位于允许时段内"/>}
       {schedule?.awaiting_user_response&&<Alert type="info" showIcon title="正在等待你回应上一条主动问候" description="真正说出并保存一条新消息后，后续时间槽才会继续尝试。"/>}
       {dailyMode&&schedule?.user_chatted_today&&<Alert type="info" showIcon title="今天已经聊过，今天的每日问候会跳过" description="改成短于 24 小时的间隔后，今日对话不再跳过整天；其他护栏仍保留。"/>}
       {props.scheduleFailed&&<Alert type="error" showIcon title="暂时无法读取当前调度状态"/>}
-      <Space wrap><Button type="primary" loading={props.savePending} disabled={!props.dirty||draft.allowed_weekdays.length===0||draft.allowed_start_minute===draft.allowed_end_minute||(draft.automatic_enabled&&!scheduleInsideWindow)||!draft.greeting_text.trim()||draft.greeting_text!==draft.greeting_text.trim()} onClick={props.onSave}>保存主动交流设置</Button>
+      <Space wrap><Button type="primary" loading={props.savePending} disabled={!props.dirty||draft.allowed_weekdays.length===0||draft.allowed_start_minute===draft.allowed_end_minute||(dailyMode&&draft.automatic_enabled&&!scheduleInsideWindow)||!draft.greeting_text.trim()||draft.greeting_text!==draft.greeting_text.trim()} onClick={props.onSave}>保存主动交流设置</Button>
         <Button disabled={!props.dirty||props.savePending} onClick={props.onDiscard}>放弃修改</Button></Space>
       {props.notice&&<p role="status">{props.notice}</p>}
     </section>

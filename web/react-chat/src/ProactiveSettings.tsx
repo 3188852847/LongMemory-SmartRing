@@ -63,7 +63,7 @@ export function ProactiveSettings({api, ready}:{api:ChatApi; ready:boolean}) {
       greeting_text:value.greeting_text, topic_enabled:value.topic_enabled,
       automatic_interval_seconds:value.automatic_interval_seconds ?? 86400,
     }),
-    onSuccess:value => {const normalized=normalizePolicy(value); client.setQueryData(['proactive-policy'], normalized); setDraft(normalized); setNotice(value.automatic_enabled ? `设置已保存；周期问候将按每 ${(value.automatic_interval_seconds ?? 86400) / 60} 分钟一次的上限检查。` : '设置已保存；周期问候保持关闭。'); void client.invalidateQueries({queryKey:['proactive-schedule-status']});},
+    onSuccess:value => {const normalized=normalizePolicy(value); client.setQueryData(['proactive-policy'], normalized); setDraft(normalized); setNotice(value.automatic_enabled ? ((value.automatic_interval_seconds ?? 86400)<86400 ? `设置已保存；将从下一个允许分钟开始，最多每 ${(value.automatic_interval_seconds ?? 86400) / 60} 分钟尝试一次。` : '设置已保存；每日问候会在所选时刻检查一次。') : '设置已保存；频率已保留，但周期问候仍然关闭。'); void client.invalidateQueries({queryKey:['proactive-schedule-status']});},
     onError:error => {setNotice(error instanceof ApiError && error.code === 'proactive_settings_conflict' ? '设置已被另一个页面修改，请重新读取后再保存。' : '保存失败，未自动重试。'); void client.invalidateQueries({queryKey:['proactive-policy']});},
   });
   const testMutation = useMutation({

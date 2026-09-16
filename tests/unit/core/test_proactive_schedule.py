@@ -10,6 +10,7 @@ from longmemory.core.proactive import (
     ScheduledTriggerAction,
     ScheduledTriggerReason,
     decide_scheduled_trigger,
+    next_interval_anchor_minute,
 )
 
 
@@ -89,6 +90,37 @@ def test_interval_does_not_backdate_current_minute_after_setting_changes():
     )
     result = decide(settings=just_changed, now=NOW)
     assert (result.action.value, result.reason.value) == ("wait", "between_intervals")
+
+
+def test_short_interval_anchor_uses_next_allowed_minute_without_user_input():
+    daytime = OutreachPolicyConfig(
+        enabled=True, allowed_start_minute=9 * 60, allowed_end_minute=21 * 60,
+    )
+    assert next_interval_anchor_minute(daytime, now=NOW) == 13 * 60 + 1
+    assert next_interval_anchor_minute(
+        daytime, now=NOW.replace(hour=13, minute=30),
+    ) == 9 * 60
+
+
+def test_short_interval_anchor_wraps_midnight_into_the_next_day():
+    all_day = OutreachPolicyConfig(
+        enabled=True, allowed_start_minute=0, allowed_end_minute=1439,
+    )
+    changed = datetime(2026, 9, 7, 15, 59, 30, tzinfo=UTC)  # 当地 23:59。
+    anchor = next_interval_anchor_minute(all_day, now=changed)
+    interval = settings(
+        automatic_interval_seconds=60,
+        scheduled_minute=anchor,
+        config=all_day,
+        revision=1,
+        updated_at=changed,
+    )
+    result = decide(
+        settings=interval,
+        now=datetime(2026, 9, 7, 16, 0, 5, tzinfo=UTC),
+    )
+    assert anchor == 0
+    assert result.action == ScheduledTriggerAction.CREATE
 
 
 def test_interval_keeps_its_continuous_phase_across_local_midnight():

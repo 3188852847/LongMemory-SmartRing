@@ -1,7 +1,7 @@
 """自然语言记忆操作的 SQLite 原子事务适配器。"""
 
 from pathlib import Path
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from math import ceil
 import hashlib
 import sqlite3
@@ -46,6 +46,7 @@ from longmemory.core.proactive import (
     OutreachTrigger,
     OutreachPolicyConfig,
     ProactivePolicySettings,
+    next_interval_anchor_minute,
 )
 from longmemory.infrastructure.database.schema import SCHEMA_VERSION
 
@@ -93,11 +94,6 @@ class SQLiteNaturalMemoryCommandHandler:
         current = store.get("user:self")
         if current.automatic_interval_seconds == seconds:
             return "unchanged", current.config.enabled, current.automatic_enabled
-        local_zone = timezone(
-            timedelta(minutes=current.config.utc_offset_minutes)
-        )
-        local_now = occurred_at.astimezone(local_zone)
-        anchor = (local_now.hour * 60 + local_now.minute + 1) % (24 * 60)
         config = OutreachPolicyConfig(
             enabled=current.config.enabled,
             utc_offset_minutes=current.config.utc_offset_minutes,
@@ -112,6 +108,7 @@ class SQLiteNaturalMemoryCommandHandler:
             maximum_lifetime=current.config.maximum_lifetime,
             policy_version="proactive-contact-policy-v3",
         )
+        anchor = next_interval_anchor_minute(config, now=occurred_at)
         updated = ProactivePolicySettings(
             current.subject_id, config, current.quiet_until,
             current.revision + 1, occurred_at,

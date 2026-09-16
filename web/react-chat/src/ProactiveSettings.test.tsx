@@ -75,6 +75,8 @@ describe('主动交流设置', () => {
 
     fireEvent.change(await screen.findByRole('spinbutton', {name:'主动交流频率（分钟）'}), {target:{value:'1'}});
     expect(await screen.findByText('当前是高频主动交流')).toBeTruthy();
+    expect(screen.queryByLabelText('每日问候时刻')).toBeNull();
+    expect(screen.getByText(/从下一个允许分钟自动开始/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', {name:'保存主动交流设置'}));
 
     await waitFor(() => expect(request).toHaveBeenCalledWith(
