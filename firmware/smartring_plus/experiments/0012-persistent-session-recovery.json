@@ -48,17 +48,27 @@
     "capability_marker_present_in_binary": true
   },
   "flash": {
-    "result": "pending_user_authorization",
+    "result": "verified",
+    "flashed_on": "2026-09-16",
     "port": "COM3",
+    "chip": "ESP32-S3 revision v0.2",
+    "mac_suffix": "6d:38",
+    "esptool_version": "4.12.0",
     "required_offsets": ["0x20000"],
     "application_only": true,
     "nvs_write_required": false,
     "assets_write_required": false,
     "partition_table_write_required": false,
+    "erased_range": "0x00020000-0x003ecfff",
+    "written_bytes": 3984224,
+    "write_hash_verification": "passed",
+    "independent_verify_flash": "digest_matched",
     "rollback_image": "D:\\sr-bv2-lvgl-assets\\backups\\0012-pre-persistent-session\\xiaozhi-0011.bin",
     "rollback_image_sha256": "5C58143B2EC3F8FE2940FC1D3EF1CDAF8A520968FAB963A0DF64B8340B4579B7"
   },
   "runtime": {
+    "firmware_boot": "verified_from_serial_log",
+    "wifi_and_ota": "verified",
     "capability_negotiated": "pending_device_validation",
     "idle_without_disconnect": "pending_device_validation",
     "wake_reuses_connection": "pending_device_validation",
