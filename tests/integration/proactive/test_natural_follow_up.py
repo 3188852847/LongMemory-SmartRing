@@ -1,3 +1,4 @@
+import asyncio
 from datetime import UTC, datetime, timedelta
 import json
 import sqlite3
@@ -14,6 +15,7 @@ from longmemory.adapters.storage.sqlite_proactive_outreach_store import (
 from longmemory.bootstrap import build_memory_runtime
 from longmemory.application.memory_runtime import MemoryRuntime
 from longmemory.core.proactive import OutreachPolicyConfig, ProactivePolicySettings
+from longmemory.entrypoints.api.memory_backend import MemoryBackend
 from longmemory.infrastructure.database.connection import open_database
 from longmemory.infrastructure.database.schema import initialize_schema
 from longmemory.methods.daily_llm.method import DailyLLMMemory
@@ -244,6 +246,85 @@ def test_explicit_voice_reschedule_replaces_recent_follow_up_atomically(tmp_path
         "WHERE content='请把时间改成16点30分。'"
     ).fetchone()[0] == 1
     connection.close()
+
+
+def test_rescheduled_voice_follow_up_delivers_only_at_new_time_after_restart(
+    tmp_path,
+):
+    """追加式改时必须改变真实后台投递，而不只改变候选页面。"""
+
+    path = tmp_path / "natural-follow-up-reschedule-delivery.db"
+    prepare(path)
+    connection = open_database(path)
+    SQLiteProactivePolicyStore(connection).save(
+        ProactivePolicySettings(
+            "user:self", OutreachPolicyConfig(
+                enabled=True, daily_limit=2, minimum_interval=timedelta(0),
+            ),
+            revision=1, updated_at=NOW,
+        ),
+        expected_revision=0,
+    )
+    connection.close()
+
+    runtime = build_memory_runtime(path, clock=lambda: NOW)
+    runtime.prepare_user(
+        "我明天下午三点要提交毕业设计汇报，到时候问我汇报进展"
+    )
+    runtime.close()
+    changed_at = NOW + timedelta(minutes=1)
+    runtime = build_memory_runtime(path, clock=lambda: changed_at)
+    changed = runtime.prepare_user("请把时间改成16点30分。")
+    runtime.close()
+    assert changed.memory_command.status == "applied"
+
+    class ReadyBridge:
+        def __init__(self):
+            self.announcements = []
+
+        async def status(self):
+            return {
+                "connection_count": 1, "ready": True,
+                "announcement_supported": True, "announcement_ready": True,
+                "user_session_active": False,
+            }
+
+        async def announce(self, text, expires_at):
+            self.announcements.append((text, expires_at))
+            return {"state": "queued"}
+
+    bridge = ReadyBridge()
+    old_time = datetime.fromisoformat("2026-09-11T15:00:00+08:00")
+    new_time = datetime.fromisoformat("2026-09-11T16:30:00+08:00")
+
+    # 每次创建新的 Backend，模拟服务停止后依靠 SQLite 账本恢复调度。
+    old_result = asyncio.run(
+        MemoryBackend(path, clock=lambda: old_time).proactive_follow_up_tick(
+            bridge
+        )
+    )
+    delivered = asyncio.run(
+        MemoryBackend(path, clock=lambda: new_time).proactive_follow_up_tick(
+            bridge
+        )
+    )
+    duplicate = asyncio.run(
+        MemoryBackend(path, clock=lambda: new_time).proactive_follow_up_tick(
+            bridge
+        )
+    )
+
+    assert old_result == {
+        "action": "skip", "reason": "no_due_follow_up",
+        "suppress_lower_priority": False,
+    }
+    assert delivered["state"] == "queued"
+    assert len(bridge.announcements) == 1
+    assert duplicate == {
+        "action": "skip",
+        "reason": "follow_up_already_handled_this_minute",
+        "suppress_lower_priority": True,
+    }
 
 
 def test_follow_up_reschedule_rejects_past_time_without_changing_original(tmp_path):

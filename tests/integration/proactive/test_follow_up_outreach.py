@@ -110,6 +110,40 @@ def test_armed_follow_up_waits_then_uses_existing_policy_and_delivers_once(tmp_p
     }
 
 
+def test_missed_follow_up_expires_without_late_delivery(tmp_path):
+    """服务错过整个有效窗口后只能记为过期，重启也不得补播。"""
+
+    path = tmp_path / "follow-up-missed.db"
+    prepare(path)
+    create_and_arm(path)
+    bridge = ReadyBridge()
+    after_window = DUE + timedelta(minutes=5)
+
+    first = asyncio.run(
+        MemoryBackend(
+            path, clock=lambda: after_window,
+        ).proactive_follow_up_tick(bridge)
+    )
+    after_restart = asyncio.run(
+        MemoryBackend(
+            path, clock=lambda: after_window + timedelta(minutes=1),
+        ).proactive_follow_up_tick(bridge)
+    )
+
+    assert first["state"] == "expired"
+    connection = open_database(path)
+    assert connection.execute(
+        "SELECT reason_code FROM proactive_outreach_events "
+        "ORDER BY occurred_at DESC,sequence DESC LIMIT 1"
+    ).fetchone()[0] == "follow_up_delivery_window_missed"
+    connection.close()
+    assert bridge.announcements == []
+    assert after_restart == {
+        "action": "skip", "reason": "no_due_follow_up",
+        "suppress_lower_priority": False,
+    }
+
+
 def test_cancelling_armed_follow_up_cancels_future_outreach(tmp_path):
     path = tmp_path / "follow-up-cancel.db"
     prepare(path)
