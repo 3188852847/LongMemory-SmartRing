@@ -1,0 +1,68 @@
+{
+  "schema_version": 1,
+  "captured_on": "2026-09-16",
+  "experiment": "0012-persistent-session-recovery",
+  "depends_on": "0011-round-visual-mode-switch",
+  "board": "viewe-smartring-plus",
+  "application_version": "2.2.3",
+  "esp_idf_version": "5.5.4",
+  "decision": {
+    "capability": "persistent_session",
+    "idle_after_seconds": 120,
+    "heartbeat_seconds": 45,
+    "microphone_stops_while_transport_stays_online": true,
+    "legacy_fallback_preserved": true,
+    "reason": "separate microphone activity from the online control channel"
+  },
+  "source": {
+    "patch_sha256": "FC77B8B29C961DD6E5C0F8E7022FFA48626B149EF87EE24E70C7A99588DF22CF",
+    "application_source_sha256_before": "BA4FA50B33632FEE82DE167AABE0929E2B95D282D3F3EC082D122F2DF09E6142",
+    "application_source_sha256_after": "7DD4F8E6A174193B5186CBD0D26FE4047960B1066E581C159A08138356B6975D",
+    "websocket_protocol_sha256_before": "718E29E7F79841A7517BA290E56AFA8BD57F94DBFA837E821D5F97BCB1AD8DF4",
+    "websocket_protocol_sha256_after": "9AF223BD22ED36F1ADFB854FD9AF367BA06D79C37B55D4FCC1DADBC06438BC3A",
+    "clean_apply": true,
+    "reverse_apply_check": true,
+    "pre_build_backup_created": true
+  },
+  "application": {
+    "length_bytes": 3984224,
+    "sha256": "1FC065D6C7BADFF0B8EC1EC6723CF3E9635D5C7B3DB4E66A16143943DBD609E8",
+    "previous_length_bytes": 3983664,
+    "previous_sha256": "5C58143B2EC3F8FE2940FC1D3EF1CDAF8A520968FAB963A0DF64B8340B4579B7",
+    "partition_length_bytes": 4128768,
+    "remaining_bytes": 144544,
+    "image_checksum_valid": true,
+    "image_validation_hash_valid": true
+  },
+  "unchanged_artifacts": {
+    "partition_table_sha256": "D46BD51980CD6E15F0BF0C86F530D87A0BBC207144BD9442937B3C1A618A3FFD",
+    "base_assets_sha256": "C31A144A0DF77BFD8F70545D3AF12E3B23F1501CC3B4865EBD91E0FCAC965478"
+  },
+  "offline_verification": {
+    "firmware_build": "passed",
+    "patch_apply": "passed",
+    "patch_reverse_check": "passed",
+    "server_targeted_tests": "48_passed",
+    "python_full_regression": "1852_passed_1_tk_environment_failure",
+    "tk_failure_isolated_rerun": "passed",
+    "capability_marker_present_in_binary": true
+  },
+  "flash": {
+    "result": "pending_user_authorization",
+    "port": "COM3",
+    "required_offsets": ["0x20000"],
+    "application_only": true,
+    "nvs_write_required": false,
+    "assets_write_required": false,
+    "partition_table_write_required": false,
+    "rollback_image": "D:\\sr-bv2-lvgl-assets\\backups\\0012-pre-persistent-session\\xiaozhi-0011.bin",
+    "rollback_image_sha256": "5C58143B2EC3F8FE2940FC1D3EF1CDAF8A520968FAB963A0DF64B8340B4579B7"
+  },
+  "runtime": {
+    "capability_negotiated": "pending_device_validation",
+    "idle_without_disconnect": "pending_device_validation",
+    "wake_reuses_connection": "pending_device_validation",
+    "failed_connect_returns_idle": "pending_device_validation",
+    "real_network_drop_recovers": "pending_device_validation"
+  }
+}

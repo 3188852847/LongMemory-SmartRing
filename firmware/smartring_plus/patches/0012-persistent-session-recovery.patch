@@ -1,0 +1,96 @@
+diff --git a/main/protocols/websocket_protocol.cc b/main/protocols/websocket_protocol.cc
+--- a/main/protocols/websocket_protocol.cc
++++ b/main/protocols/websocket_protocol.cc
+@@ -154,17 +154,26 @@
+         } else {
+             // Parse JSON data
+             auto root = cJSON_Parse(data);
+-            auto type = cJSON_GetObjectItem(root, "type");
+-            if (cJSON_IsString(type)) {
+-                if (strcmp(type->valuestring, "hello") == 0) {
+-                    ParseServerHello(root);
+-                } else {
+-                    if (on_incoming_json_ != nullptr) {
++            if (root == nullptr) {
++                ESP_LOGE(TAG, "Invalid JSON message");
++            } else {
++                auto type = cJSON_GetObjectItem(root, "type");
++                if (cJSON_IsString(type)) {
++                    if (strcmp(type->valuestring, "hello") == 0) {
++                        ParseServerHello(root);
++                    } else if (strcmp(type->valuestring, "session") == 0) {
++                        auto state = cJSON_GetObjectItem(root, "state");
++                        if (!cJSON_IsString(state) || strcmp(state->valuestring, "heartbeat") != 0) {
++                            if (on_incoming_json_ != nullptr) {
++                                on_incoming_json_(root);
++                            }
++                        }
++                    } else if (on_incoming_json_ != nullptr) {
+                         on_incoming_json_(root);
+                     }
++                } else {
++                    ESP_LOGE(TAG, "Missing message type, data: %s", data);
+                 }
+-            } else {
+-                ESP_LOGE(TAG, "Missing message type, data: %s", data);
+             }
+             cJSON_Delete(root);
+         }
+@@ -216,6 +225,9 @@
+     cJSON_AddBoolToObject(features, "aec", true);
+ #endif
+     cJSON_AddBoolToObject(features, "mcp", true);
++#if CONFIG_BOARD_TYPE_VIEWE_SMARTRING_PLUS
++    cJSON_AddBoolToObject(features, "persistent_session", true);
++#endif
+     cJSON_AddItemToObject(root, "features", features);
+     cJSON_AddStringToObject(root, "transport", "websocket");
+     cJSON* audio_params = cJSON_CreateObject();
+diff --git a/main/application.cc b/main/application.cc
+--- a/main/application.cc
++++ b/main/application.cc
+@@ -574,6 +574,16 @@
+             if (cJSON_IsObject(payload)) {
+                 McpServer::GetInstance().ParseMessage(payload);
+             }
++        } else if (strcmp(type->valuestring, "session") == 0) {
++            auto state = cJSON_GetObjectItem(root, "state");
++            if (cJSON_IsString(state) && strcmp(state->valuestring, "idle") == 0) {
++                Schedule([this]() {
++                    if (GetDeviceState() == kDeviceStateListening) {
++                        protocol_->SendStopListening();
++                        SetDeviceState(kDeviceStateIdle);
++                    }
++                });
++            }
+         } else if (strcmp(type->valuestring, "system") == 0) {
+             auto command = cJSON_GetObjectItem(root, "command");
+             if (cJSON_IsString(command)) {
+@@ -710,6 +720,9 @@
+             return;
+         }
+         SetListeningMode(mode);
++    } else if (state == kDeviceStateConnecting) {
++        protocol_->CloseAudioChannel();
++        SetDeviceState(kDeviceStateIdle);
+     } else if (state == kDeviceStateSpeaking) {
+         AbortSpeaking(kAbortReasonNone);
+     } else if (state == kDeviceStateListening) {
+@@ -725,6 +738,8 @@
+ 
+     if (!protocol_->IsAudioChannelOpened()) {
+         if (!protocol_->OpenAudioChannel()) {
++            protocol_->CloseAudioChannel();
++            SetDeviceState(kDeviceStateIdle);
+             return;
+         }
+     }
+@@ -837,6 +852,8 @@
+ 
+     if (!protocol_->IsAudioChannelOpened()) {
+         if (!protocol_->OpenAudioChannel()) {
++            protocol_->CloseAudioChannel();
++            SetDeviceState(kDeviceStateIdle);
+             audio_service_.EnableWakeWordDetection(true);
+             return;
+         }

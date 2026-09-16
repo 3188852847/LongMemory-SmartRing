@@ -207,6 +207,8 @@ def test_pipeline_bootstrap_installs_input_timing_before_response_policy(tmp_pat
     monkeypatch.setitem(sys.modules, "voice_input_latency", SimpleNamespace(
         install_voice_input_latency=lambda _: calls.append("input_timing")))
     monkeypatch.setitem(sys.modules, "voice_prediction", SimpleNamespace(install_voice_prediction_shadow=lambda _: None))
+    monkeypatch.setitem(sys.modules, "voice_persistent_session", SimpleNamespace(
+        install_persistent_device_session=lambda *_args: calls.append("persistent_session")))
     monkeypatch.setitem(sys.modules, "core.providers.asr", SimpleNamespace(base=object))
     monkeypatch.setattr(module, "isolate_memory_initialization", lambda *args: None)
     monkeypatch.setattr(module, "install_answer_completion", lambda *args: None)
@@ -220,7 +222,8 @@ def test_pipeline_bootstrap_installs_input_timing_before_response_policy(tmp_pat
         module.main()
     finally:
         sys.path[:] = previous
-    assert calls == ["input_timing", ("policy", mode, True, True), "run"]
+    assert calls == ["input_timing", ("policy", mode, True, True),
+                     "persistent_session", "run"]
 
 
 @pytest.mark.parametrize("relative", ["launcher/voice.py", "xiaozhi/setup.py", "xiaozhi/launch_with_memory.py"])

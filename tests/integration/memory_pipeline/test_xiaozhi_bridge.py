@@ -314,6 +314,160 @@ def test_launch_wrapper_marks_only_no_voice_end_prompt_boundary():
     assert suppressed == ["server generated end"]
 
 
+def test_persistent_session_idles_capable_device_without_closing_connection(
+        monkeypatch):
+    module = load_script("voice_persistent_session")
+    sent = []
+    legacy = []
+    now = 1_000.0
+    monkeypatch.setattr(module.time, "time", lambda: now)
+
+    class ConnectionClass:
+        _longmemory_persistent_session_installed = False
+
+        async def _check_timeout(self):
+            legacy.append("timeout")
+
+    async def no_voice_close_connect(_connection, have_voice):
+        legacy.append(have_voice)
+
+    receive = SimpleNamespace(no_voice_close_connect=no_voice_close_connect)
+    module.install_persistent_device_session(ConnectionClass, receive)
+    connection = SimpleNamespace(
+        features={"persistent_session": True},
+        close_after_chat=False,
+        last_activity_time=(now - 121) * 1000,
+        config={"close_connection_no_voice_time": 120},
+        websocket=SimpleNamespace(send=lambda _value: None),
+        logger=SimpleNamespace(bind=lambda **_kw: SimpleNamespace(
+            info=lambda *_args: None,
+        )),
+    )
+
+    async def send(value):
+        sent.append(value)
+
+    connection.websocket.send = send
+    asyncio.run(receive.no_voice_close_connect(connection, False))
+    asyncio.run(receive.no_voice_close_connect(connection, False))
+
+    assert sent == [module.IDLE_MESSAGE]
+    assert connection._longmemory_session_idle is True
+    assert connection.last_activity_time == (now - 121) * 1000
+    assert legacy == []
+
+    asyncio.run(receive.no_voice_close_connect(connection, True))
+
+    assert connection._longmemory_session_idle is False
+    assert legacy == [True]
+
+
+def test_persistent_session_preserves_legacy_timeout_for_old_firmware():
+    module = load_script("voice_persistent_session")
+    called = []
+
+    class ConnectionClass:
+        _longmemory_persistent_session_installed = False
+
+        async def _check_timeout(self):
+            called.append("timeout")
+
+    async def no_voice_close_connect(_connection, have_voice):
+        called.append(have_voice)
+
+    receive = SimpleNamespace(no_voice_close_connect=no_voice_close_connect)
+    module.install_persistent_device_session(
+        ConnectionClass, receive, feature_wait_seconds=0,
+    )
+    connection = SimpleNamespace(
+        features={"mcp": True},
+        stop_event=SimpleNamespace(is_set=lambda: False),
+    )
+
+    asyncio.run(receive.no_voice_close_connect(connection, False))
+    asyncio.run(ConnectionClass._check_timeout(connection))
+
+    assert called == [False, "timeout"]
+
+
+def test_persistent_session_preserves_legacy_timeout_before_feature_hello():
+    module = load_script("voice_persistent_session")
+    called = []
+
+    class ConnectionClass:
+        _longmemory_persistent_session_installed = False
+
+        async def _check_timeout(self):
+            called.append("timeout")
+
+    async def no_voice_close_connect(_connection, have_voice):
+        called.append(have_voice)
+
+    receive = SimpleNamespace(no_voice_close_connect=no_voice_close_connect)
+    module.install_persistent_device_session(
+        ConnectionClass, receive, feature_wait_seconds=0,
+    )
+    connection = SimpleNamespace(
+        features=None,
+        stop_event=SimpleNamespace(is_set=lambda: False),
+    )
+
+    asyncio.run(receive.no_voice_close_connect(connection, False))
+    asyncio.run(ConnectionClass._check_timeout(connection))
+
+    assert called == [False, "timeout"]
+
+
+def test_persistent_session_heartbeat_preserves_user_activity_time(monkeypatch):
+    module = load_script("voice_persistent_session")
+    sent = []
+    sleeps = []
+
+    class StopEvent:
+        def __init__(self):
+            self.calls = 0
+
+        def is_set(self):
+            self.calls += 1
+            return self.calls >= 3
+
+    class ConnectionClass:
+        _longmemory_persistent_session_installed = False
+
+        async def _check_timeout(self):
+            raise AssertionError("capable firmware must not use legacy timeout")
+
+    async def no_voice_close_connect(_connection, _have_voice):
+        raise AssertionError("not used")
+
+    async def sleep(value):
+        sleeps.append(value)
+
+    async def send(value):
+        sent.append(value)
+
+    monkeypatch.setattr(module.asyncio, "sleep", sleep)
+    receive = SimpleNamespace(no_voice_close_connect=no_voice_close_connect)
+    module.install_persistent_device_session(
+        ConnectionClass, receive, heartbeat_seconds=45,
+    )
+    connection = SimpleNamespace(
+        features={"persistent_session": True},
+        stop_event=StopEvent(),
+        websocket=SimpleNamespace(send=send),
+        last_activity_time=123_456,
+        logger=SimpleNamespace(bind=lambda **_kw: SimpleNamespace(
+            info=lambda *_args: None,
+        )),
+    )
+
+    asyncio.run(ConnectionClass._check_timeout(connection))
+
+    assert sleeps == [45]
+    assert sent == [module.HEARTBEAT_MESSAGE]
+    assert connection.last_activity_time == 123_456
+
+
 def test_launch_wrapper_reports_answer_when_upstream_returns_none():
     wrapper = load_script("launch_with_memory")
     recorded = []

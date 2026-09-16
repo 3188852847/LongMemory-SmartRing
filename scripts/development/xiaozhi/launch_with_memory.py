@@ -213,6 +213,7 @@ def main():
     import core.handle.receiveAudioHandle as receive_audio_handle
     from core.providers.memory.longmemory.longmemory import MemoryProvider
     from fast_voice_responses import install_fast_voice_responses
+    from voice_persistent_session import install_persistent_device_session
     from voice_latency import install_audio_send_observer, install_voice_latency
     from voice_input_latency import install_voice_input_latency
     from voice_prediction import install_voice_prediction_shadow
@@ -236,6 +237,7 @@ def main():
     # 第一版只做无正文、无播放的封闭分支影子统计，为是否值得预合成提供证据。
     install_voice_prediction_shadow(ConnectionHandler)
     install_internal_end_prompt_boundary(receive_audio_handle)
+    install_persistent_device_session(ConnectionHandler, receive_audio_handle)
     if args.device_control:
         from core.websocket_server import WebSocketServer
         from control_http import install_control_server
