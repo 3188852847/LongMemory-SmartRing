@@ -43,6 +43,7 @@ from longmemory.core.proactive import (
     OutreachTrigger,
     ScheduledTriggerAction,
     decide_scheduled_trigger,
+    scheduled_trigger_slot,
 )
 from longmemory.core.companion import (
     AbsenceRoutineDraft,
@@ -430,7 +431,6 @@ class ProactiveRuntimeBackend:
             offset = timezone(timedelta(minutes=settings.config.utc_offset_minutes))
             local_now = now.astimezone(offset)
             local_day = local_now.date()
-            idempotency_key = f"explicit-schedule:{local_day.isoformat()}"
             ledger = ProactiveOutreachLedger(
                 SQLiteProactiveOutreachStore(connection, commit_changes=False),
                 clock=lambda: now,
@@ -449,6 +449,8 @@ class ProactiveRuntimeBackend:
                     invalid_reason = "configuration_changed_or_date_expired"
                 elif not settings.config.enabled or not settings.automatic_enabled:
                     invalid_reason = "automatic_setting_disabled"
+                elif settings.automatic_interval_seconds != 24 * 60 * 60:
+                    invalid_reason = "interval_mode_does_not_use_override"
                 elif local_now.weekday() not in settings.config.allowed_weekdays:
                     invalid_reason = "weekday_no_longer_allowed"
                 elif (
@@ -462,6 +464,7 @@ class ProactiveRuntimeBackend:
                         development_override["revision"],
                         invalid_reason,
                     )
+            slot = scheduled_trigger_slot(settings, now=now)
             decision = decide_scheduled_trigger(
                 settings,
                 now=now,
@@ -474,9 +477,11 @@ class ProactiveRuntimeBackend:
                 ),
                 already_evaluated_today=(
                     False if development_override is not None
-                    else ledger.get_by_idempotency(
-                        subject_id, idempotency_key,
-                    ) is not None
+                    else bool(
+                        slot and ledger.get_by_idempotency(
+                            subject_id, slot[1],
+                        ) is not None
+                    )
                 ),
             )
         if invalid_override is not None:
@@ -521,6 +526,7 @@ class ProactiveRuntimeBackend:
                     "action": "skip",
                     "reason": "development_override_unavailable",
                 }
+            slot = scheduled_trigger_slot(settings, now=now)
             decision = decide_scheduled_trigger(
                 settings,
                 now=now,
@@ -533,9 +539,11 @@ class ProactiveRuntimeBackend:
                 ),
                 already_evaluated_today=(
                     False if current_override is not None
-                    else ledger.get_by_idempotency(
-                        subject_id, decision.idempotency_key,
-                    ) is not None
+                    else bool(
+                        slot and ledger.get_by_idempotency(
+                            subject_id, slot[1],
+                        ) is not None
+                    )
                 ),
             )
             if decision.action != ScheduledTriggerAction.CREATE:

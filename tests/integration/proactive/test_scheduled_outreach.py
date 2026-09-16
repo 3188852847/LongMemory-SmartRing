@@ -64,7 +64,10 @@ class OfflineBridge(ReadyBridge):
                 "announcement_ready": False, "reason": "device_offline"}
 
 
-def prepare(path, *, user_chatted=False, topic_enabled=False, development_budget=False):
+def prepare(
+    path, *, user_chatted=False, topic_enabled=False, development_budget=False,
+    automatic_interval_seconds=86400,
+):
     connection = open_database(path)
     initialize_schema(connection)
     SQLiteProactivePolicyStore(connection).save(
@@ -72,15 +75,22 @@ def prepare(path, *, user_chatted=False, topic_enabled=False, development_budget
             "user:self",
             OutreachPolicyConfig(
                 enabled=True,
-                daily_limit=3 if development_budget else 1,
-                minimum_interval=(timedelta(0) if development_budget else timedelta(hours=6)),
+                daily_limit=(
+                    3 if development_budget else 86400 // automatic_interval_seconds
+                ),
+                minimum_interval=(
+                    timedelta(0) if development_budget else timedelta(
+                        seconds=max(0, automatic_interval_seconds - 60),
+                    )
+                ),
             ),
             revision=1,
-            updated_at=NOW,
+            updated_at=NOW - timedelta(minutes=1),
             automatic_enabled=True,
             scheduled_minute=13 * 60,
             greeting_text="固定合成问候。",
             topic_enabled=topic_enabled,
+            automatic_interval_seconds=automatic_interval_seconds,
         ),
         expected_revision=0,
     )
@@ -162,6 +172,36 @@ def test_exact_minute_dispatches_at_most_once_across_repeated_ticks(tmp_path):
         ).fetchone() == ("explicit_schedule", "queued")
 
 
+def test_minute_interval_can_dispatch_next_slot_after_user_replies(tmp_path):
+    path = tmp_path / "minute-interval.db"
+    prepare(path, automatic_interval_seconds=60)
+    bridge = ReadyBridge()
+    first_now = NOW + timedelta(seconds=40)
+
+    first = asyncio.run(
+        MemoryBackend(path, clock=lambda: first_now).proactive_scheduled_tick(bridge)
+    )
+    connection = open_database(path)
+    connection.execute(
+        "INSERT INTO conversation_messages(id,role,content,created_at) VALUES (?,?,?,?)",
+        ("interval-reply", "user", "收到。", (NOW + timedelta(seconds=50)).isoformat()),
+    )
+    connection.commit()
+    connection.close()
+    second_now = NOW + timedelta(seconds=55)
+    second = asyncio.run(
+        MemoryBackend(path, clock=lambda: second_now).proactive_scheduled_tick(bridge)
+    )
+
+    assert first["state"] == "queued"
+    assert second["state"] == "queued"
+    assert [item[0] for item in bridge.announcements] == ["固定合成问候。"] * 2
+    with sqlite3.connect(path) as connection:
+        assert connection.execute(
+            "SELECT count(DISTINCT idempotency_key) FROM proactive_outreach"
+        ).fetchone()[0] == 2
+
+
 def test_active_absence_version_dispatches_once_through_existing_ledger(tmp_path):
     path = tmp_path / "absence-scheduled.db"
     prepare(path)
@@ -183,7 +223,7 @@ def test_active_absence_version_dispatches_once_through_existing_ledger(tmp_path
             "FROM proactive_outreach"
         ).fetchone() == (
             "habit_candidate", "routine_absence_fixed_greeting", "queued",
-            "proactive-contact-policy-v2+routine-absence-trigger-v1+selection-r1",
+            "proactive-contact-policy-v3+routine-absence-trigger-v1+selection-r1",
             "absence-version", 1, "2026-09-07",
         )
     history = backend.proactive_history(limit=1)["items"][0]

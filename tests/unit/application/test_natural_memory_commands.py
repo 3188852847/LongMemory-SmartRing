@@ -253,3 +253,28 @@ def test_ambiguous_exclusion_does_not_retroactively_delete_previous_memory(tmp_p
         assert "茉莉花茶" in runtime.prepare_user("我喜欢喝什么").support.context
     finally:
         runtime.close()
+
+
+def test_voice_frequency_command_updates_persisted_policy_without_model_guessing(tmp_path):
+    database, runtime = make_runtime(tmp_path)
+    try:
+        result = runtime.prepare_user("把主动交流频率改成每十分钟一次")
+        assert result.memory_command.kind == "set_proactive_frequency"
+        assert result.memory_command.status == "applied"
+        assert "每10分钟一次" in result.memory_command.notice
+        assert "总开关仍关闭" in result.memory_command.notice
+        repeated = runtime.prepare_user("主动联系频率设为每10分钟一次")
+        assert repeated.memory_command.status == "unchanged"
+    finally:
+        runtime.close()
+
+    with sqlite3.connect(database) as connection:
+        connection.row_factory = sqlite3.Row
+        row = connection.execute(
+            "SELECT automatic_interval_seconds,minimum_interval_seconds,"
+            "daily_limit,automatic_enabled,revision FROM proactive_policy_settings"
+        ).fetchone()
+        assert tuple(row) == (600, 540, 144, 0, 1)
+        assert connection.execute(
+            "SELECT count(*) FROM conversation_messages WHERE role='user'"
+        ).fetchone()[0] == 2

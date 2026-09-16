@@ -42,6 +42,7 @@ from longmemory.core.proactive import (
     ProactiveTopicSeed,
     TopicSeedStatus,
     decide_scheduled_trigger,
+    scheduled_trigger_slot,
 )
 
 from .errors import MemoryAccessError
@@ -79,7 +80,6 @@ class ProactiveBackend:
             runtime = history.read(subject_id, now=now)
             offset = timezone(timedelta(minutes=settings.config.utc_offset_minutes))
             local_day = now.astimezone(offset).date()
-            idempotency_key = f"explicit-schedule:{local_day.isoformat()}"
             ledger = ProactiveOutreachLedger(
                 SQLiteProactiveOutreachStore(connection, commit_changes=False),
                 clock=lambda: now,
@@ -88,8 +88,10 @@ class ProactiveBackend:
                 now=now,
                 utc_offset_minutes=settings.config.utc_offset_minutes,
             )
-            already_evaluated_today = (
-                ledger.get_by_idempotency(subject_id, idempotency_key) is not None
+            slot = scheduled_trigger_slot(settings, now=now)
+            already_evaluated_today = bool(
+                slot
+                and ledger.get_by_idempotency(subject_id, slot[1]) is not None
             )
             override_store = SQLiteProactiveScheduleOverrideStore(connection)
             development_override = override_store.get_armed(subject_id)
@@ -126,6 +128,10 @@ class ProactiveBackend:
             if not settings.config.enabled or not settings.automatic_enabled:
                 raise MemoryAccessError(
                     "proactive_schedule_override_requires_enabled", 400,
+                )
+            if settings.automatic_interval_seconds != 24 * 60 * 60:
+                raise MemoryAccessError(
+                    "proactive_schedule_override_daily_only", 400,
                 )
             local_zone = timezone(
                 timedelta(minutes=settings.config.utc_offset_minutes)
@@ -258,6 +264,9 @@ class ProactiveBackend:
                 scheduled_minute=request.scheduled_minute,
                 greeting_text=request.greeting_text,
                 topic_enabled=request.topic_enabled,
+                automatic_interval_seconds=(
+                    request.automatic_interval_seconds or 24 * 60 * 60
+                ),
             )
         except ValueError:
             raise MemoryAccessError("invalid_proactive_policy", 400) from None
@@ -266,11 +275,17 @@ class ProactiveBackend:
             current = store.get("user:self")
             if current.revision != request.expected_revision:
                 raise MemoryAccessError("proactive_settings_conflict", 409)
+            interval_seconds = (
+                request.automatic_interval_seconds
+                if request.automatic_interval_seconds is not None
+                else current.automatic_interval_seconds
+            )
             updated = ProactivePolicySettings(
                 "user:self", config, request.quiet_until,
                 current.revision + 1, datetime.now(UTC),
                 request.automatic_enabled, request.scheduled_minute,
                 request.greeting_text, request.topic_enabled,
+                interval_seconds,
             )
             return proactive_policy_json(
                 store.save(updated, expected_revision=current.revision)

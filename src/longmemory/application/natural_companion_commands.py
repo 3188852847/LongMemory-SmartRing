@@ -13,6 +13,10 @@ from longmemory.methods.contracts import MemoryEvent, WriteTrace
 from longmemory.application.follow_up_suggestions import (
     parse_follow_up_time_change,
 )
+from longmemory.application.proactive_frequency import (
+    frequency_text,
+    parse_proactive_frequency,
+)
 
 
 _REJECT_TOPIC = frozenset({
@@ -45,11 +49,14 @@ class NaturalCompanionCommandService:
                  cancel_recent_follow_up: Callable[..., str],
                  reschedule_recent_follow_up: Callable[
                      ..., tuple[str, datetime | None]
-                 ]) -> None:
+                 ],
+                 set_proactive_frequency: Callable[..., tuple[str, bool, bool]],
+             ) -> None:
         self._conversation_store = conversation_store
         self._feedback_store = feedback_store
         self._cancel_recent_follow_up = cancel_recent_follow_up
         self._reschedule_recent_follow_up = reschedule_recent_follow_up
+        self._set_proactive_frequency = set_proactive_frequency
 
     @staticmethod
     def recognizes(event: MemoryEvent) -> bool:
@@ -57,6 +64,7 @@ class NaturalCompanionCommandService:
         return event.role == "user" and (
             normalized in (_REJECT_TOPIC | _CANCEL_FOLLOW_UP)
             or parse_follow_up_time_change(normalized) is not None
+            or parse_proactive_frequency(normalized) is not None
         )
 
     def handle(self, event: MemoryEvent) -> NaturalCompanionCommandResult:
@@ -66,6 +74,34 @@ class NaturalCompanionCommandService:
         )
         self._conversation_store.save(message)
         normalized = event.content.strip().rstrip("。！？!? ")
+        frequency = parse_proactive_frequency(normalized)
+        if frequency is not None:
+            outcome, contact_enabled, automatic_enabled = (
+                self._set_proactive_frequency(
+                    seconds=frequency, occurred_at=event.occurred_at,
+                )
+            )
+            label = frequency_text(frequency)
+            if outcome == "unchanged":
+                notice = f"主动交流频率已经是每{label}一次，没有重复修改。"
+            elif not contact_enabled:
+                notice = (
+                    f"已把主动交流频率保存为每{label}一次。"
+                    "主动联系总开关仍关闭，所以现在不会主动播报。"
+                )
+            elif not automatic_enabled:
+                notice = (
+                    f"已把主动交流频率保存为每{label}一次。"
+                    "周期问候仍关闭，可以在设置中心开启。"
+                )
+            else:
+                notice = (
+                    f"好的，主动交流频率已改为每{label}一次。"
+                    "实际播报仍会遵守允许时段、勿扰和设备状态。"
+                )
+            return NaturalCompanionCommandResult(
+                "set_proactive_frequency", outcome, notice,
+            )
         time_change = parse_follow_up_time_change(normalized)
         if time_change is not None:
             hour, minute = time_change

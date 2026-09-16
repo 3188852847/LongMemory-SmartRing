@@ -7,8 +7,9 @@ from longmemory.core.proactive import OutreachPolicyConfig, ProactivePolicySetti
 
 
 class SQLiteProactivePolicyStore:
-    def __init__(self, connection: Connection) -> None:
+    def __init__(self, connection: Connection, *, commit_changes: bool = True) -> None:
         self._connection = connection
+        self._commit_changes = commit_changes
 
     def get(self, subject_id: str) -> ProactivePolicySettings:
         row = self._connection.execute(
@@ -37,6 +38,7 @@ class SQLiteProactivePolicyStore:
             row["scheduled_minute"],
             row["greeting_text"],
             bool(row["topic_enabled"]),
+            row["automatic_interval_seconds"],
         )
 
     def save(
@@ -55,6 +57,7 @@ class SQLiteProactivePolicyStore:
             config.policy_version, settings.revision, settings.updated_at.isoformat(),
             int(settings.automatic_enabled), settings.scheduled_minute,
             settings.greeting_text, int(settings.topic_enabled),
+            settings.automatic_interval_seconds,
         )
         try:
             if expected_revision == 0:
@@ -64,7 +67,8 @@ class SQLiteProactivePolicyStore:
                     "allowed_start_minute,allowed_end_minute,daily_limit,"
                     "minimum_interval_seconds,maximum_lifetime_seconds,quiet_until,"
                     "policy_version,revision,updated_at,automatic_enabled,scheduled_minute,"
-                    "greeting_text,topic_enabled) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    "greeting_text,topic_enabled,automatic_interval_seconds) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                     (settings.subject_id, *values),
                 ).rowcount
             else:
@@ -73,14 +77,17 @@ class SQLiteProactivePolicyStore:
                     "allowed_weekdays_mask=?,allowed_start_minute=?,allowed_end_minute=?,"
                     "daily_limit=?,minimum_interval_seconds=?,maximum_lifetime_seconds=?,"
                     "quiet_until=?,policy_version=?,revision=?,updated_at=?,"
-                    "automatic_enabled=?,scheduled_minute=?,greeting_text=?,topic_enabled=? "
+                    "automatic_enabled=?,scheduled_minute=?,greeting_text=?,topic_enabled=?,"
+                    "automatic_interval_seconds=? "
                     "WHERE subject_id=? AND revision=?",
                     (*values, settings.subject_id, expected_revision),
                 ).rowcount
             if changed != 1:
                 raise ValueError("proactive_settings_conflict")
-            self._connection.commit()
+            if self._commit_changes:
+                self._connection.commit()
             return settings
         except BaseException:
-            self._connection.rollback()
+            if self._commit_changes:
+                self._connection.rollback()
             raise

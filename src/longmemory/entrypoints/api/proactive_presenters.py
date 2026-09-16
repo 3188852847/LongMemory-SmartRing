@@ -28,6 +28,7 @@ def proactive_policy_json(settings):
         "scheduled_minute": settings.scheduled_minute,
         "greeting_text": settings.greeting_text,
         "topic_enabled": settings.topic_enabled,
+        "automatic_interval_seconds": settings.automatic_interval_seconds,
     }
 
 

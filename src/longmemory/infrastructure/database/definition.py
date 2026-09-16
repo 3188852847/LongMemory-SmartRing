@@ -1,6 +1,6 @@
-"""当前 SQLite V48 的完整结构定义；不包含历史迁移步骤。"""
+"""当前 SQLite V49 的完整结构定义；不包含历史迁移步骤。"""
 
-SCHEMA_VERSION = 48
+SCHEMA_VERSION = 49
 
 LATEST_SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS conversation_messages (
@@ -943,7 +943,7 @@ CREATE TABLE IF NOT EXISTS proactive_policy_settings (
     allowed_weekdays_mask INTEGER NOT NULL CHECK (allowed_weekdays_mask BETWEEN 1 AND 127),
     allowed_start_minute INTEGER NOT NULL CHECK (allowed_start_minute BETWEEN 0 AND 1439),
     allowed_end_minute INTEGER NOT NULL CHECK (allowed_end_minute BETWEEN 0 AND 1439),
-    daily_limit INTEGER NOT NULL CHECK (daily_limit BETWEEN 1 AND 20),
+    daily_limit INTEGER NOT NULL CHECK (daily_limit BETWEEN 1 AND 1440),
     minimum_interval_seconds INTEGER NOT NULL CHECK (minimum_interval_seconds BETWEEN 0 AND 604800),
     maximum_lifetime_seconds INTEGER NOT NULL CHECK (maximum_lifetime_seconds BETWEEN 5 AND 1800),
     quiet_until TEXT,
@@ -955,6 +955,9 @@ CREATE TABLE IF NOT EXISTS proactive_policy_settings (
     greeting_text TEXT NOT NULL DEFAULT '下午好，今天过得怎么样？'
         CHECK (length(trim(greeting_text)) BETWEEN 1 AND 80),
     topic_enabled INTEGER NOT NULL DEFAULT 0 CHECK (topic_enabled IN (0,1)),
+    automatic_interval_seconds INTEGER NOT NULL DEFAULT 86400
+        CHECK (automatic_interval_seconds BETWEEN 60 AND 86400
+               AND automatic_interval_seconds % 60 = 0),
     CHECK (allowed_start_minute <> allowed_end_minute)
 );
 

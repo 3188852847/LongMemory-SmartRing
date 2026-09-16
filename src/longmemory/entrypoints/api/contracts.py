@@ -162,7 +162,7 @@ class ProactivePolicyRequest(BaseModel):
     allowed_weekdays: list[int] = Field(min_length=1, max_length=7)
     allowed_start_minute: int = Field(ge=0, le=1439)
     allowed_end_minute: int = Field(ge=0, le=1439)
-    daily_limit: int = Field(ge=1, le=20)
+    daily_limit: int = Field(ge=1, le=1440)
     minimum_interval_seconds: int = Field(ge=0, le=604800)
     maximum_lifetime_seconds: int = Field(ge=5, le=1800)
     quiet_until: datetime | None
@@ -170,6 +170,10 @@ class ProactivePolicyRequest(BaseModel):
     scheduled_minute: int = Field(ge=0, le=1439)
     greeting_text: str = Field(min_length=1, max_length=80)
     topic_enabled: bool
+    # 旧控制台省略字段时由后端保留当前值，避免覆盖语音刚设置的周期。
+    automatic_interval_seconds: int | None = Field(
+        default=None, ge=60, le=86400, multiple_of=60,
+    )
 
     @field_validator("allowed_weekdays")
     @classmethod

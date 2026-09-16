@@ -27,8 +27,8 @@ describe('主动交流设置', () => {
     const client = createConsoleQueryClient();
     const api = new ChatApi();
     const view = render(<QueryClientProvider client={client}><ProactiveSettings api={api} ready={true}/></QueryClientProvider>);
-    expect(await screen.findByText('主动交流当前关闭')).toBeTruthy();
-    expect(screen.getByText(/当天已经聊过/)).toBeTruthy();
+    expect(await screen.findByRole('region', {name:'主动交流概览'})).toBeTruthy();
+    expect(screen.getByText('常用设置')).toBeTruthy();
     const toggle = screen.getByRole('switch', {name:'允许主动联系'});
     fireEvent.click(toggle);
     const automatic = screen.getByRole('switch', {name:'后台定时问候'});
@@ -42,6 +42,46 @@ describe('主动交流设置', () => {
         expected_revision:0, enabled:true, automatic_enabled:true,
         scheduled_minute:780, greeting_text:'下午好，今天过得怎么样？',
         topic_enabled:false,
+      }),
+    ));
+    view.unmount(); client.clear();
+  });
+
+  test('允许把周期频率调到一分钟并同步安全上限', async () => {
+    const policy = {
+      subject_id:'user:self', enabled:true, utc_offset_minutes:480,
+      allowed_weekdays:[0,1,2,3,4,5,6], allowed_start_minute:0, allowed_end_minute:1439,
+      daily_limit:1, minimum_interval_seconds:86340, maximum_lifetime_seconds:300,
+      quiet_until:null, policy_version:'proactive-contact-policy-v3', revision:3, updated_at:null,
+      automatic_enabled:true, automatic_interval_seconds:86400,
+      scheduled_minute:780, greeting_text:'下午好。', topic_enabled:false,
+    };
+    const request = vi.spyOn(ChatApi.prototype, 'request').mockImplementation(async (path, method, body) => {
+      if (path === '/api/proactive-policy' && method === 'PUT') {
+        return {...policy, ...(body as object), revision:4};
+      }
+      if (path === '/api/proactive-policy') return policy;
+      if (path === '/api/proactive-schedule-status') return scheduleStatus;
+      if (path.startsWith('/api/proactive-outreach?') || path.startsWith('/api/scenarios?')
+          || path === '/api/proactive-topic-seeds' || path === '/api/companion-follow-ups'
+          || path.startsWith('/api/memories?') || path === '/api/companion-strategy-candidates'
+          || path.startsWith('/api/companion-user-initiated-interactions')
+          || path === '/api/companion-routine-candidates'
+          || path === '/api/companion-absence-strategy-versions') return {items:[],events:[]};
+      throw new Error(`unexpected path: ${path}`);
+    });
+    const client = createConsoleQueryClient();
+    const view = render(<QueryClientProvider client={client}><ProactiveSettings api={new ChatApi()} ready={true}/></QueryClientProvider>);
+
+    fireEvent.change(await screen.findByRole('spinbutton', {name:'主动交流频率（分钟）'}), {target:{value:'1'}});
+    expect(await screen.findByText('当前是高频主动交流')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', {name:'保存主动交流设置'}));
+
+    await waitFor(() => expect(request).toHaveBeenCalledWith(
+      '/api/proactive-policy', 'PUT', expect.objectContaining({
+        automatic_interval_seconds:60,
+        minimum_interval_seconds:0,
+        daily_limit:1440,
       }),
     ));
     view.unmount(); client.clear();
@@ -71,6 +111,7 @@ describe('主动交流设置', () => {
     const client = createConsoleQueryClient();
     const api = new ChatApi();
     const view = render(<QueryClientProvider client={client}><ProactiveSettings api={api} ready={true}/></QueryClientProvider>);
+    fireEvent.click(await screen.findByText('测试与诊断'));
     const button = await screen.findByRole('button', {name:'发送一次测试问候'});
     expect(button.hasAttribute('disabled')).toBe(false);
     fireEvent.click(button);
@@ -112,6 +153,7 @@ describe('主动交流设置', () => {
     });
     const client = createConsoleQueryClient();
     const view = render(<QueryClientProvider client={client}><ProactiveSettings api={new ChatApi()} ready={true}/></QueryClientProvider>);
+    fireEvent.click((await screen.findAllByText('最近运行记录'))[0]);
     fireEvent.click(await screen.findByRole('button', {name:'确认已听到'}));
     expect(await screen.findByText(/亲耳观察记录为 played/)).toBeTruthy();
     expect(request).toHaveBeenCalledWith(
@@ -234,9 +276,9 @@ describe('主动交流设置', () => {
     });
     const client = createConsoleQueryClient();
     const view = render(<QueryClientProvider client={client}><ProactiveSettings api={new ChatApi()} ready={true}/></QueryClientProvider>);
-    expect(await screen.findByText('今天已经聊过，今天的定时问候会跳过')).toBeTruthy();
-    expect(screen.getByText(/不影响手动验证或你明确授权的一次性事项跟进/)).toBeTruthy();
-    expect(screen.getByText('上一条主动问候之后还没有收到新的用户消息')).toBeTruthy();
+    expect(await screen.findByText('今天已经聊过，今天的每日问候会跳过')).toBeTruthy();
+    expect(screen.getByText(/改成短于 24 小时的间隔后/)).toBeTruthy();
+    expect(screen.getByText('正在等待你回应上一条主动问候')).toBeTruthy();
     view.unmount(); client.clear();
   });
 
@@ -275,6 +317,7 @@ describe('主动交流设置', () => {
     });
     const client = createConsoleQueryClient();
     const view = render(<QueryClientProvider client={client}><ProactiveSettings api={new ChatApi()} ready={true}/></QueryClientProvider>);
+    fireEvent.click(await screen.findByText('测试与诊断'));
     fireEvent.click(await screen.findByRole('button', {name:'允许下一次定时验证'}));
     expect(await screen.findByText(/已授权下一次开发定时验证/)).toBeTruthy();
     await waitFor(() => expect(screen.getByText(/已授权 2026-09-07 13:10/)).toBeTruthy());
@@ -443,6 +486,7 @@ describe('主动交流设置', () => {
     });
     const client = createConsoleQueryClient();
     const view = render(<QueryClientProvider client={client}><ProactiveSettings api={new ChatApi()} ready={true}/></QueryClientProvider>);
+    fireEvent.click(await screen.findByText('一次性事项跟进'));
     fireEvent.click(await screen.findByRole('button', {name:'启用一次跟进'}));
     expect(await screen.findByText(/跟进已启用为一次性未来任务/)).toBeTruthy();
     expect(request).toHaveBeenCalledWith(

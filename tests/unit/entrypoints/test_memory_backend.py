@@ -240,10 +240,16 @@ def test_wipe_memories_removes_l0_to_l3_creates_backup_and_preserves_settings(re
     path, _, _ = recorded
     with sqlite3.connect(path) as connection:
         connection.execute(
-            "INSERT INTO proactive_policy_settings VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "INSERT INTO proactive_policy_settings "
+            "(subject_id,enabled,utc_offset_minutes,allowed_weekdays_mask,"
+            "allowed_start_minute,allowed_end_minute,daily_limit,"
+            "minimum_interval_seconds,maximum_lifetime_seconds,quiet_until,"
+            "policy_version,revision,updated_at,automatic_enabled,scheduled_minute,"
+            "greeting_text,topic_enabled,automatic_interval_seconds) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             ("user:self", 0, 480, 127, 480, 1320, 2, 3600, 120, None,
              "synthetic", 1, "2026-09-13T00:00:00+00:00", 0, 780,
-             "下午好，今天过得怎么样？", 0),
+             "下午好，今天过得怎么样？", 0, 86400),
         )
     backend = MemoryBackend(path, allow_delete=True)
     preview = backend.wipe_preview()

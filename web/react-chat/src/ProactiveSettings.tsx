@@ -8,11 +8,20 @@ import {ProactiveFollowUpSection} from './ProactiveFollowUpSection';
 import {CompanionLearningSection} from './CompanionLearningSection';
 import {ProactivePolicySection} from './ProactivePolicySection';
 
+const normalizePolicy = (value:ProactivePolicy):ProactivePolicy => ({
+  ...value,
+  automatic_interval_seconds:value.automatic_interval_seconds ?? 86400,
+  allowed_weekdays:[...value.allowed_weekdays],
+});
 
 /** 编辑明确许可边界；保存设置不会调用模型、创建候选或向设备投递。 */
 export function ProactiveSettings({api, ready}:{api:ChatApi; ready:boolean}) {
   const client = useQueryClient();
-  const query = useQuery({queryKey:['proactive-policy'], queryFn:() => api.request<ProactivePolicy>('/api/proactive-policy'), enabled:ready});
+  const query = useQuery({
+    queryKey:['proactive-policy'],
+    queryFn:async() => normalizePolicy(await api.request<ProactivePolicy>('/api/proactive-policy')),
+    enabled:ready,
+  });
   const scheduleStatus = useQuery({
     queryKey:['proactive-schedule-status'],
     queryFn:() => api.request<ProactiveScheduleStatus>('/api/proactive-schedule-status'),
@@ -41,7 +50,7 @@ export function ProactiveSettings({api, ready}:{api:ChatApi; ready:boolean}) {
   const [strategyNotice, setStrategyNotice] = useState('');
   const [routineNotice, setRoutineNotice] = useState('');
   const [absenceVersionNotice, setAbsenceVersionNotice] = useState('');
-  useEffect(() => {if (query.data) setDraft({...query.data, allowed_weekdays:[...query.data.allowed_weekdays]});}, [query.data]);
+  useEffect(() => {if (query.data) setDraft(normalizePolicy(query.data));}, [query.data]);
   const dirty = useMemo(() => Boolean(draft && query.data && JSON.stringify(draft) !== JSON.stringify(query.data)), [draft, query.data]);
   const mutation = useMutation({
     mutationFn:(value:ProactivePolicy) => api.request<ProactivePolicy>('/api/proactive-policy', 'PUT', {
@@ -52,8 +61,9 @@ export function ProactiveSettings({api, ready}:{api:ChatApi; ready:boolean}) {
       maximum_lifetime_seconds:value.maximum_lifetime_seconds, quiet_until:value.quiet_until,
       automatic_enabled:value.automatic_enabled, scheduled_minute:value.scheduled_minute,
       greeting_text:value.greeting_text, topic_enabled:value.topic_enabled,
+      automatic_interval_seconds:value.automatic_interval_seconds ?? 86400,
     }),
-    onSuccess:value => {client.setQueryData(['proactive-policy'], value); setDraft({...value, allowed_weekdays:[...value.allowed_weekdays]}); setNotice(value.automatic_enabled ? '设置已保存；后台只会在指定分钟检查一次。' : '设置已保存；后台定时问候保持关闭。'); void client.invalidateQueries({queryKey:['proactive-schedule-status']});},
+    onSuccess:value => {const normalized=normalizePolicy(value); client.setQueryData(['proactive-policy'], normalized); setDraft(normalized); setNotice(value.automatic_enabled ? `设置已保存；周期问候将按每 ${(value.automatic_interval_seconds ?? 86400) / 60} 分钟一次的上限检查。` : '设置已保存；周期问候保持关闭。'); void client.invalidateQueries({queryKey:['proactive-schedule-status']});},
     onError:error => {setNotice(error instanceof ApiError && error.code === 'proactive_settings_conflict' ? '设置已被另一个页面修改，请重新读取后再保存。' : '保存失败，未自动重试。'); void client.invalidateQueries({queryKey:['proactive-policy']});},
   });
   const testMutation = useMutation({
@@ -350,13 +360,13 @@ export function ProactiveSettings({api, ready}:{api:ChatApi; ready:boolean}) {
       testPending={testMutation.isPending}
       onChange={change}
       onSave={() => mutation.mutate(draft)}
-      onDiscard={() => {setDraft({...query.data!, allowed_weekdays:[...query.data!.allowed_weekdays]}); setNotice('已放弃未保存修改。');}}
+      onDiscard={() => {setDraft(normalizePolicy(query.data!)); setNotice('已放弃未保存修改。');}}
       onArm={() => armScheduleTest.mutate()}
       onCancel={() => cancelScheduleTest.mutate()}
       onTestText={setTestText}
       onTest={() => testMutation.mutate()}
     />
-    <ProactiveTopicSection
+    <details className="settings-section"><summary><strong>记忆话题（高级）</strong><span className="subtle"> 选择主动问候可用的已批准场景</span></summary><ProactiveTopicSection
       scenarios={scenarios.data?.items ?? []}
       scenariosLoaded={scenarios.isSuccess}
       seeds={topicSeeds.data?.items ?? []}
@@ -375,8 +385,8 @@ export function ProactiveSettings({api, ready}:{api:ChatApi; ready:boolean}) {
       onCreate={() => createTopic.mutate()}
       onDisable={seed => disableTopic.mutate(seed)}
       onTopicEnabledChange={topic_enabled => change({topic_enabled})}
-    />
-    <ProactiveFollowUpSection
+    /></details>
+    <details className="settings-section"><summary><strong>一次性事项跟进</strong><span className="subtle"> 建立、启用或取消未来追问</span></summary><ProactiveFollowUpSection
       sources={followUpSources.data?.items ?? []}
       items={followUps.data?.items ?? []}
       loaded={followUps.isSuccess}
@@ -398,8 +408,8 @@ export function ProactiveSettings({api, ready}:{api:ChatApi; ready:boolean}) {
       onCreate={() => createFollowUp.mutate()}
       onCancel={item => cancelFollowUp.mutate(item)}
       onArm={item => armFollowUp.mutate(item)}
-    />
-    <CompanionLearningSection
+    /></details>
+    <details className="settings-section"><summary><strong>习惯学习（实验）</strong><span className="subtle"> 候选、离线回放和版本切换</span></summary><CompanionLearningSection
       strategyItems={strategyCandidates.data?.items ?? []}
       strategyLoaded={strategyCandidates.isSuccess}
       strategyFailed={strategyCandidates.isError}
@@ -432,14 +442,14 @@ export function ProactiveSettings({api, ready}:{api:ChatApi; ready:boolean}) {
       onCreateVersion={item => createAbsenceVersion.mutate(item)}
       onSwitchVersion={(version, rollback) => switchAbsenceVersion.mutate({version, rollback})}
       onDeactivateVersion={() => deactivateAbsenceVersion.mutate()}
-    />
-    <ProactiveHistorySection
+    /></details>
+    <details className="settings-section"><summary><strong>最近运行记录</strong><span className="subtle"> 查看发送、拦截和播放证据</span></summary><ProactiveHistorySection
       items={history.data?.items ?? []}
       loading={history.isLoading}
       failed={history.isError}
       confirmingId={confirmMutation.variables?.outreach_id}
       confirmPending={confirmMutation.isPending}
       onConfirm={item => confirmMutation.mutate(item)}
-    />
+    /></details>
   </Space>;
 }

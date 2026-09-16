@@ -1,7 +1,8 @@
 """自然语言记忆操作的 SQLite 原子事务适配器。"""
 
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
+from math import ceil
 import hashlib
 import sqlite3
 from uuid import uuid4
@@ -43,6 +44,8 @@ from longmemory.core.proactive import (
     OutreachEvidence,
     OutreachState,
     OutreachTrigger,
+    OutreachPolicyConfig,
+    ProactivePolicySettings,
 )
 from longmemory.infrastructure.database.schema import SCHEMA_VERSION
 
@@ -78,7 +81,45 @@ class SQLiteNaturalMemoryCommandHandler:
             feedback_store=SQLiteCompanionFeedbackStore(self._connection),
             cancel_recent_follow_up=self._cancel_recent_follow_up,
             reschedule_recent_follow_up=self._reschedule_recent_follow_up,
+            set_proactive_frequency=self._set_proactive_frequency,
         )
+
+    def _set_proactive_frequency(self, *, seconds, occurred_at):
+        """在同一用户消息事务中更新频率；语音回执只报告已落库结果。"""
+
+        store = SQLiteProactivePolicyStore(
+            self._connection, commit_changes=False,
+        )
+        current = store.get("user:self")
+        if current.automatic_interval_seconds == seconds:
+            return "unchanged", current.config.enabled, current.automatic_enabled
+        local_zone = timezone(
+            timedelta(minutes=current.config.utc_offset_minutes)
+        )
+        local_now = occurred_at.astimezone(local_zone)
+        anchor = (local_now.hour * 60 + local_now.minute + 1) % (24 * 60)
+        config = OutreachPolicyConfig(
+            enabled=current.config.enabled,
+            utc_offset_minutes=current.config.utc_offset_minutes,
+            allowed_weekdays=current.config.allowed_weekdays,
+            allowed_start_minute=current.config.allowed_start_minute,
+            allowed_end_minute=current.config.allowed_end_minute,
+            daily_limit=ceil(86400 / seconds),
+            # 调度轮询可能比整分钟时间槽晚几十秒。若防抖也恰好等于周期，
+            # “每 1 分钟”会被上一条实际入队时间误拦；预留一分钟只吸收时间槽抖动，
+            # 真正的周期边界仍由 schedule 的唯一时间槽控制。
+            minimum_interval=timedelta(seconds=max(0, seconds - 60)),
+            maximum_lifetime=current.config.maximum_lifetime,
+            policy_version="proactive-contact-policy-v3",
+        )
+        updated = ProactivePolicySettings(
+            current.subject_id, config, current.quiet_until,
+            current.revision + 1, occurred_at,
+            current.automatic_enabled, anchor, current.greeting_text,
+            current.topic_enabled, seconds,
+        )
+        store.save(updated, expected_revision=current.revision)
+        return "applied", config.enabled, updated.automatic_enabled
 
     def handle(self, event):
         companion_command = self._companion_service.recognizes(event)

@@ -1,3 +1,4 @@
+import sqlite3
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -101,4 +102,41 @@ def test_v17_upgrade_keeps_memory_topics_off_and_adds_outreach_provenance(tmp_pa
     assert "topic_enabled" in policy_columns
     columns = {row[1] for row in connection.execute("PRAGMA table_info(proactive_outreach)")}
     assert {"topic_seed_id", "topic_seed_revision"} <= columns
+    connection.close()
+
+
+def test_v48_upgrade_preserves_daily_schedule_and_expands_frequency_limit(tmp_path):
+    from longmemory.infrastructure.database.migrations.v48_to_v49 import migrate
+
+    connection = open_database(tmp_path / "v48.db")
+    connection.executescript("""
+        CREATE TABLE proactive_policy_settings (
+            subject_id TEXT PRIMARY KEY, enabled INTEGER, utc_offset_minutes INTEGER,
+            allowed_weekdays_mask INTEGER, allowed_start_minute INTEGER,
+            allowed_end_minute INTEGER, daily_limit INTEGER,
+            minimum_interval_seconds INTEGER, maximum_lifetime_seconds INTEGER,
+            quiet_until TEXT, policy_version TEXT, revision INTEGER, updated_at TEXT,
+            automatic_enabled INTEGER, scheduled_minute INTEGER,
+            greeting_text TEXT, topic_enabled INTEGER
+        );
+    """)
+    connection.execute(
+        "INSERT INTO proactive_policy_settings VALUES "
+        "('user:self',1,480,127,540,1260,1,21600,300,NULL,"
+        "'proactive-contact-policy-v2',4,?,1,780,'你好。',0)",
+        (NOW.isoformat(),),
+    )
+    migrate(connection)
+    row = connection.execute(
+        "SELECT daily_limit,automatic_interval_seconds FROM proactive_policy_settings"
+    ).fetchone()
+    assert tuple(row) == (1, 86400)
+    connection.execute(
+        "UPDATE proactive_policy_settings SET daily_limit=1440,"
+        "automatic_interval_seconds=60"
+    )
+    with pytest.raises(sqlite3.IntegrityError):
+        connection.execute(
+            "UPDATE proactive_policy_settings SET automatic_interval_seconds=61"
+        )
     connection.close()

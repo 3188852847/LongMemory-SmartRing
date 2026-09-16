@@ -1813,6 +1813,24 @@ def test_proactive_policy_http_persists_defaults_and_rejects_stale_page(tmp_path
             assert saved_response.status == 200
             assert saved["enabled"] is True and saved["revision"] == 1
             assert saved["quiet_until"] == "2026-09-07T08:00:00+08:00"
+            interval_body = {
+                **body, "expected_revision": 1,
+                "automatic_interval_seconds": 600,
+                "daily_limit": 144, "minimum_interval_seconds": 540,
+            }
+            interval_response = await client.put(
+                base + "/api/proactive-policy", headers=headers, json=interval_body,
+            )
+            assert interval_response.status == 200
+            assert (await interval_response.json())["automatic_interval_seconds"] == 600
+            # 滚动更新期间旧页面没有新字段，也不能把语音刚设置的周期重置为每天一次。
+            legacy_body = {**interval_body, "expected_revision": 2}
+            legacy_body.pop("automatic_interval_seconds")
+            legacy_response = await client.put(
+                base + "/api/proactive-policy", headers=headers, json=legacy_body,
+            )
+            assert legacy_response.status == 200
+            assert (await legacy_response.json())["automatic_interval_seconds"] == 600
             stale = await client.put(
                 base + "/api/proactive-policy", headers=headers, json=body,
             )
