@@ -29,6 +29,7 @@ def proactive_policy_json(settings):
         "greeting_text": settings.greeting_text,
         "topic_enabled": settings.topic_enabled,
         "automatic_interval_seconds": settings.automatic_interval_seconds,
+        "dynamic_greeting_enabled": settings.dynamic_greeting_enabled,
     }
 
 

@@ -39,6 +39,7 @@ class SQLiteProactivePolicyStore:
             row["greeting_text"],
             bool(row["topic_enabled"]),
             row["automatic_interval_seconds"],
+            bool(row["dynamic_greeting_enabled"]),
         )
 
     def save(
@@ -58,6 +59,7 @@ class SQLiteProactivePolicyStore:
             int(settings.automatic_enabled), settings.scheduled_minute,
             settings.greeting_text, int(settings.topic_enabled),
             settings.automatic_interval_seconds,
+            int(settings.dynamic_greeting_enabled),
         )
         try:
             if expected_revision == 0:
@@ -67,8 +69,9 @@ class SQLiteProactivePolicyStore:
                     "allowed_start_minute,allowed_end_minute,daily_limit,"
                     "minimum_interval_seconds,maximum_lifetime_seconds,quiet_until,"
                     "policy_version,revision,updated_at,automatic_enabled,scheduled_minute,"
-                    "greeting_text,topic_enabled,automatic_interval_seconds) "
-                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    "greeting_text,topic_enabled,automatic_interval_seconds,"
+                    "dynamic_greeting_enabled) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                     (settings.subject_id, *values),
                 ).rowcount
             else:
@@ -78,7 +81,7 @@ class SQLiteProactivePolicyStore:
                     "daily_limit=?,minimum_interval_seconds=?,maximum_lifetime_seconds=?,"
                     "quiet_until=?,policy_version=?,revision=?,updated_at=?,"
                     "automatic_enabled=?,scheduled_minute=?,greeting_text=?,topic_enabled=?,"
-                    "automatic_interval_seconds=? "
+                    "automatic_interval_seconds=?,dynamic_greeting_enabled=? "
                     "WHERE subject_id=? AND revision=?",
                     (*values, settings.subject_id, expected_revision),
                 ).rowcount

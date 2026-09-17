@@ -18,6 +18,7 @@ class ProactivePolicySettings:
     greeting_text: str = "下午好，今天过得怎么样？"
     topic_enabled: bool = False
     automatic_interval_seconds: int = 24 * 60 * 60
+    dynamic_greeting_enabled: bool = False
 
     def __post_init__(self) -> None:
         if self.subject_id != self.subject_id.strip() or not 1 <= len(self.subject_id) <= 120:
@@ -58,3 +59,5 @@ class ProactivePolicySettings:
             raise ValueError("proactive_settings_automatic_boundary_invalid")
         if self.topic_enabled and not self.automatic_enabled:
             raise ValueError("proactive_settings_topic_boundary_invalid")
+        if self.dynamic_greeting_enabled and not self.topic_enabled:
+            raise ValueError("proactive_settings_dynamic_greeting_boundary_invalid")

@@ -42,9 +42,11 @@ def test_policy_and_topic_seed_projection_keep_public_contract():
         subject_id="user:self", config=config, quiet_until=None, revision=3,
         updated_at=NOW, automatic_enabled=True, scheduled_minute=780,
         greeting_text="下午好", topic_enabled=True, automatic_interval_seconds=600,
+        dynamic_greeting_enabled=True,
     )
     assert proactive_policy_json(settings)["minimum_interval_seconds"] == 7200
     assert proactive_policy_json(settings)["automatic_interval_seconds"] == 600
+    assert proactive_policy_json(settings)["dynamic_greeting_enabled"] is True
 
     row = {
         "id": "seed", "subject_id": "user:self", "scenario_id": "l2",

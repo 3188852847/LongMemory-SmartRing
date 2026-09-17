@@ -114,6 +114,7 @@ class SQLiteNaturalMemoryCommandHandler:
             current.revision + 1, occurred_at,
             current.automatic_enabled, anchor, current.greeting_text,
             current.topic_enabled, seconds,
+            current.dynamic_greeting_enabled,
         )
         store.save(updated, expected_revision=current.revision)
         return "applied", config.enabled, updated.automatic_enabled

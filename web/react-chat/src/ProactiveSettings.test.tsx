@@ -243,6 +243,8 @@ describe('主动交流设置', () => {
     vi.spyOn(crypto, 'randomUUID').mockReturnValue('6a4db801-6779-40fc-90b4-aab77f580c82');
     const client = createConsoleQueryClient();
     const view = render(<QueryClientProvider client={client}><ProactiveSettings api={new ChatApi()} ready={true}/></QueryClientProvider>);
+    expect((await screen.findByRole('switch', {name:'动态改写已批准话题'})).hasAttribute('disabled')).toBe(true);
+    expect(screen.getByText(/3 秒内失败、输出越界或模型不可用时直接播原句/)).toBeTruthy();
     fireEvent.mouseDown(await screen.findByLabelText('来源 L2 场景'));
     fireEvent.click(await screen.findByText('毕业设计'));
     fireEvent.change(screen.getByLabelText('允许播出的安全话题'), {target:{value:'毕业设计准备得怎么样了？'}});

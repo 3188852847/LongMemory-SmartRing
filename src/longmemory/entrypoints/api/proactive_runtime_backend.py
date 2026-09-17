@@ -59,9 +59,29 @@ from .proactive_presenters import outreach_result_json
 class ProactiveRuntimeBackend:
     """执行主动交流动作；所有持久化仍经过显式能力受限的数据库入口。"""
 
-    def __init__(self, *, open_database, clock):
+    def __init__(self, *, open_database, clock, greeting_composer=None):
         self._open_database = open_database
         self._clock = clock
+        self._greeting_composer = greeting_composer
+
+    async def _compose_topic(self, settings, topic_seed):
+        """模型只看到获批短句；无能力、未开启或异常时原样返回。"""
+
+        if (
+            topic_seed is None
+            or not settings.dynamic_greeting_enabled
+            or self._greeting_composer is None
+        ):
+            return (
+                topic_seed["prompt_text"] if topic_seed is not None else settings.greeting_text,
+                "approved_memory_topic" if topic_seed is not None else "fixed_greeting",
+            )
+        result = await self._greeting_composer.compose(topic_seed["prompt_text"])
+        return result.text, (
+            "model_generated_approved_topic"
+            if result.outcome == "model_generated"
+            else "model_fallback_approved_topic"
+        )
 
     async def manual_test(self, request, client):
         """执行一次用户明确发起的短文本测试；同 request_id 绝不重播。"""
@@ -340,6 +360,12 @@ class ProactiveRuntimeBackend:
             current = self._current_absence_decision(
                 connection, subject_id=subject_id, now=now,
             )
+            prepared_settings = SQLiteProactivePolicyStore(connection).get(subject_id)
+            prepared_topic = (
+                SQLiteProactiveTopicStore(connection).choose_for_schedule(
+                    subject_id, now=now,
+                ) if prepared_settings.topic_enabled else None
+            )
         if current is None:
             return {"action": "skip", "reason": "absence_strategy_inactive"}
         _, _, decision = current
@@ -347,6 +373,9 @@ class ProactiveRuntimeBackend:
             return {"action": decision.action.value, "reason": decision.reason.value}
 
         device = await XiaozhiRuntimeStateProbe(client).probe()
+        prepared_content, prepared_reason = await self._compose_topic(
+            prepared_settings, prepared_topic,
+        ) if device.ready else (None, None)
         now = self._clock()
         with self._open_database(write_capability="proactive") as connection:
             current = self._current_absence_decision(
@@ -363,6 +392,22 @@ class ProactiveRuntimeBackend:
                     subject_id, now=now,
                 ) if settings.topic_enabled else None
             )
+            topic_matches = (
+                prepared_topic is not None and topic_seed is not None
+                and prepared_topic["id"] == topic_seed["id"]
+                and prepared_topic["revision"] == topic_seed["revision"]
+                and prepared_settings.revision == settings.revision
+            )
+            content = (
+                prepared_content if topic_matches and prepared_content is not None
+                else topic_seed["prompt_text"] if topic_seed is not None
+                else settings.greeting_text
+            )
+            content_reason = (
+                prepared_reason if topic_matches and prepared_reason is not None
+                else "approved_memory_topic" if topic_seed is not None
+                else "fixed_greeting"
+            )
             ledger = ProactiveOutreachLedger(
                 SQLiteProactiveOutreachStore(connection), clock=lambda: now,
             )
@@ -370,11 +415,9 @@ class ProactiveRuntimeBackend:
                 subject_id=subject_id,
                 trigger=OutreachTrigger.HABIT_CANDIDATE,
                 trigger_reason_code=(
-                    "routine_absence_approved_memory_topic"
-                    if topic_seed is not None else "routine_absence_fixed_greeting"
+                    "routine_absence_" + content_reason
                 ),
-                content=(topic_seed["prompt_text"] if topic_seed is not None
-                         else settings.greeting_text),
+                content=content,
                 scheduled_for=now,
                 expires_at=decision.check_at + settings.config.maximum_lifetime,
                 idempotency_key=decision.idempotency_key,
@@ -419,14 +462,17 @@ class ProactiveRuntimeBackend:
             )
 
     async def scheduled_tick(self, client):
-        """评估当前当地分钟一次；不补发、不调用模型、不自动重试投递。"""
+        """评估当前当地分钟一次；动态文案失败即回退且不自动重试。"""
 
         subject_id = "user:self"
         now = self._clock()
         development_override = None
         invalid_override = None
+        prepared_topic = None
+        prepared_settings = None
         with self._open_database() as connection:
             settings = SQLiteProactivePolicyStore(connection).get(subject_id)
+            prepared_settings = settings
             history = SQLiteProactiveHistoryReader(connection)
             offset = timezone(timedelta(minutes=settings.config.utc_offset_minutes))
             local_now = now.astimezone(offset)
@@ -484,6 +530,11 @@ class ProactiveRuntimeBackend:
                     )
                 ),
             )
+            prepared_topic = (
+                SQLiteProactiveTopicStore(connection).choose_for_schedule(
+                    subject_id, now=now,
+                ) if settings.topic_enabled else None
+            )
         if invalid_override is not None:
             override_id, override_revision, invalid_reason = invalid_override
             with self._open_database(
@@ -505,6 +556,9 @@ class ProactiveRuntimeBackend:
             }
 
         device = await XiaozhiRuntimeStateProbe(client).probe()
+        prepared_content, prepared_reason = await self._compose_topic(
+            prepared_settings, prepared_topic,
+        ) if device.ready else (None, None)
         # 网络探测可能跨过配置分钟；重新读钟后再次决策，不能用旧时刻补发。
         now = self._clock()
         with self._open_database(write_capability="proactive") as connection:
@@ -575,21 +629,33 @@ class ProactiveRuntimeBackend:
                 )
                 if settings.topic_enabled else None
             )
+            topic_matches = (
+                prepared_topic is not None and topic_seed is not None
+                and prepared_topic["id"] == topic_seed["id"]
+                and prepared_topic["revision"] == topic_seed["revision"]
+                and prepared_settings.revision == settings.revision
+            )
+            content = (
+                prepared_content if topic_matches and prepared_content is not None
+                else topic_seed["prompt_text"] if topic_seed is not None
+                else settings.greeting_text
+            )
+            content_reason = (
+                prepared_reason if topic_matches and prepared_reason is not None
+                else "approved_memory_topic" if topic_seed is not None
+                else "fixed_greeting"
+            )
             outreach = ledger.create_candidate(
                 subject_id=subject_id,
                 trigger=OutreachTrigger.EXPLICIT_SCHEDULE,
                 trigger_reason_code=(
-                    "development_approved_memory_topic"
-                    if current_override is not None and topic_seed is not None
-                    else "development_fixed_schedule"
+                    "development_" + content_reason
                     if current_override is not None
-                    else "approved_memory_topic" if topic_seed is not None
+                    else content_reason
+                    if topic_seed is not None
                     else "explicit_daily_schedule"
                 ),
-                content=(
-                    topic_seed["prompt_text"] if topic_seed is not None
-                    else settings.greeting_text
-                ),
+                content=content,
                 scheduled_for=now,
                 expires_at=(
                     decision.scheduled_for + settings.config.maximum_lifetime

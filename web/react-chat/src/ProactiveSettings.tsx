@@ -11,6 +11,7 @@ import {ProactivePolicySection} from './ProactivePolicySection';
 const normalizePolicy = (value:ProactivePolicy):ProactivePolicy => ({
   ...value,
   automatic_interval_seconds:value.automatic_interval_seconds ?? 86400,
+  dynamic_greeting_enabled:value.dynamic_greeting_enabled ?? false,
   allowed_weekdays:[...value.allowed_weekdays],
 });
 
@@ -61,6 +62,7 @@ export function ProactiveSettings({api, ready}:{api:ChatApi; ready:boolean}) {
       maximum_lifetime_seconds:value.maximum_lifetime_seconds, quiet_until:value.quiet_until,
       automatic_enabled:value.automatic_enabled, scheduled_minute:value.scheduled_minute,
       greeting_text:value.greeting_text, topic_enabled:value.topic_enabled,
+      dynamic_greeting_enabled:value.dynamic_greeting_enabled,
       automatic_interval_seconds:value.automatic_interval_seconds ?? 86400,
     }),
     onSuccess:value => {const normalized=normalizePolicy(value); client.setQueryData(['proactive-policy'], normalized); setDraft(normalized); setNotice(value.automatic_enabled ? ((value.automatic_interval_seconds ?? 86400)<86400 ? `设置已保存；将从下一个允许分钟开始，最多每 ${(value.automatic_interval_seconds ?? 86400) / 60} 分钟尝试一次。` : '设置已保存；每日问候会在所选时刻检查一次。') : '设置已保存；频率已保留，但周期问候仍然关闭。'); void client.invalidateQueries({queryKey:['proactive-schedule-status']});},
@@ -380,11 +382,13 @@ export function ProactiveSettings({api, ready}:{api:ChatApi; ready:boolean}) {
       proactiveEnabled={draft.enabled}
       automaticEnabled={draft.automatic_enabled}
       topicEnabled={draft.topic_enabled}
+      dynamicGreetingEnabled={draft.dynamic_greeting_enabled}
       onScenarioChange={setTopicScenarioId}
       onTextChange={setTopicText}
       onCreate={() => createTopic.mutate()}
       onDisable={seed => disableTopic.mutate(seed)}
-      onTopicEnabledChange={topic_enabled => change({topic_enabled})}
+      onTopicEnabledChange={topic_enabled => change({topic_enabled, ...(!topic_enabled?{dynamic_greeting_enabled:false}:{})})}
+      onDynamicGreetingEnabledChange={dynamic_greeting_enabled => change({dynamic_greeting_enabled})}
     /></details>
     <details className="settings-section"><summary><strong>一次性事项跟进</strong><span className="subtle"> 建立、启用或取消未来追问</span></summary><ProactiveFollowUpSection
       sources={followUpSources.data?.items ?? []}

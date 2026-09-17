@@ -92,9 +92,9 @@ export function ProactivePolicySection(props:Props) {
     <section className="settings-section proactive-policy-section">
       <h3>常用设置</h3>
       <div className="setting-line"><span>允许助手主动联系</span><Switch aria-label="允许主动联系" checked={draft.enabled}
-        onChange={enabled=>props.onChange({enabled,...(!enabled?{automatic_enabled:false,topic_enabled:false}:{})})}/></div>
+        onChange={enabled=>props.onChange({enabled,...(!enabled?{automatic_enabled:false,topic_enabled:false,dynamic_greeting_enabled:false}:{})})}/></div>
       <div className="setting-line"><span>开启周期问候</span><Switch aria-label="后台定时问候" disabled={!draft.enabled} checked={draft.automatic_enabled}
-        onChange={automatic_enabled=>props.onChange({automatic_enabled,...(!automatic_enabled?{topic_enabled:false}:{})})}/></div>
+        onChange={automatic_enabled=>props.onChange({automatic_enabled,...(!automatic_enabled?{topic_enabled:false,dynamic_greeting_enabled:false}:{})})}/></div>
       <label htmlFor="proactive-frequency">主动交流频率</label>
       <InputNumber id="proactive-frequency" aria-label="主动交流频率（分钟）" min={1} max={1440} step={1} value={intervalMinutes} onChange={setFrequency}/>
       <small>{proactiveFrequencyText(draft.automatic_interval_seconds)}；可设置 1 分钟到 24 小时。语音可说“把主动交流频率改成每十分钟一次”。</small>

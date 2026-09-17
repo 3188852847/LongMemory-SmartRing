@@ -26,7 +26,7 @@ class MemoryBackend:
                  scenario_producer=None,
                  scenario_model=None, persona_producer=None, persona_model=None,
                  consolidation_background_enabled=False, clock=None,
-                 semantic_relation_previewer=None):
+                 semantic_relation_previewer=None, proactive_greeting_composer=None):
         # 路径只来自启动参数；任何 HTTP 请求都不能选文件或切换数据库。
         self.database = database.resolve() if database is not None else None
         self.allow_delete = allow_delete
@@ -64,6 +64,7 @@ class MemoryBackend:
         self.proactive_runtime = ProactiveRuntimeBackend(
             open_database=self._open,
             clock=self.clock,
+            greeting_composer=proactive_greeting_composer,
         )
         self.atomic_memories = AtomicMemoryBackend(
             open_database=self._open,

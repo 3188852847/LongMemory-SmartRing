@@ -269,6 +269,11 @@ class ProactiveBackend:
                 if request.automatic_interval_seconds is not None
                 else current.automatic_interval_seconds
             )
+            dynamic_greeting_enabled = (
+                request.dynamic_greeting_enabled
+                if request.dynamic_greeting_enabled is not None
+                else current.dynamic_greeting_enabled
+            )
             now = self._clock()
             scheduled_minute = request.scheduled_minute
             if request.automatic_enabled and interval_seconds < 24 * 60 * 60:
@@ -280,6 +285,7 @@ class ProactiveBackend:
                     request.automatic_enabled, scheduled_minute,
                     request.greeting_text, request.topic_enabled,
                     interval_seconds,
+                    dynamic_greeting_enabled,
                 )
             except ValueError:
                 raise MemoryAccessError("invalid_proactive_policy", 400) from None

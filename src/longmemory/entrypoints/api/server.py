@@ -3,6 +3,7 @@
 import argparse
 import asyncio
 import os
+from dataclasses import replace
 from pathlib import Path
 import re
 
@@ -81,7 +82,7 @@ def create_app(*, port=8765, bridge=None, web_root=None, database=None, allow_me
                tts_backend_store=None,
                round_skin_store=None, round_wallpaper_library=None,
                round_wallpaper_delivery=None, launcher_status_file=None,
-               semantic_relation_previewer=None):
+               semantic_relation_previewer=None, proactive_greeting_composer=None):
     sessions = Sessions()
     assets = web_root or ROOT / "web"
     client = bridge if bridge is not None else XiaozhiControlClient(ROOT / "data/control/device-control.token")
@@ -141,6 +142,7 @@ def create_app(*, port=8765, bridge=None, web_root=None, database=None, allow_me
         consolidation_background_enabled=consolidation_background_enabled,
         clock=proactive_clock,
         semantic_relation_previewer=semantic_relation_previewer,
+        proactive_greeting_composer=proactive_greeting_composer,
     )
 
     async def scheduled_tick():
@@ -312,6 +314,7 @@ def main():
     l1_sufficiency_shadow = None
     l2_sufficiency_shadow = None
     semantic_relation_previewer = None
+    proactive_greeting_composer = None
     if args.enable_experiment_runs:
         from longmemory.infrastructure.config.settings import load_model_settings
         try:
@@ -352,6 +355,19 @@ def main():
             role_prompt = role_prompt.replace("<memory></memory>", "（证据见独立 memory_evidence 消息。）")
             generator = (FakeAnswerGenerator() if settings.provider == "fake" else
                          OpenAICompatibleAnswerGenerator(settings, role_prompt=role_prompt))
+            if settings.provider == "openai_compatible":
+                from longmemory.application.proactive.greeting import (
+                    ProactiveGreetingComposer,
+                )
+                proactive_settings = replace(
+                    settings,
+                    timeout_seconds=min(settings.timeout_seconds, 2.5),
+                    max_tokens=min(settings.max_tokens, 120),
+                )
+                proactive_greeting_composer = ProactiveGreetingComposer(
+                    OpenAICompatibleAnswerGenerator(proactive_settings),
+                    timeout_seconds=3.0,
+                )
             if args.enable_l1_sufficiency_shadow:
                 from longmemory.adapters.llm.evidence_sufficiency import (
                     OpenAICompatibleEvidenceSufficiencyGate,
@@ -572,7 +588,8 @@ def main():
                                ),
                                round_wallpaper_delivery=wallpaper_delivery,
                                launcher_status_file=args.launcher_status_file,
-                               semantic_relation_previewer=semantic_relation_previewer),
+                               semantic_relation_previewer=semantic_relation_previewer,
+                               proactive_greeting_composer=proactive_greeting_composer),
                     host="127.0.0.1", port=args.port, access_log=None, print=None)
     except OSError:
         parser.exit(1, f"控制台未能绑定 127.0.0.1:{args.port}。请检查旧控制台是否仍在运行或端口权限；未自动停止其他进程、未换端口。\n")

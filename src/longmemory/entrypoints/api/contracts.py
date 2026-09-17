@@ -170,6 +170,8 @@ class ProactivePolicyRequest(BaseModel):
     scheduled_minute: int = Field(ge=0, le=1439)
     greeting_text: str = Field(min_length=1, max_length=80)
     topic_enabled: bool
+    # 旧控制台省略时保留当前值，避免旧页面无意关闭新能力。
+    dynamic_greeting_enabled: bool | None = None
     # 旧控制台省略字段时由后端保留当前值，避免覆盖语音刚设置的周期。
     automatic_interval_seconds: int | None = Field(
         default=None, ge=60, le=86400, multiple_of=60,

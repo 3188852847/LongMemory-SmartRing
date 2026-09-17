@@ -22,11 +22,13 @@ interface Props {
   proactiveEnabled: boolean;
   automaticEnabled: boolean;
   topicEnabled: boolean;
+  dynamicGreetingEnabled: boolean;
   onScenarioChange: (value?: string) => void;
   onTextChange: (value: string) => void;
   onCreate: () => void;
   onDisable: (seed: ProactiveTopicSeed) => void;
   onTopicEnabledChange: (value: boolean) => void;
+  onDynamicGreetingEnabledChange: (value: boolean) => void;
 }
 
 /** 只展示和编辑允许公开播报的话题候选；写入及冲突处理由父层负责。 */
@@ -67,5 +69,11 @@ export function ProactiveTopicSection(props: Props) {
       disabled={!props.proactiveEnabled || !props.automaticEnabled}
       checked={props.topicEnabled} onChange={props.onTopicEnabledChange}/></div>
     <p className="subtle">此开关默认关闭。开启并保存后，定时点会从可用素材中优先选择最久未使用的一条；没有可用素材时仍使用上方固定问候。</p>
+    <div className="setting-line"><span>让模型自然改写已批准短句</span><Switch
+      aria-label="动态改写已批准话题"
+      disabled={!props.topicEnabled}
+      checked={props.dynamicGreetingEnabled}
+      onChange={props.onDynamicGreetingEnabledChange}/></div>
+    <p className="subtle">默认关闭。开启后模型只会看到已批准公开播报的短句，并须完整保留原句；3 秒内失败、输出越界或模型不可用时直接播原句。</p>
   </section>;
 }

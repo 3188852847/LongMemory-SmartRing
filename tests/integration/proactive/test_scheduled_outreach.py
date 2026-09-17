@@ -31,6 +31,7 @@ from longmemory.core.proactive import (
 from longmemory.entrypoints.api.memory_backend import MemoryBackend
 from longmemory.infrastructure.database.connection import open_database
 from longmemory.infrastructure.database.schema import initialize_schema
+from longmemory.application.proactive.greeting import GreetingComposition
 
 
 NOW = datetime(2026, 9, 7, 5, 0, 10, tzinfo=UTC)  # 北京时间周一 13:00。
@@ -66,7 +67,7 @@ class OfflineBridge(ReadyBridge):
 
 def prepare(
     path, *, user_chatted=False, topic_enabled=False, development_budget=False,
-    automatic_interval_seconds=86400,
+    automatic_interval_seconds=86400, dynamic_greeting_enabled=False,
 ):
     connection = open_database(path)
     initialize_schema(connection)
@@ -91,6 +92,7 @@ def prepare(
             greeting_text="固定合成问候。",
             topic_enabled=topic_enabled,
             automatic_interval_seconds=automatic_interval_seconds,
+            dynamic_greeting_enabled=dynamic_greeting_enabled,
         ),
         expected_revision=0,
     )
@@ -343,6 +345,31 @@ def test_enabled_memory_topic_is_dispatched_with_traceable_seed_revision(tmp_pat
             "SELECT trigger_reason_code,topic_seed_id,topic_seed_revision "
             "FROM proactive_outreach"
         ).fetchone() == ("approved_memory_topic", "b" * 32, 1)
+
+
+def test_dynamic_greeting_only_rewrites_the_selected_approved_topic(tmp_path):
+    class Composer:
+        async def compose(self, approved_text):
+            assert approved_text == "毕业设计准备得怎么样了？"
+            return GreetingComposition(
+                "突然想问问你，毕业设计准备得怎么样了？", "model_generated",
+            )
+
+    path = tmp_path / "dynamic-topic.db"
+    prepare(path, topic_enabled=True, dynamic_greeting_enabled=True)
+    add_topic_seed(path)
+    bridge = ReadyBridge()
+
+    result = asyncio.run(MemoryBackend(
+        path, clock=lambda: NOW, proactive_greeting_composer=Composer(),
+    ).proactive_scheduled_tick(bridge))
+
+    assert result["state"] == "queued"
+    assert bridge.announcements[0][0] == "突然想问问你，毕业设计准备得怎么样了？"
+    with sqlite3.connect(path) as connection:
+        assert connection.execute(
+            "SELECT trigger_reason_code,topic_seed_id FROM proactive_outreach"
+        ).fetchone() == ("model_generated_approved_topic", "b" * 32)
 
 
 def test_one_shot_development_override_bypasses_chat_and_awaiting_once(tmp_path):

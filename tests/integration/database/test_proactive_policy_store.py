@@ -140,3 +140,23 @@ def test_v48_upgrade_preserves_daily_schedule_and_expands_frequency_limit(tmp_pa
             "UPDATE proactive_policy_settings SET automatic_interval_seconds=61"
         )
     connection.close()
+
+
+def test_v49_upgrade_keeps_dynamic_greeting_off(tmp_path):
+    from longmemory.infrastructure.database.migrations.v49_to_v50 import migrate
+
+    connection = open_database(tmp_path / "v49.db")
+    connection.execute(
+        "CREATE TABLE proactive_policy_settings (subject_id TEXT PRIMARY KEY)"
+    )
+    connection.execute(
+        "INSERT INTO proactive_policy_settings(subject_id) VALUES ('user:self')"
+    )
+
+    migrate(connection)
+
+    row = connection.execute(
+        "SELECT dynamic_greeting_enabled FROM proactive_policy_settings"
+    ).fetchone()
+    assert row[0] == 0
+    connection.close()
