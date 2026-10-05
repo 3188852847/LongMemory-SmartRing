@@ -36,6 +36,8 @@ data/backups/*
 data/audio/*
 !data/audio/.gitkeep
 data/test-tmp/
+# 本机目录整理时保留的历史测试产物；只归档，不进入版本库。
+data/local-archive/
 
 # 实验运行产物
 experiments/jobs/

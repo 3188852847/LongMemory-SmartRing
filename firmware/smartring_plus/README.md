@@ -4,12 +4,15 @@
 
 当前本机工作对象：
 
-- 厂家 ZIP 副本：`D:\SmartRing-Plus-main\examples\esp-idf\11_xiaozhi\xiaozhi-esp32-main_smartring_plus_B_V2`
-- 干净短路径构建副本：`D:\sr-bv2`
-- 补丁实验副本：`D:\sr-bv2-lvgl-assets`
+- 厂家 ZIP 副本：`D:\LongMemory-local\firmware\vendor\SmartRing-Plus-main\examples\esp-idf\11_xiaozhi\xiaozhi-esp32-main_smartring_plus_B_V2`
+- 干净基线归档：`D:\LongMemory-local\archive\firmware\sr-bv2-baseline`；旧构建缓存不可直接改目录复用。
+- 补丁工作区：`D:\LongMemory-local\firmware\current`；继续通过兼容联接 `D:\sr-bv2-lvgl-assets` 使用现有构建路径。
 - 板型：`viewe-smartring-plus`
 - 应用：v2.2.3
 - 工具链：ESP-IDF v5.5.4、Python 3.11.15、CMake 3.30.2、Ninja 1.12.1、Xtensa GCC 14.2.0
+
+2026-10-06 只归档、不删除的目录整理已完成；历史实验记录保留当时路径，现位置与恢复依据见
+[本机目录与依赖](../../docs/guides/本机目录与依赖.md)。现有补丁工作区及回退镜像的旧路径继续有效。
 
 `upstream-baseline.json` 固定关键文件与构建产物哈希。它只证明我们使用的 ZIP 内容和本机构建身份，不证明对应某个未经核实的上游 Git commit。
 
