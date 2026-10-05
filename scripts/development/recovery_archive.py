@@ -8,6 +8,7 @@
 import argparse
 import hashlib
 import json
+import os
 from pathlib import Path, PurePosixPath
 import re
 import shutil
@@ -109,6 +110,12 @@ def restore(archive, destination):
     result = verify(archive)
     destination.mkdir(parents=True, exist_ok=False)
     root = destination.resolve()
+    display_root = str(root)
+    if os.name == 'nt' and not str(root).startswith('\\\\?\\'):
+        # 厂家源码本身就接近 MAX_PATH；隔离恢复再加一层目录会超过 260 字符。
+        # 使用 Windows 扩展路径访问文件，不改系统注册表，也不缩短或丢弃文件名。
+        value = str(root)
+        root = Path('\\\\?\\UNC\\' + value[2:] if value.startswith('\\\\') else '\\\\?\\' + value)
     with zipfile.ZipFile(archive) as bundle:
         manifest = json.loads(bundle.read('manifest.json'))
         for item in manifest['files']:
@@ -120,7 +127,7 @@ def restore(archive, destination):
                 shutil.copyfileobj(source, output, 1024 * 1024)
             if digest(target) != item['sha256']:
                 raise ValueError('展开后的文件校验失败')
-    return result | {'restored_to': str(root)}
+    return result | {'restored_to': display_root}
 
 
 def main():

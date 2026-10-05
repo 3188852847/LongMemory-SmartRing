@@ -2,6 +2,7 @@
 
 import importlib.util
 import json
+import os
 from pathlib import Path
 import zipfile
 
@@ -68,3 +69,16 @@ def test_windows_case_collision_rejected(tmp_path):
     source.write_bytes(b'x')
     with pytest.raises(ValueError, match='重复恢复路径'):
         archive.create(tmp_path / 'case.zip', [(source, 'D/A'), (source, 'D/a')])
+
+
+def test_long_vendor_path_restores_without_shortening(tmp_path):
+    source = tmp_path / 'source'
+    source.write_bytes(b'vendor source')
+    name = 'D/' + '/'.join(['long-vendor-directory-' + 'x' * 60] * 4) + '/source.cc'
+    bundle = tmp_path / 'long.zip'
+    archive.create(bundle, [(source, name)])
+    archive.restore(bundle, tmp_path / 'restored')
+    path = str((tmp_path / 'restored').resolve() / name)
+    if os.name == 'nt':
+        path = '\\\\?\\' + path
+    assert Path(path).read_bytes() == source.read_bytes()
