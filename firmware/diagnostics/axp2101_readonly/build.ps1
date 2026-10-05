@@ -1,5 +1,5 @@
 param(
-    [string]$IdfPath = 'D:\Espressif\.espressif\v5.5.4\esp-idf',
+    [string]$IdfPath = 'D:\LongMemory-local\tools\Espressif\.espressif\v5.5.4\esp-idf',
     [string]$ToolsPath = 'C:\Espressif\tools'
 )
 $ErrorActionPreference = 'Stop'

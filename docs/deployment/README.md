@@ -23,7 +23,7 @@ V0.1 的 LongMemory 已在电脑本地运行；V0.1-Demo 开始准备圆屏的�
 
 ## 环境准备进展（2026-09-03）
 
-- 用户已下载并解压指定快照到 `D:\ESP32-Workspace\xiaozhi-esp32-server`，实际 Python 服务目录为其 `main\xiaozhi-server`。
+- 用户已下载并解压指定快照；2026-10-06 整理后位于 `D:\LongMemory-local\runtime\xiaozhi-esp32-server`，实际 Python 服务目录为其 `main\xiaozhi-server`。
 - 已检查实际依赖清单：上游推荐 Python 3.10；用户以 uv 创建独立 `.venv` 并生成 `requirements.windows.lock.txt`，反馈安装、依赖一致性和关键 Python 库导入检查通过。解释器配置显示 Python 3.10.20。
 - 用户确认 FFmpeg 可通过当前终端 PATH 调用。该 PATH 配置尚未持久化为启动脚本，不代表 PyCharm 运行按钮自动继承。
 - Opus 初次失败定位为 `opuslib_next` 的 `find_library("opus")` 未找到 DLL，不是 Python 包未安装。

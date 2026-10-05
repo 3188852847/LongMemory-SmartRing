@@ -16,6 +16,7 @@ def setup_module(tmp_path, monkeypatch):
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     monkeypatch.setattr(module, "ROOT", tmp_path)
+    monkeypatch.setattr(module, "MODEL_ROOT", tmp_path / "external-models")
     files = {name: ("synthetic " + name).encode() for name in (*MODEL_FILES, "README.md")}
     metadata = {"sha": REVISION, "siblings": [
         {"rfilename": name, "blobId": hashlib.sha1(f"blob {len(data)}\0".encode() + data).hexdigest()}
@@ -33,7 +34,7 @@ def setup_module(tmp_path, monkeypatch):
 def test_download_receipt_and_refuse_overwrite(setup_module):
     module, files, calls = setup_module
     module.main([])
-    target = module.ROOT / "data/models/bge-small-zh-v1.5" / REVISION
+    target = module.MODEL_ROOT / "bge-small-zh-v1.5" / REVISION
     receipt = json.loads((target / "snapshot.json").read_text())
     assert receipt["files"] == {name: hashlib.sha256(files[name]).hexdigest() for name in MODEL_FILES}
     assert len(calls) == len(files) + 1
@@ -44,7 +45,7 @@ def test_download_receipt_and_refuse_overwrite(setup_module):
 
 def test_manual_import_missing_files_and_verify_existing(setup_module):
     module, files, calls = setup_module
-    target = module.ROOT / "data/models/bge-small-zh-v1.5" / REVISION
+    target = module.MODEL_ROOT / "bge-small-zh-v1.5" / REVISION
     target.mkdir(parents=True)
     (target / "model.safetensors").write_bytes(files["model.safetensors"])
     manual = module.ROOT / "manual"
@@ -59,7 +60,7 @@ def test_manual_import_missing_files_and_verify_existing(setup_module):
 
 def test_existing_corruption_not_replaced(setup_module):
     module, files, calls = setup_module
-    target = module.ROOT / "data/models/bge-small-zh-v1.5" / REVISION
+    target = module.MODEL_ROOT / "bge-small-zh-v1.5" / REVISION
     target.mkdir(parents=True)
     (target / "config.json").write_bytes(b"bad")
     with pytest.raises(ValueError):

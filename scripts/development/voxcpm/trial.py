@@ -9,7 +9,7 @@ import uuid
 
 ROOT = Path(__file__).resolve().parents[3]
 REVISION = '32279effe8c19989596f05d353d1447f51d9e915'
-MODEL = ROOT / 'data/models/VoxCPM2' / REVISION
+MODEL = Path(r'D:\LongMemory-local\runtime\models\VoxCPM2') / REVISION
 WEIGHTS = {'audiovae.pth': '94b5d51e107e0507d4acc976cfdadb64edd6fd06d1f751dadbf2fd1594274bf1',
            'model.safetensors': 'f7f964cfa9da23653baec6e6f7750719977ad944ed9f95fe52fe3a620506891d'}
 

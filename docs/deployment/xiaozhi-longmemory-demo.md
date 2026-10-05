@@ -13,7 +13,7 @@
 普通 PowerShell 执行：
 
 ```powershell
-Set-Location "D:\ESP32-Workspace\xiaozhi-esp32-server\main\xiaozhi-server"
+Set-Location "D:\LongMemory-local\runtime\xiaozhi-esp32-server\main\xiaozhi-server"
 $xiaozhiSetup = "D:\02-项目\LongMemory-SmartRing\scripts\development\xiaozhi\setup.py"
 .\.venv\Scripts\python.exe $xiaozhiSetup install-memory
 ```

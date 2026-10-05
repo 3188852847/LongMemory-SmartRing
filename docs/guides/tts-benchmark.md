@@ -57,7 +57,7 @@ http://127.0.0.1:8767/settings?tab=voice
 CosyVoice 使用项目外独立环境和权重，不加入主项目依赖。源码、依赖和模型准备完成后，先检查本地快照：
 
 ```powershell
-$cosyPython = "D:\ESP32-Workspace\CosyVoice\.venv\Scripts\python.exe"
+$cosyPython = "D:\LongMemory-local\runtime\CosyVoice\.venv\Scripts\python.exe"
 & $cosyPython "D:\02-项目\LongMemory-SmartRing\scripts\development\cosyvoice\trial.py" inspect
 ```
 

@@ -323,17 +323,21 @@ def test_default_console_url_opens_react_chat():
         runtime.console_url(8767, "https://example.invalid")
 
 
-def test_voxcpm_commands_use_isolated_environment_and_start_before_voice(options):
+def test_voxcpm_commands_use_isolated_environment_and_start_before_voice(options, monkeypatch):
     voice = options.root / "voice"; (voice / ".venv/Scripts").mkdir(parents=True)
     (voice / ".venv/Scripts/python.exe").touch()
     voxcpm = options.root / "scripts/development/voxcpm"
-    (voxcpm / ".venv/Scripts").mkdir(parents=True)
-    (voxcpm / ".venv/Scripts/python.exe").touch(); (voxcpm / "service.py").touch()
+    external_python = options.root / "external-runtime/voxcpm2/Scripts/python.exe"
+    external_python.parent.mkdir(parents=True)
+    external_python.touch()
+    voxcpm.mkdir(parents=True)
+    (voxcpm / "service.py").touch()
+    monkeypatch.setattr(runtime, "DEFAULT_VOXCPM_PYTHON", external_python)
     commands = runtime.build_commands(replace(options, voice=True, voice_root=voice,
                                                lan_ip="192.168.1.2", tts_backend="voxcpm2"),
                                       uv="synthetic-uv")
     assert [item[0] for item in commands] == ["console", "voxcpm2", "voice"]
-    assert commands[1][1][0] == str(voxcpm / ".venv/Scripts/python.exe")
+    assert commands[1][1][0] == str(external_python)
     assert commands[1][1][1] == str(voxcpm / "service.py")
     assert commands[2][1][6:8] == ["voxcpm2", "longmemory"]
 

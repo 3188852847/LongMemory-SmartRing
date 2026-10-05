@@ -15,19 +15,21 @@ import sys
 from winjob import Job
 
 ROOT = Path(__file__).resolve().parents[3]
-VOICE_ROOT = Path(r"D:\ESP32-Workspace\xiaozhi-esp32-server\main\xiaozhi-server")
+LOCAL_ROOT = Path(r"D:\LongMemory-local")
+VOICE_ROOT = LOCAL_ROOT / "runtime/xiaozhi-esp32-server/main/xiaozhi-server"
 VOXCPM_PORT = 18768
 SANOTTS_PORT = 18769
 COSYVOICE_PORT = 18770
-DEFAULT_SANOTTS_SOURCE = Path(r"D:\ESP32-Workspace\sanoTTS")
-DEFAULT_COSYVOICE_SOURCE = Path(r"D:\ESP32-Workspace\CosyVoice")
+DEFAULT_SANOTTS_SOURCE = LOCAL_ROOT / "runtime/sanoTTS"
+DEFAULT_COSYVOICE_SOURCE = LOCAL_ROOT / "runtime/CosyVoice"
+DEFAULT_VOXCPM_PYTHON = LOCAL_ROOT / "runtime/voxcpm2-venv/Scripts/python.exe"
 DEFAULT_COSYVOICE_MODEL = DEFAULT_COSYVOICE_SOURCE / "pretrained_models/Fun-CosyVoice3-0.5B"
 EXPECTED_SANOTTS_FINGERPRINT = "e7adac23b8ae2aefa1623eaa24f6f8049ddfd97e30efd5a377e0f239e6cd7605"
 WALLPAPER_DELIVERY_PORT = 8768
 DEFAULT_CHAT_PATH = "/chat-react"
 CONSOLE_PATHS = {"overview": "/overview", "chat": DEFAULT_CHAT_PATH, "device": "/device", "memories": "/memories", "settings": "/settings"}
-DEFAULT_BGE_MODEL = ROOT / "data/models/bge-small-zh-v1.5/7999e1d3359715c523056ef9478215996d62a620"
-DEFAULT_FFMPEG_DIR = Path(r"D:\Tools\ffmpeg\bin")
+DEFAULT_BGE_MODEL = LOCAL_ROOT / "runtime/models/bge-small-zh-v1.5/7999e1d3359715c523056ef9478215996d62a620"
+DEFAULT_FFMPEG_DIR = LOCAL_ROOT / "tools/ffmpeg/bin"
 LAUNCHER_STATUS_NAME = "launcher-status.json"
 
 
@@ -210,7 +212,8 @@ def build_commands(options, uv=None):
         if options.voice_mode == "doubao_realtime":
             validate_doubao_config(options.doubao_env or root / ".env.doubao.local")
         elif options.tts_backend == "voxcpm2":
-            voxcpm_python = root / "scripts/development/voxcpm/.venv/Scripts/python.exe"
+            # 独立环境与模型集中存放；服务代码仍来自主仓库，二者不再靠旧目录联接绑定。
+            voxcpm_python = DEFAULT_VOXCPM_PYTHON
             service = root / "scripts/development/voxcpm/service.py"
             if not voxcpm_python.is_file() or not service.is_file():
                 raise ValueError("VoxCPM2 独立环境或服务脚本不完整。")

@@ -485,7 +485,7 @@ LongMemory-SmartRing/                              # 项目根目录
 ## 开发环境
 
 本机专属依赖与历史实验已于 2026-10-06 集中整理，日常 `Start.cmd` 入口保持不变。
-目录用途、兼容联接与保留项见[本机目录与依赖](docs/guides/本机目录与依赖.md)。
+旧路径兼容联接已移除，当前入口直接使用集中目录；目录用途与保留项见[本机目录与依赖](docs/guides/本机目录与依赖.md)。
 
 ```powershell
 cd "D:\02-项目\LongMemory-SmartRing"

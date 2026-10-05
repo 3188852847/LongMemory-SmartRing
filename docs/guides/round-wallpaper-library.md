@@ -2,7 +2,7 @@
 
 ## 启动
 
-1. 使用日常启动面板启动控制台。启动器会自动发现已有的 `D:\Tools\ffmpeg\bin`，不会下载或改动 FFmpeg。
+1. 使用日常启动面板启动控制台。启动器会自动发现已有的 `D:\LongMemory-local\tools\ffmpeg\bin`，不会下载或改动 FFmpeg。
 2. 打开“圆屏预览”页，找到“6. 动态壁纸素材库”。
 3. 如页面提示没有 FFmpeg，先确认 `ffmpeg.exe` 和 `ffprobe.exe` 均在上述目录，再停止并重新启动面板服务。
 

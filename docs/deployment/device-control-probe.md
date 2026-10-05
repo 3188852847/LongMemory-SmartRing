@@ -17,7 +17,7 @@
 连接能访问学校模型的网络，沿用已验证有线 IP；若 IP 变化，先沿原指南核对配置和防火墙。
 
 ```powershell
-Set-Location "D:\ESP32-Workspace\xiaozhi-esp32-server\main\xiaozhi-server"
+Set-Location "D:\LongMemory-local\runtime\xiaozhi-esp32-server\main\xiaozhi-server"
 $xiaozhiSetup = "D:\02-项目\LongMemory-SmartRing\scripts\development\xiaozhi\setup.py"
 .\.venv\Scripts\python.exe $xiaozhiSetup start --lan-ip 192.168.124.45 --allow-insecure-http --device-control
 ```
@@ -29,7 +29,7 @@ $xiaozhiSetup = "D:\02-项目\LongMemory-SmartRing\scripts\development\xiaozhi\s
 ## 2. 新开终端，只查看握手状态
 
 ```powershell
-Set-Location "D:\ESP32-Workspace\xiaozhi-esp32-server\main\xiaozhi-server"
+Set-Location "D:\LongMemory-local\runtime\xiaozhi-esp32-server\main\xiaozhi-server"
 $deviceControl = "D:\02-项目\LongMemory-SmartRing\scripts\development\xiaozhi\control.py"
 .\.venv\Scripts\python.exe $deviceControl status
 ```

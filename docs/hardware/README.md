@@ -13,7 +13,7 @@
 ### 当前已配网小智的完整备份
 
 - 2026-09-03，电脑识别 COM3，USB 标识与此前圆屏一致；使用 esptool 4.12.0 从地址 0x0 读取 0x1000000 字节，命令成功退出，随后发送硬复位。
-- 文件：`D:\ESP32-Workspace\backups\SmartRing-Plus-B\xiaozhi-configured-before-axp-2026-09-03.bin`。
+- 文件：`D:\LongMemory-local\firmware\device-backups\SmartRing-Plus-B\xiaozhi-configured-before-axp-2026-09-03.bin`。
 - 文件长度：16777216 字节；读取耗时 384.1 秒。
 - SHA256：`1E65419D8DBB75C876183CB53ECE50FB02801B2661645F3905C889DB52436480`。
 - 原厂备份保留不覆盖，并复核原 SHA256 仍为 `A8E690F083A46F847185A4A4F5C28738970012443C4DEADE9B86BF18E954EE41`。

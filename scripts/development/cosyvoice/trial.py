@@ -21,7 +21,7 @@ import uuid
 
 
 ROOT = Path(__file__).resolve().parents[3]
-DEFAULT_SOURCE = Path(r"D:\ESP32-Workspace\CosyVoice")
+DEFAULT_SOURCE = Path(r"D:\LongMemory-local\runtime\CosyVoice")
 DEFAULT_MODEL = DEFAULT_SOURCE / "pretrained_models" / "Fun-CosyVoice3-0.5B"
 REQUIRED_SOURCE = (
     "cosyvoice/cli/cosyvoice.py",

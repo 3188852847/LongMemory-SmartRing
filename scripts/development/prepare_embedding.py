@@ -9,6 +9,7 @@ import urllib.request
 from longmemory.adapters.llm.local_embedding import MODEL_FILES, MODEL_ID, REVISION
 
 ROOT = Path(__file__).resolve().parents[2]
+MODEL_ROOT = Path(r"D:\LongMemory-local\runtime\models")
 
 
 def main(argv=None):
@@ -16,7 +17,7 @@ def main(argv=None):
     parser.add_argument("--from-directory", type=Path,
                         help="只从此目录读取缺失文件；仍查询官方元数据校验，但不请求文件下载")
     args = parser.parse_args(argv)
-    target = ROOT / "data/models/bge-small-zh-v1.5" / REVISION
+    target = MODEL_ROOT / "bge-small-zh-v1.5" / REVISION
     # 允许显式再次运行以补齐缺失文件；既有文件必须重新通过官方哈希
     # 校验，绝不覆盖损坏内容，也不在一次运行里自动重试网络请求。
     if (target / "snapshot.json").exists():
