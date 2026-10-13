@@ -86,6 +86,15 @@ registry 来源与项目默认 PyPI 来源不一致，拒绝继续。这是来�
 通过，原 `uv.lock` 字节和 SHA-256 保持一致；没有执行安装或联网重新锁定。
 修复后的远程安装和后续检查仍须以新运行的实际结果为准，保持 `--locked`。
 
+第二次远程运行（`38455211859`）的前端 job 已完成组件测试、构建与隔离浏览器
+测试；后端报告 1917 通过、13 个明确跳过、1 项 deselect，但仍有两项失败。
+一项是 Windows 8.3 临时路径（例如 `RUNNER~1`）与 .NET 展开的长路径比较
+方式不一致：现统一规范化根目录、SDK 和候选路径，保留原登记记录正文及
+存在性、版本目录和越界检查；本机用真实短路径验证，并补缺失文件/现存兄弟
+目录越界的拒绝测试。另一项是合成日期用例依赖本机时区：改为注入明确 UTC
+测试时间，使 runner 与本机使用相同假设。两项修复后的整体回归及第三次远程
+执行须由协调会话核对；第二次前端成功不能代表后端已通过。
+
 官方依据：[uv GitHub Actions](https://docs.astral.sh/uv/guides/integration/github/)、
 [setup-uv v6.8.0](https://github.com/astral-sh/setup-uv/releases/tag/v6.8.0)、
 [checkout v4.2.2](https://github.com/actions/checkout/releases/tag/v4.2.2)、

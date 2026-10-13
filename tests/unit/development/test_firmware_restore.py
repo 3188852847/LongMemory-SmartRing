@@ -138,13 +138,28 @@ def test_artifacts_reject_oversized_application_without_receipt(tmp_path):
     assert not (tmp_path / "restore-build.json").exists()
 
 
+def _windows_short_path(path):
+    """向 Windows 查询真实 8.3 别名；无别名的卷会返回原路径。"""
+    import ctypes
+    from ctypes import wintypes
+    function = ctypes.windll.kernel32.GetShortPathNameW
+    function.argtypes = [wintypes.LPCWSTR, wintypes.LPWSTR, wintypes.DWORD]
+    function.restype = wintypes.DWORD
+    buffer = ctypes.create_unicode_buffer(32768)
+    length = function(str(path), buffer, len(buffer))
+    assert 0 < length < len(buffer), "合成文件必须存在且能够查询 Windows 路径"
+    return buffer.value
+
+
 @pytest.mark.skipif(not shutil.which("powershell.exe"), reason="Windows PowerShell registry integration")
-def test_registry_merges_completed_sdk_without_switching_original_default():
+@pytest.mark.parametrize("use_short_root", [False, True])
+def test_registry_merges_completed_sdk_without_switching_original_default(use_short_root):
     with tempfile.TemporaryDirectory(prefix="smart-ring-registry-check-") as directory:
         root = Path(directory)
         sdk = root / "v5.5.4/esp-idf"
         python = root / "python_env/v5.5.4/venv/Scripts/python.exe"
         profile = root / "Microsoft.v5.5.4.PowerShell_profile.ps1"
+        sdk.mkdir(parents=True)
         python.parent.mkdir(parents=True)
         python.touch()
         profile.touch()
@@ -157,14 +172,59 @@ def test_registry_merges_completed_sdk_without_switching_original_default():
         record = {"id":"new","path":str(sdk),"python":str(python),"activationScript":str(profile),"status":"finished"}
         vendor.write_text(json.dumps({"idfInstalled":[record]}),encoding="utf-8")
         (root / "tools/eim_idf.json").write_text(json.dumps(prior),encoding="utf-8")
+        esp_root = _windows_short_path(root) if use_short_root else str(root)
+        sdk_path = _windows_short_path(sdk) if use_short_root else str(sdk)
         result = subprocess.run(["powershell.exe","-NoProfile","-ExecutionPolicy","Bypass","-File",
-                                 str(DIRECTORY / "sync_registry.ps1"),"-EspRoot",str(root),"-SdkPath",str(sdk),
+                                 str(DIRECTORY / "sync_registry.ps1"),"-EspRoot",esp_root,"-SdkPath",sdk_path,
                                  "-PriorRegistry",str(original),"-VendorRegistry",str(vendor)],
                                 capture_output=True,timeout=30)
         assert result.returncode == 0, result.stderr.decode(errors="replace")
         merged = json.loads((root / "tools/eim_idf.json").read_text(encoding="utf-8-sig"))
         assert merged["idfSelectedId"] == "original"
         assert merged["idfInstalled"] == prior["idfInstalled"] + [record]
+
+
+@pytest.mark.skipif(not shutil.which("powershell.exe"), reason="Windows PowerShell registry integration")
+@pytest.mark.parametrize("invalid_path", ["missing_python", "missing_profile", "sibling_python"])
+def test_registry_short_root_still_rejects_missing_or_outside_paths(invalid_path):
+    with tempfile.TemporaryDirectory(prefix="smart-ring-registry-boundary-") as directory:
+        root = Path(directory) / "esp"
+        sdk = root / "v5.5.4/esp-idf"
+        python = root / "python_env/v5.5.4/venv/Scripts/python.exe"
+        profile = root / "Microsoft.v5.5.4.PowerShell_profile.ps1"
+        sdk.mkdir(parents=True)
+        python.parent.mkdir(parents=True)
+        python.touch()
+        profile.touch()
+        if invalid_path == "missing_python":
+            python.unlink()
+        elif invalid_path == "missing_profile":
+            profile.unlink()
+        else:
+            # esp-sibling 与 esp 共享字符串前缀，仍然属于根目录外；
+            # 文件真实存在，不能仅靠缺失文件检测碰巧拒绝越界。
+            python = Path(directory) / "esp-sibling/python.exe"
+            python.parent.mkdir()
+            python.touch()
+        (root / "tools").mkdir()
+        prior = {"idfInstalled": [], "idfSelectedId": "original", "version": "3.0"}
+        original = root / "prior.json"
+        original.write_text(json.dumps(prior), encoding="utf-8")
+        destination = root / "tools/eim_idf.json"
+        destination.write_text(json.dumps(prior), encoding="utf-8")
+        before = destination.read_bytes()
+        vendor = root / "vendor.json"
+        record = {"id": "new", "path": str(sdk), "python": str(python),
+                  "activationScript": str(profile), "status": "finished"}
+        vendor.write_text(json.dumps({"idfInstalled": [record]}), encoding="utf-8")
+        result = subprocess.run([
+            "powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
+            str(DIRECTORY / "sync_registry.ps1"), "-EspRoot", _windows_short_path(root),
+            "-SdkPath", str(sdk), "-PriorRegistry", str(original), "-VendorRegistry", str(vendor),
+        ], capture_output=True, timeout=30)
+        assert result.returncode != 0
+        assert destination.read_bytes() == before
+        assert not (root / "tools/eim_idf.json.smart-ring.tmp").exists()
 
 
 @pytest.mark.skipif(not shutil.which("powershell.exe") or not shutil.which("uv"), reason="Windows SDK preparation failure cleanup")
