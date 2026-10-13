@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "captured_on": "2026-10-14",
+  "experiment": "0013-continuous-round-face",
+  "depends_on": "restore/restore-0012.patch",
+  "board": "viewe-smartring-plus",
+  "esp_idf_version": "5.5.4",
+  "source": {
+    "board_cc_sha256_before": "2e190e96c8f53117b61ae0972e7bfcad705bbe5406bdea1d44e0af05e8c626b4",
+    "board_cc_sha256_after": "8f8f45b4dd29454b6bd063a3c50f1074accfac0ad15cc0aa5d84243bdc15dfa4",
+    "motion_header_sha256": "35d160298040605f50c73fd4ebb31609221f483ead95c39c4a960ba244c8e040",
+    "patch_sha256": "f20760d4bfa0499dc2c1823d760bb504e293f57269c093ee0de7f61126d69e5a",
+    "newline": "LF"
+  },
+  "contract": {
+    "timer_period_ms": 40,
+    "interaction_and_emotion_separated": true,
+    "new_assets": false,
+    "new_dependencies": false,
+    "protocol_or_device_state_machine_changed": false,
+    "skin_schema_changed": false,
+    "wallpaper_priority_preserved": true,
+    "lip_sync": false
+  },
+  "verification": {
+    "patch_apply_check": true,
+    "patch_reverse_check": true,
+    "pure_model": true,
+    "firmware_compile": false,
+    "flashed": false,
+    "device_audio_concurrency": false,
+    "performance_measured": false,
+    "pure_model_compiler": "MSVC 19.51.36231 x64 /std:c++17 /utf-8 /W4 /EHsc"
+  }
+}
