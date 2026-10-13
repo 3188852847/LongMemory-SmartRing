@@ -71,3 +71,6 @@
 :root[data-theme=future] .memory-shell .mode-card{background:transparent;border:0;border-top:1px solid var(--border);box-shadow:none}
 :root[data-theme=future] .memory-shell .memory-overview{background:transparent;border:0;border-bottom:1px solid var(--border);box-shadow:none}
 :root[data-theme=future] .chat-shell .bubble.assistant{background:transparent;border:0;box-shadow:none}
+/* AntD 6 的空搜索 input 覆盖在选中值上；原生 input 主题背景不能涂在这层。
+   保留组件库自己的文字、禁用和搜索规则，仅抵消旧全局背景 !important。 */
+:root[data-theme=future] .ant-select .ant-select-input{background-color:transparent!important}
