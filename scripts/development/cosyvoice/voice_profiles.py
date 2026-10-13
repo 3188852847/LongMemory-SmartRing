@@ -75,15 +75,29 @@ class VoiceProfileStore:
         self.profile_path.parent.mkdir(parents=True, exist_ok=True)
         lock = self.profile_path.with_suffix('.lock')
         self._contained(lock)
-        try:
-            handle = os.open(lock, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-        except FileExistsError:
-            raise ValueError('voice_profile_busy') from None
-        try:
-            os.close(handle)
-            yield
-        finally:
-            lock.unlink(missing_ok=True)
+        # OS 持有锁的生命周期，进程崩溃也会释放；固定 lock 文件本身保留，
+        # 避免 unlink 后另一个写者锁住旧 inode、第三个写者却新建文件的竞态。
+        with lock.open('a+b') as handle:
+            if handle.seek(0, os.SEEK_END) == 0:
+                handle.write(b'0'); handle.flush()
+            handle.seek(0)
+            try:
+                if os.name == 'nt':
+                    import msvcrt
+                    msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+                else:
+                    import fcntl
+                    fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except OSError:
+                raise ValueError('voice_profile_busy') from None
+            try:
+                yield
+            finally:
+                handle.seek(0)
+                if os.name == 'nt':
+                    msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+                else:
+                    fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
     def _atomic(self, path, data):
         self._contained(path)

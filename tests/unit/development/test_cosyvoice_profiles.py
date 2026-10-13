@@ -4,6 +4,7 @@ from io import BytesIO
 import json
 import os
 import subprocess
+import sys
 from pathlib import Path
 import threading
 from types import SimpleNamespace
@@ -44,6 +45,37 @@ def test_reference_private_opaque_hashed_and_profile_compare_and_swap(tmp_path):
     with pytest.raises(ValueError, match='voice_reference_changed'):
         store.profile()
     assert not store.uses_default_voice()
+
+
+def test_operating_system_write_lock_rejects_concurrent_writer_and_releases_after_error(tmp_path):
+    store, other = profiles.VoiceProfileStore(tmp_path), profiles.VoiceProfileStore(tmp_path)
+    _, digest = store.profile()
+    with pytest.raises(RuntimeError, match='synthetic'):
+        with store._writing():
+            with pytest.raises(ValueError, match='voice_profile_busy'):
+                other.save(profiles.DEFAULT_PROFILE, digest)
+            raise RuntimeError('synthetic')
+    assert other.save(profiles.DEFAULT_PROFILE, digest)[0] == profiles.DEFAULT_PROFILE
+
+
+def test_write_lock_is_released_even_when_child_exits_without_finally(tmp_path):
+    path = ROOT / 'scripts/development/cosyvoice/voice_profiles.py'
+    code = "import importlib.util,sys,os; s=importlib.util.spec_from_file_location('v',sys.argv[1]); m=importlib.util.module_from_spec(s); s.loader.exec_module(m); c=m.VoiceProfileStore(sys.argv[2])._writing(); c.__enter__(); os._exit(0)"
+    result = subprocess.run([sys.executable, '-c', code, str(path), str(tmp_path)], capture_output=True, timeout=5)
+    assert result.returncode == 0
+    store = profiles.VoiceProfileStore(tmp_path)
+    _, digest = store.profile()
+    assert store.save(profiles.DEFAULT_PROFILE, digest)[0] == profiles.DEFAULT_PROFILE
+
+
+def test_metadata_unknown_fields_are_not_exposed_by_reference_listing(tmp_path):
+    store = profiles.VoiceProfileStore(tmp_path)
+    item = store.add_reference(pcm(), '合成', '合成文本')
+    path = store.audio_root / (item['id'] + '.json')
+    path.write_text(json.dumps({**item, 'unexpected_private_value': 'synthetic-secret'}))
+    assert store.references() == []
+    with pytest.raises(ValueError, match='invalid_voice_reference'):
+        store.reference(item['id'])
 
 
 @pytest.mark.parametrize('data', [b'not wave', pcm(1), pcm(31), pcm()[:-2], pcm() + b'garbage', b'x' * (profiles.MAX_AUDIO_BYTES + 1)], ids=['not-wave', 'short', 'long', 'truncated', 'trailing', 'too-large'])
