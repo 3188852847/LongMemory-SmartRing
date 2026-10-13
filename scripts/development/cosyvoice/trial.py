@@ -160,7 +160,16 @@ def configure_runtime_cache() -> None:
     os.environ["HF_HUB_DISABLE_TELEMETRY"] = "1"
     # WeText 属于本项目的语音资源；只对当前语音进程指定缓存根。
     # ModelScope 1.20.0 会在这个根下使用 hub/pengzhendong/wetext。
-    os.environ["MODELSCOPE_CACHE"] = str(ROOT / "local/runtime/modelscope-cache")
+    # kaldifst 的 Windows 原生读取接口不能打开含中文的绝对文件名。
+    # 从项目内部工作目录使用 ASCII 相对路径，实体仍留在项目内；不搬模型、
+    # 不创建盘符或联接，也不改全局环境。启动器已固定声音服务的工作目录。
+    try:
+        wetext_cache = os.path.relpath(ROOT / "local/runtime/modelscope-cache", Path.cwd())
+    except ValueError:
+        raise RuntimeError("请从智慧圆屏项目内目录启动 CosyVoice，不能跨盘解析 WeText。") from None
+    if os.name == "nt" and not wetext_cache.isascii():
+        raise RuntimeError("请从智慧圆屏项目根或其英文脚本目录启动 CosyVoice。")
+    os.environ["MODELSCOPE_CACHE"] = wetext_cache
     install_modelscope_offline()
 
 

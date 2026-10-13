@@ -180,6 +180,7 @@ def test_runtime_cache_uses_project_root_without_moving_existing_cache(
     modelscope_runtime, monkeypatch, tmp_path,
 ):
     monkeypatch.setattr(trial, "ROOT", tmp_path)
+    monkeypatch.chdir(tmp_path)
     for key in ("NUMBA_CACHE_DIR", "MPLCONFIGDIR", "HF_HOME", "HF_HUB_OFFLINE", "HF_HUB_DISABLE_TELEMETRY"):
         monkeypatch.delenv(key, raising=False)
     monkeypatch.setenv("MODELSCOPE_CACHE", str(modelscope_runtime.cache))
@@ -187,7 +188,38 @@ def test_runtime_cache_uses_project_root_without_moving_existing_cache(
     trial.configure_runtime_cache()
 
     # 新电脑使用项目专属 WeText 根；只改变本进程选择，不迁移或覆盖旧缓存。
-    assert trial.os.environ["MODELSCOPE_CACHE"] == str(tmp_path / "local/runtime/modelscope-cache")
+    assert Path(trial.os.environ["MODELSCOPE_CACHE"]).resolve() == tmp_path / "local/runtime/modelscope-cache"
+    assert trial.os.environ["MODELSCOPE_CACHE"].isascii()
     assert all((modelscope_runtime.repo / name).is_file() for name in trial.WETEXT_REQUIRED_FILES)
     assert trial.os.environ["HF_HUB_OFFLINE"] == "1"
     assert modelscope_runtime.imported_snapshot(trial.WETEXT_MODEL_ID) == str(modelscope_runtime.repo)
+
+
+def test_runtime_cache_keeps_native_fst_path_ascii_from_service_directory(
+    modelscope_runtime, monkeypatch, tmp_path,
+):
+    root = tmp_path / "智慧圆屏"
+    cwd = root / "scripts/development/cosyvoice"
+    cwd.mkdir(parents=True)
+    monkeypatch.setattr(trial, "ROOT", root)
+    monkeypatch.chdir(cwd)
+
+    trial.configure_runtime_cache()
+
+    cache = trial.os.environ["MODELSCOPE_CACHE"]
+    assert cache.isascii()
+    assert not Path(cache).is_absolute()
+    assert Path(cache).resolve() == root / "local/runtime/modelscope-cache"
+
+
+@pytest.mark.skipif(trial.os.name != "nt", reason="Windows native FST path boundary")
+def test_runtime_cache_rejects_working_directory_requiring_unicode_relative_path(
+    modelscope_runtime, monkeypatch, tmp_path,
+):
+    root = tmp_path / "智慧圆屏"
+    root.mkdir()
+    monkeypatch.setattr(trial, "ROOT", root)
+    monkeypatch.chdir(tmp_path)
+
+    with pytest.raises(RuntimeError, match="项目根"):
+        trial.configure_runtime_cache()
