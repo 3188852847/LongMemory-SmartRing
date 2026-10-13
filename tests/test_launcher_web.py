@@ -24,6 +24,26 @@ finally:
     sys.path.pop(0)
 
 
+def test_launcher_window_uses_existing_browser_with_argument_list(tmp_path):
+    browser = tmp_path / 'Microsoft/Edge/Application/msedge.exe'
+    browser.parent.mkdir(parents=True)
+    browser.write_bytes(b'synthetic-browser')
+    url = 'http://127.0.0.1:12345/#token=synthetic'
+    assert web_app.launcher_window_command(url, environment={'ProgramFiles': str(tmp_path)}) == [
+        str(browser), '--app=' + url, '--window-size=1040,800']
+    assert web_app.launcher_window_command(url, environment={}) is None
+    with pytest.raises(ValueError):
+        web_app.launcher_window_command('https://outside.example/', environment={})
+
+
+def test_launcher_window_falls_back_without_changing_browser(monkeypatch):
+    monkeypatch.setattr(web_app, 'launcher_window_command', lambda _: None)
+    calls = []
+    monkeypatch.setattr(web_app.webbrowser, 'open', lambda url, **kwargs: calls.append((url, kwargs)) or True)
+    assert web_app.open_launcher_window('http://127.0.0.1:12345/')
+    assert calls == [('http://127.0.0.1:12345/', {'new': 1})]
+
+
 class FakeManager:
     def __init__(self):
         self.services = {}
@@ -96,6 +116,26 @@ def request(host, method, path, body=None, *, token=True, headers=None):
         return response.status, dict(response.getheaders()), data
     finally:
         client.close()
+
+
+def test_rebuilt_assets_use_new_manifest_without_host_restart(host):
+    (host.dist / 'assets/new-build.js').write_text('console.log("new synthetic build")', encoding='utf-8')
+    (host.dist / '.vite/manifest.json').write_text(
+        json.dumps({'launcher.html': {'file': 'assets/new-build.js'}}), encoding='utf-8')
+    assert request(host, 'GET', '/react-chat/assets/new-build.js', token=False)[0] == 200
+    assert request(host, 'GET', '/react-chat/assets/app.js', token=False)[0] == 404
+    (host.dist / '.vite/manifest.json').write_text('{incomplete', encoding='utf-8')
+    assert request(host, 'GET', '/', token=False)[0] == 503
+
+
+def test_status_trace_matches_response_header_and_excludes_token(host):
+    code, headers, _ = request(host, 'GET', '/api/launcher/status')
+    assert code == 200
+    path = host.controller.root / 'data/logs/launcher-events.jsonl'
+    row = json.loads(path.read_text(encoding='utf-8').splitlines()[-1])
+    assert row['request_id'] == headers['X-Request-Id']
+    assert row['event'] == 'phase_changed'
+    assert host.token not in path.read_text(encoding='utf-8')
 
 
 def test_start_readiness_stop_and_console(panel):

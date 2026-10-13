@@ -7,8 +7,10 @@ import http.client
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import mimetypes
+import os
 from pathlib import Path
 import secrets
+import subprocess
 import threading
 import time
 from urllib.parse import unquote, urlsplit
@@ -16,6 +18,7 @@ import webbrowser
 
 from control import CONTROL_FILE_NAME, LauncherControl, request_control
 from controller import ControllerError, LauncherController
+from events import LauncherEvents
 from runtime import ROOT, Singleton
 
 DISCOVERY_NAME = 'launcher-web.json'
@@ -30,11 +33,18 @@ class LauncherHTTPServer(ThreadingHTTPServer):
         self.dist = Path(dist).resolve()
         self.token = token or secrets.token_urlsafe(32)
         self.shutdown_observed = threading.Event()
+        self.events = LauncherEvents(getattr(controller, 'root', None))
+        self.assets = self.read_assets()
+        super().__init__(('127.0.0.1', 0), LauncherHandler)
+        self.origin = f'http://127.0.0.1:{self.server_port}'
+
+    def read_assets(self):
+        """重新构建后读取新的白名单，避免 HTML 更新而资源仍被旧清单拒绝。"""
         try:
             manifest = json.loads((self.dist / '.vite/manifest.json').read_text(encoding='utf-8'))
             if not isinstance(manifest, dict):
                 raise ValueError
-            self.assets = set()
+            assets = set()
             for record in manifest.values():
                 if not isinstance(record, dict):
                     raise ValueError
@@ -44,11 +54,10 @@ class LauncherHTTPServer(ThreadingHTTPServer):
                         if '\\' in value or ':' in value or '..' in candidate.parts:
                             raise ValueError
                         if candidate.suffix.lower() in {'.js', '.css', '.svg', '.png', '.jpg', '.webp', '.woff', '.woff2'}:
-                            self.assets.add(value)
+                            assets.add(value)
+            return assets
         except (OSError, TypeError, ValueError):
             raise ValueError('启动页面构建清单无效，请在 web/react-chat 重新执行 pnpm.cmd build。') from None
-        super().__init__(('127.0.0.1', 0), LauncherHandler)
-        self.origin = f'http://127.0.0.1:{self.server_port}'
 
     @property
     def browser_url(self):
@@ -64,7 +73,12 @@ class LauncherHandler(BaseHTTPRequestHandler):
         pass
 
     def _send(self, status, body, content_type='application/json; charset=utf-8', *, nonce=None):
+        request_id = getattr(self, 'request_id', None) or secrets.token_hex(12)
+        if self.command == 'POST' and self.path in {'/api/launcher/settings', '/api/launcher/actions'}:
+            self.server.events.record(request_id, event='request_result', status=status,
+                                      action=getattr(self, 'audit_action', None))
         self.send_response(status)
+        self.send_header('X-Request-Id', request_id)
         self.send_header('Content-Type', content_type)
         self.send_header('Content-Length', str(len(body)))
         self.send_header('Cache-Control', 'no-store')
@@ -101,6 +115,7 @@ class LauncherHandler(BaseHTTPRequestHandler):
         return True
 
     def do_GET(self):
+        self.request_id = secrets.token_hex(12)
         if not self._local_request():
             return
         parsed = urlsplit(self.path)
@@ -110,6 +125,8 @@ class LauncherHandler(BaseHTTPRequestHandler):
             if self._authenticated():
                 try:
                     snapshot = self.server.controller.snapshot()
+                    self.server.events.record(self.request_id, event='phase_changed',
+                                              phase=snapshot.get('state'))
                     self._json(200, snapshot)
                     if snapshot.get('shutdown_complete'):
                         self.server.shutdown_observed.set()
@@ -117,8 +134,16 @@ class LauncherHandler(BaseHTTPRequestHandler):
                     self._error(error.status, 'settings_unavailable', str(error))
             return
         if parsed.path == '/':
+            try:
+                self.server.assets = self.server.read_assets()
+            except ValueError:
+                return self._error(503, 'build_invalid', '启动页面正在构建或尚未完成，请稍后从入口重新打开。')
             target = self.server.dist / 'launcher.html'
         elif parsed.path.startswith('/react-chat/assets/'):
+            try:
+                self.server.assets = self.server.read_assets()
+            except ValueError:
+                return self._error(503, 'build_invalid', '启动页面资源清单暂不可用。')
             suffix = unquote(parsed.path[len('/react-chat/assets/'):])
             # URL 反斜杠和二次编码不能参与 Windows 路径解析。
             if not suffix or '\\' in suffix or '%' in suffix or ':' in suffix:
@@ -148,6 +173,7 @@ class LauncherHandler(BaseHTTPRequestHandler):
         self._send(200, body, mimetypes.guess_type(resolved.name)[0] or 'application/octet-stream', nonce=nonce)
 
     def do_POST(self):
+        self.request_id = secrets.token_hex(12)
         if not self._local_request() or not self._authenticated():
             return
         if self.path not in {'/api/launcher/settings', '/api/launcher/actions'}:
@@ -167,12 +193,14 @@ class LauncherHandler(BaseHTTPRequestHandler):
             if not isinstance(body, dict):
                 raise ValueError
             if self.path.endswith('/settings'):
+                self.audit_action = 'settings'
                 if set(body) != {'settings', 'expected_revision'}:
                     raise ValueError
                 result = self.server.controller.update_settings(body['settings'], body['expected_revision'])
             else:
                 if set(body) != {'action'} or not isinstance(body['action'], str):
                     raise ValueError
+                self.audit_action = body['action']
                 result = self.server.controller.action(body['action'])
         except ControllerError as error:
             return self._error(error.status, 'settings_conflict' if error.status == 409 else 'operation_rejected', str(error))
@@ -195,7 +223,38 @@ def publish_discovery(path, server, control):
     temporary.replace(path)
 
 
-def reopen_existing(root, *, opener=webbrowser.open):
+def launcher_window_command(url, *, environment=None):
+    """复用已安装的 Edge 应用窗口；不安装包装框架、不改默认浏览器。"""
+    parsed = urlsplit(url)
+    if parsed.scheme != 'http' or parsed.hostname != '127.0.0.1' or not parsed.port:
+        raise ValueError('本机启动窗口只接受回环地址。')
+    environment = os.environ if environment is None else environment
+    for key, suffix in (
+        ('ProgramFiles(x86)', 'Microsoft/Edge/Application/msedge.exe'),
+        ('ProgramFiles', 'Microsoft/Edge/Application/msedge.exe'),
+        ('LOCALAPPDATA', 'Microsoft/Edge/Application/msedge.exe'),
+    ):
+        directory = environment.get(key)
+        if directory:
+            browser = Path(directory) / suffix
+            if browser.is_file():
+                return [str(browser), '--app=' + url, '--window-size=1040,800']
+    return None
+
+
+def open_launcher_window(url):
+    command = launcher_window_command(url)
+    if command:
+        try:
+            subprocess.Popen(command, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0),
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            return True
+        except OSError:
+            pass
+    return webbrowser.open(url, new=1)
+
+
+def reopen_existing(root, *, opener=open_launcher_window):
     """只有旧 socket 活着且发现文件绑定其随机令牌，才打开既有网页实例。"""
     try:
         control_path = root / 'data/control' / CONTROL_FILE_NAME
@@ -262,7 +321,7 @@ def main():
         publish_discovery(discovery_path, server, control)
         controller.start_worker()
         server.timeout = .25
-        webbrowser.open(server.browser_url)
+        open_launcher_window(server.browser_url)
         shutdown_at = None
         while True:
             server.handle_request()

@@ -55,7 +55,7 @@ export function SettingsApp() {
         <p>编辑角色名称与系统提示词。网页从下一轮开始使用；圆屏必须在弹窗里单独预检和同步。</p>
         <RoleEditor api={api} disabled={!enabled} onSaved={() => {void queryClient.invalidateQueries({queryKey:['chat-config']});}}/>
       </Card>},
-      {key:'voice', label:'声音与克隆', children:<Card title="声音与克隆" extra={<span className="setting-scope">网页＋圆屏下一次合成</span>}>
+      {key:'voice', label:'声音与克隆', children:<Card title="声音与克隆" extra={<span className="setting-scope">网页与圆屏共用声线</span>}>
         <CosyVoiceProfileSettings api={api} disabled={!enabled}/>
         <TTSBackendSettings api={api} disabled={!enabled}/>
         <VADSettings api={api} disabled={!enabled}/>

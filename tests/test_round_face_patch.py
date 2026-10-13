@@ -2,9 +2,19 @@
 
 import hashlib
 import json
+import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1] / 'firmware/smartring_plus'
+
+
+def test_motion_patch_is_valid_after_checkout():
+    patch = ROOT / 'patches/0013-continuous-round-face.patch'
+    assert b'\r\n' not in patch.read_bytes()
+    parsed = subprocess.run(['git', 'apply', '--numstat', str(patch)],
+                            cwd=ROOT.parents[1], capture_output=True, text=True)
+    assert parsed.returncode == 0, parsed.stderr
+    assert 'main/boards/viewe-smartring-plus/round_face_motion.h' in parsed.stdout
 
 
 def test_motion_patch_and_header_identity():

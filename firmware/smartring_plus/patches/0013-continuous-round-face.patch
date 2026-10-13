@@ -108,8 +108,8 @@ diff --git a/main/boards/viewe-smartring-plus/viewe-smartring-plus.cc b/main/boa
 +            if (lv_obj_get_width(object) != width || lv_obj_get_height(object) != height)
 +                lv_obj_set_size(object, width, height);
 +            lv_obj_align(object, LV_ALIGN_CENTER, x, y);
-+            const lv_color_t color = lv_color_mix(accent, lv_obj_get_style_bg_color(object, 0), pose.color_mix);
-+            if (!lv_color_eq(color, lv_obj_get_style_bg_color(object, 0)))
++            const lv_color_t color = lv_color_mix(accent, lv_obj_get_style_bg_color(object, LV_PART_MAIN), pose.color_mix);
++            if (!lv_color_eq(color, lv_obj_get_style_bg_color(object, LV_PART_MAIN)))
 +                lv_obj_set_style_bg_color(object, color, 0);
 +        };
 +        update_part(left_eye_, coordinate(pose.eye_width), coordinate(pose.eye_height),

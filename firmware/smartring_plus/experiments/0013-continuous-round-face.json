@@ -7,9 +7,9 @@
   "esp_idf_version": "5.5.4",
   "source": {
     "board_cc_sha256_before": "2e190e96c8f53117b61ae0972e7bfcad705bbe5406bdea1d44e0af05e8c626b4",
-    "board_cc_sha256_after": "8f8f45b4dd29454b6bd063a3c50f1074accfac0ad15cc0aa5d84243bdc15dfa4",
+    "board_cc_sha256_after": "b3248d15cdf8578449af2dfe91aff13371d84dcddee57f020385fd5664f03cd9",
     "motion_header_sha256": "35d160298040605f50c73fd4ebb31609221f483ead95c39c4a960ba244c8e040",
-    "patch_sha256": "4a1afb788c45a72375be919717fda42c6c90d16f858d4b2e760e8361bb800849",
+    "patch_sha256": "04adfd7199320257edf74f31dabb55f0fac48d877b0650ce1dc1d5f4887da69c",
     "newline": "LF"
   },
   "contract": {
@@ -26,10 +26,18 @@
     "patch_apply_check": true,
     "patch_reverse_check": true,
     "pure_model": true,
-    "firmware_compile": false,
+    "firmware_compile": true,
     "flashed": false,
     "device_audio_concurrency": false,
     "performance_measured": false,
-    "pure_model_compiler": "MSVC 19.51.36231 x64 /std:c++17 /utf-8 /W4 /EHsc"
+    "pure_model_compiler": "MSVC 19.51.36231 x64 /std:c++17 /utf-8 /W4 /EHsc",
+    "offline_network_guard": true,
+    "image_partition_check": true
+  },
+  "build": {
+    "binary_bytes": 3986384,
+    "binary_sha256": "2749e5266efc136b4502a9f4e9bdbec4179077bcf8e4f1bb77b60d49d0cdb24f",
+    "app_partition_bytes": 4128768,
+    "app_free_bytes": 142384
   }
 }

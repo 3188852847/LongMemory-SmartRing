@@ -1,5 +1,9 @@
 # 系统架构总览
 
+2026-10-14 React 启动器由独立回环控制主机提供，在聊天 API 尚未运行时可操作；进程编排继续复用原 Manager。浏览器页面关闭保留服务，停止/退出均为明确操作。见 [ADR-0177](../adr/0177-react-local-launcher.md) 与 [启动器契约](../development/launcher-contract.md)。
+
+CosyVoice3 声音档案与受控参考录音由标准库模块跨三套 Python 环境共用，网页与圆屏经同一声音服务读取；角色提示词与声音设置仍独立。见 [ADR-0178](../adr/0178-controlled-cosyvoice-profiles.md) 与 [参考声音指南](../guides/参考声音与克隆.md)。
+
 2026-10-14 工程布局更新：网页源码按 `app/`、`pages/`、`features/`、公共组件、API
 与样式归类；[前端模块说明](../development/frontend-structure.md)记录实际边界。
 私有配置统一进入 `local/config/`，公共模板在 `config/examples/`；小智固定路径只

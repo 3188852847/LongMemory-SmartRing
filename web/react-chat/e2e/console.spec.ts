@@ -52,8 +52,8 @@ test('文字聊天可保存并在刷新后恢复，React 页面可统一导航',
   await expect(page.getByRole('heading', {name:'圆屏状态预览'})).toBeVisible();
   await expect(page.getByRole('region', {name:'圆屏模拟画布'})).toBeVisible();
   await page.getByRole('link', {name:'设置中心'}).click();
-  await expect(page.getByRole('heading', {name:'设置中心'})).toBeVisible();
-  await expect(page.getByRole('tab', {name:'助手角色'})).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByRole('heading', {name:'助手设置'})).toBeVisible();
+  await expect(page.getByRole('tab', {name:'助手表达'})).toHaveAttribute('aria-selected', 'true');
   await page.getByRole('button', {name:'助手角色设置'}).click();
   await expect(page.getByRole('dialog', {name:'助手角色设置'})).toBeVisible();
   await page.getByRole('switch', {name:'启用结构化表达偏好'}).click();
@@ -149,7 +149,7 @@ test('窄窗口保留全部主导航且页面不产生横向溢出', async ({pag
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 
   await page.getByRole('link', {name:'设置中心'}).click();
-  await expect(page.getByRole('heading', {name:'设置中心'})).toBeVisible();
+  await expect(page.getByRole('heading', {name:'助手设置'})).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });
 
