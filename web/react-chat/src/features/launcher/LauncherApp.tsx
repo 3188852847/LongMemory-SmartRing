@@ -3,7 +3,7 @@ import {Alert, Button, Checkbox, Drawer, Input, Modal, Select, Switch} from 'ant
 import {OrbitMark, SciFiSurface, StatusIndicator} from '../../components/SciFiSurface';
 import {LauncherApi, LauncherError, type LauncherAction, type LauncherSettings, type LauncherSnapshot} from './api';
 
-const stateText = {stopped: '等待开启', starting: '正在连接', ready: '陪伴已就绪', stopping: '正在停止', failed: '需要处理'};
+const stateText = {stopped: '等待开启', starting: '正在连接', ready: '服务已就绪', stopping: '正在停止', failed: '需要处理'};
 const stateTone = {stopped: 'quiet', starting: 'busy', ready: 'good', stopping: 'busy', failed: 'bad'} as const;
 const models = [{value: 'official', label: '官方 DeepSeek'}, {value: 'campus', label: '学校模型'}];
 const fields: Array<{key: keyof LauncherSettings; label: string; options: Array<{value: string; label: string}>}> = [
@@ -136,7 +136,8 @@ export function LauncherApp({api, pollMs = 1200}: {api: LauncherApi; pollMs?: nu
         <div className="launcher-primary-actions">
           {snapshot?.state === 'ready' ? <><Button type="primary" size="large" disabled={busy || closed || !snapshot.console_url} onClick={() => void action('open_console')}>进入陪伴空间 <span aria-hidden="true">↗</span></Button>
             <Button type="text" disabled={!snapshot.can_stop || busy || closed} onClick={() => setConfirmation('stop')}>停止服务</Button></>
-            : <Button type="primary" size="large" disabled={!snapshot?.can_start || busy || closed || Boolean(error)} onClick={() => void action('start')} loading={snapshot?.state === 'starting' || pending}>{snapshot?.state === 'failed' ? '重新启动' : '开启陪伴'}</Button>}
+            : snapshot?.state === 'failed' && snapshot.can_stop ? <Button type="primary" size="large" aria-label="重试停止" disabled={busy || closed} onClick={() => setConfirmation('stop')}>重试停止</Button>
+            : <Button type="primary" size="large" aria-label={snapshot?.state === 'failed' ? '重新启动' : '开启陪伴'} disabled={!snapshot?.can_start || busy || closed || Boolean(error)} onClick={() => void action('start')} loading={snapshot?.state === 'starting' || pending}>{snapshot?.state === 'failed' ? '重新启动' : '开启陪伴'}</Button>}
         </div>
       </section>
       {error && <Alert className="launcher-error" type="error" title="需要处理" description={error} showIcon action={<Button disabled={pending || closed} onClick={() => setRefreshKey(value => value + 1)}>刷新状态</Button>}/>}
@@ -146,7 +147,7 @@ export function LauncherApp({api, pollMs = 1200}: {api: LauncherApi; pollMs?: nu
       </SciFiSurface>
     </main>
     <footer className="launcher-footer"><span>关闭此页面，服务仍会继续运行。</span><Button type="text" disabled={!snapshot || busy || closed} onClick={() => setConfirmation('shutdown')}>停止服务并退出面板</Button></footer>
-    <Drawer title="启动设置" open={settingsOpen} onClose={() => setSettingsOpen(false)} width={480} className="launcher-drawer"
+    <Drawer title="启动设置" open={settingsOpen} onClose={() => setSettingsOpen(false)} size={480} className="launcher-drawer"
       footer={<div className="launcher-drawer-footer"><span>保存后，下次启动生效</span><Button type="primary" onClick={() => void saveSettings()} disabled={settingsLocked || pending || Boolean(needsConsent && !draft?.http_risk_ack)}>保存设置</Button></div>}>
       {settingsLocked && <Alert type="info" title="请先停止服务，再修改启动设置。" showIcon/>}
       {error && <Alert type="error" title={error} showIcon action={error.includes('其他页面') ? <Button onClick={openSettings}>载入最新设置</Button> : undefined}/>}
@@ -154,7 +155,7 @@ export function LauncherApp({api, pollMs = 1200}: {api: LauncherApi; pollMs?: nu
         <div className="launcher-switch-row"><label htmlFor="launcher-voice">连接圆屏语音</label><Switch id="launcher-voice" checked={draft.voice} disabled={settingsLocked} onChange={voice => setDraft({...draft, voice})}/></div>
         {fields.map(field => <div className="launcher-field" key={field.key}><label htmlFor={`launcher-${field.key}`}>{field.label}</label><Select id={`launcher-${field.key}`} options={field.options} value={String(draft[field.key])} disabled={settingsLocked} onChange={value => setDraft({...draft, [field.key]: value})}/></div>)}
         <div className="launcher-field"><label htmlFor="launcher-ip">电脑局域网 IP</label><Input id="launcher-ip" value={draft.lan_ip} placeholder="填写圆屏可访问的电脑 IPv4 地址" maxLength={64} disabled={settingsLocked} onChange={event => setDraft({...draft, lan_ip: event.target.value})}/></div>
-        <div className="launcher-engine"><span>当前声音引擎</span><strong>{draft.tts_backend === 'cosyvoice3' ? 'CosyVoice 3' : draft.tts_backend}</strong><p>助手表达可在陪伴空间中设置，声音克隆功能后续开放。</p></div>
+        <div className="launcher-engine"><span>当前声音引擎</span><strong>{draft.tts_backend === 'cosyvoice3' ? 'CosyVoice 3' : draft.tts_backend}</strong><p>声音与助手表达的详细选项，请进入陪伴空间查看。</p></div>
         {needsConsent && <div className="launcher-risk"><p>学校模型接口使用 HTTP，传输内容可能被网络中间方读取。请确认网络环境及数据使用范围。</p><Checkbox disabled={settingsLocked} checked={draft.http_risk_ack} onChange={event => setDraft({...draft, http_risk_ack: event.target.checked})}>我了解并接受本次使用的传输风险</Checkbox></div>}
       </div>}
     </Drawer>

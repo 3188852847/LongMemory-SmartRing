@@ -63,20 +63,6 @@ export function OverviewApp() {
     {session.isError && <Alert type="error" showIcon title="控制台会话不可用" description="网页后端可能已经停止。请回到启动面板查看受管服务状态；本页没有自动重启任何进程。"/>}
     <ConsoleStatusRail config={config.data} device={device.data} deviceFailed={device.isError} activeMemoryCount={memories.data?.total}/>
     <section className="overview-grid" aria-label="系统入口与说明">
-      <SystemDiagnostics runtime={runtime.data} config={config.data} device={device.data}
-        failures={{runtime:runtime.isError,config:config.isError,device:device.isError}}/>
-      <Card className="overview-runtime-card" title="受管服务"
-        extra={<Tag color={runtimeTone(runtime.data?.state)}>{runtime.data?.state === 'ready' ? '启动面板在线' : runtime.data?.state === 'stale' ? '状态已过期' : runtime.data?.enabled === false ? '非启动面板模式' : '正在核对'}</Tag>}>
-        <dl className="overview-facts">
-          <div><dt>网页控制台</dt><dd>{serviceLabel(runtime.data?.services.console)}</dd></div>
-          <div><dt>小智语音</dt><dd>{serviceLabel(runtime.data?.services.voice)}</dd></div>
-          <div><dt>VoxCPM2</dt><dd>{serviceLabel(runtime.data?.services.voxcpm2)}</dd></div>
-          <div><dt>sanoTTS</dt><dd>{serviceLabel(runtime.data?.services.sanotts)}</dd></div>
-          <div><dt>CosyVoice 3</dt><dd>{serviceLabel(runtime.data?.services.cosyvoice3)}</dd></div>
-          <div><dt>状态新鲜度</dt><dd>{runtime.data?.age_seconds !== undefined ? `${runtime.data.age_seconds.toFixed(1)} 秒前` : '不可用'}</dd></div>
-        </dl>
-        <p className="subtle">这里只显示启动面板拥有的进程；手动终端启动会标为“非启动面板模式”。进程运行不代表模型、设备或声音已经可用，请结合下方独立状态判断。</p>
-      </Card>
       <Card title="开始使用" extra={<Tag color={consoleReady ? 'green' : 'gold'}>{consoleReady ? '控制台就绪' : '正在核对'}</Tag>}>
         <div className="overview-actions">
           <Link to="/chat-react"><strong>文字聊天</strong><span>输入、回答和本轮记忆证据</span></Link>
@@ -84,6 +70,20 @@ export function OverviewApp() {
           <Link to="/memories"><strong>记忆管理</strong><span>L0 原话、L1 事实、纠正与删除</span></Link>
           <Link to="/display-preview"><strong>圆屏外观</strong><span>状态视觉、皮肤与动态壁纸</span></Link>
         </div>
+      </Card>
+      <SystemDiagnostics runtime={runtime.data} config={config.data} device={device.data}
+        failures={{runtime:runtime.isError,config:config.isError,device:device.isError}}/>
+      <Card className="overview-runtime-card" title="受管服务"
+        extra={<Tag color={runtimeTone(runtime.data?.state)}>{runtime.data?.state === 'ready' ? '启动面板在线' : runtime.data?.state === 'stale' ? '状态已过期' : runtime.data?.enabled === false ? '非启动面板模式' : '正在核对'}</Tag>}>
+        <dl className="overview-facts">
+          <div><dt>网页控制台</dt><dd>{serviceLabel(runtime.data?.services.console)}</dd></div>
+          <div><dt>小智语音</dt><dd>{serviceLabel(runtime.data?.services.voice)}</dd></div>
+          {runtime.data?.services.voxcpm2 && runtime.data.services.voxcpm2 !== 'disabled' && <div><dt>VoxCPM2</dt><dd>{serviceLabel(runtime.data.services.voxcpm2)}</dd></div>}
+          {runtime.data?.services.sanotts && runtime.data.services.sanotts !== 'disabled' && <div><dt>sanoTTS</dt><dd>{serviceLabel(runtime.data.services.sanotts)}</dd></div>}
+          <div><dt>CosyVoice 3</dt><dd>{serviceLabel(runtime.data?.services.cosyvoice3)}</dd></div>
+          <div><dt>状态新鲜度</dt><dd>{runtime.data?.age_seconds !== undefined ? `${runtime.data.age_seconds.toFixed(1)} 秒前` : '不可用'}</dd></div>
+        </dl>
+        <p className="subtle">这里只显示启动面板拥有的进程；手动终端启动会标为“非启动面板模式”。进程运行不代表模型、设备或声音已经可用，请结合下方独立状态判断。</p>
       </Card>
       <Card title="当前回答链路" extra={<Tag color={model.tone}>{model.label}</Tag>}>
         <dl className="overview-facts">

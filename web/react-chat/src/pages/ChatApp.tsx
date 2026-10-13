@@ -157,12 +157,13 @@ export function ChatApp() {
       </section>
     </>;
   const latestTurn = chat?.turns.at(-1);
-  return <><AppShell subtitle="你的日常聊天空间" className="chat-shell" sidebar={sidebar}><ConsoleStatusRail config={config} device={deviceStatus.data} deviceFailed={deviceStatus.isError} activeMemoryCount={memoryCount.data?.total}/><PageHeader eyebrow="日常使用" title="聊聊今天" description="在这里用文字继续日常对话；新事实是否进入长期记忆，可以在本轮证据中核对。" action={<div className="page-header-actions"><span>{chat?.turns.length ?? 0} / 40 轮</span><MemoryCommandHelp/></div>}/>
-      {config?.provider==='openai_compatible'&&<Alert showIcon type={config.model_health?.state==='available'?'success':config.model_health?.state==='unavailable'?'error':'info'}
+  const modelCheck = config?.provider==='openai_compatible'&&<Alert showIcon type={config.model_health?.state==='available'?'success':config.model_health?.state==='unavailable'?'error':'info'}
         title={config.model_health?.state==='available'?'模型服务最近验证可用':config.model_health?.state==='unavailable'?'模型服务最近验证失败':'模型服务尚未验证'}
         description={config.model_health?.state==='unavailable'?(modelFailure(config.model_health.code)??'模型调用失败。'):'检测只发送固定合成短句，不读取或写入个人记忆，也不自动重试。'}
         action={<Button loading={checkingModel} disabled={busy||unknown}
-          onClick={()=>void checkModel()}>检测模型连接</Button>}/>}<div className="chat-workspace"><section className="messages" aria-label="聊天记录">{!chat?.turns.length && <div className="empty"><h2>今天想聊些什么？</h2><p>可以说说今天的事，也可以继续上次的话题。</p></div>}
+          onClick={()=>void checkModel()}>检测模型连接</Button>}/>;
+  return <><AppShell subtitle="你的日常聊天空间" className="chat-shell" sidebar={sidebar}><ConsoleStatusRail config={config} device={deviceStatus.data} deviceFailed={deviceStatus.isError} activeMemoryCount={memoryCount.data?.total}/><PageHeader eyebrow="日常使用" title="聊聊今天" description="在这里用文字继续日常对话；新事实是否进入长期记忆，可以在本轮证据中核对。" action={<div className="page-header-actions"><span>{chat?.turns.length ?? 0} / 40 轮</span><MemoryCommandHelp/></div>}/>
+      {config?.model_health?.state==='unavailable' && modelCheck}<div className="chat-workspace"><section className="messages" aria-label="聊天记录">{!chat?.turns.length && <div className="empty"><h2>今天想聊些什么？</h2><p>可以说说今天的事，也可以继续上次的话题。</p></div>}
         {chat?.turns.map((turn, i) => <article id={turn.request_id ? `turn-${turn.request_id}` : undefined} className={turn.request_id === focusedRequestId ? 'focused-chat-turn' : undefined} key={turn.request_id ?? i}><div className="bubble user"><strong>你</strong><p>{turn.input}</p></div><div className="bubble assistant"><strong>助手</strong><p>{turn.answer ?? '未获得完整回答。'}</p>{turn.answer&&<SpeechPlayer api={api} text={turn.answer}/>}<MemoryFeedbackControls turn={turn} disabled={busy || unknown} onSelect={kind => void setMemoryFeedback(turn,kind)}/></div>
           {turn.memory_command && <Alert className="memory-command-result" showIcon type={memoryCommandAlert(turn.memory_command.status)} title="实际记忆操作结果" description={turn.memory_command.notice}/>}
           {turn.follow_up_suggestion?.status === 'candidate_armed' && <Alert className="memory-command-result" showIcon type="success" title="一次性跟进已安排" description={`${new Date(turn.follow_up_suggestion.follow_up_at!).toLocaleString('zh-CN')} · ${turn.follow_up_suggestion.prompt_text}。到点仍会经过勿扰时段、频率和设备状态检查。`}/>}
@@ -180,6 +181,7 @@ export function ChatApp() {
           options={[{value:'enter',label:'Enter 发送 · Shift+Enter 换行'},{value:'ctrl_enter',label:'Ctrl+Enter 发送 · Enter 换行'}]}
           onChange={value => {setSendShortcut(value); saveSendShortcut(value);}}/></div><Button type="primary" htmlType="submit" disabled={disabled || !draft.trim() || (chat?.turns.length ?? 0) >= 40}>发送</Button></div></form>
       <p className="chat-status" role="status"><i aria-hidden="true"/>{notice}</p>{unknown && <Button disabled={busy} onClick={() => void action(async () => {if (!chat) return; const result = await load(chat.chat_id); if (!result.pending && result.turns.length > chat.turns.length) setDraft(''); setNotice(result.pending ? '后台仍在处理，没有重发。' : '已查询。服务中断时不能据此保证未写入，请检查过程。');})}>只查询结果，不重发</Button>}
+      {config?.model_health?.state!=='unavailable' && <div className="chat-model-check">{modelCheck}</div>}
       <details className="runtime"><summary>运行配置与记忆说明</summary><p>{config?.enabled ? `${config.model} · ${config.role} · ${config.provider}` : '聊天未启用'}</p>{config?.provider === 'fake' && <p>Fake 是离线工程替身，不具备角色和多轮理解能力。</p>}<p>提取：{config?.method === 'longmemory_daily_llm_v2' ? '模型辅助 P3.2（失败保留 L0）' : '规则基线'}；检索：{config?.retrieval === 'keyword_dense_rrf_v1' ? '关键词＋本地 BGE 融合 P3.2' : '关键词基线'}。网页不自动驱动圆屏播放。</p>{config?.enabled && <p>记忆库：{config.database}</p>}</details>
     </AppShell>
     <Modal title="重命名聊天" open={rename} onCancel={() => setRename(false)} confirmLoading={busy} okText="保存" cancelText="取消" okButtonProps={{disabled: !title.trim() || busy}}
