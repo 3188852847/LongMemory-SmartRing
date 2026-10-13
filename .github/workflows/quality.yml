@@ -36,7 +36,6 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version-file: web/react-chat/.node-version
-          package-manager-cache: false
       - name: Install locked console and test dependencies
         run: uv sync --locked --extra console --group dev
       - name: Test quality report guard
@@ -58,7 +57,6 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version-file: web/react-chat/.node-version
-          package-manager-cache: false
       - name: Install declared pnpm
         run: npm install --global pnpm@11.19.0
       - name: Install locked frontend dependencies
