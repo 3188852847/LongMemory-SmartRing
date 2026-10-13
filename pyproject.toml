@@ -17,6 +17,13 @@ console = [
 ]
 semantic = ["transformers==4.57.6", "torch==2.8.0"]
 
+# 原 uv.lock 的普通包来自这个公开镜像；将来源登记到项目，避免干净机器
+# 使用默认 PyPI 后认为 lock 的 registry 不一致而要求重新解析。
+[[tool.uv.index]]
+name = "pypi-tuna"
+url = "https://pypi.tuna.tsinghua.edu.cn/simple"
+default = true
+
 # 小规模检索实验使用 CPU wheel，避免安装 CUDA 运行库；原依赖不受影响。
 [[tool.uv.index]]
 name = "pytorch-cpu"

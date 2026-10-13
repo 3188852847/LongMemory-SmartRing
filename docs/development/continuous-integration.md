@@ -41,7 +41,10 @@ Playwright 启动器使用 Windows，所以第一版选择与日用系统相同�
 ## 依赖、权限与产物
 
 所有 action 固定完整 commit，并在注释注明官方 release；Python/Node 按已有
-版本声明，依赖用锁文件检查而不重新解析。工作流只使用 `contents: read`，
+版本声明，依赖用锁文件检查而不重新解析。`pyproject.toml` 显式声明原锁文件
+使用的 TUNA 公开默认镜像，torch 保留原 CPU 专用索引；同一来源声明同时用于
+本机与 CI，不依赖机器隐藏设置，不改变包版本、依赖范围或制品摘要。
+工作流只使用 `contents: read`，
 checkout 不保留凭证，不使用个人 Secret 或 `pull_request_target`。
 同分支新任务取消旧任务，两项检查都有超时；没有发布、烧录或自动合并步骤。
 
@@ -76,6 +79,12 @@ CI 的后端入口显式选择当前检出 `src` 并检查来源；在多工作�
 GitHub Actions 在线安装和运行由推送触发，实际结论以对应提交的 Actions 运行
 结果为准，不能用本地检查代替远程成功。尚未修改仓库分支保护；若要禁止失败 PR 合并，需要仓库所有者
 把这两个 job 配置为必需状态检查。
+
+首次远程运行（`38454741181`）在 `uv sync --locked` 阶段发现原锁的
+registry 来源与项目默认 PyPI 来源不一致，拒绝继续。这是来源声明缺失，
+不是包版本或依赖范围过期。补齐项目默认索引后，`uv lock --offline --check`
+通过，原 `uv.lock` 字节和 SHA-256 保持一致；没有执行安装或联网重新锁定。
+修复后的远程安装和后续检查仍须以新运行的实际结果为准，保持 `--locked`。
 
 官方依据：[uv GitHub Actions](https://docs.astral.sh/uv/guides/integration/github/)、
 [setup-uv v6.8.0](https://github.com/astral-sh/setup-uv/releases/tag/v6.8.0)、
