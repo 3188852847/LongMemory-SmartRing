@@ -1,2 +1,2 @@
 @echo off
-call "%~dp0Start.cmd"
+call "%~dp0scripts\development\launcher\Start.cmd"
