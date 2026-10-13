@@ -1,4 +1,5 @@
 import {useEffect, useRef, useState} from 'react';
+import {useUnsavedChanges} from '../../app/UnsavedChanges';
 import {Alert, Button, Input, Select, Space} from 'antd';
 import {ApiError, type ChatApi} from '../../api';
 
@@ -51,13 +52,7 @@ export function CosyVoiceProfileSettings({api, disabled}: {api: ChatApi; disable
   const locked = disabled || busy;
   const dirty = Boolean(snapshot && (draft.reference_id !== snapshot.profile.reference_id
     || draft.transcript !== snapshot.profile.transcript || draft.style !== snapshot.profile.style));
-  // 离开页面提醒未保存的声线；分类切换仍保留已挂载的草稿。
-  useEffect(() => {
-    if (!dirty) return;
-    const warn = (event: BeforeUnloadEvent) => {event.preventDefault(); event.returnValue = '';};
-    window.addEventListener('beforeunload', warn);
-    return () => window.removeEventListener('beforeunload', warn);
-  }, [dirty]);
+  useUnsavedChanges(dirty, '有未保存的声音草稿。');
   return <section className="settings-subsection voice-profile-workspace" aria-labelledby="cosy-profile-title">
     <h3 id="cosy-profile-title">我的声音</h3>
     <p>参考录音决定声线，表达指令尝试语气，与助手性格分别保存。录音供本机 CosyVoice 3 使用，请使用本人或已获授权的声音。</p>

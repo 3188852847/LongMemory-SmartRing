@@ -1,10 +1,16 @@
-import {afterEach, describe, expect, test, vi} from 'vitest';
+import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
 import {fireEvent, render, screen, waitFor} from '@testing-library/react';
 import {QueryClientProvider} from '@tanstack/react-query';
 import {MemoryRouter} from 'react-router-dom';
 import {ChatApi} from '../api';
 import {DeviceApp} from './DeviceApp';
 import {createConsoleQueryClient} from '../app/queryClient';
+import * as diagnostics from '../features/observability/types';
+import {syntheticResponse} from '../features/data-workspace/syntheticFixtures';
+
+// 本文件只检查原设备时序；新摘要使用自己的有效合成契约，避免以 DeviceStatus 冒充摘要。
+beforeEach(() => vi.spyOn(diagnostics, 'readDiagnostics').mockResolvedValue(
+  syntheticResponse('/api/observability', false) as diagnostics.DiagnosticSnapshot));
 
 afterEach(() => vi.restoreAllMocks());
 

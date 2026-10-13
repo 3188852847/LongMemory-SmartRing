@@ -1,4 +1,5 @@
 import {DataWorkspace, useWorkspaceParam} from '../features/data-workspace/DataWorkspace';
+import {useUnsavedChanges} from '../app/UnsavedChanges';
 import {useEffect, useRef, useState} from 'react';
 import {Alert, Button, Card, Checkbox, Descriptions, Drawer, Empty, Input, List, Modal, Select, Space, Switch, Tabs, Tag} from 'antd';
 import {Link, useSearchParams} from 'react-router-dom';
@@ -125,6 +126,9 @@ export function MemoryApp() {
   const [wipeNotice, setWipeNotice] = useState('');
   const [promoting, setPromoting] = useState(false);
   const [promotedContent, setPromotedContent] = useState('');
+  useUnsavedChanges(Boolean((correcting && correction) || (changing && (changedContent || effectiveLocal))
+    || (promoting && promotedContent)
+    || (mode && Object.entries(modeDraft).some(([key, value]) => mode[key as keyof typeof modeDraft] !== value))), '有未保存的记忆编辑或运行开关。');
   const [qualityCandidates, setQualityCandidates] = useState<L1QualityCandidates>();
   const [qualityScanning, setQualityScanning] = useState(false);
   const [semanticPreview, setSemanticPreview] = useState<SemanticRelationPreview>();

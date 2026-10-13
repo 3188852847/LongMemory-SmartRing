@@ -4,6 +4,7 @@ import {OrbitMark, SciFiSurface, StatusIndicator} from '../../components/SciFiSu
 import {AmbientMotionToggle} from '../../components/DigitalAtmosphere';
 import {StateCore} from '../../components/StateCore';
 import {TransitionSurface} from '../../components/TransitionSurface';
+import {useUnsavedChanges} from '../../app/UnsavedChanges';
 import {LauncherApi, LauncherError, type LauncherAction, type LauncherSettings, type LauncherSnapshot} from './api';
 
 const stateText = {stopped: '等待开启', starting: '正在连接', ready: '服务已就绪', stopping: '正在停止', failed: '需要处理'};
@@ -103,6 +104,13 @@ export function LauncherApp({api, pollMs = 1200}: {api: LauncherApi; pollMs?: nu
   }
   const busy = pending || exiting || snapshot?.state === 'starting' || snapshot?.state === 'stopping';
   const settingsLocked = busy || snapshot?.state === 'ready';
+  const settingsDirty = Boolean(settingsOpen && draft && Object.entries(draft).some(
+    ([key, value]) => value !== originalSettings.current?.[key as keyof LauncherSettings]));
+  useUnsavedChanges(settingsDirty, '有未保存的启动设置。');
+  function closeSettings() {
+    if (pending || (settingsDirty && !window.confirm('关闭会丢弃未保存的启动设置，继续吗？'))) return;
+    setSettingsOpen(false);
+  }
   const tone = snapshot ? stateTone[snapshot.state] : 'quiet';
   const needsConsent = draft?.model_profile === 'campus' || (draft?.voice && draft.voice_mode === 'pipeline' && draft.voice_model_profile === 'campus');
   const coreState = closed ? 'stopped' : exiting ? 'stopping' : snapshot?.state ?? 'unknown';
@@ -154,7 +162,7 @@ export function LauncherApp({api, pollMs = 1200}: {api: LauncherApi; pollMs?: nu
       </SciFiSurface>
     </main>
     <footer className="launcher-footer"><span>关闭此页面，服务仍会继续运行。</span><Button type="text" disabled={!snapshot || busy || closed} onClick={() => setConfirmation('shutdown')}>停止服务并退出面板</Button></footer>
-    <Drawer title="启动设置" open={settingsOpen} onClose={() => setSettingsOpen(false)} size={480} className="launcher-drawer"
+    <Drawer title="启动设置" open={settingsOpen} onClose={closeSettings} size={480} className="launcher-drawer"
       footer={<div className="launcher-drawer-footer"><span>保存后，下次启动生效</span><Button type="primary" onClick={() => void saveSettings()} disabled={settingsLocked || pending || Boolean(needsConsent && !draft?.http_risk_ack)}>保存设置</Button></div>}>
       {settingsLocked && <Alert type="info" title="请先停止服务，再修改启动设置。" showIcon/>}
       {error && <Alert type="error" title={error} showIcon action={error.includes('其他页面') ? <Button onClick={openSettings}>载入最新设置</Button> : undefined}/>}

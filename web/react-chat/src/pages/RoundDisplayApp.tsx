@@ -3,6 +3,7 @@ import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {Alert, Button, Card, Checkbox, Descriptions, Input, InputNumber, Segmented, Select, Space, Tabs, Tag} from 'antd';
 import {AppShell, ConsoleNav} from '../components/AppShell';
 import {useSearchParams} from 'react-router-dom';
+import {useUnsavedChanges} from '../app/UnsavedChanges';
 import '../styles/display-workspace.css';
 import {PageHeader} from '../components/PageHeader';
 import {ApiError, ChatApi, type RoundDeviceSkin, type RoundSkin, type RoundSkinApply, type RoundSkins, type RoundWallpaperDeployment, type RoundWallpaperDeviceStatus} from '../api';
@@ -141,12 +142,7 @@ export function RoundDisplayApp() {
   const [showSafeArea, setShowSafeArea] = useState(false);
   const [selectedSkin, setSelectedSkin] = useState('rose-night-v1');
   const [draft, setDraft] = useState<SkinDraft>();
-  useEffect(() => {
-    if (!draft) return;
-    const warn = (event: BeforeUnloadEvent) => {event.preventDefault(); event.returnValue = '';};
-    window.addEventListener('beforeunload', warn);
-    return () => window.removeEventListener('beforeunload', warn);
-  }, [draft]);
+  useUnsavedChanges(Boolean(draft), '有未保存的圆屏皮肤草稿。');
   const [observations,setObservations] = useState<RoundObservations>({});
   const [observationNotice,setObservationNotice] = useState('');
   const [skinModeSwitch,setSkinModeSwitch] = useState<SkinModeSwitchState>('idle');

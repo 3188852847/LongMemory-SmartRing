@@ -1,4 +1,5 @@
 import {DataWorkspace, useWorkspaceParam} from '../features/data-workspace/DataWorkspace';
+import {useUnsavedChanges} from '../app/UnsavedChanges';
 import {useEffect, useRef, useState} from 'react';
 import {Alert, Button, Card, Checkbox, Descriptions, Drawer, Empty, List, Modal, Select, Space, Statistic, Tag} from 'antd';
 import {Link} from 'react-router-dom';
@@ -115,6 +116,7 @@ export function MemoryQualityApp() {
   const [shadowReviewBusy,setShadowReviewBusy] = useState(false);
   const [extractionAudit,setExtractionAudit] = useState<L1ExtractionAuditPage|null>(null);
   const [retryingAttempt,setRetryingAttempt] = useState<string|null>(null);
+  useUnsavedChanges(Boolean(reviewTarget || l1ShadowReview || shadowReview), '有尚未提交的质量复核。');
 
   async function load(nextFilter=filter,offset=0) {
     setBusy(true);

@@ -1,4 +1,5 @@
 import {DataWorkspace, useWorkspaceParam} from '../features/data-workspace/DataWorkspace';
+import {useUnsavedChanges} from '../app/UnsavedChanges';
 import {useEffect, useState} from 'react';
 import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {Alert, Button, Card, Checkbox, Descriptions, Drawer, Empty, Input, List, Modal, Select, Space, Tag} from 'antd';
@@ -59,6 +60,7 @@ export function ScenarioApp() {
   const [reviewDecision, setReviewDecision] = useState<'accepted' | 'rejected'>();
   const [ending, setEnding] = useState(false);
   const [inboxOnly, setInboxOnly] = useState(false);
+  useUnsavedChanges(creating && Boolean(title || summary || sourceIds.length || validFrom || validTo), '有未保存的场景候选。');
 
   useEffect(() => {void api.bootstrap().then(() => setReady(true)).catch(error => setNotice(derivedMemoryFailure(error, 'read')));}, []);
   const config = useQuery({queryKey: ['memory-config'], enabled: ready,

@@ -5,6 +5,8 @@ import {Alert, Button, Card, Descriptions, InputNumber, Select, Slider, Space, T
 import {ApiError, ChatApi, type DeviceStatus, type NaturalInterruptionDiagnostic, type VoiceAsrPrefetch, type VoiceLatency, type VoicePredictionShadow} from '../api';
 import {AppShell, ConsoleNav} from '../components/AppShell';
 import {PageHeader} from '../components/PageHeader';
+import {DiagnosticsPanel} from '../features/observability/DiagnosticsPanel';
+import {readDiagnostics} from '../features/observability/types';
 import {errorMessage, resultView, statusView, validTarget} from '../../../assets/state.mjs';
 
 type VolumeRead = {volume: number};
@@ -143,6 +145,9 @@ export function DeviceApp() {
   const [stopResult, setStopResult] = useState<StopSpeechResult>();
   const [stopError, setStopError] = useState<string>();
   const session = useQuery({queryKey: ['console-session'], queryFn: async () => {await api.bootstrap(); return true;}, staleTime: Infinity});
+  // 仅进入诊断任务时读一次，刷新只读摘要，不重发原失败操作或启动服务。
+  const diagnostics = useQuery({queryKey: ['safe-diagnostics'], queryFn: () => readDiagnostics(api),
+    enabled: session.isSuccess && workspace === 'diagnostics', retry: false, refetchOnWindowFocus: false});
   const status = useQuery({
     queryKey: ['device-status'],
     queryFn: () => api.request<DeviceStatus>('/api/device'),
@@ -264,7 +269,10 @@ export function DeviceApp() {
     <Alert className="device-help" type="info" showIcon title="待机时可能暂不可控" description="圆屏进入聆听状态后才可能建立活动连接。显示“请唤醒圆屏”时，先轻触设备，再刷新状态；不需要重新配网。"/>
     {operation?.error && <p role="status">{errorMessage(operation.error)}</p>}
 </>},
-      {key:'diagnostics',label:'语音时序与诊断',children:<>    {status.data?.voice_latency ? <VoiceLatencyCard value={status.data.voice_latency} prefetch={status.data.voice_asr_prefetch}/> : <Card className="device-latency-card" title="最近一次圆屏首句时序"><p className="subtle">当前连接还没有可用的完整时序。与圆屏完成一轮语音对话后，本页会分开显示记忆、模型、首句组织、TTS 和发送等待。</p></Card>}
+      {key:'diagnostics',label:'语音时序与诊断',children:<>
+        <DiagnosticsPanel snapshot={diagnostics.data} loading={session.isPending || diagnostics.isFetching}
+          error={session.isError || diagnostics.isError} onRefresh={() => {if (session.isSuccess) void diagnostics.refetch();}}/>
+        {status.data?.voice_latency ? <VoiceLatencyCard value={status.data.voice_latency} prefetch={status.data.voice_asr_prefetch}/> : <Card className="device-latency-card" title="最近一次圆屏首句时序"><p className="subtle">当前连接还没有可用的完整时序。与圆屏完成一轮语音对话后，本页会分开显示记忆、模型、首句组织、TTS 和发送等待。</p></Card>}
     {status.data?.voice_prediction_shadow&&<VoicePredictionShadowCard value={status.data.voice_prediction_shadow}/>}
     {status.data?.voice_feedback&&<Card title="等待反馈与真正答案">
       <Descriptions column={3} items={[

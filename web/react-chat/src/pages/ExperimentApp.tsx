@@ -1,4 +1,5 @@
 import {DataWorkspace, useWorkspaceParam} from '../features/data-workspace/DataWorkspace';
+import {useUnsavedChanges} from '../app/UnsavedChanges';
 import {useEffect, useMemo, useState} from 'react';
 import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {Alert, Button, Card, Empty, Input, Select, Space, Table, Tag} from 'antd';
@@ -71,17 +72,7 @@ export function ExperimentApp() {
   const [dirtyGroups,setDirtyGroups] = useState<Record<string,boolean>>({});
   const reviewDirty = Object.values(dirtyGroups).some(Boolean);
   const setReviewDirty = (dirty:boolean) => {if(!dirty)setDirtyGroups({});};
-  useEffect(()=>{
-    if(!reviewDirty)return;
-    const warn=(event:BeforeUnloadEvent)=>{event.preventDefault();event.returnValue='';};
-    const leave=(event:MouseEvent)=>{
-      const link=event.target instanceof Element?event.target.closest<HTMLAnchorElement>('a[href]'):null;
-      if(!link || link.target==='_blank' || new URL(link.href).pathname==='/experiments-react')return;
-      if(!confirm('有未保存的复核，离开会丢弃编辑。继续吗？')){event.preventDefault();event.stopPropagation();}
-    };
-    window.addEventListener('beforeunload',warn);document.addEventListener('click',leave,true);
-    return()=>{window.removeEventListener('beforeunload',warn);document.removeEventListener('click',leave,true);};
-  },[reviewDirty]);
+  useUnsavedChanges(reviewDirty, '有未保存的实验复核。');
   useEffect(()=>{
     if(selectedUrl===selected && questionUrl===questionId)return;
     // 浏览器前进/返回也经过相同护栏；接受前不切换查询或卸载复核表单。

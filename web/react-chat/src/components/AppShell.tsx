@@ -1,6 +1,7 @@
 import {useEffect, useId, useState, type ReactNode} from 'react';
 import {Link, useLocation} from 'react-router-dom';
 import {OrbitMark, StatusIndicator} from './SciFiSurface';
+import {AmbientMotionToggle} from './DigitalAtmosphere';
 
 type Page = 'overview' | 'device' | 'display' | 'chat' | 'memories' | 'quality' | 'scenarios' | 'personas' | 'settings' | 'experiments';
 
@@ -59,7 +60,7 @@ export function AppShell({subtitle, className = '', layout = 'page', sidebar, ch
       }} onKeyDown={event => {
         if (event.key === 'Escape') {setNavOpen(false); event.currentTarget.parentElement?.querySelector<HTMLButtonElement>('.shell-nav-toggle')?.focus();}
       }}>{sidebar}</div>
-      <div className="sidebar-footer"><StatusIndicator>本机个人空间</StatusIndicator></div>
+      <div className="sidebar-footer"><AmbientMotionToggle/><StatusIndicator>本机个人空间</StatusIndicator></div>
     </div></aside>
     <main id="main-content" tabIndex={-1}><div className="shell-content">{children}</div></main>
   </div>;

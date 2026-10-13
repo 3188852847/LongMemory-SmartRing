@@ -1,4 +1,5 @@
 import {DataWorkspace, useWorkspaceParam} from '../features/data-workspace/DataWorkspace';
+import {useUnsavedChanges} from '../app/UnsavedChanges';
 import {useEffect, useState} from 'react';
 import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {Alert, Button, Card, Descriptions, Drawer, Empty, Input, List, Modal, Select, Space, Tag} from 'antd';
@@ -68,6 +69,7 @@ export function PersonaApp() {
   const [validFrom,setValidFrom] = useState('');
   const [validTo,setValidTo] = useState('');
   const [replacementIds,setReplacementIds] = useState<string[]>([]);
+  useUnsavedChanges(creating && Boolean(label || statement || sources.length || validFrom || validTo || replacementIds.length), '有未保存的画像候选。');
 
   useEffect(() => {void api.bootstrap().then(() => setReady(true)).catch(error => setNotice(derivedMemoryFailure(error, 'read')));},[]);
   const config = useQuery({queryKey:['memory-config'],enabled:ready,queryFn:() => api.request<MemoryConfig>('/api/memory-config')});

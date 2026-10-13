@@ -2,6 +2,7 @@ import {useEffect, useRef, useState} from 'react';
 import {Alert, Button, Input, Modal, Select} from 'antd';
 import {useQuery, useQueryClient} from '@tanstack/react-query';
 import {useSearchParams} from 'react-router-dom';
+import {useUnsavedChanges} from '../app/UnsavedChanges';
 import {ApiError, ChatApi, type Config, type DeviceStatus, type MemoryFeedbackKind, type MemoryPageSummary, type Snapshot, type Summary, type Turn} from '../api';
 import {turnSummary} from '../../../assets/chat-view.mjs';
 import {AppShell, ConsoleNav} from '../components/AppShell';
@@ -34,6 +35,7 @@ export function ChatApp() {
   const [chats, setChats] = useState<Summary[]>([]);
   const [chat, setChat] = useState<Snapshot>();
   const [draft, setDraft] = useState('');
+  useUnsavedChanges(Boolean(draft), '有尚未发送的聊天草稿。');
   const [busy, setBusy] = useState(true);
   const [unknown, setUnknown] = useState(false);
   const [notice, setNotice] = useState('正在连接本机服务…');

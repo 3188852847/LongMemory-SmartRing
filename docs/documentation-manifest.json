@@ -438,6 +438,28 @@
         "索引"
       ],
       "review": "pending: 本轮只建立维护归属，未完成全篇实现核对"
+    },
+    {
+      "id": "safe-observability",
+      "scope": "当前进程请求与启动阶段摘要、默认日志元数据及未覆盖的真实语音链路",
+      "authority": "docs/development/observability-contract.md",
+      "sources": [
+        "src/longmemory/infrastructure/logging/diagnostics.py",
+        "src/longmemory/entrypoints/api/observability.py",
+        "src/longmemory/entrypoints/api/security.py",
+        "web/react-chat/src/features/observability/**",
+        "scripts/development/launcher/events.py"
+      ],
+      "related": [
+        "docs/development/parallel/G-20261014.md",
+        "docs/development/parallel/J-20261014.md"
+      ],
+      "tags": [
+        "日志",
+        "故障",
+        "请求标识"
+      ],
+      "review": "pending: 后端合成验收通过；前端完整验收待依赖"
     }
   ],
   "old_path_rules": [
@@ -3019,6 +3041,18 @@
       ]
     },
     {
+      "path": "docs/development/observability-contract.md",
+      "title": "安全故障摘要契约",
+      "status": "current",
+      "basis": "本轮明确交付的观察契约",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "隔离整合"
+      ]
+    },
+    {
       "path": "docs/development/parallel/A-20261014.md",
       "title": "A：文档维护机制交付记录",
       "status": "current",
@@ -3031,6 +3065,90 @@
       },
       "tags": [
         "parallel"
+      ]
+    },
+    {
+      "path": "docs/development/parallel/B-20261014.md",
+      "title": "B：现行指南、架构与协作规则",
+      "status": "pending",
+      "basis": "本轮隔离交付记录；前端完整验收和主项目合入另行登记",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "隔离整合"
+      ]
+    },
+    {
+      "path": "docs/development/parallel/C-20261014.md",
+      "title": "C：页面外壳、聊天与总览",
+      "status": "pending",
+      "basis": "本轮隔离交付记录；前端完整验收和主项目合入另行登记",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "隔离整合"
+      ]
+    },
+    {
+      "path": "docs/development/parallel/D-20261014.md",
+      "title": "D：设置与圆屏工作区优化",
+      "status": "pending",
+      "basis": "本轮隔离交付记录；前端完整验收和主项目合入另行登记",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "隔离整合"
+      ]
+    },
+    {
+      "path": "docs/development/parallel/E-20261014.md",
+      "title": "E：记忆、设备与实验工作区",
+      "status": "pending",
+      "basis": "本轮隔离交付记录；前端完整验收和主项目合入另行登记",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "隔离整合"
+      ]
+    },
+    {
+      "path": "docs/development/parallel/F-20261014.md",
+      "title": "F：启动面板与共享数码光效",
+      "status": "pending",
+      "basis": "本轮隔离交付记录；前端完整验收和主项目合入另行登记",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "隔离整合"
+      ]
+    },
+    {
+      "path": "docs/development/parallel/G-20261014.md",
+      "title": "G 独立会话：契约与可观测性",
+      "status": "pending",
+      "basis": "本轮隔离交付记录；前端完整验收和主项目合入另行登记",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "隔离整合"
+      ]
+    },
+    {
+      "path": "docs/development/parallel/J-20261014.md",
+      "title": "J：隔离整合与接口验收",
+      "status": "pending",
+      "basis": "本轮隔离交付记录；前端完整验收和主项目合入另行登记",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "隔离整合"
       ]
     },
     {
@@ -3463,6 +3581,114 @@
       },
       "tags": [
         "history"
+      ]
+    },
+    {
+      "path": "docs/history/current-docs-before-20261014/AGENTS.md",
+      "title": "智慧圆屏项目协作规则",
+      "status": "historical",
+      "basis": "B保存的完整历史快照，来源清单可逆向还原",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "隔离整合"
+      ]
+    },
+    {
+      "path": "docs/history/current-docs-before-20261014/README.md",
+      "title": "现行文档整理前快照",
+      "status": "historical",
+      "basis": "B保存的完整历史快照，来源清单可逆向还原",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "隔离整合"
+      ]
+    },
+    {
+      "path": "docs/history/current-docs-before-20261014/docs/architecture/overview.md",
+      "title": "系统架构总览",
+      "status": "historical",
+      "basis": "B保存的完整历史快照，来源清单可逆向还原",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "隔离整合"
+      ]
+    },
+    {
+      "path": "docs/history/current-docs-before-20261014/docs/architecture/repository-structure.md",
+      "title": "仓库结构约定",
+      "status": "historical",
+      "basis": "B保存的完整历史快照，来源清单可逆向还原",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "隔离整合"
+      ]
+    },
+    {
+      "path": "docs/history/current-docs-before-20261014/docs/architecture/workflows.md",
+      "title": "系统运行流程",
+      "status": "historical",
+      "basis": "B保存的完整历史快照，来源清单可逆向还原",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "隔离整合"
+      ]
+    },
+    {
+      "path": "docs/history/current-docs-before-20261014/docs/guides/使用说明.md",
+      "title": "LongMemory 使用说明：启动命令与网页操作",
+      "status": "historical",
+      "basis": "B保存的完整历史快照，来源清单可逆向还原",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "隔离整合"
+      ]
+    },
+    {
+      "path": "docs/history/current-docs-before-20261014/docs/guides/声音设置.md",
+      "title": "声音设置",
+      "status": "historical",
+      "basis": "B保存的完整历史快照，来源清单可逆向还原",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "隔离整合"
+      ]
+    },
+    {
+      "path": "docs/history/current-docs-before-20261014/docs/guides/本机目录与依赖.md",
+      "title": "本机目录与依赖",
+      "status": "historical",
+      "basis": "B保存的完整历史快照，来源清单可逆向还原",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "隔离整合"
+      ]
+    },
+    {
+      "path": "docs/history/current-docs-before-20261014/docs/guides/统一启动.md",
+      "title": "统一启动：不用自己开两个终端",
+      "status": "historical",
+      "basis": "B保存的完整历史快照，来源清单可逆向还原",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "隔离整合"
       ]
     },
     {
@@ -4029,5 +4255,10 @@
         "versions"
       ]
     }
-  ]
+  ],
+  "integration_sources": {
+    "date": "2026-10-14",
+    "baseline_commit": "042ad05d9f834dd4969cbd0b938a76c716a454fa",
+    "report": "docs/development/parallel/J-20261014.md"
+  }
 }

@@ -8,6 +8,7 @@
 .shell.workspace-shell .nav-copy > span { white-space: normal; overflow-wrap: anywhere; }
 .shell.workspace-shell .nav-copy small { display: none; }
 .shell.workspace-shell .shell-nav-toggle { display: none; }
+.shell.workspace-shell .sidebar-footer { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
 .shell.workspace-shell > main { padding: 24px clamp(20px, 2.5vw, 40px) 40px; }
 .shell.workspace-shell .page-header { gap: 16px; margin-bottom: 18px; padding-bottom: 16px; }
 .shell.workspace-shell .page-heading h1 { text-wrap: balance; }
@@ -41,6 +42,9 @@
   .shell.workspace-shell .sidebar-inner { position: static; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; max-height: none; overflow: visible; padding: 0; }
   .shell.workspace-shell .brand-block { padding: 0; }
   .shell.workspace-shell .brand-block p, .shell.workspace-shell .sidebar-footer { display: none; }
+  /* 环境开关留在导航内部，避免 F 的文档流浮动实例破坏 C 的视口聊天工作区。 */
+  .shell.workspace-shell .sidebar-footer { display: flex; grid-column: 1 / -1; padding-top: 6px; }
+  .shell.workspace-shell .sidebar-footer > .shared-status { display: none; }
   .shell.workspace-shell .shell-nav-toggle { display: block; min-height: 44px; padding: 8px 10px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); color: var(--text); background: var(--surface); cursor: pointer; }
   .shell.workspace-shell .shell-nav-toggle:hover { border-color: var(--accent); }
   .shell.workspace-shell .shell-navigation { display: none; position: absolute; inset: 100% 0 auto; max-height: min(65dvh, 560px); overflow-y: auto; overscroll-behavior: contain; padding: 12px 16px 20px; background: var(--surface); border-bottom: 1px solid var(--border-strong); box-shadow: var(--shadow); }

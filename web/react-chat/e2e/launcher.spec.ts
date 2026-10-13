@@ -9,8 +9,11 @@ const token = 'synthetic-launcher-browser-test-token';
 
 test.beforeAll(async () => {
   const root = resolve(process.cwd(), '../..');
+  await mkdir(resolve(root, 'data/test-tmp/browser-j'), {recursive: true});
   host = spawn(process.env.SMART_RING_TEST_PYTHON || resolve(root, '.venv/Scripts/python.exe'),
-    [resolve(root, 'scripts/development/playwright_launcher.py')], {cwd: root, windowsHide: true});
+    [resolve(root, 'scripts/development/playwright_launcher.py')], {cwd: root, windowsHide: true,
+      env: {...process.env, PYTHONPATH: resolve(root, 'src'), PYTHONDONTWRITEBYTECODE:'1',
+        TEMP: resolve(root, 'data/test-tmp/browser-j'), TMP: resolve(root, 'data/test-tmp/browser-j')}});
   origin = await new Promise<string>((success, failure) => {
     const timer = setTimeout(() => failure(new Error('合成启动器未在期限内启动')), 10_000);
     let output = '';
