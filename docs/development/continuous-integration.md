@@ -96,6 +96,15 @@ registry 来源与项目默认 PyPI 来源不一致，拒绝继续。这是来�
 本机整体回归 1987 项通过、1 项符号链接权限跳过；第三次远程执行以对应提交的
 实际结果为准，第二次前端成功不能代表后端已通过。
 
+第三次远程运行（`38456933608`）的后端 job 已通过干净安装、完整合成检查和跳过
+护栏；前端 180 项通过，质量候选扫描/合并/恢复流程达到原 15 秒用例限制。
+同一代码在上一轮远程前端检查与本机检查中通过；API 均为即时合成替身，每用例
+独立 QueryClient，没有真实网络等待。现将 CI 前端 worker 上限设为 2，减少有限
+CPU 上同时渲染多个 jsdom/Ant Design 文件的争用；不增加重试、不扩大时间限制、
+不放松断言。低并发本机复验 39 个文件、181 项全部通过，该流程 6.341 秒，仍低于
+原限制。资源争用是目前证据支持的推断，调整后的在线结果以新提交的 Actions
+记录为准，不承诺消除所有运行波动。
+
 官方依据：[uv GitHub Actions](https://docs.astral.sh/uv/guides/integration/github/)、
 [setup-uv v6.8.0](https://github.com/astral-sh/setup-uv/releases/tag/v6.8.0)、
 [checkout v4.2.2](https://github.com/actions/checkout/releases/tag/v4.2.2)、
