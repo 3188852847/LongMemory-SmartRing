@@ -1088,8 +1088,23 @@ def test_console_serializes_device_operations():
     asyncio.run(run())
 
 
-def test_memory_http_browse_sources_confirmed_delete_and_persistence(tmp_path):
+def test_memory_http_browse_sources_confirmed_delete_and_persistence(tmp_path, monkeypatch):
+    import json
+    from longmemory.entrypoints.api import server
     from longmemory.bootstrap import build_application
+    # 新检出不带生成的 React dist；这个 HTTP/记忆用例只需要合成页面，
+    # 真实前端构建与浏览器行为由独立的前端质量检查负责。
+    assets = tmp_path / "web/react-chat/dist"
+    (assets / ".vite").mkdir(parents=True)
+    (assets / "assets").mkdir()
+    (assets / "assets/app.js").write_text("export {};", encoding="utf-8")
+    (assets / "index.html").write_text(
+        '<meta name="style-nonce" content="__LONGMEMORY_NONCE__">', encoding="utf-8"
+    )
+    (assets / ".vite/manifest.json").write_text(
+        json.dumps({"index.html": {"file": "assets/app.js"}}), encoding="utf-8"
+    )
+    monkeypatch.setattr(server, "ROOT", tmp_path)
     database = tmp_path / "synthetic.db"
     app = build_application(database_path=database)
     result = app.chat("我养了一只叫豆包的猫。")

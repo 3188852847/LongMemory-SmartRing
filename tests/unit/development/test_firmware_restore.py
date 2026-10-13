@@ -173,6 +173,17 @@ def test_installer_restores_proxy_and_sdk_environment_after_early_failure():
         root = Path(directory)
         if not str(root).isascii() or " " in str(root):
             pytest.skip("Integration fixture needs an ASCII no-space path")
+        # 提前失败必须从代理开启后的空 EIM 分支触发，不能碰巧因当前检出
+        # 缺少 .venv 而在代理之前退出。只复制入口与清单到一次性合成项目；
+        # Python 占位不会执行（不存在的 EIM 先使 SDK 阶段失败）。
+        development = root / "synthetic-project/scripts/development"
+        (development / "firmware_restore").mkdir(parents=True)
+        wrapper = development / "run_firmware_restore.ps1"
+        shutil.copyfile(DIRECTORY.parent / "run_firmware_restore.ps1", wrapper)
+        shutil.copyfile(DIRECTORY / "manifest.json", development / "firmware_restore/manifest.json")
+        python_placeholder = root / "synthetic-project/.venv/Scripts/python.exe"
+        python_placeholder.parent.mkdir(parents=True)
+        python_placeholder.touch()
         marker = root / "proxy.log"
         proxy = root / "proxy.ps1"
         def literal(value):
@@ -182,7 +193,7 @@ def test_installer_restores_proxy_and_sdk_environment_after_early_failure():
             "function Disable-DevProxy { [IO.File]::AppendAllText(" + literal(marker) + ", 'disable') }\n", encoding="utf-8-sig")
         harness = root / "check.ps1"
         source = "$ErrorActionPreference='Stop'; $env:IDF_PATH='original-value'; try { & "
-        source += literal(DIRECTORY.parent / "run_firmware_restore.ps1")
+        source += literal(wrapper)
         source += " -ProxyScript " + literal(proxy) + " -Stage Sdk -EspRoot " + literal(root / "empty-esp")
         source += " -WorkRoot " + literal(root / "work") + "; exit 2 } catch {"
         source += "if($env:IDF_PATH -ne 'original-value') {exit 3}; if([IO.File]::ReadAllText("
