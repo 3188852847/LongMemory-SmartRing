@@ -3,9 +3,11 @@
 import hashlib
 import importlib.util
 import io
+import json
 from pathlib import Path
 from types import SimpleNamespace
 import zipfile
+import urllib.error
 
 import pytest
 
@@ -41,6 +43,50 @@ def test_lfs_weight_uses_payload_sha256_instead_of_pointer_blob(tmp_path):
     entry = resource()
     entry["git_blob"] = hashlib.sha1(b"LFS pointer, not payload").hexdigest()
     assert assets.validate(path, entry) == entry["sha256"]
+
+
+def test_modelscope_small_file_uses_explicit_range(tmp_path, monkeypatch):
+    entry = resource()
+    entry["range_required"] = True
+    def response(request, **kwargs):
+        assert request.headers["Range"] == "bytes=0-14"
+        return Response(b"synthetic model", status=206,
+                        headers={"Content-Range": "bytes 0-14/15"})
+    monkeypatch.setattr(assets.urllib.request, "urlopen", response)
+    assets.download(entry, tmp_path)
+    assert (tmp_path / entry["target"]).read_bytes() == b"synthetic model"
+
+
+@pytest.mark.parametrize("status", [403, 429])
+def test_modelscope_rate_limit_stops_once_and_preserves_progress(tmp_path, monkeypatch, status):
+    entry = resource()
+    entry["url"] = "https://modelscope.cn/api/v1/models/example/repo"
+    path = tmp_path / "models/sample.bin.part"
+    path.parent.mkdir()
+    path.write_bytes(b"synt")
+    requests = []
+    def limited(request, **kwargs):
+        requests.append(request)
+        body = io.BytesIO(json.dumps({"Code": 10013201001, "Message": "rate limited"}).encode())
+        raise urllib.error.HTTPError(entry["url"], status, "Forbidden", {}, body)
+    monkeypatch.setattr(assets.urllib.request, "urlopen", limited)
+    with pytest.raises(assets.AssetDownloadError, match="ModelScope 当前限流"):
+        assets.download(entry, tmp_path)
+    assert len(requests) == 1
+    assert path.read_bytes() == b"synt"
+    assert not (tmp_path / "models/sample.bin").exists()
+
+
+@pytest.mark.parametrize("body", [b'{}', b'[]', b'invalid json'])
+def test_other_forbidden_response_is_not_claimed_to_be_a_rate_limit(tmp_path, monkeypatch, body):
+    entry = resource()
+    entry["url"] = "https://modelscope.cn/api/v1/models/example/repo"
+    def forbidden(request, **kwargs):
+        raise urllib.error.HTTPError(entry["url"], 403, "Forbidden", {}, io.BytesIO(body))
+    monkeypatch.setattr(assets.urllib.request, "urlopen", forbidden)
+    with pytest.raises(assets.AssetDownloadError, match="HTTP 403") as error:
+        assets.download(entry, tmp_path)
+    assert "当前限流" not in str(error.value)
 
 
 @pytest.mark.parametrize("content", [b"truncated", b"corrupted model"])

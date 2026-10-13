@@ -2,7 +2,9 @@
     [Parameter(Mandatory = $true)]
     [string]$ProxyScript,
     [switch]$Resume,
-    [switch]$DownloadOnly
+    [switch]$DownloadOnly,
+    [ValidateSet('Sources', 'Environments', 'Models', 'Tools')]
+    [string[]]$Stages
 )
 
 # 机器代理位置由调用者传入，项目不固定本机地址或修改永久配置。
@@ -11,11 +13,16 @@ $ErrorActionPreference = 'Stop'
 if ($Resume -and $DownloadOnly) {
     throw 'Resume 与 DownloadOnly 只选择一个。'
 }
+if ($Stages -and ($Resume -or $DownloadOnly)) {
+    throw 'Stages 不与 Resume 或 DownloadOnly 同时使用。'
+}
 . $ProxyScript
 $enableVoiceProxy = Get-Command Enable-DevProxy -CommandType Function -ErrorAction Stop
 $disableVoiceProxy = Get-Command Disable-DevProxy -CommandType Function -ErrorAction Stop
 $voiceStages = @('Sources', 'Environments', 'Models', 'Tools')
-if ($DownloadOnly) {
+if ($Stages) {
+    $voiceStages = $Stages
+} elseif ($DownloadOnly) {
     $voiceStages = @('Models', 'Tools')
 } elseif ($Resume) {
     $voiceStages = @('Environments', 'Models', 'Tools')

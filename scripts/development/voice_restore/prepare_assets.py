@@ -13,6 +13,8 @@ import re
 import shutil
 import subprocess
 import tarfile
+import urllib.error
+import urllib.parse
 import urllib.request
 import zipfile
 
@@ -22,6 +24,29 @@ LOCAL = ROOT / "local"
 MANIFEST = Path(__file__).with_name("assets.json")
 OPUS_SHA256 = "995e23c399522546397f9059f10365702dec3ceadbaf34b8ecd4c5e977822603"
 SEGMENT_BYTES = 16 * 1024 * 1024
+
+
+class AssetDownloadError(RuntimeError):
+    """下载服务的简短诊断，不携带签名 URL、响应原文或自动重试。"""
+
+
+def open_download(request, asset):
+    try:
+        return urllib.request.urlopen(request, timeout=90)
+    except urllib.error.HTTPError as error:
+        if error.code in (403, 429) and urllib.parse.urlsplit(asset["url"]).hostname == "modelscope.cn":
+            try:
+                body = json.loads(error.read(4096))
+            except (ValueError, UnicodeDecodeError):
+                body = {}
+            if isinstance(body, dict) and str(body.get("Code")) == "10013201001":
+                error.close()
+                raise AssetDownloadError(
+                    "ModelScope 当前限流：操作过于频繁，请稍后重新运行 Models 阶段。"
+                    "已下载资源保留；未自动重试。"
+                ) from None
+        error.close()
+        raise AssetDownloadError(f"下载服务返回 HTTP {error.code}：{asset['name']}；已有资源保留。") from None
 
 
 def local_path(relative, local=LOCAL):
@@ -68,12 +93,12 @@ def download(asset, local=LOCAL):
     next_progress = offset + 64 * 1024 * 1024
     while offset < asset["size"]:
         headers = {"User-Agent": "SmartRoundScreen-VoiceRestore/1", "Accept-Encoding": "identity"}
-        ranged = offset > 0 or asset["size"] > SEGMENT_BYTES
+        ranged = asset.get("range_required", False) or offset > 0 or asset["size"] > SEGMENT_BYTES
         end = min(offset + SEGMENT_BYTES, asset["size"]) - 1
         if ranged:
             headers["Range"] = f"bytes={offset}-{end}"
         request = urllib.request.Request(asset["url"], headers=headers)
-        with urllib.request.urlopen(request, timeout=90) as response:
+        with open_download(request, asset) as response:
             expected_bytes = asset["size"] - offset
             if ranged:
                 # 服务器可以进一步缩小分段，但必须从要求的位置开始，且总长
@@ -185,4 +210,7 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except AssetDownloadError as error:
+        raise SystemExit(str(error)) from None

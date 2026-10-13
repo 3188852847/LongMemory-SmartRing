@@ -22,7 +22,7 @@ def quoted(path):
 
 
 @pytest.mark.parametrize("fails", [True, False])
-@pytest.mark.parametrize("mode", ["-Resume", "-DownloadOnly", ""])
+@pytest.mark.parametrize("mode", ["-Resume", "-DownloadOnly", "-Stages Tools", "-Stages Models", ""])
 def test_wrapper_restores_proxy_and_stops_after_failure(tmp_path, fails, mode):
     wrapper = tmp_path / "run_voice_restore.ps1"
     shutil.copyfile(ROOT / "scripts/development/run_voice_restore.ps1", wrapper)
@@ -48,7 +48,8 @@ if ($env:VOICE_TEST_FAIL -eq '1' -and $Stage -eq $env:VOICE_TEST_FAIL_STAGE) {
     log = tmp_path / "stages.txt"
     environment = dict(os.environ, VOICE_TEST_MARKER="original", VOICE_TEST_LOG=str(log),
                        VOICE_TEST_FAIL="1" if fails else "0",
-                       VOICE_TEST_FAIL_STAGE="Models" if mode == "-DownloadOnly" else "Environments")
+                       VOICE_TEST_FAIL_STAGE=("Tools" if mode == "-Stages Tools" else "Models"
+                                             if mode in ("-DownloadOnly", "-Stages Models") else "Environments"))
     command = f"try {{ & {quoted(wrapper)} -ProxyScript {quoted(proxy)} {mode} }} catch {{}}; Write-Output $env:VOICE_TEST_MARKER"
     result = subprocess.run([POWERSHELL, "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command],
                             env=environment, capture_output=True, text=True, encoding="utf-8")
@@ -57,7 +58,8 @@ if ($env:VOICE_TEST_FAIL -eq '1' -and $Stage -eq $env:VOICE_TEST_FAIL_STAGE) {
     stages = log.read_text(encoding="utf-8-sig").splitlines()
     stages_requested = {"": ["Sources", "Environments", "Models", "Tools"],
                         "-Resume": ["Environments", "Models", "Tools"],
-                        "-DownloadOnly": ["Models", "Tools"]}[mode]
+                        "-DownloadOnly": ["Models", "Tools"],
+                        "-Stages Tools": ["Tools"], "-Stages Models": ["Models"]}[mode]
     expected = ["enabled"]
     if not fails:
         expected += stages_requested
