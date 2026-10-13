@@ -81,6 +81,15 @@ describe('React 启动面板', () => {
     expect(await screen.findByRole('button', {name: '载入最新设置'})).toBeTruthy();
     expect((screen.getByLabelText('电脑局域网 IP') as HTMLInputElement).value).toBe('192.168.1.2');
   });
+  test('停止失败但仍有受管进程时提供确认后的重试停止', async () => {
+    const {api, request} = fake({...stopped, state: 'failed', can_start: false, can_stop: true});
+    render(<LauncherApp api={api}/>);
+    fireEvent.click(await screen.findByRole('button', {name: '重试停止'}));
+    expect(await screen.findByText('停止陪伴服务？')).toBeTruthy();
+    expect(request.mock.calls.some(call => call[0] === 'actions')).toBe(false);
+    fireEvent.click(screen.getByRole('button', {name: '停止服务'}));
+    await waitFor(() => expect(request).toHaveBeenCalledWith('actions', {action: 'stop'}));
+  });
   test('请求失败有可操作提示，不自动重试启动', async () => {
     const {api, request} = fake(); request.mockRejectedValue(new Error('private path'));
     render(<LauncherApp api={api}/>);

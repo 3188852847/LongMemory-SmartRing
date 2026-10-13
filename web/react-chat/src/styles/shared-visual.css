@@ -67,3 +67,7 @@
 @media(max-width:950px){.overview-shell .overview-grid>.ant-card:has(.overview-actions:not(.compact)) .overview-actions{grid-template-columns:repeat(2,minmax(0,1fr))}.shell .page-header{align-items:flex-start;flex-direction:column;gap:12px}.shell .page-action{max-width:100%}}
 @media(max-width:760px){.shell .console-nav{margin:10px 0 0;gap:8px}.shell .console-nav-link{min-height:36px;padding:7px 10px}.shell .console-nav-link.active .nav-copy small{display:none}.shell .console-status-rail{margin-bottom:18px}.shell .rail-cell:nth-child(-n+2){border-bottom:0}.shell .brand-block{padding-bottom:4px}.chat-shell .bubble{padding:14px 15px}.chat-shell .bubble.assistant{padding-left:0}.chat-shell .bubble.user{margin-left:9%}.chat-shell .chat-composer{padding:13px}.memory-shell .memory-overview>div{border:0!important}.memory-shell .memory-overview>div:first-child{padding-bottom:12px}.shell .legacy-entry{font-size:.65rem}.shell .page-heading h1{font-size:1.5rem}}
 @media(prefers-reduced-motion:reduce){.shell .console-nav-link,.shell .overview-actions>a{transition:none}}
+:root[data-theme=future] .shell .page-header{padding-bottom:18px;margin-bottom:22px;gap:18px}
+:root[data-theme=future] .memory-shell .mode-card{background:transparent;border:0;border-top:1px solid var(--border);box-shadow:none}
+:root[data-theme=future] .memory-shell .memory-overview{background:transparent;border:0;border-bottom:1px solid var(--border);box-shadow:none}
+:root[data-theme=future] .chat-shell .bubble.assistant{background:transparent;border:0;box-shadow:none}
