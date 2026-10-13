@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "board": "viewe-smartring-plus",
+  "target": "esp32s3",
+  "application_version": "2.2.3",
+  "sdk": {
+    "repository": "https://github.com/espressif/esp-idf.git",
+    "tag": "v5.5.4",
+    "commit": "735507283d5b2f9fb363a1901172dbd9e847945d",
+    "python_version": "3.11.15",
+    "cmake_version": "3.30.2",
+    "ninja_version": "1.12.1",
+    "compiler_version": "esp-14.2.0_20260121"
+  },
+  "vendor": {
+    "repository": "https://github.com/VIEWESMART/SmartRing-Plus.git",
+    "commit": "c4bdbab349e44cfc74fa6912f923193e9d389c7e",
+    "project_directory": "examples/esp-idf/11_xiaozhi/xiaozhi-esp32-main_smartring_plus_B_V2"
+  },
+  "eim": {
+    "version": "0.19.0",
+    "sha256": "4953e6a0337d778737e2f704f479595a5673e12d315e79b53f18c24a9e963ffc"
+  }
+}

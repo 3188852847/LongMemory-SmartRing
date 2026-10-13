@@ -2,7 +2,9 @@
 
 这里保存 LongMemory-SmartRing 对厂家 B V2 固件的**基线身份和补丁入口**，不复制厂家全量源码。
 
-当前本机工作对象：
+2026-10-14 开始恢复固件编译环境。当前恢复流程见[固件编译恢复指南](../../docs/guides/恢复固件编译-20261014.md)：原 ESP-IDF 5.5.4、官方厂家固定提交、项目累计补丁与全新组件；安装和真实编译尚待验收，不烧录圆屏。实际源码/build 使用 `D:\Dev\esp-projects\smart-ring`，SDK 使用已登记的 `D:\Dev\esp\v5.5.4\esp-idf`；本目录保存补丁、版本和摘要。`restore/` 累计补丁包括早期项目改动与 0012 状态，历史阶段补丁继续保留，不能在累计补丁之上重复应用。
+
+以下为重装前的工作对象和验证记录，不是新电脑的现有安装：
 
 - 厂家 ZIP 副本：`D:\LongMemory-local\firmware\vendor\SmartRing-Plus-main\examples\esp-idf\11_xiaozhi\xiaozhi-esp32-main_smartring_plus_B_V2`
 - 干净基线归档：`D:\LongMemory-local\archive\firmware\sr-bv2-baseline`；旧构建缓存不可直接改目录复用。

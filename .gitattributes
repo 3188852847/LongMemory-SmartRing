@@ -25,3 +25,7 @@
 *.png binary
 *.jpg binary
 *.jpeg binary
+
+# 恢复累计补丁按原始字节校验；避免 Windows checkout 改写其换行。
+firmware/smartring_plus/restore/*.patch text eol=lf
+firmware/smartring_plus/restore/*.defaults text eol=lf

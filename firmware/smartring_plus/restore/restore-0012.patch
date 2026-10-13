@@ -1,0 +1,1035 @@
+--- a/main/application.cc
++++ b/main/application.cc
+@@ -555,0 +556,7 @@
++#if CONFIG_BOARD_TYPE_VIEWE_SMARTRING_PLUS
++                    // STT 正文证明本轮有效输入已经识别完成，而 TTS 尚未开始。
++                    // 这里只更新圆屏表现，不伪造新的设备/音频状态；后续 tts.start
++                    // 仍由既有状态机切换到 speaking。
++                    display->SetStatus("思考中...");
++                    display->SetEmotion("thinking");
++#endif
+@@ -568,0 +576,10 @@
++            }
++        } else if (strcmp(type->valuestring, "session") == 0) {
++            auto state = cJSON_GetObjectItem(root, "state");
++            if (cJSON_IsString(state) && strcmp(state->valuestring, "idle") == 0) {
++                Schedule([this]() {
++                    if (GetDeviceState() == kDeviceStateListening) {
++                        protocol_->SendStopListening();
++                        SetDeviceState(kDeviceStateIdle);
++                    }
++                });
+@@ -705,0 +723,3 @@
++    } else if (state == kDeviceStateConnecting) {
++        protocol_->CloseAudioChannel();
++        SetDeviceState(kDeviceStateIdle);
+@@ -720,0 +741,2 @@
++            protocol_->CloseAudioChannel();
++            SetDeviceState(kDeviceStateIdle);
+@@ -800,0 +823,3 @@
++        if (state == kDeviceStateSpeaking) {
++            show_interrupted_on_listening_ = true;
++        }
+@@ -829,0 +855,2 @@
++            protocol_->CloseAudioChannel();
++            SetDeviceState(kDeviceStateIdle);
+@@ -879,2 +906,9 @@
+-            display->SetStatus(Lang::Strings::LISTENING);
+-            display->SetEmotion("neutral");
++            if (show_interrupted_on_listening_) {
++                // 只有设备确实从播放中发送 abort 并回到采集，才显示“已打断”。
++                display->SetStatus("已打断，请继续...");
++                show_interrupted_on_listening_ = false;
++            } else {
++                display->SetStatus(Lang::Strings::LISTENING);
++            }
++            // 使用已有字体图标表达采集状态，不新增角色素材，也不推断用户情绪。
++            display->SetEmotion("microphone");
+--- a/main/application.h
++++ b/main/application.h
+@@ -142,0 +143 @@
++    bool show_interrupted_on_listening_ = false;  // One-shot UI evidence after aborting active playback
+--- a/main/CMakeLists.txt
++++ b/main/CMakeLists.txt
+@@ -270,0 +271 @@
++    # 动态壁纸从 0009 起使用独立 A/B 分区，不再进入基础 assets 包。
+--- a/main/protocols/websocket_protocol.cc
++++ b/main/protocols/websocket_protocol.cc
+@@ -86,0 +87,5 @@
++#if CONFIG_USE_SERVER_AEC
++    // 服务端 AEC 必须依赖 v2 音频包中的时间戳。实验固件固定使用 v2，
++    // 避免历史 NVS 中残留的 version=1 让 AEC 看似开启、实际没有参考时间戳。
++    version_ = 2;
++#else
+@@ -90,0 +96 @@
++#endif
+@@ -151,6 +157,15 @@
+-            auto type = cJSON_GetObjectItem(root, "type");
+-            if (cJSON_IsString(type)) {
+-                if (strcmp(type->valuestring, "hello") == 0) {
+-                    ParseServerHello(root);
+-                } else {
+-                    if (on_incoming_json_ != nullptr) {
++            if (root == nullptr) {
++                ESP_LOGE(TAG, "Invalid JSON message");
++            } else {
++                auto type = cJSON_GetObjectItem(root, "type");
++                if (cJSON_IsString(type)) {
++                    if (strcmp(type->valuestring, "hello") == 0) {
++                        ParseServerHello(root);
++                    } else if (strcmp(type->valuestring, "session") == 0) {
++                        auto state = cJSON_GetObjectItem(root, "state");
++                        if (!cJSON_IsString(state) || strcmp(state->valuestring, "heartbeat") != 0) {
++                            if (on_incoming_json_ != nullptr) {
++                                on_incoming_json_(root);
++                            }
++                        }
++                    } else if (on_incoming_json_ != nullptr) {
+@@ -158,0 +174,2 @@
++                } else {
++                    ESP_LOGE(TAG, "Missing message type, data: %s", data);
+@@ -160,2 +176,0 @@
+-            } else {
+-                ESP_LOGE(TAG, "Missing message type, data: %s", data);
+@@ -212,0 +228,3 @@
++#if CONFIG_BOARD_TYPE_VIEWE_SMARTRING_PLUS
++    cJSON_AddBoolToObject(features, "persistent_session", true);
++#endif
+--- a/main/boards/viewe-smartring-plus/config.json
++++ b/main/boards/viewe-smartring-plus/config.json
+@@ -1 +1 @@
+-{"target":"esp32s3","builds":[{"name":"viewe-smartring-plus","sdkconfig_append":["CONFIG_USE_WECHAT_MESSAGE_STYLE=y","CONFIG_USE_EMOTE_MESSAGE_STYLE=y","CONFIG_MMAP_FILE_NAME_LENGTH=32","CONFIG_FLASH_EXPRESSION_ASSETS=y","CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y","CONFIG_PARTITION_TABLE_CUSTOM_FILENAME=\"partitions/v2/16m.csv\""]}]}
++{"target":"esp32s3","builds":[{"name":"viewe-smartring-plus","sdkconfig_append":["CONFIG_USE_DEFAULT_MESSAGE_STYLE=y","CONFIG_USE_MULTILINE_CHAT_MESSAGE=y","CONFIG_MMAP_FILE_NAME_LENGTH=32","CONFIG_FLASH_DEFAULT_ASSETS=y","CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y","CONFIG_PARTITION_TABLE_CUSTOM_FILENAME=\"partitions/v2/16m.csv\"","CONFIG_USE_SERVER_AEC=y"]}]}
+--- a/main/boards/viewe-smartring-plus/viewe-smartring-plus.cc
++++ b/main/boards/viewe-smartring-plus/viewe-smartring-plus.cc
+@@ -3,0 +4 @@
++#include "display/lvgl_display/lvgl_theme.h"
+@@ -9,0 +11,2 @@
++#include "mcp_server.h"
++#include "settings.h"
+@@ -13,0 +17,4 @@
++#include <esp_heap_caps.h>
++#include <esp_partition.h>
++#include <spi_flash_mmap.h>
++#include <mbedtls/sha256.h>
+@@ -24,0 +32,4 @@
++#include <algorithm>
++#include <cstring>
++#include <cctype>
++#include <stdexcept>
+@@ -26,0 +38 @@
++#include "assets.h"
+@@ -578,0 +591,721 @@
++struct RoundSkinConfig {
++    int api = 1;
++    std::string id = "rose-night-v1";
++    std::string manifest_sha256 = "a30a24b7de67b26b40812d6fd234b18723d8345b5ba8b230e1cdcc3dfb70f6f5";
++    int background = 0x171B26;
++    int foreground = 0xF7F4F8;
++    int muted = 0xCBD1DC;
++    int accent = 0xDF72A8;
++    int listening = 0x69D5FF;
++    int thinking = 0xF7C65A;
++    int happy = 0x7DE2B8;
++    int concerned = 0x8AA8FF;
++    int error = 0xF16C73;
++    int eye_width = 22;
++    int eye_height = 36;
++    int mouth_width = 38;
++};
++
++static bool IsRoundSkinId(const std::string& value) {
++    if (value.size() < 3 || value.size() > 40 ||
++        !std::isalnum(static_cast<unsigned char>(value.front()))) {
++        return false;
++    }
++    for (unsigned char ch : value) {
++        if (!(std::islower(ch) || std::isdigit(ch) || ch == '-')) {
++            return false;
++        }
++    }
++    return true;
++}
++
++static bool IsLowerHexSha256(const std::string& value) {
++    if (value.size() != 64) {
++        return false;
++    }
++    for (unsigned char ch : value) {
++        if (!(std::isdigit(ch) || (ch >= 'a' && ch <= 'f'))) {
++            return false;
++        }
++    }
++    return true;
++}
++
++static bool IsRoundSkinValid(const RoundSkinConfig& skin) {
++    auto color = [](int value) { return value >= 0 && value <= 0xFFFFFF; };
++    return skin.api == 1 && IsRoundSkinId(skin.id) && IsLowerHexSha256(skin.manifest_sha256) &&
++           color(skin.background) && color(skin.foreground) && color(skin.muted) &&
++           color(skin.accent) && color(skin.listening) && color(skin.thinking) &&
++           color(skin.happy) && color(skin.concerned) && color(skin.error) &&
++           skin.eye_width >= 12 && skin.eye_width <= 36 &&
++           skin.eye_height >= 18 && skin.eye_height <= 48 &&
++           skin.mouth_width >= 20 && skin.mouth_width <= 64;
++}
++
++static RoundSkinConfig LoadRoundSkin() {
++    RoundSkinConfig skin;
++    Settings settings("round_skin");
++    skin.api = settings.GetInt("api", 0);
++    skin.id = settings.GetString("skin_id");
++    skin.manifest_sha256 = settings.GetString("skin_sha");
++    skin.background = settings.GetInt("background", -1);
++    skin.foreground = settings.GetInt("foreground", -1);
++    skin.muted = settings.GetInt("muted", -1);
++    skin.accent = settings.GetInt("accent", -1);
++    skin.listening = settings.GetInt("listening", -1);
++    skin.thinking = settings.GetInt("thinking", -1);
++    skin.happy = settings.GetInt("happy", -1);
++    skin.concerned = settings.GetInt("concerned", -1);
++    skin.error = settings.GetInt("error", -1);
++    skin.eye_width = settings.GetInt("eye_width", -1);
++    skin.eye_height = settings.GetInt("eye_height", -1);
++    skin.mouth_width = settings.GetInt("mouth_width", -1);
++    if (!IsRoundSkinValid(skin)) {
++        ESP_LOGI(TAG, "No valid persisted round skin; using built-in fallback");
++        return RoundSkinConfig();
++    }
++    ESP_LOGI(TAG, "Loaded round skin %s", skin.id.c_str());
++    return skin;
++}
++
++static void SaveRoundSkin(const RoundSkinConfig& skin) {
++    if (!IsRoundSkinValid(skin)) {
++        throw std::invalid_argument("Invalid round skin");
++    }
++    Settings settings("round_skin", true);
++    settings.SetString("skin_id", skin.id);
++    settings.SetString("skin_sha", skin.manifest_sha256);
++    settings.SetInt("background", skin.background);
++    settings.SetInt("foreground", skin.foreground);
++    settings.SetInt("muted", skin.muted);
++    settings.SetInt("accent", skin.accent);
++    settings.SetInt("listening", skin.listening);
++    settings.SetInt("thinking", skin.thinking);
++    settings.SetInt("happy", skin.happy);
++    settings.SetInt("concerned", skin.concerned);
++    settings.SetInt("error", skin.error);
++    settings.SetInt("eye_width", skin.eye_width);
++    settings.SetInt("eye_height", skin.eye_height);
++    settings.SetInt("mouth_width", skin.mouth_width);
++    settings.SetInt("api", skin.api);
++}
++
++struct RoundWallpaperRecord {
++    int api = 1;
++    std::string slot;
++    std::string id;
++    std::string sha256;
++    size_t size = 0;
++    const void* data = nullptr;
++};
++
++class RoundWallpaperStore {
++private:
++    static constexpr size_t kHeaderSectorSize = 4096;
++    static constexpr size_t kMaxWallpaperBytes = 3 * 1024 * 1024 - kHeaderSectorSize;
++    static constexpr uint32_t kHeaderVersion = 1;
++    static constexpr char kMagic[8] = {'L', 'M', 'W', 'A', 'L', 'L', '1', '\0'};
++
++    struct __attribute__((packed)) Header {
++        char magic[8];
++        uint32_t version;
++        uint32_t data_size;
++        uint16_t width;
++        uint16_t height;
++        uint8_t sha256[32];
++        char wallpaper_id[32];
++    };
++
++    esp_partition_mmap_handle_t mmap_handle_ = 0;
++    const void* mmap_data_ = nullptr;
++    RoundWallpaperRecord active_;
++    RoundWallpaperRecord staged_;
++
++    static const esp_partition_t* Find(const char* slot) {
++        const char* label = std::strcmp(slot, "a") == 0 ? "wallpaper_a" : "wallpaper_b";
++        return esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_ANY, label);
++    }
++
++    static std::string BytesToHex(const uint8_t* data, size_t size) {
++        static constexpr char hex[] = "0123456789abcdef";
++        std::string result(size * 2, '0');
++        for (size_t i = 0; i < size; ++i) {
++            result[i * 2] = hex[data[i] >> 4];
++            result[i * 2 + 1] = hex[data[i] & 0x0F];
++        }
++        return result;
++    }
++
++    static bool HexToBytes(const std::string& value, uint8_t* output, size_t size) {
++        if (!IsLowerHexSha256(value) || size != 32) return false;
++        auto nibble = [](char value) -> uint8_t {
++            return value <= '9' ? value - '0' : value - 'a' + 10;
++        };
++        for (size_t i = 0; i < size; ++i) {
++            output[i] = static_cast<uint8_t>((nibble(value[i * 2]) << 4) | nibble(value[i * 2 + 1]));
++        }
++        return true;
++    }
++
++    static bool IsGif360(const uint8_t* data, size_t size) {
++        return size >= 10 && std::memcmp(data, "GIF", 3) == 0 &&
++               (std::memcmp(data + 3, "87a", 3) == 0 || std::memcmp(data + 3, "89a", 3) == 0) &&
++               static_cast<uint16_t>(data[6] | (data[7] << 8)) == 360 &&
++               static_cast<uint16_t>(data[8] | (data[9] << 8)) == 360;
++    }
++
++    static bool HashPartition(const esp_partition_t* partition, size_t offset, size_t size,
++                              uint8_t output[32]) {
++        auto* buffer = static_cast<uint8_t*>(heap_caps_malloc(4096, MALLOC_CAP_INTERNAL));
++        if (buffer == nullptr) return false;
++        mbedtls_sha256_context context;
++        mbedtls_sha256_init(&context);
++        bool ok = mbedtls_sha256_starts(&context, 0) == 0;
++        for (size_t position = 0; ok && position < size; position += 4096) {
++            const size_t count = std::min<size_t>(4096, size - position);
++            ok = esp_partition_read(partition, offset + position, buffer, count) == ESP_OK &&
++                 mbedtls_sha256_update(&context, buffer, count) == 0;
++        }
++        ok = ok && mbedtls_sha256_finish(&context, output) == 0;
++        mbedtls_sha256_free(&context);
++        heap_caps_free(buffer);
++        return ok;
++    }
++
++    static bool ReadRecord(const char* slot, RoundWallpaperRecord& record) {
++        const esp_partition_t* partition = Find(slot);
++        Header header{};
++        if (partition == nullptr || esp_partition_read(partition, 0, &header, sizeof(header)) != ESP_OK ||
++            std::memcmp(header.magic, kMagic, sizeof(kMagic)) != 0 || header.version != kHeaderVersion ||
++            header.data_size == 0 || header.data_size > kMaxWallpaperBytes ||
++            header.width != 360 || header.height != 360 ||
++            std::memchr(header.wallpaper_id, '\0', sizeof(header.wallpaper_id)) == nullptr) {
++            return false;
++        }
++        const std::string id(header.wallpaper_id);
++        if (!IsRoundSkinId(id)) return false;
++        uint8_t prefix[10]{};
++        uint8_t digest[32]{};
++        if (esp_partition_read(partition, kHeaderSectorSize, prefix, sizeof(prefix)) != ESP_OK ||
++            !IsGif360(prefix, sizeof(prefix)) ||
++            !HashPartition(partition, kHeaderSectorSize, header.data_size, digest) ||
++            std::memcmp(digest, header.sha256, sizeof(digest)) != 0) {
++            return false;
++        }
++        record = {.api = 1, .slot = slot, .id = id,
++                  .sha256 = BytesToHex(header.sha256, sizeof(header.sha256)),
++                  .size = header.data_size, .data = nullptr};
++        return true;
++    }
++
++    void Unmap() {
++        if (mmap_handle_ != 0) {
++            esp_partition_munmap(mmap_handle_);
++            mmap_handle_ = 0;
++            mmap_data_ = nullptr;
++        }
++        active_.data = nullptr;
++    }
++
++public:
++    static RoundWallpaperStore& GetInstance() {
++        static RoundWallpaperStore instance;
++        return instance;
++    }
++
++    ~RoundWallpaperStore() { Unmap(); }
++
++    bool GetSlot(const std::string& slot, RoundWallpaperRecord& record) {
++        return (slot == "a" || slot == "b") && ReadRecord(slot.c_str(), record);
++    }
++
++    cJSON* GetStatus() {
++        Settings settings("round_wallpaper");
++        const std::string active_slot = settings.GetString("active_slot");
++        const std::string previous_slot = settings.GetString("previous_slot");
++        RoundWallpaperRecord active;
++        RoundWallpaperRecord previous;
++        const bool active_valid = GetSlot(active_slot, active);
++        const bool rollback_available = previous_slot != active_slot && GetSlot(previous_slot, previous);
++        cJSON* json = cJSON_CreateObject();
++        cJSON_AddNumberToObject(json, "wallpaper_api", 1);
++        cJSON_AddBoolToObject(json, "active_valid", active_valid);
++        cJSON_AddStringToObject(json, "active_slot", active_valid ? active.slot.c_str() : "");
++        cJSON_AddStringToObject(json, "active_wallpaper_id", active_valid ? active.id.c_str() : "");
++        cJSON_AddStringToObject(json, "active_sha256", active_valid ? active.sha256.c_str() : "");
++        cJSON_AddNumberToObject(json, "active_size_bytes", active_valid ? active.size : 0);
++        cJSON_AddBoolToObject(json, "rollback_available", rollback_available);
++        return json;
++    }
++
++    bool GetActive(RoundWallpaperRecord& record) {
++        if (active_.data != nullptr) {
++            record = active_;
++            return true;
++        }
++        Settings settings("round_wallpaper");
++        std::string preferred = settings.GetString("active_slot");
++        // 暂存槽没有经过显式激活时绝不能在重启后自动生效。只有 NVS 中
++        // 已记录 a/b 才读取；已激活槽损坏时才尝试另一槽作为启动回退。
++        if (preferred != "a" && preferred != "b") {
++            return false;
++        }
++        const char* order[2] = {
++            preferred == "b" ? "b" : "a",
++            preferred == "b" ? "a" : "b",
++        };
++        RoundWallpaperRecord candidate;
++        for (const char* slot : order) {
++            if (!ReadRecord(slot, candidate)) continue;
++            const esp_partition_t* partition = Find(slot);
++            const void* mapped = nullptr;
++            if (esp_partition_mmap(partition, kHeaderSectorSize, candidate.size,
++                                   ESP_PARTITION_MMAP_DATA, &mapped, &mmap_handle_) != ESP_OK) {
++                continue;
++            }
++            mmap_data_ = mapped;
++            candidate.data = mapped;
++            active_ = candidate;
++            record = active_;
++            ESP_LOGI(TAG, "Loaded wallpaper %s from slot %s", active_.id.c_str(), active_.slot.c_str());
++            return true;
++        }
++        return false;
++    }
++
++    bool Stage(const std::string& url, const std::string& id, const std::string& expected_sha,
++               size_t expected_size, RoundWallpaperRecord& result) {
++        if (!IsRoundSkinId(id) || !IsLowerHexSha256(expected_sha) ||
++            expected_size == 0 || expected_size > kMaxWallpaperBytes) {
++            return false;
++        }
++        RoundWallpaperRecord active;
++        const bool has_active = GetActive(active);
++        std::string protected_slot = has_active ? active.slot : "";
++        if (!has_active) {
++            Settings current("round_wallpaper");
++            const std::string previous = current.GetString("previous_slot");
++            RoundWallpaperRecord retained;
++            if (GetSlot(previous, retained)) protected_slot = previous;
++        }
++        // 皮肤模式仍保护 previous_slot 中保留的壁纸，后续发布只能写另一槽。
++        const char* slot = protected_slot == "a" ? "b" : "a";
++        const esp_partition_t* partition = Find(slot);
++        if (partition == nullptr) return false;
++
++        auto network = Board::GetInstance().GetNetwork();
++        auto http = network->CreateHttp(0);
++        if (!http->Open("GET", url) || http->GetStatusCode() != 200 ||
++            http->GetBodyLength() != expected_size) {
++            ESP_LOGE(TAG, "Wallpaper download preflight failed");
++            return false;
++        }
++        const size_t erase_size = ((kHeaderSectorSize + expected_size + 4095) / 4096) * 4096;
++        if (erase_size > partition->size || esp_partition_erase_range(partition, 0, erase_size) != ESP_OK) {
++            ESP_LOGE(TAG, "Wallpaper inactive slot erase failed");
++            return false;
++        }
++        auto* buffer = static_cast<uint8_t*>(heap_caps_malloc(4096, MALLOC_CAP_INTERNAL));
++        if (buffer == nullptr) return false;
++        mbedtls_sha256_context context;
++        mbedtls_sha256_init(&context);
++        bool ok = mbedtls_sha256_starts(&context, 0) == 0;
++        size_t written = 0;
++        while (ok && written < expected_size) {
++            const size_t wanted = std::min<size_t>(4096, expected_size - written);
++            const int count = http->Read(reinterpret_cast<char*>(buffer), wanted);
++            if (count <= 0 || static_cast<size_t>(count) > wanted) {
++                ok = false;
++                break;
++            }
++            ok = esp_partition_write(partition, kHeaderSectorSize + written, buffer, count) == ESP_OK &&
++                 mbedtls_sha256_update(&context, buffer, count) == 0;
++            written += count;
++        }
++        uint8_t digest[32]{};
++        ok = ok && written == expected_size && mbedtls_sha256_finish(&context, digest) == 0;
++        mbedtls_sha256_free(&context);
++        heap_caps_free(buffer);
++        http->Close();
++        uint8_t expected_digest[32]{};
++        if (!ok || !HexToBytes(expected_sha, expected_digest, sizeof(expected_digest)) ||
++            std::memcmp(digest, expected_digest, sizeof(digest)) != 0) {
++            ESP_LOGE(TAG, "Wallpaper download hash mismatch");
++            return false;
++        }
++        uint8_t prefix[10]{};
++        if (esp_partition_read(partition, kHeaderSectorSize, prefix, sizeof(prefix)) != ESP_OK ||
++            !IsGif360(prefix, sizeof(prefix))) {
++            ESP_LOGE(TAG, "Wallpaper is not a 360x360 GIF");
++            return false;
++        }
++        Header header{};
++        std::memcpy(header.magic, kMagic, sizeof(kMagic));
++        header.version = kHeaderVersion;
++        header.data_size = expected_size;
++        header.width = 360;
++        header.height = 360;
++        std::memcpy(header.sha256, digest, sizeof(digest));
++        std::strncpy(header.wallpaper_id, id.c_str(), sizeof(header.wallpaper_id) - 1);
++        if (esp_partition_write(partition, 0, &header, sizeof(header)) != ESP_OK ||
++            !ReadRecord(slot, staged_)) {
++            ESP_LOGE(TAG, "Wallpaper verified header write failed");
++            return false;
++        }
++        result = staged_;
++        ESP_LOGI(TAG, "Wallpaper %s staged and verified in slot %s", id.c_str(), slot);
++        return true;
++    }
++
++    bool Activate(const std::string& slot, const std::string& id,
++                  const std::string& sha256, size_t size, RoundWallpaperRecord& result) {
++        RoundWallpaperRecord candidate;
++        if (!GetSlot(slot, candidate) || candidate.id != id || candidate.sha256 != sha256 ||
++            candidate.size != size) {
++            ESP_LOGE(TAG, "Wallpaper activation record mismatch");
++            return false;
++        }
++        Settings current("round_wallpaper");
++        const std::string previous = current.GetString("active_slot");
++        Settings writable("round_wallpaper", true);
++        if ((previous == "a" || previous == "b") && previous != slot) {
++            writable.SetString("previous_slot", previous);
++        }
++        writable.SetString("active_slot", slot);
++        result = candidate;
++        ESP_LOGI(TAG, "Wallpaper %s selected in slot %s; restart required", id.c_str(), slot.c_str());
++        return true;
++    }
++
++    bool Deactivate(RoundWallpaperRecord& result) {
++        Settings current("round_wallpaper");
++        const std::string active = current.GetString("active_slot");
++        RoundWallpaperRecord candidate;
++        if ((active != "a" && active != "b") || !GetSlot(active, candidate)) {
++            ESP_LOGE(TAG, "No verified active wallpaper to deactivate");
++            return false;
++        }
++        // 只改变 NVS 中的显示模式指针。A/B 分区内容保持不变，用户之后
++        // 可以通过 rollback 工具恢复刚才的壁纸，无需再次下载或擦写媒体。
++        Settings writable("round_wallpaper", true);
++        writable.SetString("previous_slot", active);
++        writable.SetString("active_slot", "");
++        result = candidate;
++        ESP_LOGI(TAG, "Wallpaper slot %s retained; skin mode selected; restart required",
++                 active.c_str());
++        return true;
++    }
++
++    bool Rollback(RoundWallpaperRecord& result) {
++        Settings current("round_wallpaper");
++        const std::string active = current.GetString("active_slot");
++        const std::string previous = current.GetString("previous_slot");
++        RoundWallpaperRecord candidate;
++        if ((previous != "a" && previous != "b") || !GetSlot(previous, candidate)) {
++            ESP_LOGE(TAG, "No verified wallpaper rollback slot");
++            return false;
++        }
++        Settings writable("round_wallpaper", true);
++        // 皮肤模式下 active_slot 为空，previous_slot 保存切换前的壁纸。
++        // 此时 rollback 的含义是恢复保留壁纸，而不是交换两个活动槽。
++        if (active != "a" && active != "b") {
++            writable.SetString("active_slot", previous);
++            writable.SetString("previous_slot", "");
++            result = candidate;
++            ESP_LOGI(TAG, "Retained wallpaper restored from slot %s; restart required",
++                     previous.c_str());
++            return true;
++        }
++        if (active == previous) return false;
++        writable.SetString("active_slot", previous);
++        writable.SetString("previous_slot", active);
++        result = candidate;
++        ESP_LOGI(TAG, "Wallpaper rollback selected slot %s; restart required", previous.c_str());
++        return true;
++    }
++};
++
++// SmartRing-Plus 的日常入口继续复用通用 LCD 的状态栏、电量、
++// 通知和字幕。动态壁纸存在时，它是所有日常交互状态的角色主视觉；
++// 几何脸只在壁纸缺失或无法解码时作为固件内置回退。
++class SmartRingFaceDisplay : public SpiLcdDisplay {
++private:
++    static constexpr const char* kWallpaperAssetName = "round_wallpaper.gif";
++
++    lv_obj_t* left_eye_ = nullptr;
++    lv_obj_t* right_eye_ = nullptr;
++    lv_obj_t* mouth_ = nullptr;
++    lv_obj_t* wallpaper_image_ = nullptr;
++    lv_timer_t* face_timer_ = nullptr;
++    std::unique_ptr<LvglRawImage> wallpaper_source_ = nullptr;
++    std::unique_ptr<LvglGif> wallpaper_gif_ = nullptr;
++    bool wallpaper_ready_ = false;
++    uint32_t animation_frame_ = 0;
++    RoundSkinConfig skin_ = LoadRoundSkin();
++    std::string current_emotion_ = "neutral";
++
++    static void FaceTimerCallback(lv_timer_t* timer) {
++        auto* display = static_cast<SmartRingFaceDisplay*>(lv_timer_get_user_data(timer));
++        display->animation_frame_++;
++        display->ApplyFace(display->current_emotion_.c_str());
++    }
++
++    static void ConfigureFacePart(lv_obj_t* object) {
++        lv_obj_set_style_border_width(object, 0, 0);
++        lv_obj_set_style_pad_all(object, 0, 0);
++        lv_obj_set_style_radius(object, LV_RADIUS_CIRCLE, 0);
++        lv_obj_set_scrollbar_mode(object, LV_SCROLLBAR_MODE_OFF);
++    }
++
++    void TryLoadWallpaper() {
++        // Assets::Apply() 会在 SetupUI() 之后再次设置主题，因此这里允许重试；
++        // 资源尚未挂载时保留几何脸，不把壁纸缺失变成启动故障。
++        if (wallpaper_ready_ || container_ == nullptr) {
++            return;
++        }
++
++        void* data = nullptr;
++        size_t size = 0;
++        RoundWallpaperRecord record;
++        if (RoundWallpaperStore::GetInstance().GetActive(record)) {
++            data = const_cast<void*>(record.data);
++            size = record.size;
++        } else if (!Assets::GetInstance().GetAssetData(kWallpaperAssetName, data, size)) {
++            ESP_LOGW(TAG, "Round wallpaper asset is not available yet");
++            return;
++        }
++
++        auto source = std::make_unique<LvglRawImage>(data, size);
++        if (!source->IsGif()) {
++            ESP_LOGE(TAG, "Round wallpaper asset is not a GIF");
++            return;
++        }
++
++        auto controller = std::make_unique<LvglGif>(source->image_dsc());
++        if (!controller->IsLoaded() || controller->width() != width_ || controller->height() != height_) {
++            ESP_LOGE(TAG, "Round wallpaper must decode to %dx%d", width_, height_);
++            return;
++        }
++
++        wallpaper_image_ = lv_image_create(container_);
++        lv_obj_set_size(wallpaper_image_, width_, height_);
++        lv_obj_center(wallpaper_image_);
++        lv_obj_clear_flag(wallpaper_image_, LV_OBJ_FLAG_CLICKABLE);
++        lv_obj_set_scrollbar_mode(wallpaper_image_, LV_SCROLLBAR_MODE_OFF);
++        lv_image_set_src(wallpaper_image_, controller->image_dsc());
++        controller->SetFrameCallback([this]() {
++            if (wallpaper_image_ != nullptr && wallpaper_gif_ != nullptr) {
++                lv_image_set_src(wallpaper_image_, wallpaper_gif_->image_dsc());
++            }
++        });
++
++        wallpaper_source_ = std::move(source);
++        wallpaper_gif_ = std::move(controller);
++        wallpaper_ready_ = true;
++        wallpaper_gif_->Start();
++        ESP_LOGI(TAG, "Round wallpaper loaded: %u bytes", static_cast<unsigned>(size));
++    }
++
++    void ApplyFace(const char* emotion) {
++        if (left_eye_ == nullptr || right_eye_ == nullptr || mouth_ == nullptr) {
++            return;
++        }
++
++        const char* value = emotion == nullptr ? "neutral" : emotion;
++        const bool listening = std::strcmp(value, "microphone") == 0;
++        const bool thinking = std::strcmp(value, "thinking") == 0;
++        const bool speaking = std::strcmp(value, "speaking") == 0 ||
++                              Application::GetInstance().GetDeviceState() == kDeviceStateSpeaking;
++        const bool error = std::strcmp(value, "triangle_exclamation") == 0 ||
++                           std::strcmp(value, "cloud_slash") == 0 ||
++                           std::strcmp(value, "wifi_off") == 0;
++        const bool happy = std::strcmp(value, "happy") == 0 ||
++                           std::strcmp(value, "laughing") == 0 ||
++                           std::strcmp(value, "loving") == 0 ||
++                           std::strcmp(value, "funny") == 0;
++        const bool sad = std::strcmp(value, "sad") == 0 ||
++                         std::strcmp(value, "crying") == 0;
++
++        // 动态壁纸自身是角色主视觉；状态由文字/系统覆盖表达，不再叠加几何脸。
++        const bool show_face = !wallpaper_ready_;
++        if (show_face) {
++            lv_obj_remove_flag(left_eye_, LV_OBJ_FLAG_HIDDEN);
++            lv_obj_remove_flag(right_eye_, LV_OBJ_FLAG_HIDDEN);
++            lv_obj_remove_flag(mouth_, LV_OBJ_FLAG_HIDDEN);
++        } else {
++            lv_obj_add_flag(left_eye_, LV_OBJ_FLAG_HIDDEN);
++            lv_obj_add_flag(right_eye_, LV_OBJ_FLAG_HIDDEN);
++            lv_obj_add_flag(mouth_, LV_OBJ_FLAG_HIDDEN);
++            return;
++        }
++
++        lv_color_t accent = lv_color_hex(skin_.accent);
++        if (listening) {
++            accent = lv_color_hex(skin_.listening);
++        } else if (thinking) {
++            accent = lv_color_hex(skin_.thinking);
++        } else if (error) {
++            accent = lv_color_hex(skin_.error);
++        } else if (happy) {
++            accent = lv_color_hex(skin_.happy);
++        } else if (sad) {
++            accent = lv_color_hex(skin_.concerned);
++        }
++
++        // 一个 140 ms 的低频时钟只改变三个既有几何对象。它不读取麦克风、
++        // 不推断业务状态，也不创建逐帧图片，因此不会把动画冒充设备回执。
++        const uint32_t short_phase = animation_frame_ % 8;
++        const int pulse = short_phase <= 4 ? static_cast<int>(short_phase)
++                                           : 8 - static_cast<int>(short_phase);
++        const uint32_t speaking_phase = animation_frame_ % 6;
++        const int mouth_pulse = speaking_phase <= 3 ? static_cast<int>(speaking_phase)
++                                                     : 6 - static_cast<int>(speaking_phase);
++        const bool blink = !listening && !thinking && !speaking && !error &&
++                           animation_frame_ % 32 == 0;
++
++        lv_coord_t eye_width = thinking ? std::max(12, skin_.eye_width - 6) : skin_.eye_width;
++        lv_coord_t eye_height = thinking ? 18 : (listening ? std::min(48, skin_.eye_height + 6) : skin_.eye_height);
++        lv_coord_t mouth_width = error ? 20 : (speaking ? std::min(64, skin_.mouth_width + 8) :
++                                              (happy ? std::min(64, skin_.mouth_width + 14) : skin_.mouth_width));
++        lv_coord_t mouth_height = error ? 18 :
++                                  (speaking ? 10 + mouth_pulse * 4 : (happy ? 13 : 8));
++        lv_coord_t left_eye_y = -18;
++        lv_coord_t right_eye_y = -18;
++        if (blink) {
++            eye_height = 5;
++        } else if (listening) {
++            eye_height = std::min<lv_coord_t>(48, eye_height + pulse);
++        } else if (thinking) {
++            left_eye_y -= pulse;
++            right_eye_y += pulse;
++        }
++
++        lv_obj_set_size(left_eye_, eye_width, eye_height);
++        lv_obj_set_size(right_eye_, eye_width, eye_height);
++        lv_obj_set_size(mouth_, mouth_width, mouth_height);
++        lv_obj_align(left_eye_, LV_ALIGN_CENTER, -42, left_eye_y);
++        lv_obj_align(right_eye_, LV_ALIGN_CENTER, 42, right_eye_y);
++        lv_obj_align(mouth_, LV_ALIGN_CENTER, 0, 38);
++        lv_obj_set_style_bg_color(left_eye_, accent, 0);
++        lv_obj_set_style_bg_color(right_eye_, accent, 0);
++        lv_obj_set_style_bg_color(mouth_, accent, 0);
++    }
++
++    void ApplySkinStyles() {
++        const lv_color_t background = lv_color_hex(skin_.background);
++        const lv_color_t foreground = lv_color_hex(skin_.foreground);
++        const lv_color_t muted = lv_color_hex(skin_.muted);
++        if (container_ != nullptr) lv_obj_set_style_bg_color(container_, background, 0);
++        if (top_bar_ != nullptr) lv_obj_set_style_bg_color(top_bar_, background, 0);
++        if (bottom_bar_ != nullptr) lv_obj_set_style_bg_color(bottom_bar_, background, 0);
++        if (status_label_ != nullptr) lv_obj_set_style_text_color(status_label_, foreground, 0);
++        if (notification_label_ != nullptr) lv_obj_set_style_text_color(notification_label_, foreground, 0);
++        if (chat_message_label_ != nullptr) lv_obj_set_style_text_color(chat_message_label_, muted, 0);
++        if (network_label_ != nullptr) lv_obj_set_style_text_color(network_label_, muted, 0);
++        if (battery_label_ != nullptr) lv_obj_set_style_text_color(battery_label_, muted, 0);
++        ApplyFace(current_emotion_.c_str());
++    }
++
++public:
++    SmartRingFaceDisplay(esp_lcd_panel_io_handle_t panel_io,
++                         esp_lcd_panel_handle_t panel,
++                         int width, int height, int offset_x, int offset_y,
++                         bool mirror_x, bool mirror_y, bool swap_xy)
++        : SpiLcdDisplay(panel_io, panel, width, height, offset_x, offset_y,
++                        mirror_x, mirror_y, swap_xy) {
++        // 圆屏专用界面默认采用深色；运行时的显式主题切换仍由通用实现处理。
++        current_theme_ = LvglThemeManager::GetInstance().GetTheme("dark");
++    }
++
++    void SetupUI() override {
++        LcdDisplay::SetupUI();
++        DisplayLockGuard lock(this);
++        if (emoji_box_ == nullptr) {
++            return;
++        }
++
++        // 保留通用 emoji 对象供主题/预览代码安全访问，但不让它覆盖板级脸。
++        lv_obj_add_flag(emoji_label_, LV_OBJ_FLAG_HIDDEN);
++        lv_obj_add_flag(emoji_image_, LV_OBJ_FLAG_HIDDEN);
++        lv_obj_set_size(emoji_box_, 190, 130);
++        lv_obj_align(emoji_box_, LV_ALIGN_CENTER, 0, -14);
++
++        left_eye_ = lv_obj_create(emoji_box_);
++        right_eye_ = lv_obj_create(emoji_box_);
++        mouth_ = lv_obj_create(emoji_box_);
++        ConfigureFacePart(left_eye_);
++        ConfigureFacePart(right_eye_);
++        ConfigureFacePart(mouth_);
++        TryLoadWallpaper();
++        ApplySkinStyles();
++        face_timer_ = lv_timer_create(FaceTimerCallback, 140, this);
++        lv_timer_set_repeat_count(face_timer_, -1);
++        lv_timer_reset(face_timer_);
++
++        // 字幕最多占中央安全区下方两行，不再堆叠历史聊天气泡。
++        if (bottom_bar_ != nullptr && chat_message_label_ != nullptr) {
++            lv_obj_set_size(bottom_bar_, 272, 58);
++            lv_obj_set_style_bg_opa(bottom_bar_, LV_OPA_TRANSP, 0);
++            lv_obj_align(bottom_bar_, LV_ALIGN_BOTTOM_MID, 0, -38);
++            lv_obj_set_width(chat_message_label_, 252);
++            lv_obj_set_height(chat_message_label_, 48);
++            lv_label_set_long_mode(chat_message_label_, LV_LABEL_LONG_DOT);
++            lv_obj_set_style_text_align(chat_message_label_, LV_TEXT_ALIGN_CENTER, 0);
++        }
++    }
++
++    void SetTheme(Theme* theme) override {
++        LcdDisplay::SetTheme(theme);
++        if (!setup_ui_called_) {
++            return;
++        }
++        DisplayLockGuard lock(this);
++        TryLoadWallpaper();
++        ApplySkinStyles();
++    }
++
++    void SetStatus(const char* status) override {
++        LvglDisplay::SetStatus(status);
++        if (status == nullptr) {
++            return;
++        }
++        if (std::strcmp(status, Lang::Strings::STANDBY) == 0) {
++            SetEmotion("neutral");
++        } else if (std::strcmp(status, Lang::Strings::LISTENING) == 0 ||
++                   std::strcmp(status, "已打断，请继续...") == 0) {
++            SetEmotion("microphone");
++        } else if (std::strcmp(status, Lang::Strings::SPEAKING) == 0) {
++            SetEmotion("speaking");
++        } else if (std::strcmp(status, "思考中...") == 0) {
++            SetEmotion("thinking");
++        }
++    }
++
++    void SetEmotion(const char* emotion) override {
++        if (!setup_ui_called_) {
++            return;
++        }
++        DisplayLockGuard lock(this);
++        const std::string next_emotion = emotion == nullptr ? "neutral" : emotion;
++        if (next_emotion != current_emotion_) {
++            current_emotion_ = next_emotion;
++            animation_frame_ = 1;
++        }
++        ApplyFace(current_emotion_.c_str());
++    }
++
++    RoundSkinConfig GetRoundSkin() const {
++        return skin_;
++    }
++
++    void SetRoundSkin(const RoundSkinConfig& skin) {
++        if (!IsRoundSkinValid(skin)) {
++            throw std::invalid_argument("Invalid round skin");
++        }
++        SaveRoundSkin(skin);
++        DisplayLockGuard lock(this);
++        skin_ = skin;
++        ApplySkinStyles();
++    }
++};
++
+@@ -812,3 +1545,3 @@
+-        display_ = new SpiLcdDisplay(panel_io, panel, DISPLAY_WIDTH, DISPLAY_HEIGHT,
+-                                     DISPLAY_OFFSET_X, DISPLAY_OFFSET_Y,
+-                                     DISPLAY_MIRROR_X, DISPLAY_MIRROR_Y, DISPLAY_SWAP_XY);
++        display_ = new SmartRingFaceDisplay(panel_io, panel, DISPLAY_WIDTH, DISPLAY_HEIGHT,
++                                            DISPLAY_OFFSET_X, DISPLAY_OFFSET_Y,
++                                            DISPLAY_MIRROR_X, DISPLAY_MIRROR_Y, DISPLAY_SWAP_XY);
+@@ -836,0 +1570,174 @@
++    void InitializeRoundSkinTools() {
++        auto* face_display = static_cast<SmartRingFaceDisplay*>(display_);
++        auto& mcp = McpServer::GetInstance();
++        mcp.AddUserOnlyTool("self.screen.get_round_skin", "Read the audited round skin configuration",
++            PropertyList(), [face_display](const PropertyList&) -> ReturnValue {
++                const auto skin = face_display->GetRoundSkin();
++                cJSON* json = cJSON_CreateObject();
++                cJSON_AddNumberToObject(json, "skin_api", skin.api);
++                cJSON_AddStringToObject(json, "skin_id", skin.id.c_str());
++                cJSON_AddStringToObject(json, "manifest_sha256", skin.manifest_sha256.c_str());
++                cJSON_AddNumberToObject(json, "background", skin.background);
++                cJSON_AddNumberToObject(json, "foreground", skin.foreground);
++                cJSON_AddNumberToObject(json, "muted", skin.muted);
++                cJSON_AddNumberToObject(json, "accent", skin.accent);
++                cJSON_AddNumberToObject(json, "listening", skin.listening);
++                cJSON_AddNumberToObject(json, "thinking", skin.thinking);
++                cJSON_AddNumberToObject(json, "happy", skin.happy);
++                cJSON_AddNumberToObject(json, "concerned", skin.concerned);
++                cJSON_AddNumberToObject(json, "error", skin.error);
++                cJSON_AddNumberToObject(json, "eye_width", skin.eye_width);
++                cJSON_AddNumberToObject(json, "eye_height", skin.eye_height);
++                cJSON_AddNumberToObject(json, "mouth_width", skin.mouth_width);
++                return json;
++            });
++        mcp.AddUserOnlyTool("self.screen.set_round_skin", "Set an audited skin_api=1 round skin configuration",
++            PropertyList({
++                Property("skin_api", kPropertyTypeInteger, 1, 1),
++                Property("skin_id", kPropertyTypeString),
++                Property("manifest_sha256", kPropertyTypeString),
++                Property("background", kPropertyTypeInteger, 0, 0xFFFFFF),
++                Property("foreground", kPropertyTypeInteger, 0, 0xFFFFFF),
++                Property("muted", kPropertyTypeInteger, 0, 0xFFFFFF),
++                Property("accent", kPropertyTypeInteger, 0, 0xFFFFFF),
++                Property("listening", kPropertyTypeInteger, 0, 0xFFFFFF),
++                Property("thinking", kPropertyTypeInteger, 0, 0xFFFFFF),
++                Property("happy", kPropertyTypeInteger, 0, 0xFFFFFF),
++                Property("concerned", kPropertyTypeInteger, 0, 0xFFFFFF),
++                Property("error", kPropertyTypeInteger, 0, 0xFFFFFF),
++                Property("eye_width", kPropertyTypeInteger, 12, 36),
++                Property("eye_height", kPropertyTypeInteger, 18, 48),
++                Property("mouth_width", kPropertyTypeInteger, 20, 64),
++            }), [face_display](const PropertyList& properties) -> ReturnValue {
++                RoundSkinConfig skin;
++                skin.api = properties["skin_api"].value<int>();
++                skin.id = properties["skin_id"].value<std::string>();
++                skin.manifest_sha256 = properties["manifest_sha256"].value<std::string>();
++                skin.background = properties["background"].value<int>();
++                skin.foreground = properties["foreground"].value<int>();
++                skin.muted = properties["muted"].value<int>();
++                skin.accent = properties["accent"].value<int>();
++                skin.listening = properties["listening"].value<int>();
++                skin.thinking = properties["thinking"].value<int>();
++                skin.happy = properties["happy"].value<int>();
++                skin.concerned = properties["concerned"].value<int>();
++                skin.error = properties["error"].value<int>();
++                skin.eye_width = properties["eye_width"].value<int>();
++                skin.eye_height = properties["eye_height"].value<int>();
++                skin.mouth_width = properties["mouth_width"].value<int>();
++                face_display->SetRoundSkin(skin);
++                return true;
++            });
++    }
++
++    void InitializeRoundWallpaperTools() {
++        auto& mcp = McpServer::GetInstance();
++        mcp.AddUserOnlyTool("self.screen.get_round_wallpaper",
++            "Read the verified active wallpaper and rollback availability",
++            PropertyList(), [](const PropertyList&) -> ReturnValue {
++                return RoundWallpaperStore::GetInstance().GetStatus();
++            });
++
++        mcp.AddUserOnlyTool("self.screen.stage_round_wallpaper",
++            "Download a validated 360x360 GIF to the inactive wallpaper slot without activating it",
++            PropertyList({
++                Property("wallpaper_api", kPropertyTypeInteger, 1, 1),
++                Property("wallpaper_id", kPropertyTypeString),
++                Property("sha256", kPropertyTypeString),
++                Property("size_bytes", kPropertyTypeInteger, 1, 3 * 1024 * 1024 - 4096),
++                Property("url", kPropertyTypeString),
++            }), [](const PropertyList& properties) -> ReturnValue {
++                if (properties["wallpaper_api"].value<int>() != 1) {
++                    throw std::invalid_argument("Unsupported wallpaper API");
++                }
++                RoundWallpaperRecord record;
++                if (!RoundWallpaperStore::GetInstance().Stage(
++                        properties["url"].value<std::string>(),
++                        properties["wallpaper_id"].value<std::string>(),
++                        properties["sha256"].value<std::string>(),
++                        properties["size_bytes"].value<int>(), record)) {
++                    throw std::runtime_error("Wallpaper staging failed");
++                }
++                cJSON* json = cJSON_CreateObject();
++                cJSON_AddNumberToObject(json, "wallpaper_api", record.api);
++                cJSON_AddStringToObject(json, "slot", record.slot.c_str());
++                cJSON_AddStringToObject(json, "wallpaper_id", record.id.c_str());
++                cJSON_AddStringToObject(json, "sha256", record.sha256.c_str());
++                cJSON_AddNumberToObject(json, "size_bytes", record.size);
++                cJSON_AddStringToObject(json, "state", "staged_verified");
++                return json;
++            });
++
++        mcp.AddUserOnlyTool("self.screen.activate_round_wallpaper",
++            "Select an exactly verified staged wallpaper; a separate reboot applies it",
++            PropertyList({
++                Property("wallpaper_api", kPropertyTypeInteger, 1, 1),
++                Property("slot", kPropertyTypeString),
++                Property("wallpaper_id", kPropertyTypeString),
++                Property("sha256", kPropertyTypeString),
++                Property("size_bytes", kPropertyTypeInteger, 1, 3 * 1024 * 1024 - 4096),
++            }), [](const PropertyList& properties) -> ReturnValue {
++                if (properties["wallpaper_api"].value<int>() != 1) {
++                    throw std::invalid_argument("Unsupported wallpaper API");
++                }
++                RoundWallpaperRecord record;
++                if (!RoundWallpaperStore::GetInstance().Activate(
++                        properties["slot"].value<std::string>(),
++                        properties["wallpaper_id"].value<std::string>(),
++                        properties["sha256"].value<std::string>(),
++                        properties["size_bytes"].value<int>(), record)) {
++                    throw std::runtime_error("Wallpaper activation failed");
++                }
++                cJSON* json = cJSON_CreateObject();
++                cJSON_AddNumberToObject(json, "wallpaper_api", record.api);
++                cJSON_AddStringToObject(json, "slot", record.slot.c_str());
++                cJSON_AddStringToObject(json, "wallpaper_id", record.id.c_str());
++                cJSON_AddStringToObject(json, "sha256", record.sha256.c_str());
++                cJSON_AddNumberToObject(json, "size_bytes", record.size);
++                cJSON_AddStringToObject(json, "state", "activation_pending_restart");
++                return json;
++            });
++
++        mcp.AddUserOnlyTool("self.screen.deactivate_round_wallpaper",
++            "Keep the active wallpaper slot but select geometric skin mode; a separate reboot applies it",
++            PropertyList({Property("wallpaper_api", kPropertyTypeInteger, 1, 1)}),
++            [](const PropertyList& properties) -> ReturnValue {
++                if (properties["wallpaper_api"].value<int>() != 1) {
++                    throw std::invalid_argument("Unsupported wallpaper API");
++                }
++                RoundWallpaperRecord record;
++                if (!RoundWallpaperStore::GetInstance().Deactivate(record)) {
++                    throw std::runtime_error("Wallpaper deactivation failed");
++                }
++                cJSON* json = cJSON_CreateObject();
++                cJSON_AddNumberToObject(json, "wallpaper_api", record.api);
++                cJSON_AddStringToObject(json, "slot", record.slot.c_str());
++                cJSON_AddStringToObject(json, "wallpaper_id", record.id.c_str());
++                cJSON_AddStringToObject(json, "sha256", record.sha256.c_str());
++                cJSON_AddNumberToObject(json, "size_bytes", record.size);
++                cJSON_AddStringToObject(json, "state", "deactivation_pending_restart");
++                return json;
++            });
++
++        mcp.AddUserOnlyTool("self.screen.rollback_round_wallpaper",
++            "Restore the retained or previously active verified wallpaper; a separate reboot applies it",
++            PropertyList({Property("wallpaper_api", kPropertyTypeInteger, 1, 1)}),
++            [](const PropertyList& properties) -> ReturnValue {
++                if (properties["wallpaper_api"].value<int>() != 1) {
++                    throw std::invalid_argument("Unsupported wallpaper API");
++                }
++                RoundWallpaperRecord record;
++                if (!RoundWallpaperStore::GetInstance().Rollback(record)) {
++                    throw std::runtime_error("Wallpaper rollback failed");
++                }
++                cJSON* json = cJSON_CreateObject();
++                cJSON_AddNumberToObject(json, "wallpaper_api", record.api);
++                cJSON_AddStringToObject(json, "slot", record.slot.c_str());
++                cJSON_AddStringToObject(json, "wallpaper_id", record.id.c_str());
++                cJSON_AddStringToObject(json, "sha256", record.sha256.c_str());
++                cJSON_AddNumberToObject(json, "size_bytes", record.size);
++                cJSON_AddStringToObject(json, "state", "rollback_pending_restart");
++                return json;
++            });
++    }
++
+@@ -848,0 +1756,2 @@
++        InitializeRoundSkinTools();
++        InitializeRoundWallpaperTools();
+--- a/partitions/v2/16m.csv
++++ b/partitions/v2/16m.csv
+@@ -8 +8,3 @@
+-assets,   data, spiffs,  0x800000,  8M
++assets,       data, spiffs,  0x800000,  2M
++wallpaper_a,  data, 0x40,    0xA00000,  3M
++wallpaper_b,  data, 0x41,    0xD00000,  3M

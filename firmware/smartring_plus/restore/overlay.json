@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "basis_commit": "c4bdbab349e44cfc74fa6912f923193e9d389c7e",
+  "application_version": "2.2.3",
+  "patch_sha256": "f3eedc137b1d0acaca72a0317eea4e829b9995a392bb4ae6ddc5e767640b93de",
+  "content_policy": "Project-owned cumulative modifications only; LF normalization; no cached components, generated files, personal wallpaper or binary images. Historical patches remain unchanged.",
+  "files": {
+    "main/application.cc": {
+      "before_sha256": "936b079179e5ec8b845e5efae167e93147f30d7e68fc074640de86848dc68f2c",
+      "after_sha256": "71177e2848a9b6d42ed9473753c3d866172c7a0f6a2058dbc395ffa85487843d",
+      "historical_after_sha256": "7dd4f8e6a174193b5186cbd0d26fe4047960b1066e581c159a08138356b6975d"
+    },
+    "main/application.h": {
+      "before_sha256": "2ba86323a14203de062ccdfd20a12b23ab55b42d1b422e0f0d5936ae8c0d3516",
+      "after_sha256": "44c304518c17daaa378fdf54d62acf8d745fd7c00c0f86f473a7ca2505de4db2",
+      "historical_after_sha256": "ddc316f95350b6b2f30acd538f775bd6030cd82dee7eaa71fd345f4d4ddc8f24"
+    },
+    "main/CMakeLists.txt": {
+      "before_sha256": "8ab8c0d2e91b3c817ad29f8f766d8d3042c6933dbd8580edc2d474b75f19dace",
+      "after_sha256": "1e868b1a287738caa5537e6acbae0535e78a2508d1fa4cdc8eb515ffb5466f9a",
+      "historical_after_sha256": "02d73bcf1a7b3204a1db120955931cc4d6540a2b926ae29cb076512612f783f4"
+    },
+    "main/protocols/websocket_protocol.cc": {
+      "before_sha256": "f8454cdd600ce024d24207405125f6e5730084a2805be413ccf69fbdcfd55a97",
+      "after_sha256": "9560755fae0e1657223995817b1a5d0720747b6123926c2401c4a580b75642c9",
+      "historical_after_sha256": "9af223bd22ed36f1adfb854fd9af367ba06d79c37b55d4fcc1dadbc06438bc3a"
+    },
+    "main/boards/viewe-smartring-plus/config.json": {
+      "before_sha256": "2bc31333ebe34bf5711e5d33384260cc8c545952a5e2821e7875196826f8c719",
+      "after_sha256": "1628bbb227121a93392bced97132298d5a92891a82781aea1d05c84afc4c8eaf",
+      "historical_after_sha256": "5e08104e689197df943464cce6ff31169a12b85a2ab4ccfaca592290544f0c70"
+    },
+    "main/boards/viewe-smartring-plus/viewe-smartring-plus.cc": {
+      "before_sha256": "60ebb09cd61ed4c47394e159fbbdc502a904bc5a8b297a46d49d717bd6a7a5d3",
+      "after_sha256": "2e190e96c8f53117b61ae0972e7bfcad705bbe5406bdea1d44e0af05e8c626b4",
+      "historical_after_sha256": "0e6ff07af543ca65b957077ce34bf674618e02ae66a4b0110ce351773f07e7bd"
+    },
+    "partitions/v2/16m.csv": {
+      "before_sha256": "58a8787d486fe89bac4055acc310b7a0d6edd33e90c61d2ca6a705d251460333",
+      "after_sha256": "14e63509d822060f4438aa3e2d4086f6c947210a283fd515d7f865072a9855cc",
+      "historical_after_sha256": "3a13532e9e0c3fc68c6799cf3059ce0eff44cd4a8108eb2c4f6599f6cc9b13b5"
+    }
+  }
+}
