@@ -34,6 +34,7 @@ export function LauncherApp({api, pollMs = 1200}: {api: LauncherApi; pollMs?: nu
   const operation = useRef(false);
   const generation = useRef(0);
   const originalSettings = useRef<LauncherSettings | null>(null);
+  const mutationError = useRef(false);
 
   useEffect(() => {
     mounted.current = true;
@@ -47,7 +48,7 @@ export function LauncherApp({api, pollMs = 1200}: {api: LauncherApi; pollMs?: nu
         const before = generation.current;
         try {
           const next = await api.request('status', undefined, abort.signal);
-          if (active && !operation.current && before === generation.current) {setSnapshot(next); setError('');}
+          if (active && !operation.current && before === generation.current) {setSnapshot(next); if (!mutationError.current) setError('');}
         } catch (cause) {
           if (active && !operation.current) setError(cause instanceof LauncherError ? cause.message : '无法连接启动面板，请重新打开启动入口。');
           if (cause instanceof LauncherError && [401, 403].includes(cause.status)) return;
@@ -61,12 +62,13 @@ export function LauncherApp({api, pollMs = 1200}: {api: LauncherApi; pollMs?: nu
 
   async function mutate(path: 'settings' | 'actions', body: unknown) {
     if (operation.current) return;
-    generation.current += 1; operation.current = true; setPending(true); setError('');
+    generation.current += 1; operation.current = true; mutationError.current = false; setPending(true); setError('');
     try {
       const next = await api.request(path, body);
       if (mounted.current) setSnapshot(next);
       return next;
     } catch (cause) {
+      mutationError.current = true;
       if (mounted.current) setError(cause instanceof LauncherError ? cause.message : '操作未完成，请检查服务状态后重试。');
     } finally {
       operation.current = false;
@@ -89,7 +91,7 @@ export function LauncherApp({api, pollMs = 1200}: {api: LauncherApi; pollMs?: nu
     if (!Object.keys(changed).length) {setSettingsOpen(false); return;}
     if (await mutate('settings', {settings: changed, expected_revision: revision})) setSettingsOpen(false);
   }
-  const busy = pending || snapshot?.state === 'starting' || snapshot?.state === 'stopping';
+  const busy = pending || exiting || snapshot?.state === 'starting' || snapshot?.state === 'stopping';
   const settingsLocked = busy || snapshot?.state === 'ready';
   const tone = snapshot ? stateTone[snapshot.state] : 'quiet';
   const needsConsent = draft?.model_profile === 'campus' || (draft?.voice && draft.voice_mode === 'pipeline' && draft.voice_model_profile === 'campus');

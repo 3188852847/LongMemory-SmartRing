@@ -53,6 +53,7 @@ describe('React 启动面板', () => {
     const {api, request} = fake(); render(<LauncherApp api={api}/>);
     fireEvent.click(await screen.findByRole('button', {name: '停止服务并退出面板'}));
     expect(await screen.findByText('停止服务并退出面板？')).toBeTruthy();
+    request.mockResolvedValue({...stopped, shutdown_complete: true});
     fireEvent.click(screen.getByRole('button', {name: '停止并退出'}));
     await waitFor(() => expect(request).toHaveBeenCalledWith('actions', {action: 'shutdown'}));
     expect(await screen.findByText('面板已退出')).toBeTruthy();
