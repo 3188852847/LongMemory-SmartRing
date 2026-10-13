@@ -1,19 +1,24 @@
 # 开发环境
 
-要求：Python 3.12、uv、Git。
+要求：项目固定的 Python 3.12.13、uv、Git；依赖使用既有 `uv.lock`。
 
 ```powershell
-cd "D:\02-项目\LongMemory-SmartRing"
+cd "<项目根目录>"
 uv sync
 uv run python --version
 uv run --no-sync python -m pytest
 uv run longmemory
 ```
 
-项目已在 `pyproject.toml` 中把 uv 缓存固定到 `.uv-cache/`，并把 pytest
-夹具临时目录固定到 `.pytest-tmp/`；两者均被 Git 忽略。正常运行测试时不需要再传
-`-p no:cacheprovider` 或 `--basetemp`。`.pytest-tmp/` 会在每次测试开始时清理，
-不得在其中保存手工数据或需要保留的实验结果。
+项目在 `pyproject.toml` 中把 uv 缓存固定到 `.uv-cache/`；`tests/conftest.py`
+为每个 pytest 进程分配 `data/test-tmp/pytest/run-<PID>-<随机标识>/`，均被 Git
+忽略。正常运行测试时不需要再传 `-p no:cacheprovider` 或 `--basetemp`。正常结束
+只尝试清理本进程分配的 run 目录，共享父目录保留；不会扫描、清理其他进程或历史
+目录。异常中断或文件被占用时可能残留，不能据此自动删除。
+
+显式 `--basetemp` 会保留调用者路径，只补建不存在的父目录，本项目的退出钩子不
+清理该目录。pytest 首次使用它时会清空目标已有内容，因此只能指定专用临时目录。
+脚本、实验结果与历史目录的边界见 [测试产物管理](test-artifacts.md)。
 
 依赖已经同步后，测试命令使用 `--no-sync`，这样不会因为检查包索引而意外联网。
 需要新增或更新依赖时仍由用户明确执行 `uv sync`，两种操作的边界保持清楚。

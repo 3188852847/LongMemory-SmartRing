@@ -2,6 +2,7 @@
 __pycache__/
 *.py[cod]
 .pytest_cache/
+# 历史测试目录与研究证据继续忽略；新 pytest 自动产物使用 data/test-tmp/pytest/。
 .pytest-tmp/
 .test-runtime/
 .tmp-tests/
@@ -35,6 +36,7 @@ data/backups/*
 !data/backups/.gitkeep
 data/audio/*
 !data/audio/.gitkeep
+# 测试夹具和临时输出（含每进程唯一的 pytest/run-*），不保存研究证据。
 data/test-tmp/
 # 本机目录整理时保留的历史测试产物；只归档，不进入版本库。
 data/local-archive/

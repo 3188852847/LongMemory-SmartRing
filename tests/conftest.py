@@ -13,7 +13,7 @@ _owned_test_temp: Path | None = None
 def pytest_configure(config):
     """给每个 pytest 进程分配自己的项目内临时目录。
 
-    不能在 pyproject.toml 中固定 ``--basetemp=.pytest-tmp``：两个测试进程
+    不能在 pyproject.toml 中固定共享的 ``--basetemp``：两个测试进程
     并行时，后启动的进程会清理前一个仍在使用的 SQLite 文件。这里既避开
     Windows 用户临时目录的 ACL 问题，也不会让不同测试进程互相破坏。
     显式传入 ``--basetemp`` 时尊重调用者选择，便于故障排查。
@@ -21,12 +21,12 @@ def pytest_configure(config):
     global _owned_test_temp
     if config.option.basetemp is not None:
         # pytest 创建 basetemp 自身时不会递归创建父目录。显式传入项目内
-        # ``.test-tmp/run-name`` 在全新检出中会因此整套夹具初始化失败；这里
+        # ``data/test-tmp/manual/run-name`` 在全新检出中会因此夹具初始化失败；这里
         # 只补父目录，不预建或清空 pytest 将接管的目标目录。
         Path(config.option.basetemp).resolve().parent.mkdir(parents=True, exist_ok=True)
         return
     run_name = f"run-{os.getpid()}-{uuid.uuid4().hex[:8]}"
-    _owned_test_temp = Path(config.rootpath) / ".pytest-tmp" / run_name
+    _owned_test_temp = Path(config.rootpath) / "data" / "test-tmp" / "pytest" / run_name
     _owned_test_temp.parent.mkdir(parents=True, exist_ok=True)
     config.option.basetemp = str(_owned_test_temp)
 
@@ -38,10 +38,8 @@ def pytest_unconfigure(config):
     if _owned_test_temp is None:
         return
     shutil.rmtree(_owned_test_temp, ignore_errors=True)
-    try:
-        _owned_test_temp.parent.rmdir()
-    except OSError:
-        pass
+    # 保留共享父目录：另一个进程可能已经 configure，但尚未首次请求 tmp_path。
+    # 即便父目录此刻为空，也不能删除，否则会破坏对方随后创建 basetemp 的步骤。
     _owned_test_temp = None
 
 
