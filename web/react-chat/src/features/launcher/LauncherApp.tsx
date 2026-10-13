@@ -116,10 +116,10 @@ export function LauncherApp({api, pollMs = 1200}: {api: LauncherApi; pollMs?: nu
           <legend>交流方式</legend>
           <div className="launcher-mode-options">
             <button type="button" aria-pressed={snapshot?.settings.voice === false} onClick={() => void mutate('settings', {settings: {voice: false}, expected_revision: snapshot?.settings_revision})}>
-              <span aria-hidden="true">⌨</span><strong>文字聊天</strong><small>在电脑上继续对话</small>
+              <span aria-hidden="true"><svg className="launcher-mode-icon" viewBox="0 0 24 24" fill="none"><rect x="3" y="5" width="18" height="12" rx="3" stroke="currentColor" strokeWidth="1.4"/><path d="M7 9h2m3 0h2m3 0h1M7 13h10M9 20h6" stroke="currentColor" strokeWidth="1.4"/></svg></span><strong>文字聊天</strong><small>在电脑上继续对话</small>
             </button>
             <button type="button" aria-pressed={snapshot?.settings.voice === true} onClick={() => void mutate('settings', {settings: {voice: true}, expected_revision: snapshot?.settings_revision})}>
-              <span aria-hidden="true">◉</span><strong>圆屏陪伴</strong><small>用声音连接智能圆屏</small>
+              <span aria-hidden="true"><svg className="launcher-mode-icon" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.4"/><path d="M8 10v3m8-3v3m-7 3h6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg></span><strong>圆屏陪伴</strong><small>用声音连接智能圆屏</small>
             </button>
           </div>
         </fieldset>

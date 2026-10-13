@@ -58,6 +58,17 @@ describe('React 启动面板', () => {
     await waitFor(() => expect(request).toHaveBeenCalledWith('actions', {action: 'shutdown'}));
     expect(await screen.findByText('面板已退出')).toBeTruthy();
   });
+  test('退出仅排队时不冒充完成，停止失败后恢复错误状态', async () => {
+    const {api, request} = fake(); render(<LauncherApp api={api} pollMs={40}/>);
+    fireEvent.click(await screen.findByRole('button', {name: '停止服务并退出面板'}));
+    request.mockResolvedValue({...stopped, state: 'stopping', can_start: false});
+    fireEvent.click(screen.getByRole('button', {name: '停止并退出'}));
+    expect(await screen.findByText('正在停止并退出')).toBeTruthy();
+    expect(screen.queryByText('面板已退出')).toBeNull();
+    request.mockResolvedValue({...stopped, state: 'failed', message: '停止未完成'});
+    expect(await screen.findByText('停止未完成')).toBeTruthy();
+    await waitFor(() => expect(screen.getByRole('button', {name: '重新启动'}).hasAttribute('disabled')).toBe(false));
+  });
   test('打开设置不会自动保存，冲突保留草稿并提示重新载入', async () => {
     const {api, request} = fake(); render(<LauncherApp api={api}/>);
     fireEvent.click(await screen.findByRole('button', {name: /启动设置/}));
