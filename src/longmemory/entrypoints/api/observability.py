@@ -12,7 +12,9 @@ def operation_name(path):
     # 不使用客户端路径或参数作为字段。动态 UUID、查询正文及非法 URL 一律不记录。
     if path.startswith("/api/internal/memory/"):
         return "memory_runtime"
-    for prefix, name in (("/api/chat", "chat"), ("/api/device", "device"),
+    for prefix, name in (("/api/chats", "chat"), ("/api/chat-config", "chat"),
+                         ("/api/chat-model", "chat"), ("/api/chat-memory-feedback", "chat"),
+                         ("/api/device", "device"),
                          ("/api/memories", "memory"), ("/api/observability", "diagnostics")):
         if path == prefix or path.startswith(prefix + "/"):
             return name

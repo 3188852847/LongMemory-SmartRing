@@ -17,6 +17,14 @@ from longmemory.infrastructure.logging.diagnostics import Diagnostics
 from longmemory.infrastructure.logging.setup import log_event
 
 
+@pytest.mark.parametrize("path", ["/api/chats", "/api/chats/synthetic-id/messages",
+                                 "/api/chat-config", "/api/chat-model/check",
+                                 "/api/chat-memory-feedback/daily"])
+def test_actual_chat_routes_use_chat_operation_without_raw_path(path):
+    from longmemory.entrypoints.api.observability import operation_name
+    assert operation_name(path) == "chat"
+
+
 class Bridge:
     async def status(self):
         raise BridgeError("bridge_unavailable", 503)
