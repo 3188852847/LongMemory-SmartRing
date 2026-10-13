@@ -16,6 +16,8 @@ import {VADSettings} from '../features/voice/VADSettings';
 import {TTSBackendSettings} from '../features/voice/TTSBackendSettings';
 import {CosyVoiceProfileSettings} from '../features/voice/CosyVoiceProfileSettings';
 
+import '../styles/settings-workspace.css';
+
 const api = new ChatApi();
 
 /** 将模型、助手角色、声音和浏览器外观汇集到一个入口；设置仍保持不同生效边界。 */
@@ -27,21 +29,23 @@ export function SettingsApp() {
   const config = useQuery({queryKey:['chat-config'], queryFn:() => api.request<Config>('/api/chat-config'), enabled:session.isSuccess});
   const enabled = session.isSuccess && config.data?.enabled === true;
   const requestedTab=searchParams.get('tab');
-  const activeTab=['model','memory-backend','role','voice','appearance','proactive'].includes(requestedTab??'')?requestedTab!:'role';
-  const selectTab=(tab:string)=>{const next=new URLSearchParams(searchParams);if(tab==='role')next.delete('tab');else next.set('tab',tab);setSearchParams(next,{replace:true});};
+  const activeTab=['overview','model','memory-backend','role','voice','appearance','proactive'].includes(requestedTab??'')?requestedTab!:'role';
+  const selectTab=(tab:string)=>{const next=new URLSearchParams(searchParams);if(tab==='role')next.delete('tab');else next.set('tab',tab);setSearchParams(next);};
   const sidebar = <ConsoleNav active="settings" legacyPath="/chat"/>;
 
   return <AppShell subtitle="角色、声音与阅读体验" className="settings-shell" sidebar={sidebar}>
     <PageHeader eyebrow="控制与观察" title="助手设置" description="在这里调整助手表达、参考声线、页面外观和主动联系。声音与性格分别保存，事实记忆保持独立。"/>
     {(session.isError || config.isError) && <Alert type="error" showIcon title="设置服务当前不可用" description="请确认统一启动的文字服务仍在运行，再刷新本页。"/>}
-    <section className="settings-overview" aria-label="当前设置摘要">
-      <div><small>设置服务</small><strong className={enabled ? 'is-positive' : ''}>{enabled ? '可用' : '连接中'}</strong></div>
+    <Tabs className="settings-tabs settings-workspace" activeKey={activeTab} onChange={selectTab} items={[
+      {key:'overview', label:'设置总览', children:<>
+        <section className="settings-overview" aria-label="当前设置摘要">
+      <div><small>设置服务</small><strong className={enabled ? 'is-positive' : ''}>{enabled ? '可用' : session.isError || config.isError ? '读取失败' : config.data ? '未启用' : '连接中'}</strong></div>
       <div><small>当前助手</small><strong>{config.data?.role ?? '—'}</strong></div>
       <div><small>当前模型</small><strong>{config.data?.model ?? '—'}</strong></div>
       <div><small>模型通道</small><strong>{config.data?.provider ?? '—'}</strong></div>
     </section>
     <PersonalizationOverview api={api} ready={enabled} prefs={prefs} onSelectTab={selectTab}/>
-    <Tabs className="settings-tabs" activeKey={activeTab} onChange={selectTab} items={[
+      </>},
       {key:'model', label:'模型与服务', children:<Card title="模型与服务" extra={<span className="setting-scope">当前服务进程</span>}>
         <p>核对当前进程，并管理学校/官方两个本机配置档。页面永远不读取或显示已有 API Key，切换在重启后生效。</p>
         <ModelConnectionSettings api={api} config={config.data} disabled={!enabled}
@@ -56,10 +60,12 @@ export function SettingsApp() {
         <RoleEditor api={api} disabled={!enabled} onSaved={() => {void queryClient.invalidateQueries({queryKey:['chat-config']});}}/>
       </Card>},
       {key:'voice', label:'声音与克隆', children:<Card title="声音与克隆" extra={<span className="setting-scope">网页与圆屏共用声线</span>}>
-        <CosyVoiceProfileSettings api={api} disabled={!enabled}/>
-        <TTSBackendSettings api={api} disabled={!enabled}/>
-        <VADSettings api={api} disabled={!enabled}/>
-        <details><summary>高级：兼容音色配置与声音测量</summary><VoiceSettings api={api} disabled={!enabled}/><TTSBenchmarkPanel api={api} enabled={enabled}/></details>
+        <Tabs className="voice-task-tabs" defaultActiveKey="profile" items={[
+          {key:'profile', label:'我的声音', children:<CosyVoiceProfileSettings api={api} disabled={!enabled}/>},
+          {key:'vad', label:'拾音与判停', children:<VADSettings api={api} disabled={!enabled}/>},
+          {key:'backend', label:'启动声音引擎', children:<TTSBackendSettings api={api} disabled={!enabled}/>},
+          {key:'advanced', label:'兼容与测量', children:<><VoiceSettings api={api} disabled={!enabled}/><TTSBenchmarkPanel api={api} enabled={enabled}/></>},
+        ]}/>
       </Card>},
       {key:'appearance', label:'外观与阅读', children:<Card title="外观与阅读" extra={<span className="setting-scope">当前浏览器</span>}>
         <p>只保存主题、字号、阅读密度、聊天宽度和动画偏好，不保存聊天正文或个人记忆。</p>

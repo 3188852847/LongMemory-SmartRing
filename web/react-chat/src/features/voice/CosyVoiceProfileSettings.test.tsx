@@ -12,6 +12,45 @@ beforeEach(() => vi.stubGlobal('URL', class extends URL {
 afterEach(() => {vi.restoreAllMocks(); vi.unstubAllGlobals();});
 
 describe('CosyVoice 日用声线', () => {
+  test('旧服务可保存但不可试听，明确重启边界', async () => {
+    const api = new ChatApi();
+    vi.spyOn(api, 'request').mockResolvedValue({...snapshot, service_state:'needs_restart', activation:'after_service_start'});
+    render(<CosyVoiceProfileSettings api={api} disabled={false}/>);
+    await screen.findByText('需要重新启动声音服务');
+    expect((screen.getByRole('button', {name:'试听草稿'}) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole('button', {name:'保存日用声线'}) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  test('重新读取前可保留未保存草稿，放弃后才读取', async () => {
+    const api = new ChatApi();
+    const request = vi.spyOn(api, 'request').mockResolvedValue(snapshot);
+    render(<CosyVoiceProfileSettings api={api} disabled={false}/>);
+    await screen.findByText('固定试听文本：固定合成测试文本');
+    fireEvent.change(screen.getByLabelText('表达指令（可留空）'), {target:{value:'测试语气'}});
+    fireEvent.click(screen.getByRole('button', {name:'重新读取声音档案'}));
+    expect(screen.getByText('重新读取会放弃当前草稿')).toBeTruthy();
+    expect(request).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole('button', {name:'保留草稿'}));
+    expect((screen.getByLabelText('表达指令（可留空）') as HTMLInputElement).value).toBe('测试语气');
+    fireEvent.click(screen.getByRole('button', {name:'重新读取声音档案'}));
+    fireEvent.click(screen.getByRole('button', {name:'放弃草稿并重新读取'}));
+    await waitFor(() => expect(request).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect((screen.getByLabelText('表达指令（可留空）') as HTMLInputElement).value).toBe(''));
+  });
+
+  test('修改参考原文会撤销旧试听音频', async () => {
+    const api = new ChatApi();
+    vi.spyOn(api, 'request').mockResolvedValue({...snapshot, profile:{...profile, reference_id:'test-ref', transcript:'测试原文'}});
+    vi.spyOn(api, 'cosyVoicePreview').mockResolvedValue(new Blob(['synthetic']));
+    render(<CosyVoiceProfileSettings api={api} disabled={false}/>);
+    await screen.findByDisplayValue('测试原文');
+    fireEvent.click(screen.getByRole('button', {name:'试听草稿'}));
+    await screen.findByLabelText('CosyVoice 声音草稿试听');
+    fireEvent.change(screen.getByLabelText('参考录音中的原文'), {target:{value:'修改后的原文'}});
+    expect(screen.queryByLabelText('CosyVoice 声音草稿试听')).toBeNull();
+    expect(screen.getByText(/有未保存的声音草稿/)).toBeTruthy();
+  });
+
   test('读取不写入，试听草稿不保存，明确保存带摘要且下一次合成生效', async () => {
     const api = new ChatApi();
     const request = vi.spyOn(api, 'request').mockResolvedValue(snapshot);
@@ -59,6 +98,7 @@ describe('CosyVoice 日用声线', () => {
     const request = vi.spyOn(api, 'request').mockResolvedValueOnce(snapshot).mockResolvedValue({item, references: [item]});
     render(<CosyVoiceProfileSettings api={api} disabled={false}/>);
     await screen.findByText('固定试听文本：固定合成测试文本');
+    fireEvent.click(screen.getByText('添加参考录音', {exact:true}));
     fireEvent.change(screen.getByLabelText('参考录音文件'), {target: {files: [new File(['RIFF-synthetic'], '合成录音.wav', {type: 'audio/wav'})]}});
     fireEvent.change(screen.getByLabelText('录音原文'), {target: {value: item.transcript}});
     fireEvent.click(screen.getByRole('button', {name: '上传到参考库'}));

@@ -1,0 +1,63 @@
+/* D 工作区：画布留在编辑项旁；设备回读与写入只在实机任务中。 */
+.display-preview-shell .page-header { margin-bottom: 16px; padding-bottom: 16px; }
+.display-preview-shell .display-preview-layout { grid-template-columns: minmax(300px, 360px) minmax(0, 1fr); gap: 24px; margin-top: 0; }
+.display-preview-shell .display-stage { position: sticky; top: 16px; padding: 16px; gap: 12px; min-width: 0; }
+.display-preview-shell .display-preview-caption { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; margin: 0; }
+.display-preview-shell .display-preview-caption h2 { margin: 0; font-size: 1rem; }
+.display-preview-shell .display-stage .subtle { margin: 0; line-height: 1.6; }
+.display-preview-shell .display-stage small { line-height: 1.5; }
+.display-preview-shell .display-controls { display: block; min-width: 0; }
+.display-preview-shell .display-task-tabs > .ant-tabs-nav { margin-bottom: 16px; }
+.display-preview-shell .display-task-tabs > .ant-tabs-nav .ant-tabs-nav-wrap { overflow: visible; }
+.display-preview-shell .display-task-tabs > .ant-tabs-nav .ant-tabs-nav-list { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; width: 100%; transform: none !important; }
+.display-preview-shell .display-task-tabs > .ant-tabs-nav .ant-tabs-tab { margin: 0; min-height: 44px; padding: 10px 8px; justify-content: center; }
+.display-preview-shell .display-task-tabs > .ant-tabs-nav .ant-tabs-nav-operations { display: none; }
+.display-preview-shell .display-task-tabs .ant-tabs-tab-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+.display-preview-shell .display-task-content { display: grid; gap: 16px; }
+.display-preview-shell .display-task-content .ant-card-head-title { white-space: normal; }
+.display-preview-shell .round-skin-actions .ant-select { min-width: 0 !important; width: 100%; }
+.display-preview-shell .round-skin-actions { display: flex; }
+.display-preview-shell .round-skin-actions .ant-btn { height: auto; min-height: 44px; white-space: normal; }
+.display-preview-shell .round-skin-editor { padding: 12px; }
+.display-preview-shell .round-skin-color-grid { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
+.display-preview-shell .round-skin-color-grid input[type=color] { height: 44px; width: 44px; }
+.display-preview-shell .round-skin-color-grid code { font-size: .75rem; }
+.display-preview-shell .round-observation-row { grid-template-columns: 80px minmax(0, 1fr); }
+.display-preview-shell .round-observation-row small { grid-column: 2; text-align: left; }
+.display-preview-shell .display-task-content .ant-space,
+.display-preview-shell .display-task-content .ant-space-item { max-width: 100%; min-width: 0; }
+.display-preview-shell .display-task-content .ant-btn { max-width: 100%; white-space: normal; height: auto; min-height: 44px; }
+.display-preview-shell .display-task-content .ant-descriptions-item-content { overflow-wrap: anywhere; }
+.display-preview-shell .wallpaper-import-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.display-preview-shell .wallpaper-file-field { grid-column: 1 / -1; }
+/* 原全局样式把尺寸写成常数。这里恢复档案变量，确保脸部尺寸编辑实际可见。 */
+.display-preview-shell .round-face .eye { width: var(--round-eye-width); height: var(--round-eye-height); }
+.display-preview-shell .round-face .mouth { width: var(--round-mouth-width); }
+.display-preview-shell .round-display.emotion-happy .eye { height: calc(var(--round-eye-height) * .7); }
+.display-preview-shell .round-display.emotion-happy .mouth { width: calc(var(--round-mouth-width) * 1.2); }
+@media (max-width: 1100px) {
+  .display-preview-shell .display-preview-layout { grid-template-columns: 1fr; }
+  .display-preview-shell .display-stage { position: sticky; top: 8px; z-index: 2; grid-template-columns: 140px minmax(0, 1fr); padding: 12px; }
+  .display-preview-shell .display-stage .round-display { grid-column: 1; grid-row: 1 / 5; width: 140px; border-width: 4px; }
+  .display-preview-shell #main-content { scroll-padding-block-start: 190px; }
+  .display-preview-shell .display-controls :is(input, button, [tabindex]) { scroll-margin-block-start: 190px; }
+  .display-preview-shell .display-stage > :not(.round-display) { grid-column: 2; }
+  .display-preview-shell .display-stage .round-topline, .display-preview-shell .display-stage .round-caption { display: none; }
+  .display-preview-shell .display-stage .round-focus { inset: 10px; gap: 8px; }
+  .display-preview-shell .display-stage .round-focus > strong { font-size: .65rem; }
+  .display-preview-shell .display-stage .round-face { transform: scale(.6); width: 127px; height: 64px; flex: none; }
+  .display-preview-shell .display-stage .round-face .eye.left { left: 26px; }
+  .display-preview-shell .display-stage .round-face .eye.right { right: 26px; }
+  .display-preview-shell .display-stage .round-orbit { width: 64px; height: 64px; flex: none; }
+  .display-preview-shell .display-stage .round-orbit i:nth-child(1) { left: 25px; }
+  .display-preview-shell .display-stage .round-power { top: 4px; font-size: 8px; }
+}
+@media (max-width: 600px) {
+  .display-preview-shell .display-stage { grid-template-columns: 110px minmax(0, 1fr); gap: 8px; }
+  .display-preview-shell .display-stage .round-display { width: 110px; }
+  .display-preview-shell .display-stage .subtle { display: none; }
+  .display-preview-shell .display-preview-caption { flex-wrap: wrap; font-size: .8rem; }
+  .display-preview-shell .display-task-content .ant-card-body { padding: 14px; }
+  .display-preview-shell .display-task-content .ant-card-head-wrapper { flex-wrap: wrap; gap: 8px; padding-block: 10px; }
+  .display-preview-shell .round-skin-color-grid, .display-preview-shell .wallpaper-import-grid { grid-template-columns: 1fr; }
+}

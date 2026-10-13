@@ -47,14 +47,17 @@ describe('圆屏状态协议与模拟器', () => {
     render(<QueryClientProvider client={queryClient}><MemoryRouter><RoundDisplayApp/></MemoryRouter></QueryClientProvider>);
     expect(screen.getByRole('heading', {name: '圆屏状态预览'})).toBeTruthy();
     expect(screen.getByText(/画布：360 × 360 px/)).toBeTruthy();
-    expect(screen.getByText('预览与真机采用同一版皮肤清单')).toBeTruthy();
+    expect(screen.getByText(/网页动画不证明新固件已在真机运行/)).toBeTruthy();
     expect(screen.getByRole('region', {name: '圆屏模拟画布'})).toBeTruthy();
-    expect(screen.getByText('1. 交互阶段')).toBeTruthy();
-    expect(screen.getByText('2. 情绪表达')).toBeTruthy();
-    expect(screen.getByText('3. 系统覆盖')).toBeTruthy();
-    expect(screen.getByText('4. 皮肤档案')).toBeTruthy();
+    expect(screen.getByText('交互阶段')).toBeTruthy();
+    expect(screen.getByText('情绪表达')).toBeTruthy();
+    expect(screen.getByText('系统覆盖')).toBeTruthy();
+    expect(screen.queryByRole('button', {name:'应用到真机'})).toBeNull();
+    fireEvent.click(screen.getByRole('tab', {name:'皮肤', exact:true}));
+    expect(screen.getByText('皮肤档案')).toBeTruthy();
     expect(screen.getByText('当前编辑/预览')).toBeTruthy();
     expect(screen.getByText('网页保存选择')).toBeTruthy();
+    fireEvent.click(screen.getByRole('tab', {name:'实机验证'}));
     expect(screen.getByText('最近真机回读')).toBeTruthy();
     expect(screen.getByText('真机显示模式')).toBeTruthy();
     expect(await screen.findByText('动态壁纸')).toBeTruthy();
@@ -62,8 +65,8 @@ describe('圆屏状态协议与模拟器', () => {
     const useSkinDisplay=screen.getByRole('button', {name:'切换为皮肤显示（会重启）'});
     expect(useSkinDisplay).toBeTruthy();
     expect(screen.getByText('不会自动检测')).toBeTruthy();
-    expect(screen.getByText('5. 真机五态观察')).toBeTruthy();
-    expect(screen.getByText('6. 动态壁纸素材库')).toBeTruthy();
+    expect(screen.getByText('真机五态观察')).toBeTruthy();
+    expect(screen.queryByText('6. 动态壁纸素材库')).toBeNull();
     expect(screen.getByText('先检测真机皮肤能力')).toBeTruthy();
     expect(screen.getByRole('button', {name:'检测真机皮肤能力'})).toBeTruthy();
     expect((screen.getByRole('button', {name:'应用到真机'}) as HTMLButtonElement).disabled).toBe(true);
@@ -74,6 +77,7 @@ describe('圆屏状态协议与模拟器', () => {
     expect(await screen.findByText('切换指令已发送，正在等待圆屏重连')).toBeTruthy();
     const reconnecting=screen.getByRole('button', {name:'等待圆屏重连'});
     expect(reconnecting.classList.contains('ant-btn-loading')).toBe(false);
+    fireEvent.click(screen.getByRole('tab', {name:'皮肤', exact:true}));
     const edit = screen.getByRole('button', {name:'从当前皮肤开始编辑'}) as HTMLButtonElement;
     await waitFor(() => expect(edit.disabled).toBe(false));
     fireEvent.click(edit);
@@ -81,6 +85,10 @@ describe('圆屏状态协议与模拟器', () => {
     expect(screen.getByLabelText('皮肤颜色：聆听')).toBeTruthy();
     expect(screen.getByRole('button', {name:'保存为“我的自定义皮肤”'})).toBeTruthy();
 
+    fireEvent.change(screen.getByLabelText('皮肤颜色：聆听'), {target:{value:'#123456'}});
+    expect((screen.getByLabelText('皮肤颜色：聆听') as HTMLInputElement).value).toBe('#123456');
+    fireEvent.click(screen.getByRole('tab', {name:'实机验证'}));
+    expect((screen.getByRole('button', {name:'应用到真机'}) as HTMLButtonElement).disabled).toBe(true);
     request.mockResolvedValueOnce({skin_api:1,skin_id:'rose-night-v1',manifest_sha256:'a'.repeat(64)});
     act(() => queryClient.setQueryData(['round-wallpapers','device'], {
       wallpaper_api:1,active_valid:false,active_slot:'',active_wallpaper_id:'',
@@ -88,9 +96,16 @@ describe('圆屏状态协议与模拟器', () => {
     }));
     expect(await screen.findByText('已确认切换为皮肤显示')).toBeTruthy();
     await screen.findByText(/真机支持皮肤协议/);
+    expect(screen.getByText('与当前预览不同')).toBeTruthy();
+    fireEvent.click(screen.getByRole('tab', {name:'皮肤', exact:true}));
+    expect((screen.getByLabelText('皮肤颜色：聆听') as HTMLInputElement).value).toBe('#123456');
+    fireEvent.click(screen.getByRole('button', {name:'取消编辑'}));
+    fireEvent.click(screen.getByRole('tab', {name:'实机验证'}));
     expect(screen.getByText('与当前预览一致')).toBeTruthy();
     fireEvent.click(screen.getByRole('checkbox',{name:'待机'}));
     expect(await screen.findByText(/观察记录已保存在当前浏览器/)).toBeTruthy();
     expect(localStorage.getItem(`longmemory:round-display-observations:v1:rose-night-v1:${'a'.repeat(64)}`)).toContain('idle');
+    fireEvent.click(screen.getByRole('tab', {name:'壁纸'}));
+    expect(await screen.findByText('6. 动态壁纸素材库')).toBeTruthy();
   });
 });
