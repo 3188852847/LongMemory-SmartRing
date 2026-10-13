@@ -1,3 +1,4 @@
+import {DataWorkspace, useWorkspaceParam} from '../features/data-workspace/DataWorkspace';
 import {useEffect, useRef, useState} from 'react';
 import {Alert, Button, Card, Checkbox, Descriptions, Drawer, Empty, Input, List, Modal, Select, Space, Switch, Tabs, Tag} from 'antd';
 import {Link, useSearchParams} from 'react-router-dom';
@@ -81,10 +82,16 @@ function DailyFeedbackReview({feedback}:{feedback:DailyMemoryFeedback}) {
 
 export function MemoryApp() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const [workspace,setWorkspace] = useWorkspaceParam('view','browse',['browse','daily','consolidation','quality','runtime']);
   const [config, setConfig] = useState<MemoryConfig>();
   const [mode, setMode] = useState<RuntimeMode>();
   const [modeDraft, setModeDraft] = useState({write_enabled: true, use_enabled: true, scenario_use_enabled: false, persona_use_enabled: false});
-  const [tab, setTab] = useState<'l1' | 'l0'>('l1');
+  const [tab,setTab] = useWorkspaceParam('layer','l1',['l1','l0']);
+  const [appliedQuery,setAppliedQuery] = useWorkspaceParam('q','');
+  const [offsetText,setOffset] = useWorkspaceParam('offset','0');
+  const browseOffset = /^\d{1,7}$/.test(offsetText)?Math.floor(Number(offsetText)/25)*25:0;
+  const [initialized,setInitialized] = useState(false);
+  const loadedCoordinate = useRef('');
   const [l1, setL1] = useState<Page<L1Summary>>({items: [], total: 0, limit: 25, offset: 0});
   const [l0, setL0] = useState<Page<L0Summary>>({items: [], total: 0, limit: 25, offset: 0});
   const [l0Loaded, setL0Loaded] = useState(false);
@@ -92,11 +99,12 @@ export function MemoryApp() {
   const [dailyFeedback,setDailyFeedback] = useState<DailyMemoryFeedback>();
   const [reviewDate,setReviewDate] = useState(localDateText());
   const [dailyNotice,setDailyNotice] = useState('');
-  const [query, setQuery] = useState('');
-  const [l1State, setL1State] = useState('active');
-  const [role, setRole] = useState('all');
-  const [linkState, setLinkState] = useState('all');
-  const [l0Date, setL0Date] = useState('');
+  const [query, setQuery] = useState(appliedQuery);
+  useEffect(()=>setQuery(appliedQuery),[appliedQuery]);
+  const [l1State, setL1State] = useWorkspaceParam('state','active',['active','retired','all']);
+  const [role, setRole] = useWorkspaceParam('role','all',['all','user','assistant']);
+  const [linkState, setLinkState] = useWorkspaceParam('link_state','all',['all','linked','unlinked']);
+  const [l0Date, setL0Date] = useWorkspaceParam('local_date','');
   const [selectedL1, setSelectedL1] = useState<L1Detail>();
   const [selectedL0, setSelectedL0] = useState<L0Detail>();
   const [busy, setBusy] = useState(true);
@@ -130,7 +138,7 @@ export function MemoryApp() {
   async function fetchL1(offset = 0, search = query, stateFilter = l1State) {
     const params = new URLSearchParams({q: search, state: stateFilter, offset: String(offset), limit: '25'});
     const data = await api.request<Page<L1Summary>>(`/api/memories?${params}`);
-    setL1(data); setSelectedL1(undefined);
+    setL1(data);
   }
   async function fetchL0(offset = 0, search = query, roleFilter = role, linkFilter = linkState, dateFilter = l0Date) {
     const params = new URLSearchParams({q: search, role: roleFilter, link_state: linkFilter, offset: String(offset), limit: '25'});
@@ -139,7 +147,7 @@ export function MemoryApp() {
       params.set('utc_offset_minutes',String(-new Date().getTimezoneOffset()));
     }
     const data = await api.request<Page<L0Summary>>(`/api/source-messages?${params}`);
-    setL0(data); setL0Loaded(true); setSelectedL0(undefined);
+    setL0(data); setL0Loaded(true);
   }
   async function fetchDaily(date=reviewDate) {
     const params=new URLSearchParams({local_date:date,utc_offset_minutes:String(-new Date().getTimezoneOffset())});
@@ -157,7 +165,7 @@ export function MemoryApp() {
       setDailyNotice('暂时无法读取这一天的回顾；完整 L1 列表仍可正常使用。');
     }
   }
-  async function refresh(offset = 0, search = query) {
+  async function refresh(offset = browseOffset, search = appliedQuery) {
     setBusy(true);
     try {
       if (tab === 'l1') {await fetchL1(offset, search); await fetchDaily();} else await fetchL0(offset, search);
@@ -176,7 +184,7 @@ export function MemoryApp() {
           const runtime = await api.request<RuntimeMode>('/api/memory-mode');
           setMode(runtime); setModeDraft({write_enabled: runtime.write_enabled, use_enabled: runtime.use_enabled, scenario_use_enabled: runtime.scenario_use_enabled, persona_use_enabled: runtime.persona_use_enabled});
         } catch {setNotice('记忆库可浏览，但聊天 Runtime 未启用，运行期开关不可用。');}
-        const params = new URLSearchParams({q: '', state: 'active', offset: '0', limit: '25'});
+        const params = new URLSearchParams({q: appliedQuery, state: l1State, offset: String(tab==='l1'?browseOffset:0), limit: '25'});
         setL1(await api.request<Page<L1Summary>>(`/api/memories?${params}`));
         // 页签标题必须来自真实查询。L0 尚未读取时不能用初始 state 的 0
         // 冒充数据库统计；同时预载第一页也让首次切换无需再等待空白列表。
@@ -184,31 +192,44 @@ export function MemoryApp() {
           fetchL0(0, '', 'all', 'all', '').catch(() => undefined),
           fetchDaily(),
         ]);
-        const linkedMemoryId = searchParams.get('memory_id')?.trim();
-        const linkedL0Id = searchParams.get('l0_message_id')?.trim();
-        if (linkedL0Id && linkedL0Id.length <= 128 && !/[\u0000-\u001f\u007f]/.test(linkedL0Id)) {
-          try {
-            setTab('l0');
-            setSelectedL0(await api.request<L0Detail>(`/api/source-messages/${encodeURIComponent(linkedL0Id)}`));
-            setNotice('已从圆屏质量反馈打开对应用户 L0；可核对原话和派生记忆。');
-          } catch {
-            setNotice('圆屏反馈指向的 L0 不存在或已不可用；记忆列表仍可正常浏览。');
-          }
-        } else if (linkedMemoryId && linkedMemoryId.length <= 128 && !/[\u0000-\u001f\u007f]/.test(linkedMemoryId)) {
-          try {
-            setSelectedL1(await api.request<L1Detail>(`/api/memories/${encodeURIComponent(linkedMemoryId)}`));
-            setNotice('已从聊天证据打开对应 L1；下方可核对 L0 原始来源。');
-          } catch {
-            setNotice('链接指向的 L1 不存在或已不可用；记忆列表仍可正常浏览。');
-          }
-        } else {
-          setNotice(linkedMemoryId ? '记忆链接格式无效；未自动打开详情。' : 'L1 原子记忆已加载；可切换到 L0 检查原始记录。');
-        }
+        setInitialized(true);
+        setNotice('记忆已加载；可核对来源或切换任务。');
       } catch (error) {setNotice(memoryFailure(error, 'read'));}
       finally {setBusy(false);}
     })();
   }, []);
 
+
+  const browseCoordinate = `${tab}:${appliedQuery}:${l1State}:${role}:${linkState}:${l0Date}:${browseOffset}`;
+  useEffect(()=>{
+    if(!initialized || loadedCoordinate.current===browseCoordinate)return;
+    loadedCoordinate.current=browseCoordinate;
+    void refresh(browseOffset,appliedQuery);
+  },[initialized,browseCoordinate]);
+  useEffect(()=>{
+    if(!initialized)return;
+    const memoryId=searchParams.get('memory_id');
+    const sourceId=searchParams.get('l0_message_id');
+    if(!memoryId && !sourceId){setSelectedL1(undefined);setSelectedL0(undefined);return;}
+    const id=sourceId||memoryId!;
+    if(id.length>128 || /[\u0000-\u001f\u007f]/.test(id)){setNotice('记忆链接格式无效；未自动打开详情。');return;}
+    let current=true;
+    if(sourceId){
+      if(selectedL0?.id===sourceId)return;
+      setSelectedL1(undefined);
+      void api.request<L0Detail>(`/api/source-messages/${encodeURIComponent(id)}`).then(value=>{if(current){setSelectedL0(value);setNotice('已从圆屏质量反馈打开对应用户 L0；可核对原话和派生记忆。');}}).catch(()=>{if(current){setSelectedL0(undefined);setNotice('链接指向的 L0 不存在或已不可用。');}});
+    }else{
+      if(selectedL1?.id===memoryId)return;
+      setSelectedL0(undefined);
+      void api.request<L1Detail>(`/api/memories/${encodeURIComponent(id)}`).then(value=>{if(current)setSelectedL1(value);}).catch(()=>{if(current){setSelectedL1(undefined);setNotice('链接指向的 L1 不存在或已不可用。');}});
+    }
+    return()=>{current=false;};
+  },[initialized,searchParams.get('memory_id'),searchParams.get('l0_message_id')]);
+
+  function linkDetail(key:'memory_id'|'l0_message_id',id:string) {
+    const next=new URLSearchParams(searchParams);next.delete('memory_id');next.delete('l0_message_id');next.set(key,id);
+    setSearchParams(next,{replace:true});
+  }
   function closeL1() {
     setSelectedL1(undefined);
     setTemporalHistoryOpen(false);
@@ -227,7 +248,7 @@ export function MemoryApp() {
     finally {locked.current = false; setBusy(false);}
   }
   async function openL1(id: string) {
-    await guarded(async () => {setSelectedL1(await api.request<L1Detail>(`/api/memories/${encodeURIComponent(id)}`));});
+    await guarded(async () => {setSelectedL1(await api.request<L1Detail>(`/api/memories/${encodeURIComponent(id)}`));linkDetail('memory_id',id);});
   }
   async function openTemporalHistory() {
     if (!selectedL1) return;
@@ -317,7 +338,7 @@ export function MemoryApp() {
   async function openCorrection(id:string) {
     await guarded(async()=>{
       const detail=await api.request<L1Detail>(`/api/memories/${encodeURIComponent(id)}`);
-      setSelectedL1(detail); setCorrection(''); setCorrecting(true);
+      setSelectedL1(detail); linkDetail('memory_id',id); setCorrection(''); setCorrecting(true);
     });
   }
   function changeReviewDate(value:string) {
@@ -329,7 +350,7 @@ export function MemoryApp() {
     changeReviewDate(localDateText(date));
   }
   async function openL0(id: string) {
-    await guarded(async () => {setSelectedL0(await api.request<L0Detail>(`/api/source-messages/${encodeURIComponent(id)}`));});
+    await guarded(async () => {setSelectedL0(await api.request<L0Detail>(`/api/source-messages/${encodeURIComponent(id)}`));linkDetail('l0_message_id',id);});
   }
   function closeL0() {
     setSelectedL0(undefined);
@@ -339,15 +360,9 @@ export function MemoryApp() {
       setSearchParams(next, {replace: true});
     }
   }
-  function switchTab(key: string) {
-    const next = key as 'l1' | 'l0'; setTab(next); setQuery(''); setL0Date(''); setSelectedL1(undefined); setSelectedL0(undefined);
-    void guarded(async () => {
-      if (next === 'l1') await fetchL1(0, ''); else await fetchL0(0, '');
-      setNotice(next === 'l1' ? '这里显示系统派生的 L1 原子记忆。' : '这里显示完整 L0 原始记录，包括没有形成 L1 的话语。');
-    });
-  }
+  function switchTab(key:string) {setTab(key);setOffset('0');}
   async function inspectDailyUnlinked() {
-    setTab('l0'); setQuery(''); setRole('user'); setLinkState('unlinked'); setL0Date(reviewDate);
+    setWorkspace('browse'); setTab('l0'); setQuery(''); setAppliedQuery(''); setOffset('0'); setRole('user'); setLinkState('unlinked'); setL0Date(reviewDate);
     await guarded(async()=>{
       await fetchL0(0,'','user','unlinked',reviewDate);
       setNotice(`${reviewDate} 的未关联用户原话已加载；未形成 L1 不等于一定漏记，请逐条核对。`);
@@ -391,7 +406,7 @@ export function MemoryApp() {
         revision: selectedL1.revision, corrected_content: correction.trim(), correction_kind: 'error', confirm_correction: true,
       });
       setCorrecting(false); setCorrection(''); await fetchL1(0, query); await fetchDaily();
-      setSelectedL1(await api.request<L1Detail>(`/api/memories/${encodeURIComponent(result.new_memory_id)}`));
+      setSelectedL1(await api.request<L1Detail>(`/api/memories/${encodeURIComponent(result.new_memory_id)}`));linkDetail('memory_id',result.new_memory_id);
       setNotice('纠正已保存：新 L1 生效，旧 L1 保留为已取代历史。');
     }, 'write');
   }
@@ -413,7 +428,7 @@ export function MemoryApp() {
         confirm_change: true,
       });
       setChanging(false); setChangedContent(''); setEffectiveLocal(''); await fetchL1(0, query); await fetchDaily();
-      setSelectedL1(await api.request<L1Detail>(`/api/memories/${encodeURIComponent(result.new_memory_id)}`));
+      setSelectedL1(await api.request<L1Detail>(`/api/memories/${encodeURIComponent(result.new_memory_id)}`));linkDetail('memory_id',result.new_memory_id);
       setNotice('变化已保存：旧事实保留历史有效期，新事实从指定时间开始生效。');
     }, 'write');
   }
@@ -421,7 +436,7 @@ export function MemoryApp() {
     if (!selectedL1) return;
     await guarded(async () => {
       await api.request(`/api/memories/${encodeURIComponent(selectedL1.id)}`, 'DELETE', {revision: selectedL1.revision, confirm_delete: true});
-      setDeleting(false); setDeleteUnderstood(false); setSelectedL1(undefined);
+      setDeleting(false); setDeleteUnderstood(false); closeL1();
       await fetchL1(0, query); await fetchDaily(); setNotice('L1 已删除；L0 原始对话仍保留。');
     }, 'write');
   }
@@ -441,7 +456,7 @@ export function MemoryApp() {
         '/api/memories/clear', 'POST', {revision: clearPreview.revision, confirm_clear: true},
       );
       setClearing(false); setClearPreview(undefined); setClearPhrase('');
-      setSelectedL1(undefined); setSelectedL0(undefined); setTab('l1'); setQuery(''); setL1State('active');
+      setSelectedL1(undefined); setSelectedL0(undefined); setTab('l1'); setQuery(''); setAppliedQuery(''); setOffset('0'); setL1State('active');
       await fetchL1(0, '', 'active'); await fetchDaily();
       setNotice(`已清空 ${result.deleted_l1} 条 L1；${result.l0_preserved} 条 L0 原始对话仍保留，关联的当前 L2/L3 已停止召回。`);
     }, 'write');
@@ -461,7 +476,7 @@ export function MemoryApp() {
         '/api/memories/wipe', 'POST', {revision: wipePreview.revision, confirm_wipe: true},
       );
       setWiping(false); setWipePreview(undefined); setWipePhrase(''); setWipeNotice('');
-      setSelectedL1(undefined); setSelectedL0(undefined); setTab('l1'); setQuery(''); setL1State('active');
+      setSelectedL1(undefined); setSelectedL0(undefined); setTab('l1'); setQuery(''); setAppliedQuery(''); setOffset('0'); setL1State('active');
       setL0({items:[], total:0, limit:25, offset:0}); setL0Loaded(true);
       await fetchL1(0, '', 'active'); await fetchDaily();
       setNotice(`已清除当前库的 L0 ${result.l0_total}、L1 ${result.l1_total}、L2 ${result.l2_total}、L3 ${result.l3_total} 条；操作前恢复点已保存。网页会话档案和既有备份未删除。`);
@@ -489,22 +504,24 @@ export function MemoryApp() {
       <ConsoleNav active="memories" legacyPath="/memories-legacy"/>
       <Card size="small" className="memory-layer-guide" title="层级说明"><p><Tag color="magenta">L1</Tag><span>规范化、可召回的派生事实</span></p><p><Tag color="blue">L0</Tag><span>用户或助手当时说过的原文</span></p></Card>
     </>;
-  return <><AppShell subtitle="可追溯的个人记忆" className="memory-shell" sidebar={sidebar}><PageHeader eyebrow="长期记忆" title="原始与原子记忆" description="查看系统保存的原话和从中提取的可召回事实，并核对两者之间的来源关系。" meta={config?.database ?? '未指定记忆库'} action={<Space wrap><ManualMemoryAdd api={api} disabled={!config?.configured || !mode} onSaved={async memoryId => {await fetchL1(0, ''); setTab('l1'); setQuery(''); setNotice('明确事实已处理，列表已更新。'); if (memoryId) await openL1(memoryId);}}/><Button danger disabled={busy || !config?.allow_clear} onClick={() => void openClearMemories()}>重置长期记忆</Button><Button danger disabled={busy || !config?.allow_clear} onClick={() => void openWipeMemories()}>清除 L0–L3</Button><Button loading={busy} disabled={!config?.configured} onClick={() => void refresh(page.offset)}>刷新</Button></Space>}/>
-      <section className="memory-overview" aria-label="记忆概览"><div><small>当前视图</small><strong>{tab === 'l1' ? 'L1 原子记忆' : 'L0 原始记录'}</strong></div><div><small>记录数</small><strong>{page.total}</strong></div><div><small>回答时召回</small><strong className={mode?.use_enabled ? 'is-positive' : ''}>{mode?.use_enabled ? '已开启' : '已关闭'}</strong></div></section>
+  return <><AppShell subtitle="可追溯的个人记忆" className="memory-shell" sidebar={sidebar}><PageHeader eyebrow="长期记忆" title="原始与原子记忆" description="查看系统保存的原话和从中提取的可召回事实，并核对两者之间的来源关系。" meta={config?.database ?? '未指定记忆库'} action={<Space wrap><ManualMemoryAdd api={api} disabled={!config?.configured || !mode} onSaved={async memoryId => {await fetchL1(0, ''); setTab('l1'); setQuery(''); setAppliedQuery(''); setOffset('0'); setWorkspace('browse'); setNotice('明确事实已处理，列表已更新。'); if (memoryId) await openL1(memoryId);}}/><Button danger disabled={busy || !config?.allow_clear} onClick={() => void openClearMemories()}>重置长期记忆</Button><Button danger disabled={busy || !config?.allow_clear} onClick={() => void openWipeMemories()}>清除 L0–L3</Button><Button loading={busy} disabled={!config?.configured} onClick={() => void refresh(page.offset)}>刷新</Button></Space>}/>
+    <DataWorkspace label="记忆工作区" activeKey={workspace} onChange={setWorkspace} items={[
+      {key:'browse',label:'浏览记忆',children:<>      <section className="memory-overview" aria-label="记忆概览"><div><small>当前视图</small><strong>{tab === 'l1' ? 'L1 原子记忆' : 'L0 原始记录'}</strong></div><div><small>记录数</small><strong>{page.total}</strong></div><div><small>回答时召回</small><strong className={mode?.use_enabled ? 'is-positive' : ''}>{mode?.use_enabled ? '已开启' : '已关闭'}</strong></div></section>
       <section className="memory-browser"><Tabs activeKey={tab} onChange={switchTab} items={[{key: 'l1', label: `L1 原子记忆 · ${l1.total}`}, {key: 'l0', label: `L0 原始记录 · ${l0Loaded ? l0.total : '—'}`}]}/>
-      <div className="memory-toolbar"><Input.Search aria-label="搜索当前层级" value={query} maxLength={200} allowClear disabled={busy || !config?.configured} placeholder={tab === 'l1' ? '搜索原子事实' : '搜索原始对话'} onChange={e => setQuery(e.target.value)} onSearch={value => void refresh(0, value.trim())}/>
-        {tab === 'l1' ? <Select aria-label="L1 状态" value={l1State} disabled={busy || !config?.configured} onChange={value => {setL1State(value); void guarded(async () => {await fetchL1(0, query, value); setNotice('L1 状态筛选已应用。');});}} options={[{value:'active',label:'当前记忆'},{value:'retired',label:'已退役'},{value:'all',label:'全部 L1'}]}/>
-          : <><Select aria-label="L0 角色" value={role} disabled={busy || !config?.configured} onChange={value => {setRole(value); void guarded(async () => {await fetchL0(0, query, value, linkState); setNotice('L0 角色筛选已应用。');});}} options={[{value:'all',label:'全部角色'},{value:'user',label:'用户原话'},{value:'assistant',label:'助手原话'}]}/>
-            <Select aria-label="L1 关联" value={linkState} disabled={busy || !config?.configured} onChange={value => {setLinkState(value); void guarded(async () => {await fetchL0(0, query, role, value); setNotice('L0 关联筛选已应用。');});}} options={[{value:'all',label:'全部关联状态'},{value:'linked',label:'已形成 L1'},{value:'unlinked',label:'未形成 L1'}]}/>
-            <Input aria-label="L0 日期" type="date" value={l0Date} disabled={busy || !config?.configured} onChange={event=>{const value=event.target.value;setL0Date(value);void guarded(async()=>{await fetchL0(0,query,role,linkState,value);setNotice(value?`${value} 的 L0 已加载。`:'已恢复全部日期的 L0。');});}}/></>}
+      <div className="memory-toolbar"><Input.Search aria-label="搜索当前层级" value={query} maxLength={200} allowClear disabled={busy || !config?.configured} placeholder={tab === 'l1' ? '搜索原子事实' : '搜索原始对话'} onChange={e => setQuery(e.target.value)} onSearch={value=>{setAppliedQuery(value.trim());setOffset('0');if(value.trim()===appliedQuery && browseOffset===0)void refresh(0,value.trim());}}/>
+        {tab === 'l1' ? <Select aria-label="L1 状态" value={l1State} disabled={busy || !config?.configured} onChange={value => {setL1State(value);setOffset('0');}} options={[{value:'active',label:'当前记忆'},{value:'retired',label:'已退役'},{value:'all',label:'全部 L1'}]}/>
+          : <><Select aria-label="L0 角色" value={role} disabled={busy || !config?.configured} onChange={value => {setRole(value);setOffset('0');}} options={[{value:'all',label:'全部角色'},{value:'user',label:'用户原话'},{value:'assistant',label:'助手原话'}]}/>
+            <Select aria-label="L1 关联" value={linkState} disabled={busy || !config?.configured} onChange={value => {setLinkState(value);setOffset('0');}} options={[{value:'all',label:'全部关联状态'},{value:'linked',label:'已形成 L1'},{value:'unlinked',label:'未形成 L1'}]}/>
+            <Input aria-label="L0 日期" type="date" value={l0Date} disabled={busy || !config?.configured} onChange={event=>{const value=event.target.value;setL0Date(value);setOffset('0');}}/></>}
       </div>
-      {tab === 'l1' ? <List loading={busy} dataSource={l1.items} locale={{emptyText: <Empty description="没有符合条件的 L1"/>}} renderItem={item => <List.Item className="memory-item" onClick={() => void openL1(item.id)} actions={[<Button key="open" type="link">查看来源</Button>]}>
+      {tab === 'l1' ? <List loading={busy} dataSource={l1.items} locale={{emptyText: <Empty description="没有符合条件的 L1"/>}} renderItem={item => <List.Item className="memory-item" onClick={() => void openL1(item.id)} actions={[<Button key="open" type="link" onClick={event=>{event.stopPropagation();void openL1(item.id);}}>查看来源</Button>]}>
         <List.Item.Meta title={<span className="memory-title"><Tag color="magenta">L1</Tag><span>{item.content}{item.truncated ? '…' : ''}</span></span>} description={<span className="memory-meta"><Tag color={item.effective_state === 'expired' ? 'gold' : item.effective_state === 'not_started' ? 'blue' : item.state === 'active' ? 'green' : 'default'}>{item.effective_state === 'expired' ? '已到期' : item.effective_state === 'not_started' ? '未生效' : item.state === 'active' ? '当前' : '已退役'}</Tag><span>{displayTime(item.recorded_at)}</span><code>{item.id}</code></span>}/></List.Item>}/>
-        : <List loading={busy} dataSource={l0.items} locale={{emptyText: <Empty description="没有符合条件的 L0"/>}} renderItem={item => <List.Item className="memory-item" onClick={() => void openL0(item.id)} actions={[<Button key="open" type="link">查看派生</Button>]}>
+        : <List loading={busy} dataSource={l0.items} locale={{emptyText: <Empty description="没有符合条件的 L0"/>}} renderItem={item => <List.Item className="memory-item" onClick={() => void openL0(item.id)} actions={[<Button key="open" type="link" onClick={event=>{event.stopPropagation();void openL0(item.id);}}>查看派生</Button>]}>
           <List.Item.Meta title={<span className="memory-title"><Tag color="blue">L0</Tag><span>{item.content}{item.truncated ? '…' : ''}</span></span>} description={<span className="memory-meta"><Tag>{item.role === 'user' ? '用户' : '助手'}</Tag><Tag color={item.linked_memory_count ? 'green' : 'default'}>{item.linked_memory_count ? `已关联 ${item.linked_memory_count} 条 L1` : '未形成 L1'}</Tag><span>{displayTime(item.created_at)}</span><code>{item.id}</code></span>}/></List.Item>}/>}
-      <div className="pagination"><Button disabled={busy || page.offset === 0} onClick={() => void refresh(Math.max(0, page.offset - page.limit))}>上一页</Button><span>{page.total ? `${page.offset + 1}–${Math.min(page.offset + page.limit, page.total)} / ${page.total}` : '0 条'}</span><Button disabled={busy || page.offset + page.limit >= page.total} onClick={() => void refresh(page.offset + page.limit)}>下一页</Button></div>
-      </section><p className="memory-status" role="status">{notice}</p>
-      <Card className="mode-card" title={`每日记忆回顾 · ${reviewDate}`} extra={<Space wrap><Button size="small" onClick={previousReviewDate}>前一天</Button><Input aria-label="回顾日期" type="date" max={localDateText()} value={reviewDate} onChange={event=>changeReviewDate(event.target.value)} style={{width:145}}/><Button size="small" disabled={reviewDate===localDateText()} onClick={()=>changeReviewDate(localDateText())}>今天</Button>{daily&&<Tag color={daily.total?'processing':'default'}>{daily.total} 条写入</Tag>}</Space>}>
+      <div className="pagination"><Button disabled={busy || page.offset === 0} onClick={()=>setOffset(String(Math.max(0,page.offset-page.limit)))}>上一页</Button><span>{page.total ? `${page.offset + 1}–${Math.min(page.offset + page.limit, page.total)} / ${page.total}` : '0 条'}</span><Button disabled={busy || page.offset + page.limit >= page.total} onClick={()=>setOffset(String(page.offset+page.limit))}>下一页</Button></div>
+      </section>
+</>},
+      {key:'daily',label:'每日回顾',children:<>      <Card className="mode-card" title={`每日记忆回顾 · ${reviewDate}`} extra={<Space wrap><Button size="small" onClick={previousReviewDate}>前一天</Button><Input aria-label="回顾日期" type="date" max={localDateText()} value={reviewDate} onChange={event=>changeReviewDate(event.target.value)} style={{width:145}}/><Button size="small" disabled={reviewDate===localDateText()} onClick={()=>changeReviewDate(localDateText())}>今天</Button>{daily&&<Tag color={daily.total?'processing':'default'}>{daily.total} 条写入</Tag>}</Space>}>
         <p className="subtle">这里按你的本地自然日显示当天形成的 L1，包括后来被纠正或取代的记录；它不是“当前有效记忆”总表，也不会触发模型整理。</p>
         {dailyNotice&&<p role="status" className="subtle">{dailyNotice}</p>}
         {daily&&<>
@@ -520,8 +537,10 @@ export function MemoryApp() {
         {daily.deletions.length>0&&<details><summary>查看删除审计（{daily.deletions.length}）</summary><List size="small" dataSource={daily.deletions} renderItem={event=><List.Item><Space direction="vertical" size={0}><span>已删除 L1：<code>{event.memory_id}</code></span><small className="subtle">{displayTime(event.deleted_at)} · 不保留被删正文</small></Space></List.Item>}/>{daily.deletions_limited&&<p className="subtle">删除审计超过 100 条，这里只显示最近记录。</p>}</details>}
         </>}
       </Card>
-      <ConsolidationOverview enabled={config?.configured === true}/>
-      <Card className="mode-card l1-quality-card" title="L1 质量候选" extra={<Button size="small" loading={qualityScanning} disabled={!config?.configured} onClick={() => void scanL1Quality()}>{qualityCandidates ? '重新扫描' : '扫描当前 L1'}</Button>}>
+</>},
+      {key:'consolidation',label:'整理状态',children:<>      <ConsolidationOverview enabled={config?.configured === true}/>
+</>},
+      {key:'quality',label:'重复与关系复核',children:<>      <Card className="mode-card l1-quality-card" title="L1 质量候选" extra={<Button size="small" loading={qualityScanning} disabled={!config?.configured} onClick={() => void scanL1Quality()}>{qualityCandidates ? '重新扫描' : '扫描当前 L1'}</Button>}>
         <p className="subtle">本地只读检查当前有效 L1，寻找规范化重复、高字面重合和明确肯定/否定冲突。相似度是字符片段重合，不是事实置信度；扫描不会调用模型或修改记忆。</p>
         {!qualityCandidates ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="尚未扫描"/> : qualityCandidates.items.length === 0 ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={`已检查 ${qualityCandidates.scanned_memory_count} 条当前 L1，未发现候选`}/> : <>
           <Space wrap><Tag color="gold">待复核 {qualityCandidates.total} 组</Tag><Tag>已检查 {qualityCandidates.scanned_memory_count} 条</Tag>{qualityCandidates.memory_scan_limited&&<Tag color="red">只检查前 500 条</Tag>}{qualityCandidates.candidate_limit_reached&&<Tag color="red">候选达到 {qualityCandidates.candidate_limit} 组上限</Tag>}</Space>
@@ -550,7 +569,8 @@ export function MemoryApp() {
           <p className="subtle">生成于 {displayTime(semanticPreview.generated_at)}；刷新页面后结果消失。若要处理候选，请另行核对 L0 来源后使用现有人工操作。</p>
         </>}
       </Card>
-      {mode && <Card className="mode-card" title={<span>本次运行的记忆模式 <Tag>临时设置</Tag></span>} extra={<Button type="primary" disabled={busy || (mode.write_enabled === modeDraft.write_enabled && mode.use_enabled === modeDraft.use_enabled && mode.scenario_use_enabled === modeDraft.scenario_use_enabled && mode.persona_use_enabled === modeDraft.persona_use_enabled)} onClick={() => void saveMode()}>应用到网页与圆屏</Button>}>
+</>},
+      {key:'runtime',label:'记忆开关',children:<>      {mode && <Card className="mode-card" title={<span>本次运行的记忆模式 <Tag>临时设置</Tag></span>} extra={<Button type="primary" disabled={busy || (mode.write_enabled === modeDraft.write_enabled && mode.use_enabled === modeDraft.use_enabled && mode.scenario_use_enabled === modeDraft.scenario_use_enabled && mode.persona_use_enabled === modeDraft.persona_use_enabled)} onClick={() => void saveMode()}>应用到网页与圆屏</Button>}>
         <div className="memory-mode-grid">
           <label><Switch checked={modeDraft.write_enabled} disabled={busy} onChange={value => setModeDraft({...modeDraft, write_enabled: value})}/><span><strong>生成 L1</strong><small>从新对话提取原子记忆</small></span></label>
           <label><Switch checked={modeDraft.use_enabled} disabled={busy} onChange={value => setModeDraft({...modeDraft, use_enabled: value})}/><span><strong>使用 L1</strong><small>回答时召回已有事实</small></span></label>
@@ -558,6 +578,9 @@ export function MemoryApp() {
           <label><Switch checked={modeDraft.persona_use_enabled} disabled={busy || !mode.persona_available} onChange={value => setModeDraft({...modeDraft, persona_use_enabled: value})}/><span><strong>使用 L3</strong><small>注入已接受用户画像</small></span></label>
         </div><p className="subtle">关闭 L1 写入仍保留 L0。L2/L3 只使用当前有效且与问题相关的内容，设置在服务重启后恢复默认。</p></Card>}
 
+</>},
+    ]}/>
+    <p className="memory-status" role="status">{notice}</p>
     </AppShell>
     <Drawer width={620} title="L1 原子记忆" open={Boolean(selectedL1)} onClose={closeL1} extra={<Space><Button onClick={()=>void openTemporalHistory()}>事实时间线</Button><Button disabled={!config?.allow_correction || selectedL1?.state !== 'active'} onClick={() => setCorrecting(true)}>纠正错误</Button><Button disabled={!config?.allow_change || selectedL1?.state !== 'active'} onClick={openChange}>记录变化</Button><Button danger disabled={!config?.allow_delete} onClick={() => setDeleting(true)}>删除</Button></Space>}>
       {selectedL1 && <><p className="detail-content">{selectedL1.content}</p><Descriptions column={1} size="small" items={[{key:'state',label:'层级与状态',children:<Space><Tag color="magenta">L1</Tag><Tag>{selectedL1.effective_state === 'expired' ? '已到期' : selectedL1.effective_state === 'not_started' ? '未生效' : selectedL1.state === 'active' ? '当前' : '已退役'}</Tag></Space>},{key:'id',label:'记忆 ID',children:selectedL1.id},{key:'time',label:'系统记录时间',children:displayTime(selectedL1.recorded_at)},{key:'validFrom',label:'事实开始生效',children:displayTime(selectedL1.valid_from)},{key:'validTo',label:'事实结束生效',children:displayTime(selectedL1.valid_to)},{key:'superseded',label:'取代它的记忆',children:selectedL1.superseded_by_id ?? '无'}]}/>

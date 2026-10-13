@@ -18,6 +18,7 @@ describe('记忆质量样本工作台',()=>{
       return feedback as never;
     });
     render(<MemoryRouter><MemoryQualityApp/></MemoryRouter>);
+    fireEvent.click(screen.getByRole('button',{name:'日常提取'}));
     fireEvent.click(await screen.findByRole('button',{name:'重新提取一次'}));
     await waitFor(()=>expect(request).toHaveBeenCalledWith(
       '/api/l1-extraction-audit/source-failed/retry','POST',
@@ -112,6 +113,7 @@ describe('记忆质量样本工作台',()=>{
     expect(screen.getByText('正式 L2 门控未就绪')).toBeTruthy();
     expect(screen.getAllByText(/有支持证据 0\/60/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/有证据问题样本：当前 0，要求 60/).length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole('button',{name:'L2 影子判断'}));
     fireEvent.click(screen.getByRole('button',{name:'查看候选判断'}));
     expect(await screen.findByText('证据不足')).toBeTruthy();
     expect(screen.getByText('missing_attribute')).toBeTruthy();
@@ -145,6 +147,7 @@ describe('记忆质量样本工作台',()=>{
     render(<MemoryRouter><MemoryQualityApp/></MemoryRouter>);
     expect(await screen.findByText('豆包是什么颜色')).toBeTruthy();
     expect(screen.getByText('语义相关不等于足以回答')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button',{name:'L1 影子判断'}));
     fireEvent.click(screen.getByRole('button',{name:'查看 L1 候选判断'}));
     expect(await screen.findByText('用户养了一只叫豆包的猫。')).toBeTruthy();
     expect(screen.getByText(/关键词 1 · 余弦 0.810 · 融合 0.0300/)).toBeTruthy();

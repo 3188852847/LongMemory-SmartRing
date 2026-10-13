@@ -1,7 +1,7 @@
+import {DataWorkspace, useWorkspaceParam} from '../features/data-workspace/DataWorkspace';
 import {useEffect, useState} from 'react';
 import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {Alert, Button, Card, Checkbox, Descriptions, Drawer, Empty, Input, List, Modal, Select, Space, Tag} from 'antd';
-import {useSearchParams} from 'react-router-dom';
 import {ChatApi} from '../api';
 import {AppShell, ConsoleNav} from '../components/AppShell';
 import {PageHeader} from '../components/PageHeader';
@@ -37,15 +37,16 @@ const displayTime = (value?: string | null) => value ? new Date(value).toLocaleS
 
 /** L2 是多条 L1 汇总出的生活场景；候选可带现实有效期，回答使用由独立开关控制。 */
 export function ScenarioApp() {
-  const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const [ready, setReady] = useState(false);
   const [notice, setNotice] = useState('正在连接本机记忆服务…');
-  const [filter, setFilter] = useState<'all' | ScenarioState>('all');
-  const [selectedId, setSelectedId] = useState<string|undefined>(() => {
-    const value = searchParams.get('scenario_id')?.trim();
-    return value && value.length <= 128 && !/[\u0000-\u001f\u007f]/.test(value) ? value : undefined;
-  });
+  const [workspace,setWorkspace] = useWorkspaceParam('view','browse',['browse','consolidation']);
+  const [filterValue,setFilter] = useWorkspaceParam('state','all',['all','candidate','active','rejected','stale']);
+  const filter = filterValue as 'all'|ScenarioState;
+  const [query,setQuery] = useWorkspaceParam('q','');
+  const [selectedValue,selectId] = useWorkspaceParam('scenario_id','');
+  const selectedId = selectedValue.length<=128 ? selectedValue || undefined : undefined;
+  const setSelectedId = (value:string|undefined) => selectId(value??'');
   const [creating, setCreating] = useState(false);
   const [title, setTitle] = useState('');
   const [summary, setSummary] = useState('');
@@ -70,12 +71,7 @@ export function ScenarioApp() {
     queryFn: () => api.request<SourceInbox>('/api/scenario-source-inbox')});
   const detail = useQuery({queryKey: ['scenario', selectedId], enabled: ready && Boolean(selectedId),
     queryFn: () => api.request<ScenarioDetail>(`/api/scenarios/${encodeURIComponent(selectedId!)}`)});
-  const closeDetail = () => {
-    setSelectedId(undefined);
-    if (searchParams.has('scenario_id')) {
-      const next = new URLSearchParams(searchParams); next.delete('scenario_id'); setSearchParams(next, {replace:true});
-    }
-  };
+  const closeDetail = () => setSelectedId(undefined);
 
   const createCandidate = useMutation({
     mutationFn: () => api.request<{id: string}>('/api/scenarios', 'POST', {
@@ -156,16 +152,20 @@ export function ScenarioApp() {
     <PageHeader eyebrow="长期记忆" title="生活场景（L2）" description="把多条相关的原子记忆整理成可复核的生活场景；候选不会自动生效。" meta={config.data?.database ?? '未指定记忆库'} action={<Button loading={busy} onClick={() => void queryClient.invalidateQueries({queryKey: ['scenarios']})}>刷新</Button>}/>
     <Alert className="mode-card" type="info" showIcon title="L2 先复核，再按需用于回答"
       description="L2 把多条 L1 汇总成可带现实有效期的生活场景。接受本身不会自动开启使用；回答开关在记忆管理页，且只召回相关的当前场景。"/>
-    <ConsolidationStatusCard stage="l1_to_l2" enabled={ready&&config.data?.configured===true}/>
+
     {!canManage && config.data?.configured && <Alert type="warning" showIcon title="当前进程没有开启 L2 管理权限" description="通过日常启动面板启动时会开启；只读浏览仍可使用。"/>}
-    <div className="scenario-toolbar"><Select aria-label="场景状态" value={filter} onChange={value => setFilter(value)} options={[
+    <DataWorkspace label="场景工作区" activeKey={workspace} onChange={setWorkspace} items={[
+      {key:'browse',label:'场景与候选',children:<>    <div className="scenario-toolbar"><Input aria-label="搜索已加载场景" allowClear value={query} maxLength={200} onChange={event=>setQuery(event.target.value)} placeholder="搜索场景标题或内容"/><Select aria-label="场景状态" value={filter} onChange={value => setFilter(value)} options={[
       {value:'all',label:'全部状态'}, {value:'candidate',label:'待复核'}, {value:'active',label:'已接受'},
       {value:'rejected',label:'已拒绝'}, {value:'stale',label:'已失效'},
     ]}/></div>
-    <List loading={scenarios.isFetching} dataSource={scenarios.data?.items ?? []} locale={{emptyText:<Empty description="尚无 L2 生活场景"/>}}
-      renderItem={item => <List.Item className="memory-item" onClick={() => setSelectedId(item.id)} actions={[<Button key="open" type="link">查看来源</Button>]}
+    <List loading={scenarios.isFetching} dataSource={(scenarios.data?.items??[]).filter(item=>`${item.title} ${item.summary}`.toLocaleLowerCase().includes(query.toLocaleLowerCase()))} locale={{emptyText:<Empty description={query?"当前已加载场景中没有匹配项":"尚无 L2 生活场景"}/>}}
+      renderItem={item => <List.Item className="memory-item" onClick={() => setSelectedId(item.id)} actions={[<Button key="open" type="link" onClick={event=>{event.stopPropagation();setSelectedId(item.id);}}>查看来源</Button>]}
         ><List.Item.Meta title={<Space wrap><span>{item.title}</span><Tag color={stateColor[item.status]}>{stateName[item.status]}</Tag></Space>}
           description={<><p className="scenario-summary">{item.summary}</p><small>{displayTime(item.generated_at)} · 修订 {item.revision}</small></>}/></List.Item>}/>
+<p className="subtle">当前状态读取最多 100 条；搜索仅筛选已加载内容。已读取 {scenarios.data?.items.length??0} / {scenarios.data?.total??0} 条。</p></>},
+      {key:'consolidation',label:'整理状态',children:<>    <ConsolidationStatusCard stage="l1_to_l2" enabled={ready&&config.data?.configured===true}/></>},
+    ]}/>
     <p role="status">{config.error ? derivedMemoryFailure(config.error, 'read') : scenarios.error ? derivedMemoryFailure(scenarios.error, 'read') : notice}</p>
   </AppShell>
 

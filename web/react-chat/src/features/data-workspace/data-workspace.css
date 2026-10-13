@@ -1,0 +1,35 @@
+/* 页面任务与数据阅读的局部布局；颜色、字体和环境动态由共享视觉提供。 */
+.data-workspace { min-width: 0; margin-block: 16px; }
+.data-workspace-nav { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.data-workspace-nav button { min-height: 44px; padding: 8px 16px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); font: inherit; cursor: pointer; }
+.data-workspace-nav button[aria-pressed="true"] { border-color: currentColor; background: var(--accent-soft); font-weight: 650; }
+.data-workspace-nav button:focus-visible, .data-workspace-panel:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
+.data-workspace-panel { min-width: 0; max-height: max(340px, 64dvh); overflow: auto; scrollbar-gutter: stable; overscroll-behavior: contain; padding: 4px 8px 12px 4px; }
+.data-workspace-panel[hidden] { display: none; }
+.data-workspace-panel > :first-child { margin-top: 0; }
+.data-workspace-panel .ant-list-item { align-items: flex-start; }
+.data-workspace-panel .ant-list-item-action { flex-wrap: wrap; display: flex; gap: 4px; }
+.data-workspace-panel .ant-list-item-action > li { padding: 0 4px; }
+.data-workspace-panel .ant-list-item-meta { min-width: 0; }
+.data-workspace-panel p, .data-workspace-panel code, .data-workspace-panel pre { overflow-wrap: anywhere; }
+.data-workspace-panel .memory-toolbar, .data-workspace-panel .scenario-toolbar { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; }
+.data-workspace-panel .memory-toolbar .ant-input-search { flex: 1 1 240px; min-width: 0; }
+.data-workspace-panel .scenario-toolbar .ant-input { flex: 1 1 220px; }
+.data-workspace-panel .ant-select { min-width: 160px; }
+.data-workspace-panel .ant-table-wrapper { overflow-x: auto; }
+.data-workspace-panel .question-grid-react { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 16px; }
+.data-workspace-panel .question-grid-react > * { min-width: 0; }
+.data-workspace-panel .question-grid-react pre { white-space: pre-wrap; }
+.data-workspace-panel .experiment-layout { display: grid; grid-template-columns: minmax(240px, .7fr) minmax(0, 2fr); gap: 20px; align-items: start; }
+.data-workspace-panel .device-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+@media (max-width: 1100px) {
+  .data-workspace-panel .experiment-layout { grid-template-columns: 1fr; }
+  .data-workspace-panel .experiment-run-list { max-height: 220px; overflow: auto; }
+}
+@media (max-width: 700px) {
+  .data-workspace-panel { max-height: none; overflow: visible; padding-inline: 0; }
+  .data-workspace-panel .question-grid-react, .data-workspace-panel .device-grid { grid-template-columns: 1fr; }
+  .data-workspace-panel .ant-list-item { flex-wrap: wrap; }
+  .data-workspace-panel .ant-list-item-action { margin-inline-start: 0; }
+  .data-workspace-nav button { flex: 1 1 auto; }
+}

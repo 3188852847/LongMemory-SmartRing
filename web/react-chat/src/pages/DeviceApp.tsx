@@ -1,3 +1,4 @@
+import {DataWorkspace, useWorkspaceParam} from '../features/data-workspace/DataWorkspace';
 import {useEffect, useState} from 'react';
 import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {Alert, Button, Card, Descriptions, InputNumber, Select, Slider, Space, Tag} from 'antd';
@@ -130,6 +131,7 @@ function NaturalInterruptionCard({value}:{value:NaturalInterruptionDiagnostic}) 
  * 读取/设置音量仍是用户明确触发的 mutation，不会因为失败而自动重放。
  */
 export function DeviceApp() {
+  const [workspace,setWorkspace] = useWorkspaceParam('view','controls',['controls','diagnostics']);
   const client = useQueryClient();
   const [target, setTarget] = useState<number | null>(30);
   const [brightness, setBrightness] = useState<number | null>(50);
@@ -213,33 +215,15 @@ export function DeviceApp() {
     {session.isError && <Alert type="error" showIcon title="无法建立控制台会话" description="请确认本机网页服务仍在运行，再刷新页面。没有自动重发设备指令。"/>}
     <Card className={`device-summary-card tone-${view.tone}`}>
       <div className="device-status-hero"><span className="device-status-dot" aria-hidden="true"/><div><small>SMART RING TERMINAL</small><h2>SmartRing-Plus B V2</h2><p>{view.help}</p></div><Tag color={view.tone === 'good' ? 'green' : view.tone === 'warning' ? 'gold' : 'red'}>{view.badge}</Tag></div>
-      <div className="device-status-grid">
+      <details className="device-connection-details"><summary>连接能力与服务状态</summary><div className="device-status-grid">
         <div><small>小智控制服务</small><strong>{view.bridge}</strong></div>
         <div><small>圆屏连接</small><strong>{view.device}</strong></div>
         <div><small>设备工具</small><strong>{view.tools}</strong></div>
         <div><small>说话打断基础</small><strong>{status.data?.aec_advertised?'固件已上报 AEC':'未上报 AEC'}</strong></div>
-      </div><div className="device-refresh-meta"><span>{status.data?.connection_count ?? 0} 个活动连接</span><span>{status.dataUpdatedAt ? `刷新于 ${new Date(status.dataUpdatedAt).toLocaleTimeString('zh-CN', {hour12:false})}` : '尚未刷新'}</span><span>每 5 秒检查连接，不轮询音量</span></div>
+      </div></details><div className="device-refresh-meta"><span>{status.data?.connection_count ?? '—'} 个活动连接</span><span>{status.dataUpdatedAt ? `刷新于 ${new Date(status.dataUpdatedAt).toLocaleTimeString('zh-CN', {hour12:false})}` : '尚未刷新'}</span><span>每 5 秒检查连接，不轮询音量</span></div>
     </Card>
-    {status.data?.voice_latency ? <VoiceLatencyCard value={status.data.voice_latency} prefetch={status.data.voice_asr_prefetch}/> : <Card className="device-latency-card" title="最近一次圆屏首句时序"><p className="subtle">当前连接还没有可用的完整时序。与圆屏完成一轮语音对话后，本页会分开显示记忆、模型、首句组织、TTS 和发送等待。</p></Card>}
-    {status.data?.voice_prediction_shadow&&<VoicePredictionShadowCard value={status.data.voice_prediction_shadow}/>}
-    {status.data?.voice_feedback&&<Card title="等待反馈与真正答案">
-      <Descriptions column={3} items={[
-        {key:'feedback',label:'入口 → 提示首包',children:elapsed(status.data.voice_feedback.first_feedback_ms)},
-        {key:'answer',label:'入口 → 真正答案首包',children:elapsed(status.data.voice_feedback.first_answer_ms)},
-        {key:'search',label:'联网查询',children:status.data.voice_feedback.kind==='web'?elapsed(status.data.voice_feedback.query_ms):'本轮未发起'},
-      ]}/>
-      <p className="subtle">两项首包均在实际发送时记录，尚不包含设备缓冲。等待提示不算作真正答案；快速回答会跳过提示。联网时模型首次输出可能是搜索决定。</p>
-      {status.data.voice_feedback.status==='query_failed'&&<Alert type="warning" title="本轮联网查询未成功，不能据此声称已查到最新信息。"/>}
-    </Card>}
-    {status.data?.natural_interruption && <NaturalInterruptionCard value={status.data.natural_interruption}/>}
-    <Card className="device-snapshot-card" title="设备快照" extra={<Tag color={snapshot ? (status.data?.ready && !status.error ? 'blue' : 'gold') : 'default'}>{readSnapshot.isPending?'读取中':snapshot?(status.data?.ready && !status.error?'单次读取':'历史读数'):'等待读取'}</Tag>}><Descriptions column={{xs:1,sm:3}} items={[
-      {key:'battery',label:'电池与充电',children:snapshotValue(Boolean(snapshot?.battery), snapshot?.battery ? `${snapshot.battery.level}% · ${snapshot.battery.charging?'充电中':'未充电'}` : unsupported)},
-      {key:'network',label:'Wi‑Fi 信号',children:snapshotValue(Boolean(snapshot?.network), snapshot?.network?.signal === 'strong'?'强':snapshot?.network?.signal === 'medium'?'中':snapshot?.network?.signal === 'weak'?'弱':unsupported)},
-      {key:'temperature',label:'芯片温度',children:snapshotValue(Boolean(snapshot?.chip), snapshot?.chip ? `${snapshot.chip.temperature} ℃` : unsupported)},
-      {key:'brightness',label:'屏幕亮度',children:snapshotValue(Number.isInteger(snapshot?.brightness), snapshot?.brightness ?? unsupported)},
-      {key:'theme',label:'屏幕主题',children:snapshotValue(Boolean(snapshot?.theme), snapshot?.theme === 'dark'?'深色':snapshot?.theme === 'light'?'浅色':unsupported)},
-    ]}/><p className="subtle">{snapshotAt ? `读取于 ${new Date(snapshotAt).toLocaleTimeString('zh-CN', {hour12:false})}。` : '点击页面右上角“读取设备快照”取得当前值。'} 这是一次主动读取，不是持续监测；为保护隐私不显示 Wi‑Fi 名称。{snapshot && (!status.data?.ready || status.error) ? ' 当前连接不可用，上述内容只代表上一次成功快照。' : ''}</p></Card>
-    <div className="device-grid">
+    <DataWorkspace label="设备工作区" activeKey={workspace} onChange={setWorkspace} items={[
+      {key:'controls',label:'常用控制',children:<>    <div className="device-grid">
       <Card className="device-control-card" title="扬声器音量" extra={<Tag color={view.set ? 'green' : 'default'}>{view.set ? '可控' : '不可控'}</Tag>}>
         <div className="device-card-action"><Button disabled={!view.read || busy} loading={readVolume.isPending} onClick={() => readVolume.mutate()}>读取当前值</Button></div>
         <div className="volume-value"><strong>{reading?.value ?? '—'}</strong><span>/ {volumeMaximum}</span></div>
@@ -270,7 +254,29 @@ export function DeviceApp() {
         <p className="subtle">若请求超时，音量可能已经改变。先读取核对，不要连续重试。</p>
       </Card>
     </div>
+    <Card className="device-snapshot-card" title="设备快照" extra={<Tag color={snapshot ? (status.data?.ready && !status.error ? 'blue' : 'gold') : 'default'}>{readSnapshot.isPending?'读取中':snapshot?(status.data?.ready && !status.error?'单次读取':'历史读数'):'等待读取'}</Tag>}><Descriptions column={{xs:1,sm:3}} items={[
+      {key:'battery',label:'电池与充电',children:snapshotValue(Boolean(snapshot?.battery), snapshot?.battery ? `${snapshot.battery.level}% · ${snapshot.battery.charging?'充电中':'未充电'}` : unsupported)},
+      {key:'network',label:'Wi‑Fi 信号',children:snapshotValue(Boolean(snapshot?.network), snapshot?.network?.signal === 'strong'?'强':snapshot?.network?.signal === 'medium'?'中':snapshot?.network?.signal === 'weak'?'弱':unsupported)},
+      {key:'temperature',label:'芯片温度',children:snapshotValue(Boolean(snapshot?.chip), snapshot?.chip ? `${snapshot.chip.temperature} ℃` : unsupported)},
+      {key:'brightness',label:'屏幕亮度',children:snapshotValue(Number.isInteger(snapshot?.brightness), snapshot?.brightness ?? unsupported)},
+      {key:'theme',label:'屏幕主题',children:snapshotValue(Boolean(snapshot?.theme), snapshot?.theme === 'dark'?'深色':snapshot?.theme === 'light'?'浅色':unsupported)},
+    ]}/><p className="subtle">{snapshotAt ? `读取于 ${new Date(snapshotAt).toLocaleTimeString('zh-CN', {hour12:false})}。` : '点击页面右上角“读取设备快照”取得当前值。'} 这是一次主动读取，不是持续监测；为保护隐私不显示 Wi‑Fi 名称。{snapshot && (!status.data?.ready || status.error) ? ' 当前连接不可用，上述内容只代表上一次成功快照。' : ''}</p></Card>
     <Alert className="device-help" type="info" showIcon title="待机时可能暂不可控" description="圆屏进入聆听状态后才可能建立活动连接。显示“请唤醒圆屏”时，先轻触设备，再刷新状态；不需要重新配网。"/>
     {operation?.error && <p role="status">{errorMessage(operation.error)}</p>}
+</>},
+      {key:'diagnostics',label:'语音时序与诊断',children:<>    {status.data?.voice_latency ? <VoiceLatencyCard value={status.data.voice_latency} prefetch={status.data.voice_asr_prefetch}/> : <Card className="device-latency-card" title="最近一次圆屏首句时序"><p className="subtle">当前连接还没有可用的完整时序。与圆屏完成一轮语音对话后，本页会分开显示记忆、模型、首句组织、TTS 和发送等待。</p></Card>}
+    {status.data?.voice_prediction_shadow&&<VoicePredictionShadowCard value={status.data.voice_prediction_shadow}/>}
+    {status.data?.voice_feedback&&<Card title="等待反馈与真正答案">
+      <Descriptions column={3} items={[
+        {key:'feedback',label:'入口 → 提示首包',children:elapsed(status.data.voice_feedback.first_feedback_ms)},
+        {key:'answer',label:'入口 → 真正答案首包',children:elapsed(status.data.voice_feedback.first_answer_ms)},
+        {key:'search',label:'联网查询',children:status.data.voice_feedback.kind==='web'?elapsed(status.data.voice_feedback.query_ms):'本轮未发起'},
+      ]}/>
+      <p className="subtle">两项首包均在实际发送时记录，尚不包含设备缓冲。等待提示不算作真正答案；快速回答会跳过提示。联网时模型首次输出可能是搜索决定。</p>
+      {status.data.voice_feedback.status==='query_failed'&&<Alert type="warning" title="本轮联网查询未成功，不能据此声称已查到最新信息。"/>}
+    </Card>}
+    {status.data?.natural_interruption && <NaturalInterruptionCard value={status.data.natural_interruption}/>}
+</>},
+    ]}/>
   </AppShell>;
 }

@@ -63,6 +63,7 @@ describe('每日记忆回顾',()=>{
 
     const client=new QueryClient({defaultOptions:{queries:{retry:false}}});
     render(<QueryClientProvider client={client}><MemoryRouter><MemoryApp/></MemoryRouter></QueryClientProvider>);
+    fireEvent.click(screen.getByRole('button',{name:'每日回顾'}));
     expect(await screen.findByText(/每日记忆回顾/)).toBeTruthy();
     expect((await screen.findAllByText('用户喜欢乌龙茶。')).length).toBeGreaterThanOrEqual(2);
     expect(screen.getByText('新增 1')).toBeTruthy();
@@ -81,6 +82,7 @@ describe('每日记忆回顾',()=>{
     const expectedDate=`${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
     expect(screen.getByLabelText('L0 日期').getAttribute('value')).toBe(expectedDate);
     fireEvent.click(screen.getByText('L1 原子记忆 · 1'));
+    fireEvent.click(screen.getByRole('button',{name:'每日回顾'}));
     const correctionButton=screen.getByRole('button',{name:'直接纠正'});
     await waitFor(()=>expect(correctionButton.hasAttribute('disabled')).toBe(false));
     fireEvent.click(correctionButton);
@@ -309,6 +311,7 @@ describe('L1 质量候选',()=>{
     });
     const client=new QueryClient({defaultOptions:{queries:{retry:false}}});
     render(<QueryClientProvider client={client}><MemoryRouter><MemoryApp/></MemoryRouter></QueryClientProvider>);
+    fireEvent.click(screen.getByRole('button',{name:'重复与关系复核'}));
     const scan=await screen.findByRole('button',{name:'扫描当前 L1'});
     fireEvent.click(scan);
     expect(await screen.findByText('可能矛盾')).toBeTruthy();
@@ -350,6 +353,7 @@ describe('L1 质量候选',()=>{
     });
     const client=new QueryClient({defaultOptions:{queries:{retry:false}}});
     render(<QueryClientProvider client={client}><MemoryRouter><MemoryApp/></MemoryRouter></QueryClientProvider>);
+    fireEvent.click(screen.getByRole('button',{name:'重复与关系复核'}));
     const button=await screen.findByRole('button',{name:'运行一次预览'});
     expect(calls.some(call=>call.path.includes('semantic-relations'))).toBe(false);
     fireEvent.click(button);
