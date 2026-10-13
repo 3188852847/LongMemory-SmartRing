@@ -65,9 +65,11 @@
 | `src/longmemory/` | 独立记忆核心、适配层与程序入口 |
 | `web/react-chat/`、`scripts/` | 网页控制台、启动与开发工具 |
 | `tests/`、[datasets](datasets/README.md)、`experiments/` | 测试代码、评估输入、实验配置与结果；与个人数据隔离 |
-| [测试产物管理](docs/development/test-artifacts.md) | 当前自动临时目录、清理边界与历史测量资料归位建议 |
+| [测试产物管理](docs/development/test-artifacts.md) | 当前自动临时目录、清理边界与历史测量资料归位 |
 | `firmware/smartring_plus/` | 项目自有固件补丁和恢复记录 |
-| `data/`、`local/`、`LongMemory备份/` | 本地数据、专属外部资源、私有恢复包与原始快照；真实内容不提交 Git |
+| `config/examples/`、`local/config/` | 公开脱敏模板、私有配置与偏好；[配置管理](docs/development/configuration.md) |
+| `data/`、`local/runtime/`、`local/archive/` | 日用数据、专属资源、历史恢复档案；[资料归属](docs/development/local-assets.md)；真实内容不提交 Git |
+| [前端模块](docs/development/frontend-structure.md)、[自动化质量检查](docs/development/continuous-integration.md) | 实际源码归类、提交后的自动检查及验收边界 |
 | [系统架构](docs/architecture/overview.md)、[运行流程](docs/architecture/workflows.md) | 当前职责边界与运行步骤 |
 | [V1 日用范围](docs/requirements/v1-personal-companion.md)、[ROADMAP](ROADMAP.md) | 阶段完成标准与 P1～P5 优先级 |
 | `docs/adr/`、`docs/research/` | 架构决策记录（ADR）与可追溯研究证据 |

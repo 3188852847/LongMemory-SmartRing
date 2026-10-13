@@ -43,7 +43,7 @@ def test_react_nonce_and_resource_whitelist(built):
             response = await client.get(base + '/react-chat/assets/app.js')
             assert response.status == 200
             assert 'nonce-' not in response.headers['Content-Security-Policy']
-            for path in ['/react-chat/.vite/manifest.json', '/react-chat/index.html', '/react-chat/src/main.tsx', '/react-chat/assets/no.js']:
+            for path in ['/react-chat/.vite/manifest.json', '/react-chat/index.html', '/react-chat/src/main.tsx', '/react-chat/src/app/main.tsx', '/react-chat/assets/no.js']:
                 assert (await client.get(base + path)).status == 404
             assert (await client.get(base + '/chat-react', headers={'Origin': 'https://evil.invalid'})).status == 403
             assert (await client.get(base + '/memories-legacy')).status == 200

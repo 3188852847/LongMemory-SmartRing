@@ -4,7 +4,7 @@
 
 - 项目由 LongMemory-SmartRing 更名为智慧圆屏；当前授权范围为恢复原代码、文字、记忆、原日用语音与固件编译环境，以及适配现有电脑目录规则。2026-10-14 所有者授权固件编译恢复，暂不烧录。
 - 产品展示名称更新，内部 `longmemory` 包、命令、协议、Cookie、数据库名、记忆方法名和历史记录保留；禁止全仓替换历史标识。
-- 主仓库、数据、配置和 `.venv` 位于本项目；专用外部运行资源使用项目内 `local/`，私有恢复包和原始展开快照使用 `LongMemory备份/`，二者不提交 Git。
+- 主仓库、数据、配置和 `.venv` 位于本项目；专用外部运行资源使用项目内 `local/runtime/` 与 `local/tools/`，私有恢复包和原始展开快照已归位到 `local/archive/recovery/`，不提交 Git。
 - 2026-10-13 所有者决定：专属外部源码、模型和工具重新从官方来源取得，不从旧备份部署；旧备份仅用于识别版本、文件指纹和历史修改。BGE 已验收，当前准备原日用语音链路（小智、Silero、SenseVoice、CosyVoice3），固件以后恢复。此决定不撤销已经完成的主仓库与个人数据恢复。
 - 当前使用原 Python 3.12.13、原 uv.lock；前端固定 pnpm 11.19.0 和原 pnpm-lock.yaml。安装依赖、模型下载和联网拉取由用户执行，助手给出命令并验证结果。
 - 2026-10-14 原圆屏语音主链路已恢复；默认圆屏模式、模型辅助提取与关键词＋本地 BGE 混合召回，保留已选择的官方模型和助手角色。资源均全新取得并通过摘要核对，离线合成、听写、判停与编解码通过；所有者确认实机声音、连续对话、打断和记忆回答正常。低频整理及影子模型复核暂时关闭。
@@ -21,7 +21,9 @@
 - 根目录唯一日常入口为 `启动智慧圆屏.cmd`；内部 CMD 实现位于 `scripts/development/launcher/Start.cmd`，当前操作指南使用中文入口，历史档案保留当时名称。
 - README 只保留当前介绍、能力、启动方式、目录与文档导航；CHANGELOG 保留近期摘要，完整旧文与来源摘要见 `docs/history/`、`docs/releases/`。
 - pytest 自动夹具使用 `data/test-tmp/pytest/run-<PID>-<随机标识>/`；每进程独立，正常结束仅清理自身目录，保留共享父目录。显式 basetemp 由调用者负责隔离；不得指向个人数据或历史证据。
-- `.pytest-tmp`、`.test-runtime` 中的旧资料以及根目录私有 env、恢复备份仍保留；集中迁移前核对引用和运行期读写，不把已有文件一律当缓存清理。现行规则见 `docs/development/test-artifacts.md`。
+- 第二批所有者授权 A 配置/资源归位、B 前端模块整理、C 自动化质量检查并行执行。私有 env、小智人工 YAML、启动与圆屏偏好统一到 `local/config/`，公开模板统一到 `config/examples/`；厂家小智 `data/.config.yaml` 是启动前生成的消费副本，不作为人工管理来源。切换必须停止旧代码进程、逐文件校验并重开正式启动器，不能活着搬迁配置。规则见 `docs/development/configuration.md`。
+- 旧恢复备份归位 `local/archive/recovery/`，原 `.test-runtime` 脚本与结果原样进入 `experiments/results/legacy-runtime-20261014/`，原 `.pytest-tmp` 进入 `local/archive/test-artifacts/pytest-before-20261014/`。归位保留内容、摘要及路径映射，不运行旧脚本，不覆盖结果；历史原文保留。规则见 `docs/development/local-assets.md` 和 `docs/development/test-artifacts.md`。
+- 前端按实际功能模块管理，不创建无用途空目录；CI 执行锁定依赖的合成检查，专属语音/模型/工具验收按精确例外另行验证。远程结果、分支保护与本地验证必须分别报告，不把工作流文件存在当作远程验收通过。
 
 ## 项目定位
 

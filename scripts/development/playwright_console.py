@@ -11,6 +11,8 @@ from longmemory.adapters.llm.fake import FakeAnswerGenerator
 from longmemory.entrypoints.api.chat_backend import ChatBackend
 from longmemory.entrypoints.api.experiment_backend import ExperimentBackend
 from longmemory.entrypoints.api.server import create_app
+from longmemory.infrastructure.config.round_skins import RoundSkinStore
+from longmemory.infrastructure.media.round_wallpaper_library import RoundWallpaperLibrary
 from longmemory.methods.longmemory_v1.method import LongMemoryV1
 
 
@@ -87,6 +89,10 @@ def main():
         LongMemoryV1(database).close()
         seed_owner_review_cases(database)
         backend = ChatBackend(database, FakeAnswerGenerator())
+        # 仅复用版本化的内置皮肤；选择、自定义皮肤和媒体都属于本次临时工程。
+        # create_app 的默认目录是日用项目，测试必须显式覆盖这两个本地资产入口。
+        skins = RoundSkinStore(root)
+        skins.skin_root = Path(__file__).resolve().parents[2] / "firmware/smartring_plus/skins"
         try:
             app = create_app(
                 port=args.port,
@@ -94,6 +100,8 @@ def main():
                 database=database,
                 chat_backend=backend,
                 experiment_backend=ExperimentBackend(root / "experiments"),
+                round_skin_store=skins,
+                round_wallpaper_library=RoundWallpaperLibrary(root / "wallpapers"),
                 allow_memory_correction=True,
                 allow_memory_delete=True,
             )

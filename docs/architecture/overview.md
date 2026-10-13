@@ -1,5 +1,13 @@
 # 系统架构总览
 
+2026-10-14 工程布局更新：网页源码按 `app/`、`pages/`、`features/`、公共组件、API
+与样式归类；[前端模块说明](../development/frontend-structure.md)记录实际边界。
+私有配置统一进入 `local/config/`，公共模板在 `config/examples/`；小智固定路径只
+保存启动前生成的消费副本，详见[配置管理](../development/configuration.md)。
+历史恢复和测量证据见[本地资料归属](../development/local-assets.md)。
+自动化质量检查见[CI 说明](../development/continuous-integration.md)；部署模式、
+记忆算法、数据库结构和设备协议保持原有边界。
+
 通用联网与等待反馈（ADR-0172）位于 Xiaozhi 语音适配层：回答模型只获得一个
 只读搜索工具，结果仅在当前请求副本内使用；缓存 Opus 提示直接进入语音队列，
 不进入记忆核心。配置与音频资产归基础设施，设备控制协议只公开有限状态和耗时。
