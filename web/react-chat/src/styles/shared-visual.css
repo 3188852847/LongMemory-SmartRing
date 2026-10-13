@@ -74,3 +74,78 @@
 /* AntD 6 的空搜索 input 覆盖在选中值上；原生 input 主题背景不能涂在这层。
    保留组件库自己的文字、禁用和搜索规则，仅抵消旧全局背景 !important。 */
 :root[data-theme=future] .ant-select .ant-select-input{background-color:transparent!important}
+
+/* 共享动态只负责光效和反馈，不接管页面高度、滚动或各任务工作区。 */
+:root {
+  --motion-press: 120ms;
+  --motion-feedback: 160ms;
+  --motion-detail: 240ms;
+  --ease-out: cubic-bezier(.23,1,.32,1);
+  --ease-in-out: cubic-bezier(.77,0,.175,1);
+  --ease-drawer: cubic-bezier(.32,.72,0,1);
+}
+:root[data-theme=future] {
+  --canvas:#06111b; --surface:#0b1c2c; --surface-soft:#102738;
+  --muted:#a2bac9; --muted-strong:#b6cbd7; --accent:#5ce5ed;
+  --success:#70dfbd; --warning:#efb864; --danger:#ff8395;
+}
+.digital-atmosphere {
+  display:none; position:fixed; inset:0; z-index:4; overflow:hidden;
+  pointer-events:none; user-select:none; color:var(--accent,#5ce5ed);
+}
+:root[data-theme=future] .digital-atmosphere,.digital-atmosphere.atmosphere-launcher {display:block}
+.digital-atmosphere.atmosphere-launcher {color:#5ce5ed}
+.atmosphere-track {position:absolute; opacity:.18; background:currentColor}
+.track-top {height:1px; width:58%; top:0; right:0}
+.track-side {width:1px; height:62%; top:20%; right:0}
+.atmosphere-track>i {position:absolute; display:block; background:currentColor; border-radius:999px}
+.track-top>i {width:70px; height:3px; top:0; left:0; animation:data-flow-x 22s linear infinite}
+.track-side>i {height:60px; width:3px; top:0; right:0; animation:data-flow-y 26s linear infinite}
+.atmosphere-ring {position:absolute; width:220px; height:220px; border:1px solid currentColor; border-radius:50%; opacity:.08; right:-145px; bottom:14%; animation:data-orbit 32s linear infinite}
+.atmosphere-ring>i {position:absolute; width:5px; height:5px; border-radius:50%; background:currentColor; top:30px; left:30px}
+@keyframes data-flow-x {from{transform:translateX(-80px)}to{transform:translateX(100vw)}}
+@keyframes data-flow-y {from{transform:translateY(-80px)}to{transform:translateY(80vh)}}
+@keyframes data-orbit {to{transform:rotate(360deg)}}
+.ambient-motion-toggle {display:inline-flex; align-items:center; justify-content:center; gap:7px; min-height:44px; padding:8px 12px; font-size:.75rem; color:var(--muted); border:1px solid var(--border-strong,var(--border)); border-radius:999px; background:var(--surface); cursor:pointer}
+.ambient-motion-toggle svg {width:18px; height:18px; flex:none}
+.ambient-motion-toggle[aria-pressed=true] svg {color:var(--accent)}
+.ambient-motion-toggle span {white-space:nowrap}
+.ambient-motion-floating {position:fixed; left:12px; bottom:10px; z-index:20}
+/* 窄窗口放回文档流，避免浮动控件遮住聊天输入或页面主动作。 */
+@media(max-width:760px) {.ambient-motion-floating {position:static; margin:0 18px 16px}}
+.ambient-motion-toggle:focus-visible {outline:2px solid var(--accent); outline-offset:3px}
+.state-core {position:relative; width:300px; max-width:100%; aspect-ratio:1; color:var(--accent); border-radius:50%; border:1px solid var(--border-strong); background:radial-gradient(circle at 42% 35%,color-mix(in srgb,var(--accent) 10%,var(--surface)),var(--surface) 67%); box-shadow:inset 0 0 60px color-mix(in srgb,var(--accent) 6%,transparent),0 0 80px color-mix(in srgb,var(--accent) 5%,transparent)}
+.orb-grid {position:absolute; inset:16%; border:1px solid var(--border-strong); border-radius:50%; background:linear-gradient(90deg,transparent 49.7%,var(--border) 50%,transparent 50.3%),linear-gradient(transparent 49.7%,var(--border) 50%,transparent 50.3%)}
+.orb-orbit {position:absolute; inset:6%; border:1px solid transparent; border-top-color:currentColor; border-right-color:var(--border-strong); border-radius:50%; transform:rotate(-35deg)}
+.orbit-two {inset:-5%; border-top-color:transparent; border-bottom-color:var(--border-strong); border-left-color:var(--border-strong); transform:rotate(25deg)}
+.orb-symbol {position:absolute; inset:32%; width:36%; height:36%; opacity:.9}
+.orb-signal {position:absolute; top:13%; left:13%; width:6px; height:6px; border-radius:50%; background:currentColor; box-shadow:0 0 14px currentColor}
+.core-stopped,.core-unknown {color:var(--muted)}
+.core-ready {color:var(--success)}
+.core-failed {color:var(--warning)}
+.core-starting .orbit-one,.core-stopping .orbit-one {animation:core-orbit 2.4s linear infinite}
+.core-ready .orb-signal {animation:core-breathe 4s var(--ease-in-out) infinite}
+.core-pulse {position:absolute; bottom:21%; left:42%; width:16%; height:14px; display:flex; align-items:center; justify-content:center; gap:5px}
+.core-pulse i {width:3px; height:14px; border-radius:999px; background:currentColor; animation:core-wave 1.2s var(--ease-in-out) infinite}
+.core-pulse i:nth-child(2){animation-delay:-.4s}.core-pulse i:nth-child(3){animation-delay:-.8s}
+@keyframes core-orbit {to{transform:rotate(325deg)}}
+@keyframes core-breathe {0%,100%{opacity:.5}50%{opacity:1}}
+@keyframes core-wave {0%,100%{transform:scaleY(.3);opacity:.45}50%{transform:scaleY(1);opacity:.9}}
+.shared-status.tone-busy>i {animation:core-breathe 1.6s var(--ease-in-out) infinite}
+:root[data-theme=future] :is(.ant-btn,.ambient-motion-toggle,.console-nav-link) {transition:background-color var(--motion-feedback) var(--ease-out),border-color var(--motion-feedback) var(--ease-out),color var(--motion-feedback) var(--ease-out),transform var(--motion-press) var(--ease-out)}
+/* 不给快速标签切换补上 left/width 动画；AntD 的 thumb 用 transform 续接当前位置。 */
+.ant-tabs-ink-bar {transition:none!important}
+@media(hover:hover) and (pointer:fine) {
+  .ambient-motion-toggle:hover {border-color:var(--accent); color:var(--text)}
+  :root[data-theme=future] .ant-btn:not(:disabled):hover {box-shadow:0 0 0 1px color-mix(in srgb,var(--accent) 28%,transparent)!important}
+}
+:root[data-input-modality=pointer] :is(.ambient-motion-toggle,.launcher-mode-options button,.launcher-primary-actions .ant-btn):not(:disabled):active {transform:scale(.98); transition-duration:80ms}
+:root[data-input-modality=keyboard] :is(.ant-btn,.ant-segmented-thumb,.ant-drawer-content-wrapper,.ant-modal,.ambient-motion-toggle,.console-nav-link) {animation:none!important; transition:none!important}
+:root[data-ambient=off] :is(.digital-atmosphere *,.state-core *,.shared-status>i) {animation:none!important}
+:root[data-page-visibility=hidden] :is(.digital-atmosphere *,.state-core *,.shared-status>i) {animation-play-state:paused!important}
+:root[data-motion=reduce] :is(.digital-atmosphere *,.state-core *,.shared-status>i) {animation:none!important}
+:root[data-motion=reduce] :is(.ambient-motion-toggle,.launcher-mode-options button,.launcher-primary-actions .ant-btn) {transform:none!important}
+@media(prefers-reduced-motion:reduce) {
+  :is(.digital-atmosphere *,.state-core *,.shared-status>i) {animation:none!important}
+  :is(.ambient-motion-toggle,.launcher-mode-options button,.launcher-primary-actions .ant-btn) {transform:none!important}
+}

@@ -1,7 +1,10 @@
-import {describe, expect, test, vi} from 'vitest';
+import {afterEach, describe, expect, test, vi} from 'vitest';
 import {fireEvent, render, screen, waitFor} from '@testing-library/react';
 import {LauncherApp} from './LauncherApp';
 import {LauncherApi, LauncherError, type LauncherSnapshot} from './api';
+import {AMBIENT_KEY} from '../../components/DigitalAtmosphere';
+
+afterEach(() => {localStorage.removeItem(AMBIENT_KEY);});
 
 const stopped: LauncherSnapshot = {
   state: 'stopped', message: '可以开启陪伴', services: [{id: 'console', label: '文字服务', state: '尚未启动'}],
@@ -14,6 +17,30 @@ function fake(snapshot = stopped) {
   return {api, request};
 }
 describe('React 启动面板', () => {
+  test('设置分类保留草稿，分类与光效开关不会写启动配置', async () => {
+    const {api, request} = fake(); render(<LauncherApp api={api}/>);
+    fireEvent.click(screen.getByRole('button', {name: '持续光效'}));
+    fireEvent.click(await screen.findByRole('button', {name: /启动设置/}));
+    fireEvent.change(await screen.findByLabelText('电脑局域网 IP'), {target: {value: '192.168.1.22'}});
+    fireEvent.click(screen.getByText('记忆', {exact: true}));
+    expect(screen.getByLabelText('记忆召回')).toBeTruthy();
+    expect(screen.queryByLabelText('电脑局域网 IP')).toBeNull();
+    fireEvent.click(screen.getByText('语音', {exact: true}));
+    expect(screen.getByLabelText('聆听环境')).toBeTruthy();
+    fireEvent.click(screen.getByText('常用', {exact: true}));
+    expect((screen.getByLabelText('电脑局域网 IP') as HTMLInputElement).value).toBe('192.168.1.22');
+    expect(request.mock.calls.every(call => call[0] === 'status')).toBe(true);
+    fireEvent.click(screen.getByRole('button', {name: '保存设置'}));
+    await waitFor(() => expect(request).toHaveBeenCalledWith('settings', {settings: {lan_ip: '192.168.1.22'}, expected_revision: 'rev-1'}));
+  });
+  test('状态核心只消费服务事实，未知和异常没有处理中波形', async () => {
+    const {api} = fake({...stopped, state: 'failed'});
+    const {container} = render(<LauncherApp api={api}/>);
+    expect(container.querySelector('.state-core')?.getAttribute('data-state')).toBe('unknown');
+    expect(container.querySelector('.core-pulse')).toBeNull();
+    await waitFor(() => expect(container.querySelector('.state-core')?.getAttribute('data-state')).toBe('failed'));
+    expect(container.querySelector('.core-pulse')).toBeNull();
+  });
   test('打开与卸载只有读操作，未知服务状态不冒充就绪', async () => {
     const {api, request} = fake();
     const {unmount} = render(<LauncherApp api={api}/>);
