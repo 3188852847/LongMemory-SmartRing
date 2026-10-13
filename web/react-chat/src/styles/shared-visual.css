@@ -1,0 +1,18 @@
+.scifi-surface{position:relative;min-width:0;background:var(--surface);border:1px solid var(--border);border-radius:14px}
+.shared-status{display:inline-flex;align-items:center;gap:9px;line-height:1.4;color:var(--muted)}
+.shared-status>i{width:7px;height:7px;flex:none;border-radius:50%;background:currentColor}
+.shared-status.tone-good{color:var(--success)}.shared-status.tone-busy{color:var(--accent)}.shared-status.tone-warning{color:var(--warning)}.shared-status.tone-bad{color:var(--danger)}
+.orbit-mark{width:42px;height:42px;flex:none;color:var(--accent)}
+.page-header .scifi-surface{padding:8px 12px;border-radius:999px;font-size:.78rem}
+:root[data-theme=future] .scifi-surface{background:linear-gradient(135deg,color-mix(in srgb,var(--surface) 94%,var(--accent)),var(--surface));border-color:var(--border-strong)}
+.brand-block .orbit-mark{width:38px;height:38px}
+/* 网页仍使用原有路由和业务模块，只整理外壳的阅读层次。 */
+:root[data-theme=future]{--canvas:#06111b;--surface:#0b1c2c;--text:#edf7fb;--text-strong:#edf7fb;--muted:#93abba;--accent:#5ce5ed}
+:root[data-theme=future] .page-header{padding-bottom:24px;margin-bottom:28px;gap:24px}
+:root[data-theme=future] .page-header h1{letter-spacing:.015em;font-weight:570}
+:root[data-theme=future] .page-description{max-width:65ch;line-height:1.75}
+:root[data-theme=future] .console-nav-link{border-radius:9px;padding:11px 12px;margin-bottom:5px}
+:root[data-theme=future] .nav-copy small{line-height:1.55;opacity:.84}
+:root[data-theme=future] .console-nav-link.active{box-shadow:inset 2px 0 0 var(--accent);background:linear-gradient(90deg,rgba(92,229,237,.12),rgba(92,229,237,.02))}
+:root[data-theme=future] .nav-group h2{letter-spacing:.035em;font-family:inherit}
+:root[data-theme=future] .page-kicker{letter-spacing:.04em;font-family:inherit}

@@ -1,5 +1,6 @@
 import type {ReactNode} from 'react';
 import {Link} from 'react-router-dom';
+import {OrbitMark, StatusIndicator} from './SciFiSurface';
 
 type Page = 'overview' | 'device' | 'display' | 'chat' | 'memories' | 'quality' | 'scenarios' | 'personas' | 'settings' | 'experiments';
 
@@ -44,10 +45,10 @@ export function AppShell({subtitle, className = '', sidebar, children}: {
     <a className="skip-link" href="#main-content">跳到主要内容</a>
     <aside><div className="sidebar-inner">
       <div className="brand-block"><Link aria-label="智慧圆屏" className="brand" to="/overview">
-        <span className="brand-mark" aria-hidden="true">圆</span><span className="brand-copy"><strong>智慧圆屏</strong><small>个人陪伴控制台</small></span>
+        <OrbitMark/><span className="brand-copy"><strong>智慧圆屏</strong><small>个人陪伴控制台</small></span>
       </Link><p>{subtitle}</p></div>
       {sidebar}
-      <div className="sidebar-footer"><i aria-hidden="true"/>本机个人空间</div>
+      <div className="sidebar-footer"><StatusIndicator>本机个人空间</StatusIndicator></div>
     </div></aside>
     <main id="main-content"><div className="shell-content">{children}</div></main>
   </div>;

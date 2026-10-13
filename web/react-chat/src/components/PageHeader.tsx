@@ -1,4 +1,5 @@
 import type {ReactNode} from 'react';
+import {SciFiSurface} from './SciFiSurface';
 
 type PageHeaderProps = {
   eyebrow: string;
@@ -18,7 +19,7 @@ export function PageHeader({eyebrow, title, description, meta, action}: PageHead
       <p className="page-kicker">{eyebrow}</p>
       <h1>{title}</h1>
       {description && <p className="page-description">{description}</p>}
-      {meta && <div className="page-meta">{meta}</div>}
+      {meta && <SciFiSurface className="page-meta">{meta}</SciFiSurface>}
     </div>
     {action && <div className="page-action">{action}</div>}
   </header>;
