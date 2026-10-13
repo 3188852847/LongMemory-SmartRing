@@ -20,6 +20,7 @@ import sys
 from time import perf_counter
 import threading
 from typing import Protocol
+from voice_profiles import VoiceProfileStore
 
 # 多个隔离 TTS 目录都可能有 trial.py。使用唯一模块名加载同目录文件，避免
 # 完整 pytest 进程中的 sys.modules 把 CosyVoice 与 VoxCPM2 试验模块串台。
@@ -49,7 +50,7 @@ CAPABILITIES = {
     "locality": "local",
     "delivery_modes": ["buffered", "audio_stream"],
     "output_mime_types": ["audio/wav"],
-    "controls": [],
+    "controls": ["reference_voice", "style_prompt"],
     # 客户端关闭 HTTP 响应后，服务端在下一个模型块写出时终止迭代。它不是逐采样
     # 抢占，因此只声明协作式取消，不能冒充即时 GPU 中止。
     "cancellation": "cooperative",
@@ -74,6 +75,7 @@ class CosyVoiceSynthesizer:
         cache_entries: int = 24,
         hidden_only: bool = True,
         model_streaming: bool = False,
+        profile_root: Path | None = None,
     ):
         paths = validate_local_files(source_root, model_dir)
         configure_runtime_cache()
@@ -92,6 +94,8 @@ class CosyVoiceSynthesizer:
         self._cache_entries = cache_entries
         self._cache: OrderedDict[str, bytes] = OrderedDict()
         self._stream_cache: OrderedDict[str, tuple[bytes, ...]] = OrderedDict()
+        self._profiles = VoiceProfileStore(profile_root or Path(__file__).resolve().parents[3])
+        self._speaker_cache = OrderedDict()
         # 圆屏已经按自然标点收齐片段后播放。完整生成该片段可省去内部流式
         # Flow/HiFT 对累计前缀的重复计算；HTTP 仍沿用相同 WAV 长度前缀协议。
         # 保留显式恢复内部流式的开关，以便隔离对照与回退。
@@ -153,16 +157,45 @@ class CosyVoiceSynthesizer:
             raise RuntimeError("stream runtime unavailable")
         runtime_model.token_hop_len = self.stream_token_hop_len
 
-    def _generate(self, text: str) -> bytes:
+    def _voice_context(self, profile=None):
+        """每个片段捕获不可变档案；后续保存不能改变正在生成的声音。"""
+        if not hasattr(self, '_profiles'):
+            return None
+        selected, reference, digest = self._profiles.model_context(profile)
+        if selected['reference_id'] is None and not selected['style']:
+            return None
+        prompt_wav = reference or self._prompt_wav
+        if selected['style']:
+            prompt = 'You are a helpful assistant. ' + selected['style'] + '<|endofprompt|>'
+        else:
+            prompt = 'You are a helpful assistant.<|endofprompt|>' + selected['transcript']
+        speaker = 'longmemory-profile-' + digest
+        if speaker not in self._speaker_cache:
+            # 指令模式也注册自己的 prompt_text；不能复用带旧转写的缓存 speaker，
+            # 因为上游 frontend_instruct2 会直接复用缓存的 prompt_text token。
+            if not self._model.add_zero_shot_spk(prompt, prompt_wav, speaker):
+                raise RuntimeError('voice reference registration failed')
+            self._speaker_cache[speaker] = True
+            while len(self._speaker_cache) > 8:
+                old, _ = self._speaker_cache.popitem(last=False)
+                self._model.frontend.spk2info.pop(old, None)
+        else:
+            self._speaker_cache.move_to_end(speaker)
+        return {'digest': digest, 'prompt': prompt, 'wav': prompt_wav,
+                'speaker': speaker, 'instruct': bool(selected['style'])}
+
+    def _inference(self, text, context):
+        if context is None:
+            return self._model.inference_zero_shot(text, PROMPT_TEXT, self._prompt_wav,
+                zero_shot_spk_id=REFERENCE_SPEAKER_ID, stream=self.model_streaming)
+        method = self._model.inference_instruct2 if context['instruct'] else self._model.inference_zero_shot
+        return method(text, context['prompt'], context['wav'],
+                      zero_shot_spk_id=context['speaker'], stream=self.model_streaming)
+
+    def _generate(self, text: str, context=None) -> bytes:
         self._prepare_stream()
         chunks = []
-        for item in self._model.inference_zero_shot(
-            text,
-            PROMPT_TEXT,
-            self._prompt_wav,
-            zero_shot_spk_id=REFERENCE_SPEAKER_ID,
-            stream=self.model_streaming,
-        ):
+        for item in self._inference(text, context):
             speech = item.get("tts_speech")
             if speech is None or speech.numel() == 0:
                 raise RuntimeError("empty audio chunk")
@@ -201,24 +234,20 @@ class CosyVoiceSynthesizer:
         )
         return output.getvalue()
 
-    def stream_chunks(self, text: str, *, use_cache: bool = True):
+    def stream_chunks(self, text: str, *, use_cache: bool = True, voice_profile=None):
         """逐块交付音频；完全相同的近期回复可复用本次进程内结果。"""
         with self._lock:
+            context = self._voice_context(voice_profile)
+            key = (context['digest'], text) if context else text
             if use_cache:
-                cached = self._stream_cache.pop(text, None)
+                cached = self._stream_cache.pop(key, None)
                 if cached is not None:
-                    self._stream_cache[text] = cached
+                    self._stream_cache[key] = cached
                     yield from cached
                     return
             self._prepare_stream()
             generated = []
-            for item in self._model.inference_zero_shot(
-                text,
-                PROMPT_TEXT,
-                self._prompt_wav,
-                zero_shot_spk_id=REFERENCE_SPEAKER_ID,
-                stream=self.model_streaming,
-            ):
+            for item in self._inference(text, context):
                 speech = item.get("tts_speech")
                 if speech is None:
                     raise RuntimeError("empty audio chunk")
@@ -231,20 +260,22 @@ class CosyVoiceSynthesizer:
                 # 先耗尽模型迭代再写 HTTP，避免客户端此时断开跳过上游清理。
                 yield from generated
             if use_cache and generated:
-                self._stream_cache[text] = tuple(generated)
+                self._stream_cache[key] = tuple(generated)
                 while len(self._stream_cache) > self._cache_entries:
                     self._stream_cache.popitem(last=False)
 
-    def synthesize(self, text: str, *, use_cache: bool = True) -> bytes:
+    def synthesize(self, text: str, *, use_cache: bool = True, voice_profile=None) -> bytes:
         with self._lock:
+            context = self._voice_context(voice_profile)
+            key = (context['digest'], text) if context else text
             if use_cache:
-                cached = self._cache.pop(text, None)
+                cached = self._cache.pop(key, None)
                 if cached is not None:
-                    self._cache[text] = cached
+                    self._cache[key] = cached
                     return cached
-            audio = self._generate(text)
+            audio = self._generate(text, context)
             if use_cache:
-                self._cache[text] = audio
+                self._cache[key] = audio
                 while len(self._cache) > self._cache_entries:
                     self._cache.popitem(last=False)
             return audio
@@ -283,7 +314,15 @@ class CosyVoiceHandler(BaseHTTPRequestHandler):
         if self.path != "/health":
             self._json(404, {"error": "not_found"})
             return
-        body = {"ready": True, "provider": "cosyvoice3", "capabilities": CAPABILITIES}
+        body = {"ready": True, "provider": "cosyvoice3", "capabilities": CAPABILITIES,
+                "voice_profile_contract_version": 1}
+        store = getattr(self.server.synthesizer, '_profiles', None)
+        if store is not None:
+            try:
+                body['voice_profile_config_digest'] = store.profile()[1]
+                body['voice_profile_config_state'] = 'valid'
+            except (OSError, ValueError):
+                body['voice_profile_config_state'] = 'invalid'
         for name in ("load_seconds", "warmup_seconds", "stream_token_hop_len"):
             value = getattr(self.server.synthesizer, name, None)
             if isinstance(value, (int, float)):
@@ -350,21 +389,24 @@ class CosyVoiceHandler(BaseHTTPRequestHandler):
             self._json(503, {"error": "busy"})
             return
         try:
+            kwargs = {'use_cache': body.get('cache', True)}
+            if 'voice_profile' in body:
+                # 仅用于网页草稿试听：完整白名单校验仍在 synthesizer 的档案库中。
+                kwargs['voice_profile'] = body['voice_profile']
             if streaming:
                 self.send_response(200)
                 self.send_header("Content-Type", "application/vnd.longmemory.wav-chunks")
                 self.send_header("Cache-Control", "no-store")
+                self.send_header('X-LongMemory-Voice-Profile', '1')
                 # HTTP/1.0 会以连接关闭标记响应结束。每个 WAV 前的无符号大端长度
                 # 让客户端不依赖 TCP 分包边界，最大块仍由客户端再次限制。
                 self.end_headers()
-                for chunk in self.server.synthesizer.stream_chunks(
-                    text.strip(), use_cache=body.get("cache", True)
-                ):
+                for chunk in self.server.synthesizer.stream_chunks(text.strip(), **kwargs):
                     self.wfile.write(struct.pack("!I", len(chunk)))
                     self.wfile.write(chunk)
                     self.wfile.flush()
                 return
-            audio = self.server.synthesizer.synthesize(text.strip(), use_cache=body.get("cache", True))
+            audio = self.server.synthesizer.synthesize(text.strip(), **kwargs)
         except (BrokenPipeError, ConnectionResetError):
             # 用户打断或 Xiaozhi 退出时，关闭生成器即可释放模型锁；无需把正常取消
             # 记录成合成故障，也不能在已经发送部分音频后回写 JSON。
@@ -379,6 +421,7 @@ class CosyVoiceHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "audio/wav")
         self.send_header("Content-Length", str(len(audio)))
         self.send_header("Cache-Control", "no-store")
+        self.send_header('X-LongMemory-Voice-Profile', '1')
         self.end_headers()
         self.wfile.write(audio)
 

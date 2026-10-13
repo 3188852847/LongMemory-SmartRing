@@ -7,6 +7,21 @@
 import asyncio
 import re
 from uuid import uuid4
+from functools import lru_cache
+import importlib.util
+from pathlib import Path
+
+
+@lru_cache(maxsize=1)
+def _voice_profile_helper():
+    spec = importlib.util.spec_from_file_location('fast_cosyvoice_profiles', Path(__file__).with_name('cosyvoice_profiles.py'))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def default_voice_active():
+    return _voice_profile_helper().default_voice_active()
 
 
 COSYVOICE_URL = "http://127.0.0.1:18770/v1/audio/speech"
@@ -65,7 +80,7 @@ def install_fast_voice_responses(connection_class):
 
     def chat(connection, query, depth=0):
         response = fast_response_for(query) if depth == 0 else None
-        if response is None or not _uses_cosyvoice3(connection):
+        if response is None or not _uses_cosyvoice3(connection) or not default_voice_active():
             return original(connection, query, depth)
 
         from core.providers.tts.dto.dto import ContentType, SentenceType, TTSMessageDTO

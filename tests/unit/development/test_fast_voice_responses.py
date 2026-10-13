@@ -45,6 +45,19 @@ def test_non_cosyvoice_backend_keeps_original_chat():
     assert calls == [("你好", 0)]
 
 
+def test_custom_voice_does_not_use_official_greeting_assets(monkeypatch):
+    calls = []
+    monkeypatch.setattr(fast, 'default_voice_active', lambda: False)
+    class Connection:
+        def chat(self, query, depth=0):
+            calls.append((query, depth)); return 'normal-pipeline'
+    fast.install_fast_voice_responses(Connection)
+    connection = Connection()
+    connection.config = {'selected_module': {'TTS': 'CustomTTS'}, 'TTS': {'CustomTTS': {'url': fast.COSYVOICE_URL}}}
+    assert connection.chat('你好') == 'normal-pipeline'
+    assert calls == [('你好', 0)]
+
+
 def test_cosyvoice_greeting_archives_l0_and_queues_preset_without_model(monkeypatch):
     class DTO:
         def __init__(self, **values): self.__dict__.update(values)

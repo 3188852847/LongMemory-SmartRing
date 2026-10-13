@@ -11,6 +11,16 @@ export class ApiError extends Error {
 export class ChatApi {
   private csrf = '';
 
+  async cosyVoicePreview(profile: unknown): Promise<Blob> {
+    const response = await fetch('/api/voice-profile/preview', {
+      method: 'POST', credentials: 'same-origin', cache: 'no-store',
+      headers: {'Content-Type': 'application/json', 'X-Console-CSRF': this.csrf},
+      body: JSON.stringify({profile}),
+    });
+    if (!response.ok) throw await this.apiError(response, 'voice_preview_unavailable');
+    return response.blob();
+  }
+
   async voicePreview(voice: string): Promise<Blob> {
     const response = await fetch('/api/voice-settings/preview', {
       method: 'POST', credentials: 'same-origin', cache: 'no-store',

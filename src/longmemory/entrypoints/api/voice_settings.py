@@ -7,11 +7,14 @@ from pathlib import Path
 import subprocess
 from time import monotonic
 import hashlib
+import base64
+import binascii
 from aiohttp import web
 
 from longmemory.adapters.tts import capabilities_for
 from longmemory.application.voice_benchmark import CASES, case_by_id, measure_buffered_speech
 from longmemory.infrastructure.config.tts_benchmark_history import TTSBenchmarkHistory
+from longmemory.infrastructure.config.cosyvoice_profiles import profile_module
 
 PROFILE_DEFAULT = {"version": 1, "reference": None, "style": "", "cfg_value": 2.0,
                    "quality": "balanced"}
@@ -38,6 +41,7 @@ class VoiceSettings:
         self.last_preview = float('-inf')
         self.audio_root = (self.project / 'data/audio').resolve()
         self.profile_path = self.audio_root / 'voxcpm-settings.json'
+        self.cosy_profiles = profile_module().VoiceProfileStore(self.project)
         self.benchmark_history = TTSBenchmarkHistory(
             self.project / 'data/control/tts-benchmark-history.json'
         )
@@ -88,7 +92,7 @@ class VoiceSettings:
         return self.profile()
 
     @staticmethod
-    def local_speech(backend, text, *, bypass_local_cache=False, speaking_rate=1.0):
+    def local_speech(backend, text, *, bypass_local_cache=False, speaking_rate=1.0, voice_profile=None):
         connection = http.client.HTTPConnection('127.0.0.1', LOCAL_TTS[backend], timeout=30)
         request = {'input': text, 'response_format': 'wav', 'stream': False}
         # VoxCPM2 日常链保留重复句缓存；只有固定测试台显式绕过它，防止把缓存读取
@@ -97,12 +101,16 @@ class VoiceSettings:
             request['cache'] = False
         if backend == 'sanotts':
             request['speed'] = speaking_rate
+        if backend == 'cosyvoice3' and voice_profile is not None:
+            request['voice_profile'] = voice_profile
         payload = json.dumps(request).encode()
         try:
             connection.request('POST', '/v1/audio/speech', body=payload,
                                headers={'Content-Type': 'application/json'})
             response = connection.getresponse(); audio = response.read(8 * 1024 * 1024 + 1)
             if response.status != 200 or len(audio) > 8 * 1024 * 1024 or not audio.startswith(b'RIFF'):
+                raise ValueError('synthesis_failed')
+            if voice_profile is not None and response.getheader('X-LongMemory-Voice-Profile') != '1':
                 raise ValueError('synthesis_failed')
             return audio
         except (OSError, http.client.HTTPException):
@@ -128,6 +136,21 @@ class VoiceSettings:
     def voxcpm_ready():
         """兼容旧测试与调用方。"""
         return VoiceSettings.local_ready('voxcpm2')
+
+    @staticmethod
+    def cosy_profile_service_state():
+        connection = http.client.HTTPConnection('127.0.0.1', LOCAL_TTS['cosyvoice3'], timeout=0.5)
+        try:
+            connection.request('GET', '/health')
+            response = connection.getresponse()
+            value = json.loads(response.read(16384))
+            if response.status != 200 or not isinstance(value, dict) or value.get('provider') != 'cosyvoice3' or value.get('ready') is not True:
+                return 'unavailable'
+            return 'ready' if value.get('voice_profile_contract_version') == 1 else 'needs_restart'
+        except (OSError, ValueError, http.client.HTTPException):
+            return 'unavailable'
+        finally:
+            connection.close()
 
     async def call(self, body):
         if self.lock.locked():
@@ -197,6 +220,78 @@ class VoiceSettings:
 
 
 def register_voice_routes(app, backend):
+    async def cosy_snapshot():
+        result = backend.cosy_profiles.snapshot()
+        result['service_state'] = await asyncio.to_thread(backend.cosy_profile_service_state)
+        result['activation'] = 'next_synthesis' if result['service_state'] == 'ready' else 'after_service_start'
+        return result
+    async def limited_json(request, maximum):
+        # 只为受控声音上传扩展单一路由，其他 API 保持原 1KiB 默认限制。
+        if request.content_type != 'application/json' or (request.content_length is not None and request.content_length > maximum):
+            raise ValueError('invalid_voice_request')
+        chunks, total = [], 0
+        async for chunk in request.content.iter_chunked(65536):
+            total += len(chunk)
+            if total > maximum:
+                raise ValueError('invalid_voice_request')
+            chunks.append(chunk)
+        body = json.loads(b''.join(chunks))
+        if not isinstance(body, dict):
+            raise ValueError('invalid_voice_request')
+        return body
+
+    async def cosy_profile(request):
+        if backend is None:
+            return web.json_response({'error': 'voice_not_enabled'}, status=403)
+        try:
+            if request.method == 'GET':
+                return web.json_response(await cosy_snapshot())
+            body = await limited_json(request, 8192)
+            if set(body) != {'profile', 'expected_profile_digest'}:
+                raise ValueError('invalid_voice_request')
+            async with backend.lock:
+                backend.cosy_profiles.save(body['profile'], body['expected_profile_digest'])
+                return web.json_response(await cosy_snapshot())
+        except (ValueError, OSError, UnicodeError) as error:
+            changed = str(error) == 'voice_profile_changed'
+            return web.json_response({'error': 'voice_profile_changed' if changed else 'invalid_voice_profile'}, status=409 if changed else 400)
+
+    async def upload_reference(request):
+        if backend is None:
+            return web.json_response({'error': 'voice_not_enabled'}, status=403)
+        try:
+            module = profile_module()
+            body = await limited_json(request, ((module.MAX_AUDIO_BYTES + 2) // 3) * 4 + 8192)
+            if set(body) != {'audio_base64', 'label', 'transcript'} or not isinstance(body['audio_base64'], str):
+                raise ValueError('invalid_voice_request')
+            data = base64.b64decode(body['audio_base64'], validate=True)
+            async with backend.lock:
+                item = backend.cosy_profiles.add_reference(data, body['label'], body['transcript'])
+                return web.json_response({'item': item, 'references': backend.cosy_profiles.references()}, status=201)
+        except (ValueError, OSError, UnicodeError, binascii.Error) as error:
+            full = str(error) == 'voice_reference_library_full'
+            return web.json_response({'error': 'voice_reference_library_full' if full else 'invalid_voice_reference'}, status=409 if full else 400)
+
+    async def cosy_preview(request):
+        if backend is None:
+            return web.json_response({'error': 'voice_not_enabled'}, status=403)
+        try:
+            body = await limited_json(request, 8192)
+            if set(body) != {'profile'}:
+                raise ValueError('invalid_voice_request')
+            profile = backend.cosy_profiles.validate_profile(body['profile'])
+            if await asyncio.to_thread(backend.cosy_profile_service_state) != 'ready':
+                return web.json_response({'error': 'voice_profile_service_restart_required'}, status=409)
+            if backend.lock.locked() or monotonic() - backend.last_preview < 3:
+                return web.json_response({'error': 'speech_busy'}, status=409)
+            async with backend.lock:
+                backend.last_preview = monotonic()
+                audio = await asyncio.to_thread(backend.local_speech, 'cosyvoice3', profile_module().PREVIEW_TEXT,
+                    bypass_local_cache=True, voice_profile=profile)
+            return web.Response(body=audio, content_type='audio/wav', headers={'Cache-Control': 'no-store'})
+        except (ValueError, OSError, UnicodeError):
+            return web.json_response({'error': 'voice_preview_unavailable'}, status=409)
+
     async def settings(request):
         if backend is None:
             return web.json_response({'error': 'voice_not_enabled'}, status=403)
@@ -296,6 +391,10 @@ def register_voice_routes(app, backend):
         except OSError:
             return web.json_response({'error':'voice_environment_unavailable'}, status=503)
     app.router.add_get('/api/voice-settings', settings, allow_head=False)
+    app.router.add_get('/api/voice-profile', cosy_profile, allow_head=False)
+    app.router.add_post('/api/voice-profile', cosy_profile)
+    app.router.add_post('/api/voice-profile/preview', cosy_preview)
+    app.router.add_post('/api/voice-references', upload_reference)
     app.router.add_post('/api/voice-settings', settings)
     app.router.add_post('/api/voice-settings/preview', settings)
     app.router.add_post('/api/speech', speech)

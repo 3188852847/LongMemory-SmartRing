@@ -39,6 +39,7 @@ _CAPABILITIES = {
         delivery_modes=("buffered", "audio_stream"),
         output_mime_types=("audio/wav",),
         cancellation="cooperative",
+        controls=("reference_voice", "style_prompt"),
     ),
 }
 

@@ -25,8 +25,9 @@ describe('TTS 下次启动选择',()=>{
     });
     render(<TTSBackendSettings api={new ChatApi()} disabled={false}/>);
     await screen.findByText('联网');
+    fireEvent.click(screen.getByRole('button',{name:'高级：兼容声音引擎'}));
     fireEvent.mouseDown(screen.getByRole('combobox',{name:'圆屏声音后端'}));
-    fireEvent.click(await screen.findByText('sanoTTS'));
+    fireEvent.click(await screen.findByText('sanoTTS（兼容）'));
     fireEvent.click(screen.getByRole('button',{name:'保存下次启动选择'}));
     expect(await screen.findByText('等待重启生效')).toBeTruthy();
     await waitFor(()=>expect(request).toHaveBeenCalledTimes(2));

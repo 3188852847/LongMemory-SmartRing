@@ -14,6 +14,7 @@ import {PersonalizationOverview} from '../features/settings/PersonalizationOverv
 import {TTSBenchmarkPanel} from '../features/voice/TTSBenchmarkPanel';
 import {VADSettings} from '../features/voice/VADSettings';
 import {TTSBackendSettings} from '../features/voice/TTSBackendSettings';
+import {CosyVoiceProfileSettings} from '../features/voice/CosyVoiceProfileSettings';
 
 const api = new ChatApi();
 
@@ -31,7 +32,7 @@ export function SettingsApp() {
   const sidebar = <ConsoleNav active="settings" legacyPath="/chat"/>;
 
   return <AppShell subtitle="角色、声音与阅读体验" className="settings-shell" sidebar={sidebar}>
-    <PageHeader eyebrow="控制与观察" title="设置中心" description="调整助手的表达、声音、页面外观和主动联系边界；这些设置不会修改你的事实记忆。"/>
+    <PageHeader eyebrow="控制与观察" title="助手设置" description="在这里调整助手表达、参考声线、页面外观和主动联系。声音与性格分别保存，事实记忆保持独立。"/>
     {(session.isError || config.isError) && <Alert type="error" showIcon title="设置服务当前不可用" description="请确认统一启动的文字服务仍在运行，再刷新本页。"/>}
     <section className="settings-overview" aria-label="当前设置摘要">
       <div><small>设置服务</small><strong className={enabled ? 'is-positive' : ''}>{enabled ? '可用' : '连接中'}</strong></div>
@@ -50,16 +51,15 @@ export function SettingsApp() {
         <p>在保持圆屏、模型、角色和声音不变的情况下切换长期记忆实现，用于日常体验和受控对照。</p>
         <MemoryBackendSettings api={api} disabled={!enabled}/>
       </Card>},
-      {key:'role', label:'助手角色', children:<Card title="助手角色" extra={<span className="setting-scope">网页＋可选圆屏同步</span>}>
+      {key:'role', label:'助手表达', children:<Card title="性格与回答方式" extra={<span className="setting-scope">网页＋可选圆屏同步</span>}>
         <p>编辑角色名称与系统提示词。网页从下一轮开始使用；圆屏必须在弹窗里单独预检和同步。</p>
         <RoleEditor api={api} disabled={!enabled} onSaved={() => {void queryClient.invalidateQueries({queryKey:['chat-config']});}}/>
       </Card>},
-      {key:'voice', label:'声音', children:<Card title="声音" extra={<span className="setting-scope">小智 TTS</span>}>
-        <p>查看并试听当前 TTS，调整已接入的语音参数，以及选择圆屏拾音灵敏度。TTS 输出与 VAD 输入互不替代。</p>
+      {key:'voice', label:'声音与克隆', children:<Card title="声音与克隆" extra={<span className="setting-scope">网页＋圆屏下一次合成</span>}>
+        <CosyVoiceProfileSettings api={api} disabled={!enabled}/>
         <TTSBackendSettings api={api} disabled={!enabled}/>
-        <VoiceSettings api={api} disabled={!enabled}/>
         <VADSettings api={api} disabled={!enabled}/>
-        <TTSBenchmarkPanel api={api} enabled={enabled}/>
+        <details><summary>高级：兼容音色配置与声音测量</summary><VoiceSettings api={api} disabled={!enabled}/><TTSBenchmarkPanel api={api} enabled={enabled}/></details>
       </Card>},
       {key:'appearance', label:'外观与阅读', children:<Card title="外观与阅读" extra={<span className="setting-scope">当前浏览器</span>}>
         <p>只保存主题、字号、阅读密度、聊天宽度和动画偏好，不保存聊天正文或个人记忆。</p>

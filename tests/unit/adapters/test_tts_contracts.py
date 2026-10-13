@@ -27,7 +27,7 @@ def test_current_catalog_reports_delivered_not_theoretical_capabilities():
     assert cosy is not None and cosy.as_dict()["locality"] == "local"
     assert cosy.as_dict()["delivery_modes"] == ["buffered", "audio_stream"]
     assert cosy.streams_audio is True
-    assert cosy.as_dict()["controls"] == []
+    assert cosy.as_dict()["controls"] == ["reference_voice", "style_prompt"]
     assert cosy.as_dict()["cancellation"] == "cooperative"
     assert capabilities_for("planned-but-not-integrated") is None
 

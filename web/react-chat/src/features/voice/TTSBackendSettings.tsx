@@ -12,7 +12,8 @@ export function ttsBackendFailure(error:unknown,phase:'read'|'write') {
 
 export function TTSBackendSettings({api,disabled}:{api:ChatApi;disabled:boolean}){
   const [data,setData]=useState<TTSBackends>();
-  const [selected,setSelected]=useState<TTSBackendId>('edge');
+  const [selected,setSelected]=useState<TTSBackendId>('cosyvoice3');
+  const [advanced,setAdvanced]=useState(false);
   const [saving,setSaving]=useState(false);
   const [error,setError]=useState('');
   useEffect(()=>{
@@ -36,9 +37,11 @@ export function TTSBackendSettings({api,disabled}:{api:ChatApi;disabled:boolean}
     <Space wrap>
       <span>下次圆屏语音启动</span>
       <Select aria-label="圆屏声音后端" value={selected} onChange={setSelected} style={{minWidth:300}}
-        options={data?.backends?.map(item=>({value:item.id,label:item.label}))}/>
+        options={data?.backends?.filter(item=>advanced||item.id==='cosyvoice3'||item.id===selected).map(item=>({value:item.id,label:item.id==='cosyvoice3'?item.label:`${item.label}（兼容）`}))}/>
       <Button type="primary" loading={saving} disabled={disabled||!data?.enabled||selected===data.next_start_backend} onClick={()=>void save()}>保存下次启动选择</Button>
     </Space>
+    <p>日用声音集中使用 CosyVoice 3。旧引擎保留兼容配置和实验记录。</p>
+    <Button type="text" disabled={saving} onClick={()=>setAdvanced(!advanced)}>{advanced?'收起兼容声音引擎':'高级：兼容声音引擎'}</Button>
     {option&&<Descriptions bordered size="small" column={1} items={[
       {key:'description',label:'适用性',children:option.description},
       {key:'runtime',label:'本次语音',children:data?.voice_running?(data.current_backend===option.id?<Tag color="processing">正在使用</Tag>:'不是当前后端'):<Tag>未由当前启动器运行</Tag>},

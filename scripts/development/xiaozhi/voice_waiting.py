@@ -97,7 +97,8 @@ def begin_waiting(connection, dialogue):
     old = getattr(connection, "_longmemory_waiting", None)
     if old is not None:
         old.cancel()
-    state = WaitingTurn(connection, "model")
+    from cosyvoice_profiles import default_voice_active
+    state = WaitingTurn(connection, "model", packets=None if default_voice_active() else ())
     connection._longmemory_waiting = state
     state.timer.start()
     return dialogue

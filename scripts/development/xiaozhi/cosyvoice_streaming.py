@@ -12,6 +12,7 @@ from pathlib import Path
 import requests
 
 from fast_voice_responses import fast_asset_for_text
+from cosyvoice_profiles import default_voice_active
 
 
 STREAM_URL = "http://127.0.0.1:18770/v1/audio/stream"
@@ -95,7 +96,7 @@ def install_cosyvoice_streaming(tts, connection):
         pattern = getattr(tts, "_correct_words_pattern", None)
         if pattern:
             cleaned = pattern.sub(lambda match: tts.correct_words[match.group(0)], cleaned)
-        preset_name = fast_asset_for_text(cleaned)
+        preset_name = fast_asset_for_text(cleaned) if default_voice_active() else None
         preset = PRESET_ROOT / preset_name if preset_name else None
         delivered = False
         pcm_parts = []
