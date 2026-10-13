@@ -66,3 +66,7 @@ Thumbs.db
 .DS_Store
 # 用户上传的圆屏原片、缩略图与派生资源只保存在本机，不进入版本库。
 data/round-screen/
+
+# 重装私有备份与本项目专用的外部运行资源。
+/LongMemory备份/
+/local/

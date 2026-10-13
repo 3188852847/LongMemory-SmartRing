@@ -82,8 +82,9 @@ def provenance() -> dict:
         digest.update(path.relative_to(ROOT).as_posix().encode())
         digest.update(path.read_bytes())
     try:
-        commit = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, stderr=subprocess.DEVNULL, text=True).strip()
-        dirty = bool(subprocess.check_output(["git", "status", "--porcelain"], cwd=ROOT, stderr=subprocess.DEVNULL, text=True).strip())
+        # Git 的路径输出使用 UTF-8；Windows 默认 GBK 会在中文文件名处失败。
+        commit = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, stderr=subprocess.DEVNULL, text=True, encoding="utf-8").strip()
+        dirty = bool(subprocess.check_output(["git", "status", "--porcelain"], cwd=ROOT, stderr=subprocess.DEVNULL, text=True, encoding="utf-8").strip())
     except (OSError, subprocess.CalledProcessError):
         commit, dirty = None, None
     return {"commit": commit, "dirty": dirty, "source_sha256": digest.hexdigest()}

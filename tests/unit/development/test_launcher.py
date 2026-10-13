@@ -53,6 +53,7 @@ def test_command_preserves_paths_and_does_not_enable_deletion_or_jobs(options):
     assert "--allow-memory-correction" in cmd
     assert "--enable-experiment-runs" not in cmd
     assert "--enable-memory-consolidation" not in cmd
+    assert "--disable-proactive-schedule" in cmd
     assert "--chat-provider" in cmd
     assert cmd[cmd.index("--memory-extraction") + 1] == "rules"
     assert cmd[cmd.index("--memory-retrieval") + 1] == "keyword"
@@ -410,6 +411,8 @@ def test_role_memory_and_tts_domains_compose_independently(
     voxcpm_python.parent.mkdir(parents=True)
     voxcpm_python.touch()
     (voxcpm_root / "service.py").touch()
+    # 组合测试只用自己的合成解释器，不依赖旧机器的真实语音环境。
+    monkeypatch.setattr(runtime, "DEFAULT_VOXCPM_PYTHON", voxcpm_python)
 
     sanotts_source = options.root / "external-sanotts"
     for relative in (

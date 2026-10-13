@@ -43,8 +43,8 @@ export function AppShell({subtitle, className = '', sidebar, children}: {
   return <div className={`shell ${className}`.trim()}>
     <a className="skip-link" href="#main-content">跳到主要内容</a>
     <aside><div className="sidebar-inner">
-      <div className="brand-block"><Link aria-label="LongMemory" className="brand" to="/overview">
-        <span className="brand-mark" aria-hidden="true">LM</span><span className="brand-copy"><strong>LongMemory</strong><small>Companion console</small></span>
+      <div className="brand-block"><Link aria-label="智慧圆屏" className="brand" to="/overview">
+        <span className="brand-mark" aria-hidden="true">圆</span><span className="brand-copy"><strong>智慧圆屏</strong><small>个人陪伴控制台</small></span>
       </Link><p>{subtitle}</p></div>
       {sidebar}
       <div className="sidebar-footer"><i aria-hidden="true"/>本机个人空间</div>

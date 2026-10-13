@@ -9,7 +9,7 @@ import urllib.request
 from longmemory.adapters.llm.local_embedding import MODEL_FILES, MODEL_ID, REVISION
 
 ROOT = Path(__file__).resolve().parents[2]
-MODEL_ROOT = Path(r"D:\LongMemory-local\runtime\models")
+MODEL_ROOT = ROOT / "local" / "runtime" / "models"
 
 
 def main(argv=None):

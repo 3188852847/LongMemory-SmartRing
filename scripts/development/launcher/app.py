@@ -200,7 +200,7 @@ def _boolean_option(
 
 def main():
     window = tk.Tk()
-    window.title("LongMemory · 日常启动")
+    window.title("智慧圆屏 · 日常启动")
     window.geometry("1040x800")
     window.minsize(760, 560)
     window.configure(background=APP_BACKGROUND)
@@ -325,7 +325,7 @@ def main():
     header_copy = ttk.Frame(header, style="Header.TFrame")
     header_copy.pack(side="left", fill="x", expand=True)
     ttk.Label(header_copy, text="个人陪伴控制台", style="Eyebrow.TLabel").pack(anchor="w")
-    ttk.Label(header_copy, text="LongMemory", style="Title.TLabel").pack(anchor="w")
+    ttk.Label(header_copy, text="智慧圆屏", style="Title.TLabel").pack(anchor="w")
     ttk.Label(
         header_copy,
         text="启动一次，就可以使用文字聊天和 SmartRing-Plus 圆屏；常用选择保存在本机。",

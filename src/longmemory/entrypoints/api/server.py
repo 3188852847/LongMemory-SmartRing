@@ -82,7 +82,8 @@ def create_app(*, port=8765, bridge=None, web_root=None, database=None, allow_me
                tts_backend_store=None,
                round_skin_store=None, round_wallpaper_library=None,
                round_wallpaper_delivery=None, launcher_status_file=None,
-               semantic_relation_previewer=None, proactive_greeting_composer=None):
+               semantic_relation_previewer=None, proactive_greeting_composer=None,
+               proactive_schedule_enabled=True):
     sessions = Sessions()
     assets = web_root or ROOT / "web"
     client = bridge if bridge is not None else XiaozhiControlClient(ROOT / "data/control/device-control.token")
@@ -152,7 +153,8 @@ def create_app(*, port=8765, bridge=None, web_root=None, database=None, allow_me
             await memory_backend.proactive_background_tick(client)
 
     proactive_schedule = (
-        ProactiveScheduleLoop(scheduled_tick) if database is not None else None
+        ProactiveScheduleLoop(scheduled_tick)
+        if database is not None and proactive_schedule_enabled else None
     )
 
     async def start_proactive_schedule(_app):
@@ -229,7 +231,7 @@ def create_app(*, port=8765, bridge=None, web_root=None, database=None, allow_me
 
 
 def main():
-    parser = argparse.ArgumentParser(description="LongMemory 本机控制台（不会自动启动小智）")
+    parser = argparse.ArgumentParser(description="智慧圆屏本机控制台（不会自动启动小智）")
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--database", type=Path, help="已有当前版本记忆数据库；不自动建库或迁移")
     parser.add_argument("--allow-memory-delete", action="store_true", help="启用网页 L1 单条删除与批量清空；默认只读")
@@ -237,6 +239,8 @@ def main():
     parser.add_argument("--allow-scenario-management", action="store_true", help="启用显式 L2 候选创建与复核；默认只读")
     parser.add_argument("--allow-persona-management", action="store_true", help="启用显式 L3 候选创建与复核；默认只读")
     parser.add_argument("--enable-chat", action="store_true", help="允许网页向指定已有记忆库写入对话和记忆")
+    parser.add_argument("--disable-proactive-schedule", action="store_true",
+                        help="本次不运行圆屏定时联系，不修改已保存的联系设置")
     parser.add_argument(
         "--enable-memory-consolidation", action="store_true",
         help="显式启用单一后台 L1→L2→L3 整理；默认关闭并且不会扫描数据库",
@@ -589,7 +593,8 @@ def main():
                                round_wallpaper_delivery=wallpaper_delivery,
                                launcher_status_file=args.launcher_status_file,
                                semantic_relation_previewer=semantic_relation_previewer,
-                               proactive_greeting_composer=proactive_greeting_composer),
+                               proactive_greeting_composer=proactive_greeting_composer,
+                               proactive_schedule_enabled=not args.disable_proactive_schedule),
                     host="127.0.0.1", port=args.port, access_log=None, print=None)
     except OSError:
         parser.exit(1, f"控制台未能绑定 127.0.0.1:{args.port}。请检查旧控制台是否仍在运行或端口权限；未自动停止其他进程、未换端口。\n")

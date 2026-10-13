@@ -15,7 +15,8 @@ import sys
 from winjob import Job
 
 ROOT = Path(__file__).resolve().parents[3]
-LOCAL_ROOT = Path(r"D:\LongMemory-local")
+# 项目专用运行资源随项目保存；不依赖重装前的机器绝对路径。
+LOCAL_ROOT = ROOT / "local"
 VOICE_ROOT = LOCAL_ROOT / "runtime/xiaozhi-esp32-server/main/xiaozhi-server"
 VOXCPM_PORT = 18768
 SANOTTS_PORT = 18769
@@ -165,6 +166,9 @@ def build_commands(options, uv=None):
                "--memory-audit-log", str(root / "data/logs/xiaozhi-demo-v1.jsonl")]
     console.extend(["--model-profile", options.model_profile])
     console.extend(["--memory-backend", options.memory_backend])
+    if not options.voice:
+        # 文字模式保留圆屏联系设置，但不启动无法投递的圆屏定时任务。
+        console.append("--disable-proactive-schedule")
     # 媒体工具是用户已安装的本地依赖。启动器只发现并传递路径，
     # 不下载、不改 PATH；找不到时其他控制台功能仍可启动。
     ffmpeg_dir = options.ffmpeg_dir or DEFAULT_FFMPEG_DIR
