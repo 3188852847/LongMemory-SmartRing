@@ -6,4 +6,4 @@ if not exist "%PROJECT_ROOT%\.venv\Scripts\pythonw.exe" (
   pause
   exit /b 1
 )
-start "" "%PROJECT_ROOT%\.venv\Scripts\pythonw.exe" "%PROJECT_ROOT%\scripts\development\launcher\app.py"
+start "" "%PROJECT_ROOT%\.venv\Scripts\pythonw.exe" "%PROJECT_ROOT%\scripts\development\launcher\web_app.py"

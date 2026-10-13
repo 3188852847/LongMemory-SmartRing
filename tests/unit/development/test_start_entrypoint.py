@@ -29,7 +29,7 @@ def _synthetic_project(tmp_path, name):
     (project / INTERNAL_ENTRY).parent.mkdir(parents=True)
     for entry in (USER_ENTRY, INTERNAL_ENTRY):
         shutil.copyfile(ROOT / entry, project / entry)
-    target = project / "scripts/development/launcher/app.py"
+    target = project / "scripts/development/launcher/web_app.py"
     target.write_text(
         "import json, sys\n"
         "from pathlib import Path\n"
@@ -89,7 +89,7 @@ def test_entry_starts_only_synthetic_target(tmp_path, entry, name):
     else:
         pytest.fail(f"合成启动目标未执行：{result.stdout}{result.stderr}")
     assert Path(observed["python"]).resolve() == (scripts / "pythonw.exe").resolve()
-    assert observed["argv"] == [str(project / "scripts/development/launcher/app.py")]
+    assert observed["argv"] == [str(project / "scripts/development/launcher/web_app.py")]
     assert Path(observed["cwd"]).resolve() == caller.resolve()
 
 
