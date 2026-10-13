@@ -577,7 +577,7 @@ def test_bridge_scripts_have_python310_syntax():
 
 
 def test_real_upstream_dialogue_injects_context_if_available():
-    source = Path('D:/ESP32-Workspace/xiaozhi-esp32-server/main/xiaozhi-server/core/utils/dialogue.py')
+    source = ROOT / 'local/runtime/xiaozhi-esp32-server/main/xiaozhi-server/core/utils/dialogue.py'
     if not source.is_file():
         pytest.skip('固定上游源码未安装，其他协议回归仍可运行')
     spec = importlib.util.spec_from_file_location('upstream_dialogue_for_test', source)
@@ -592,7 +592,7 @@ def test_real_upstream_dialogue_injects_context_if_available():
 
 
 def test_python310_provider_calls_python312_worker_if_available(config):
-    python310 = Path('D:/ESP32-Workspace/xiaozhi-esp32-server/main/xiaozhi-server/.venv/Scripts/python.exe')
+    python310 = ROOT / 'local/runtime/xiaozhi-esp32-server/main/xiaozhi-server/.venv/Scripts/python.exe'
     if not python310.is_file():
         pytest.skip('小智 Python 3.10 环境未安装')
     driver = r'''

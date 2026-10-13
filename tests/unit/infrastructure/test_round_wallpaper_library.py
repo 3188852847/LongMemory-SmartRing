@@ -66,7 +66,7 @@ def test_library_discards_only_its_own_staging_directory(tmp_path):
 
 
 def test_library_real_ffmpeg_roundtrip_when_local_tools_exist(tmp_path):
-    tools = Path(r"D:\Tools\ffmpeg\bin")
+    tools = Path(__file__).resolve().parents[3] / 'local/tools/ffmpeg/bin'
     if not (tools / "ffmpeg.exe").is_file() or not (tools / "ffprobe.exe").is_file():
         pytest.skip("本机未安装用户提供的 FFmpeg")
     source = tmp_path / "synthetic.mp4"

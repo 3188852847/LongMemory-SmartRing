@@ -65,6 +65,7 @@
 | `src/longmemory/` | 独立记忆核心、适配层与程序入口 |
 | `web/react-chat/`、`scripts/` | 网页控制台、启动与开发工具 |
 | `tests/`、[datasets](datasets/README.md)、`experiments/` | 测试代码、评估输入、实验配置与结果；与个人数据隔离 |
+| [测试产物管理](docs/development/test-artifacts.md) | 当前自动临时目录、清理边界与历史测量资料归位建议 |
 | `firmware/smartring_plus/` | 项目自有固件补丁和恢复记录 |
 | `data/`、`local/`、`LongMemory备份/` | 本地数据、专属外部资源、私有恢复包与原始快照；真实内容不提交 Git |
 | [系统架构](docs/architecture/overview.md)、[运行流程](docs/architecture/workflows.md) | 当前职责边界与运行步骤 |

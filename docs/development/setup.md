@@ -10,9 +10,10 @@ uv run --no-sync python -m pytest
 uv run longmemory
 ```
 
-项目在 `pyproject.toml` 中把 uv 缓存固定到 `.uv-cache/`；`tests/conftest.py`
-为每个 pytest 进程分配 `data/test-tmp/pytest/run-<PID>-<随机标识>/`，均被 Git
-忽略。正常运行测试时不需要再传 `-p no:cacheprovider` 或 `--basetemp`。正常结束
+`pyproject.toml` 保留 `.uv-cache/` 作为缓存默认值；本机 `UV_CACHE_DIR` 按机器规则指向
+`D:\08-包与构建缓存\Python\uv`，实际位置用 `uv cache dir` 核对，不移动工具内部缓存。
+`tests/conftest.py` 为每个 pytest 进程分配 `data/test-tmp/pytest/run-<PID>-<随机标识>/`，
+产物被 Git 忽略。正常运行测试时不需要再传 `-p no:cacheprovider` 或 `--basetemp`。正常结束
 只尝试清理本进程分配的 run 目录，共享父目录保留；不会扫描、清理其他进程或历史
 目录。异常中断或文件被占用时可能残留，不能据此自动删除。
 
