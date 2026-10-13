@@ -6,7 +6,7 @@ diff --git a/main/boards/viewe-smartring-plus/viewe-smartring-plus.cc b/main/boa
  #include "mcp_server.h"
  #include "settings.h"
 +#include "round_face_motion.h"
- 
+
  #include <wifi_manager.h>
  #include <esp_log.h>
 @@ -1040,13 +1041,13 @@
@@ -18,13 +18,13 @@ diff --git a/main/boards/viewe-smartring-plus/viewe-smartring-plus.cc b/main/boa
 +    round_face::Interaction interaction_ = round_face::Interaction::Idle;
      RoundSkinConfig skin_ = LoadRoundSkin();
      std::string current_emotion_ = "neutral";
- 
+
      static void FaceTimerCallback(lv_timer_t* timer) {
          auto* display = static_cast<SmartRingFaceDisplay*>(lv_timer_get_user_data(timer));
 -        display->animation_frame_++;
          display->ApplyFace(display->current_emotion_.c_str());
      }
- 
+
 @@ -1103,6 +1104,7 @@
          wallpaper_gif_ = std::move(controller);
          wallpaper_ready_ = true;
@@ -32,10 +32,10 @@ diff --git a/main/boards/viewe-smartring-plus/viewe-smartring-plus.cc b/main/boa
 +        if (face_timer_ != nullptr) lv_timer_pause(face_timer_);
          ESP_LOGI(TAG, "Round wallpaper loaded: %u bytes", static_cast<unsigned>(size));
      }
- 
+
 @@ -1112,13 +1114,11 @@
          }
- 
+
          const char* value = emotion == nullptr ? "neutral" : emotion;
 -        const bool listening = std::strcmp(value, "microphone") == 0;
 -        const bool thinking = std::strcmp(value, "thinking") == 0;
@@ -55,7 +55,7 @@ diff --git a/main/boards/viewe-smartring-plus/viewe-smartring-plus.cc b/main/boa
 @@ -1152,43 +1152,31 @@
              accent = lv_color_hex(skin_.concerned);
          }
- 
+
 -        // 一个 140 ms 的低频时钟只改变三个既有几何对象。它不读取麦克风、
 -        // 不推断业务状态，也不创建逐帧图片，因此不会把动画冒充设备回执。
 -        const uint32_t short_phase = animation_frame_ % 8;
@@ -119,7 +119,7 @@ diff --git a/main/boards/viewe-smartring-plus/viewe-smartring-plus.cc b/main/boa
 +        update_part(mouth_, coordinate(pose.mouth_width), coordinate(pose.mouth_height),
 +                    coordinate(pose.gaze_x * .35f), coordinate(pose.mouth_y));
      }
- 
+
      void ApplySkinStyles() {
 @@ -1238,9 +1226,10 @@
          ConfigureFacePart(mouth_);
@@ -130,11 +130,11 @@ diff --git a/main/boards/viewe-smartring-plus/viewe-smartring-plus.cc b/main/boa
          lv_timer_set_repeat_count(face_timer_, -1);
          lv_timer_reset(face_timer_);
 +        if (wallpaper_ready_) lv_timer_pause(face_timer_);
- 
+
          // 字幕最多占中央安全区下方两行，不再堆叠历史聊天气泡。
          if (bottom_bar_ != nullptr && chat_message_label_ != nullptr) {
 @@ -1266,31 +1255,35 @@
- 
+
      void SetStatus(const char* status) override {
          LvglDisplay::SetStatus(status);
 -        if (status == nullptr) {
@@ -163,7 +163,7 @@ diff --git a/main/boards/viewe-smartring-plus/viewe-smartring-plus.cc b/main/boa
 +        }
 +        ApplyFace(current_emotion_.c_str());
      }
- 
+
      void SetEmotion(const char* emotion) override {
 -        if (!setup_ui_called_) {
 -            return;
@@ -185,7 +185,7 @@ diff --git a/main/boards/viewe-smartring-plus/viewe-smartring-plus.cc b/main/boa
 +        // 不重置动画时钟；打断从正在显示的形状转向聆听，不从零重新播放。
          ApplyFace(current_emotion_.c_str());
      }
- 
+
 diff --git a/main/boards/viewe-smartring-plus/round_face_motion.h b/main/boards/viewe-smartring-plus/round_face_motion.h
 new file mode 100644
 --- /dev/null

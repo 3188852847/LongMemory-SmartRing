@@ -9,7 +9,7 @@
     "board_cc_sha256_before": "2e190e96c8f53117b61ae0972e7bfcad705bbe5406bdea1d44e0af05e8c626b4",
     "board_cc_sha256_after": "8f8f45b4dd29454b6bd063a3c50f1074accfac0ad15cc0aa5d84243bdc15dfa4",
     "motion_header_sha256": "35d160298040605f50c73fd4ebb31609221f483ead95c39c4a960ba244c8e040",
-    "patch_sha256": "f20760d4bfa0499dc2c1823d760bb504e293f57269c093ee0de7f61126d69e5a",
+    "patch_sha256": "4a1afb788c45a72375be919717fda42c6c90d16f858d4b2e760e8361bb800849",
     "newline": "LF"
   },
   "contract": {
