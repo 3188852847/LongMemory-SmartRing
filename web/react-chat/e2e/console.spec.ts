@@ -9,8 +9,10 @@ test('文字聊天可保存并在刷新后恢复，React 页面可统一导航',
 
   await page.goto('/chat-react');
   await expect(page.getByRole('heading', {name:'聊聊今天'})).toBeVisible();
-  await expect(page.getByRole('region', {name:'当前系统状态'})).toBeVisible();
+  await page.getByRole('button', {name:'记忆证据', exact:true}).click();
   await expect(page.getByRole('region', {name:'本轮记忆证据'})).toContainText('WAITING');
+  await page.getByRole('button', {name:'运行状态', exact:true}).click();
+  await expect(page.getByRole('region', {name:'当前系统状态'})).toBeVisible();
   await page.getByRole('link', {name:'查看模型诊断'}).click();
   await expect(page).toHaveURL(/\/settings\?tab=model$/);
   await expect(page.getByRole('tab', {name:'模型与服务'})).toHaveAttribute('aria-selected', 'true');
@@ -21,6 +23,7 @@ test('文字聊天可保存并在刷新后恢复，React 页面可统一导航',
   await page.getByRole('textbox', {name:'消息'}).fill('我养了一只叫豆包的猫');
   await page.locator('button[type="submit"]').click();
   await expect(page.locator('.bubble.assistant').getByText('好的，我记住了。', {exact:true})).toBeVisible();
+  await page.getByRole('button', {name:'记忆证据', exact:true}).click();
   await expect(page.getByRole('region', {name:'本轮记忆证据'})).toContainText('用户养了一只叫豆包的猫。');
   await page.getByRole('link', {name:'核对 L0 原话'}).click();
   await expect(page).toHaveURL(/\/memories\?memory_id=/);
@@ -143,6 +146,7 @@ test('窄窗口保留全部主导航且页面不产生横向溢出', async ({pag
   await page.setViewportSize({width:390, height:844});
   await page.goto('/chat-react');
   await expect(page.getByRole('heading', {name:'聊聊今天'})).toBeVisible();
+  await page.getByRole('button', {name:'展开导航'}).click();
   await expect(page.getByRole('link', {name:'设备状态'})).toBeVisible();
   await expect(page.getByRole('link', {name:'圆屏预览'})).toBeVisible();
   await expect(page.getByRole('link', {name:'实验中心'})).toBeVisible();
@@ -150,6 +154,7 @@ test('窄窗口保留全部主导航且页面不产生横向溢出', async ({pag
 
   await page.getByRole('link', {name:'设置中心'}).click();
   await expect(page.getByRole('heading', {name:'助手设置'})).toBeVisible();
+  await expect(page.getByRole('button', {name:'展开导航'})).toHaveAttribute('aria-expanded', 'false');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });
 

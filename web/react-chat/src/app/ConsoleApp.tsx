@@ -4,6 +4,7 @@ import {BrowserRouter, Navigate, Route, Routes} from 'react-router-dom';
 import {AppearanceProvider} from './AppearanceProvider';
 import {createConsoleQueryClient} from './queryClient';
 import {ChatApp} from '../pages/ChatApp';
+import '../styles/workspace-shell.css';
 
 const DeviceApp = lazy(() => import('../pages/DeviceApp').then(module => ({default: module.DeviceApp})));
 const MemoryApp = lazy(() => import('../pages/MemoryApp').then(module => ({default: module.MemoryApp})));

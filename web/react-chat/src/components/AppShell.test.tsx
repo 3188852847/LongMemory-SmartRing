@@ -1,5 +1,5 @@
 import {describe, expect, test} from 'vitest';
-import {render, screen} from '@testing-library/react';
+import {fireEvent, render, screen} from '@testing-library/react';
 import {MemoryRouter} from 'react-router-dom';
 import {AppShell, ConsoleNav} from './AppShell';
 
@@ -23,5 +23,13 @@ describe('控制台共享导航', () => {
     expect(screen.getByText('长期记忆')).toBeTruthy();
     expect(screen.getByText('控制与观察')).toBeTruthy();
     expect(screen.getByRole('heading', {name: '页面内容'})).toBeTruthy();
+    expect(screen.getByRole('link', {name:'文字聊天'}).getAttribute('aria-current')).toBe('page');
+    expect(screen.getByRole('main').getAttribute('tabindex')).toBe('-1');
+    const toggle = screen.getByRole('button', {name:'展开导航'});
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    fireEvent.keyDown(screen.getByRole('navigation', {name:'控制台导航'}), {key:'Escape'});
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect(document.activeElement).toBe(toggle);
   });
 });
