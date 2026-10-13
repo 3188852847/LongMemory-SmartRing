@@ -73,7 +73,7 @@
 | `data/`、`local/runtime/`、`local/archive/` | 日用数据、专属资源、历史恢复档案；[资料归属](docs/development/local-assets.md)；真实内容不提交 Git |
 | [前端模块](docs/development/frontend-structure.md)、[自动化质量检查](docs/development/continuous-integration.md) | 实际源码归类、提交后的自动检查及验收边界 |
 | [系统架构](docs/architecture/overview.md)、[运行流程](docs/architecture/workflows.md) | 当前职责边界与运行步骤 |
-| [V1 日用范围](docs/requirements/v1-personal-companion.md)、[ROADMAP](ROADMAP.md) | 阶段完成标准与 P1～P5 优先级 |
+| [V1 日用范围](docs/requirements/v1-personal-companion.md)、[ROADMAP](ROADMAP.md) | 日用验收边界、当前优先级与完成标准 |
 | `docs/adr/`、`docs/research/` | 架构决策记录（ADR）与可追溯研究证据 |
 
 未来功能见[产品能力地图](docs/requirements/product-capability-map.md)与[自定义功能清单](docs/requirements/自定义功能清单.md)；候选清单不代表已实现或已授权开发。

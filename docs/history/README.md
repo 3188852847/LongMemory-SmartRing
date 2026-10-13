@@ -30,6 +30,24 @@ git show 9db0a9eb764e27d4a93233fe03e032117c340e81:CHANGELOG.md
 
 ## 已有阶段档案
 
+### ROADMAP 归档（2026-10-14 路线更新）
+
+[旧 ROADMAP 完整档案](ROADMAP-through-20261014.md)来自提交
+`075ea23ca2b8e351e083cdfc2cbb8083e43031e0` 的 `ROADMAP.md`，原文 323 行，
+Git blob 字节 SHA-256 为 `ddd7f6ce8d5f9c8d00a83daf67cfac6cc94552073f5d99a81271ae6485fde48f`。
+档案增加四行说明，仅把 53 处 Markdown 链接的 `docs/` 前缀改为 `../`；正文、
+历史结论、数字、阶段标识和候选内容保留。去掉四行说明并反向还原链接后，应与
+来源 Git blob 逐字节一致。可用以下命令读取原文：
+
+```powershell
+git show 075ea23ca2b8e351e083cdfc2cbb8083e43031e0:ROADMAP.md
+```
+
+现行根 ROADMAP 已按新电脑恢复结果与近期体验讨论更新。旧档案不是当前任务清单，
+不把旧机器的烧录、性能测量或未来版本规划作为本机验收与新增授权。
+
+### 日用与发布记录
+
 - [2026-09-15 语音阶段交接](../releases/voice-stage-handoff-2026-09-15.md)
 - [2026-09-15 V1 接续审计](../releases/v1-followup-audit-2026-09-15.md)
 - [V1 RC1 就绪检查](../releases/v1-rc1-readiness.md)
