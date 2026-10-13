@@ -152,8 +152,8 @@ def _windows_short_path(path):
 
 
 @pytest.mark.skipif(not shutil.which("powershell.exe"), reason="Windows PowerShell registry integration")
-@pytest.mark.parametrize("use_short_root", [False, True])
-def test_registry_merges_completed_sdk_without_switching_original_default(use_short_root):
+@pytest.mark.parametrize("path_form", ["long", "short_root", "short_root_and_sdk"])
+def test_registry_merges_completed_sdk_without_switching_original_default(path_form):
     with tempfile.TemporaryDirectory(prefix="smart-ring-registry-check-") as directory:
         root = Path(directory)
         sdk = root / "v5.5.4/esp-idf"
@@ -172,8 +172,8 @@ def test_registry_merges_completed_sdk_without_switching_original_default(use_sh
         record = {"id":"new","path":str(sdk),"python":str(python),"activationScript":str(profile),"status":"finished"}
         vendor.write_text(json.dumps({"idfInstalled":[record]}),encoding="utf-8")
         (root / "tools/eim_idf.json").write_text(json.dumps(prior),encoding="utf-8")
-        esp_root = _windows_short_path(root) if use_short_root else str(root)
-        sdk_path = _windows_short_path(sdk) if use_short_root else str(sdk)
+        esp_root = _windows_short_path(root) if path_form != "long" else str(root)
+        sdk_path = _windows_short_path(sdk) if path_form == "short_root_and_sdk" else str(sdk)
         result = subprocess.run(["powershell.exe","-NoProfile","-ExecutionPolicy","Bypass","-File",
                                  str(DIRECTORY / "sync_registry.ps1"),"-EspRoot",esp_root,"-SdkPath",sdk_path,
                                  "-PriorRegistry",str(original),"-VendorRegistry",str(vendor)],
