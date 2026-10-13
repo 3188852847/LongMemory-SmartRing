@@ -21,7 +21,7 @@ import uuid
 
 
 ROOT = Path(__file__).resolve().parents[3]
-DEFAULT_SOURCE = Path(r"D:\LongMemory-local\runtime\CosyVoice")
+DEFAULT_SOURCE = ROOT / "local/runtime/CosyVoice"
 DEFAULT_MODEL = DEFAULT_SOURCE / "pretrained_models" / "Fun-CosyVoice3-0.5B"
 REQUIRED_SOURCE = (
     "cosyvoice/cli/cosyvoice.py",
@@ -158,6 +158,9 @@ def configure_runtime_cache() -> None:
     os.environ["HF_HOME"] = str(runtime_cache / "huggingface")
     os.environ["HF_HUB_OFFLINE"] = "1"
     os.environ["HF_HUB_DISABLE_TELEMETRY"] = "1"
+    # WeText 属于本项目的语音资源；只对当前语音进程指定缓存根。
+    # ModelScope 1.20.0 会在这个根下使用 hub/pengzhendong/wetext。
+    os.environ["MODELSCOPE_CACHE"] = str(ROOT / "local/runtime/modelscope-cache")
     install_modelscope_offline()
 
 

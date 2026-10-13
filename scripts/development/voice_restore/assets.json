@@ -1,0 +1,257 @@
+{
+  "version": 1,
+  "verified_date": "2026-10-13",
+  "sources": {
+    "xiaozhi": "eb4b28c59ed7ed885258498cf757ce14352d620e",
+    "cosyvoice": "074ca6dc9e80a2f424f1f74b48bdd7d3fea531cc",
+    "matcha": "dd9105b34bf2be2230f4aa1e4769fb586a3c824e"
+  },
+  "assets": [
+    {
+      "group": "models",
+      "name": "cosy_model/CosyVoice-BlankEN/config.json",
+      "url": "https://huggingface.co/FunAudioLLM/Fun-CosyVoice3-0.5B-2512/resolve/29e01c4e8d000f4bcd70751be16fa94bf3d85a18/CosyVoice-BlankEN/config.json",
+      "target": "runtime/CosyVoice/pretrained_models/Fun-CosyVoice3-0.5B/CosyVoice-BlankEN/config.json",
+      "size": 659,
+      "sha256": null,
+      "git_blob": "463b055262b6c66c4629a74a4b300bfe2ed31d3c"
+    },
+    {
+      "group": "models",
+      "name": "cosy_model/CosyVoice-BlankEN/generation_config.json",
+      "url": "https://huggingface.co/FunAudioLLM/Fun-CosyVoice3-0.5B-2512/resolve/29e01c4e8d000f4bcd70751be16fa94bf3d85a18/CosyVoice-BlankEN/generation_config.json",
+      "target": "runtime/CosyVoice/pretrained_models/Fun-CosyVoice3-0.5B/CosyVoice-BlankEN/generation_config.json",
+      "size": 242,
+      "sha256": null,
+      "git_blob": "dfc11073787daf1b0f9c0f1499487ab5f4c93738"
+    },
+    {
+      "group": "models",
+      "name": "cosy_model/CosyVoice-BlankEN/merges.txt",
+      "url": "https://huggingface.co/FunAudioLLM/Fun-CosyVoice3-0.5B-2512/resolve/29e01c4e8d000f4bcd70751be16fa94bf3d85a18/CosyVoice-BlankEN/merges.txt",
+      "target": "runtime/CosyVoice/pretrained_models/Fun-CosyVoice3-0.5B/CosyVoice-BlankEN/merges.txt",
+      "size": 1402109,
+      "sha256": null,
+      "git_blob": "90d3d82d027eadcc6a5e77c38eb82d43fc51b53b"
+    },
+    {
+      "group": "models",
+      "name": "cosy_model/CosyVoice-BlankEN/model.safetensors",
+      "url": "https://huggingface.co/FunAudioLLM/Fun-CosyVoice3-0.5B-2512/resolve/29e01c4e8d000f4bcd70751be16fa94bf3d85a18/CosyVoice-BlankEN/model.safetensors",
+      "target": "runtime/CosyVoice/pretrained_models/Fun-CosyVoice3-0.5B/CosyVoice-BlankEN/model.safetensors",
+      "size": 988097824,
+      "sha256": "130282af0dfa9fe5840737cc49a0d339d06075f83c5a315c3372c9a0740d0b96",
+      "git_blob": "3dff8ababe3dbf3bd7a556f5f143503ab2ef3c98"
+    },
+    {
+      "group": "models",
+      "name": "cosy_model/CosyVoice-BlankEN/tokenizer_config.json",
+      "url": "https://huggingface.co/FunAudioLLM/Fun-CosyVoice3-0.5B-2512/resolve/29e01c4e8d000f4bcd70751be16fa94bf3d85a18/CosyVoice-BlankEN/tokenizer_config.json",
+      "target": "runtime/CosyVoice/pretrained_models/Fun-CosyVoice3-0.5B/CosyVoice-BlankEN/tokenizer_config.json",
+      "size": 1287,
+      "sha256": null,
+      "git_blob": "ff55d7b9eb1384e5d4d7e75dc0f564c1a8833d6e"
+    },
+    {
+      "group": "models",
+      "name": "cosy_model/CosyVoice-BlankEN/vocab.json",
+      "url": "https://huggingface.co/FunAudioLLM/Fun-CosyVoice3-0.5B-2512/resolve/29e01c4e8d000f4bcd70751be16fa94bf3d85a18/CosyVoice-BlankEN/vocab.json",
+      "target": "runtime/CosyVoice/pretrained_models/Fun-CosyVoice3-0.5B/CosyVoice-BlankEN/vocab.json",
+      "size": 2776833,
+      "sha256": null,
+      "git_blob": "4783fe10ac3adce15ac8f358ef5462739852c569"
+    },
+    {
+      "group": "models",
+      "name": "cosy_model/README.md",
+      "url": "https://huggingface.co/FunAudioLLM/Fun-CosyVoice3-0.5B-2512/resolve/29e01c4e8d000f4bcd70751be16fa94bf3d85a18/README.md",
+      "target": "runtime/CosyVoice/pretrained_models/Fun-CosyVoice3-0.5B/README.md",
+      "size": 11982,
+      "sha256": null,
+      "git_blob": "d816a921470cff1b6926d31c89e4ec7dea185f32"
+    },
+    {
+      "group": "models",
+      "name": "cosy_model/campplus.onnx",
+      "url": "https://huggingface.co/FunAudioLLM/Fun-CosyVoice3-0.5B-2512/resolve/29e01c4e8d000f4bcd70751be16fa94bf3d85a18/campplus.onnx",
+      "target": "runtime/CosyVoice/pretrained_models/Fun-CosyVoice3-0.5B/campplus.onnx",
+      "size": 28303423,
+      "sha256": "a6ac6a63997761ae2997373e2ee1c47040854b4b759ea41ec48e4e42df0f4d73",
+      "git_blob": "7b08523b2e28e437cfb1a0312723a5ab0bac287e"
+    },
+    {
+      "group": "models",
+      "name": "cosy_model/config.json",
+      "url": "https://huggingface.co/FunAudioLLM/Fun-CosyVoice3-0.5B-2512/resolve/29e01c4e8d000f4bcd70751be16fa94bf3d85a18/config.json",
+      "target": "runtime/CosyVoice/pretrained_models/Fun-CosyVoice3-0.5B/config.json",
+      "size": 2,
+      "sha256": null,
+      "git_blob": "9e26dfeeb6e641a33dae4961196235bdb965b21b"
+    },
+    {
+      "group": "models",
+      "name": "cosy_model/configuration.json",
+      "url": "https://huggingface.co/FunAudioLLM/Fun-CosyVoice3-0.5B-2512/resolve/29e01c4e8d000f4bcd70751be16fa94bf3d85a18/configuration.json",
+      "target": "runtime/CosyVoice/pretrained_models/Fun-CosyVoice3-0.5B/configuration.json",
+      "size": 47,
+      "sha256": null,
+      "git_blob": "5e812fae901c12933ac69ebf3eb79d0eb49bbab4"
+    },
+    {
+      "group": "models",
+      "name": "cosy_model/cosyvoice3.yaml",
+      "url": "https://huggingface.co/FunAudioLLM/Fun-CosyVoice3-0.5B-2512/resolve/29e01c4e8d000f4bcd70751be16fa94bf3d85a18/cosyvoice3.yaml",
+      "target": "runtime/CosyVoice/pretrained_models/Fun-CosyVoice3-0.5B/cosyvoice3.yaml",
+      "size": 6934,
+      "sha256": null,
+      "git_blob": "2eda7e5007d99f6b17fbe7bd751cf54e3cde29ea"
+    },
+    {
+      "group": "models",
+      "name": "cosy_model/flow.pt",
+      "url": "https://huggingface.co/FunAudioLLM/Fun-CosyVoice3-0.5B-2512/resolve/29e01c4e8d000f4bcd70751be16fa94bf3d85a18/flow.pt",
+      "target": "runtime/CosyVoice/pretrained_models/Fun-CosyVoice3-0.5B/flow.pt",
+      "size": 1329116148,
+      "sha256": "a6fab32a7825e5b0bc855ddd948f8db9370b0a786fbc249caa4595e95b608e4b",
+      "git_blob": "074b96e9cfbf3e511067528bde8e76a308f94904"
+    },
+    {
+      "group": "models",
+      "name": "cosy_model/hift.pt",
+      "url": "https://huggingface.co/FunAudioLLM/Fun-CosyVoice3-0.5B-2512/resolve/29e01c4e8d000f4bcd70751be16fa94bf3d85a18/hift.pt",
+      "target": "runtime/CosyVoice/pretrained_models/Fun-CosyVoice3-0.5B/hift.pt",
+      "size": 83202622,
+      "sha256": "b279d7641eb97ae55b3b540cfba4f953c26492a2df758328a89a4d007ab87a65",
+      "git_blob": "c5088ac4f7db1314a4efe06ca60e9f47ea2a1900"
+    },
+    {
+      "group": "models",
+      "name": "cosy_model/llm.pt",
+      "url": "https://huggingface.co/FunAudioLLM/Fun-CosyVoice3-0.5B-2512/resolve/29e01c4e8d000f4bcd70751be16fa94bf3d85a18/llm.pt",
+      "target": "runtime/CosyVoice/pretrained_models/Fun-CosyVoice3-0.5B/llm.pt",
+      "size": 2024669519,
+      "sha256": "69f43bd545131c30e98947fb360ea8b4dc9916d8e83dded7757c7ea4f5a24970",
+      "git_blob": "d9813d1f616910e9117d612e6e725b0350f98115"
+    },
+    {
+      "group": "models",
+      "name": "cosy_model/speech_tokenizer_v3.onnx",
+      "url": "https://huggingface.co/FunAudioLLM/Fun-CosyVoice3-0.5B-2512/resolve/29e01c4e8d000f4bcd70751be16fa94bf3d85a18/speech_tokenizer_v3.onnx",
+      "target": "runtime/CosyVoice/pretrained_models/Fun-CosyVoice3-0.5B/speech_tokenizer_v3.onnx",
+      "size": 969451503,
+      "sha256": "23236a74175dbdda47afc66dbadd5bcb41303c467a57c261cb8539ad9db9208d",
+      "git_blob": "91daac1b6f0bbcb54b8885dc7a1cbf054de22f94"
+    },
+    {
+      "group": "models",
+      "name": "sense_model/README.md",
+      "url": "https://huggingface.co/FunAudioLLM/SenseVoiceSmall/resolve/3847d57b6bdf2dd8875cb1508d2af43d80a16bf7/README.md",
+      "target": "runtime/xiaozhi-esp32-server/main/xiaozhi-server/models/SenseVoiceSmall/README.md",
+      "size": 11952,
+      "sha256": null,
+      "git_blob": "21ccb8d3bd78b977f6915ec907f866a217406c6a"
+    },
+    {
+      "group": "models",
+      "name": "sense_model/README_zh.md",
+      "url": "https://huggingface.co/FunAudioLLM/SenseVoiceSmall/resolve/3847d57b6bdf2dd8875cb1508d2af43d80a16bf7/README_zh.md",
+      "target": "runtime/xiaozhi-esp32-server/main/xiaozhi-server/models/SenseVoiceSmall/README_zh.md",
+      "size": 9603,
+      "sha256": null,
+      "git_blob": "97475dec58ce34bba735d317d304ea8f7323f83c"
+    },
+    {
+      "group": "models",
+      "name": "sense_model/am.mvn",
+      "url": "https://huggingface.co/FunAudioLLM/SenseVoiceSmall/resolve/3847d57b6bdf2dd8875cb1508d2af43d80a16bf7/am.mvn",
+      "target": "runtime/xiaozhi-esp32-server/main/xiaozhi-server/models/SenseVoiceSmall/am.mvn",
+      "size": 11203,
+      "sha256": null,
+      "git_blob": "681910cd1ab6458b61474cdbf0d1ac5e810f7b0d"
+    },
+    {
+      "group": "models",
+      "name": "sense_model/chn_jpn_yue_eng_ko_spectok.bpe.model",
+      "url": "https://huggingface.co/FunAudioLLM/SenseVoiceSmall/resolve/3847d57b6bdf2dd8875cb1508d2af43d80a16bf7/chn_jpn_yue_eng_ko_spectok.bpe.model",
+      "target": "runtime/xiaozhi-esp32-server/main/xiaozhi-server/models/SenseVoiceSmall/chn_jpn_yue_eng_ko_spectok.bpe.model",
+      "size": 377341,
+      "sha256": "aa87f86064c3730d799ddf7af3c04659151102cba548bce325cf06ba4da4e6a8",
+      "git_blob": "72734d2b95d9bf34a2df2018846cf87edac3332d"
+    },
+    {
+      "group": "models",
+      "name": "sense_model/config.yaml",
+      "url": "https://huggingface.co/FunAudioLLM/SenseVoiceSmall/resolve/3847d57b6bdf2dd8875cb1508d2af43d80a16bf7/config.yaml",
+      "target": "runtime/xiaozhi-esp32-server/main/xiaozhi-server/models/SenseVoiceSmall/config.yaml",
+      "size": 1855,
+      "sha256": null,
+      "git_blob": "26bb9d3d20a09ff389c1ddb24865771d2312fc0f"
+    },
+    {
+      "group": "models",
+      "name": "sense_model/configuration.json",
+      "url": "https://huggingface.co/FunAudioLLM/SenseVoiceSmall/resolve/3847d57b6bdf2dd8875cb1508d2af43d80a16bf7/configuration.json",
+      "target": "runtime/xiaozhi-esp32-server/main/xiaozhi-server/models/SenseVoiceSmall/configuration.json",
+      "size": 396,
+      "sha256": null,
+      "git_blob": "264d8171d2d6bfebf3c48d04bd325b34d9be1d9a"
+    },
+    {
+      "group": "models",
+      "name": "sense_model/model.pt",
+      "url": "https://huggingface.co/FunAudioLLM/SenseVoiceSmall/resolve/3847d57b6bdf2dd8875cb1508d2af43d80a16bf7/model.pt",
+      "target": "runtime/xiaozhi-esp32-server/main/xiaozhi-server/models/SenseVoiceSmall/model.pt",
+      "size": 936291369,
+      "sha256": "833ca2dcfdf8ec91bd4f31cfac36d6124e0c459074d5e909aec9cabe6204a3ea",
+      "git_blob": "504783eeb5c68405034d837e954fc733d6677eba"
+    },
+    {
+      "group": "models",
+      "name": "wetext/en/tn/tagger.fst",
+      "url": "https://modelscope.cn/api/v1/models/pengzhendong/wetext/repo?Revision=master&FilePath=en%2Ftn%2Ftagger.fst",
+      "target": "runtime/modelscope-cache/hub/pengzhendong/wetext/en/tn/tagger.fst",
+      "size": 5645674,
+      "sha256": "245e2dc9174cdd007a8e9e50f3339773d1adbbc7535b71cf67478dc1683cc3ec"
+    },
+    {
+      "group": "models",
+      "name": "wetext/en/tn/verbalizer.fst",
+      "url": "https://modelscope.cn/api/v1/models/pengzhendong/wetext/repo?Revision=master&FilePath=en%2Ftn%2Fverbalizer.fst",
+      "target": "runtime/modelscope-cache/hub/pengzhendong/wetext/en/tn/verbalizer.fst",
+      "size": 6398822,
+      "sha256": "03155c88f317b2795969e264c19f87faf98b9853d5ac631e419bacdc3b3ee15a"
+    },
+    {
+      "group": "models",
+      "name": "wetext/zh/tn/tagger.fst",
+      "url": "https://modelscope.cn/api/v1/models/pengzhendong/wetext/repo?Revision=master&FilePath=zh%2Ftn%2Ftagger.fst",
+      "target": "runtime/modelscope-cache/hub/pengzhendong/wetext/zh/tn/tagger.fst",
+      "size": 527178,
+      "sha256": "cf341314c51f7ce59049f3b2c42f0ce8fd71e6d08d4d6969613aad384a5e2ae8"
+    },
+    {
+      "group": "models",
+      "name": "wetext/zh/tn/verbalizer.fst",
+      "url": "https://modelscope.cn/api/v1/models/pengzhendong/wetext/repo?Revision=master&FilePath=zh%2Ftn%2Fverbalizer.fst",
+      "target": "runtime/modelscope-cache/hub/pengzhendong/wetext/zh/tn/verbalizer.fst",
+      "size": 1069758,
+      "sha256": "5a13cd679dd54637d12d2bd1bd33ee2165d91c867e14468c93195af02256e5da"
+    },
+    {
+      "group": "tools",
+      "name": "libopus-1.6.1",
+      "url": "https://api.anaconda.org/download/conda-forge/libopus/1.6.1/win-64/libopus-1.6.1-h6a83c73_0.conda",
+      "target": "downloads/libopus-1.6.1-h6a83c73_0.conda",
+      "size": 307373,
+      "sha256": "c3678f111866235b44fa65265966abae7d90b6387178f1459afaedcee8b4a997"
+    },
+    {
+      "group": "tools",
+      "name": "ffmpeg-9.0.1-essentials",
+      "url": "https://github.com/GyanD/codexffmpeg/releases/download/9.0.1/ffmpeg-9.0.1-essentials_build.zip",
+      "target": "downloads/ffmpeg-9.0.1-essentials_build.zip",
+      "size": 111253802,
+      "sha256": "fec81ae03971d9dd4be3ebe02e263bd2ec1d789483f931bdba5f5715e65da2e9"
+    }
+  ]
+}

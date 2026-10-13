@@ -176,7 +176,7 @@ def test_offline_incompatible_download_entry_stops_startup(modelscope_runtime):
         trial.install_modelscope_offline()
 
 
-def test_runtime_cache_installs_offline_guard_without_moving_modelscope_cache(
+def test_runtime_cache_uses_project_root_without_moving_existing_cache(
     modelscope_runtime, monkeypatch, tmp_path,
 ):
     monkeypatch.setattr(trial, "ROOT", tmp_path)
@@ -186,6 +186,8 @@ def test_runtime_cache_installs_offline_guard_without_moving_modelscope_cache(
 
     trial.configure_runtime_cache()
 
-    assert trial.os.environ["MODELSCOPE_CACHE"] == str(modelscope_runtime.cache)
+    # 新电脑使用项目专属 WeText 根；只改变本进程选择，不迁移或覆盖旧缓存。
+    assert trial.os.environ["MODELSCOPE_CACHE"] == str(tmp_path / "local/runtime/modelscope-cache")
+    assert all((modelscope_runtime.repo / name).is_file() for name in trial.WETEXT_REQUIRED_FILES)
     assert trial.os.environ["HF_HUB_OFFLINE"] == "1"
     assert modelscope_runtime.imported_snapshot(trial.WETEXT_MODEL_ID) == str(modelscope_runtime.repo)

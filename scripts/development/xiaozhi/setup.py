@@ -17,9 +17,10 @@ import re
 from urllib.parse import urlsplit
 
 
-DEFAULT_SERVER = Path(r"D:\LongMemory-local\runtime\xiaozhi-esp32-server\main\xiaozhi-server")
-DEFAULT_DOUBAO_ENV = Path(__file__).resolve().parents[3] / ".env.doubao.local"
-DEFAULT_FFMPEG = Path(r"D:\LongMemory-local\tools\ffmpeg\bin")
+ROOT = Path(__file__).resolve().parents[3]
+DEFAULT_SERVER = ROOT / "local/runtime/xiaozhi-esp32-server/main/xiaozhi-server"
+DEFAULT_DOUBAO_ENV = ROOT / ".env.doubao.local"
+DEFAULT_FFMPEG = ROOT / "local/tools/ffmpeg/bin"
 CUSTOM_TTS_URLS = {
     "voxcpm2": "http://127.0.0.1:18768/v1/audio/speech",
     "sanotts": "http://127.0.0.1:18769/v1/audio/speech",
