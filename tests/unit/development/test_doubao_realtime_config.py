@@ -18,7 +18,7 @@ def test_default_path_and_offline_status_are_safe(tmp_path, monkeypatch):
     status = config.config_status(path)
     assert status["configured"] is False
     assert status["missing"] == ["DOUBAO_API_KEY"]
-    assert config.DEFAULT_CONFIG_PATH == SCRIPT_ROOT.parents[2] / ".env.doubao.local"
+    assert config.DEFAULT_CONFIG_PATH == SCRIPT_ROOT.parents[2] / "local/config/.env.doubao.local"
     with pytest.raises(config.ConfigError, match="缺少豆包配置文件"):
         config.load_config(path)
     assert not path.exists()

@@ -73,7 +73,7 @@ def open_doubao_configuration(parent, path, on_saved=None):
     body.pack(fill="both", expand=True)
     ttk.Label(body, text="开通豆包实时语音服务后，填写该服务的 API Key。",
               wraplength=510).pack(anchor="w")
-    ttk.Label(body, text="凭据仅保存到本机 .env.doubao.local；不会进行联网验证。",
+    ttk.Label(body, text="凭据仅保存到本机 local/config/.env.doubao.local；不会进行联网验证。",
               wraplength=510).pack(anchor="w", pady=(4, 12))
     secret = tk.StringVar(dialog, value="")
     ttk.Label(body, text="实时语音 API Key（已保存的内容不会回显）").pack(anchor="w")
@@ -313,10 +313,10 @@ def main():
     manager = Manager()
     box = ttk.Frame(window, padding=(28, 22), style="App.TFrame")
     box.pack(fill="both", expand=True)
-    choice_path = ROOT / 'data/control/launcher.json'
-    model_profile_path = ROOT / 'data/control/model-profile.json'
-    memory_backend_path = ROOT / 'data/control/memory-backend.json'
-    tts_backend_path = ROOT / 'data/control/tts-backend.json'
+    choice_path = ROOT / 'local/config/preferences/launcher.json'
+    model_profile_path = ROOT / 'local/config/preferences/model-profile.json'
+    memory_backend_path = ROOT / 'local/config/preferences/memory-backend.json'
+    tts_backend_path = ROOT / 'local/config/preferences/tts-backend.json'
     control = LauncherControl(lock.socket, ROOT / 'data/control' / CONTROL_FILE_NAME)
     saved = load_preferences(choice_path)
     saved["tts_backend"] = load_tts_backend(tts_backend_path, saved["tts_backend"])
@@ -554,7 +554,7 @@ def main():
         try:
             save_preferences(choice_path, current_preferences())
         except (OSError, ValueError):
-            settings_status.set("日常推荐已显示，但未能保存；请检查 data/control 是否可写。")
+            settings_status.set("日常推荐已显示，但未能保存；请检查 local/config 是否可写。")
             return
         settings_status.set("已应用并保存日常推荐；实验开关已关闭，下次启动生效。")
 
@@ -739,7 +739,7 @@ def main():
     ttk.Combobox(voice_mode_row, textvariable=voice_mode,
                  values=tuple(voice_mode_labels), state="readonly", width=28).pack(side="left")
     ttk.Button(voice_mode_row, text="配置豆包 API", command=lambda: open_doubao_configuration(
-        window, ROOT / ".env.doubao.local",
+        window, ROOT / "local/config/.env.doubao.local",
         lambda: settings_status.set("豆包配置已保存到本机，尚未验证云端权限和实际通话。"),
     )).pack(side="left", padx=8)
     ttk.Button(voice_mode_row, text="配置指南", command=lambda: os.startfile(
@@ -799,7 +799,7 @@ def main():
             save_preferences(choice_path, current_preferences())
             settings_status.set("当前选择已保存；运行中的服务不热切换，下次启动生效。")
         except (OSError, ValueError):
-            settings_status.set("当前选择未能保存；请勿关闭面板，并检查 data/control 是否可写。")
+            settings_status.set("当前选择未能保存；请勿关闭面板，并检查 local/config 是否可写。")
 
     def persist_model_profile(target):
         try:
@@ -808,14 +808,14 @@ def main():
             save_model_profile(model_profile_path, value, target)
             settings_status.set("模型选择已保存；运行中的服务不热切换，下次启动生效。")
         except (OSError, ValueError):
-            settings_status.set("模型选择未能保存；请勿关闭面板，并检查 data/control 是否可写。")
+            settings_status.set("模型选择未能保存；请勿关闭面板，并检查 local/config 是否可写。")
 
     def persist_memory_backend(*_):
         try:
             save_memory_backend(memory_backend_path, selected_memory_backend())
             settings_status.set("圆屏记忆后端已保存；下次启动生效。")
         except (OSError, ValueError):
-            settings_status.set("圆屏记忆后端未能保存；请检查 data/control 是否可写。")
+            settings_status.set("圆屏记忆后端未能保存；请检查 local/config 是否可写。")
 
     def persist_tts_backend(*_):
         try:
@@ -824,7 +824,7 @@ def main():
             save_preferences(choice_path, current_preferences())
             settings_status.set("圆屏声音已保存；运行中的声音不热切换，下次启动生效。")
         except (OSError, ValueError):
-            settings_status.set("圆屏声音未能保存；请检查 data/control 是否可写。")
+            settings_status.set("圆屏声音未能保存；请检查 local/config 是否可写。")
 
     # 路径输入仍在启动或显式同步时保存，避免每次键入都写磁盘；下面这些
     # 有限枚举和布尔选择则在用户操作时立即落盘。

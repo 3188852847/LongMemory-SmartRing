@@ -146,14 +146,14 @@ def build_commands(options, uv=None):
     root = options.root.resolve()
     if not options.database.is_file():
         raise ValueError("请选择已有日常数据库；启动器不会创建或迁移数据库。")
-    env_file = {"campus": ".env", "official": ".env.deepseek.local"}[options.model_profile]
+    env_file = {"campus": "local/config/.env", "official": "local/config/.env.deepseek.local"}[options.model_profile]
     if not (root / env_file).is_file() or not (root / ".venv/Scripts/python.exe").is_file():
         raise ValueError(f"缺少项目 {env_file} 或虚拟环境，请先在控制台配置该模型档。")
     uv = uv or shutil.which("uv")
     if not uv:
         raise ValueError("未找到 uv，请检查已有安装的 PATH。启动器不自动安装依赖。")
     # 当前 uv 的 env-file 参数会拆分反斜杠/空格路径。子进程 cwd 已明确
-    # 固定为项目根目录，使用相对 .env 同时规避两种路径解析问题。
+    # 固定为项目根目录，使用相对 local/config/.env 同时规避两种路径解析问题。
     console = [str(uv), "run", "--offline", "--no-sync", "--env-file", env_file,
                "python", "-m", "longmemory.entrypoints.api", "--port", str(options.port),
                "--database", str(options.database.resolve()), "--enable-chat",
@@ -214,7 +214,7 @@ def build_commands(options, uv=None):
         if not python.is_file():
             raise ValueError("未找到小智自己的 Python 环境。")
         if options.voice_mode == "doubao_realtime":
-            validate_doubao_config(options.doubao_env or root / ".env.doubao.local")
+            validate_doubao_config(options.doubao_env or root / "local/config/.env.doubao.local")
         elif options.tts_backend == "voxcpm2":
             # 独立环境与模型集中存放；服务代码仍来自主仓库，二者不再靠旧目录联接绑定。
             voxcpm_python = DEFAULT_VOXCPM_PYTHON
@@ -259,7 +259,7 @@ def build_commands(options, uv=None):
                                   str(ip), options.tts_backend, options.memory_backend]
         if options.voice_mode == "doubao_realtime":
             voice_command.extend(["--voice-mode", "doubao_realtime", "--doubao-env", str(
-                (options.doubao_env or root / ".env.doubao.local").resolve()
+                (options.doubao_env or root / "local/config/.env.doubao.local").resolve()
             )])
         else:
             voice_command.extend(["--voice-latency-mode", options.voice_latency_mode])

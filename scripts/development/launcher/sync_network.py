@@ -6,6 +6,9 @@ import re
 import sys
 import uuid
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "xiaozhi"))
+from config_paths import config_path, backup_path
+
 
 def updated_text(text, address):
     import yaml
@@ -37,7 +40,7 @@ def sync(path, address, apply=False):
     changed = result.encode('utf-8') != original
     if apply and changed:
         # 备份含原有凭据，只留在原私有目录，不复制到项目或输出正文。
-        backup = path.with_name(path.name + '.' + uuid.uuid4().hex + '.bak')
+        backup = backup_path(path, path.name + '.' + uuid.uuid4().hex + '.bak')
         with backup.open('xb') as handle:
             handle.write(original)
         if path.read_bytes() != original:
@@ -51,6 +54,6 @@ def sync(path, address, apply=False):
 
 if __name__ == '__main__':
     try:
-        print(json.dumps(sync(Path(sys.argv[1]) / 'data/.config.yaml', sys.argv[2], sys.argv[3] == 'apply')))
+        print(json.dumps(sync(config_path(Path(sys.argv[1])), sys.argv[2], sys.argv[3] == 'apply')))
     except Exception:
         raise SystemExit(3)

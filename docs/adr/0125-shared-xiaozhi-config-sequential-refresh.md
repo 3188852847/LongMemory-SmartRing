@@ -3,6 +3,8 @@
 日期：2026-09-13
 状态：接受
 
+2026-10-14 补充：本记录的顺序同步决定继续有效；受管实例 YAML 的管理位置由 [ADR-0126](0126-central-local-configuration.md) 更新为 `local/config/xiaozhi.yaml`，厂家 `data/.config.yaml` 为生成副本。下文保留当时背景。
+
 ## 背景
 
 启动器会在语音启动前同步网络、TTS、模型、记忆后端和 VAD。五个配置域虽然在产品中彼此独立，却共同保存在 Xiaozhi 的 `data/.config.yaml`，各写入工具都使用整文件 SHA-256 摘要防止覆盖并发修改。

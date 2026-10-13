@@ -26,17 +26,19 @@ def test_profile_write_never_returns_key_and_selection_is_separate(tmp_path):
     assert result["restart_required"] is True
     assert result["profiles"][1]["api_key_configured"] is True
     assert "synthetic-secret" not in json.dumps(result)
-    assert "synthetic-secret" in (tmp_path / ".env.deepseek.local").read_text(encoding="utf-8")
+    assert "synthetic-secret" in (tmp_path / "local/config/.env.deepseek.local").read_text(encoding="utf-8")
 
     store.save("official", payload(api_key="", model="deepseek-reasoner"))
-    text = (tmp_path / ".env.deepseek.local").read_text(encoding="utf-8")
+    text = (tmp_path / "local/config/.env.deepseek.local").read_text(encoding="utf-8")
     assert "synthetic-secret" in text and "deepseek-reasoner" in text
 
 
 def test_web_and_voice_selections_are_independent_and_backward_compatible(tmp_path):
     store = ModelProfileStore(tmp_path)
-    (tmp_path / ".env").write_text("LONGMEMORY_LLM_API_KEY=campus\n", encoding="utf-8")
-    (tmp_path / ".env.deepseek.local").write_text("LONGMEMORY_LLM_API_KEY=official\n", encoding="utf-8")
+    (tmp_path / "local/config/.env").parent.mkdir(parents=True, exist_ok=True)
+    (tmp_path / "local/config/.env").write_text("LONGMEMORY_LLM_API_KEY=campus\n", encoding="utf-8")
+    (tmp_path / "local/config/.env.deepseek.local").parent.mkdir(parents=True, exist_ok=True)
+    (tmp_path / "local/config/.env.deepseek.local").write_text("LONGMEMORY_LLM_API_KEY=official\n", encoding="utf-8")
     store.activate("official", target="voice")
     assert store.selected("web") == "campus"
     assert store.selected("voice") == "official"

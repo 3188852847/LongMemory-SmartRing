@@ -7,6 +7,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+from config_paths import config_path, backup_path
 import sys
 import uuid
 
@@ -50,7 +51,7 @@ def prepare(path, prompt, database, project):
 
 
 def sync(server, body):
-    path = server / 'data/.config.yaml'
+    path = config_path(server)
     if body.get('action') not in {'check', 'apply'} or not isinstance(body.get('prompt'), str) or not 1 <= len(body['prompt']) <= 16000:
         raise ValueError('invalid_request')
     original, updated, matches = prepare(path, body['prompt'], body['database'], body['project'])
@@ -81,7 +82,7 @@ def commit_change(path, body, original, updated, matches, backup_label='role'):
                 raise ValueError('config_changed')
             if backup_label not in {'role', 'model', 'tts', 'memory', 'vad'}:
                 raise ValueError('invalid_backup_label')
-            backup = path.with_name(path.name + '.' + backup_label + '-' + uuid.uuid4().hex + '.bak')
+            backup = backup_path(path, path.name + '.' + backup_label + '-' + uuid.uuid4().hex + '.bak')
             with backup.open('xb') as handle:
                 handle.write(original)
                 handle.flush(); os.fsync(handle.fileno())

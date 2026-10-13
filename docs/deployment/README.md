@@ -53,7 +53,7 @@ V0.1 的 LongMemory 已在电脑本地运行；V0.1-Demo 开始准备圆屏的�
 用户已反馈上述 ASR、VAD、TTS 三项检查全部通过。准备进入完整服务启动，尚未完成真实流式调用或服务端启动验收。
 
 - 工具：[setup.py](../../scripts/development/xiaozhi/setup.py)。使用外部小智 `.venv` 的 Python 执行，不使用 LongMemory 解释器。
-- 模板：[local.example.yaml](../../scripts/development/xiaozhi/local.example.yaml)。`init` 在外部服务的 `data/.config.yaml` 创建私有副本；已有配置时拒绝覆盖。
+- 模板：[xiaozhi.example.yaml](../../config/examples/xiaozhi.example.yaml)。`init` 在受管实例的项目 `local/config/xiaozhi.yaml` 创建人工管理配置（显式其他实例仍使用自身 `data/.config.yaml`）；已有配置时拒绝覆盖。
 - 仅在私有副本中填写 `LLM.CampusLLM.base_url` 和 `api_key`，保持 `model_name` 与已验证接口一致。此 YAML 不自动展开 `${环境变量}`；不要把真实值填写到模板、截图或发给助手。
 - `check-config`：解析配置并验证本机地址、模块选择和运行文件是否存在；无模型请求，不代表完整服务可启动。
 - `check-stream`：通过 OpenAI SDK 发送固定合成句，使用 `stream=True`，要求收到非空 `delta.content`；不输出密钥或响应正文，无自动重试。HTTP 需加 `--allow-insecure-http` 明确接受明文风险。用户负责在校园网运行。
@@ -68,7 +68,7 @@ V0.1 的 LongMemory 已在电脑本地运行；V0.1-Demo 开始准备圆屏的�
 ```powershell
 $xiaozhiSetup = "D:\02-项目\LongMemory-SmartRing\scripts\development\xiaozhi\setup.py"
 .\.venv\Scripts\python.exe $xiaozhiSetup init
-# 用编辑器填写外部服务 data/.config.yaml 后再继续
+# 用编辑器填写 local/config/xiaozhi.yaml 后再继续（显式其他实例填写自身 data/.config.yaml）
 .\.venv\Scripts\python.exe $xiaozhiSetup check-config
 # 切换校园网，明确接受 HTTP 合成测试风险后
 .\.venv\Scripts\python.exe $xiaozhiSetup check-stream --allow-insecure-http

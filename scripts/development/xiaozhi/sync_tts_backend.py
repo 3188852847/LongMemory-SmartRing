@@ -9,6 +9,7 @@ import copy
 import hashlib
 import json
 from pathlib import Path
+from config_paths import config_path
 import sys
 
 from sync_role import commit_change
@@ -97,7 +98,7 @@ def prepare(path: Path, backend: str):
 def sync(server: Path, body: dict):
     if body.get("action") not in {"check", "apply"} or body.get("backend") not in BACKENDS:
         raise ValueError("invalid_request")
-    path = server / "data/.config.yaml"
+    path = config_path(server)
     original, updated, matches = prepare(path, body["backend"])
     result = commit_change(path, body, original, updated, matches, backup_label="tts")
     return result | {"backend": body["backend"], "service_url": CUSTOM_URLS.get(body["backend"])}

@@ -1,6 +1,6 @@
 """用小智已安装的 OpenAI/httpx SDK，比较空闲七秒后的连接复用。
 
-只有 --run-official 才读取项目根 .env.deepseek.local 并发出固定公开问题。
+只有 --run-official 才读取项目 local/config/.env.deepseek.local 并发出固定公开问题。
 每组新建一个 SDK 客户端，先请求、空闲 7 秒、再请求；仅比较 keepalive_expiry
 5/120 秒，保留 SDK 默认 trust_env/代理/连接池容量。请求禁止重试和重定向。
 trace 回调完全忽略信息字典，只累计建连/TLS/响应头事件的计数和耗时，不打印

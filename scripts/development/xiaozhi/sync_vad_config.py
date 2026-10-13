@@ -10,6 +10,7 @@ import copy
 import hashlib
 import json
 from pathlib import Path
+from config_paths import config_path
 import sys
 
 from sync_role import commit_change
@@ -90,11 +91,11 @@ def inspect(path: Path):
 
 def sync(server: Path, body: dict):
     if body.get("action") == "status" and set(body) == {"action"}:
-        return inspect(server / "data/.config.yaml")
+        return inspect(config_path(server))
     profile = body.get("profile")
     if body.get("action") not in {"check", "apply"} or profile not in PROFILES:
         raise ValueError("invalid_request")
-    path = server / "data/.config.yaml"
+    path = config_path(server)
     original, updated, matches = prepare(path, profile)
     result = commit_change(path, body, original, updated, matches, backup_label="vad")
     return result | {"profile": profile, "values": PROFILES[profile]}

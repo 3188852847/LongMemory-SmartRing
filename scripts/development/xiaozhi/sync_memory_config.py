@@ -6,6 +6,7 @@ import argparse
 import copy
 import json
 from pathlib import Path
+from config_paths import config_path
 
 from sync_role import commit_change
 
@@ -31,7 +32,7 @@ def prepare(server: Path, profile: str):
 
     if profile not in PROFILES:
         raise ValueError("unknown_profile")
-    path = server / "data/.config.yaml"
+    path = config_path(server)
     if path.is_symlink() or not path.is_file() or path.stat().st_size > 1024 * 1024:
         raise ValueError("unsafe_config")
     original = path.read_bytes()

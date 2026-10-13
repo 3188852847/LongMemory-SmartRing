@@ -6,7 +6,7 @@ import os
 import re
 import tempfile
 
-CONFIG_PATH = Path(__file__).resolve().parents[3] / ".env.web-search.local"
+CONFIG_PATH = Path(__file__).resolve().parents[3] / "local/config/.env.web-search.local"
 PROVIDERS = {"tavily", "metaso"}
 
 

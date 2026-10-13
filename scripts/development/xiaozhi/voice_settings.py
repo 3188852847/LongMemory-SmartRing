@@ -4,6 +4,7 @@ import copy
 import hashlib
 import json
 from pathlib import Path
+from config_paths import config_path
 import sys
 
 from sync_role import commit_change, prepare
@@ -72,7 +73,7 @@ def _update_sanotts_speed(text, before, speed, yaml):
 
 def settings(server, body):
     import yaml
-    path = server / 'data/.config.yaml'
+    path = config_path(server)
     # 复用来源、项目、别名与文件目标检查；不修改角色。
     raw = path.read_bytes()
     before = yaml.safe_load(raw.decode('utf-8'))

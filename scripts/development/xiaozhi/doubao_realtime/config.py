@@ -13,7 +13,7 @@ import tempfile
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[4]
-DEFAULT_CONFIG_PATH = PROJECT_ROOT / ".env.doubao.local"
+DEFAULT_CONFIG_PATH = PROJECT_ROOT / "local/config/.env.doubao.local"
 OFFICIAL_URL = "wss://openspeech.bytedance.com/api/v3/duplex/realtime/dialogue"
 MODEL = "1.2.6.1"
 DEFAULT_SPEAKER = "zh_female_vv_jupiter_bigtts"
@@ -160,6 +160,7 @@ def save_config(path: str | Path | None = None, *, api_key: str | None = None,
     )
     temporary: Path | None = None
     try:
+        target.parent.mkdir(parents=True, exist_ok=True)
         # 同目录替换避免跨盘移动；异常时原文件仍然完整。
         with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", newline="\n",
                                          dir=target.parent, prefix=".doubao-", suffix=".tmp",

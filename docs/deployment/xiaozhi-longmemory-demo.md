@@ -22,7 +22,7 @@ $xiaozhiSetup = "D:\02-项目\LongMemory-SmartRing\scripts\development\xiaozhi\s
 
 ## 3. 修改现有配置的记忆项
 
-打开外部小智服务的 `data/.config.yaml`，保留 server/ASR/TTS/CampusLLM 和密钥，不再次 init。
+打开受管实例的 `local/config/xiaozhi.yaml`（显式其他小智实例使用自身 `data/.config.yaml`），保留 server/ASR/TTS/CampusLLM 和密钥，不再次 init。
 
 在现有 selected_module 内将 `Memory: nomem` 改为 `Memory: LongMemory`，其他项不变。
 在现有顶层 Memory 内添加 LongMemory，**不要重复创建第二个顶层 Memory 键**：

@@ -32,12 +32,14 @@ def options(tmp_path, modules):
     root = tmp_path / "合成项目 path"
     (root / ".venv/Scripts").mkdir(parents=True)
     (root / ".venv/Scripts/python.exe").touch()
-    (root / ".env.deepseek.local").write_text("# synthetic", encoding="utf-8")
+    (root / "local/config/.env.deepseek.local").parent.mkdir(parents=True, exist_ok=True)
+    (root / "local/config/.env.deepseek.local").write_text("# synthetic", encoding="utf-8")
     (root / "synthetic.db").touch()
     voice_root = tmp_path / "合成小智"
     (voice_root / ".venv/Scripts").mkdir(parents=True)
     (voice_root / ".venv/Scripts/python.exe").touch()
-    (root / ".env.doubao.local").write_text('DOUBAO_API_KEY="synthetic-secret"\n', encoding="utf-8")
+    (root / "local/config/.env.doubao.local").parent.mkdir(parents=True, exist_ok=True)
+    (root / "local/config/.env.doubao.local").write_text('DOUBAO_API_KEY="synthetic-secret"\n', encoding="utf-8")
     return modules.runtime.Options(
         root=root, database=root / "synthetic.db", model_profile="official",
         voice=True, voice_mode="doubao_realtime", voice_root=voice_root,
@@ -67,7 +69,7 @@ def test_cloud_commands_skip_local_models_and_voice_campus_consent(options, modu
     assert web[web.index("--model-profile") + 1] == "official"
     assert web[web.index("--memory-backend") + 1] == "longmemory"
     assert voice[voice.index("--voice-mode") + 1] == "doubao_realtime"
-    assert voice[voice.index("--doubao-env") + 1] == str(options.root / ".env.doubao.local")
+    assert voice[voice.index("--doubao-env") + 1] == str(options.root / "local/config/.env.doubao.local")
     assert "synthetic-secret" not in repr(commands)
 
 

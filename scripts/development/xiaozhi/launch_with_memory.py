@@ -190,7 +190,7 @@ def main():
     parser.add_argument("--voice-mode", choices=["pipeline", "doubao_realtime"], default="pipeline")
     parser.add_argument("--voice-latency-mode", choices=["realtime", "original"], default="realtime")
     parser.add_argument("--doubao-env", "--doubao-env-file", type=Path,
-                        default=Path(__file__).resolve().parents[3] / ".env.doubao.local")
+                        default=Path(__file__).resolve().parents[3] / "local/config/.env.doubao.local")
     args = parser.parse_args()
     root = Path.cwd()
     if args.device_control or args.voice_mode == "doubao_realtime":

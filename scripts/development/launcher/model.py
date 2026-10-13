@@ -11,7 +11,7 @@ def config_action(server: Path, project: Path, profile: str, *, apply=False,
         raise ValueError("未知圆屏模型配置档。")
     python = server / ".venv/Scripts/python.exe"
     script = project / "scripts/development/xiaozhi/sync_model_config.py"
-    env_file = project / ({"campus": ".env", "official": ".env.deepseek.local"}[profile])
+    env_file = project / ({"campus": "local/config/.env", "official": "local/config/.env.deepseek.local"}[profile])
     if not python.is_file() or not script.is_file() or not env_file.is_file():
         raise ValueError("小智环境、模型同步工具或所选本机配置档不完整。")
     command = [str(python), str(script), "--project", str(project), "--server", str(server),

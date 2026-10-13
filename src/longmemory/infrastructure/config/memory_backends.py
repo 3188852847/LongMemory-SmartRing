@@ -34,7 +34,7 @@ class MemoryBackendStore:
 
     def __init__(self, root: Path, *, current_backend: str = "longmemory"):
         self.root = Path(root).resolve()
-        self.selection_path = self.root / "data/control/memory-backend.json"
+        self.selection_path = self.root / "local/config/preferences/memory-backend.json"
         self.current_backend = self._backend(current_backend)
 
     @staticmethod

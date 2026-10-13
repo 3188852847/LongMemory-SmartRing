@@ -9,12 +9,13 @@ import argparse
 import copy
 import json
 from pathlib import Path
+from config_paths import config_path
 from urllib.parse import urlparse
 
 from sync_role import commit_change
 
 
-PROFILE_FILES = {"campus": ".env", "official": ".env.deepseek.local"}
+PROFILE_FILES = {"campus": "local/config/.env", "official": "local/config/.env.deepseek.local"}
 
 
 def read_env(path: Path) -> dict[str, str]:
@@ -65,7 +66,7 @@ def prepare(project: Path, server: Path, profile: str):
     import yaml
 
     values = profile_values(project, profile)
-    path = server / "data/.config.yaml"
+    path = config_path(server)
     if path.is_symlink() or not path.is_file() or path.stat().st_size > 1024 * 1024:
         raise ValueError("unsafe_config")
     original = path.read_bytes()

@@ -21,7 +21,7 @@ BACKENDS = {
 
 class TTSBackendStore:
     def __init__(self, root: Path, *, current_backend: str = "edge"):
-        self.selection_path = Path(root).resolve() / "data/control/tts-backend.json"
+        self.selection_path = Path(root).resolve() / "local/config/preferences/tts-backend.json"
         self.current_backend = self._backend(current_backend)
         self.default_backend = self.current_backend
 

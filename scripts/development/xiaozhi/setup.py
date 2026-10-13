@@ -2,8 +2,8 @@
 
 用小智自己的 .venv 执行本文件。init/check-config 不发请求；
 check-stream 才访问用户配置的模型，start 才启动本机服务。
-三段式密钥位于外部服务 data/.config.yaml；实时模式使用项目已忽略的
-.env.doubao.local。两种配置都不输出到日志或复制到示例。
+受管实例配置位于 local/config/xiaozhi.yaml，启动前生成厂家消费副本；
+实时模式使用项目已忽略的 local/config/.env.doubao.local。两种配置都不输出到日志或复制到示例。
 """
 
 import argparse
@@ -11,6 +11,7 @@ import hashlib
 import ipaddress
 import os
 from pathlib import Path
+from config_paths import config_path, render_runtime_config
 import subprocess
 import sys
 import re
@@ -19,7 +20,7 @@ from urllib.parse import urlsplit
 
 ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_SERVER = ROOT / "local/runtime/xiaozhi-esp32-server/main/xiaozhi-server"
-DEFAULT_DOUBAO_ENV = ROOT / ".env.doubao.local"
+DEFAULT_DOUBAO_ENV = ROOT / "local/config/.env.doubao.local"
 DEFAULT_FFMPEG = ROOT / "local/tools/ffmpeg/bin"
 CUSTOM_TTS_URLS = {
     "voxcpm2": "http://127.0.0.1:18768/v1/audio/speech",
@@ -56,10 +57,10 @@ def init_config(server_dir: Path) -> Path:
     """仅首次生成私有配置；使用 x 模式，已有文件绝不覆盖。"""
     if not (server_dir / "app.py").is_file():
         raise SetupError("目标目录没有 app.py，请检查服务目录。")
-    target = server_dir / "data" / ".config.yaml"
-    template = Path(__file__).with_name("local.example.yaml").read_text(encoding="utf-8")
+    target = config_path(server_dir)
+    template = (ROOT / "config/examples/xiaozhi.example.yaml").read_text(encoding="utf-8")
     target.parent.mkdir(parents=True, exist_ok=True)
-    with target.open("x", encoding="utf-8") as handle:
+    with target.open("x", encoding="utf-8", newline="") as handle:
         handle.write(template)
     return target
 
@@ -287,7 +288,7 @@ def main() -> int:
             return 0
         # 延迟导入，只依赖小智已经安装的 PyYAML，不给记忆核心新增依赖。
         import yaml
-        with (server_dir / "data" / ".config.yaml").open(encoding="utf-8") as handle:
+        with (config_path(server_dir)).open(encoding="utf-8") as handle:
             config = yaml.safe_load(handle)
         if not isinstance(config, dict):
             raise SetupError("私有配置必须是 YAML 映射，不能是空文件。")
@@ -350,6 +351,7 @@ def main() -> int:
             command.extend(["--voice-latency-mode", args.voice_latency_mode])
         if args.device_control:
             command.append("--device-control")
+        render_runtime_config(server_dir)
         return subprocess.call(command, cwd=server_dir,
                                env=prepare_environment(server_dir, args.ffmpeg_dir, args.voice_mode))
     except FileExistsError:

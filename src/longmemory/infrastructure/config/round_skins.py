@@ -84,8 +84,8 @@ class RoundSkinStore:
     def __init__(self, root: Path):
         self.root = Path(root).resolve()
         self.skin_root = self.root / "firmware/smartring_plus/skins"
-        self.selection_path = self.root / "data/control/round-skin-selection.json"
-        self.custom_skin_path = self.root / "data/control/round-skin-custom.skin.json"
+        self.selection_path = self.root / "local/config/display/round-skin-selection.json"
+        self.custom_skin_path = self.root / "local/config/display/round-skin-custom.skin.json"
 
     @staticmethod
     def _read_skin(path: Path) -> dict:

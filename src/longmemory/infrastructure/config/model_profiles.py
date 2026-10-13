@@ -9,7 +9,7 @@ from pathlib import Path
 from .settings import ModelSettings
 
 
-PROFILE_FILES = {"campus": ".env", "official": ".env.deepseek.local"}
+PROFILE_FILES = {"campus": "local/config/.env", "official": "local/config/.env.deepseek.local"}
 PROFILE_LABELS = {"campus": "学校模型", "official": "官方 DeepSeek"}
 MANAGED_KEYS = (
     "LONGMEMORY_LLM_PROVIDER", "LONGMEMORY_LLM_BASE_URL",
@@ -24,7 +24,7 @@ class ModelProfileStore:
 
     def __init__(self, root: Path, *, current_profile: str = "campus"):
         self.root = root.resolve()
-        self.selection_path = self.root / "data/control/model-profile.json"
+        self.selection_path = self.root / "local/config/preferences/model-profile.json"
         self.current_profile = self._profile(current_profile)
 
     @staticmethod

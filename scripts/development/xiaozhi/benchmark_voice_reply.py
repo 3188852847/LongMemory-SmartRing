@@ -1,6 +1,6 @@
 """用公开固定问题比较语音回答策略，只记录数值，不接触记忆或个人对话。
 
-默认只说明边界。只有显式传入 --run-official 和项目内 .env.deepseek.local 才联网；
+默认只说明边界。只有显式传入 --run-official 和项目内 local/config/.env.deepseek.local 才联网；
 仅允许 DeepSeek 官方 HTTPS，直连、不跟随重定向、不重试、不采用代理环境变量。
 首段时刻复用日用 CosyVoice 切段规则，但不调用 TTS，不能代表圆屏首声。
 
@@ -29,7 +29,7 @@ from cosyvoice_segments import install_cosyvoice_punctuation_policy
 
 
 PROJECT = Path(__file__).resolve().parents[3]
-OFFICIAL_ENV = PROJECT / ".env.deepseek.local"
+OFFICIAL_ENV = PROJECT / "local/config/.env.deepseek.local"
 CASES = (
     ("sunset", "为什么傍晚的天空会变红？"),
     ("desk", "请给我一个整理书桌的简单办法。"),
@@ -314,7 +314,7 @@ def main(argv=None):
     parser.add_argument("--timeout-seconds", type=float, default=30)
     args = parser.parse_args(argv)
     if not args.run_official:
-        print(json.dumps({"state": "not_run", "requires": "--run-official --env-file .env.deepseek.local",
+        print(json.dumps({"state": "not_run", "requires": "--run-official --env-file local/config/.env.deepseek.local",
                           "scope": "synthetic_text_only_no_tts_no_memory"}))
         return 0
     try:

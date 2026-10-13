@@ -17,7 +17,8 @@ sys.path.pop(0)
 def test_updates_only_model_fields_and_preserves_text(tmp_path):
     project = tmp_path / 'project'; server = tmp_path / 'server'
     project.mkdir(); (server / 'data').mkdir(parents=True)
-    (project / '.env').write_text(
+    (project / 'local/config/.env').parent.mkdir(parents=True, exist_ok=True)
+    (project / 'local/config/.env').write_text(
         'LONGMEMORY_LLM_BASE_URL=http://synthetic.local/tenant/v1\n'
         'LONGMEMORY_LLM_MODEL=synthetic-model\n'
         'LONGMEMORY_LLM_API_KEY=SYNTHETIC_SECRET_NEW\n'
@@ -41,7 +42,8 @@ def test_updates_only_model_fields_and_preserves_text(tmp_path):
 def test_official_profile_check_is_read_only_and_summary_has_no_key(tmp_path):
     project = tmp_path / 'project'; server = tmp_path / 'server'
     project.mkdir(); (server / 'data').mkdir(parents=True)
-    (project / '.env.deepseek.local').write_text(
+    (project / 'local/config/.env.deepseek.local').parent.mkdir(parents=True, exist_ok=True)
+    (project / 'local/config/.env.deepseek.local').write_text(
         'LONGMEMORY_LLM_BASE_URL=https://api.synthetic.invalid\n'
         'LONGMEMORY_LLM_MODEL=official-model\n'
         'LONGMEMORY_LLM_API_KEY=SYNTHETIC_OFFICIAL_SECRET\n', encoding='utf-8')
@@ -60,7 +62,8 @@ def test_official_profile_check_is_read_only_and_summary_has_no_key(tmp_path):
 def test_rejects_non_base_endpoint(tmp_path, base):
     project = tmp_path / 'project'; server = tmp_path / 'server'
     project.mkdir(); (server / 'data').mkdir(parents=True)
-    (project / '.env').write_text(
+    (project / 'local/config/.env').parent.mkdir(parents=True, exist_ok=True)
+    (project / 'local/config/.env').write_text(
         f'LONGMEMORY_LLM_BASE_URL={base}\nLONGMEMORY_LLM_MODEL=x\nLONGMEMORY_LLM_API_KEY=x\n', encoding='utf-8')
     (server / 'data/.config.yaml').write_text(
         'selected_module: {LLM: CampusLLM}\nLLM: {CampusLLM: {type: openai, base_url: old, api_key: old, model_name: old}}\n', encoding='utf-8')

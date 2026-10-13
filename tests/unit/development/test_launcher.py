@@ -37,7 +37,8 @@ def options(tmp_path):
     root = tmp_path / "中文 path"
     (root / ".venv/Scripts").mkdir(parents=True)
     (root / ".venv/Scripts/python.exe").touch()
-    (root / ".env").write_text("# synthetic only", encoding="utf-8")
+    (root / "local/config/.env").parent.mkdir(parents=True, exist_ok=True)
+    (root / "local/config/.env").write_text("# synthetic only", encoding="utf-8")
     database = root / "synthetic.db"
     database.touch()  # 只测文件预检，数据库 schema 仍由真实入口独立校验。
     return runtime.Options(root=root, database=database, consent=True)
@@ -47,7 +48,7 @@ def test_command_preserves_paths_and_does_not_enable_deletion_or_jobs(options):
     name, cmd, cwd = runtime.build_commands(options, uv="synthetic-uv")[0]
     assert name == "console" and cwd == options.root.resolve()
     assert str(options.database) in cmd
-    assert cmd[cmd.index('--env-file') + 1] == '.env'
+    assert cmd[cmd.index('--env-file') + 1] == 'local/config/.env'
     assert "--no-sync" in cmd and "--offline" in cmd
     assert "--allow-memory-delete" not in cmd
     assert "--allow-memory-correction" in cmd
@@ -219,11 +220,12 @@ def test_explicit_launcher_choice_enables_l1_delete_capability(options):
 
 
 def test_official_profile_uses_separate_env_file_and_needs_no_http_ack(options):
-    (options.root / ".env.deepseek.local").write_text("# synthetic", encoding="utf-8")
+    (options.root / "local/config/.env.deepseek.local").parent.mkdir(parents=True, exist_ok=True)
+    (options.root / "local/config/.env.deepseek.local").write_text("# synthetic", encoding="utf-8")
     cmd = runtime.build_commands(
         replace(options, model_profile="official", consent=False), uv="synthetic-uv"
     )[0][1]
-    assert cmd[cmd.index("--env-file") + 1] == ".env.deepseek.local"
+    assert cmd[cmd.index("--env-file") + 1] == "local/config/.env.deepseek.local"
     assert cmd[cmd.index("--model-profile") + 1] == "official"
 
 
@@ -709,7 +711,8 @@ def test_manager_syncs_selected_voice_model_and_memory_after_ports_are_free(opti
     (voice_root / ".venv/Scripts").mkdir(parents=True)
     (voice_root / ".venv/Scripts/python.exe").touch()
     (voice_root / "app.py").touch()
-    (options.root / ".env.deepseek.local").write_text("synthetic", encoding="utf-8")
+    (options.root / "local/config/.env.deepseek.local").parent.mkdir(parents=True, exist_ok=True)
+    (options.root / "local/config/.env.deepseek.local").write_text("synthetic", encoding="utf-8")
     selected = replace(options, voice=True, voice_root=voice_root,
                        lan_ip="192.168.1.9", voice_model_profile="official")
 

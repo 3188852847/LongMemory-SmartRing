@@ -9,13 +9,13 @@
 
 ## 配置与安全
 
-- 项目根目录 `.env` 是已忽略的本地配置，`uv run --env-file .env` 才会显式读取它。
-- 可提交模板为 `.env.example`，不含真实 Key 或私有服务地址。
+- 项目目录 `local/config/.env` 是已忽略的本地配置，`uv run --env-file local/config/.env` 才会显式读取它。
+- 可提交模板为 `config/examples/.env.example`，不含真实 Key 或私有服务地址。
 - `LONGMEMORY_LLM_PROVIDER` 默认 `fake`；真实验证命令用 `--provider openai_compatible` 显式选择。
 - Base URL 应包含服务提供的 API 前缀，例如 `/v1`；程序只在后面追加 `/chat/completions`。
 - 当前服务为 HTTP。校园网不代表加密，接受凭据与合成文本明文传输的风险后，
-  才在本地 `.env` 设置 `LONGMEMORY_LLM_ALLOW_HTTP=true`。优先向服务方申请 HTTPS 或安全隧道。
-- Key 已出现在会话中，正式使用前建议更换，并只更新本地 `.env`。
+  才在本地 `local/config/.env` 设置 `LONGMEMORY_LLM_ALLOW_HTTP=true`。优先向服务方申请 HTTPS 或安全隧道。
+- Key 已出现在会话中，正式使用前建议更换，并只更新本地 `local/config/.env`。
 - 仅使用合成数据；远程服务可能记录请求，不能据“私有部署”推断不留日志。
 
 ## 1. 仅验证接口，不创建数据库
@@ -23,7 +23,7 @@
 在项目根目录、连接校园网后执行：
 
 ```powershell
-uv run --env-file .env python -m longmemory --provider openai_compatible --check-model
+uv run --env-file local/config/.env python -m longmemory --provider openai_compatible --check-model
 ```
 
 预期收到“连接验证通过”。这只代表返回了非空的兼容文本，不代表问答质量合格。
@@ -33,7 +33,7 @@ uv run --env-file .env python -m longmemory --provider openai_compatible --check
 ## 2. 合成记忆评估
 
 ```powershell
-uv run --env-file .env python -m longmemory.evaluation.runner --provider openai_compatible
+uv run --env-file local/config/.env python -m longmemory.evaluation.runner --provider openai_compatible
 ```
 
 程序为每个用例和每个组创建独立临时 SQLite 库；不打开个人运行数据库。
@@ -59,7 +59,7 @@ uv run --env-file .env python -m longmemory.evaluation.runner --provider openai_
 使用一个尚不存在的合成数据库文件，避免首次验证自动迁移真实个人数据：
 
 ```powershell
-uv run --env-file .env python -m longmemory --provider openai_compatible --database data/databases/campus-demo-new.db
+uv run --env-file local/config/.env python -m longmemory --provider openai_compatible --database data/databases/campus-demo-new.db
 ```
 
 依次输入“我养了一只叫豆包的猫。”、`/memories`、`/exit`。
@@ -74,10 +74,10 @@ uv run --env-file .env python -m longmemory --provider openai_compatible --datab
 
 ## 日志与反馈
 
-CLI 日志默认 `data/logs/events.jsonl`，本地 `.env` 可设置合成验证专用路径。
+CLI 日志默认 `data/logs/events.jsonl`，本地 `local/config/.env` 可设置合成验证专用路径。
 记录 turn_id、记忆 ID、ADD/NOOP、检索/注入 ID、完成/失败事件和耗时，
 不复制对话原文、回答正文、完整 URL 或 Key。用记忆 ID 可回到 SQLite 检查来源。
 日志最多保留当前文件及两个 1 MiB 轮转文件。ID 仍是可关联元数据，不应公开上传。
 
 切回可与助手聊天的网络后，只提供退出码、安全错误、合成问答结果或脱敏报告；
-不要提供 `.env`、Authorization 请求头或原始敏感对话。
+不要提供 `local/config/.env`、Authorization 请求头或原始敏感对话。
