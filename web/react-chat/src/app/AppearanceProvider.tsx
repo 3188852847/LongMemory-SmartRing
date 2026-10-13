@@ -72,9 +72,12 @@ export function AppearanceProvider({children}: {children: ReactNode}) {
   const future = prefs.theme === 'future';
   const dark = future || prefs.theme === 'dark' || (prefs.theme === 'system' && systemDark);
   const fontSize = prefs.size === 'larger' ? 20 : prefs.size === 'large' ? 18 : 16;
+  // Drawer/Modal 经 Portal 挂到 body，必须在组件库层关闭运动，不能只靠页面 CSS。
+  const motion = !(prefs.motion === 'reduce' || (prefs.motion === 'system' && systemReducedMotion));
   return <AppearanceContext.Provider value={value}>
     <ConfigProvider csp={{nonce}} theme={{algorithm: dark ? theme.darkAlgorithm : theme.defaultAlgorithm,
       token: {
+        motion,
         colorPrimary: future ? '#28d7f2' : dark ? '#e16e9e' : '#a72a5f',
         colorInfo: future ? '#55a7ff' : dark ? '#74a0df' : '#3769b0',
         colorSuccess: future ? '#38e5a3' : dark ? '#55b889' : '#198754',
