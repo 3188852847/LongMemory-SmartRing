@@ -1,17 +1,23 @@
 ﻿param(
     [Parameter(Mandatory = $true)]
     [string]$ProxyScript,
-    [switch]$Resume
+    [switch]$Resume,
+    [switch]$DownloadOnly
 )
 
 # 机器代理位置由调用者传入，项目不固定本机地址或修改永久配置。
 # 点源加载、阶段执行与清理均在同一进程、同一脚本作用域中完成。
 $ErrorActionPreference = 'Stop'
+if ($Resume -and $DownloadOnly) {
+    throw 'Resume 与 DownloadOnly 只选择一个。'
+}
 . $ProxyScript
 $enableVoiceProxy = Get-Command Enable-DevProxy -CommandType Function -ErrorAction Stop
 $disableVoiceProxy = Get-Command Disable-DevProxy -CommandType Function -ErrorAction Stop
 $voiceStages = @('Sources', 'Environments', 'Models', 'Tools')
-if ($Resume) {
+if ($DownloadOnly) {
+    $voiceStages = @('Models', 'Tools')
+} elseif ($Resume) {
     $voiceStages = @('Environments', 'Models', 'Tools')
 }
 try {

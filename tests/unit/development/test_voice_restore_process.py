@@ -22,8 +22,8 @@ def quoted(path):
 
 
 @pytest.mark.parametrize("fails", [True, False])
-@pytest.mark.parametrize("resume", [True, False])
-def test_wrapper_restores_proxy_and_stops_after_failure(tmp_path, fails, resume):
+@pytest.mark.parametrize("mode", ["-Resume", "-DownloadOnly", ""])
+def test_wrapper_restores_proxy_and_stops_after_failure(tmp_path, fails, mode):
     wrapper = tmp_path / "run_voice_restore.ps1"
     shutil.copyfile(ROOT / "scripts/development/run_voice_restore.ps1", wrapper)
     proxy = tmp_path / "proxy.ps1"
@@ -41,22 +41,29 @@ function Disable-DevProxy {
     (tmp_path / "restore_voice.ps1").write_text("""
 param([string]$Stage)
 Add-Content -LiteralPath $env:VOICE_TEST_LOG -Value $Stage
-if ($env:VOICE_TEST_FAIL -eq '1' -and $Stage -eq 'Environments') {
+if ($env:VOICE_TEST_FAIL -eq '1' -and $Stage -eq $env:VOICE_TEST_FAIL_STAGE) {
     throw 'synthetic_failure'
 }
 """, encoding="utf-8-sig")
     log = tmp_path / "stages.txt"
     environment = dict(os.environ, VOICE_TEST_MARKER="original", VOICE_TEST_LOG=str(log),
-                       VOICE_TEST_FAIL="1" if fails else "0")
-    command = f"try {{ & {quoted(wrapper)} -ProxyScript {quoted(proxy)} {'-Resume' if resume else ''} }} catch {{}}; Write-Output $env:VOICE_TEST_MARKER"
+                       VOICE_TEST_FAIL="1" if fails else "0",
+                       VOICE_TEST_FAIL_STAGE="Models" if mode == "-DownloadOnly" else "Environments")
+    command = f"try {{ & {quoted(wrapper)} -ProxyScript {quoted(proxy)} {mode} }} catch {{}}; Write-Output $env:VOICE_TEST_MARKER"
     result = subprocess.run([POWERSHELL, "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command],
                             env=environment, capture_output=True, text=True, encoding="utf-8")
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip() == "original"
     stages = log.read_text(encoding="utf-8-sig").splitlines()
-    expected = ["enabled"] + ([] if resume else ["Sources"]) + ["Environments"]
+    stages_requested = {"": ["Sources", "Environments", "Models", "Tools"],
+                        "-Resume": ["Environments", "Models", "Tools"],
+                        "-DownloadOnly": ["Models", "Tools"]}[mode]
+    expected = ["enabled"]
     if not fails:
-        expected += ["Models", "Tools"]
+        expected += stages_requested
+    else:
+        end = stages_requested.index(environment["VOICE_TEST_FAIL_STAGE"])
+        expected += stages_requested[:end + 1]
     assert stages == expected + ["disabled"]
 
 

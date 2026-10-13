@@ -67,7 +67,7 @@ def test_partial_requires_exact_range_before_append(tmp_path, monkeypatch):
     partial.parent.mkdir()
     partial.write_bytes(b"synthetic ")
     def open_range(request, **kwargs):
-        assert request.headers["Range"] == "bytes=10-"
+        assert request.headers["Range"] == "bytes=10-14"
         return Response(b"model", status=206, headers={"Content-Range": "bytes 10-14/15"})
     monkeypatch.setattr(assets.urllib.request, "urlopen", open_range)
     assets.download(resource(), tmp_path)
@@ -91,6 +91,83 @@ def test_empty_partial_can_continue(tmp_path, monkeypatch):
     monkeypatch.setattr(assets.urllib.request, "urlopen", lambda *a, **k: Response(b"synthetic model"))
     assets.download(resource(), tmp_path)
     assert (tmp_path / "models/sample.bin").is_file()
+
+
+def test_large_resource_uses_bounded_ranges_and_full_file_digest(tmp_path, monkeypatch):
+    content = b"synthetic model"
+    requested = []
+    monkeypatch.setattr(assets, "SEGMENT_BYTES", 4)
+    def response(request, **kwargs):
+        start, end = map(int, request.headers["Range"][6:].split("-"))
+        requested.append((start, end))
+        return Response(content[start:end + 1], status=206, headers={
+            "Content-Range": f"bytes {start}-{end}/{len(content)}",
+            "Content-Length": str(end - start + 1),
+        })
+    monkeypatch.setattr(assets.urllib.request, "urlopen", response)
+    assert assets.download(resource(), tmp_path) == hashlib.sha256(content).hexdigest()
+    assert requested == [(0, 3), (4, 7), (8, 11), (12, 14)]
+    assert (tmp_path / "models/sample.bin").read_bytes() == content
+
+
+def test_server_can_cap_a_range_further_without_repeating_bytes(tmp_path, monkeypatch):
+    content = b"synthetic model"
+    monkeypatch.setattr(assets, "SEGMENT_BYTES", 8)
+    def response(request, **kwargs):
+        start, requested_end = map(int, request.headers["Range"][6:].split("-"))
+        end = min(start + 2, requested_end)
+        return Response(content[start:end + 1], status=206,
+                        headers={"Content-Range": f"bytes {start}-{end}/{len(content)}"})
+    monkeypatch.setattr(assets.urllib.request, "urlopen", response)
+    assets.download(resource(), tmp_path)
+    assert (tmp_path / "models/sample.bin").read_bytes() == content
+
+
+def test_truncated_range_keeps_prefix_and_explicit_rerun_resumes(tmp_path, monkeypatch):
+    content = b"synthetic model"
+    monkeypatch.setattr(assets, "SEGMENT_BYTES", 4)
+    monkeypatch.setattr(assets.urllib.request, "urlopen", lambda *a, **k: Response(
+        content[:3], status=206, headers={"Content-Range": "bytes 0-3/15", "Content-Length": "4"}))
+    with pytest.raises(ValueError, match="已保留 3/15"):
+        assets.download(resource(), tmp_path)
+    assert (tmp_path / "models/sample.bin.part").read_bytes() == content[:3]
+    requested = []
+    def response(request, **kwargs):
+        start, end = map(int, request.headers["Range"][6:].split("-"))
+        requested.append(start)
+        return Response(content[start:end + 1], status=206,
+                        headers={"Content-Range": f"bytes {start}-{end}/15"})
+    monkeypatch.setattr(assets.urllib.request, "urlopen", response)
+    assets.download(resource(), tmp_path)
+    assert requested[0] == 3
+    assert (tmp_path / "models/sample.bin").read_bytes() == content
+
+
+@pytest.mark.parametrize("content_range", ["bytes 0-3/15", "bytes 4-7/16", "bytes 4-8/15"])
+def test_wrong_range_does_not_append_to_prefix(tmp_path, monkeypatch, content_range):
+    partial = tmp_path / "models/sample.bin.part"
+    partial.parent.mkdir()
+    partial.write_bytes(b"synt")
+    monkeypatch.setattr(assets, "SEGMENT_BYTES", 4)
+    monkeypatch.setattr(assets.urllib.request, "urlopen", lambda *a, **k: Response(
+        b"heti", status=206, headers={"Content-Range": content_range}))
+    with pytest.raises(ValueError, match="断点续传"):
+        assets.download(resource(), tmp_path)
+    assert partial.read_bytes() == b"synt"
+
+
+def test_completed_segments_still_require_the_expected_digest(tmp_path, monkeypatch):
+    content = b"corrupted model"
+    monkeypatch.setattr(assets, "SEGMENT_BYTES", 4)
+    def response(request, **kwargs):
+        start, end = map(int, request.headers["Range"][6:].split("-"))
+        return Response(content[start:end + 1], status=206,
+                        headers={"Content-Range": f"bytes {start}-{end}/15"})
+    monkeypatch.setattr(assets.urllib.request, "urlopen", response)
+    with pytest.raises(ValueError, match="SHA-256"):
+        assets.download(resource(), tmp_path)
+    assert not (tmp_path / "models/sample.bin").exists()
+    assert (tmp_path / "models/sample.bin.part").read_bytes() == content
 
 
 def test_manifest_cannot_escape_resource_root(tmp_path):

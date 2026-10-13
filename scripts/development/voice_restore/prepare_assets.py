@@ -9,6 +9,7 @@ import hashlib
 import io
 import json
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import tarfile
@@ -20,6 +21,7 @@ ROOT = Path(__file__).resolve().parents[3]
 LOCAL = ROOT / "local"
 MANIFEST = Path(__file__).with_name("assets.json")
 OPUS_SHA256 = "995e23c399522546397f9059f10365702dec3ceadbaf34b8ecd4c5e977822603"
+SEGMENT_BYTES = 16 * 1024 * 1024
 
 
 def local_path(relative, local=LOCAL):
@@ -62,28 +64,49 @@ def download(asset, local=LOCAL):
     if offset > asset["size"]:
         raise ValueError("未完成文件超过清单长度；保留文件，请先检查")
     if offset < asset["size"]:
-        headers = {"User-Agent": "SmartRoundScreen-VoiceRestore/1", "Accept-Encoding": "identity"}
-        if offset:
-            headers["Range"] = f"bytes={offset}-"
-        request = urllib.request.Request(asset["url"], headers=headers)
         print(f"下载：{asset['name']}（{offset}/{asset['size']} 字节）", flush=True)
+    next_progress = offset + 64 * 1024 * 1024
+    while offset < asset["size"]:
+        headers = {"User-Agent": "SmartRoundScreen-VoiceRestore/1", "Accept-Encoding": "identity"}
+        ranged = offset > 0 or asset["size"] > SEGMENT_BYTES
+        end = min(offset + SEGMENT_BYTES, asset["size"]) - 1
+        if ranged:
+            headers["Range"] = f"bytes={offset}-{end}"
+        request = urllib.request.Request(asset["url"], headers=headers)
         with urllib.request.urlopen(request, timeout=90) as response:
-            if offset:
-                expected = f"bytes {offset}-{asset['size'] - 1}/{asset['size']}"
-                if response.status != 206 or response.headers.get("Content-Range") != expected:
+            expected_bytes = asset["size"] - offset
+            if ranged:
+                # 服务器可以进一步缩小分段，但必须从要求的位置开始，且总长
+                # 与固定清单一致；不能把另一段、旧版本或完整文件追加到 .part。
+                match = re.fullmatch(r"bytes (\d+)-(\d+)/(\d+)", response.headers.get("Content-Range", ""))
+                if (response.status != 206 or match is None
+                        or int(match[1]) != offset or int(match[3]) != asset["size"]
+                        or not offset <= int(match[2]) <= end):
                     raise ValueError("服务器未接受断点续传；保留原 .part，请反馈此错误")
+                expected_bytes = int(match[2]) - offset + 1
             elif response.status != 200:
                 raise ValueError("下载响应无效")
-            written, next_progress = offset, offset + 64 * 1024 * 1024
+            length = response.headers.get("Content-Length")
+            if length is not None and int(length) != expected_bytes:
+                raise ValueError("响应长度与请求分段不一致；保留原 .part")
+            if response.headers.get("Content-Encoding", "identity") != "identity":
+                raise ValueError("下载响应使用了未经请求的编码；保留原 .part")
+            written = offset
             with partial.open("ab" if partial.exists() else "xb") as output:
                 while block := response.read(1024 * 1024):
-                    if written + len(block) > asset["size"]:
-                        raise ValueError("下载超出固定资源长度")
+                    if written + len(block) > offset + expected_bytes:
+                        raise ValueError("下载超出固定分段长度")
                     output.write(block)
                     written += len(block)
                     if written >= next_progress:
                         print(f"  {asset['name']}：{written * 100 // asset['size']}%", flush=True)
                         next_progress = written + 64 * 1024 * 1024
+            if written - offset != expected_bytes:
+                raise ValueError(
+                    f"下载连接提前结束：{asset['name']}；已保留 {written}/{asset['size']} 字节，"
+                    "重新运行下载阶段将从保留位置续传。"
+                )
+            offset = written
     digest = validate(partial, asset)
     # 目标此前不存在；不用 replace，避免覆盖并发写入的文件。
     partial.rename(path)
