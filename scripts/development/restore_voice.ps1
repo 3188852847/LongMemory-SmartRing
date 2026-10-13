@@ -76,7 +76,9 @@ elseif ($Stage -eq 'Environments') {
     Invoke-VoiceCommand -Command uv -ArgumentList @('pip', 'check', '--python', $xiaozhiPython)
     $cosyPython = Get-VoicePython -Directory $cosyRepository
     Invoke-VoiceCommand -Command uv -ArgumentList @('pip', 'install', '--python', $cosyPython, '--index-url', 'https://download.pytorch.org/whl/cu121', 'torch==2.3.1+cu121', 'torchaudio==2.3.1+cu121')
-    Invoke-VoiceCommand -Command uv -ArgumentList @('pip', 'install', '--python', $cosyPython, '-c', (Join-Path $voiceDeclarations 'cosyvoice.torch.txt'), '-r', (Join-Path $voiceDeclarations 'cosyvoice.requirements.txt'))
+    # 旧 Whisper 的 setup 导入 pkg_resources。运行包版本表不会约束 uv 的
+    # 临时构建环境，因此单独固定构建工具，继续保留隔离构建。
+    Invoke-VoiceCommand -Command uv -ArgumentList @('pip', 'install', '--python', $cosyPython, '--build-constraints', (Join-Path $voiceDeclarations 'cosyvoice.build.txt'), '-c', (Join-Path $voiceDeclarations 'cosyvoice.torch.txt'), '-r', (Join-Path $voiceDeclarations 'cosyvoice.requirements.txt'))
     Invoke-VoiceCommand -Command uv -ArgumentList @('pip', 'check', '--python', $cosyPython)
 }
 else {

@@ -1,0 +1,3 @@
+# Isolated build tools are resolved separately from runtime requirements.
+# Whisper 20231117 imports pkg_resources during setup; setuptools 82+ removed it.
+setuptools==80.10.2
