@@ -15,7 +15,7 @@
 正常回答。详见[配置管理](../development/configuration.md)、[前端模块](../development/frontend-structure.md)、
 [CI 检查](../development/continuous-integration.md)与[本地资料](../development/local-assets.md)。
 
-本批集成回归：1979 个 Python 用例通过、1 个 Windows 符号链接权限跳过；
+本批最终集成回归：1987 个 Python 用例通过、1 个 Windows 符号链接权限跳过；
 真实 junction（目录联接）拒绝测试通过。前端 181 项、Edge 浏览器 4 项、类型检查
 和生产构建通过。没有改变数据库结构、核心算法、设备协议或固件。
 
