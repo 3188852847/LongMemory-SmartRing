@@ -1,0 +1,22 @@
+.observability-panel {
+  min-width: 0;
+}
+
+.observability-panel li {
+  margin-block: 1rem;
+}
+
+.observability-panel code,
+.observability-panel p {
+  overflow-wrap: anywhere;
+}
+
+.observability-panel summary {
+  cursor: pointer;
+  padding-block: 0.5rem;
+}
+
+.observability-panel summary:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 3px;
+}

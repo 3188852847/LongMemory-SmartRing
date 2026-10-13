@@ -82,7 +82,8 @@ def panel(tmp_path):
     opened = []
     panel = controller.LauncherController(tmp_path, manager=manager, opener=opened.append)
     panel.opened_urls = opened
-    return panel
+    yield panel
+    panel.events.close()
 
 
 @pytest.fixture
@@ -390,3 +391,65 @@ def test_legacy_lock_without_new_discovery_never_opens(panel, tmp_path):
         panel.close()
         channel.close()
         listener.close()
+
+
+def test_launcher_phases_are_linked_without_browser_polling(panel):
+    request_id = 'a' * 24
+    panel.action('start', request_id=request_id)
+    panel.perform_pending()
+    panel.manager.health = True
+    panel.tick()
+    rows = panel.events.snapshot()['events']
+    assert [row['phase'] for row in rows] == ['ready', 'starting']
+    assert all(row['request_id'] == request_id for row in rows)
+    panel.action('stop', request_id='b' * 24)
+    panel.perform_pending()
+    assert panel.events.snapshot()['events'][0]['phase'] == 'stopped'
+    assert panel.events.snapshot()['events'][0]['request_id'] == 'b' * 24
+
+
+def test_launcher_failure_codes_never_copy_exception_body(panel):
+    panel.manager.failure = ValueError('synthetic-api-key /private/config and conversation')
+    panel.action('start', request_id='a' * 24)
+    panel.perform_pending()
+    result = panel.events.snapshot()
+    assert result['events'][0]['code'] == 'configuration_rejected'
+    assert result['events'][0]['request_id'] == 'a' * 24
+    assert 'private' not in json.dumps(result)
+    assert 'synthetic-api-key' not in panel.snapshot()['message']
+    panel.manager.failure = None
+    panel.action('start')
+    panel.perform_pending()
+    panel.started -= 91
+    panel.tick()
+    assert panel.events.snapshot()['events'][0]['code'] == 'readiness_timeout'
+
+
+def test_readonly_launcher_observability_requires_auth_and_does_not_add_events(host):
+    assert request(host, 'GET', '/api/launcher/observability', token=False)[0] == 401
+    request(host, 'POST', '/api/launcher/actions', {'action': 'start'})
+    host.controller.perform_pending()
+    host.controller.manager.health = True
+    host.controller.tick()
+    code, _, body = request(host, 'GET', '/api/launcher/observability')
+    snapshot = json.loads(body)
+    assert code == 200 and snapshot['device_playback'] == 'unconfirmed'
+    assert snapshot['events'][0]['phase'] == 'ready'
+    assert host.token not in body.decode()
+    for _ in range(3):
+        assert json.loads(request(host, 'GET', '/api/launcher/observability')[2]) == snapshot
+
+
+def test_launcher_event_rotation_and_write_failure(panel, monkeypatch):
+    panel.events.record('a' * 24, event='request_result', action='start')
+    panel.events.handler.maxBytes = 220
+    for _ in range(70):
+        panel.events.record('unsafe-secret', event='request_result', action='private-value')
+    paths = list(panel.events.path.parent.glob('launcher-events.jsonl*'))
+    assert len(paths) == 3
+    assert all('unsafe-secret' not in path.read_text(encoding='utf-8') for path in paths)
+    assert len(panel.events.snapshot()['events']) == 50
+    monkeypatch.setattr(panel.events.handler, 'shouldRollover', lambda _: (_ for _ in ()).throw(OSError('private-key')))
+    panel.events.record('a' * 24, event='request_result', action='stop')
+    assert panel.events.snapshot()['persistence'] == 'unavailable'
+    assert 'private-key' not in json.dumps(panel.events.snapshot())

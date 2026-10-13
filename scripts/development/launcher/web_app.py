@@ -18,7 +18,6 @@ import webbrowser
 
 from control import CONTROL_FILE_NAME, LauncherControl, request_control
 from controller import ControllerError, LauncherController
-from events import LauncherEvents
 from runtime import ROOT, Singleton
 
 DISCOVERY_NAME = 'launcher-web.json'
@@ -33,7 +32,7 @@ class LauncherHTTPServer(ThreadingHTTPServer):
         self.dist = Path(dist).resolve()
         self.token = token or secrets.token_urlsafe(32)
         self.shutdown_observed = threading.Event()
-        self.events = LauncherEvents(getattr(controller, 'root', None))
+        self.events = controller.events
         self.assets = self.read_assets()
         super().__init__(('127.0.0.1', 0), LauncherHandler)
         self.origin = f'http://127.0.0.1:{self.server_port}'
@@ -126,12 +125,16 @@ class LauncherHandler(BaseHTTPRequestHandler):
                 try:
                     snapshot = self.server.controller.snapshot()
                     self.server.events.record(self.request_id, event='phase_changed',
-                                              phase=snapshot.get('state'))
+                                              phase=snapshot.get('state'), initial_only=True)
                     self._json(200, snapshot)
                     if snapshot.get('shutdown_complete'):
                         self.server.shutdown_observed.set()
                 except ControllerError as error:
                     self._error(error.status, 'settings_unavailable', str(error))
+            return
+        if parsed.path == '/api/launcher/observability':
+            if self._authenticated():
+                self._json(200, self.server.events.snapshot())
             return
         if parsed.path == '/':
             try:
@@ -201,7 +204,7 @@ class LauncherHandler(BaseHTTPRequestHandler):
                 if set(body) != {'action'} or not isinstance(body['action'], str):
                     raise ValueError
                 self.audit_action = body['action']
-                result = self.server.controller.action(body['action'])
+                result = self.server.controller.action(body['action'], request_id=self.request_id)
         except ControllerError as error:
             return self._error(error.status, 'settings_conflict' if error.status == 409 else 'operation_rejected', str(error))
         except (ValueError, TypeError, OSError):
