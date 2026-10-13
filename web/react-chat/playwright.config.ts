@@ -15,6 +15,8 @@ export default defineConfig({
   reporter: [['list'], ['html', {open: 'never', outputFolder: 'playwright-report'}]],
   use: {
     baseURL: 'http://127.0.0.1:18777',
+    // 本地可复用已安装的 Chromium 系浏览器；未指定时由 Playwright 使用其固定版本。
+    launchOptions: {executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined},
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
     video: 'off',
