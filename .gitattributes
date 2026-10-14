@@ -31,4 +31,5 @@ firmware/smartring_plus/restore/*.patch text eol=lf
 firmware/smartring_plus/restore/*.defaults text eol=lf
 firmware/smartring_plus/patches/0013-continuous-round-face.patch text eol=lf
 firmware/smartring_plus/patches/0014-otto-gif-face.patch text eol=lf
+firmware/smartring_plus/patches/0015-otto-black-background.patch text eol=lf
 scripts/development/otto_firmware/otto_state.h text eol=lf

@@ -1,0 +1,68 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -18 +18 @@
+-set(PROJECT_VER "2.2.3-otto0014")
++set(PROJECT_VER "2.2.3-otto0015")
+diff --git a/main/boards/viewe-smartring-plus/viewe-smartring-plus.cc b/main/boards/viewe-smartring-plus/viewe-smartring-plus.cc
+--- a/main/boards/viewe-smartring-plus/viewe-smartring-plus.cc
++++ b/main/boards/viewe-smartring-plus/viewe-smartring-plus.cc
+@@ -1049,0 +1050,2 @@
++    bool view_styles_initialized_ = false;
++    bool otto_view_styles_ = false;
+@@ -1198,0 +1201 @@
++        ApplyViewStyles();
+@@ -1264,0 +1268,37 @@
++    void ApplyViewStyles(bool force = false) {
++        if (container_ == nullptr) return;
++        // Otto 原图为黑底；仅覆盖运行时样式，不改写皮肤、主题或壁纸配置。
++        // 壁纸暂不可用而回退到 Otto 时也须保证黑底，恢复壁纸后再恢复其样式。
++        const bool otto_view = !wallpaper_view_ || !active_face_.empty();
++        if (!force && view_styles_initialized_ && otto_view_styles_ == otto_view) return;
++        view_styles_initialized_ = true;
++        otto_view_styles_ = otto_view;
++        const lv_color_t background = lv_color_hex(otto_view ? 0x000000 : skin_.background);
++        const lv_color_t foreground = lv_color_hex(otto_view ? 0xFFFFFF : skin_.foreground);
++        const lv_color_t muted = lv_color_hex(otto_view ? 0xC8C8C8 : skin_.muted);
++        auto* screen = lv_obj_get_screen(container_);
++        auto* theme = static_cast<LvglTheme*>(current_theme_);
++        const void* background_image = !otto_view && theme && theme->background_image() ?
++            theme->background_image()->image_dsc() : nullptr;
++        // 根屏幕和全尺寸容器必须同时不透明；颜色不能盖住主题的背景图片。
++        for (auto* object : {screen, container_, top_bar_, bottom_bar_}) {
++            if (!object) continue;
++            lv_obj_set_style_bg_image_src(object, object == container_ ? background_image : nullptr, 0);
++            lv_obj_set_style_bg_color(object, background, 0);
++            lv_obj_set_style_bg_opa(object, object == bottom_bar_ ? LV_OPA_TRANSP :
++                (object == top_bar_ && !otto_view ? LV_OPA_50 : LV_OPA_COVER), 0);
++            lv_obj_set_style_text_color(object, foreground, 0);
++        }
++        if (emoji_box_) {
++            lv_obj_set_style_bg_image_src(emoji_box_, nullptr, 0);
++            lv_obj_set_style_bg_opa(emoji_box_, LV_OPA_TRANSP, 0);
++        }
++        for (auto* label : {status_label_, notification_label_, emoji_label_}) {
++            if (label) lv_obj_set_style_text_color(label, foreground, 0);
++        }
++        // 静音/网络/电量图标均有显式主题颜色，必须一起覆盖以免浅色主题黑字消失。
++        for (auto* label : {chat_message_label_, network_label_, battery_label_, mute_label_}) {
++            if (label) lv_obj_set_style_text_color(label, muted, 0);
++        }
++    }
++
+@@ -1266,11 +1306 @@
+-        const lv_color_t background = lv_color_hex(skin_.background);
+-        const lv_color_t foreground = lv_color_hex(skin_.foreground);
+-        const lv_color_t muted = lv_color_hex(skin_.muted);
+-        if (container_ != nullptr) lv_obj_set_style_bg_color(container_, background, 0);
+-        if (top_bar_ != nullptr) lv_obj_set_style_bg_color(top_bar_, background, 0);
+-        if (bottom_bar_ != nullptr) lv_obj_set_style_bg_color(bottom_bar_, background, 0);
+-        if (status_label_ != nullptr) lv_obj_set_style_text_color(status_label_, foreground, 0);
+-        if (notification_label_ != nullptr) lv_obj_set_style_text_color(notification_label_, foreground, 0);
+-        if (chat_message_label_ != nullptr) lv_obj_set_style_text_color(chat_message_label_, muted, 0);
+-        if (network_label_ != nullptr) lv_obj_set_style_text_color(network_label_, muted, 0);
+-        if (battery_label_ != nullptr) lv_obj_set_style_text_color(battery_label_, muted, 0);
++        ApplyViewStyles(true);
+@@ -1287 +1317 @@
+-        // 圆屏专用界面默认采用深色；运行时的显式主题切换仍由通用实现处理。
++        // 默认深色主题；Otto 另用运行时黑底覆盖，壁纸视图保留主题与皮肤。

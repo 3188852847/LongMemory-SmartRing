@@ -568,6 +568,27 @@
         "回退"
       ],
       "review": "verified 2026-10-14: K实际设备结果/当前入口；M源码来源为已合main6f260ea，所有者体验未确认"
+    },
+    {
+      "id": "otto-black-background-0015",
+      "scope": "0015 Otto整屏黑底/文字图标对比度、临时壁纸样式恢复及仅应用离线交付",
+      "authority": "docs/development/parallel/O-otto-black-background-20261015.md",
+      "sources": [
+        "firmware/smartring_plus/*/0015-otto-black-background.*",
+        "firmware/smartring_plus/previews/otto0015-black-background.png",
+        "tests/unit/firmware/otto_black_background.py"
+      ],
+      "related": [
+        "docs/development/parallel/M-otto-firmware-20261014.md",
+        "docs/guides/圆屏Otto动态表情更新-20261014.md"
+      ],
+      "tags": [
+        "固件",
+        "Otto",
+        "0015",
+        "黑底"
+      ],
+      "review": "verified 2026-10-15: 实际方法宿主回归/负向对照、编译、指纹、正反补丁与仅应用交付；真机待验收"
     }
   ],
   "old_path_rules": [
@@ -4671,6 +4692,29 @@
         "表情",
         "验收",
         "回退"
+      ]
+    },
+    {
+      "path": "docs/development/parallel/O-otto-black-background-20261015.md",
+      "title": "O：0015 Otto 整屏黑底适配",
+      "status": "current",
+      "basis": "0014真机白色外围缺陷的本轮修复与离线交付；不替代K设备更新或所有者体验验收",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-15",
+        "scope": "实际板级方法与真实GIF宿主回归、四项负向对照、单次独立空目录编译、产物/容量/源码与增量正反应用；不覆盖设备视觉语音",
+        "evidence": [
+          "firmware/smartring_plus/experiments/0015-otto-black-background.json",
+          "firmware/smartring_plus/patches/0015-otto-black-background.patch",
+          "tests/unit/firmware/otto_black_background.py"
+        ]
+      },
+      "tags": [
+        "固件",
+        "Otto",
+        "0015",
+        "黑底",
+        "离线验证"
       ]
     }
   ],

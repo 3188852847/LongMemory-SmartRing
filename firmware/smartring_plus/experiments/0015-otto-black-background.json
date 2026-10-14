@@ -1,0 +1,296 @@
+{
+  "id": "0015-otto-black-background",
+  "date": "2026-10-15",
+  "timezone": "Asia/Shanghai",
+  "status": "offline_delivery_ready",
+  "baseline_repository_commit": "ffbdfd758ccea91e0829b2e0ae720fea9ccd450c",
+  "source_baseline": "D:\\Dev\\esp-projects\\smart-ring\\otto0014",
+  "source": "D:\\Dev\\esp-projects\\smart-ring\\otto0015",
+  "application_version": "2.2.3-otto0015",
+  "board": "viewe-smartring-plus",
+  "chip": "esp32s3",
+  "sdk_version": "5.5.4",
+  "sdk_commit": "735507283d5b2f9fb363a1901172dbd9e847945d",
+  "build": "D:\\Dev\\esp-projects\\smart-ring\\build-otto0015-clean1",
+  "build_entry": "scripts/development/otto_firmware/build.ps1 -Source <source> -Build <new build>",
+  "external_python_network_guard": "scripts/development/otto_firmware/offline_python/sitecustomize.py",
+  "clean_directory": true,
+  "ccache": false,
+  "independent_second_build": false,
+  "build_tools": {
+    "python": "D:\\Dev\\esp\\python_env\\v5.5.4\\venv\\Scripts\\python.exe",
+    "c_compiler": "D:/Dev/esp/tools/xtensa-esp-elf/esp-14.2.0_20260121/xtensa-esp-elf/bin/xtensa-esp32s3-elf-gcc.exe",
+    "cmake": "D:/Dev/esp/tools/cmake/3.30.2/bin/cmake.exe",
+    "ninja": "D:/Dev/esp/tools/ninja/1.12.1/ninja.exe",
+    "host_msvc": "C:/Program Files (x86)/Microsoft Visual Studio/18/BuildTools/VC/Tools/MSVC/14.51.36231/bin/HostX64/x64/cl.exe"
+  },
+  "patch": {
+    "bytes": 4237,
+    "sha256": "c14857075855ed3230fd653551c603adf00638e5ef2205c6996d7ab143613e6e"
+  },
+  "patch_context_lines": 0,
+  "apply_option": "--unidiff-zero",
+  "apply_order": [
+    "restore-0012",
+    "0013-continuous-round-face",
+    "0014-otto-gif-face",
+    "0015-otto-black-background"
+  ],
+  "patch_forward_actual_apply_hashes_and_reverse_actual_restore": true,
+  "patch_audit_fixture": "D:\\Dev\\esp-projects\\smart-ring\\otto0015-audit2",
+  "sources": {
+    "CMakeLists.txt": {
+      "baseline_raw": {
+        "bytes": 759,
+        "sha256": "249820e3e0396720154104ad0836728a4a245ecbd19162711e45c893860aa61c"
+      },
+      "target_raw": {
+        "bytes": 759,
+        "sha256": "b3e2212c8a3f7f7d5fbf9ac55879e0a81dd3b25a9ddb05257f7b03296cb4ad14"
+      },
+      "baseline_normalized_sha256": "249820e3e0396720154104ad0836728a4a245ecbd19162711e45c893860aa61c",
+      "target_normalized_sha256": "b3e2212c8a3f7f7d5fbf9ac55879e0a81dd3b25a9ddb05257f7b03296cb4ad14"
+    },
+    "main/boards/viewe-smartring-plus/viewe-smartring-plus.cc": {
+      "baseline_raw": {
+        "bytes": 82404,
+        "sha256": "636942d8ae6cb4f7a336f14be5199c737f8c234c6a04525ba27dfb91851bb274"
+      },
+      "target_raw": {
+        "bytes": 83915,
+        "sha256": "ddc0401177cd020d4a21afeecf40e627cfaea7c02a45870764afed49066c9d47"
+      },
+      "baseline_normalized_sha256": "636942d8ae6cb4f7a336f14be5199c737f8c234c6a04525ba27dfb91851bb274",
+      "target_normalized_sha256": "ddc0401177cd020d4a21afeecf40e627cfaea7c02a45870764afed49066c9d47"
+    }
+  },
+  "build_artifacts": {
+    "xiaozhi.bin": {
+      "bytes": 3991024,
+      "sha256": "e3f3582a434701ef1637e22731c4e05a456fccb114ebe1efd570c0469b52befe"
+    },
+    "xiaozhi.elf": {
+      "bytes": 40173472,
+      "sha256": "428a170ade4196c4965447bccc77edeaa8688ebb864a8631bba53e39caef4540"
+    },
+    "xiaozhi.map": {
+      "bytes": 24876810,
+      "sha256": "acfb6afbde283cac8fd14548ad380665e28a0eadb6d514220bfff869e2bfc362"
+    },
+    "partition_table/partition-table.bin": {
+      "bytes": 3072,
+      "sha256": "d46bd51980cd6e15f0bf0c86f530d87a0bbc207144bd9442937b3c1a618a3ffd"
+    },
+    "generated_assets.bin": {
+      "bytes": 352105,
+      "sha256": "c31a144a0df77bfd8f70545d3af12e3b23f1501cc3b4865ebd91e0fcac965478"
+    },
+    "bootloader/bootloader.bin": {
+      "bytes": 16256,
+      "sha256": "f639b2cab6d871c75b5294330417b7dea6b93220f4d431424040f80226bd26cd"
+    }
+  },
+  "app_capacity": 4128768,
+  "app_free_bytes": 137744,
+  "image_checksum_and_validation_hash_valid": true,
+  "partitions": [
+    {
+      "name": "nvs",
+      "type": 1,
+      "subtype": 2,
+      "offset": "0x9000",
+      "bytes": 16384,
+      "flags": 0
+    },
+    {
+      "name": "otadata",
+      "type": 1,
+      "subtype": 0,
+      "offset": "0xd000",
+      "bytes": 8192,
+      "flags": 0
+    },
+    {
+      "name": "phy_init",
+      "type": 1,
+      "subtype": 1,
+      "offset": "0xf000",
+      "bytes": 4096,
+      "flags": 0
+    },
+    {
+      "name": "ota_0",
+      "type": 0,
+      "subtype": 16,
+      "offset": "0x20000",
+      "bytes": 4128768,
+      "flags": 0
+    },
+    {
+      "name": "ota_1",
+      "type": 0,
+      "subtype": 17,
+      "offset": "0x410000",
+      "bytes": 4128768,
+      "flags": 0
+    },
+    {
+      "name": "assets",
+      "type": 1,
+      "subtype": 130,
+      "offset": "0x800000",
+      "bytes": 2097152,
+      "flags": 0
+    },
+    {
+      "name": "wallpaper_a",
+      "type": 1,
+      "subtype": 64,
+      "offset": "0xa00000",
+      "bytes": 3145728,
+      "flags": 0
+    },
+    {
+      "name": "wallpaper_b",
+      "type": 1,
+      "subtype": 65,
+      "offset": "0xd00000",
+      "bytes": 3145728,
+      "flags": 0
+    }
+  ],
+  "unchanged": {
+    "source_tree_comparison": {
+      "files_compared": 10765,
+      "changed": [
+        "CMakeLists.txt",
+        "main/boards/viewe-smartring-plus/viewe-smartring-plus.cc"
+      ],
+      "method": "read-only recursive raw-byte comparison; exclude build-*.log"
+    },
+    "sdkconfig": {
+      "bytes": 103621,
+      "sha256": "b871887bac42a703cd69529c7b09a3911a3452e79d7d22c1b8f63d146e3dc44e"
+    },
+    "dependencies.lock": {
+      "bytes": 30856,
+      "sha256": "cfa751e181e1cbfdca7dd96c5c3a7147b1b660495eb7e5cac2a2c604e58157ce"
+    },
+    "partition_table_matches_0014": true,
+    "generated_default_assets_matches_0014": true,
+    "gif_decoder_and_state_model_changes": false,
+    "existing_gifs_reencoded": false,
+    "nvs_skin_wallpaper_write_paths_added": false,
+    "device_backups_or_nvs_read": false
+  },
+  "host_validation": {
+    "passed": true,
+    "fixture": "D:\\Dev\\esp-projects\\smart-ring\\otto0015-host3",
+    "actual_code": "board SetupUI/SetTheme/ApplySkinStyles/ApplyViewStyles/ClearGif/ShowOtto/TryLoadWallpaper/SetStatus/SetEmotion/SetServerEmotion/SetFaceView; ApplyFace arbitration prefix; LvglRawImage/LvglGif/gifdec",
+    "stubbed": "base LCD theme writes, LVGL objects/styles/timers, partition store; geometry painting excluded",
+    "cases": [
+      "boot with white saved skin",
+      "explicit light theme and theme background image reset",
+      "root/container opaque pure black and background images removed",
+      "status/notification white; subtitle/network/battery/mute #C8C8C8",
+      "seven Otto states, interruption, all 21 canonical GIFs",
+      "30 Otto/wallpaper round trips: 240/360 dimensions, visible image, original theme image restore",
+      "missing wallpaper failure, image-free wallpaper theme",
+      "original decoder failure/retry/pause/finish/lifetime cases from N"
+    ],
+    "source_fingerprints": {
+      "main\\boards\\viewe-smartring-plus\\viewe-smartring-plus.cc": "ddc0401177cd020d4a21afeecf40e627cfaea7c02a45870764afed49066c9d47",
+      "main\\boards\\viewe-smartring-plus\\otto_state.h": "b3edb212369a5abeadaff70bf8743567be5a36eb440cdff0776ed207b7422c4d",
+      "main\\application.cc": "d7fd88fa50803a98611388bbafed829bc074b5dd43851443bea8129d5aecf366",
+      "main\\display\\display.h": "6fd42590a7baf8cd7043a2e18fb979ebdc87f0934c0edf506649944374a389d6",
+      "main\\display\\lvgl_display\\lvgl_image.cc": "b736b586bc1cf502eea333fd591f7c5a72c80f60febad96cdc2b120b04c02d3f",
+      "main\\display\\lvgl_display\\lvgl_image.h": "f6802935571e67677c5de98f0db4d186c13fcfd36d5eed5412c67c2e31d34684",
+      "main\\display\\lvgl_display\\gif\\lvgl_gif.cc": "0097eacf37050f55f8fa0376e67a10d077df7f517e8625c70c4965a71550e978",
+      "main\\display\\lvgl_display\\gif\\lvgl_gif.h": "f18327bdc0fec90dd36339c952e2c27319b054453b9d2a839e05db3542b6cc4e",
+      "main\\display\\lvgl_display\\gif\\gifdec.c": "147323f75b4a852c7586e52db1c734c955d674c850e5a29a5ed4928e74e15ae4",
+      "board_raw_sha256": "ddc0401177cd020d4a21afeecf40e627cfaea7c02a45870764afed49066c9d47",
+      "test_generator_sha256": "eeece42ada93c8a54c753f9d131846f9e6bde177a8e1bb723cd29c758cf8618d",
+      "all_21_fixed_gifs_sha256": {
+        "angry.gif": "d67aeb6d7a8c5678cbc472757bf5bd5565967d70fc46e780a9ae260c738679b1",
+        "confident.gif": "2f498822df14c6d4654d6d4a9db87ba9ce55b625bea7484dad07164bbe0e15e9",
+        "confused.gif": "244a67c812f8b6a39681258a16f38249f7c47d496ed77c7731ab6d5069ac0fab",
+        "cool.gif": "f332bd852f4d1ea7cc2b390626812ec0ce8171899c88bd71dd08dcc56f2bbc05",
+        "crying.gif": "cad138dec2d92292df6d1d053375484d620e9e1f51e64c5b2a4f1d1d338bcd14",
+        "delicious.gif": "23607f905f87b42ae40fe6c20e6e27ba3acf4700c803686606a8cb60b9e2eb93",
+        "embarrassed.gif": "d9ab84a9839067e935d9db5811a0b113545f4b486ca1384a38353bb37312c915",
+        "funny.gif": "b3020524fcea2bcdb311bd84b0e6aa87000fbf4caf5f512e4918acc506bf8808",
+        "happy.gif": "9d2c6701d7a7a81208a00cf4c76ec1ca64f1f6ddc4a884b94aa489cc71c120a3",
+        "kissy.gif": "5a5f9067bc21e71813d0c9c6a0c17289dfc31f35459483e4ad131a3e1e029403",
+        "laughing.gif": "2e571fdc66c48db6a00de204578bbe6eda71ae6a21953981cbc68be3ba733996",
+        "loving.gif": "3c466f82ceca7c239ea8d27a3fcb6091b63b179234c8350334fa074c0a0d7ff1",
+        "neutral.gif": "edcb042a7ff48dcc0da0d7bafa7a08171e41ad9efe29d2bc5d552f0ed8b27eb7",
+        "relaxed.gif": "ce22ef9b70f4b6602c8389c1f3080e6a479e5d7e7bd916d3c94da71ce33ae39e",
+        "sad.gif": "6fc08f07bc2275479ed692c0ae5f8c0fce761925696129fc233645df895b5cfb",
+        "shocked.gif": "45141d5822624a890bf692842695589ac7a2c6126079dcbec45d746938640c43",
+        "silly.gif": "9a1573f1dabe504d283c5f3ae9a5be2fbeba8355b6a644917551bf086165ba8b",
+        "sleepy.gif": "6a3f0622163ceec2a3698b77a644b3fe6e227b81432ec49c3373bfcc3d1b035c",
+        "surprised.gif": "36e782c38f3f714cdcc7d61e008d77645885115c72eee04cb9e2ffa31fa333f1",
+        "thinking.gif": "105d1495832a48b17cc97782666ed6ccd766bbdbfce187f49ff17929f97f5b6c",
+        "winking.gif": "6ed0d8757fdf6bca59e5851ea7f968b6df13f2abf6fffb0f4ba512a09e68bfd2"
+      }
+    },
+    "failures_before_final_pass": [
+      "host1: C stub functions lacked C parameter names; test fixture fixed, no firmware change"
+    ],
+    "result_log": {
+      "bytes": 1563,
+      "sha256": "d9414f478ca524cedd76a67e4c4ae5fac0dd3942aae141ceba7ce45f11cc3d0e"
+    },
+    "negative_controls": {
+      "root": {
+        "expected_exit_code": 31,
+        "actual_exit_code": 31,
+        "failure": "expected negative control: o->bg==0 && o->bg_image==nullptr",
+        "generated_mutation_sha256": "c1d5264872983125640ebf3d757afca89f503231ebf3e9b847c11d716dc8e43c"
+      },
+      "image": {
+        "expected_exit_code": 31,
+        "actual_exit_code": 31,
+        "failure": "expected negative control: o->bg==0 && o->bg_image==nullptr",
+        "generated_mutation_sha256": "e24cf765956ec0f074b86757a2acd358b24c316ee89f51c035e9541072952a11"
+      },
+      "opacity": {
+        "expected_exit_code": 31,
+        "actual_exit_code": 31,
+        "failure": "expected negative control: o->opa==(o==d.bottom_bar_?LV_OPA_TRANSP:LV_OPA_COVER)",
+        "generated_mutation_sha256": "2b7d0c10cc003498576e321e5b5006a510ced838e9c1b58d768ca06914f8c802"
+      },
+      "mute": {
+        "expected_exit_code": 31,
+        "actual_exit_code": 31,
+        "failure": "expected negative control: o->text==0xC8C8C8",
+        "generated_mutation_sha256": "119001adc7a840125fd6eee4e5444271a4efc6ef655545fee3e09c309488fb22"
+      }
+    },
+    "negative_control_build_correction": "First invocation incorrectly used one /Fo for multiple input files; separate compile/link then all expected assertions rejected."
+  },
+  "appearance": {
+    "otto_background": "#000000",
+    "foreground": "#FFFFFF",
+    "muted": "#C8C8C8",
+    "foreground_contrast_ratio": 21.0,
+    "muted_contrast_ratio": 12.552,
+    "wallpaper_restore": "saved skin colors and current theme background image; subtitle stays transparent",
+    "style_update": "forced after setup/theme/skin; otherwise only on Otto/wallpaper appearance change"
+  },
+  "preview": {
+    "path": "firmware/smartring_plus/previews/otto0015-black-background.png",
+    "bytes": 26774,
+    "sha256": "3321fd2330adacdb463c34352cd2a5c9193e072f8c0f0051a6042f112155d6cc",
+    "type": "Pillow composition of original GIF first frames at 240x240 on 360x360 black circles; schematic text; not LVGL rasterization or device capture"
+  },
+  "write_scope": "current active application partition only; address must be verified by K, never inferred from default flash_args",
+  "assets_write_required": false,
+  "serial_opened": false,
+  "flashed": false,
+  "device_visual_voice_interrupt_acceptance": false,
+  "limits": [
+    "Host stubs do not establish physical appearance, panel refresh/rotation, voice or interruption performance.",
+    "K must use current authorization, a new checkpoint and current layout verification."
+  ]
+}
