@@ -538,7 +538,10 @@
       "status": "current",
       "basis": "按 ROADMAP、恢复/工程约定及本轮任务确定的维护入口；仅限定对应事实范围，语义核对另列",
       "review": {
-        "state": "pending"
+        "state": "verified",
+        "date": "2026-10-14",
+        "scope": "本次COM3先备份、仅0013应用更新的直接授权与K调度；不代表设备已烧录/验收",
+        "evidence": "所有者本轮直接授权；K 01a13a9a-6ace-7a71-9238-5b9abc4f8d10启动确认"
       },
       "tags": []
     },
@@ -576,8 +579,8 @@
       "review": {
         "state": "verified",
         "date": "2026-10-14",
-        "scope": "仅本轮整合进度、导航、保留边界和新增模块段落；不代表全篇语义审计",
-        "evidence": "收口记录；J 106cff3；H 91de3ea；main生产源码一致与构建指纹核对"
+        "scope": "本次COM3先备份、仅0013应用更新的直接授权与K调度；不代表设备已烧录/验收",
+        "evidence": "所有者本轮直接授权；K 01a13a9a-6ace-7a71-9238-5b9abc4f8d10启动确认"
       },
       "tags": []
     },
@@ -3278,8 +3281,8 @@
       "review": {
         "state": "verified",
         "date": "2026-10-14",
-        "scope": "仅本轮整合进度、导航、保留边界和新增模块段落；不代表全篇语义审计",
-        "evidence": "收口记录；J 106cff3；H 91de3ea；main生产源码一致与构建指纹核对"
+        "scope": "本次COM3先备份、仅0013应用更新的直接授权与K调度；不代表设备已烧录/验收",
+        "evidence": "所有者本轮直接授权；K 01a13a9a-6ace-7a71-9238-5b9abc4f8d10启动确认"
       },
       "tags": [
         "development"
