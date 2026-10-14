@@ -626,9 +626,20 @@
         "state": "verified",
         "date": "2026-10-14",
         "scope": "初次问题、四项修订定向通过、合成资源边界；9个复验源/7个记录源、clean5/clean6十个公开产物、镜像校验和assets摘要最终对齐；不含设备或私有包本体",
-        "evidence": ["tests/unit/firmware/otto_review_checks.py", "tests/unit/firmware/otto_review_bridge.py", "tests/unit/firmware/otto_review_display.py", "docs/development/parallel/N-otto-review-20261014.md：后续定向复验与最终冻结产物对齐追加结果"]
+        "evidence": [
+          "tests/unit/firmware/otto_review_checks.py",
+          "tests/unit/firmware/otto_review_bridge.py",
+          "tests/unit/firmware/otto_review_display.py",
+          "docs/development/parallel/N-otto-review-20261014.md：后续定向复验与最终冻结产物对齐追加结果"
+        ]
       },
-      "tags": ["Otto", "独立审查", "状态", "资源", "烧录前"]
+      "tags": [
+        "Otto",
+        "独立审查",
+        "状态",
+        "资源",
+        "烧录前"
+      ]
     },
     {
       "path": "docs/guides/Otto动态表情预览-20261014.md",
@@ -680,8 +691,8 @@
       "review": {
         "state": "verified",
         "date": "2026-10-14",
-        "scope": "限核对Otto资源检查与用户最新直接烧录授权、L真实预览/M接入/K备份的分阶段调度；不等于预览、编译或新烧录通过",
-        "evidence": "所有者最新消息；固定目录23文件/21GIF独立指纹结构核验；L 01a13abb-1934-7201-80e2-cefc61718811、M 01a13ac7-0695-7912-9488-c1cfba4a2452、K 01a13a9a-6ace-7a71-9238-5b9abc4f8d10委派"
+        "scope": "限本次Otto资源/软件/技术审查/设备两目标更新与独立核验、启动及归档边界；所有者真实体验待反馈，不等于全篇或完整V1验收",
+        "evidence": "L 618aea9→804d81e；M 57c8972→6f260ea；N 87f5154→40bce14及后续追溯；K新检查点/独立读回/保护核验/15秒启动元数据与主会话复核"
       },
       "tags": []
     },
@@ -693,8 +704,8 @@
       "review": {
         "state": "verified",
         "date": "2026-10-14",
-        "scope": "仅本轮整合进度、导航、保留边界和新增模块段落；不代表全篇语义审计",
-        "evidence": "收口记录；J 106cff3；H 91de3ea；main生产源码一致与构建指纹核对"
+        "scope": "限本次Otto资源/软件/技术审查/设备两目标更新与独立核验、启动及归档边界；所有者真实体验待反馈，不等于全篇或完整V1验收",
+        "evidence": "L 618aea9→804d81e；M 57c8972→6f260ea；N 87f5154→40bce14及后续追溯；K新检查点/独立读回/保护核验/15秒启动元数据与主会话复核"
       },
       "tags": []
     },
@@ -706,8 +717,8 @@
       "review": {
         "state": "verified",
         "date": "2026-10-14",
-        "scope": "仅本轮整合进度、导航、保留边界和新增模块段落；不代表全篇语义审计",
-        "evidence": "收口记录；J 106cff3；H 91de3ea；main生产源码一致与构建指纹核对"
+        "scope": "限本次Otto资源/软件/技术审查/设备两目标更新与独立核验、启动及归档边界；所有者真实体验待反馈，不等于全篇或完整V1验收",
+        "evidence": "L 618aea9→804d81e；M 57c8972→6f260ea；N 87f5154→40bce14及后续追溯；K新检查点/独立读回/保护核验/15秒启动元数据与主会话复核"
       },
       "tags": []
     },
@@ -719,8 +730,8 @@
       "review": {
         "state": "verified",
         "date": "2026-10-14",
-        "scope": "限核对Otto资源检查与用户最新直接烧录授权、L真实预览/M接入/K备份的分阶段调度；不等于预览、编译或新烧录通过",
-        "evidence": "所有者最新消息；固定目录23文件/21GIF独立指纹结构核验；L 01a13abb-1934-7201-80e2-cefc61718811、M 01a13ac7-0695-7912-9488-c1cfba4a2452、K 01a13a9a-6ace-7a71-9238-5b9abc4f8d10委派"
+        "scope": "限本次Otto资源/软件/技术审查/设备两目标更新与独立核验、启动及归档边界；所有者真实体验待反馈，不等于全篇或完整V1验收",
+        "evidence": "L 618aea9→804d81e；M 57c8972→6f260ea；N 87f5154→40bce14及后续追溯；K新检查点/独立读回/保护核验/15秒启动元数据与主会话复核"
       },
       "tags": []
     },
@@ -3421,8 +3432,8 @@
       "review": {
         "state": "verified",
         "date": "2026-10-14",
-        "scope": "限核对Otto资源检查与用户最新直接烧录授权、L真实预览/M接入/K备份的分阶段调度；不等于预览、编译或新烧录通过",
-        "evidence": "所有者最新消息；固定目录23文件/21GIF独立指纹结构核验；L 01a13abb-1934-7201-80e2-cefc61718811、M 01a13ac7-0695-7912-9488-c1cfba4a2452、K 01a13a9a-6ace-7a71-9238-5b9abc4f8d10委派"
+        "scope": "限本次Otto资源/软件/技术审查/设备两目标更新与独立核验、启动及归档边界；所有者真实体验待反馈，不等于全篇或完整V1验收",
+        "evidence": "L 618aea9→804d81e；M 57c8972→6f260ea；N 87f5154→40bce14及后续追溯；K新检查点/独立读回/保护核验/15秒启动元数据与主会话复核"
       },
       "tags": [
         "development"
