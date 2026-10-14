@@ -27,6 +27,14 @@
   .data-workspace-panel .experiment-run-list { max-height: 220px; overflow: auto; }
 }
 @media (max-width: 700px) {
+  /* 处置属于每条样本：窄屏独占一行再换行，保留全部动作及键盘入口。 */
+  .data-workspace-panel .quality-list-card .ant-list-item { flex-direction: column; align-items: stretch; }
+  /* 明确摘要宽度，避免纵排先按 Meta 内容默认的 width:0 估高，留出大片空白。 */
+  .data-workspace-panel .quality-list-card .ant-list-item-meta { flex: 0 0 auto; width: 100%; }
+  .data-workspace-panel .quality-list-card .ant-list-item-action { width: 100%; max-width: 100%; margin-inline: 0; gap: 8px; }
+  .data-workspace-panel .quality-list-card .ant-list-item-action > li { max-width: 100%; padding: 0; }
+  .data-workspace-panel .quality-list-card .ant-list-item-action :is(a, .ant-btn) { display: inline-flex; align-items: center; min-height: 44px; max-width: 100%; height: auto; white-space: normal; overflow-wrap: anywhere; }
+  .data-workspace-panel .quality-list-card .ant-list-item-action-split { display: none; }
   .memory-source-drawer .ant-drawer-header { flex-wrap: wrap; gap: 12px; }
   .memory-source-drawer .ant-drawer-header-title { flex: 1 1 100%; min-width: 0; }
   .memory-source-drawer .ant-drawer-title { white-space: nowrap; }

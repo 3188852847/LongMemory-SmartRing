@@ -1,6 +1,6 @@
 import {useEffect, useMemo, useState, type CSSProperties} from 'react';
 import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
-import {Alert, Button, Card, Checkbox, Descriptions, Input, InputNumber, Segmented, Select, Space, Tabs, Tag} from 'antd';
+import {Alert, Button, Card, Checkbox, Descriptions, Input, InputNumber, Radio, Segmented, Select, Space, Tabs, Tag} from 'antd';
 import {AppShell, ConsoleNav} from '../components/AppShell';
 import {useSearchParams} from 'react-router-dom';
 import {useUnsavedChanges} from '../app/UnsavedChanges';
@@ -190,6 +190,11 @@ export function RoundDisplayApp() {
   const view = useMemo(() => resolveRoundDisplay(interaction, system), [interaction, system]);
   const skin = skins.data?.skins.find(item => item.id === selectedSkin);
   const savedSkin = skins.data?.skins.find(item => item.id === skins.data?.selected_skin);
+  // 成功提示只证明本次保存的对象和内容仍是当前预览与持久选择；不能沿用旧 mutation 的成功布尔值。
+  const selectionSaved = Boolean(saveSkin.isSuccess && !draft && skin
+    && saveSkin.variables === selectedSkin && saveSkin.data?.selected_skin === selectedSkin
+    && skins.data?.selected_skin === selectedSkin
+    && saveSkin.data?.skins.find(item => item.id === selectedSkin)?.manifest_sha256 === skin.manifest_sha256);
   const deviceMatchesPreview = Boolean(!draft && deviceSkin.data && skin
     && deviceSkin.data.skin_id === skin.id
     && deviceSkin.data.manifest_sha256 === skin.manifest_sha256);
@@ -256,7 +261,8 @@ export function RoundDisplayApp() {
         <Tabs className="display-task-tabs" activeKey={activeTab} onChange={selectTab} items={[
           {key:'expression', label:'表情', children:<div className="display-task-content">
         <Card title="交互阶段"><p className="subtle">描述系统正在做什么，是圆屏的主状态。</p>
-          <Segmented block options={interactionOptions} value={interaction} onChange={value => setInteraction(value as InteractionState)}/>
+          <Radio.Group className="round-interaction-options" aria-label="交互阶段" optionType="button" buttonStyle="solid"
+            options={interactionOptions} value={interaction} onChange={event => setInteraction(event.target.value as InteractionState)}/>
         </Card>
         <Card title="情绪表达"><p className="subtle">只改变眼神、颜色和动作幅度，不改变交互逻辑。</p>
           <Segmented block options={emotionOptions} value={emotion} onChange={value => setEmotion(value as EmotionState)}/>
@@ -290,7 +296,7 @@ export function RoundDisplayApp() {
             {key:'target', label:'目标画布', children:`${skin.target.board} · ${skin.target.width}×${skin.target.height} · ${skin.target.color_format}`},
             {key:'hash', label:'清单指纹', children:<code>{skin.manifest_sha256.slice(0, 16)}…</code>},
           ]}/>}<p className="subtle">皮肤不会改变交互逻辑、记忆、模型或声音。</p>
-          {saveSkin.isSuccess && !draft && <p role="status">电脑预览选择已保存；真机尚未下发。</p>}
+          {selectionSaved && <p role="status">电脑预览选择已保存；真机尚未下发。</p>}
           {draft && <div className="round-skin-editor" role="region" aria-label="本机自定义皮肤编辑器">
             <h3>我的自定义皮肤</h3>
             <p className="subtle">修改会立即出现在左侧预览；保存后生成新的 SHA-256，但不会自动写入圆屏。取消或保存编辑后才能切换皮肤。</p>

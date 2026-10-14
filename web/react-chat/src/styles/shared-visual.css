@@ -140,7 +140,9 @@
   :root[data-theme=future] .ant-btn:not(:disabled):hover {box-shadow:0 0 0 1px color-mix(in srgb,var(--accent) 28%,transparent)!important}
 }
 :root[data-input-modality=pointer] :is(.ambient-motion-toggle,.launcher-mode-options button,.launcher-primary-actions .ant-btn):not(:disabled):active {transform:scale(.98); transition-duration:80ms}
-:root[data-input-modality=keyboard] :is(.ant-btn,.ant-segmented-thumb,.ant-drawer-content-wrapper,.ant-modal,.ambient-motion-toggle,.console-nav-link) {animation:none!important; transition:none!important}
+/* 键盘反馈即时响应；弹窗、抽屉的进退场由 ConfigProvider 的 motion 控制。
+   不能在退场途中取消生命周期动画，否则组件收不到结束事件，会留下阻挡页面的遮罩。 */
+:root[data-input-modality=keyboard] :is(.ant-btn,.ant-segmented-thumb,.ambient-motion-toggle,.console-nav-link) {animation:none!important; transition:none!important}
 :root[data-ambient=off] :is(.digital-atmosphere *,.state-core *,.shared-status>i) {animation:none!important}
 :root[data-page-visibility=hidden] :is(.digital-atmosphere *,.state-core *,.shared-status>i) {animation-play-state:paused!important}
 :root[data-motion=reduce] :is(.digital-atmosphere *,.state-core *,.shared-status>i) {animation:none!important}

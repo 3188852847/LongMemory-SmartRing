@@ -116,7 +116,11 @@ test('H07 新页面归零和焦点、历史返回恢复文档位置与筛选', a
   await expect(search).toBeEnabled();
   await search.fill('茶');await search.press('Enter');
   await page.getByRole('button',{name:'每日回顾',exact:true}).click();
+  await expect(page.getByRole('button',{name:'每日回顾',exact:true})).toHaveAttribute('aria-pressed','true');
+  // 查询切换和日报读取会改变文档高度；先确认可滚动布局，再建立返回恢复的测试坐标。
+  await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollHeight-innerHeight)).toBeGreaterThan(0);
   await page.evaluate(()=>window.scrollTo(0,5000));
+  await expect.poll(()=>page.evaluate(()=>scrollY)).toBeGreaterThan(0);
   const before=await page.evaluate(()=>scrollY);expect(before).toBeGreaterThan(0);
   await page.getByRole('link',{name:'系统总览',exact:true}).click();
   await expect(page.getByRole('heading',{name:'系统总览',exact:true})).toBeVisible();
