@@ -506,14 +506,15 @@
     },
     {
       "id": "firmware-otto0014-current-backup",
-      "scope": "0014前COM3当前状态备份、实际布局与assets原分区交接；不代表0014已更新",
+      "scope": "0014前COM3当前状态备份、assets原分区交接、正式更新的新当前检查点与实际机械证据",
       "authority": "docs/development/parallel/K-otto0014-flash-20261014.md",
       "sources": [
         "firmware/smartring_plus/*/0013-continuous-round-face.*"
       ],
       "related": [
         "docs/development/parallel/K-firmware-flash-20261014.md",
-        "docs/guides/圆屏动态表情烧录-20261014.md"
+        "docs/guides/圆屏动态表情烧录-20261014.md",
+        "docs/guides/圆屏Otto动态表情更新-20261014.md"
       ],
       "tags": [
         "Otto",
@@ -523,7 +524,7 @@
         "assets",
         "资源"
       ],
-      "review": "verified 2026-10-14: K新完整备份、独立整片芯片MD5、实际OTA/app/assets解析、串口释放；0014写入与体验待后续"
+      "review": "verified 2026-10-14: 新当前NVS边界、仅两目标更新/独立读回/保护范围及启动观察；所有者体验和实机回退未确认"
     },
     {
       "id": "otto-firmware-0014",
@@ -545,6 +546,28 @@
         "0014"
       ],
       "review": "verified 2026-10-14: 最终补丁、资源映像保留、实际解码/桥接与干净编译，设备运行待验收"
+    },
+    {
+      "id": "firmware-otto0014-owner-acceptance",
+      "scope": "本次Otto0014已更新设备的操作、所有者体验验收和准确备份/目标回退入口",
+      "authority": "docs/guides/圆屏Otto动态表情更新-20261014.md",
+      "sources": [
+        "firmware/smartring_plus/*/0014-otto-gif-face.*"
+      ],
+      "related": [
+        "docs/development/parallel/K-otto0014-flash-20261014.md",
+        "docs/guides/圆屏动态表情烧录-20261014.md"
+      ],
+      "tags": [
+        "Otto",
+        "0014",
+        "圆屏",
+        "表情",
+        "烧录",
+        "验收",
+        "回退"
+      ],
+      "review": "verified 2026-10-14: K实际设备结果/当前入口；M源码来源为已合main6f260ea，所有者体验未确认"
     }
   ],
   "old_path_rules": [
@@ -4521,8 +4544,8 @@
     {
       "path": "docs/guides/圆屏动态表情烧录-20261014.md",
       "title": "圆屏动态表情：0013 更新与实机验收",
-      "status": "current",
-      "basis": "本次0013更新后的操作与验收入口；以K实际证据区分机械通过和体验待验",
+      "status": "reference",
+      "basis": "0013阶段当时操作/待验事实与原备份参考；当前设备已更新0014，当前入口另列",
       "review": {
         "state": "verified",
         "date": "2026-10-14",
@@ -4536,18 +4559,25 @@
         "烧录",
         "验收",
         "回退"
+      ],
+      "superseded_by": [
+        {
+          "path": "docs/guides/圆屏Otto动态表情更新-20261014.md",
+          "scope": "当前设备版本、当前Otto验收入口及本次新检查点/仅目标回退",
+          "evidence": "K实际0014更新、独立读回及新版本启动；原0013历史步骤/备份事实保留"
+        }
       ]
     },
     {
       "path": "docs/development/parallel/K-otto0014-flash-20261014.md",
-      "title": "K：Otto 0014 当前状态备份与资源交接",
+      "title": "K：Otto 0014 更新与当前状态保护",
       "status": "current",
-      "basis": "本次新授权下的只读备份/资源交接实际证据；尚未写入0014",
+      "basis": "0014前备份/资源交接及正式两目标更新的实际证据；新当前检查点保护、读回/启动通过，所有者体验待确认",
       "review": {
         "state": "verified",
         "date": "2026-10-14",
-        "scope": "新完整16MB备份、独立设备摘要、活动槽、原assets结构与逐资源摘要、端口释放；不包含0014烧录/体验/实际重包容量；未索引尾部统计、当前构建983源码候选与索引/模型边界及历史快照比较",
-        "evidence": "otto0014-20261014-221931-db1e03ad私有backup-verification/current-layout-and-application/original-assets-metadata/asset-handoff/serial-release JSON；固定SDK消费者与打包实现；assets-tail-statistics/assets-read-path-audit/assets-index-and-model-bounds/assets-prior-snapshot-comparison JSON"
+        "scope": "原快照、新同句柄当前检查点及NVS变化边界、两目标各一次写入、独立应用与完整2MB资源读回、全保护范围、15秒启动观察及串口释放；真实视觉/声音/打断/并发和实机回退未确认",
+        "evidence": "c41463c初次备份；update-current-20261014-231752-a787087e私有checkpoint-verification/update-verification/complete-assets-independent-readback/boot-observation/delivery-summary JSON；main正式L/M/N固定清单与11项离线拒绝检查"
       },
       "tags": [
         "并行",
@@ -4620,6 +4650,27 @@
         "固件",
         "Otto",
         "资源"
+      ]
+    },
+    {
+      "path": "docs/guides/圆屏Otto动态表情更新-20261014.md",
+      "title": "智慧圆屏：Otto 0014 更新与验收",
+      "status": "current",
+      "basis": "本次正式0014更新后的操作与真实体验验收入口；原0013阶段另留参考",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-14",
+        "scope": "实际版本、保留/写入范围、私有新检查点/目标回退路径及所有者验收步骤；不宣称真实视觉、声音、打断或语音并发通过",
+        "evidence": "K-otto0014-flash-20261014实际设备记录和update-current-20261014-231752-a787087e机器证据；正式main6f260ea/04b33a9固定产物"
+      },
+      "tags": [
+        "指南",
+        "Otto",
+        "0014",
+        "圆屏",
+        "表情",
+        "验收",
+        "回退"
       ]
     }
   ],
