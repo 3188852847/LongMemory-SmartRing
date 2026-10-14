@@ -1,6 +1,7 @@
 """回环网页的最小会话防护：不是多用户认证，也不对抗本机恶意程序。"""
 
 import secrets
+import asyncio
 import time
 from collections import OrderedDict
 
@@ -68,6 +69,8 @@ def security_middleware(authority: str, sessions: Sessions, internal_token: str 
                 response = await handler(request)
         except web.HTTPException as error:
             response = web.json_response({"error": "request_rejected"}, status=error.status)
+        except asyncio.TimeoutError:
+            response = web.json_response({"error": "console_timeout"}, status=504)
         except Exception:
             # 未预期异常也不回传路径、原始响应或配置内容；前端不能据此宣称未执行。
             response = web.json_response({"error": "console_internal_error"}, status=500)

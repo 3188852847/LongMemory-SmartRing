@@ -1,5 +1,5 @@
 import {describe, expect, test, vi} from 'vitest';
-import {render, screen} from '@testing-library/react';
+import {fireEvent, render, screen} from '@testing-library/react';
 import {MemoryRouter} from 'react-router-dom';
 import {QueryClient, QueryClientProvider} from '@tanstack/react-query';
 import {ChatApi} from '../api';
@@ -21,6 +21,11 @@ describe('系统总览', () => {
     expect((await screen.findAllByText('SyntheticModel')).length).toBe(2);
     expect(await screen.findByText('12 条')).toBeTruthy();
     expect(screen.getAllByText('已连接').length).toBeGreaterThan(0);
+    const details = screen.getByText('查看服务、回答与圆屏链路详情').closest('details')!;
+    expect(details.open).toBe(false);
+    expect(screen.getByRole('link', {name:/^文字聊天\s*输入、回答和本轮记忆证据$/}).getAttribute('href')).toBe('/chat-react');
+    fireEvent.click(screen.getByText('查看服务、回答与圆屏链路详情'));
+    expect(details.open).toBe(true);
     expect(await screen.findByText('启动面板在线')).toBeTruthy();
     expect(screen.getByText('0.4 秒前')).toBeTruthy();
     expect(screen.getByRole('link', {name:'文字聊天'}).getAttribute('href')).toBe('/chat-react');

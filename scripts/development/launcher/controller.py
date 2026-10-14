@@ -7,6 +7,7 @@ import ipaddress
 import json
 from pathlib import Path
 import queue
+import secrets
 import threading
 import time
 import webbrowser
@@ -21,6 +22,7 @@ from view_model import (
     stopped_services, starting_services, ready_services, failed_services,
     readiness_timeout,
 )
+from events import LauncherEvents
 
 
 class ControllerError(ValueError):
@@ -52,6 +54,9 @@ class LauncherController:
         self.allow_memory_delete = DEFAULT_SESSION_ALLOW_MEMORY_DELETE
         self.control = None
         self._thread = None
+        self.events = LauncherEvents(self.root)
+        self.operation_request_id = None
+        self.operation_started = self.clock()
 
     def settings(self):
         values = load_preferences(self.paths['launcher'])
@@ -191,7 +196,7 @@ class LauncherController:
                        model_profile=values['model_profile'], voice_model_profile=values['voice_model_profile'],
                        memory_backend=values['memory_backend'], allow_memory_delete=self.allow_memory_delete)
 
-    def action(self, action):
+    def action(self, action, *, request_id=None):
         with self._lock:
             if action not in {'start', 'stop', 'open_console', 'shutdown'}:
                 raise ControllerError('不支持此操作。')
@@ -215,24 +220,37 @@ class LauncherController:
             else:
                 self.state = 'stopping'
                 self.presentation = {**stopped_services(), 'message': '正在停止本面板拥有的服务，请稍候。'}
-            self._queue.put(action)
+            operation_id = request_id or secrets.token_hex(12)
+            self.operation_request_id = operation_id
+            self.operation_started = self.clock()
+            self.events.record(operation_id, event='phase_changed', action=action, phase=self.state)
+            self._queue.put((action, operation_id, self.operation_started))
             return self.snapshot()
 
-    def _fail(self, message):
+    def _phase_event(self, *, code=None):
+        self.events.record(self.operation_request_id, event='phase_changed', phase=self.state,
+                           code=code, duration_ms=max(0, round((self.clock() - self.operation_started) * 1000)))
+
+    def _fail(self, message, code='operation_failed'):
         try:
             self.manager.stop()
         except Exception:
             message += ' 停止未完全确认，请勿重复启动；请核对原服务。'
+            code = 'stop_unconfirmed'
         with self._lock:
             self.state = 'failed'
             self.presentation = {**failed_services([]), 'message': message}
+            self._phase_event(code=code)
 
     def perform_pending(self):
         """工作线程执行一次操作；测试使用合成 Manager 调用，不接触日用服务。"""
         try:
-            action = self._queue.get_nowait()
+            action, operation_id, operation_started = self._queue.get_nowait()
         except queue.Empty:
             return
+        with self._lock:
+            self.operation_request_id = operation_id
+            self.operation_started = operation_started
         try:
             if action == 'start':
                 self.manager.start(self._options())
@@ -242,10 +260,12 @@ class LauncherController:
                 self.manager.stop()
                 with self._lock:
                     self.state, self.presentation, self.opened = 'stopped', stopped_services(), False
+                    self.operation_request_id = operation_id
+                    self._phase_event()
                 if action == 'shutdown':
                     self.shutdown_requested.set()
-        except ValueError as error:
-            self._fail(str(error))
+        except ValueError:
+            self._fail('受管服务配置检查未通过，请核对启动设置与恢复指南。', 'configuration_rejected')
         except Exception:
             self._fail('无法完成受管服务操作。未关闭外部程序；请查看启动指南。')
 
@@ -256,7 +276,7 @@ class LauncherController:
         exited = [(name, service.process.poll()) for name, service in self.manager.services.items()
                   if service.process.poll() is not None]
         if exited:
-            self._fail(failed_services(exited, options.tts_backend, options.voice_mode)['message'])
+            self._fail(failed_services(exited, options.tts_backend, options.voice_mode)['message'], 'child_exited')
         elif self.manager.ready():
             local_ready = (self.manager.local_tts_ready() if options.voice and options.voice_mode == 'pipeline'
                            and options.tts_backend in {'voxcpm2', 'sanotts', 'cosyvoice3'} else False)
@@ -264,11 +284,12 @@ class LauncherController:
                 if self.state not in {'starting', 'ready'}:
                     return
                 self.state = 'ready'
+                self._phase_event()
                 self.presentation = ready_services(voice=options.voice, voice_mode=options.voice_mode,
                     tts_backend=options.tts_backend, local_tts_ready=local_ready, opened=self.opened)
             self.manager.publish_status('ready', console_ready=True, voice_ready=options.voice, tts_ready=local_ready)
         elif self.clock() - self.started > self.readiness_seconds:
-            self._fail(readiness_timeout()['message'])
+            self._fail(readiness_timeout()['message'], 'readiness_timeout')
         else:
             self.manager.publish_status('starting')
 
@@ -303,7 +324,7 @@ class LauncherController:
                 self.perform_pending()
                 self.tick()
             except Exception:
-                self._fail('服务状态检查失败，已尝试停止本面板拥有的服务。请查看启动指南。')
+                self._fail('服务状态检查失败，已尝试停止本面板拥有的服务。请查看启动指南。', 'health_check_failed')
 
     def start_worker(self):
         self._thread = threading.Thread(target=self.run, name='launcher-manager', daemon=True)
@@ -313,4 +334,7 @@ class LauncherController:
         self._closed.set()
         if self._thread:
             self._thread.join()
-        self.manager.stop()
+        try:
+            self.manager.stop()
+        finally:
+            self.events.close()

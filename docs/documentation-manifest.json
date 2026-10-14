@@ -1,0 +1,4264 @@
+{
+  "schema_version": 1,
+  "recorded_date": "2026-10-14",
+  "baseline_commit": "8f32727632d98ddcd3890181286a0f310622a97b",
+  "scope": "公开 docs Markdown 与根入口；不访问 local/data/真实音频/日志/实验结果。分类不等于全篇语义验收。",
+  "status_labels": {
+    "current": "现行",
+    "reference": "参考",
+    "historical": "历史",
+    "draft": "草案",
+    "pending": "待核对",
+    "superseded": "已被替代"
+  },
+  "topics": [
+    {
+      "id": "priorities",
+      "scope": "当前执行优先级、完成标准和未排期候选",
+      "authority": "ROADMAP.md",
+      "sources": [],
+      "related": [
+        "docs/requirements/product-capability-map.md",
+        "docs/requirements/自定义功能清单.md"
+      ],
+      "tags": [
+        "路线",
+        "候选",
+        "研究"
+      ],
+      "review": "pending: 本轮只建立维护归属，未完成全篇实现核对"
+    },
+    {
+      "id": "authorization",
+      "scope": "项目规则、任务授权与协作边界",
+      "authority": "AGENTS.md",
+      "sources": [
+        ".agents/skills/**"
+      ],
+      "related": [
+        "docs/development/并行优化-20261014.md"
+      ],
+      "tags": [
+        "规则",
+        "授权"
+      ],
+      "review": "pending: 本轮只建立维护归属，未完成全篇实现核对"
+    },
+    {
+      "id": "daily-use",
+      "scope": "日常任务入口与使用步骤",
+      "authority": "docs/guides/使用说明.md",
+      "sources": [],
+      "related": [
+        "docs/guides/统一启动.md"
+      ],
+      "tags": [
+        "操作",
+        "日常"
+      ],
+      "review": "pending: 本轮只建立维护归属，未完成全篇实现核对"
+    },
+    {
+      "id": "launcher-lifecycle",
+      "scope": "React 启动窗口、受管服务生命周期与回退",
+      "authority": "docs/guides/React启动面板.md",
+      "sources": [
+        "启动智慧圆屏.cmd",
+        "scripts/development/launcher/**",
+        "web/react-chat/src/features/launcher/**",
+        "web/react-chat/src/app/launcher-main.tsx"
+      ],
+      "related": [
+        "docs/development/launcher-contract.md",
+        "docs/guides/统一启动.md",
+        "docs/adr/0177-react-local-launcher.md"
+      ],
+      "tags": [
+        "启动",
+        "停止",
+        "退出",
+        "Edge"
+      ],
+      "review": "pending: 本轮只建立维护归属，未完成全篇实现核对"
+    },
+    {
+      "id": "machine-layout",
+      "scope": "本机目录、运行时归属与依赖导航",
+      "authority": "docs/guides/本机目录与依赖.md",
+      "sources": [
+        ".python-version",
+        "pyproject.toml",
+        "uv.lock",
+        "web/react-chat/package.json",
+        "web/react-chat/pnpm-lock.yaml",
+        "web/react-chat/.node-version"
+      ],
+      "related": [
+        "docs/development/setup.md"
+      ],
+      "tags": [
+        "Python",
+        "环境",
+        "依赖",
+        "目录"
+      ],
+      "review": "pending: 本轮只建立维护归属，未完成全篇实现核对"
+    },
+    {
+      "id": "configuration",
+      "scope": "私有人工配置与公开模板的来源、消费副本、生效边界",
+      "authority": "docs/development/configuration.md",
+      "sources": [
+        "src/longmemory/infrastructure/config/**",
+        "scripts/development/migrate_local_config.py",
+        "config/examples/**",
+        "scripts/development/xiaozhi/sync_*.py"
+      ],
+      "related": [
+        "docs/guides/本机目录与依赖.md",
+        "docs/adr/0126-central-local-configuration.md"
+      ],
+      "tags": [
+        "配置",
+        "YAML",
+        "env"
+      ],
+      "review": "pending: 本轮只建立维护归属，未完成全篇实现核对"
+    },
+    {
+      "id": "local-assets",
+      "scope": "私有恢复包、历史运行资料与外部资源归位规则",
+      "authority": "docs/development/local-assets.md",
+      "sources": [
+        "scripts/development/recovery_archive.py"
+      ],
+      "related": [
+        "docs/development/test-artifacts.md"
+      ],
+      "tags": [
+        "备份",
+        "资源",
+        "恢复"
+      ],
+      "review": "pending: 本轮只建立维护归属，未完成全篇实现核对"
+    },
+    {
+      "id": "text-recovery",
+      "scope": "新电脑文字、记忆与 BGE 恢复证据及复验步骤",
+      "authority": "docs/guides/恢复文字与记忆-20261013.md",
+      "sources": [
+        "scripts/development/prepare_embedding.py"
+      ],
+      "related": [
+        "docs/guides/本机目录与依赖.md"
+      ],
+      "tags": [
+        "恢复",
+        "BGE",
+        "记忆"
+      ],
+      "review": "pending: 本轮只建立维护归属，未完成全篇实现核对"
+    },
+    {
+      "id": "voice-recovery",
+      "scope": "新电脑原日用语音资源与链路恢复证据",
+      "authority": "docs/guides/恢复语音-20261013.md",
+      "sources": [
+        "scripts/development/voice_restore/**",
+        "scripts/development/restore_voice.ps1",
+        "scripts/development/run_voice_restore.ps1",
+        "scripts/development/xiaozhi/**"
+      ],
+      "related": [
+        "docs/guides/React启动面板.md",
+        "docs/guides/参考声音与克隆.md"
+      ],
+      "tags": [
+        "恢复",
+        "Silero",
+        "SenseVoice",
+        "CosyVoice"
+      ],
+      "review": "pending: 本轮只建立维护归属，未完成全篇实现核对"
+    },
+    {
+      "id": "firmware-recovery",
+      "scope": "ESP-IDF 固定版本、ASCII 工程与离线编译恢复证据",
+      "authority": "docs/guides/恢复固件编译-20261014.md",
+      "sources": [
+        "scripts/development/firmware_restore/**",
+        "scripts/development/invoke_firmware_build.ps1",
+        "scripts/development/run_firmware_restore.ps1",
+        "firmware/smartring_plus/restore/**"
+      ],
+      "related": [
+        "docs/development/界面与交互优化-20261014.md"
+      ],
+      "tags": [
+        "固件",
+        "ESP-IDF",
+        "编译",
+        "恢复"
+      ],
+      "review": "pending: 本轮只建立维护归属，未完成全篇实现核对"
+    },
+    {
+      "id": "voice-profile",
+      "scope": "参考录音、草稿试听、保存与声音档案生效",
+      "authority": "docs/guides/参考声音与克隆.md",
+      "sources": [
+        "scripts/development/cosyvoice/**",
+        "src/longmemory/infrastructure/config/cosyvoice_profiles.py",
+        "src/longmemory/entrypoints/api/voice_settings.py",
+        "web/react-chat/src/features/voice/**"
+      ],
+      "related": [
+        "docs/guides/声音设置.md",
+        "docs/adr/0178-controlled-cosyvoice-profiles.md"
+      ],
+      "tags": [
+        "声音",
+        "克隆",
+        "试听",
+        "CosyVoice"
+      ],
+      "review": "pending: 本轮只建立维护归属，未完成全篇实现核对"
+    },
+    {
+      "id": "assistant-role",
+      "scope": "回答角色、表达偏好和网页/圆屏同步",
+      "authority": "docs/guides/助手角色设置.md",
+      "sources": [
+        "src/longmemory/prompts/**",
+        "web/react-chat/src/features/settings/RoleEditor*",
+        "web/react-chat/src/features/settings/rolePreferences*",
+        "scripts/development/xiaozhi/sync_role.py"
+      ],
+      "related": [
+        "docs/guides/参考声音与克隆.md"
+      ],
+      "tags": [
+        "助手",
+        "角色",
+        "表达"
+      ],
+      "review": "pending: 本轮只建立维护归属，未完成全篇实现核对"
+    },
+    {
+      "id": "architecture",
+      "scope": "系统职责边界及研究解耦",
+      "authority": "docs/architecture/overview.md",
+      "sources": [
+        "src/longmemory/bootstrap.py",
+        "src/longmemory/methods/**",
+        "src/longmemory/core/**"
+      ],
+      "related": [
+        "docs/architecture/workflows.md",
+        "docs/architecture/method-boundary.md",
+        "docs/architecture/technology-strategy.md"
+      ],
+      "tags": [
+        "架构",
+        "记忆",
+        "研究"
+      ],
+      "review": "pending: 本轮只建立维护归属，未完成全篇实现核对"
+    },
+    {
+      "id": "runtime-flows",
+      "scope": "当前交互、记忆与调度运行流程及拟议边界",
+      "authority": "docs/architecture/workflows.md",
+      "sources": [
+        "src/longmemory/application/**",
+        "src/longmemory/entrypoints/**",
+        "src/longmemory/adapters/**"
+      ],
+      "related": [
+        "docs/architecture/overview.md"
+      ],
+      "tags": [
+        "流程",
+        "提取",
+        "检索",
+        "记忆",
+        "主动交流"
+      ],
+      "review": "pending: 本轮只建立维护归属，未完成全篇实现核对"
+    },
+    {
+      "id": "repository-layout",
+      "scope": "源码、测试、数据集与文档职责位置",
+      "authority": "docs/architecture/repository-structure.md",
+      "sources": [
+        "src/longmemory/__init__.py"
+      ],
+      "related": [
+        "docs/development/frontend-structure.md",
+        "docs/development/test-artifacts.md"
+      ],
+      "tags": [
+        "目录",
+        "源码"
+      ],
+      "review": "pending: 本轮只建立维护归属，未完成全篇实现核对"
+    },
+    {
+      "id": "frontend-layout",
+      "scope": "前端功能模块、路由与页面组织",
+      "authority": "docs/development/frontend-structure.md",
+      "sources": [
+        "web/react-chat/src/**",
+        "web/assets/**"
+      ],
+      "related": [
+        "docs/architecture/repository-structure.md",
+        "docs/guides/React聊天页.md",
+        "docs/guides/外观设置.md"
+      ],
+      "tags": [
+        "网页",
+        "前端",
+        "React"
+      ],
+      "review": "pending: 本轮只建立维护归属，未完成全篇实现核对"
+    },
+    {
+      "id": "visual-system",
+      "scope": "网页和启动面板视觉及动效规范",
+      "authority": "docs/architecture/visual-system.md",
+      "sources": [
+        "web/react-chat/src/components/**",
+        "web/react-chat/src/styles/**",
+        "web/react-chat/src/app/AppearanceProvider*"
+      ],
+      "related": [
+        "docs/development/界面与交互优化-20261014.md"
+      ],
+      "tags": [
+        "视觉",
+        "动效",
+        "界面"
+      ],
+      "review": "pending: 本轮只建立维护归属，未完成全篇实现核对"
+    },
+    {
+      "id": "display-protocol",
+      "scope": "圆屏状态协议、电脑模拟器与设备回执边界",
+      "authority": "docs/architecture/round-display-state-protocol.md",
+      "sources": [
+        "src/longmemory/entrypoints/api/routes/device.py",
+        "web/react-chat/src/pages/RoundDisplayApp*",
+        "firmware/smartring_plus/motion/**",
+        "firmware/smartring_plus/patches/**"
+      ],
+      "related": [
+        "docs/architecture/round-screen-skins.md",
+        "docs/development/界面与交互优化-20261014.md"
+      ],
+      "tags": [
+        "圆屏",
+        "预览",
+        "动画",
+        "设备"
+      ],
+      "review": "pending: 本轮只建立维护归属，未完成全篇实现核对"
+    },
+    {
+      "id": "test-artifacts",
+      "scope": "pytest 临时目录隔离及历史测试产物边界",
+      "authority": "docs/development/test-artifacts.md",
+      "sources": [
+        "tests/conftest.py",
+        "tests/unit/development/test_pytest_temp_lifecycle.py"
+      ],
+      "related": [
+        "docs/development/local-assets.md"
+      ],
+      "tags": [
+        "测试",
+        "pytest",
+        "临时目录"
+      ],
+      "review": "pending: 本轮只建立维护归属，未完成全篇实现核对"
+    },
+    {
+      "id": "ci",
+      "scope": "锁定依赖的质量工作流、skip 例外及本地/远程证据边界",
+      "authority": "docs/development/continuous-integration.md",
+      "sources": [
+        ".github/workflows/**",
+        "scripts/ci/**"
+      ],
+      "related": [
+        "docs/development/setup.md"
+      ],
+      "tags": [
+        "测试",
+        "CI",
+        "GitHub"
+      ],
+      "review": "pending: 本轮只建立维护归属，未完成全篇实现核对"
+    },
+    {
+      "id": "research-evaluation",
+      "scope": "比较协议、评分与实验方法使用",
+      "authority": "docs/research/method-comparison.md",
+      "sources": [
+        "src/longmemory/evaluation/**",
+        "datasets/**"
+      ],
+      "related": [
+        "docs/research/evaluation-plan.md",
+        "docs/architecture/method-boundary.md"
+      ],
+      "tags": [
+        "实验",
+        "评估",
+        "Baseline"
+      ],
+      "review": "pending: 本轮只建立维护归属，未完成全篇实现核对"
+    },
+    {
+      "id": "doc-maintenance",
+      "scope": "文档清单、任务检索、只读检查与核对证据",
+      "authority": "docs/development/documentation-maintenance.md",
+      "sources": [
+        "scripts/development/check_docs.py",
+        "tests/unit/development/test_doc_maintenance.py",
+        ".agents/skills/project-doc-maintenance/**",
+        "docs/documentation-manifest.json"
+      ],
+      "related": [
+        "docs/README.md"
+      ],
+      "tags": [
+        "文档",
+        "skill",
+        "索引"
+      ],
+      "review": "pending: 本轮只建立维护归属，未完成全篇实现核对"
+    },
+    {
+      "id": "safe-observability",
+      "scope": "当前进程请求与启动阶段摘要、默认日志元数据及未覆盖的真实语音链路",
+      "authority": "docs/development/observability-contract.md",
+      "sources": [
+        "src/longmemory/infrastructure/logging/diagnostics.py",
+        "src/longmemory/entrypoints/api/observability.py",
+        "src/longmemory/entrypoints/api/security.py",
+        "web/react-chat/src/features/observability/**",
+        "scripts/development/launcher/events.py"
+      ],
+      "related": [
+        "docs/development/parallel/G-20261014.md",
+        "docs/development/parallel/J-20261014.md"
+      ],
+      "tags": [
+        "日志",
+        "故障",
+        "请求标识"
+      ],
+      "review": "pending: 后端合成验收通过；前端完整验收待依赖"
+    }
+  ],
+  "old_path_rules": [
+    {
+      "id": "external-runtime-before-restore",
+      "tokens": [
+        "D:\\LongMemory-local",
+        "D:/LongMemory-local"
+      ],
+      "replacement": "local/runtime/、local/tools/；固件另见恢复固件编译指南"
+    },
+    {
+      "id": "recovery-package-before-move",
+      "tokens": [
+        "LongMemory备份/",
+        "LongMemory备份\\"
+      ],
+      "replacement": "local/archive/recovery/"
+    },
+    {
+      "id": "legacy-measurements",
+      "tokens": [
+        ".test-runtime"
+      ],
+      "replacement": "experiments/results/legacy-runtime-20261014/（原始快照，不运行）"
+    },
+    {
+      "id": "legacy-pytest",
+      "tokens": [
+        ".pytest-tmp"
+      ],
+      "replacement": "新运行 data/test-tmp/pytest/；历史 local/archive/test-artifacts/pytest-before-20261014/"
+    },
+    {
+      "id": "root-launcher-before-move",
+      "tokens": [
+        ".\\Start.cmd",
+        "./Start.cmd"
+      ],
+      "replacement": "启动智慧圆屏.cmd；内部 scripts/development/launcher/Start.cmd"
+    }
+  ],
+  "known_gaps": [
+    {
+      "id": "voice-recovery-lifecycle",
+      "path": "docs/guides/恢复语音-20261013.md",
+      "scope": "本次完成的验收与日常入口：关闭或停止启动器会停止服务",
+      "evidence": "React 启动指南和 scripts/development/launcher/web_app.py 模块说明明确浏览器关闭后服务继续；恢复文保留旧语义",
+      "state": "pending",
+      "owner": "B/主会话",
+      "action": "核对并明确恢复记录时点与当前 React 生命周期；不以恢复旧语句作为日常操作来源"
+    },
+    {
+      "id": "text-recovery-staged-status",
+      "path": "docs/guides/恢复文字与记忆-20261013.md",
+      "scope": "当前选择文字模式、语音和 ESP-IDF 以后恢复等阶段语句",
+      "evidence": "AGENTS 和后续语音/固件恢复指南已记录圆屏模式及恢复完成；旧段落仍描述首轮阶段",
+      "state": "pending",
+      "owner": "B/主会话",
+      "action": "区分首轮事实与现行恢复状态；保留各轮原验收数字"
+    },
+    {
+      "id": "inventory-semantic-boundary",
+      "path": "docs/README.md",
+      "scope": "全量公开文档",
+      "evidence": "本轮建立路径/标题清单与检索归属，没有逐篇核对所有实现、数字与外部来源",
+      "state": "pending",
+      "owner": "对应任务负责人",
+      "action": "按任务逐项记录范围和证据，不将机械检查写成全量语义验收"
+    }
+  ],
+  "documents": [
+    {
+      "path": "AGENTS.md",
+      "title": "智慧圆屏项目协作规则",
+      "status": "current",
+      "basis": "按 ROADMAP、恢复/工程约定及本轮任务确定的维护入口；仅限定对应事实范围，语义核对另列",
+      "review": {
+        "state": "pending"
+      },
+      "tags": []
+    },
+    {
+      "path": "CHANGELOG.md",
+      "title": "Changelog",
+      "status": "current",
+      "basis": "按 ROADMAP、恢复/工程约定及本轮任务确定的维护入口；仅限定对应事实范围，语义核对另列",
+      "review": {
+        "state": "pending"
+      },
+      "tags": []
+    },
+    {
+      "path": "README.md",
+      "title": "智慧圆屏",
+      "status": "current",
+      "basis": "按 ROADMAP、恢复/工程约定及本轮任务确定的维护入口；仅限定对应事实范围，语义核对另列",
+      "review": {
+        "state": "pending"
+      },
+      "tags": []
+    },
+    {
+      "path": "ROADMAP.md",
+      "title": "智慧圆屏路线图",
+      "status": "current",
+      "basis": "按 ROADMAP、恢复/工程约定及本轮任务确定的维护入口；仅限定对应事实范围，语义核对另列",
+      "review": {
+        "state": "pending"
+      },
+      "tags": []
+    },
+    {
+      "path": "docs/README.md",
+      "title": "文档入口",
+      "status": "current",
+      "basis": "按 ROADMAP、恢复/工程约定及本轮任务确定的维护入口；仅限定对应事实范围，语义核对另列",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-14",
+        "scope": "本轮新增导航与机制：清单入口、命令行为、文件归属和验证边界；所链接存量文档的语义不在此范围",
+        "evidence": "14 项合成测试；skill quick_validate；新增文档严格本地链接检查。见 docs/development/parallel/A-20261014.md"
+      },
+      "tags": []
+    },
+    {
+      "path": "docs/adr/0001-modular-monolith.md",
+      "title": "ADR-0001：V0.1 采用模块化单体",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0002-l0-l1-memory-model.md",
+      "title": "ADR-0002：V0.1 只实现 L0 与 L1",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0003-local-sqlite-storage.md",
+      "title": "ADR-0003：V0.1 使用本地 SQLite",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0004-memory-assertion-lifecycle-and-provenance.md",
+      "title": "ADR-0004：记忆声明、来源证据与生命周期分离",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0005-early-device-demo-and-private-model.md",
+      "title": "ADR-0005：提前圆屏演示，优先验证私有部署模型",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0006-xiaozhi-local-process-memory-bridge.md",
+      "title": "ADR-0006：小智通过本机子进程接入独立记忆用例",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0007-local-console-and-device-control.md",
+      "title": "ADR-0007：本机控制台与受限设备控制通道",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ],
+      "superseded_by": [
+        {
+          "path": "docs/adr/0008-replaceable-memory-methods-and-research-protocols.md",
+          "scope": "执行顺序与页面范围",
+          "evidence": "ADR-0007 状态与 ADR-0008 首段；本机安全/设备约束保留"
+        }
+      ]
+    },
+    {
+      "path": "docs/adr/0008-replaceable-memory-methods-and-research-protocols.md",
+      "title": "ADR-0008：可替换记忆方法、实验协议与文字入口",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ],
+      "superseded_by": [
+        {
+          "path": "docs/adr/0015-product-first-companion-roadmap.md",
+          "scope": "研究优先执行顺序",
+          "evidence": "ADR-0008 2026-09-04 补记；方法边界/数据隔离保留"
+        }
+      ]
+    },
+    {
+      "path": "docs/adr/0009-minimal-frozen-comparison-protocol.md",
+      "title": "ADR-0009：最小历史回放与冻结问答协议",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0010-source-bound-extraction-candidates.md",
+      "title": "ADR-0010：来源绑定的语义提取候选边界",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0011-frozen-corpus-semantic-retrieval.md",
+      "title": "ADR-0011：冻结既有事实语料的本地语义检索消融",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0012-frozen-retrieval-answer-replay.md",
+      "title": "ADR-0012：冻结检索结果的回答对照",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0013-local-experiment-viewer.md",
+      "title": "ADR-0013：本机实验结果查看与人工复核",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0014-local-experiment-jobs.md",
+      "title": "ADR-0014：本机冻结检索回答作业",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0015-product-first-companion-roadmap.md",
+      "title": "ADR-0015：日常陪伴产品优先，研究能力保留",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0016-minimal-windows-launcher.md",
+      "title": "ADR-0016：最小 Windows 启动面板与进程所有权",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0017-explicit-launcher-network-sync.md",
+      "title": "ADR-0017：启动器显式网络地址同步",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0018-launcher-firewall-actions.md",
+      "title": "ADR-0018：启动面板显式防火墙操作",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0019-persistent-web-conversations.md",
+      "title": "ADR-0019：网页会话持久化旁库",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0020-p2-frontend-slice.md",
+      "title": "ADR-0020：P2 外观阶段保留原生前端",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ],
+      "superseded_by": [
+        {
+          "path": "docs/adr/0021-react-chat-migration.md",
+          "scope": "后续聊天页原生前端选型",
+          "evidence": "ADR-0020 状态与 ADR-0021 决定；其他历史功能保留"
+        }
+      ]
+    },
+    {
+      "path": "docs/adr/0021-react-chat-migration.md",
+      "title": "ADR-0021：P2 聊天前端采用 React 与 Ant Design",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ],
+      "superseded_by": [
+        {
+          "path": "docs/adr/0032-progressive-react-console-migration.md",
+          "scope": "不整体迁移控制台的边界",
+          "evidence": "ADR-0021 状态；聊天页采用 React 的决定保留"
+        }
+      ]
+    },
+    {
+      "path": "docs/adr/0022-web-assistant-role-settings.md",
+      "title": "ADR-0022：网页助手角色版本化设置",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0023-device-role-config-sync.md",
+      "title": "ADR-0023：圆屏角色显式同步到小智配置",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0024-voice-settings-preview.md",
+      "title": "ADR-0024：本机音色设置与固定文本试听",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0025-local-voxcpm2-tts-adapter.md",
+      "title": "ADR-0025：本机 VoxCPM2 与 Xiaozhi 的可替换 TTS 适配层",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0026-layered-memory-and-knowledge-plane.md",
+      "title": "ADR-0026：四层个人记忆、可信性边界与独立知识平面",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0027-shared-persistent-memory-runtime.md",
+      "title": "ADR-0027：网页与圆屏共享常驻 Memory Runtime",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0028-daily-llm-l1-extraction.md",
+      "title": "ADR-0028：日常模型辅助 L1 提取采用 L0 优先与显式降级",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0029-optional-daily-hybrid-retrieval.md",
+      "title": "ADR-0029：日常混合召回采用可选排名融合与显式降级",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0030-auditable-manual-memory-correction.md",
+      "title": "ADR-0030：用追加与取代实现可审计的人工纠正",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0031-runtime-memory-mode-controls.md",
+      "title": "ADR-0031：运行期记忆写入与使用独立控制",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0032-progressive-react-console-migration.md",
+      "title": "ADR-0032：Web 控制台渐进统一到 React",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0033-staged-technology-adoption.md",
+      "title": "ADR-0033：按问题与触发条件分阶段采用技术",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0034-temporal-fact-change.md",
+      "title": "ADR-0034：区分错误纠正与后来发生的事实变化",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0035-reviewable-l2-scenario-candidates.md",
+      "title": "ADR-0035：L2 先形成可复核的场景候选，不直接生成用户画像",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0036-incremental-memory-architecture-calibration.md",
+      "title": "ADR-0036：在实现 L2 前渐进校准记忆内部边界",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0037-controlled-l2-answer-context.md",
+      "title": "ADR-0037：已接受 L2 通过独立开关受控参与回答",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0038-audited-l2-lifecycle.md",
+      "title": "ADR-0038：L2 失效必须通过可审计生命周期事件",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0039-reviewable-l3-persona-foundation.md",
+      "title": "ADR-0039：L3 用户画像采用原子候选与分级证据门槛",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0040-streamlined-daily-launcher.md",
+      "title": "ADR-0040：启动面板采用日常入口与高级设置分层",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0041-local-launcher-default-l1-delete.md",
+      "title": "ADR-0041：本机单用户启动面板默认允许 L1 删除",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0042-reviewable-l3-persona-management.md",
+      "title": "ADR-0042：L3 先采用人工候选与可审计生命周期",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0043-explicit-l3-model-preview.md",
+      "title": "ADR-0043：L3 模型能力先作为显式、不落库草稿预览",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0044-unified-persona-profile-projection.md",
+      "title": "ADR-0044：统一用户画像采用原子断言之上的聚合投影",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0045-audited-l3-replacement.md",
+      "title": "ADR-0045：L3 更新采用候选式追加与事务性取代",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0046-l3-consolidation-operation-contract.md",
+      "title": "ADR-0046：L3 低频整理先采用显式操作契约",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0047-round-screen-autonomous-evolution-boundary.md",
+      "title": "ADR-0047：圆屏产品采用受控自主记忆与独立陪伴策略演化",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0048-distinct-policy-review-audit.md",
+      "title": "ADR-0048：自动激活使用独立策略复核身份",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0049-controlled-l3-automatic-activation-executor.md",
+      "title": "ADR-0049：L3 自动生效采用确定性门控执行器",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0050-controlled-l3-answer-context.md",
+      "title": "ADR-0050：L3 画像通过独立开关受控参与回答",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0051-round-screen-natural-memory-commands.md",
+      "title": "ADR-0051：圆屏自然记忆操作采用高精度契约与受限执行",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0052-durable-low-frequency-consolidation-ledger.md",
+      "title": "ADR-0052：低频记忆整理使用持久运行账本与确定性触发护栏",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0053-policy-audited-l2-activation.md",
+      "title": "ADR-0053：L2 自动生效必须使用独立策略身份和受控执行器",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0054-cross-time-l2-to-l3-consolidation.md",
+      "title": "ADR-0054：L2→L3 自动整理只使用当前有效场景和可回溯跨日证据",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0055-explicit-risk-assessment-completeness.md",
+      "title": "ADR-0055：自动记忆生效必须显式证明风险评估已完成",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0056-independent-consolidation-risk-review.md",
+      "title": "ADR-0056：自动整理候选必须经过独立的失败关闭风险复核",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0057-single-owner-consolidation-scheduler.md",
+      "title": "ADR-0057：由常驻 MemoryRuntime 单一拥有低频整理调度器",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0058-round-screen-proactive-delivery-probe.md",
+      "title": "ADR-0058：圆屏主动播报通道技术验证",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0059-proactive-outreach-event-ledger.md",
+      "title": "ADR-0059：主动交流当前投影与只追加事件账本",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0060-deterministic-proactive-contact-policy.md",
+      "title": "ADR-0060：默认关闭的确定性主动联系策略",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0061-persistent-proactive-policy-settings.md",
+      "title": "ADR-0061：主动联系设置随个人数据库持久化",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0062-proactive-outreach-dispatch-orchestrator.md",
+      "title": "ADR-0062：主动交流单次执行编排器",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0063-trusted-proactive-runtime-state.md",
+      "title": "ADR-0063：主动交流可信运行状态汇总",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0064-manual-proactive-delivery-test.md",
+      "title": "ADR-0064：控制台手动主动问候验证",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0065-proactive-outreach-owner-history.md",
+      "title": "ADR-0065：所有者控制台主动交流运行记录",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0066-user-observed-proactive-playback.md",
+      "title": "ADR-0066：以所有者观察补充主动播放证据",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0067-explicit-scheduled-proactive-greeting.md",
+      "title": "ADR-0067：默认关闭的显式定时问候",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0068-owner-approved-proactive-topic-seeds.md",
+      "title": "ADR-0068：所有者明确批准的主动话题素材",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0069-deterministic-approved-topic-scheduling.md",
+      "title": "ADR-0069：确定性投递已批准的记忆话题",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0070-proactive-diagnostics-and-schedule-visibility.md",
+      "title": "ADR-0070：手动诊断与自动追问规则分离",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0071-one-shot-development-schedule-override.md",
+      "title": "ADR-0071：一次性开发定时验证授权",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0072-observed-companion-interaction-outcomes.md",
+      "title": "ADR-0072：只记录可观察的陪伴互动结果",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0073-explicit-proactive-topic-rejection.md",
+      "title": "ADR-0073：圆屏明确拒绝主动话题",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0074-auditable-contact-time-strategy-candidates.md",
+      "title": "ADR-0074：可审计且默认不生效的联系时段候选",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0075-user-initiated-interaction-time-evidence.md",
+      "title": "ADR-0075：用户主动出现时间使用独立、保守的可审计证据",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0076-user-initiated-routine-candidates.md",
+      "title": "ADR-0076：日常交流时段候选与缺席联系策略分离",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0077-offline-routine-absence-safety-replay.md",
+      "title": "ADR-0077：先离线回放日常时段缺席草案，再允许版本化激活",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0078-immutable-absence-strategy-version-drafts.md",
+      "title": "ADR-0078：缺席策略先保存不可变版本草案，不以建档代替激活",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0079-atomic-companion-strategy-selection.md",
+      "title": "ADR-0079：用单一当前指针与只追加事件治理陪伴策略版本",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0080-active-absence-strategy-runtime.md",
+      "title": "ADR-0080：当前缺席策略复用 P4 后台调度与投递链",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0081-structured-proactive-strategy-provenance.md",
+      "title": "ADR-0081：主动问候结构化绑定策略运行来源",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0082-managed-assistant-expression-preferences.md",
+      "title": "ADR-0082：在版本化角色提示词中嵌入可移除的结构化表达偏好",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0083-local-voice-profile-web-playback-and-device-surface.md",
+      "title": "ADR-0083：本机声音方案、网页朗读与圆屏受控能力面",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0084-round-display-state-protocol-and-simulator.md",
+      "title": "ADR-0084：圆屏三维状态协议与浏览器模拟器",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0085-local-model-configuration-observability.md",
+      "title": "ADR-0085：本机控制台显示实际模型配置摘要并保持显式检测",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0086-explicit-l1-exclusion-command.md",
+      "title": "ADR-0086：显式跳过本轮 L1 采用带内容的高精度命令",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0087-explicit-l1-inclusion-command.md",
+      "title": "ADR-0087：显式写入 L1 采用自指陈述与确定性规范化",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0088-owner-explicit-memory-form.md",
+      "title": "ADR-0088：本机所有者明确添加长期事实",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0089-editable-local-model-profiles.md",
+      "title": "ADR-0089：控制台管理本机模型配置档，切换在重启后生效",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0090-audited-upstream-firmware-overlay.md",
+      "title": "ADR-0090：用可审计补丁层维护 SmartRing-Plus 固件改动",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0091-independent-web-and-round-screen-model-profiles.md",
+      "title": "ADR-0091：网页与圆屏使用独立模型档案，并由启动器安全同步",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0092-switchable-round-screen-memory-backends.md",
+      "title": "ADR-0092：圆屏记忆后端可切换，数据与运行边界隔离",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0093-versioned-round-screen-skin-packs.md",
+      "title": "ADR-0093：版本化圆屏皮肤包与本地渲染",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0094-content-free-l1-deletion-audit.md",
+      "title": "ADR-0094：不保留正文的 L1 删除审计",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0095-content-free-owner-memory-quality-events.md",
+      "title": "ADR-0095：不保留正文的所有者记忆质量事件",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0096-owner-answer-memory-feedback.md",
+      "title": "ADR-0096：回答级记忆反馈保存在网页会话旁库",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0097-round-screen-answer-completion-receipt.md",
+      "title": "ADR-0097：圆屏回答完成后通过本机窄接口回执",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0098-explicit-round-screen-memory-feedback.md",
+      "title": "ADR-0098：圆屏明确记忆质量反馈采用保守规则与追加事件",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0099-round-screen-retrieval-evidence-index.md",
+      "title": "ADR-0099：圆屏回答回执保存无正文召回证据索引",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0100-append-only-memory-quality-review-state.md",
+      "title": "ADR-0100：记忆质量样本使用只追加复核状态",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0101-l1-backed-follow-up-candidates.md",
+      "title": "ADR-0101：长期事项先形成 L1 可追溯跟进候选",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0102-one-shot-follow-up-outreach.md",
+      "title": "ADR-0102：显式启用的长期事项复用一次性主动交流账本",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0103-explicit-conversation-follow-up-suggestions.md",
+      "title": "ADR-0103：只从时间明确的对话请求形成跟进候选",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0104-conversation-authorized-one-shot-follow-up.md",
+      "title": "ADR-0104：明确对话请求可直接授权一次性跟进",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0105-explicit-temporary-state-validity.md",
+      "title": "ADR-0105：明确临时状态使用 L1 有效期",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0106-temporary-interaction-mode.md",
+      "title": "ADR-0106：临时互动方式使用可追溯固定指令",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0107-explicit-temporary-interaction-restore.md",
+      "title": "ADR-0107：明确恢复当天默认互动方式",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0108-next-turn-interaction-mode.md",
+      "title": "ADR-0108：进程内一次性下一轮互动方式",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0109-local-round-wallpaper-library.md",
+      "title": "ADR-0109：动态壁纸先进入本机可审计素材库",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0110-a-b-round-wallpaper-delivery.md",
+      "title": "ADR-0110：动态壁纸使用独立 A/B 槽与短时投递 URL",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0111-launcher-runtime-status-snapshot.md",
+      "title": "ADR-0111：启动面板运行状态只读快照",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0112-reviewable-assistant-role-history.md",
+      "title": "ADR-0112：可查看但不直接回滚的助手角色历史",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0113-round-screen-first-audio-timing.md",
+      "title": "ADR-0113：圆屏首句分阶段时序",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0114-bounded-stale-voice-process-recovery.md",
+      "title": "ADR-0114：受限的遗留语音进程清理",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0115-deterministic-round-screen-response-stop.md",
+      "title": "ADR-0115：圆屏当前回答的确定性中止",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0116-natural-speech-interruption-capability-gate.md",
+      "title": "ADR-0116：自然说话打断的能力门槛",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0117-versioned-tts-capability-contract-and-benchmark.md",
+      "title": "ADR-0117：版本化 TTS 能力契约与固定合成测试台",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0118-external-sanotts-node-wasm-adapter.md",
+      "title": "ADR-0118：外部 sanoTTS Node/WASM 快速语音适配器",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0119-persisted-sanotts-speaking-rate.md",
+      "title": "ADR-0119：sanoTTS 受控语速持久化",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0120-react-vad-profile-settings.md",
+      "title": "ADR-0120：React 拾音档位设置",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0121-react-next-start-tts-backend.md",
+      "title": "ADR-0121：React 管理下次启动的圆屏 TTS 后端",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0122-defer-round-screen-l1-extraction.md",
+      "title": "ADR-0122：圆屏模型提取改为回答后受管补写",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0123-isolated-cosyvoice3-buffered-adapter.md",
+      "title": "ADR-0123：隔离的 CosyVoice3 缓冲式语音适配器",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0124-bounded-stale-local-tts-recovery.md",
+      "title": "ADR-0124：受限的遗留本地 TTS 清理",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0125-shared-xiaozhi-config-sequential-refresh.md",
+      "title": "ADR-0125：共享 Xiaozhi 配置的顺序刷新写入",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0126-central-local-configuration.md",
+      "title": "ADR-0126：集中本机配置与小智生成副本",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0126-cosyvoice3-loopback-streaming-bridge.md",
+      "title": "ADR-0126：CosyVoice3 本机分块语音桥",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0127-separate-memory-reset-and-current-database-wipe.md",
+      "title": "ADR-0127：区分长期记忆重置与当前数据库 L0–L3 清除",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0128-auditable-daily-retrieval-scores.md",
+      "title": "ADR-0128：保存日常召回策略与分量分数",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0129-review-only-l1-quality-candidate-inbox.md",
+      "title": "ADR-0129：只读 L1 质量候选收件箱",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0130-owner-confirmed-l1-duplicate-merge.md",
+      "title": "ADR-0130：所有者确认的 L1 重复合并",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0131-conservative-write-time-l1-deduplication.md",
+      "title": "ADR-0131：L1 写入时保守规范化去重",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0132-l1-merge-evidence-ledger.md",
+      "title": "ADR-0132：L1 重复合并的逐条证据账本",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0133-restorable-l1-duplicate-merge.md",
+      "title": "ADR-0133：用追加式状态事件恢复 L1 重复合并",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0134-audit-l2-retrieval-before-semantic-upgrade.md",
+      "title": "ADR-0134：先审计 L2 召回分数，再评估语义升级",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0135-freeze-l2-retrieval-dev-and-holdout.md",
+      "title": "ADR-0135：冻结 L2 召回开发集与留出集",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0136-separate-l2-topical-retrieval-from-answer-support.md",
+      "title": "ADR-0136：分离 L2 主题召回与作答证据充分性",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0137-default-off-l2-sufficiency-shadow.md",
+      "title": "ADR-0137：默认关闭的 L2 证据充分性影子记录",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0138-append-only-owner-review-for-l2-shadow.md",
+      "title": "ADR-0138：L2 影子门控采用整轮、追加式人工复核",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0139-deterministic-l1-extraction-input-gates.md",
+      "title": "ADR-0139：L1 模型提取增加窄范围确定性输入门",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0140-append-only-l1-extraction-attempt-ledger.md",
+      "title": "ADR-0140：日常 L1 提取采用脱敏、追加式尝试账本",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0141-structural-xiaozhi-internal-input-boundary.md",
+      "title": "ADR-0141：按结构化调用来源排除小智内部结束提示",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0142-explicit-recovery-for-failed-l1-extraction.md",
+      "title": "ADR-0142：已有 L0 的失败 L1 提取采用显式单次恢复",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0143-frozen-l1-evidence-sufficiency-before-daily-shadow.md",
+      "title": "ADR-0143：先冻结评估 L1 证据充分性，再接日常影子链路",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0144-default-off-l1-sufficiency-daily-shadow.md",
+      "title": "ADR-0144：默认关闭的日常 L1 证据充分性影子审计",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0145-offline-l1-sufficiency-policy-replay.md",
+      "title": "ADR-0145：先离线回放 L1 充分性策略，不直接启用门控",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0146-exact-owner-labels-for-l1-shadow.md",
+      "title": "ADR-0146：L1 日常影子复核保存精确人工支持集合",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0147-l1-controlled-trial-readiness.md",
+      "title": "ADR-0147：L1 证据门控先评估受控试验就绪度",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0148-exact-owner-labels-for-l2-shadow.md",
+      "title": "ADR-0148：L2 影子复核使用精确场景支持集",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0149-review-only-semantic-l1-relations.md",
+      "title": "ADR-0149：只读的 L1 语义关系发现",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0150-explicit-temporal-fact-history.md",
+      "title": "ADR-0150：只把明确双时间取代链视为事实历史",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0151-conservative-temporal-history-recall.md",
+      "title": "ADR-0151：历史问答只沿当前事实的显式变化链扩展",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0152-persist-temporal-role-in-round-screen-receipts.md",
+      "title": "ADR-0152：圆屏回答回执持久化历史证据角色",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0153-temporal-recall-question-and-snapshot-boundaries.md",
+      "title": "ADR-0153：历史召回复核问句、锚点与读快照",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0154-personal-daily-v1-release-boundary.md",
+      "title": "ADR-0154：个人日用 V1.0 发布边界",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0155-explicit-date-bounded-temporal-recall.md",
+      "title": "ADR-0155：明确日期约束的历史事实召回",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0156-explicit-round-visual-mode-switch.md",
+      "title": "ADR-0156：圆屏动态壁纸与几何皮肤显式切换",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0157-cosyvoice3-reference-cache-and-stream-reset.md",
+      "title": "ADR-0157：CosyVoice3 固定参考预计算与流式步长复位",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0158-authenticated-local-launcher-control.md",
+      "title": "ADR-0158：启动面板受令牌保护的本机控制接口",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0159-cosyvoice-daily-default-and-immediate-launcher-preferences.md",
+      "title": "ADR-0159：CosyVoice 3 日用默认与启动选项即时保存",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0160-cosyvoice-closed-intent-fast-path.md",
+      "title": "ADR-0160：CosyVoice3 封闭寒暄预置语音快速通道",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0161-voice-latency-strategy-and-early-cosy-first-chunk.md",
+      "title": "ADR-0161：语音延迟分层策略与 CosyVoice3 首段提前提交",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0162-cosyvoice-continuous-pcm-frame-alignment.md",
+      "title": "ADR-0162：CosyVoice 连续 PCM 帧对齐",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0163-punctuation-bounded-cosyvoice-playback.md",
+      "title": "ADR-0163：按标点边界连续播放 CosyVoice",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0164-coalesced-punctuation-voice-segments.md",
+      "title": "ADR-0164：合并短标点片段",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0165-segment-audio-inventory-observation.md",
+      "title": "ADR-0165：按 TTS 片段观测可播放音频库存",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0166-cosyvoice-measured-runtime-optimization.md",
+      "title": "ADR-0166：以实测选择 CosyVoice 本地运行优化",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0167-cosyvoice-first-segment-handoff.md",
+      "title": "ADR-0167：首段衔接缺口与日用运行诊断",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0168-cosyvoice-short-opening-continuity.md",
+      "title": "ADR-0168：短开头合并与已就绪片段调度",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0169-cosyvoice-windows-process-qos.md",
+      "title": "ADR-0169：CosyVoice 在 Windows 显式使用 HighQoS",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0170-doubao-realtime-fallback-mode.md",
+      "title": "ADR-0170：独立的豆包实时语音备用模式",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0171-realtime-first-voice-pipeline.md",
+      "title": "ADR-0171：实时优先的圆屏语音链路",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0172-web-search-and-voice-waiting-feedback.md",
+      "title": "ADR-0172：通用联网搜索与语音等待反馈",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0173-auditable-recent-follow-up-reschedule.md",
+      "title": "ADR-0173：最近唯一一次性跟进采用追加式改时",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0174-round-screen-persistent-control-session.md",
+      "title": "ADR-0174：圆屏采音状态与控制连接分离",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0175-user-controlled-proactive-interval.md",
+      "title": "ADR-0175：主动交流采用用户可调周期",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0176-constrained-dynamic-proactive-greetings.md",
+      "title": "ADR-0176：动态主动问候只改写已批准公开播报的话题",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0177-react-local-launcher.md",
+      "title": "ADR-0177：独立本机控制主机与 React 启动面板",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/adr/0178-controlled-cosyvoice-profiles.md",
+      "title": "ADR-0178：受控参考录音与独立声音档案",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "adr"
+      ]
+    },
+    {
+      "path": "docs/architecture/code-health.md",
+      "title": "代码健康检查与渐进重构",
+      "status": "pending",
+      "basis": "已盘点路径与标题，尚无本轮充分证据确定现行用途；保留原文等待任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "architecture"
+      ]
+    },
+    {
+      "path": "docs/architecture/memory-pipeline.md",
+      "title": "V0.1 记忆流水线",
+      "status": "historical",
+      "basis": "保存归档原文或明确版本/发布阶段记录的用途；不按日期判废，不代替当前验收",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "architecture"
+      ]
+    },
+    {
+      "path": "docs/architecture/method-boundary.md",
+      "title": "方法边界与阶段 A 使用说明",
+      "status": "pending",
+      "basis": "已盘点路径与标题，尚无本轮充分证据确定现行用途；保留原文等待任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "architecture"
+      ]
+    },
+    {
+      "path": "docs/architecture/overview.md",
+      "title": "系统架构总览",
+      "status": "current",
+      "basis": "按 ROADMAP、恢复/工程约定及本轮任务确定的维护入口；仅限定对应事实范围，语义核对另列",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "architecture"
+      ]
+    },
+    {
+      "path": "docs/architecture/react-chat-migration.md",
+      "title": "React 控制台渐进迁移清单",
+      "status": "pending",
+      "basis": "已盘点路径与标题，尚无本轮充分证据确定现行用途；保留原文等待任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "architecture"
+      ]
+    },
+    {
+      "path": "docs/architecture/repository-structure.md",
+      "title": "仓库结构约定",
+      "status": "current",
+      "basis": "按 ROADMAP、恢复/工程约定及本轮任务确定的维护入口；仅限定对应事实范围，语义核对另列",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "architecture"
+      ]
+    },
+    {
+      "path": "docs/architecture/round-display-state-protocol.md",
+      "title": "SmartRing-Plus 圆屏状态协议",
+      "status": "current",
+      "basis": "按 ROADMAP、恢复/工程约定及本轮任务确定的维护入口；仅限定对应事实范围，语义核对另列",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "architecture"
+      ]
+    },
+    {
+      "path": "docs/architecture/round-screen-skins.md",
+      "title": "圆屏皮肤架构与流程",
+      "status": "pending",
+      "basis": "已盘点路径与标题，尚无本轮充分证据确定现行用途；保留原文等待任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "architecture"
+      ]
+    },
+    {
+      "path": "docs/architecture/technology-strategy.md",
+      "title": "技术策略与技术雷达",
+      "status": "pending",
+      "basis": "已盘点路径与标题，尚无本轮充分证据确定现行用途；保留原文等待任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "architecture"
+      ]
+    },
+    {
+      "path": "docs/architecture/visual-system.md",
+      "title": "LongMemory 控制台视觉系统",
+      "status": "current",
+      "basis": "按 ROADMAP、恢复/工程约定及本轮任务确定的维护入口；仅限定对应事实范围，语义核对另列",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "architecture"
+      ]
+    },
+    {
+      "path": "docs/architecture/workflows.md",
+      "title": "系统运行流程",
+      "status": "current",
+      "basis": "按 ROADMAP、恢复/工程约定及本轮任务确定的维护入口；仅限定对应事实范围，语义核对另列",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "architecture"
+      ]
+    },
+    {
+      "path": "docs/deployment/README.md",
+      "title": "部署文档",
+      "status": "pending",
+      "basis": "已盘点路径与标题，尚无本轮充分证据确定现行用途；保留原文等待任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "deployment"
+      ]
+    },
+    {
+      "path": "docs/deployment/device-control-probe.md",
+      "title": "圆屏音量通道：先验证，后做控制台",
+      "status": "pending",
+      "basis": "已盘点路径与标题，尚无本轮充分证据确定现行用途；保留原文等待任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "deployment"
+      ]
+    },
+    {
+      "path": "docs/deployment/experiment-console.md",
+      "title": "实验中心：运行、查看与人工复核",
+      "status": "pending",
+      "basis": "已盘点路径与标题，尚无本轮充分证据确定现行用途；保留原文等待任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "deployment"
+      ]
+    },
+    {
+      "path": "docs/deployment/local-console.md",
+      "title": "本机控制台：设备与状态、记忆管理、文字聊天",
+      "status": "pending",
+      "basis": "已盘点路径与标题，尚无本轮充分证据确定现行用途；保留原文等待任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "deployment"
+      ]
+    },
+    {
+      "path": "docs/deployment/xiaozhi-longmemory-demo.md",
+      "title": "圆屏接入 LongMemory：七步操作",
+      "status": "pending",
+      "basis": "已盘点路径与标题，尚无本轮充分证据确定现行用途；保留原文等待任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "deployment"
+      ]
+    },
+    {
+      "path": "docs/development/campus-model-validation.md",
+      "title": "校园网模型验证：离线开发与真实调用分开",
+      "status": "pending",
+      "basis": "已盘点路径与标题，尚无本轮充分证据确定现行用途；保留原文等待任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "development"
+      ]
+    },
+    {
+      "path": "docs/development/configuration.md",
+      "title": "本机配置集中管理",
+      "status": "current",
+      "basis": "按 ROADMAP、恢复/工程约定及本轮任务确定的维护入口；仅限定对应事实范围，语义核对另列",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "development"
+      ]
+    },
+    {
+      "path": "docs/development/continuous-integration.md",
+      "title": "自动化质量检查",
+      "status": "current",
+      "basis": "按 ROADMAP、恢复/工程约定及本轮任务确定的维护入口；仅限定对应事实范围，语义核对另列",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "development"
+      ]
+    },
+    {
+      "path": "docs/development/documentation-maintenance.md",
+      "title": "文档维护机制",
+      "status": "current",
+      "basis": "按 ROADMAP、恢复/工程约定及本轮任务确定的维护入口；仅限定对应事实范围，语义核对另列",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-14",
+        "scope": "本轮新增导航与机制：清单入口、命令行为、文件归属和验证边界；所链接存量文档的语义不在此范围",
+        "evidence": "14 项合成测试；skill quick_validate；新增文档严格本地链接检查。见 docs/development/parallel/A-20261014.md"
+      },
+      "tags": [
+        "development"
+      ]
+    },
+    {
+      "path": "docs/development/frontend-structure.md",
+      "title": "前端源码组织",
+      "status": "current",
+      "basis": "按 ROADMAP、恢复/工程约定及本轮任务确定的维护入口；仅限定对应事实范围，语义核对另列",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "development"
+      ]
+    },
+    {
+      "path": "docs/development/launcher-contract.md",
+      "title": "本机启动器契约与观察",
+      "status": "current",
+      "basis": "按 ROADMAP、恢复/工程约定及本轮任务确定的维护入口；仅限定对应事实范围，语义核对另列",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "development"
+      ]
+    },
+    {
+      "path": "docs/development/local-assets.md",
+      "title": "本地配置与历史资料",
+      "status": "current",
+      "basis": "按 ROADMAP、恢复/工程约定及本轮任务确定的维护入口；仅限定对应事实范围，语义核对另列",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "development"
+      ]
+    },
+    {
+      "path": "docs/development/observability-contract.md",
+      "title": "安全故障摘要契约",
+      "status": "current",
+      "basis": "本轮明确交付的观察契约",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "隔离整合"
+      ]
+    },
+    {
+      "path": "docs/development/parallel/A-20261014.md",
+      "title": "A：文档维护机制交付记录",
+      "status": "current",
+      "basis": "本轮 A 独立任务的交付与验证记录；只证明文档机制检查，不代替业务/模型/设备验收",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-14",
+        "scope": "本轮任务所属文件与文档机制的实际检查结果；存量文档语义不在此范围",
+        "evidence": "14 项合成测试、quick_validate、291 份 Markdown 只读检查与前后 SHA-256 比较"
+      },
+      "tags": [
+        "parallel"
+      ]
+    },
+    {
+      "path": "docs/development/parallel/B-20261014.md",
+      "title": "B：现行指南、架构与协作规则",
+      "status": "pending",
+      "basis": "本轮隔离交付记录；前端完整验收和主项目合入另行登记",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "隔离整合"
+      ]
+    },
+    {
+      "path": "docs/development/parallel/C-20261014.md",
+      "title": "C：页面外壳、聊天与总览",
+      "status": "pending",
+      "basis": "本轮隔离交付记录；前端完整验收和主项目合入另行登记",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "隔离整合"
+      ]
+    },
+    {
+      "path": "docs/development/parallel/D-20261014.md",
+      "title": "D：设置与圆屏工作区优化",
+      "status": "pending",
+      "basis": "本轮隔离交付记录；前端完整验收和主项目合入另行登记",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "隔离整合"
+      ]
+    },
+    {
+      "path": "docs/development/parallel/E-20261014.md",
+      "title": "E：记忆、设备与实验工作区",
+      "status": "pending",
+      "basis": "本轮隔离交付记录；前端完整验收和主项目合入另行登记",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "隔离整合"
+      ]
+    },
+    {
+      "path": "docs/development/parallel/F-20261014.md",
+      "title": "F：启动面板与共享数码光效",
+      "status": "pending",
+      "basis": "本轮隔离交付记录；前端完整验收和主项目合入另行登记",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "隔离整合"
+      ]
+    },
+    {
+      "path": "docs/development/parallel/G-20261014.md",
+      "title": "G 独立会话：契约与可观测性",
+      "status": "pending",
+      "basis": "本轮隔离交付记录；前端完整验收和主项目合入另行登记",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "隔离整合"
+      ]
+    },
+    {
+      "path": "docs/development/parallel/J-20261014.md",
+      "title": "J：隔离整合与接口验收",
+      "status": "pending",
+      "basis": "本轮隔离交付记录；前端完整验收和主项目合入另行登记",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "隔离整合"
+      ]
+    },
+    {
+      "path": "docs/development/setup.md",
+      "title": "开发环境",
+      "status": "pending",
+      "basis": "已盘点路径与标题，尚无本轮充分证据确定现行用途；保留原文等待任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "development"
+      ]
+    },
+    {
+      "path": "docs/development/test-artifacts.md",
+      "title": "测试产物管理",
+      "status": "current",
+      "basis": "按 ROADMAP、恢复/工程约定及本轮任务确定的维护入口；仅限定对应事实范围，语义核对另列",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "development"
+      ]
+    },
+    {
+      "path": "docs/development/troubleshooting.md",
+      "title": "已确认故障记录",
+      "status": "pending",
+      "basis": "已盘点路径与标题，尚无本轮充分证据确定现行用途；保留原文等待任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "development"
+      ]
+    },
+    {
+      "path": "docs/development/并行优化-20261014.md",
+      "title": "独立会话并行优化任务书",
+      "status": "pending",
+      "basis": "已盘点路径与标题，尚无本轮充分证据确定现行用途；保留原文等待任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "development"
+      ]
+    },
+    {
+      "path": "docs/development/界面与交互优化-20261014.md",
+      "title": "界面与交互优化进度",
+      "status": "pending",
+      "basis": "已盘点路径与标题，尚无本轮充分证据确定现行用途；保留原文等待任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "development"
+      ]
+    },
+    {
+      "path": "docs/guides/L2生活场景测试.md",
+      "title": "L2 生活场景合成测试指南",
+      "status": "pending",
+      "basis": "已盘点路径与标题，尚无本轮充分证据确定现行用途；保留原文等待任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "guides"
+      ]
+    },
+    {
+      "path": "docs/guides/L3用户画像测试.md",
+      "title": "L3 用户画像测试指南",
+      "status": "pending",
+      "basis": "已盘点路径与标题，尚无本轮充分证据确定现行用途；保留原文等待任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "guides"
+      ]
+    },
+    {
+      "path": "docs/guides/React启动面板.md",
+      "title": "React 启动面板",
+      "status": "current",
+      "basis": "按 ROADMAP、恢复/工程约定及本轮任务确定的维护入口；仅限定对应事实范围，语义核对另列",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "guides"
+      ]
+    },
+    {
+      "path": "docs/guides/React聊天页.md",
+      "title": "React 控制台体验与构建",
+      "status": "pending",
+      "basis": "已盘点路径与标题，尚无本轮充分证据确定现行用途；保留原文等待任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "guides"
+      ]
+    },
+    {
+      "path": "docs/guides/VoxCPM2独立试听.md",
+      "title": "VoxCPM2 独立试听",
+      "status": "pending",
+      "basis": "已盘点路径与标题，尚无本轮充分证据确定现行用途；保留原文等待任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "guides"
+      ]
+    },
+    {
+      "path": "docs/guides/round-wallpaper-library.md",
+      "title": "动态壁纸素材库使用说明",
+      "status": "pending",
+      "basis": "已盘点路径与标题，尚无本轮充分证据确定现行用途；保留原文等待任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "guides"
+      ]
+    },
+    {
+      "path": "docs/guides/tts-benchmark.md",
+      "title": "TTS 测试台使用说明",
+      "status": "pending",
+      "basis": "已盘点路径与标题，尚无本轮充分证据确定现行用途；保留原文等待任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "guides"
+      ]
+    },
+    {
+      "path": "docs/guides/v1-rc1-owner-test-script.md",
+      "title": "V1.0-RC1 所有者真机验收脚本",
+      "status": "pending",
+      "basis": "已盘点路径与标题，尚无本轮充分证据确定现行用途；保留原文等待任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "guides"
+      ]
+    },
+    {
+      "path": "docs/guides/使用说明.md",
+      "title": "LongMemory 使用说明：启动命令与网页操作",
+      "status": "current",
+      "basis": "按 ROADMAP、恢复/工程约定及本轮任务确定的维护入口；仅限定对应事实范围，语义核对另列",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "guides"
+      ]
+    },
+    {
+      "path": "docs/guides/助手角色设置.md",
+      "title": "助手角色设置",
+      "status": "current",
+      "basis": "按 ROADMAP、恢复/工程约定及本轮任务确定的维护入口；仅限定对应事实范围，语义核对另列",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "guides"
+      ]
+    },
+    {
+      "path": "docs/guides/参考声音与克隆.md",
+      "title": "参考声音与克隆",
+      "status": "current",
+      "basis": "按 ROADMAP、恢复/工程约定及本轮任务确定的维护入口；仅限定对应事实范围，语义核对另列",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "guides"
+      ]
+    },
+    {
+      "path": "docs/guides/圆屏实时优先.md",
+      "title": "圆屏实时优先",
+      "status": "pending",
+      "basis": "已盘点路径与标题，尚无本轮充分证据确定现行用途；保留原文等待任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "guides"
+      ]
+    },
+    {
+      "path": "docs/guides/圆屏聊天体验脚本.md",
+      "title": "圆屏聊天体验脚本：虚拟人物照念版",
+      "status": "pending",
+      "basis": "已盘点路径与标题，尚无本轮充分证据确定现行用途；保留原文等待任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "guides"
+      ]
+    },
+    {
+      "path": "docs/guides/圆屏联网与等待反馈.md",
+      "title": "圆屏联网与等待反馈",
+      "status": "pending",
+      "basis": "已盘点路径与标题，尚无本轮充分证据确定现行用途；保留原文等待任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "guides"
+      ]
+    },
+    {
+      "path": "docs/guides/圆屏记忆后端切换.md",
+      "title": "圆屏记忆后端切换",
+      "status": "pending",
+      "basis": "已盘点路径与标题，尚无本轮充分证据确定现行用途；保留原文等待任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "guides"
+      ]
+    },
+    {
+      "path": "docs/guides/声音设置.md",
+      "title": "声音设置",
+      "status": "pending",
+      "basis": "已盘点路径与标题，尚无本轮充分证据确定现行用途；保留原文等待任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "guides"
+      ]
+    },
+    {
+      "path": "docs/guides/外观设置.md",
+      "title": "聊天网页外观",
+      "status": "pending",
+      "basis": "已盘点路径与标题，尚无本轮充分证据确定现行用途；保留原文等待任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "guides"
+      ]
+    },
+    {
+      "path": "docs/guides/恢复固件编译-20261014.md",
+      "title": "智慧圆屏：恢复固件编译环境",
+      "status": "current",
+      "basis": "按 ROADMAP、恢复/工程约定及本轮任务确定的维护入口；仅限定对应事实范围，语义核对另列",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "guides"
+      ]
+    },
+    {
+      "path": "docs/guides/恢复文字与记忆-20261013.md",
+      "title": "智慧圆屏：文字与记忆恢复",
+      "status": "current",
+      "basis": "按 ROADMAP、恢复/工程约定及本轮任务确定的维护入口；仅限定对应事实范围，语义核对另列",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "guides"
+      ]
+    },
+    {
+      "path": "docs/guides/恢复语音-20261013.md",
+      "title": "智慧圆屏：恢复原日用语音",
+      "status": "current",
+      "basis": "按 ROADMAP、恢复/工程约定及本轮任务确定的维护入口；仅限定对应事实范围，语义核对另列",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "guides"
+      ]
+    },
+    {
+      "path": "docs/guides/数据库恢复演练.md",
+      "title": "数据库一致性备份与恢复演练",
+      "status": "pending",
+      "basis": "已盘点路径与标题，尚无本轮充分证据确定现行用途；保留原文等待任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "guides"
+      ]
+    },
+    {
+      "path": "docs/guides/本机目录与依赖.md",
+      "title": "本机目录与依赖",
+      "status": "current",
+      "basis": "按 ROADMAP、恢复/工程约定及本轮任务确定的维护入口；仅限定对应事实范围，语义核对另列",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "guides"
+      ]
+    },
+    {
+      "path": "docs/guides/模型配置分流.md",
+      "title": "学校模型与官方 DeepSeek 配置分流",
+      "status": "pending",
+      "basis": "已盘点路径与标题，尚无本轮充分证据确定现行用途；保留原文等待任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "guides"
+      ]
+    },
+    {
+      "path": "docs/guides/统一启动.md",
+      "title": "统一启动：不用自己开两个终端",
+      "status": "pending",
+      "basis": "已盘点路径与标题，尚无本轮充分证据确定现行用途；保留原文等待任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "guides"
+      ]
+    },
+    {
+      "path": "docs/guides/聊天会话.md",
+      "title": "聊天会话：关闭后继续聊",
+      "status": "pending",
+      "basis": "已盘点路径与标题，尚无本轮充分证据确定现行用途；保留原文等待任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "guides"
+      ]
+    },
+    {
+      "path": "docs/guides/豆包实时语音备用模式.md",
+      "title": "豆包实时语音备用模式",
+      "status": "pending",
+      "basis": "已盘点路径与标题，尚无本轮充分证据确定现行用途；保留原文等待任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "guides"
+      ]
+    },
+    {
+      "path": "docs/guides/重装系统与重建环境.md",
+      "title": "重装系统：保留代码、数据和开发经验，重建环境与模型",
+      "status": "pending",
+      "basis": "已盘点路径与标题，尚无本轮充分证据确定现行用途；保留原文等待任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "guides"
+      ]
+    },
+    {
+      "path": "docs/hardware/README.md",
+      "title": "硬件记录",
+      "status": "pending",
+      "basis": "已盘点路径与标题，尚无本轮充分证据确定现行用途；保留原文等待任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "hardware"
+      ]
+    },
+    {
+      "path": "docs/history/README-20261014.md",
+      "title": "智慧圆屏",
+      "status": "historical",
+      "basis": "保存归档原文或明确版本/发布阶段记录的用途；不按日期判废，不代替当前验收",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "history"
+      ]
+    },
+    {
+      "path": "docs/history/README.md",
+      "title": "项目历史档案",
+      "status": "current",
+      "basis": "按 ROADMAP、恢复/工程约定及本轮任务确定的维护入口；仅限定对应事实范围，语义核对另列",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "history"
+      ]
+    },
+    {
+      "path": "docs/history/ROADMAP-through-20261014.md",
+      "title": "历史 ROADMAP 快照（截至 2026-10-14 更新前）",
+      "status": "historical",
+      "basis": "保存归档原文或明确版本/发布阶段记录的用途；不按日期判废，不代替当前验收",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "history"
+      ]
+    },
+    {
+      "path": "docs/history/current-docs-before-20261014/AGENTS.md",
+      "title": "智慧圆屏项目协作规则",
+      "status": "historical",
+      "basis": "B保存的完整历史快照，来源清单可逆向还原",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "隔离整合"
+      ]
+    },
+    {
+      "path": "docs/history/current-docs-before-20261014/README.md",
+      "title": "现行文档整理前快照",
+      "status": "historical",
+      "basis": "B保存的完整历史快照，来源清单可逆向还原",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "隔离整合"
+      ]
+    },
+    {
+      "path": "docs/history/current-docs-before-20261014/docs/architecture/overview.md",
+      "title": "系统架构总览",
+      "status": "historical",
+      "basis": "B保存的完整历史快照，来源清单可逆向还原",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "隔离整合"
+      ]
+    },
+    {
+      "path": "docs/history/current-docs-before-20261014/docs/architecture/repository-structure.md",
+      "title": "仓库结构约定",
+      "status": "historical",
+      "basis": "B保存的完整历史快照，来源清单可逆向还原",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "隔离整合"
+      ]
+    },
+    {
+      "path": "docs/history/current-docs-before-20261014/docs/architecture/workflows.md",
+      "title": "系统运行流程",
+      "status": "historical",
+      "basis": "B保存的完整历史快照，来源清单可逆向还原",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "隔离整合"
+      ]
+    },
+    {
+      "path": "docs/history/current-docs-before-20261014/docs/guides/使用说明.md",
+      "title": "LongMemory 使用说明：启动命令与网页操作",
+      "status": "historical",
+      "basis": "B保存的完整历史快照，来源清单可逆向还原",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "隔离整合"
+      ]
+    },
+    {
+      "path": "docs/history/current-docs-before-20261014/docs/guides/声音设置.md",
+      "title": "声音设置",
+      "status": "historical",
+      "basis": "B保存的完整历史快照，来源清单可逆向还原",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "隔离整合"
+      ]
+    },
+    {
+      "path": "docs/history/current-docs-before-20261014/docs/guides/本机目录与依赖.md",
+      "title": "本机目录与依赖",
+      "status": "historical",
+      "basis": "B保存的完整历史快照，来源清单可逆向还原",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "隔离整合"
+      ]
+    },
+    {
+      "path": "docs/history/current-docs-before-20261014/docs/guides/统一启动.md",
+      "title": "统一启动：不用自己开两个终端",
+      "status": "historical",
+      "basis": "B保存的完整历史快照，来源清单可逆向还原",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "隔离整合"
+      ]
+    },
+    {
+      "path": "docs/releases/CHANGELOG-through-20261014.md",
+      "title": "Changelog",
+      "status": "historical",
+      "basis": "保存归档原文或明确版本/发布阶段记录的用途；不按日期判废，不代替当前验收",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "releases"
+      ]
+    },
+    {
+      "path": "docs/releases/v1-followup-audit-2026-09-15.md",
+      "title": "V1 主线接续审计：语音收尾后的剩余证据",
+      "status": "historical",
+      "basis": "保存归档原文或明确版本/发布阶段记录的用途；不按日期判废，不代替当前验收",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "releases"
+      ]
+    },
+    {
+      "path": "docs/releases/v1-rc1-observation.md",
+      "title": "V1.0-RC1 日用观察协议",
+      "status": "historical",
+      "basis": "保存归档原文或明确版本/发布阶段记录的用途；不按日期判废，不代替当前验收",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "releases"
+      ]
+    },
+    {
+      "path": "docs/releases/v1-rc1-readiness.md",
+      "title": "V1.0-RC1 就绪记录",
+      "status": "historical",
+      "basis": "保存归档原文或明确版本/发布阶段记录的用途；不按日期判废，不代替当前验收",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "releases"
+      ]
+    },
+    {
+      "path": "docs/releases/voice-stage-handoff-2026-09-15.md",
+      "title": "语音阶段收尾与主会话交接",
+      "status": "historical",
+      "basis": "保存归档原文或明确版本/发布阶段记录的用途；不按日期判废，不代替当前验收",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "releases"
+      ]
+    },
+    {
+      "path": "docs/requirements/companion-product.md",
+      "title": "日常陪伴产品：范围与分阶段验收",
+      "status": "pending",
+      "basis": "已盘点路径与标题，尚无本轮充分证据确定现行用途；保留原文等待任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "requirements"
+      ]
+    },
+    {
+      "path": "docs/requirements/l2-scenario-memory.md",
+      "title": "L2 场景记忆：第一版需求与验收",
+      "status": "pending",
+      "basis": "已盘点路径与标题，尚无本轮充分证据确定现行用途；保留原文等待任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "requirements"
+      ]
+    },
+    {
+      "path": "docs/requirements/l3-user-persona.md",
+      "title": "L3 用户画像：第一版验收需求",
+      "status": "pending",
+      "basis": "已盘点路径与标题，尚无本轮充分证据确定现行用途；保留原文等待任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "requirements"
+      ]
+    },
+    {
+      "path": "docs/requirements/local-console.md",
+      "title": "本机控制台里程碑",
+      "status": "pending",
+      "basis": "已盘点路径与标题，尚无本轮充分证据确定现行用途；保留原文等待任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "requirements"
+      ]
+    },
+    {
+      "path": "docs/requirements/p2-personalization.md",
+      "title": "P2 最小实现范围与设置归属",
+      "status": "pending",
+      "basis": "已盘点路径与标题，尚无本轮充分证据确定现行用途；保留原文等待任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "requirements"
+      ]
+    },
+    {
+      "path": "docs/requirements/product-capability-map.md",
+      "title": "LongMemory 陪伴助手产品能力地图",
+      "status": "pending",
+      "basis": "已盘点路径与标题，尚无本轮充分证据确定现行用途；保留原文等待任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "requirements"
+      ]
+    },
+    {
+      "path": "docs/requirements/research-platform.md",
+      "title": "可替换方法研究平台：分阶段验收",
+      "status": "pending",
+      "basis": "已盘点路径与标题，尚无本轮充分证据确定现行用途；保留原文等待任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "requirements"
+      ]
+    },
+    {
+      "path": "docs/requirements/round-screen-dynamic-wallpaper.md",
+      "title": "SmartRing-Plus 圆屏动态壁纸需求",
+      "status": "pending",
+      "basis": "已盘点路径与标题，尚无本轮充分证据确定现行用途；保留原文等待任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "requirements"
+      ]
+    },
+    {
+      "path": "docs/requirements/temporal-date-recall.md",
+      "title": "明确日期历史召回",
+      "status": "pending",
+      "basis": "已盘点路径与标题，尚无本轮充分证据确定现行用途；保留原文等待任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "requirements"
+      ]
+    },
+    {
+      "path": "docs/requirements/temporal-recall-boundaries.md",
+      "title": "历史召回边界校准",
+      "status": "pending",
+      "basis": "已盘点路径与标题，尚无本轮充分证据确定现行用途；保留原文等待任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "requirements"
+      ]
+    },
+    {
+      "path": "docs/requirements/v0.1.md",
+      "title": "V0.1 需求与完成标准",
+      "status": "historical",
+      "basis": "保存归档原文或明确版本/发布阶段记录的用途；不按日期判废，不代替当前验收",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "requirements"
+      ]
+    },
+    {
+      "path": "docs/requirements/v1-personal-companion.md",
+      "title": "V1.0 个人日用陪伴助手：范围与发布验收",
+      "status": "pending",
+      "basis": "已盘点路径与标题，尚无本轮充分证据确定现行用途；保留原文等待任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "requirements"
+      ]
+    },
+    {
+      "path": "docs/requirements/自定义功能清单.md",
+      "title": "陪伴助手：自定义功能清单",
+      "status": "pending",
+      "basis": "已盘点路径与标题，尚无本轮充分证据确定现行用途；保留原文等待任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "requirements"
+      ]
+    },
+    {
+      "path": "docs/research/agent-memory-model-review-2026-09-16.md",
+      "title": "Agent 记忆模型复盘与 LongMemory 后续输入",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "research"
+      ]
+    },
+    {
+      "path": "docs/research/baseline-plan.md",
+      "title": "Baseline 计划",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "research"
+      ]
+    },
+    {
+      "path": "docs/research/comparison-dev-review-2026-09-03.md",
+      "title": "首次真实模型比较复核（2026-09-03）",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "research"
+      ]
+    },
+    {
+      "path": "docs/research/cosyvoice-runtime-optimization-2026-09-14.md",
+      "title": "CosyVoice 运行优化实测（2026-09-14）",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "research"
+      ]
+    },
+    {
+      "path": "docs/research/cosyvoice-short-opening-2026-09-15.md",
+      "title": "首小句后停顿：分段对照与验证",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "research"
+      ]
+    },
+    {
+      "path": "docs/research/cosyvoice-stream-underflow-2026-09-14.md",
+      "title": "CosyVoice3 圆屏播放欠载定位",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "research"
+      ]
+    },
+    {
+      "path": "docs/research/cosyvoice-streaming-revalidation-2026-09-15.md",
+      "title": "Windows 调度修复后的模型内部流式复验",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "research"
+      ]
+    },
+    {
+      "path": "docs/research/cosyvoice-windows-qos-2026-09-15.md",
+      "title": "日用 CosyVoice 额外变慢：Windows QoS 可逆对照",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "research"
+      ]
+    },
+    {
+      "path": "docs/research/d1-extraction-review-2026-09-03.md",
+      "title": "D1 首次真实提取实验复核（2026-09-03）",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "research"
+      ]
+    },
+    {
+      "path": "docs/research/doubao-realtime-offline-validation-2026-09-15.md",
+      "title": "豆包备用模式离线验证记录",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "research"
+      ]
+    },
+    {
+      "path": "docs/research/evaluation-plan.md",
+      "title": "V0.1 评估计划",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "research"
+      ]
+    },
+    {
+      "path": "docs/research/huggingface-speech-to-speech-assessment-2026-09-14.md",
+      "title": "Hugging Face speech-to-speech 对 LongMemory 的参考评估",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "research"
+      ]
+    },
+    {
+      "path": "docs/research/l1-evidence-sufficiency-baseline-2026-09-13.md",
+      "title": "L1 证据充分性开发基线（2026-09-13）",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "research"
+      ]
+    },
+    {
+      "path": "docs/research/l1-extraction-dev-holdout-v2-2026-09-13.md",
+      "title": "L1 提取开发/留出冻结基准 V2（2026-09-13）",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "research"
+      ]
+    },
+    {
+      "path": "docs/research/l1-semantic-pairing-baseline-2026-09-13.md",
+      "title": "L1 语义配对首轮开发基线（2026-09-13）",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "research"
+      ]
+    },
+    {
+      "path": "docs/research/l2-retrieval-dev-holdout-v2-2026-09-13.md",
+      "title": "L2 场景召回 V2 开发/留出协议（2026-09-13）",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "research"
+      ]
+    },
+    {
+      "path": "docs/research/l2-retrieval-synthetic-baseline-2026-09-13.md",
+      "title": "L2 场景召回合成基线（2026-09-13）",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "research"
+      ]
+    },
+    {
+      "path": "docs/research/method-comparison.md",
+      "title": "最小跨方法比较：运行与读报告",
+      "status": "current",
+      "basis": "按 ROADMAP、恢复/工程约定及本轮任务确定的维护入口；仅限定对应事实范围，语义核对另列",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "research"
+      ]
+    },
+    {
+      "path": "docs/research/post-v1-product-directions-2026-09-16.md",
+      "title": "V1 后产品方向讨论记录",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "research"
+      ]
+    },
+    {
+      "path": "docs/research/research-questions.md",
+      "title": "研究问题",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "research"
+      ]
+    },
+    {
+      "path": "docs/research/retrieval-answer-review-2026-09-03.md",
+      "title": "冻结检索后的首次真实回答复核",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "research"
+      ]
+    },
+    {
+      "path": "docs/research/retrieval-threshold-replay-2026-09-13.md",
+      "title": "冻结检索阈值回放记录（2026-09-13）",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "research"
+      ]
+    },
+    {
+      "path": "docs/research/round-display-firmware-audit-2026-09-08.md",
+      "title": "SmartRing-Plus 圆屏固件能力审计（2026-09-08）",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "research"
+      ]
+    },
+    {
+      "path": "docs/research/semantic-retrieval-review-2026-09-03.md",
+      "title": "首次真实本地语义检索复核",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "research"
+      ]
+    },
+    {
+      "path": "docs/research/semantic-retrieval.md",
+      "title": "冻结 L1 的本地检索消融",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "research"
+      ]
+    },
+    {
+      "path": "docs/research/voice-realtime-first-2026-09-15.md",
+      "title": "圆屏实时优先优化：2026-09-15 验证记录",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "research"
+      ]
+    },
+    {
+      "path": "docs/research/web-search-voice-feedback-2026-09-15.md",
+      "title": "通用联网与等待反馈验证",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "research"
+      ]
+    },
+    {
+      "path": "docs/third_party/elysia-skill-review.md",
+      "title": "elysia.skill 本地审查及改编记录",
+      "status": "reference",
+      "basis": "设计决策、研究或第三方资料的检索分组；语义与适用边界待按任务核对",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "third_party"
+      ]
+    },
+    {
+      "path": "docs/versions/v0.1.md",
+      "title": "V0.1 版本记录",
+      "status": "historical",
+      "basis": "保存归档原文或明确版本/发布阶段记录的用途；不按日期判废，不代替当前验收",
+      "review": {
+        "state": "pending"
+      },
+      "tags": [
+        "versions"
+      ]
+    }
+  ],
+  "integration_sources": {
+    "date": "2026-10-14",
+    "baseline_commit": "042ad05d9f834dd4969cbd0b938a76c716a454fa",
+    "report": "docs/development/parallel/J-20261014.md"
+  }
+}

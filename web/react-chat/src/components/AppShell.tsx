@@ -1,6 +1,7 @@
-import type {ReactNode} from 'react';
-import {Link} from 'react-router-dom';
+import {useEffect, useId, useState, type ReactNode} from 'react';
+import {Link, useLocation} from 'react-router-dom';
 import {OrbitMark, StatusIndicator} from './SciFiSurface';
+import {AmbientMotionToggle} from './DigitalAtmosphere';
 
 type Page = 'overview' | 'device' | 'display' | 'chat' | 'memories' | 'quality' | 'scenarios' | 'personas' | 'settings' | 'experiments';
 
@@ -29,28 +30,39 @@ function NavItem({item, active}: {item: typeof NAV_GROUPS[number]['items'][numbe
   const content = <><span className="nav-icon" aria-hidden="true">{item.icon}</span><span className="nav-copy">
     <span>{item.label}</span><small>{item.description}</small>
   </span></>;
-  return active
-    ? <div className="console-nav-link active" aria-current="page">{content}</div>
-    : <Link className="console-nav-link" aria-label={item.label} to={item.to}>{content}</Link>;
+  return <Link className={`console-nav-link${active ? ' active' : ''}`} aria-current={active ? 'page' : undefined}
+    aria-label={item.label} to={item.to}>{content}</Link>;
 }
 
 /** 控制台各 React 页面共享的外壳；页面只负责自己的业务控件。 */
-export function AppShell({subtitle, className = '', sidebar, children}: {
+export function AppShell({subtitle, className = '', layout = 'page', sidebar, children}: {
   subtitle: string;
   className?: string;
+  layout?: 'page' | 'workspace';
   sidebar: ReactNode;
   children: ReactNode;
 }) {
-  return <div className={`shell ${className}`.trim()}>
+  const [navOpen, setNavOpen] = useState(false);
+  const navigationId = useId();
+  const location = useLocation();
+  // 保留普通页面的滚动方式；仅聊天显式请求视口内工作区。
+  useEffect(() => setNavOpen(false), [location.pathname, location.search]);
+  return <div className={`shell workspace-shell layout-${layout} ${className}`.trim()}>
     <a className="skip-link" href="#main-content">跳到主要内容</a>
-    <aside><div className="sidebar-inner">
+    <aside className={`shell-sidebar${navOpen ? ' nav-open' : ''}`}><div className="sidebar-inner">
       <div className="brand-block"><Link aria-label="智慧圆屏" className="brand" to="/overview">
         <OrbitMark/><span className="brand-copy"><strong>智慧圆屏</strong><small>个人陪伴控制台</small></span>
       </Link><p>{subtitle}</p></div>
-      {sidebar}
-      <div className="sidebar-footer"><StatusIndicator>本机个人空间</StatusIndicator></div>
+      <button type="button" className="shell-nav-toggle" aria-expanded={navOpen} aria-controls={navigationId}
+        onClick={() => setNavOpen(open => !open)}>{navOpen ? '收起导航' : '展开导航'}</button>
+      <div id={navigationId} className="shell-navigation" onClick={event => {
+        if ((event.target as HTMLElement).closest('a')) setNavOpen(false);
+      }} onKeyDown={event => {
+        if (event.key === 'Escape') {setNavOpen(false); event.currentTarget.parentElement?.querySelector<HTMLButtonElement>('.shell-nav-toggle')?.focus();}
+      }}>{sidebar}</div>
+      <div className="sidebar-footer"><AmbientMotionToggle/><StatusIndicator>本机个人空间</StatusIndicator></div>
     </div></aside>
-    <main id="main-content"><div className="shell-content">{children}</div></main>
+    <main id="main-content" tabIndex={-1}><div className="shell-content">{children}</div></main>
   </div>;
 }
 

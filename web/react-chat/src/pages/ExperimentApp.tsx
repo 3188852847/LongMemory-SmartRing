@@ -1,3 +1,5 @@
+import {DataWorkspace, useWorkspaceParam} from '../features/data-workspace/DataWorkspace';
+import {useUnsavedChanges} from '../app/UnsavedChanges';
 import {useEffect, useMemo, useState} from 'react';
 import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {Alert, Button, Card, Empty, Input, Select, Space, Table, Tag} from 'antd';
@@ -41,7 +43,7 @@ function ReviewForm({runId, questionId, row, detail, reviewer, onDirty}: {runId:
   const [unknown, setUnknown] = useState(false);
   const [notice, setNotice] = useState('');
   useEffect(() => {setVerdict(saved?.verdict ?? 'pending'); setRationale(saved?.rationale ?? ''); setUnknown(false); onDirty(false);}, [saved?.verdict, saved?.rationale, reviewer, questionId, row.group]);
-  const mutation = useMutation({mutationFn:() => api.request(`/api/experiments/${runId}/reviews`, 'POST', {
+  const mutation = useMutation({mutationFn:() => api.request(`/api/experiments/${encodeURIComponent(runId)}/reviews`, 'POST', {
     report_sha256:detail.report_sha256, reviewer:reviewer.trim(), revision:current?.revision ?? null,
     method:row.group, question_id:questionId, verdict, rationale:rationale.trim(), request_id:crypto.randomUUID(),
   }), onSuccess:async () => {onDirty(false); setNotice('已另存人工复核版本；原报告与自动初筛未改。'); await client.invalidateQueries({queryKey:['experiment',runId]});},
@@ -56,25 +58,40 @@ function ReviewForm({runId, questionId, row, detail, reviewer, onDirty}: {runId:
 
 /** 实验运行、档案阅读和人工复核共用后端契约；运行与阅读状态彼此隔离。 */
 export function ExperimentApp() {
-  const [query, setQuery] = useState('');
-  const [filter, setFilter] = useState('all');
-  const [page, setPage] = useState(0);
-  const [selected, setSelected] = useState('');
-  const [questionId, setQuestionId] = useState('');
+  const [workspace,setWorkspace] = useWorkspaceParam('view','archive',['archive','run','replay']);
+  const [query, setQuery] = useWorkspaceParam('q','');
+  const [filter, setFilter] = useWorkspaceParam('kind','all',['all','real','fake','retrieval']);
+  const [pageText,setPageText] = useWorkspaceParam('page','0');
+  const page = /^\d{1,4}$/.test(pageText) ? Number(pageText) : 0;
+  const setPage = (value:number) => setPageText(String(value));
+  const [selectedUrl,setSelected] = useWorkspaceParam('run_id','');
+  const [selected,setCurrentSelected] = useState(selectedUrl);
+  const [questionUrl,setQuestionId] = useWorkspaceParam('question_id','');
+  const [questionId,setCurrentQuestion] = useState(questionUrl);
   const [reviewer, setReviewer] = useState('我');
-  const [reviewDirty, setReviewDirty] = useState(false);
+  const [dirtyGroups,setDirtyGroups] = useState<Record<string,boolean>>({});
+  const reviewDirty = Object.values(dirtyGroups).some(Boolean);
+  const setReviewDirty = (dirty:boolean) => {if(!dirty)setDirtyGroups({});};
+  useUnsavedChanges(reviewDirty, '有未保存的实验复核。');
+  useEffect(()=>{
+    if(selectedUrl===selected && questionUrl===questionId)return;
+    // 浏览器前进/返回也经过相同护栏；接受前不切换查询或卸载复核表单。
+    if(!canLeaveReview()){setSelected(selected);setQuestionId(questionId);return;}
+    setReviewDirty(false);setCurrentSelected(selectedUrl);setCurrentQuestion(questionUrl);
+  },[selectedUrl,questionUrl]);
   const session = useQuery({queryKey:['experiments-session'], queryFn:async () => {await api.bootstrap(); return true;}, staleTime:Infinity});
   const runs = useQuery({queryKey:['experiments'], queryFn:() => api.request<{items:Run[]; skipped:number; limited:boolean}>('/api/experiments'), enabled:session.isSuccess});
   const filtered = useMemo(() => filterRuns(runs.data?.items ?? [], query, filter) as Run[], [runs.data, query, filter]);
   const pages = Math.ceil(filtered.length / 10);
-  useEffect(() => {setPage(current => Math.min(current, Math.max(0, pages - 1)));}, [pages]);
+  useEffect(() => {if(runs.data && page>=pages && page>0) setPage(Math.max(0,pages-1));}, [pages,page,runs.data]);
   useEffect(() => {
     if (!selected && runs.data?.items.length) setSelected((runs.data.items.find(item => item.kind === 'answers' && item.provider === 'openai_compatible') ?? runs.data.items[0]).id);
   }, [runs.data, selected]);
-  const detail = useQuery({queryKey:['experiment', selected], queryFn:() => api.request<Detail>(`/api/experiments/${selected}`), enabled:Boolean(selected) && session.isSuccess});
-  useEffect(() => {setQuestionId(detail.data?.questions[0]?.id ?? '');}, [detail.data?.report_sha256]);
-  const question = useQuery({queryKey:['experiment-question', selected, questionId], queryFn:() => api.request<QuestionDetail>(`/api/experiments/${selected}/question?id=${encodeURIComponent(questionId)}`), enabled:Boolean(selected && questionId)});
-  async function openResult(reportId:string) {setSelected(reportId); await runs.refetch();}
+  const detail = useQuery({queryKey:['experiment', selected], queryFn:() => api.request<Detail>(`/api/experiments/${encodeURIComponent(selected)}`), enabled:Boolean(selected) && session.isSuccess});
+  useEffect(() => {if (detail.data && !detail.data.questions.some(item=>item.id===questionId)) setQuestionId(detail.data.questions[0]?.id ?? '');}, [detail.data?.report_sha256,questionId]);
+  const question = useQuery({queryKey:['experiment-question', selected, questionId], queryFn:() => api.request<QuestionDetail>(`/api/experiments/${encodeURIComponent(selected)}/question?id=${encodeURIComponent(questionId)}`), enabled:Boolean(selected && questionId) && detail.isSuccess && detail.data.questions.some(item=>item.id===questionId)});
+  async function openResult(reportId:string) {if (!canLeaveReview()) return; setReviewDirty(false); setSelected(reportId); await runs.refetch(); setWorkspace('archive');}
+  function canLeaveReview() {return !reviewDirty || confirm('有未保存的复核，切换会丢弃编辑。继续吗？');}
   const selectedRun = runs.data?.items.find(item => item.id === selected);
   const sidebar = <><ConsoleNav active="experiments" legacyPath="/experiments"/><Card size="small" className="experiment-guide" title="页面说明"><p>运行、档案、证据和人工复核均已迁移。</p><p>原版仅作为迁移期回退入口。</p></Card></>;
 
@@ -87,17 +104,19 @@ export function ExperimentApp() {
       <div><small>当前档案</small><strong>{selectedRun ? statusLabel(selectedRun.status) : '未选择'}</strong></div>
       <div><small>逐题人工复核</small><strong className={detail.data?.review_enabled ? 'is-positive' : ''}>{detail.data?.review_enabled ? '可用' : '未开放'}</strong></div>
     </section>
-    <ExperimentJobs api={api} ready={session.isSuccess} onOpen={reportId => void openResult(reportId)}/>
-    <L1PolicyReplayCard api={api} ready={session.isSuccess}/>
-    <div className="experiment-layout">
+    <DataWorkspace label="实验工作区" activeKey={workspace} onChange={setWorkspace} items={[
+      {key:'archive',label:'档案与逐题对照',children:<>    <div className="experiment-layout">
       <Card className="experiment-archive-card" title="实验档案">
+        {runs.isSuccess && runs.data.items.length === 0 && <Alert type="info" title="还没有实验档案" description="准备冻结检索档案 → 运行对照 → 逐题复核。可在“运行实验”任务核对当前运行能力；本页不会自动创建档案或调用模型。"/>}
         <Input.Search aria-label="搜索实验" allowClear value={query} onChange={event => {setQuery(event.target.value); setPage(0);}} placeholder="模型、数据集或编号"/>
         <Select className="wide" aria-label="实验类型" value={filter} onChange={value => {setFilter(value); setPage(0);}} options={[{value:'all',label:'全部'},{value:'real',label:'真实模型回答'},{value:'fake',label:'Fake 工程验证'},{value:'retrieval',label:'仅检索'}]}/>
-        <div className="experiment-run-list" aria-busy={runs.isLoading}>{filtered.slice(page*10,page*10+10).map(run => <button type="button" className="experiment-run" aria-pressed={selected===run.id} key={run.id} onClick={() => setSelected(run.id)}><Space><Tag>{run.kind === 'retrieval' ? '仅检索' : run.provider === 'fake' ? 'Fake' : '真实回答'}</Tag><strong>{run.model ?? '模型未提供'}</strong></Space><span>{dateText(run.started_at)}<br/>{run.dataset} · {run.split} · {statusLabel(run.status)} {run.completed}/{run.total}<br/>{run.id.slice(-8)}</span></button>)}{!runs.isLoading && !filtered.length && <Empty description="没有匹配的实验"/>}</div>
+        <div className="experiment-run-list" aria-busy={runs.isLoading}>{filtered.slice(page*10,page*10+10).map(run => <button type="button" className="experiment-run" aria-pressed={selected===run.id} key={run.id} onClick={() => {if(run.id!==selected && canLeaveReview()) {setReviewDirty(false);setSelected(run.id,false);}}}><Space><Tag>{run.kind === 'retrieval' ? '仅检索' : run.provider === 'fake' ? 'Fake' : '真实回答'}</Tag><strong>{run.model ?? '模型未提供'}</strong></Space><span>{dateText(run.started_at)}<br/>{run.dataset} · {run.split} · {statusLabel(run.status)} {run.completed}/{run.total}<br/>{run.id.slice(-8)}</span></button>)}{!runs.isLoading && !filtered.length && <Empty description="没有匹配的实验"/>}</div>
         <div className="pagination"><Button disabled={page===0} onClick={() => setPage(page-1)}>上一页</Button><span>{filtered.length} 条 · {filtered.length ? page+1 : 0}/{pages}</span><Button disabled={(page+1)*10>=filtered.length} onClick={() => setPage(page+1)}>下一页</Button></div>
         {runs.data && <small>{runs.data.skipped ? `${runs.data.skipped} 条无法读取，未计为通过。` : ''}{runs.data.limited ? ' 超过 500 条，仅展示限定范围。' : ''}</small>}
       </Card>
-      <section>
+      <section aria-label="选中实验结果">
+        {detail.isError&&<Alert type="error" showIcon title="选中实验读取失败" description="可刷新档案并重新选择；没有重跑实验。"/>}
+        {question.isError&&<Alert type="error" showIcon title="逐题证据读取失败" description="请选择其他题目或刷新后核对，失败不计为通过。"/>}
         {!selected ? <Card><Empty description="选择一条实验查看结果"/></Card> : <>
           <Card className="experiment-detail-card" loading={detail.isLoading} title={detail.data?.kind === 'retrieval' ? '冻结检索对照' : '逐题回答对照'}>
             {detail.data && <><p>{dateText(detail.data.started_at)} · {detail.data.dataset?.name ?? '未知数据集'} · {detail.data.split} · {statusLabel(detail.data.status)}</p>
@@ -110,10 +129,16 @@ export function ExperimentApp() {
               {detail.data.reviews.map(review => <p className="subtle" key={`${review.reviewer_kind}:${review.reviewer}`}>{review.reviewer_kind === 'human' ? '人工复核' : '助手复核'} · {review.reviewer}：{Object.entries(review.summary).map(([group,count]) => `${groupLabel(group)} ${count.pass}/${count.total}（待判断 ${count.pending}，不可评分 ${count.unscorable}）`).join('；')}</p>)}
               <details><summary>来源与可比性</summary><pre>报告 {selected}{'\n'}SHA256 {detail.data.report_sha256}{'\n'}代码 {detail.data.code_commit ?? '未记录'}{detail.data.code_dirty ? '（运行时工作区非干净）' : ''}</pre></details></>}
           </Card>
-          {detail.data && <Card className="question-select" title="逐题对照"><Select className="wide" aria-label="逐题对照" value={questionId || undefined} options={detail.data.questions.map(item => ({value:item.id,label:item.query}))} onChange={value => {if (!reviewDirty || confirm('有未保存的复核，切换会丢弃编辑。继续吗？')) {setReviewDirty(false); setQuestionId(value);}}}/><label>我的复核署名</label><Input aria-label="我的复核署名" maxLength={60} value={reviewer} onChange={event => {if (!reviewDirty || confirm('有未保存的复核，更换署名会丢弃编辑。继续吗？')) {setReviewDirty(false); setReviewer(event.target.value);}}}/><p className="subtle">自报署名，不是身份认证；同一署名继续原复核。{question.data?.source_note}</p></Card>}
-          <div className="question-grid-react">{question.data?.rows.map(row => <Card key={row.group} title={groupLabel(row.group)} extra={<Tag>{statusLabel(row.status)}</Tag>}><p className="answer-text">{row.answer ?? (detail.data?.kind === 'retrieval' ? '此实验只检索，没有生成回答。' : '没有可用回答。')}</p><p className="subtle">初筛：{row.answer_proxy_pass === null ? '未评分' : row.answer_proxy_pass ? '通过' : '未通过'} · 证据：{evidenceLabel(row.evidence_complete)}</p><EvidenceBlocks row={row}/><details><summary>评分参照（不曾发送给模型）</summary><p>{row.expected_abstention ? '期望承认信息不足，不虚构用户事实。' : row.reference_answer ?? '本报告未记录答案参照。'}</p></details>{detail.data?.reviews.map(review => {const item=review.items.find(value => value.method===row.group && value.question_id===questionId); return item ? <details key={`${review.reviewer_kind}:${review.reviewer}`}><summary>{review.reviewer_kind==='human'?'人工':'助手'} · {review.reviewer} · {verdictLabel(item.verdict)}</summary><p>{item.rationale || '尚未填写理由'}</p></details> : null;})}{detail.data?.review_enabled && <ReviewForm runId={selected} questionId={questionId} row={row} detail={detail.data} reviewer={reviewer} onDirty={setReviewDirty}/>}</Card>)}</div>
+          {detail.data && <Card className="question-select" title="逐题对照"><Select className="wide" aria-label="逐题对照" value={questionId || undefined} options={detail.data.questions.map(item => ({value:item.id,label:item.query}))} onChange={value => {if (!reviewDirty || confirm('有未保存的复核，切换会丢弃编辑。继续吗？')) {setReviewDirty(false); setQuestionId(value,false);}}}/><label>我的复核署名</label><Input aria-label="我的复核署名" maxLength={60} value={reviewer} onChange={event => {if (!reviewDirty || confirm('有未保存的复核，更换署名会丢弃编辑。继续吗？')) {setReviewDirty(false); setReviewer(event.target.value);}}}/><p className="subtle">自报署名，不是身份认证；同一署名继续原复核。{question.data?.source_note}</p></Card>}
+          <div className="question-grid-react">{question.data?.rows.map(row => <Card key={row.group} title={groupLabel(row.group)} extra={<Tag>{statusLabel(row.status)}</Tag>}><p className="answer-text">{row.answer ?? (detail.data?.kind === 'retrieval' ? '此实验只检索，没有生成回答。' : '没有可用回答。')}</p><p className="subtle">初筛：{row.answer_proxy_pass === null ? '未评分' : row.answer_proxy_pass ? '通过' : '未通过'} · 证据：{evidenceLabel(row.evidence_complete)}</p><EvidenceBlocks row={row}/><details><summary>评分参照（不曾发送给模型）</summary><p>{row.expected_abstention ? '期望承认信息不足，不虚构用户事实。' : row.reference_answer ?? '本报告未记录答案参照。'}</p></details>{detail.data?.reviews.map(review => {const item=review.items.find(value => value.method===row.group && value.question_id===questionId); return item ? <details key={`${review.reviewer_kind}:${review.reviewer}`}><summary>{review.reviewer_kind==='human'?'人工':'助手'} · {review.reviewer} · {verdictLabel(item.verdict)}</summary><p>{item.rationale || '尚未填写理由'}</p></details> : null;})}{detail.data?.review_enabled && <ReviewForm runId={selected} questionId={questionId} row={row} detail={detail.data} reviewer={reviewer} onDirty={dirty=>setDirtyGroups(current=>current[row.group]===dirty?current:{...current,[row.group]:dirty})}/>}</Card>)}</div>
         </>}
       </section>
     </div>
+</>},
+      {key:'run',label:'运行实验',children:<>    <ExperimentJobs api={api} ready={session.isSuccess} onOpen={reportId => void openResult(reportId)}/>
+</>},
+      {key:'replay',label:'L1 策略回放',children:<>    <L1PolicyReplayCard api={api} ready={session.isSuccess}/>
+</>},
+    ]}/>
   </AppShell>;
 }

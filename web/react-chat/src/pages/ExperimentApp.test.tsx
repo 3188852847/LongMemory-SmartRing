@@ -50,6 +50,7 @@ describe('React 实验档案', () => {
     const client = createConsoleQueryClient();
     const view = render(<QueryClientProvider client={client}><MemoryRouter><ExperimentApp/></MemoryRouter></QueryClientProvider>);
 
+    fireEvent.click(screen.getByRole('button',{name:'运行实验'}));
     const prepare = await screen.findByRole('button',{name:'预检与核对预算'});
     await waitFor(() => expect(prepare.hasAttribute('disabled')).toBe(false));
     fireEvent.click(prepare);
@@ -78,6 +79,7 @@ describe('React 实验档案', () => {
     });
     const client=createConsoleQueryClient();
     const view=render(<QueryClientProvider client={client}><MemoryRouter><ExperimentApp/></MemoryRouter></QueryClientProvider>);
+    fireEvent.click(screen.getByRole('button',{name:'L1 策略回放'}));
     const button=await screen.findByRole('button',{name:'运行本地回放'});
     await waitFor(()=>expect(button.hasAttribute('disabled')).toBe(false));
     fireEvent.click(button);

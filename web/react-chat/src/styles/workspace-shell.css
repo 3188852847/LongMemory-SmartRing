@@ -1,0 +1,65 @@
+/* C 拥有布局与滚动；沿用 F 的主题/视觉变量，不管理光效与动态。 */
+.shell.workspace-shell { grid-template-columns: 14rem minmax(0, 1fr); }
+.shell.workspace-shell > .shell-sidebar { padding: 16px 12px; min-width: 0; }
+.shell.workspace-shell .sidebar-inner { top: 16px; max-height: calc(100dvh - 32px); padding-bottom: 4px; }
+.shell.workspace-shell .brand-block { padding-bottom: 10px; }
+.shell.workspace-shell .console-nav { gap: 12px; margin: 12px 0; }
+.shell.workspace-shell .console-nav-link { min-height: 44px; }
+.shell.workspace-shell .nav-copy > span { white-space: normal; overflow-wrap: anywhere; }
+.shell.workspace-shell .nav-copy small { display: none; }
+.shell.workspace-shell .shell-nav-toggle { display: none; }
+.shell.workspace-shell .sidebar-footer { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.shell.workspace-shell > main { padding: 24px clamp(20px, 2.5vw, 40px) 40px; }
+.shell.workspace-shell .page-header { gap: 16px; margin-bottom: 18px; padding-bottom: 16px; }
+.shell.workspace-shell .page-heading h1 { text-wrap: balance; }
+.shell.workspace-shell .page-description { max-width: 70ch; }
+.shell.workspace-shell .page-action { max-width: none; min-width: 0; padding-top: 4px; }
+.shell.workspace-shell .page-header-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.shell.workspace-shell :is(a, button, summary, [tabindex]):focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.shell.workspace-shell :is(h1, h2, h3, [id]) { scroll-margin-block: 12px; }
+
+/* 总览的首屏由当前状态、操作和异常组成；研究/链路细节由用户展开。 */
+.shell.workspace-shell.overview-shell .overview-start { margin-bottom: 18px; }
+.shell.workspace-shell.overview-shell .overview-start .ant-card-body { padding: 16px; }
+.shell.workspace-shell.overview-shell .overview-actions { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.shell.workspace-shell.overview-shell .overview-actions a { min-width: 0; overflow-wrap: anywhere; }
+.shell.workspace-shell.overview-shell .overview-diagnostics-card { margin-bottom: 18px; }
+.shell.workspace-shell.overview-shell .overview-attention p { margin: 4px 0; }
+.shell.workspace-shell.overview-shell .overview-attention a { display: inline-block; margin-left: 12px; text-decoration: underline; }
+.shell.workspace-shell.overview-shell .overview-details { border-top: 1px solid var(--border); padding-top: 12px; }
+.shell.workspace-shell.overview-shell .overview-details > summary { color: var(--text-strong); padding: 8px 2px; }
+.shell.workspace-shell.overview-shell .overview-grid { margin-top: 14px; }
+.shell.workspace-shell.overview-shell .overview-facts dd { white-space: normal; overflow-wrap: anywhere; }
+.shell.workspace-shell.overview-shell .overview-grid .overview-actions { grid-template-columns: 1fr; }
+
+@media (max-width: 1000px) {
+  .shell.workspace-shell { grid-template-columns: 12.5rem minmax(0, 1fr); }
+  .shell.workspace-shell.overview-shell .overview-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 760px) {
+  .shell.workspace-shell { display: block; }
+  .shell.workspace-shell > .shell-sidebar { position: relative; z-index: 30; padding: 10px 14px; }
+  .shell.workspace-shell .sidebar-inner { position: static; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; max-height: none; overflow: visible; padding: 0; }
+  .shell.workspace-shell .brand-block { padding: 0; }
+  .shell.workspace-shell .brand-block p, .shell.workspace-shell .sidebar-footer { display: none; }
+  /* 环境开关留在导航内部，避免 F 的文档流浮动实例破坏 C 的视口聊天工作区。 */
+  .shell.workspace-shell .sidebar-footer { display: flex; grid-column: 1 / -1; padding-top: 6px; }
+  .shell.workspace-shell .sidebar-footer > .shared-status { display: none; }
+  .shell.workspace-shell .shell-nav-toggle { display: block; min-height: 44px; padding: 8px 10px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); color: var(--text); background: var(--surface); cursor: pointer; }
+  .shell.workspace-shell .shell-nav-toggle:hover { border-color: var(--accent); }
+  .shell.workspace-shell .shell-navigation { display: none; position: absolute; inset: 100% 0 auto; max-height: min(65dvh, 560px); overflow-y: auto; overscroll-behavior: contain; padding: 12px 16px 20px; background: var(--surface); border-bottom: 1px solid var(--border-strong); box-shadow: var(--shadow); }
+  .shell.workspace-shell .nav-open .shell-navigation { display: block; }
+  .shell.workspace-shell .console-nav { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); overflow: visible; margin: 0; gap: 12px; }
+  .shell.workspace-shell .nav-group { display: grid; align-content: start; }
+  .shell.workspace-shell .nav-group h2 { display: block; }
+  .shell.workspace-shell .console-nav-link { display: grid; padding: 6px; white-space: normal; }
+  .shell.workspace-shell .legacy-entry { margin: 12px 0 0; }
+  .shell.workspace-shell > main { padding: 18px 14px 28px; }
+  .shell.workspace-shell .page-header { flex-direction: column; gap: 10px; }
+  .shell.workspace-shell .page-action { width: 100%; }
+}
+@media (max-width: 420px) {
+  .shell.workspace-shell .brand-copy small { display: none; }
+  .shell.workspace-shell.overview-shell .overview-actions { grid-template-columns: 1fr 1fr; }
+  .shell.workspace-shell.overview-shell .overview-actions a { padding: 10px; }
+}

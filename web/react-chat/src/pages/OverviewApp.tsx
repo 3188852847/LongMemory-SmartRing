@@ -5,7 +5,7 @@ import {ChatApi, type Config, type DeviceStatus, type MemoryPageSummary, type Ru
 import {AppShell, ConsoleNav} from '../components/AppShell';
 import {ConsoleStatusRail} from '../features/chat/ChatObservability';
 import {PageHeader} from '../components/PageHeader';
-import {SystemDiagnostics} from '../features/diagnostics/SystemDiagnostics';
+import {diagnoseSystem, SystemDiagnostics} from '../features/diagnostics/SystemDiagnostics';
 
 const api = new ChatApi();
 
@@ -56,14 +56,16 @@ export function OverviewApp() {
   });
   const model = modelSummary(config.data);
   const consoleReady = session.isSuccess && config.isSuccess;
+  const findings = diagnoseSystem(runtime.data, config.data, device.data,
+    {runtime:runtime.isError,config:config.isError,device:device.isError});
+  const attention = findings.filter(item => item.tone === 'error' || item.tone === 'warning');
 
   return <AppShell subtitle="本机陪伴系统概览" className="overview-shell" sidebar={<ConsoleNav active="overview" legacyPath="/chat"/>}>
-    <PageHeader eyebrow="日常使用" title="系统总览" description="先看哪些链路真正可用，再进入聊天、记忆、设备或设置；本页只读取状态，不会调用模型或改变圆屏。"
+    <PageHeader eyebrow="日常使用" title="系统总览" description="查看当前状态，直接进入聊天、记忆或设备。本页只读取状态。"
       action={<span className="overview-refresh-note">圆屏每 5 秒核对一次</span>}/>
     {session.isError && <Alert type="error" showIcon title="控制台会话不可用" description="网页后端可能已经停止。请回到启动面板查看受管服务状态；本页没有自动重启任何进程。"/>}
     <ConsoleStatusRail config={config.data} device={device.data} deviceFailed={device.isError} activeMemoryCount={memories.data?.total}/>
-    <section className="overview-grid" aria-label="系统入口与说明">
-      <Card title="开始使用" extra={<Tag color={consoleReady ? 'green' : 'gold'}>{consoleReady ? '控制台就绪' : '正在核对'}</Tag>}>
+      <Card className="overview-start" title="开始使用" extra={<Tag color={consoleReady ? 'green' : session.isError || config.isError ? 'red' : 'gold'}>{consoleReady ? config.data?.provider === 'fake' ? '文字链路可测试（Fake）' : config.data?.enabled ? '网页控制台可用' : '聊天未启用' : session.isError || config.isError ? '读取失败' : '正在核对'}</Tag>}>
         <div className="overview-actions">
           <Link to="/chat-react"><strong>文字聊天</strong><span>输入、回答和本轮记忆证据</span></Link>
           <Link to="/device"><strong>设备与状态</strong><span>圆屏连接、音量、亮度和快照</span></Link>
@@ -71,8 +73,15 @@ export function OverviewApp() {
           <Link to="/display-preview"><strong>圆屏外观</strong><span>状态视觉、皮肤与动态壁纸</span></Link>
         </div>
       </Card>
+      <Alert className="overview-attention" showIcon type={attention.some(item => item.tone === 'error') ? 'error' : attention.length ? 'warning' : 'info'}
+        title={attention.length ? `${attention.length} 项状态需要关注` : findings[0]?.title ?? '状态仍在读取，或当前模式没有足够事实'}
+        description={attention.length ? <div>{attention.slice(0,2).map(item => <p key={item.code}>{item.title}{item.path && <Link to={item.path}>{item.action}</Link>}</p>)}{attention.length > 2 && <p>其余项目可在诊断详情中查看。</p>}</div> : '详细结论和生效边界可在下方展开核对。'}/>
+    <details className="overview-details"><summary>查看诊断详情（{findings.length} 项）</summary>
       <SystemDiagnostics runtime={runtime.data} config={config.data} device={device.data}
         failures={{runtime:runtime.isError,config:config.isError,device:device.isError}}/>
+    </details>
+    <details className="overview-details"><summary>查看服务、回答与圆屏链路详情</summary>
+    <section className="overview-grid" aria-label="系统链路详情">
       <Card className="overview-runtime-card" title="受管服务"
         extra={<Tag color={runtimeTone(runtime.data?.state)}>{runtime.data?.state === 'ready' ? '启动面板在线' : runtime.data?.state === 'stale' ? '状态已过期' : runtime.data?.enabled === false ? '非启动面板模式' : '正在核对'}</Tag>}>
         <dl className="overview-facts">
@@ -83,7 +92,7 @@ export function OverviewApp() {
           <div><dt>CosyVoice 3</dt><dd>{serviceLabel(runtime.data?.services.cosyvoice3)}</dd></div>
           <div><dt>状态新鲜度</dt><dd>{runtime.data?.age_seconds !== undefined ? `${runtime.data.age_seconds.toFixed(1)} 秒前` : '不可用'}</dd></div>
         </dl>
-        <p className="subtle">这里只显示启动面板拥有的进程；手动终端启动会标为“非启动面板模式”。进程运行不代表模型、设备或声音已经可用，请结合下方独立状态判断。</p>
+        <p className="subtle">这里只显示启动面板拥有的进程；手动终端启动会标为“非启动面板模式”。进程运行不代表模型、设备或声音已经可用，请结合独立状态判断。</p>
       </Card>
       <Card title="当前回答链路" extra={<Tag color={model.tone}>{model.label}</Tag>}>
         <dl className="overview-facts">
@@ -113,5 +122,6 @@ export function OverviewApp() {
         </div>
       </Card>
     </section>
+    </details>
   </AppShell>;
 }

@@ -6,6 +6,8 @@ from datetime import UTC, datetime
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
+from .diagnostics import REQUEST_CONTEXT
+
 
 LOGGER = logging.getLogger("longmemory.audit")
 LOGGER.addHandler(logging.NullHandler())
@@ -20,6 +22,11 @@ def log_event(event: str, **fields: object) -> None:
 
     if set(fields) - FIELDS:
         raise ValueError("审计事件包含非白名单字段。")
+    context = REQUEST_CONTEXT.get()
+    if context is not None:
+        observer, request_id = context
+        observer.stage(request_id, event)
+        fields = {**fields, "request_id": request_id}
     LOGGER.info(json.dumps({
         "at": datetime.now(UTC).isoformat(), "event": event, **fields,
     }, ensure_ascii=False))

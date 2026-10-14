@@ -20,7 +20,7 @@ export function diagnoseSystem(runtime?:RuntimeStatus, config?:Config, device?:D
   const items:DiagnosticFinding[] = [];
   if (failures.runtime) items.push({code:'runtime_status_unreadable',tone:'warning',title:'无法读取启动面板状态',detail:'控制台仍可使用，但无法判断语音和本地声音进程是否由当前启动面板管理。'});
   else if (runtime?.state === 'stale') items.push({code:'launcher_status_stale',tone:'error',title:'启动面板状态已经过期',detail:'不要依据旧状态判断服务正常；请查看启动面板是否仍在运行。'});
-  else if (runtime?.enabled === false) items.push({code:'manual_console_start',tone:'info',title:'当前不是统一启动模式',detail:'控制台可能由终端手动启动，因此无法汇总小智语音与 VoxCPM2 进程。'});
+  else if (runtime?.enabled === false) items.push({code:'manual_console_start',tone:'info',title:'当前不是统一启动模式',detail:'控制台由独立终端启动，无法确认小智语音与本地声音服务的受管状态。'});
 
   if (failures.config) items.push({code:'chat_config_unreadable',tone:'error',title:'回答配置读取失败',detail:'当前无法确认回答模型与记忆方法。请刷新；不要据此重复提交聊天。',path:'/settings?tab=model',action:'打开模型设置'});
   else if (config?.enabled && config.model_health?.state === 'unavailable') items.push({code:'answer_model_unavailable',tone:'error',title:'回答模型最近验证失败',detail:'这通常会导致“小智忙”或文字回答失败；查看固定故障类别并更新对应配置。',path:'/settings?tab=model',action:'查看模型诊断'});

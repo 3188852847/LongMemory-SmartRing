@@ -1,0 +1,576 @@
+{
+  "source_commit": "8f32727632d98ddcd3890181286a0f310622a97b",
+  "encoding": "UTF-8",
+  "original_bytes": "Git blob; worktree CRLF is not the source fingerprint",
+  "rule": "Relative Markdown destinations relocate to the same repository target; bundled targets point to bundled snapshots. Absolute URLs, fragments and code blocks remain unchanged.",
+  "files": [
+    {
+      "source": "AGENTS.md",
+      "archive": "docs/history/current-docs-before-20261014/AGENTS.md",
+      "source_sha256": "42c789e3600193d1f32197b9ef55d4c2455411e4159330d580cee048fcddc2f5",
+      "source_bytes": 20774,
+      "archive_sha256": "42c789e3600193d1f32197b9ef55d4c2455411e4159330d580cee048fcddc2f5",
+      "relocations": [],
+      "reverse_byte_equality": true
+    },
+    {
+      "source": "docs/guides/使用说明.md",
+      "archive": "docs/history/current-docs-before-20261014/docs/guides/使用说明.md",
+      "source_sha256": "3940b7b7d90b2fdd70c7117962a5ac4b8bc34af61ec297e6aa733b7b2a060784",
+      "source_bytes": 36637,
+      "archive_sha256": "ccf881e43b760000a26ea40b25df3b59bac00e584cb4ec008dd506dd9419012b",
+      "relocations": [
+        {
+          "archive_offset": 216,
+          "original": "../../README.md",
+          "relocated": "../../../../../README.md"
+        },
+        {
+          "archive_offset": 252,
+          "original": "../requirements/自定义功能清单.md",
+          "relocated": "../../../../requirements/自定义功能清单.md"
+        },
+        {
+          "archive_offset": 16780,
+          "original": "../deployment/experiment-console.md",
+          "relocated": "../../../../deployment/experiment-console.md"
+        },
+        {
+          "archive_offset": 16845,
+          "original": "../deployment/local-console.md",
+          "relocated": "../../../../deployment/local-console.md"
+        },
+        {
+          "archive_offset": 16899,
+          "original": "../deployment/device-control-probe.md",
+          "relocated": "../../../../deployment/device-control-probe.md"
+        }
+      ],
+      "reverse_byte_equality": true
+    },
+    {
+      "source": "docs/guides/统一启动.md",
+      "archive": "docs/history/current-docs-before-20261014/docs/guides/统一启动.md",
+      "source_sha256": "73bbea7aafeddb193d57d8ae4db43c7673c9aa8a6eddb90638caf4b03a2049ee",
+      "source_bytes": 19647,
+      "archive_sha256": "2b54f99c7da828e998869956238f30c3e0b78faf949735751aaebe6ea47ba494",
+      "relocations": [
+        {
+          "archive_offset": 69,
+          "original": "React启动面板.md",
+          "relocated": "../../../../guides/React启动面板.md"
+        },
+        {
+          "archive_offset": 1410,
+          "original": "圆屏记忆后端切换.md",
+          "relocated": "../../../../guides/圆屏记忆后端切换.md"
+        },
+        {
+          "archive_offset": 3363,
+          "original": "豆包实时语音备用模式.md",
+          "relocated": "../../../../guides/豆包实时语音备用模式.md"
+        },
+        {
+          "archive_offset": 4715,
+          "original": "../adr/0158-authenticated-local-launcher-control.md",
+          "relocated": "../../../../adr/0158-authenticated-local-launcher-control.md"
+        },
+        {
+          "archive_offset": 5011,
+          "original": "聊天会话.md",
+          "relocated": "../../../../guides/聊天会话.md"
+        }
+      ],
+      "reverse_byte_equality": true
+    },
+    {
+      "source": "docs/guides/本机目录与依赖.md",
+      "archive": "docs/history/current-docs-before-20261014/docs/guides/本机目录与依赖.md",
+      "source_sha256": "b623f767d697f07b29ac2bd9b10c89be670a79514811101743788c7fa1734ff0",
+      "source_bytes": 10192,
+      "archive_sha256": "6ed32e71c0823941b0fb9bf2c7e4f1a8fd2c8f0d0613ccf8d9bc5fd29d19bb3b",
+      "relocations": [
+        {
+          "archive_offset": 2798,
+          "original": "tts-benchmark.md",
+          "relocated": "../../../../guides/tts-benchmark.md"
+        },
+        {
+          "archive_offset": 2847,
+          "original": "../adr/0119-persisted-sanotts-speaking-rate.md",
+          "relocated": "../../../../adr/0119-persisted-sanotts-speaking-rate.md"
+        }
+      ],
+      "reverse_byte_equality": true
+    },
+    {
+      "source": "docs/guides/声音设置.md",
+      "archive": "docs/history/current-docs-before-20261014/docs/guides/声音设置.md",
+      "source_sha256": "38c91ec934226ae96dc7d83d6cfa826f9ea91c31be3986d698b7da1c0e4e242e",
+      "source_bytes": 16550,
+      "archive_sha256": "6c6704118fd7a3ab9138e7ecfaeb259e9b7fe607d91849c1bf2b761d542db88a",
+      "relocations": [
+        {
+          "archive_offset": 526,
+          "original": "../adr/0121-react-next-start-tts-backend.md",
+          "relocated": "../../../../adr/0121-react-next-start-tts-backend.md"
+        },
+        {
+          "archive_offset": 2200,
+          "original": "VoxCPM2独立试听.md",
+          "relocated": "../../../../guides/VoxCPM2独立试听.md"
+        },
+        {
+          "archive_offset": 3167,
+          "original": "../adr/0025-local-voxcpm2-tts-adapter.md",
+          "relocated": "../../../../adr/0025-local-voxcpm2-tts-adapter.md"
+        },
+        {
+          "archive_offset": 3894,
+          "original": "../adr/0118-external-sanotts-node-wasm-adapter.md",
+          "relocated": "../../../../adr/0118-external-sanotts-node-wasm-adapter.md"
+        },
+        {
+          "archive_offset": 4886,
+          "original": "../adr/0123-isolated-cosyvoice3-buffered-adapter.md",
+          "relocated": "../../../../adr/0123-isolated-cosyvoice3-buffered-adapter.md"
+        },
+        {
+          "archive_offset": 4959,
+          "original": "../adr/0126-cosyvoice3-loopback-streaming-bridge.md",
+          "relocated": "../../../../adr/0126-cosyvoice3-loopback-streaming-bridge.md"
+        },
+        {
+          "archive_offset": 5033,
+          "original": "../adr/0157-cosyvoice3-reference-cache-and-stream-reset.md",
+          "relocated": "../../../../adr/0157-cosyvoice3-reference-cache-and-stream-reset.md"
+        },
+        {
+          "archive_offset": 6141,
+          "original": "../research/cosyvoice-runtime-optimization-2026-09-14.md",
+          "relocated": "../../../../research/cosyvoice-runtime-optimization-2026-09-14.md"
+        },
+        {
+          "archive_offset": 6523,
+          "original": "../adr/0167-cosyvoice-first-segment-handoff.md",
+          "relocated": "../../../../adr/0167-cosyvoice-first-segment-handoff.md"
+        },
+        {
+          "archive_offset": 6840,
+          "original": "../research/cosyvoice-short-opening-2026-09-15.md",
+          "relocated": "../../../../research/cosyvoice-short-opening-2026-09-15.md"
+        },
+        {
+          "archive_offset": 7316,
+          "original": "../research/cosyvoice-windows-qos-2026-09-15.md",
+          "relocated": "../../../../research/cosyvoice-windows-qos-2026-09-15.md"
+        }
+      ],
+      "reverse_byte_equality": true
+    },
+    {
+      "source": "docs/architecture/overview.md",
+      "archive": "docs/history/current-docs-before-20261014/docs/architecture/overview.md",
+      "source_sha256": "71ade3c3ef360765f3b15c244340553621721a61fcb15ca993ad75dcaaa818b3",
+      "source_bytes": 24002,
+      "archive_sha256": "2a781472cfc6d7def19c4605c62b3c408853296fad8c2a2283963a2ba6c47dd0",
+      "relocations": [
+        {
+          "archive_offset": 114,
+          "original": "../adr/0177-react-local-launcher.md",
+          "relocated": "../../../../adr/0177-react-local-launcher.md"
+        },
+        {
+          "archive_offset": 170,
+          "original": "../development/launcher-contract.md",
+          "relocated": "../../../../development/launcher-contract.md"
+        },
+        {
+          "archive_offset": 304,
+          "original": "../adr/0178-controlled-cosyvoice-profiles.md",
+          "relocated": "../../../../adr/0178-controlled-cosyvoice-profiles.md"
+        },
+        {
+          "archive_offset": 370,
+          "original": "../guides/参考声音与克隆.md",
+          "relocated": "../../../../guides/参考声音与克隆.md"
+        },
+        {
+          "archive_offset": 479,
+          "original": "../development/frontend-structure.md",
+          "relocated": "../../../../development/frontend-structure.md"
+        },
+        {
+          "archive_offset": 613,
+          "original": "../development/configuration.md",
+          "relocated": "../../../../development/configuration.md"
+        },
+        {
+          "archive_offset": 675,
+          "original": "../development/local-assets.md",
+          "relocated": "../../../../development/local-assets.md"
+        },
+        {
+          "archive_offset": 733,
+          "original": "../development/continuous-integration.md",
+          "relocated": "../../../../development/continuous-integration.md"
+        },
+        {
+          "archive_offset": 1159,
+          "original": "../adr/0171-realtime-first-voice-pipeline.md",
+          "relocated": "../../../../adr/0171-realtime-first-voice-pipeline.md"
+        },
+        {
+          "archive_offset": 1251,
+          "original": "code-health.md",
+          "relocated": "../../../../architecture/code-health.md"
+        },
+        {
+          "archive_offset": 1694,
+          "original": "../../ROADMAP.md",
+          "relocated": "../../../../../ROADMAP.md"
+        },
+        {
+          "archive_offset": 1921,
+          "original": "../adr/0168-cosyvoice-short-opening-continuity.md",
+          "relocated": "../../../../adr/0168-cosyvoice-short-opening-continuity.md"
+        },
+        {
+          "archive_offset": 1994,
+          "original": "../adr/0170-doubao-realtime-fallback-mode.md",
+          "relocated": "../../../../adr/0170-doubao-realtime-fallback-mode.md"
+        },
+        {
+          "archive_offset": 2151,
+          "original": "../adr/0169-cosyvoice-windows-process-qos.md",
+          "relocated": "../../../../adr/0169-cosyvoice-windows-process-qos.md"
+        },
+        {
+          "archive_offset": 3537,
+          "original": "technology-strategy.md",
+          "relocated": "../../../../architecture/technology-strategy.md"
+        },
+        {
+          "archive_offset": 10963,
+          "original": "../adr/0015-product-first-companion-roadmap.md",
+          "relocated": "../../../../adr/0015-product-first-companion-roadmap.md"
+        },
+        {
+          "archive_offset": 11031,
+          "original": "../adr/0026-layered-memory-and-knowledge-plane.md",
+          "relocated": "../../../../adr/0026-layered-memory-and-knowledge-plane.md"
+        },
+        {
+          "archive_offset": 11102,
+          "original": "../adr/0047-round-screen-autonomous-evolution-boundary.md",
+          "relocated": "../../../../adr/0047-round-screen-autonomous-evolution-boundary.md"
+        },
+        {
+          "archive_offset": 11177,
+          "original": "method-boundary.md",
+          "relocated": "../../../../architecture/method-boundary.md"
+        },
+        {
+          "archive_offset": 11229,
+          "original": "../requirements/companion-product.md",
+          "relocated": "../../../../requirements/companion-product.md"
+        }
+      ],
+      "reverse_byte_equality": true
+    },
+    {
+      "source": "docs/architecture/workflows.md",
+      "archive": "docs/history/current-docs-before-20261014/docs/architecture/workflows.md",
+      "source_sha256": "bfb1c2ebf5f6e0b784272f9baaec3412057b54121cb84c17404d54fcefa313ae",
+      "source_bytes": 79743,
+      "archive_sha256": "211c9bd34596598ba9e023819139e18fe073627664b8402565f4a0fdcc6f33a9",
+      "relocations": [
+        {
+          "archive_offset": 693,
+          "original": "../research/voice-realtime-first-2026-09-15.md",
+          "relocated": "../../../../research/voice-realtime-first-2026-09-15.md"
+        },
+        {
+          "archive_offset": 1160,
+          "original": "../guides/豆包实时语音备用模式.md",
+          "relocated": "../../../../guides/豆包实时语音备用模式.md"
+        },
+        {
+          "archive_offset": 1206,
+          "original": "../adr/0170-doubao-realtime-fallback-mode.md",
+          "relocated": "../../../../adr/0170-doubao-realtime-fallback-mode.md"
+        },
+        {
+          "archive_offset": 2805,
+          "original": "../adr/0168-cosyvoice-short-opening-continuity.md",
+          "relocated": "../../../../adr/0168-cosyvoice-short-opening-continuity.md"
+        },
+        {
+          "archive_offset": 3000,
+          "original": "../adr/0169-cosyvoice-windows-process-qos.md",
+          "relocated": "../../../../adr/0169-cosyvoice-windows-process-qos.md"
+        },
+        {
+          "archive_offset": 3526,
+          "original": "../guides/助手角色设置.md",
+          "relocated": "../../../../guides/助手角色设置.md"
+        },
+        {
+          "archive_offset": 3686,
+          "original": "../guides/React聊天页.md",
+          "relocated": "../../../../guides/React聊天页.md"
+        },
+        {
+          "archive_offset": 9669,
+          "original": "../adr/0056-independent-consolidation-risk-review.md",
+          "relocated": "../../../../adr/0056-independent-consolidation-risk-review.md"
+        },
+        {
+          "archive_offset": 9812,
+          "original": "../adr/0053-policy-audited-l2-activation.md",
+          "relocated": "../../../../adr/0053-policy-audited-l2-activation.md"
+        },
+        {
+          "archive_offset": 10261,
+          "original": "../adr/0054-cross-time-l2-to-l3-consolidation.md",
+          "relocated": "../../../../adr/0054-cross-time-l2-to-l3-consolidation.md"
+        },
+        {
+          "archive_offset": 14836,
+          "original": "../adr/0058-round-screen-proactive-delivery-probe.md",
+          "relocated": "../../../../adr/0058-round-screen-proactive-delivery-probe.md"
+        },
+        {
+          "archive_offset": 15380,
+          "original": "../adr/0059-proactive-outreach-event-ledger.md",
+          "relocated": "../../../../adr/0059-proactive-outreach-event-ledger.md"
+        },
+        {
+          "archive_offset": 15755,
+          "original": "../adr/0060-deterministic-proactive-contact-policy.md",
+          "relocated": "../../../../adr/0060-deterministic-proactive-contact-policy.md"
+        },
+        {
+          "archive_offset": 16304,
+          "original": "../adr/0062-proactive-outreach-dispatch-orchestrator.md",
+          "relocated": "../../../../adr/0062-proactive-outreach-dispatch-orchestrator.md"
+        },
+        {
+          "archive_offset": 16649,
+          "original": "../adr/0063-trusted-proactive-runtime-state.md",
+          "relocated": "../../../../adr/0063-trusted-proactive-runtime-state.md"
+        },
+        {
+          "archive_offset": 17309,
+          "original": "../adr/0064-manual-proactive-delivery-test.md",
+          "relocated": "../../../../adr/0064-manual-proactive-delivery-test.md"
+        },
+        {
+          "archive_offset": 17376,
+          "original": "../adr/0065-proactive-outreach-owner-history.md",
+          "relocated": "../../../../adr/0065-proactive-outreach-owner-history.md"
+        },
+        {
+          "archive_offset": 17445,
+          "original": "../adr/0066-user-observed-proactive-playback.md",
+          "relocated": "../../../../adr/0066-user-observed-proactive-playback.md"
+        },
+        {
+          "archive_offset": 17515,
+          "original": "../adr/0070-proactive-diagnostics-and-schedule-visibility.md",
+          "relocated": "../../../../adr/0070-proactive-diagnostics-and-schedule-visibility.md"
+        },
+        {
+          "archive_offset": 18303,
+          "original": "../adr/0067-explicit-scheduled-proactive-greeting.md",
+          "relocated": "../../../../adr/0067-explicit-scheduled-proactive-greeting.md"
+        },
+        {
+          "archive_offset": 18377,
+          "original": "../adr/0071-one-shot-development-schedule-override.md",
+          "relocated": "../../../../adr/0071-one-shot-development-schedule-override.md"
+        },
+        {
+          "archive_offset": 18453,
+          "original": "../adr/0175-user-controlled-proactive-interval.md",
+          "relocated": "../../../../adr/0175-user-controlled-proactive-interval.md"
+        },
+        {
+          "archive_offset": 20090,
+          "original": "../adr/0072-observed-companion-interaction-outcomes.md",
+          "relocated": "../../../../adr/0072-observed-companion-interaction-outcomes.md"
+        },
+        {
+          "archive_offset": 20490,
+          "original": "../adr/0073-explicit-proactive-topic-rejection.md",
+          "relocated": "../../../../adr/0073-explicit-proactive-topic-rejection.md"
+        },
+        {
+          "archive_offset": 23340,
+          "original": "../adr/0074-auditable-contact-time-strategy-candidates.md",
+          "relocated": "../../../../adr/0074-auditable-contact-time-strategy-candidates.md"
+        },
+        {
+          "archive_offset": 23420,
+          "original": "../adr/0081-structured-proactive-strategy-provenance.md",
+          "relocated": "../../../../adr/0081-structured-proactive-strategy-provenance.md"
+        },
+        {
+          "archive_offset": 23995,
+          "original": "../adr/0092-switchable-round-screen-memory-backends.md",
+          "relocated": "../../../../adr/0092-switchable-round-screen-memory-backends.md"
+        },
+        {
+          "archive_offset": 24074,
+          "original": "../guides/圆屏记忆后端切换.md",
+          "relocated": "../../../../guides/圆屏记忆后端切换.md"
+        },
+        {
+          "archive_offset": 24661,
+          "original": "../adr/0096-owner-answer-memory-feedback.md",
+          "relocated": "../../../../adr/0096-owner-answer-memory-feedback.md"
+        },
+        {
+          "archive_offset": 25431,
+          "original": "../adr/0098-explicit-round-screen-memory-feedback.md",
+          "relocated": "../../../../adr/0098-explicit-round-screen-memory-feedback.md"
+        },
+        {
+          "archive_offset": 26074,
+          "original": "../adr/0099-round-screen-retrieval-evidence-index.md",
+          "relocated": "../../../../adr/0099-round-screen-retrieval-evidence-index.md"
+        },
+        {
+          "archive_offset": 26547,
+          "original": "../adr/0100-append-only-memory-quality-review-state.md",
+          "relocated": "../../../../adr/0100-append-only-memory-quality-review-state.md"
+        },
+        {
+          "archive_offset": 27039,
+          "original": "../adr/0101-l1-backed-follow-up-candidates.md",
+          "relocated": "../../../../adr/0101-l1-backed-follow-up-candidates.md"
+        },
+        {
+          "archive_offset": 27549,
+          "original": "../adr/0102-one-shot-follow-up-outreach.md",
+          "relocated": "../../../../adr/0102-one-shot-follow-up-outreach.md"
+        },
+        {
+          "archive_offset": 28357,
+          "original": "../adr/0103-explicit-conversation-follow-up-suggestions.md",
+          "relocated": "../../../../adr/0103-explicit-conversation-follow-up-suggestions.md"
+        },
+        {
+          "archive_offset": 28438,
+          "original": "../adr/0104-conversation-authorized-one-shot-follow-up.md",
+          "relocated": "../../../../adr/0104-conversation-authorized-one-shot-follow-up.md"
+        },
+        {
+          "archive_offset": 29288,
+          "original": "../adr/0105-explicit-temporary-state-validity.md",
+          "relocated": "../../../../adr/0105-explicit-temporary-state-validity.md"
+        },
+        {
+          "archive_offset": 29358,
+          "original": "../adr/0106-temporary-interaction-mode.md",
+          "relocated": "../../../../adr/0106-temporary-interaction-mode.md"
+        },
+        {
+          "archive_offset": 29422,
+          "original": "../adr/0107-explicit-temporary-interaction-restore.md",
+          "relocated": "../../../../adr/0107-explicit-temporary-interaction-restore.md"
+        },
+        {
+          "archive_offset": 29737,
+          "original": "../adr/0108-next-turn-interaction-mode.md",
+          "relocated": "../../../../adr/0108-next-turn-interaction-mode.md"
+        },
+        {
+          "archive_offset": 30227,
+          "original": "../guides/tts-benchmark.md",
+          "relocated": "../../../../guides/tts-benchmark.md"
+        },
+        {
+          "archive_offset": 30279,
+          "original": "../adr/0117-versioned-tts-capability-contract-and-benchmark.md",
+          "relocated": "../../../../adr/0117-versioned-tts-capability-contract-and-benchmark.md"
+        },
+        {
+          "archive_offset": 31032,
+          "original": "../adr/0137-default-off-l2-sufficiency-shadow.md",
+          "relocated": "../../../../adr/0137-default-off-l2-sufficiency-shadow.md"
+        },
+        {
+          "archive_offset": 31102,
+          "original": "../adr/0138-append-only-owner-review-for-l2-shadow.md",
+          "relocated": "../../../../adr/0138-append-only-owner-review-for-l2-shadow.md"
+        },
+        {
+          "archive_offset": 31179,
+          "original": "../adr/0148-exact-owner-labels-for-l2-shadow.md",
+          "relocated": "../../../../adr/0148-exact-owner-labels-for-l2-shadow.md"
+        },
+        {
+          "archive_offset": 31793,
+          "original": "../adr/0140-append-only-l1-extraction-attempt-ledger.md",
+          "relocated": "../../../../adr/0140-append-only-l1-extraction-attempt-ledger.md"
+        },
+        {
+          "archive_offset": 31872,
+          "original": "../adr/0142-explicit-recovery-for-failed-l1-extraction.md",
+          "relocated": "../../../../adr/0142-explicit-recovery-for-failed-l1-extraction.md"
+        },
+        {
+          "archive_offset": 32200,
+          "original": "../adr/0141-structural-xiaozhi-internal-input-boundary.md",
+          "relocated": "../../../../adr/0141-structural-xiaozhi-internal-input-boundary.md"
+        },
+        {
+          "archive_offset": 32792,
+          "original": "../adr/0144-default-off-l1-sufficiency-daily-shadow.md",
+          "relocated": "../../../../adr/0144-default-off-l1-sufficiency-daily-shadow.md"
+        },
+        {
+          "archive_offset": 33204,
+          "original": "../adr/0145-offline-l1-sufficiency-policy-replay.md",
+          "relocated": "../../../../adr/0145-offline-l1-sufficiency-policy-replay.md"
+        },
+        {
+          "archive_offset": 33556,
+          "original": "../adr/0146-exact-owner-labels-for-l1-shadow.md",
+          "relocated": "../../../../adr/0146-exact-owner-labels-for-l1-shadow.md"
+        },
+        {
+          "archive_offset": 33930,
+          "original": "../adr/0147-l1-controlled-trial-readiness.md",
+          "relocated": "../../../../adr/0147-l1-controlled-trial-readiness.md"
+        },
+        {
+          "archive_offset": 34478,
+          "original": "../adr/0156-explicit-round-visual-mode-switch.md",
+          "relocated": "../../../../adr/0156-explicit-round-visual-mode-switch.md"
+        },
+        {
+          "archive_offset": 34910,
+          "original": "../adr/0174-round-screen-persistent-control-session.md",
+          "relocated": "../../../../adr/0174-round-screen-persistent-control-session.md"
+        },
+        {
+          "archive_offset": 35068,
+          "original": "memory-pipeline.md",
+          "relocated": "../../../../architecture/memory-pipeline.md"
+        }
+      ],
+      "reverse_byte_equality": true
+    },
+    {
+      "source": "docs/architecture/repository-structure.md",
+      "archive": "docs/history/current-docs-before-20261014/docs/architecture/repository-structure.md",
+      "source_sha256": "56cf6c5dfac843c411494a54365e7bce795a9715ad59eb7aaaff9c8fa08d8a3d",
+      "source_bytes": 844,
+      "archive_sha256": "56cf6c5dfac843c411494a54365e7bce795a9715ad59eb7aaaff9c8fa08d8a3d",
+      "relocations": [],
+      "reverse_byte_equality": true
+    }
+  ]
+}

@@ -4,6 +4,7 @@ import {ChatApi} from '../../api';
 import {DeviceRoleSync} from './DeviceRoleSync';
 import {applyRolePreferences, DEFAULT_ROLE_PREFERENCES, readRolePreferences, type RolePreferences} from './rolePreferences';
 import {settingsFailure} from './settingsFailure';
+import {useUnsavedChanges} from '../../app/UnsavedChanges';
 
 interface Role {revision: number; name: string; prompt: string; saved_at: string | null}
 interface Settings {current: Role; history?: Role[]; presets: {name: string; prompt: string}[]; web: string; device: string}
@@ -18,6 +19,11 @@ export function RoleEditor({api, disabled, onSaved}: {api: ChatApi; disabled: bo
   const [busy, setBusy] = useState(false);
   const [unknown, setUnknown] = useState(false);
   const [notice, setNotice] = useState('');
+  const savedPreferences = settings ? readRolePreferences(settings.current.prompt) : undefined;
+  const dirty = Boolean(open && settings && (name !== settings.current.name || prompt !== settings.current.prompt
+    || guided !== savedPreferences?.enabled
+    || (guided && JSON.stringify(preferences) !== JSON.stringify(savedPreferences?.preferences))));
+  useUnsavedChanges(dirty, '有未保存的助手表达草稿。');
   const lock = useRef(false);
   async function load() {
     if (lock.current) return; lock.current = true; setBusy(true);
@@ -40,13 +46,15 @@ export function RoleEditor({api, disabled, onSaved}: {api: ChatApi; disabled: bo
     try {
       const result = await api.request<Omit<Settings, 'presets'>>('/api/assistant-role', 'POST', {expected_revision: settings.current.revision, name, prompt:savedPrompt});
       setSettings({...settings, ...result}); setName(result.current.name); setPrompt(result.current.prompt);
+      const normalized = readRolePreferences(result.current.prompt);
+      setGuided(normalized.enabled); setPreferences(normalized.preferences);
       setNotice(`已保存版本 ${result.current.revision}。网页下一轮使用；正在回答的轮次不变。未自动同步圆屏，请在下方检查。`); onSaved();
     } catch (error) {setUnknown(true); setNotice(`${settingsFailure(error, 'write')} 草稿仍保留在编辑框。`);}
     finally {lock.current = false; setBusy(false);}
   }
   function close() {
     if (busy) return;
-    if (settings && (name !== settings.current.name || prompt !== settings.current.prompt) && !confirm('关闭会丢弃未保存的草稿，继续吗？')) return;
+    if (dirty && !confirm('关闭会丢弃未保存的草稿，继续吗？')) return;
     setOpen(false);
   }
   return <><Button disabled={disabled} onClick={() => {setOpen(true); void load();}}>助手角色设置</Button>

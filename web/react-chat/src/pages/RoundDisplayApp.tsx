@@ -1,7 +1,10 @@
 import {useEffect, useMemo, useState, type CSSProperties} from 'react';
 import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
-import {Alert, Button, Card, Checkbox, Descriptions, Input, InputNumber, Segmented, Select, Space, Tag} from 'antd';
+import {Alert, Button, Card, Checkbox, Descriptions, Input, InputNumber, Radio, Segmented, Select, Space, Tabs, Tag} from 'antd';
 import {AppShell, ConsoleNav} from '../components/AppShell';
+import {useSearchParams} from 'react-router-dom';
+import {useUnsavedChanges} from '../app/UnsavedChanges';
+import '../styles/display-workspace.css';
 import {PageHeader} from '../components/PageHeader';
 import {ApiError, ChatApi, type RoundDeviceSkin, type RoundSkin, type RoundSkinApply, type RoundSkins, type RoundWallpaperDeployment, type RoundWallpaperDeviceStatus} from '../api';
 import {readRoundObservations, roundObservationKey, roundObservationStates, type RoundObservations, type RoundObservationState, writeRoundObservations} from '../features/device/roundDisplayObservations';
@@ -125,12 +128,21 @@ function skinStyle(skin?: RoundSkin): CSSProperties {
 
 export function RoundDisplayApp() {
   const queryClient = useQueryClient();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedTab = searchParams.get('tab');
+  const activeTab = ['expression','skin','wallpaper','device'].includes(requestedTab ?? '') ? requestedTab! : 'expression';
+  const selectTab = (tab:string) => {
+    const next = new URLSearchParams(searchParams);
+    if (tab === 'expression') next.delete('tab'); else next.set('tab', tab);
+    setSearchParams(next);
+  };
   const [interaction, setInteraction] = useState<InteractionState>('idle');
   const [emotion, setEmotion] = useState<EmotionState>('warm');
   const [system, setSystem] = useState<SystemState>('normal');
   const [showSafeArea, setShowSafeArea] = useState(false);
   const [selectedSkin, setSelectedSkin] = useState('rose-night-v1');
   const [draft, setDraft] = useState<SkinDraft>();
+  useUnsavedChanges(Boolean(draft), '有未保存的圆屏皮肤草稿。');
   const [observations,setObservations] = useState<RoundObservations>({});
   const [observationNotice,setObservationNotice] = useState('');
   const [skinModeSwitch,setSkinModeSwitch] = useState<SkinModeSwitchState>('idle');
@@ -178,7 +190,12 @@ export function RoundDisplayApp() {
   const view = useMemo(() => resolveRoundDisplay(interaction, system), [interaction, system]);
   const skin = skins.data?.skins.find(item => item.id === selectedSkin);
   const savedSkin = skins.data?.skins.find(item => item.id === skins.data?.selected_skin);
-  const deviceMatchesPreview = Boolean(deviceSkin.data && skin
+  // 成功提示只证明本次保存的对象和内容仍是当前预览与持久选择；不能沿用旧 mutation 的成功布尔值。
+  const selectionSaved = Boolean(saveSkin.isSuccess && !draft && skin
+    && saveSkin.variables === selectedSkin && saveSkin.data?.selected_skin === selectedSkin
+    && skins.data?.selected_skin === selectedSkin
+    && saveSkin.data?.skins.find(item => item.id === selectedSkin)?.manifest_sha256 === skin.manifest_sha256);
+  const deviceMatchesPreview = Boolean(!draft && deviceSkin.data && skin
     && deviceSkin.data.skin_id === skin.id
     && deviceSkin.data.manifest_sha256 === skin.manifest_sha256);
   const observationKey = deviceSkin.data
@@ -216,15 +233,14 @@ export function RoundDisplayApp() {
   } : skin;
   const blocked = Boolean(systemCopy[system]);
   const powerLabel = system === 'charging' ? '充电中' : system === 'low_battery' ? '电量低' : '';
-  const sidebar = <><ConsoleNav active="display" legacyPath="/"/><Card size="small" title="实现边界">
-    <p>网页完整预览 360×360 状态协议；真机首版只下发颜色与脸部尺寸，不下发浏览器动画或渐变资源。</p>
-  </Card></>;
+  const sidebar = <ConsoleNav active="display" legacyPath="/"/>;
 
   return <AppShell subtitle="智能圆屏交互实验台" className="display-preview-shell" sidebar={sidebar}>
-    <PageHeader eyebrow="体验设计" title="圆屏状态预览" description="先验证待机、聆听、思考、回应和异常是否一眼可辨，再把稳定协议接入真实固件。" meta="画布：360 × 360 px · 中央安全区：约 255 × 255 px"/>
-    <Alert type="info" showIcon title="预览与真机采用同一版皮肤清单" description="交互状态决定主体表达；真机写入必须手动触发，并在固件回读的皮肤 ID、清单指纹和全部支持字段一致后才显示成功。"/>
+    <PageHeader eyebrow="体验设计" title="圆屏状态预览" description="在电脑上编辑并预览，再单独检测与下发真机。网页动画、皮肤回读和实机观察分别核对。"/>
+
     <div className="display-preview-layout">
       <section className="display-stage" aria-label="圆屏模拟画布">
+        <div className="display-preview-caption"><h2>{activeTab === 'wallpaper' ? '电脑皮肤预览' : '电脑预览'}</h2><Tag color={draft ? 'gold' : 'blue'}>{draft ? '未保存草稿' : '预览选择'}</Tag></div>
         <div style={skinStyle(previewSkin)} className={`round-display tone-${view.tone} state-${interaction} emotion-${emotion} focus-${view.focus}`}>
           {showSafeArea && <div className="round-safe-area" aria-label="中央安全区"/>}
           <div className="round-topline">{view.title}</div>
@@ -237,15 +253,21 @@ export function RoundDisplayApp() {
           <div className="round-caption">{view.caption}</div>
           {interaction === 'listening' && !blocked && <div className="listening-rings" aria-hidden="true"><i/><i/><i/></div>}
         </div>
+        <p className="display-preview-caption">{previewSkin?.name ?? selectedSkin} · {view.title}</p>
+        <small>画布：360 × 360 px · 中央安全区：约 255 × 255 px</small>
+        <p className="subtle">{activeTab === 'wallpaper' ? '壁纸预览在素材列表中；这张画布仍显示几何皮肤。' : '编辑会更新电脑画布；保存和真机下发各需单独操作。'}网页动画不证明新固件已在真机运行。</p>
       </section>
       <section className="display-controls" aria-label="预览控制">
-        <Card title="1. 交互阶段"><p className="subtle">描述系统正在做什么，是圆屏的主状态。</p>
-          <Segmented block options={interactionOptions} value={interaction} onChange={value => setInteraction(value as InteractionState)}/>
+        <Tabs className="display-task-tabs" activeKey={activeTab} onChange={selectTab} items={[
+          {key:'expression', label:'表情', children:<div className="display-task-content">
+        <Card title="交互阶段"><p className="subtle">描述系统正在做什么，是圆屏的主状态。</p>
+          <Radio.Group className="round-interaction-options" aria-label="交互阶段" optionType="button" buttonStyle="solid"
+            options={interactionOptions} value={interaction} onChange={event => setInteraction(event.target.value as InteractionState)}/>
         </Card>
-        <Card title="2. 情绪表达"><p className="subtle">只改变眼神、颜色和动作幅度，不改变交互逻辑。</p>
+        <Card title="情绪表达"><p className="subtle">只改变眼神、颜色和动作幅度，不改变交互逻辑。</p>
           <Segmented block options={emotionOptions} value={emotion} onChange={value => setEmotion(value as EmotionState)}/>
         </Card>
-        <Card title="3. 系统覆盖"><p className="subtle">阻塞性故障会盖过“聆听/思考/说话”；充电和低电量只显示边缘提示。</p>
+        <Card title="系统覆盖"><p className="subtle">阻塞性故障会盖过“聆听/思考/说话”；充电和低电量只显示边缘提示。</p>
           <Select className="wide" aria-label="系统状态" value={system} options={systemOptions} onChange={setSystem}/>
           <Checkbox checked={showSafeArea} onChange={event => setShowSafeArea(event.target.checked)}>显示约 255×255 中央安全区</Checkbox>
         </Card>
@@ -253,11 +275,68 @@ export function RoundDisplayApp() {
           <p><Tag>{interaction}</Tag><Tag color="magenta">{emotion}</Tag><Tag color={blocked ? 'red' : 'default'}>{system}</Tag></p>
           <p>{blocked ? '系统覆盖层正在接管主画面。' : '当前显示交互状态，系统没有阻塞。'}</p>
         </Card>
-        <Card title="4. 皮肤档案" extra={<Tag color="blue">skin_api=1</Tag>}>
-          <p className="subtle">“保存预览选择”只改网页；“应用到真机”会写入设备 NVS 并立即回读核对。动态壁纸是独立的主视觉，活动时会覆盖几何皮肤，需另行切换为皮肤显示。</p>
-          <Descriptions className="round-skin-state-map" bordered size="small" column={{xs:1,sm:1,md:3}} items={[
+          </div>},
+          {key:'skin', label:'皮肤', children:<div className="display-task-content">
+        <Card title="皮肤档案" extra={<Tag color="blue">skin_api=1</Tag>}>
+          <p className="subtle">选择只更新电脑预览。“保存预览选择”保留下次打开的默认值；编辑草稿需另存自定义皮肤。真机检测和下发在“实机验证”分类。</p>
+          <Descriptions className="round-skin-state-map" bordered size="small" column={1} items={[
             {key:'working',label:'当前编辑/预览',children:<><strong>{skin?.name ?? selectedSkin}</strong><br/><Tag color={draft?'gold':'blue'}>{draft?'未保存编辑草稿':'已加载档案'}</Tag></>},
             {key:'saved',label:'网页保存选择',children:<><strong>{savedSkin?.name ?? skins.data?.selected_skin ?? '读取中'}</strong><br/><Tag>只影响预览默认值</Tag></>},
+          ]}/>
+          {(session.isError || skins.isError || saveSkin.isError) && <Alert type="error" showIcon title="皮肤档案不可用" description="请确认控制台使用最新代码启动，并刷新页面。"/>}
+          <Space wrap className="round-skin-actions">
+            <Select disabled={Boolean(draft) || saveCustom.isPending} aria-label="圆屏皮肤" value={selectedSkin} onChange={value => {setSelectedSkin(value); setDraft(undefined);}} style={{minWidth:220}}
+              options={skins.data?.skins.map(item => ({value:item.id, label:item.name}))}/>
+            <Button type="primary" loading={saveSkin.isPending} disabled={!skins.data?.enabled || Boolean(draft) || selectedSkin === skins.data?.selected_skin}
+              onClick={() => saveSkin.mutate(selectedSkin)}>保存预览选择</Button>
+            <Button disabled={!skin || Boolean(draft)} onClick={() => skin && setDraft(createDraft(skin))}>从当前皮肤开始编辑</Button>
+          </Space>
+          {skin && <Descriptions bordered size="small" column={1} items={[
+            {key:'description', label:'设计用途', children:skin.description},
+            {key:'target', label:'目标画布', children:`${skin.target.board} · ${skin.target.width}×${skin.target.height} · ${skin.target.color_format}`},
+            {key:'hash', label:'清单指纹', children:<code>{skin.manifest_sha256.slice(0, 16)}…</code>},
+          ]}/>}<p className="subtle">皮肤不会改变交互逻辑、记忆、模型或声音。</p>
+          {selectionSaved && <p role="status">电脑预览选择已保存；真机尚未下发。</p>}
+          {draft && <div className="round-skin-editor" role="region" aria-label="本机自定义皮肤编辑器">
+            <h3>我的自定义皮肤</h3>
+            <p className="subtle">修改会立即出现在左侧预览；保存后生成新的 SHA-256，但不会自动写入圆屏。取消或保存编辑后才能切换皮肤。</p>
+            <div className="round-skin-color-grid">
+              {devicePaletteFields.map(([key, label]) => <label key={key}>
+                <span>{label}</span>
+                <input type="color" disabled={saveCustom.isPending} aria-label={`皮肤颜色：${label}`} value={draft.palette[key]}
+                  onChange={event => setDraft(current => current ? {
+                    ...current, palette:{...current.palette, [key]:event.target.value.toUpperCase()},
+                  } : current)}/>
+                <code>{draft.palette[key]}</code>
+              </label>)}
+            </div>
+            <div className="round-skin-size-grid">
+              {([['eye_width', '眼睛宽度', 12, 36], ['eye_height', '眼睛高度', 18, 48], ['mouth_width', '嘴部宽度', 20, 64]] as const)
+                .map(([key, label, min, max]) => <label key={key}><span>{label}</span>
+                  <InputNumber disabled={saveCustom.isPending} aria-label={label} min={min} max={max} value={draft.face[key]}
+                    onChange={value => typeof value === 'number' && setDraft(current => current ? {
+                      ...current, face:{...current.face, [key]:value},
+                    } : current)}/>
+                </label>)}
+            </div>
+            <Space wrap>
+              <Button type="primary" loading={saveCustom.isPending} onClick={() => saveCustom.mutate(draft)}>保存为“我的自定义皮肤”</Button>
+              <Button disabled={saveCustom.isPending} onClick={() => setDraft(undefined)}>取消编辑</Button>
+            </Space>
+            {saveCustom.isError && <Alert className="settings-model-alert" type="warning" showIcon
+              title="自定义皮肤没有保存" description="可能有另一个页面先修改了档案。刷新页面后重新编辑，旧草稿不会覆盖新版本。"/>}
+          </div>}
+          <Alert className="settings-model-alert" type="warning" showIcon title="没有改写 assets 分区"
+            description="首版只修改固定 LVGL 参数并保留内置默认值；图片资源、浏览器动画和背景边缘渐变仍不下发。"/>
+        </Card>
+          </div>},
+          {key:'wallpaper', label:'壁纸', children:<div className="display-task-content">
+        <RoundWallpaperLibrary api={api} sessionReady={session.isSuccess}/>
+          </div>},
+          {key:'device', label:'实机验证', children:<div className="display-task-content">
+        <Card title="真机检测与下发">
+          <p><strong>将要下发：{skin?.name ?? selectedSkin}</strong>。电脑选择、保存档案和设备写入是三个动作。下发仅使用已保存的皮肤；有编辑草稿时请先保存或取消。</p>
+          <Descriptions bordered size="small" column={1} items={[
             {key:'device',label:'最近真机回读',children:deviceSkin.isSuccess
               ? <><strong>{deviceSkin.data.skin_id}</strong><br/><Tag color={deviceMatchesPreview?'success':'warning'}>{deviceMatchesPreview?'与当前预览一致':'与当前预览不同'}</Tag></>
               : <><strong>尚未读取</strong><br/><Tag>不会自动检测</Tag></>},
@@ -265,24 +344,13 @@ export function RoundDisplayApp() {
               ? <><strong>{wallpaperDevice.data.active_valid?'动态壁纸':'几何皮肤'}</strong><br/><Tag color={wallpaperDevice.data.active_valid?'gold':'success'}>{wallpaperDevice.data.active_valid?'皮肤当前被覆盖':'皮肤可以显示'}</Tag></>
               : <><strong>尚未读取</strong><br/><Tag>圆屏在线后刷新</Tag></>},
           ]}/>
-          {(session.isError || skins.isError || saveSkin.isError) && <Alert type="error" showIcon title="皮肤档案不可用" description="请确认控制台使用最新代码启动，并刷新页面。"/>}
           <Space wrap className="round-skin-actions">
-            <Select aria-label="圆屏皮肤" value={selectedSkin} onChange={value => {setSelectedSkin(value); setDraft(undefined);}} style={{minWidth:220}}
-              options={skins.data?.skins.map(item => ({value:item.id, label:item.name}))}/>
-            <Button type="primary" loading={saveSkin.isPending} disabled={!skins.data?.enabled || selectedSkin === skins.data?.selected_skin}
-              onClick={() => saveSkin.mutate(selectedSkin)}>保存预览选择</Button>
             <Button loading={deviceSkin.isPending} disabled={skinModeSwitch === 'waiting'} onClick={() => deviceSkin.mutate()}>检测真机皮肤能力</Button>
-            <Button danger loading={applySkin.isPending} disabled={!deviceSkin.isSuccess || !skin}
+            <Button danger loading={applySkin.isPending} disabled={!deviceSkin.isSuccess || !skin || Boolean(draft)}
               onClick={() => applySkin.mutate(selectedSkin)}>应用到真机</Button>
             <Button loading={useSkinDisplay.isPending} disabled={!wallpaperDevice.data?.active_valid || skinModeSwitch === 'waiting'}
               onClick={() => useSkinDisplay.mutate()}>{skinModeSwitch === 'waiting' ? '等待圆屏重连' : '切换为皮肤显示（会重启）'}</Button>
-            <Button disabled={!skin} onClick={() => skin && setDraft(createDraft(skin))}>从当前皮肤开始编辑</Button>
           </Space>
-          {skin && <Descriptions bordered size="small" column={1} items={[
-            {key:'description', label:'设计用途', children:skin.description},
-            {key:'target', label:'目标画布', children:`${skin.target.board} · ${skin.target.width}×${skin.target.height} · ${skin.target.color_format}`},
-            {key:'hash', label:'清单指纹', children:<code>{skin.manifest_sha256.slice(0, 16)}…</code>},
-          ]}/>}<p className="subtle">皮肤不会改变交互逻辑、记忆、模型或声音。</p>
           {deviceSkin.isSuccess && (
             <Alert className="settings-model-alert" type="success" showIcon
               title={`真机支持皮肤协议，当前为 ${deviceSkin.data.skin_id}`}
@@ -304,39 +372,8 @@ export function RoundDisplayApp() {
             title="切换指令已发送，但尚未确认重连状态" description="设备可能仍离线；页面没有重复执行写入或重启，圆屏在线后可刷新状态。"/>}
           {useSkinDisplay.isError && <Alert className="settings-model-alert" type="error" showIcon
             title="未能切换为皮肤显示" description="请确认圆屏在线且运行支持显示模式切换的新固件；不会删除现有壁纸。"/>}
-          {draft && <div className="round-skin-editor" role="region" aria-label="本机自定义皮肤编辑器">
-            <h3>我的自定义皮肤</h3>
-            <p className="subtle">修改会立即出现在左侧预览；保存后生成新的 SHA-256，但不会自动写入圆屏。</p>
-            <div className="round-skin-color-grid">
-              {devicePaletteFields.map(([key, label]) => <label key={key}>
-                <span>{label}</span>
-                <input type="color" aria-label={`皮肤颜色：${label}`} value={draft.palette[key]}
-                  onChange={event => setDraft(current => current ? {
-                    ...current, palette:{...current.palette, [key]:event.target.value.toUpperCase()},
-                  } : current)}/>
-                <code>{draft.palette[key]}</code>
-              </label>)}
-            </div>
-            <div className="round-skin-size-grid">
-              {([['eye_width', '眼睛宽度', 12, 36], ['eye_height', '眼睛高度', 18, 48], ['mouth_width', '嘴部宽度', 20, 64]] as const)
-                .map(([key, label, min, max]) => <label key={key}><span>{label}</span>
-                  <InputNumber aria-label={label} min={min} max={max} value={draft.face[key]}
-                    onChange={value => typeof value === 'number' && setDraft(current => current ? {
-                      ...current, face:{...current.face, [key]:value},
-                    } : current)}/>
-                </label>)}
-            </div>
-            <Space wrap>
-              <Button type="primary" loading={saveCustom.isPending} onClick={() => saveCustom.mutate(draft)}>保存为“我的自定义皮肤”</Button>
-              <Button onClick={() => setDraft(undefined)}>取消编辑</Button>
-            </Space>
-            {saveCustom.isError && <Alert className="settings-model-alert" type="warning" showIcon
-              title="自定义皮肤没有保存" description="可能有另一个页面先修改了档案。刷新页面后重新编辑，旧草稿不会覆盖新版本。"/>}
-          </div>}
-          <Alert className="settings-model-alert" type="warning" showIcon title="没有改写 assets 分区"
-            description="首版只修改固定 LVGL 参数并保留内置默认值；图片资源、浏览器动画和背景边缘渐变仍不下发。"/>
         </Card>
-        <Card title="5. 真机五态观察" extra={<Tag color={roundObservationStates.every(state=>observations[state])?'success':'default'}>
+        <Card title="真机五态观察" extra={<Tag color={roundObservationStates.every(state=>observations[state])?'success':'default'}>
           {roundObservationStates.filter(state=>observations[state]).length} / {roundObservationStates.length}
         </Tag>}>
           <p className="subtle">这里只记录你亲眼看到的真机表现，不从网页预览或设备在线状态自动判定。记录按真机皮肤 ID 和清单指纹隔离，只保存在当前浏览器。</p>
@@ -352,7 +389,8 @@ export function RoundDisplayApp() {
           </div>}
           {observationNotice&&<Alert className="settings-model-alert" type="info" showIcon title={observationNotice}/>}
         </Card>
-        <RoundWallpaperLibrary api={api} sessionReady={session.isSuccess}/>
+          </div>},
+        ]}/>
       </section>
     </div>
   </AppShell>;

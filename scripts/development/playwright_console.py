@@ -102,6 +102,7 @@ def main():
                 experiment_backend=ExperimentBackend(root / "experiments"),
                 round_skin_store=skins,
                 round_wallpaper_library=RoundWallpaperLibrary(root / "wallpapers"),
+                proactive_schedule_enabled=False,
                 allow_memory_correction=True,
                 allow_memory_delete=True,
             )

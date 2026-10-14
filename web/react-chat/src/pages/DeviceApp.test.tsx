@@ -1,10 +1,16 @@
-import {afterEach, describe, expect, test, vi} from 'vitest';
+import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
 import {fireEvent, render, screen, waitFor} from '@testing-library/react';
 import {QueryClientProvider} from '@tanstack/react-query';
 import {MemoryRouter} from 'react-router-dom';
 import {ChatApi} from '../api';
 import {DeviceApp} from './DeviceApp';
 import {createConsoleQueryClient} from '../app/queryClient';
+import * as diagnostics from '../features/observability/types';
+import {syntheticResponse} from '../features/data-workspace/syntheticFixtures';
+
+// 本文件只检查原设备时序；新摘要使用自己的有效合成契约，避免以 DeviceStatus 冒充摘要。
+beforeEach(() => vi.spyOn(diagnostics, 'readDiagnostics').mockResolvedValue(
+  syntheticResponse('/api/observability', false) as diagnostics.DiagnosticSnapshot));
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -93,6 +99,7 @@ describe('设备与状态页', () => {
     });
     const client=createConsoleQueryClient();
     const view=render(<QueryClientProvider client={client}><MemoryRouter><DeviceApp/></MemoryRouter></QueryClientProvider>);
+    fireEvent.click(screen.getByRole('button',{name:'语音时序与诊断'}));
     expect(await screen.findByText('最近一次圆屏首句时序')).toBeTruthy();
     expect(await screen.findByText('本轮最长已测区段：TTS 生成与编码')).toBeTruthy();
     expect(screen.getByText(/这是观测到的最长区段，不等于已经证明它是性能根因/)).toBeTruthy();
@@ -119,6 +126,7 @@ describe('设备与状态页', () => {
     });
     const client=createConsoleQueryClient();
     const view=render(<QueryClientProvider client={client}><MemoryRouter><DeviceApp/></MemoryRouter></QueryClientProvider>);
+    fireEvent.click(screen.getByRole('button',{name:'语音时序与诊断'}));
     expect(await screen.findByText('停嘴 → VAD 结束')).toBeTruthy();
     expect(screen.getByText('ASR 识别处理')).toBeTruthy();
     expect(screen.getByText('停嘴 → 首包发送')).toBeTruthy();
@@ -141,6 +149,7 @@ describe('设备与状态页', () => {
     });
     const client=createConsoleQueryClient();
     const view=render(<QueryClientProvider client={client}><MemoryRouter><DeviceApp/></MemoryRouter></QueryClientProvider>);
+    fireEvent.click(screen.getByRole('button',{name:'语音时序与诊断'}));
     expect(await screen.findByText('停嘴确认后的听写等待')).toBeTruthy();
     expect(screen.queryByText('ASR 识别处理')).toBeNull();
     expect(screen.getByText(/已提前计算 230 ms，当前连接已复用 1 次/)).toBeTruthy();
@@ -181,6 +190,7 @@ describe('设备与状态页', () => {
     });
     const client=createConsoleQueryClient();
     const view=render(<QueryClientProvider client={client}><MemoryRouter><DeviceApp/></MemoryRouter></QueryClientProvider>);
+    fireEvent.click(screen.getByRole('button',{name:'语音时序与诊断'}));
     expect(await screen.findByText('模型接口返回 404')).toBeTruthy();
     expect(screen.getByText(/这不是声音模型故障/)).toBeTruthy();
     expect(screen.getByText('回答失败')).toBeTruthy();
@@ -198,6 +208,7 @@ describe('设备与状态页', () => {
     });
     const client=createConsoleQueryClient();
     const view=render(<QueryClientProvider client={client}><MemoryRouter><DeviceApp/></MemoryRouter></QueryClientProvider>);
+    fireEvent.click(screen.getByRole('button',{name:'语音时序与诊断'}));
     expect(await screen.findByText('本地预置语音')).toBeTruthy();
     expect(screen.getByText('本轮命中封闭寒暄快速通道')).toBeTruthy();
     expect(screen.getAllByText('已跳过（本地预置）')).toHaveLength(2);
@@ -213,6 +224,7 @@ describe('设备与状态页', () => {
     });
     const client=createConsoleQueryClient();
     const view=render(<QueryClientProvider client={client}><MemoryRouter><DeviceApp/></MemoryRouter></QueryClientProvider>);
+    fireEvent.click(screen.getByRole('button',{name:'语音时序与诊断'}));
     expect(await screen.findByText('预测式语音 · 影子观察')).toBeTruthy();
     expect(screen.getByText('当前不会提前播放')).toBeTruthy();
     expect(screen.getByText('50%')).toBeTruthy();
@@ -231,6 +243,7 @@ describe('设备与状态页', () => {
     });
     const client=createConsoleQueryClient();
     const view=render(<QueryClientProvider client={client}><MemoryRouter><DeviceApp/></MemoryRouter></QueryClientProvider>);
+    fireEvent.click(screen.getByRole('button',{name:'语音时序与诊断'}));
     expect(await screen.findByText('圆屏记忆协议不匹配')).toBeTruthy();
     expect(screen.getByText(/回答模型尚未收到请求/)).toBeTruthy();
     view.unmount(); client.clear();
@@ -272,6 +285,7 @@ describe('设备与状态页', () => {
     });
     const client=createConsoleQueryClient();
     const view=render(<QueryClientProvider client={client}><MemoryRouter><DeviceApp/></MemoryRouter></QueryClientProvider>);
+    fireEvent.click(screen.getByRole('button',{name:'语音时序与诊断'}));
     expect(await screen.findByText('直连传输缺少时间戳配对')).toBeTruthy();
     expect(screen.getByText('时间戳音频传输').parentElement?.textContent).toContain('未满足');
     expect(screen.queryByRole('button',{name:/开启 AEC/})).toBeNull();

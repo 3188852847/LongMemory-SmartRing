@@ -1,0 +1,64 @@
+/* 输入区占正常网格行，不用 fixed/sticky 遮挡历史内容或键盘焦点。 */
+.shell.workspace-shell.chat-shell { height: 100dvh; min-height: 0; overflow: hidden; }
+.shell.workspace-shell.chat-shell > main { min-height: 0; padding-block: 18px; overflow: hidden; }
+.shell.workspace-shell.chat-shell .shell-content { height: 100%; min-height: 0; display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto; gap: 12px; }
+.shell.workspace-shell.chat-shell .page-header { margin: 0; padding-bottom: 10px; }
+.shell.workspace-shell.chat-shell .page-kicker { margin-bottom: 3px; }
+.shell.workspace-shell.chat-shell .page-heading h1 { font-size: 1.45rem; }
+.shell.workspace-shell.chat-shell .chat-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
+.shell.workspace-shell.chat-shell .chat-current-title { flex: 1 1 140px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--muted-strong); font-size: .85rem; }
+.shell.workspace-shell.chat-shell .chat-tools .ant-btn { min-height: 36px; }
+.shell.workspace-shell.chat-shell .chat-workspace { position: relative; display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; min-height: 0; overflow: hidden; align-items: stretch; }
+.shell.workspace-shell.chat-shell .chat-workspace.has-panel { grid-template-columns: minmax(0, 1fr) minmax(280px, 34%); }
+.shell.workspace-shell.chat-shell .messages { min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; padding: 4px 12px 12px 4px; scroll-padding-block: 12px; }
+.shell.workspace-shell.chat-shell .messages > article { max-width: 78ch; margin: 0 auto 24px; overflow-wrap: anywhere; }
+.shell.workspace-shell.chat-shell .messages .empty { min-height: 0; padding: 28px 4px; }
+.shell.workspace-shell.chat-shell .turn-evidence-action { max-width: 100%; height: auto; min-height: 36px; white-space: normal; text-align: left; color: var(--muted-strong); font-size: .8rem; }
+.shell.workspace-shell.chat-shell .chat-aux-panel { position: static; order: initial; min-height: 0; min-width: 0; display: flex; flex-direction: column; padding: 0; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); box-shadow: none; }
+.shell.workspace-shell.chat-shell .chat-panel-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--border); }
+.shell.workspace-shell.chat-shell .chat-panel-heading h2 { margin: 0; color: var(--text-strong); font-size: .9rem; }
+.shell.workspace-shell.chat-shell .chat-panel-content { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 12px; overflow-wrap: anywhere; }
+.shell.workspace-shell.chat-shell .chat-panel-content .turn-evidence { border: 0; background: transparent; }
+.shell.workspace-shell.chat-shell .chat-panel-content .trace-group { display: block; }
+.shell.workspace-shell.chat-shell .chat-panel-content .turn-evidence > details { display: block; }
+.shell.workspace-shell.chat-shell .chat-panel-content .console-status-rail { grid-template-columns: 1fr; margin: 0 0 12px; }
+.shell.workspace-shell.chat-shell .chat-panel-content .rail-cell { border-right: 0; border-bottom: 1px solid var(--border); }
+.shell.workspace-shell.chat-shell .chat-panel-content .rail-cell:last-child { border-bottom: 0; }
+.shell.workspace-shell.chat-shell .chat-runtime-info { font-size: .85rem; line-height: 1.6; }
+.shell.workspace-shell.chat-shell .chat-runtime-info h3 { font-size: .9rem; }
+.shell.workspace-shell.chat-shell .chat-sidebar-panel { border: 0; padding: 0; margin: 0; }
+.shell.workspace-shell.chat-shell .chat-sidebar-heading { display: flex; justify-content: space-between; align-items: center; }
+.shell.workspace-shell.chat-shell .chat-sidebar-heading h2 { margin: 0; font-size: .9rem; }
+.shell.workspace-shell.chat-shell .chat-sidebar-panel label { margin: 12px 0 6px; font-size: .85rem; }
+.shell.workspace-shell.chat-shell .chat-composer { min-width: 0; margin: 0; padding: 12px 14px; border: 1px solid var(--border-strong); border-radius: var(--radius-md); background: var(--surface); box-shadow: none; }
+.shell.workspace-shell.chat-shell .chat-message-label { margin: 0 0 6px; font-size: .8rem; color: var(--muted-strong); }
+.shell.workspace-shell.chat-shell .chat-composer textarea { resize: none; max-height: 7rem; font-size: 1rem; }
+.shell.workspace-shell.chat-shell .send-row { margin-top: 8px; padding: 0; gap: 10px; }
+.shell.workspace-shell.chat-shell .send-row .ant-select { min-width: 0; max-width: calc(100% - 70px); font-size: .8rem; }
+.shell.workspace-shell.chat-shell .chat-status { margin: 8px 0 0; max-height: 4.5em; overflow-y: auto; font-size: .8rem; line-height: 1.5; }
+
+@media (max-width: 1100px) {
+  /* 窄窗口切换消息/辅助面板；保留输入区，不把证据挤成窄列。 */
+  .shell.workspace-shell.chat-shell .chat-workspace.has-panel { grid-template-columns: 1fr; }
+  .shell.workspace-shell.chat-shell .chat-workspace.has-panel > .messages { position: absolute; inset: 0; visibility: hidden; }
+}
+@media (max-width: 760px) {
+  .shell.workspace-shell.chat-shell { display: flex; flex-direction: column; }
+  .shell.workspace-shell.chat-shell > .shell-sidebar { flex: none; }
+  .shell.workspace-shell.chat-shell > main { flex: 1; padding: 12px; }
+  .shell.workspace-shell.chat-shell .shell-content { gap: 8px; }
+  .shell.workspace-shell.chat-shell .page-header { flex-direction: row; align-items: center; gap: 8px; }
+  .shell.workspace-shell.chat-shell .page-action { width: auto; }
+  .shell.workspace-shell.chat-shell .page-kicker { display: none; }
+  .shell.workspace-shell.chat-shell .page-header-actions { gap: 6px; }
+  .shell.workspace-shell.chat-shell .chat-current-title { flex-basis: 100%; }
+  .shell.workspace-shell.chat-shell .chat-tools { gap: 6px; }
+  .shell.workspace-shell.chat-shell .chat-tools .ant-btn { min-height: 40px; padding-inline: 10px; }
+  .shell.workspace-shell.chat-shell .chat-composer { padding: 9px 10px; }
+}
+@media (max-height: 560px) {
+  .shell.workspace-shell.chat-shell .page-kicker, .shell.workspace-shell.chat-shell .chat-message-label { display: none; }
+  .shell.workspace-shell.chat-shell .shell-content { gap: 6px; }
+  .shell.workspace-shell.chat-shell .chat-composer textarea { max-height: 4rem; }
+  .shell.workspace-shell.chat-shell .chat-status { max-height: 3em; }
+}

@@ -55,6 +55,18 @@ export function AppearanceProvider({children}: {children: ReactNode}) {
     apply(document.documentElement, prefs, systemDark, systemReducedMotion);
   }, [prefs, systemDark, systemReducedMotion]);
 
+  useEffect(() => {
+    // 键盘不等待装饰过渡；选择器只影响视觉，不阻止任何事件或修改焦点。
+    const onKey = () => {document.documentElement.dataset.inputModality = 'keyboard';};
+    const onPointer = () => {document.documentElement.dataset.inputModality = 'pointer';};
+    window.addEventListener('keydown', onKey, true);
+    window.addEventListener('pointerdown', onPointer, true);
+    return () => {
+      window.removeEventListener('keydown', onKey, true);
+      window.removeEventListener('pointerdown', onPointer, true);
+    };
+  }, []);
+
   const value = useMemo<AppearanceContextValue>(() => ({
     prefs,
     update(next) {
@@ -78,29 +90,31 @@ export function AppearanceProvider({children}: {children: ReactNode}) {
     <ConfigProvider csp={{nonce}} theme={{algorithm: dark ? theme.darkAlgorithm : theme.defaultAlgorithm,
       token: {
         motion,
-        colorPrimary: future ? '#28d7f2' : dark ? '#e16e9e' : '#a72a5f',
+        colorPrimary: future ? '#5ce5ed' : dark ? '#e16e9e' : '#a72a5f',
         colorInfo: future ? '#55a7ff' : dark ? '#74a0df' : '#3769b0',
-        colorSuccess: future ? '#38e5a3' : dark ? '#55b889' : '#198754',
-        colorWarning: future ? '#ffbd4a' : dark ? '#d6a94e' : '#b7791f',
-        colorError: future ? '#ff647c' : dark ? '#e06b75' : '#c43d4b',
-        colorBgLayout: future ? '#050f1f' : dark ? '#101217' : '#f5f6f8',
-        colorBgContainer: future ? '#09192c' : dark ? '#171a21' : '#ffffff',
-        colorBgElevated: future ? '#0c2036' : dark ? '#1b1f27' : '#ffffff',
+        colorSuccess: future ? '#70dfbd' : dark ? '#55b889' : '#198754',
+        colorWarning: future ? '#efb864' : dark ? '#d6a94e' : '#b7791f',
+        colorError: future ? '#ff8395' : dark ? '#e06b75' : '#c43d4b',
+        colorBgLayout: future ? '#06111b' : dark ? '#101217' : '#f5f6f8',
+        colorBgContainer: future ? '#0b1c2c' : dark ? '#171a21' : '#ffffff',
+        colorBgElevated: future ? '#102738' : dark ? '#1b1f27' : '#ffffff',
         colorBorderSecondary: future ? '#173b58' : dark ? '#2a2f39' : '#e3e6eb',
-        colorText: future ? '#d9ecf7' : dark ? '#e7eaf0' : '#20232b',
-        colorTextSecondary: future ? '#7fa5bb' : dark ? '#9da5b3' : '#6b7280',
+        colorText: future ? '#edf7fb' : dark ? '#e7eaf0' : '#20232b',
+        colorTextSecondary: future ? '#a2bac9' : dark ? '#9da5b3' : '#6b7280',
         fontFamily: 'Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif',
         fontSize,
-        borderRadius: future ? 4 : 8,
-        borderRadiusLG: future ? 6 : 12,
+        borderRadius: 8,
+        borderRadiusLG: 12,
+        motionDurationFast: '0.1s', motionDurationMid: '0.16s', motionDurationSlow: '0.24s',
+        motionEaseOut: 'cubic-bezier(0.23, 1, 0.32, 1)',
         controlHeight: 36,
         boxShadow: future ? '0 18px 42px rgba(0,0,0,.28)' : dark ? '0 12px 32px rgba(0,0,0,.2)' : '0 8px 28px rgba(17,24,39,.055)',
       },
       components: {
         Button: {primaryShadow: 'none', defaultShadow: 'none', dangerShadow: 'none'},
         Card: {headerBg: 'transparent'},
-        Drawer: {colorBgElevated: future ? '#09192c' : dark ? '#171a21' : '#ffffff'},
-        Modal: {contentBg: future ? '#09192c' : dark ? '#171a21' : '#ffffff', headerBg: future ? '#09192c' : dark ? '#171a21' : '#ffffff'},
+        Drawer: {colorBgElevated: future ? '#0b1c2c' : dark ? '#171a21' : '#ffffff'},
+        Modal: {contentBg: future ? '#0b1c2c' : dark ? '#171a21' : '#ffffff', headerBg: future ? '#0b1c2c' : dark ? '#171a21' : '#ffffff'},
       },
     }}>
       {children}

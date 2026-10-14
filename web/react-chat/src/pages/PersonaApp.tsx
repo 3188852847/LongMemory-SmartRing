@@ -1,7 +1,8 @@
+import {DataWorkspace, useWorkspaceParam} from '../features/data-workspace/DataWorkspace';
+import {useUnsavedChanges} from '../app/UnsavedChanges';
 import {useEffect, useState} from 'react';
 import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
-import {Alert, Button, Card, Descriptions, Drawer, Empty, Input, List, Modal, Select, Space, Tabs, Tag} from 'antd';
-import {useSearchParams} from 'react-router-dom';
+import {Alert, Button, Card, Descriptions, Drawer, Empty, Input, List, Modal, Select, Space, Tag} from 'antd';
 import {ChatApi} from '../api';
 import {AppShell, ConsoleNav} from '../components/AppShell';
 import {PageHeader} from '../components/PageHeader';
@@ -46,15 +47,16 @@ const parseSource = (value:string) => {const [layer,id] = JSON.parse(value) as [
 
 /** L3 先保存可核对候选；助手角色、单次印象和未复核推断都不能成为用户画像。 */
 export function PersonaApp() {
-  const [searchParams,setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const [ready,setReady] = useState(false);
   const [notice,setNotice] = useState('正在连接本机记忆服务…');
-  const [filter,setFilter] = useState<'all'|PersonaState>('all');
-  const [selectedId,setSelectedId] = useState<string|undefined>(() => {
-    const value=searchParams.get('persona_id')?.trim();
-    return value&&value.length<=128&&!/[\u0000-\u001f\u007f]/.test(value)?value:undefined;
-  });
+  const [workspace,setWorkspace] = useWorkspaceParam('view','profile',['profile','evidence','consolidation']);
+  const [filterValue,setFilter] = useWorkspaceParam('state','all',['all','candidate','active','rejected','stale']);
+  const filter = filterValue as 'all'|PersonaState;
+  const [query,setQuery] = useWorkspaceParam('q','');
+  const [selectedValue,selectId] = useWorkspaceParam('persona_id','');
+  const selectedId = selectedValue.length<=128 ? selectedValue || undefined : undefined;
+  const setSelectedId = (value:string|undefined) => selectId(value??'');
   const [creating,setCreating] = useState(false);
   const [confirmingModel,setConfirmingModel] = useState(false);
   const [draftOrigin,setDraftOrigin] = useState<'manual'|'model_assisted'|'model_consolidation'>('manual');
@@ -67,6 +69,7 @@ export function PersonaApp() {
   const [validFrom,setValidFrom] = useState('');
   const [validTo,setValidTo] = useState('');
   const [replacementIds,setReplacementIds] = useState<string[]>([]);
+  useUnsavedChanges(creating && Boolean(label || statement || sources.length || validFrom || validTo || replacementIds.length), '有未保存的画像候选。');
 
   useEffect(() => {void api.bootstrap().then(() => setReady(true)).catch(error => setNotice(derivedMemoryFailure(error, 'read')));},[]);
   const config = useQuery({queryKey:['memory-config'],enabled:ready,queryFn:() => api.request<MemoryConfig>('/api/memory-config')});
@@ -78,10 +81,7 @@ export function PersonaApp() {
     queryFn:() => api.request<SourceOptions>('/api/persona-source-options')});
   const detail = useQuery({queryKey:['persona',selectedId],enabled:ready&&Boolean(selectedId),
     queryFn:() => api.request<PersonaDetail>(`/api/personas/${encodeURIComponent(selectedId!)}`)});
-  const closeDetail=()=>{
-    setSelectedId(undefined);
-    if(searchParams.has('persona_id')){const next=new URLSearchParams(searchParams);next.delete('persona_id');setSearchParams(next,{replace:true});}
-  };
+  const closeDetail = () => setSelectedId(undefined);
 
   const createCandidate = useMutation({
     mutationFn:() => api.request<{id:string}>('/api/personas','POST',{
@@ -148,12 +148,12 @@ export function PersonaApp() {
     </Space>:<Empty description="尚无已接受的画像认识；候选需在“画像依据与候选”中复核后才会进入这里"/>}
   </Card>;
   const evidencePane = <>
-    <div className="scenario-toolbar"><Select aria-label="画像状态" value={filter} onChange={setFilter} options={[
+    <div className="scenario-toolbar"><Input aria-label="搜索已加载画像" allowClear value={query} maxLength={200} onChange={event=>setQuery(event.target.value)} placeholder="搜索画像标签或内容"/><Select aria-label="画像状态" value={filter} onChange={value=>setFilter(value)} options={[
       {value:'all',label:'全部状态'},{value:'candidate',label:'待复核'},{value:'active',label:'已接受'},
       {value:'rejected',label:'已拒绝'},{value:'stale',label:'已失效'},
     ]}/></div>
-    <List loading={personas.isFetching} dataSource={personas.data?.items??[]} locale={{emptyText:<Empty description="尚无 L3 画像依据或候选"/>}}
-      renderItem={item=><List.Item className="memory-item" onClick={() => setSelectedId(item.id)} actions={[<Button key="open" type="link">查看证据</Button>]}>
+    <List loading={personas.isFetching} dataSource={(personas.data?.items??[]).filter(item=>`${item.label} ${item.statement}`.toLocaleLowerCase().includes(query.toLocaleLowerCase()))} locale={{emptyText:<Empty description={query?"当前已加载画像中没有匹配项":"尚无 L3 画像依据或候选"}/>}}
+      renderItem={item=><List.Item className="memory-item" onClick={() => setSelectedId(item.id)} actions={[<Button key="open" type="link" onClick={event=>{event.stopPropagation();setSelectedId(item.id);}}>查看证据</Button>]}>
         <List.Item.Meta title={<Space wrap><span>{item.label}</span><Tag>{kindName[item.kind]}</Tag><Tag color={item.basis==='user_declared'?'blue':'purple'}>{basisName[item.basis]}</Tag><Tag color={stateColor[item.status]}>{stateName[item.status]}</Tag></Space>}
           description={<><p className="scenario-summary">{item.statement}</p><small>{displayTime(item.generated_at)} · 修订 {item.revision}</small></>}/></List.Item>}/>
   </>;
@@ -164,11 +164,12 @@ export function PersonaApp() {
       ])}>刷新</Button>}/>
     <Alert className="mode-card" type="info" showIcon title="这里是一份持续累积的统一用户画像"
       description="页面按栏目汇总所有已接受的 L3 认识；底层仍保存独立断言和 L1/L2→L0 来源，便于逐项纠正、失效和审计。它不是助手角色，当前也尚未用于回答。"/>
-    <ConsolidationStatusCard stage="l2_to_l3" enabled={ready&&config.data?.configured===true}/>
+
     {!canManage&&config.data?.configured&&<Alert type="warning" showIcon title="当前进程没有开启 L3 管理权限" description="通过新版日常启动面板启动可开放候选与复核；只读浏览不受影响。"/>}
-    <Tabs defaultActiveKey="profile" items={[
+    <DataWorkspace label="画像工作区" activeKey={workspace} onChange={setWorkspace} items={[
       {key:'profile',label:'统一画像',children:profilePane},
-      {key:'evidence',label:`画像依据与候选（${personas.data?.total??0}）`,children:evidencePane},
+      {key:'evidence',label:`画像依据与候选（${personas.data?.total??0}）`,children:<>{evidencePane}<p className="subtle">当前状态读取最多 100 条；搜索仅筛选已加载内容。</p></>},
+      {key:'consolidation',label:'整理状态',children:<>    <ConsolidationStatusCard stage="l2_to_l3" enabled={ready&&config.data?.configured===true}/></>},
     ]}/>
     <p role="status">{config.error?derivedMemoryFailure(config.error,'read'):profile.error?derivedMemoryFailure(profile.error,'read'):personas.error?derivedMemoryFailure(personas.error,'read'):notice}</p>
   </AppShell>

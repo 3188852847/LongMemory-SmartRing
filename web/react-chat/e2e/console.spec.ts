@@ -9,8 +9,10 @@ test('文字聊天可保存并在刷新后恢复，React 页面可统一导航',
 
   await page.goto('/chat-react');
   await expect(page.getByRole('heading', {name:'聊聊今天'})).toBeVisible();
-  await expect(page.getByRole('region', {name:'当前系统状态'})).toBeVisible();
+  await page.getByRole('button', {name:'记忆证据', exact:true}).click();
   await expect(page.getByRole('region', {name:'本轮记忆证据'})).toContainText('WAITING');
+  await page.getByRole('button', {name:'运行状态', exact:true}).click();
+  await expect(page.getByRole('region', {name:'当前系统状态'})).toBeVisible();
   await page.getByRole('link', {name:'查看模型诊断'}).click();
   await expect(page).toHaveURL(/\/settings\?tab=model$/);
   await expect(page.getByRole('tab', {name:'模型与服务'})).toHaveAttribute('aria-selected', 'true');
@@ -21,6 +23,7 @@ test('文字聊天可保存并在刷新后恢复，React 页面可统一导航',
   await page.getByRole('textbox', {name:'消息'}).fill('我养了一只叫豆包的猫');
   await page.locator('button[type="submit"]').click();
   await expect(page.locator('.bubble.assistant').getByText('好的，我记住了。', {exact:true})).toBeVisible();
+  await page.getByRole('button', {name:'记忆证据', exact:true}).click();
   await expect(page.getByRole('region', {name:'本轮记忆证据'})).toContainText('用户养了一只叫豆包的猫。');
   await page.getByRole('link', {name:'核对 L0 原话'}).click();
   await expect(page).toHaveURL(/\/memories\?memory_id=/);
@@ -95,6 +98,12 @@ test('文字聊天可保存并在刷新后恢复，React 页面可统一导航',
   await expect(page.getByText('纠正已保存：新 L1 生效，旧 L1 保留为已取代历史。')).toBeVisible();
   await expect(page.locator('.detail-content')).toHaveText('用户现在养了一只叫布丁的猫。');
   await expect(page.locator('.ant-modal-wrap:visible')).toHaveCount(0);
+  // 每日回顾已由 E 移入独立任务；先关闭来源抽屉再进入，不穿过遮罩操作。
+  const deletedMemoryId = await memoryDetail.locator('.ant-descriptions-item').filter({
+    hasText:'记忆 ID',
+  }).locator('.ant-descriptions-item-content').innerText();
+  await memoryDetail.locator('.ant-drawer-close').click();
+  await page.getByRole('button', {name:'每日回顾', exact:true}).click();
   const dailyReview = page.locator('.ant-card').filter({hasText:'每日记忆回顾'}).first();
   await expect(dailyReview).toContainText('纠正 1');
   await expect(dailyReview).toContainText('事实变化 1');
@@ -104,10 +113,8 @@ test('文字聊天可保存并在刷新后恢复，React 页面可统一导航',
   await expect(dailyReview.locator('.ant-list-item').filter({
     hasText:'用户现在养了一只叫布丁的猫。',
   })).toContainText('当前');
-  const deletedMemoryId = await memoryDetail.locator('.ant-descriptions-item').filter({
-    hasText:'记忆 ID',
-  }).locator('.ant-descriptions-item-content').innerText();
-
+  await page.getByRole('button', {name:'浏览记忆', exact:true}).click();
+  await page.locator('.memory-browser .memory-item').filter({hasText:'用户现在养了一只叫布丁的猫。'}).getByRole('button', {name:'查看来源'}).click();
   await memoryDetail.getByRole('button', {name:/删\s*除/}).click();
   const deleteDialog = page.getByRole('dialog', {name:'删除这条 L1 记忆？'});
   await expect(deleteDialog).toBeVisible();
@@ -119,10 +126,12 @@ test('文字聊天可保存并在刷新后恢复，React 页面可统一导航',
   await expect(page.locator('.memory-browser .memory-item').filter({
     hasText:'用户现在养了一只叫布丁的猫。',
   })).toHaveCount(0);
+  await page.getByRole('button', {name:'每日回顾', exact:true}).click();
   await expect(dailyReview).toContainText('事实变化 1');
   await expect(dailyReview).toContainText('删除 1');
   await dailyReview.getByText('查看删除审计（1）').click();
   await expect(dailyReview.getByText(/已删除 L1：/).locator('code')).toHaveText(deletedMemoryId);
+  await page.getByRole('button', {name:'浏览记忆', exact:true}).click();
   await page.getByRole('tab', {name:/^L0 原始记录/}).click();
   await expect(page.locator('.memory-browser .memory-item').filter({
     hasText:'我养了一只叫豆包的猫',
@@ -143,6 +152,7 @@ test('窄窗口保留全部主导航且页面不产生横向溢出', async ({pag
   await page.setViewportSize({width:390, height:844});
   await page.goto('/chat-react');
   await expect(page.getByRole('heading', {name:'聊聊今天'})).toBeVisible();
+  await page.getByRole('button', {name:'展开导航'}).click();
   await expect(page.getByRole('link', {name:'设备状态'})).toBeVisible();
   await expect(page.getByRole('link', {name:'圆屏预览'})).toBeVisible();
   await expect(page.getByRole('link', {name:'实验中心'})).toBeVisible();
@@ -150,6 +160,7 @@ test('窄窗口保留全部主导航且页面不产生横向溢出', async ({pag
 
   await page.getByRole('link', {name:'设置中心'}).click();
   await expect(page.getByRole('heading', {name:'助手设置'})).toBeVisible();
+  await expect(page.getByRole('button', {name:'展开导航'})).toHaveAttribute('aria-expanded', 'false');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });
 
@@ -159,6 +170,7 @@ test('只读实验服务不能误启动模型作业', async ({page}) => {
     if (request.method() === 'POST' && request.url().endsWith('/api/experiment-jobs/start')) starts.push(request.url());
   });
   await page.goto('/experiments-react');
+  await page.getByRole('button', {name:'运行实验', exact:true}).click();
   await expect(page.getByText(/当前服务仅查看档案/)).toBeVisible();
   await expect(page.getByRole('button', {name:'预检与核对预算'})).toBeDisabled();
   expect(starts).toEqual([]);
@@ -167,6 +179,7 @@ test('只读实验服务不能误启动模型作业', async ({page}) => {
 test('所有者可合并并恢复重复 L1，矛盾候选没有合并入口', async ({page}) => {
   await page.goto('/memories');
   await expect(page.getByRole('heading', {name:'原始与原子记忆'})).toBeVisible();
+  await page.getByRole('button', {name:'重复与关系复核', exact:true}).click();
   await page.getByRole('button', {name:'扫描当前 L1'}).click();
 
   const duplicate = page.locator('.quality-candidate-item').filter({hasText:'规范化重复'});

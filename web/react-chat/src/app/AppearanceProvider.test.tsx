@@ -11,9 +11,18 @@ function MotionProbe() {
     <button onClick={() => update({...prefs, motion: 'reduce'})}>减少动态效果</button></>;
 }
 
-afterEach(() => {localStorage.clear(); vi.unstubAllGlobals();});
+afterEach(() => {localStorage.clear(); delete document.documentElement.dataset.inputModality; vi.unstubAllGlobals();});
 
 describe('共享主题的组件库运动偏好', () => {
+  test('键盘和指针只设置运动方式，不阻止焦点或默认操作', () => {
+    const {unmount} = render(<AppearanceProvider><MotionProbe/></AppearanceProvider>);
+    fireEvent.keyDown(window, {key: 'Tab'});
+    expect(document.documentElement.dataset.inputModality).toBe('keyboard');
+    fireEvent.pointerDown(window);
+    expect(document.documentElement.dataset.inputModality).toBe('pointer');
+    unmount(); fireEvent.keyDown(window, {key: 'Tab'});
+    expect(document.documentElement.dataset.inputModality).toBe('pointer');
+  });
   test.each([
     ['system', false, '允许组件运动'],
     ['system', true, '减少组件运动'],

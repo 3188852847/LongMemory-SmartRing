@@ -45,6 +45,8 @@ from .vad_settings import VadSettings, register_vad_routes
 from .proactive_scheduler import ProactiveScheduleLoop
 from .launcher_status import read_launcher_status
 from longmemory.infrastructure.logging.setup import configure_file_logging, close_file_logging
+from longmemory.infrastructure.logging.diagnostics import Diagnostics
+from .observability import observability_middleware, register_observability
 
 ROOT = Path(__file__).resolve().parents[4]
 STATIC_FILES = {
@@ -83,14 +85,17 @@ def create_app(*, port=8765, bridge=None, web_root=None, database=None, allow_me
                round_skin_store=None, round_wallpaper_library=None,
                round_wallpaper_delivery=None, launcher_status_file=None,
                semantic_relation_previewer=None, proactive_greeting_composer=None,
-               proactive_schedule_enabled=True):
+               proactive_schedule_enabled=True, diagnostics=None, observability_root=None):
     sessions = Sessions()
     assets = web_root or ROOT / "web"
     client = bridge if bridge is not None else XiaozhiControlClient(ROOT / "data/control/device-control.token")
     operation_lock = asyncio.Lock()
+    observer = diagnostics if diagnostics is not None else Diagnostics(observability_root)
     app = web.Application(client_max_size=1024, middlewares=[
+        observability_middleware(observer),
         security_middleware(f"127.0.0.1:{port}", sessions, memory_runtime_token)
     ])
+    register_observability(app, observer)
 
     async def static(request):
         # 不把仓库当作静态文件目录，避免 .env、数据库和令牌被网页下载。
@@ -594,7 +599,8 @@ def main():
                                launcher_status_file=args.launcher_status_file,
                                semantic_relation_previewer=semantic_relation_previewer,
                                proactive_greeting_composer=proactive_greeting_composer,
-                               proactive_schedule_enabled=not args.disable_proactive_schedule),
+                               proactive_schedule_enabled=not args.disable_proactive_schedule,
+                               observability_root=ROOT),
                     host="127.0.0.1", port=args.port, access_log=None, print=None)
     except OSError:
         parser.exit(1, f"控制台未能绑定 127.0.0.1:{args.port}。请检查旧控制台是否仍在运行或端口权限；未自动停止其他进程、未换端口。\n")

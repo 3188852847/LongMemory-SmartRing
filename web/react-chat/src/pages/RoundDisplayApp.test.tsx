@@ -23,6 +23,55 @@ describe('圆屏状态协议与模拟器', () => {
     expect(deviceSkinErrorCopy(new ApiError('round_skin_readback_invalid', 409)).title).toBe('未能读取真机皮肤能力');
   });
 
+  test('预览保存提示随对象和自定义清单版本失效，保持选择保存与编辑保存独立', async () => {
+    vi.spyOn(ChatApi.prototype, 'bootstrap').mockResolvedValue(undefined);
+    const makeSkin=(id:string,name:string,hash:string)=>({
+      schema_version:1,id,name,description:'合成档案',
+      target:{board:'viewe-smartring-plus',width:360,height:360,color_format:'RGB565',skin_api:1},
+      palette:Object.fromEntries(['background','background_edge','foreground','muted','accent','listening','thinking','happy','concerned','warning','error','charging'].map(key=>[key,'#123456'])),
+      face:{eye_width:22,eye_height:36,mouth_width:38},motion:{blink_seconds:5.4,speaking_seconds:.52},manifest_sha256:hash.repeat(64),
+    });
+    let payload={enabled:true,selected_skin:'rose-night-v1',custom_skin_id:'local-custom-v1',
+      skins:[makeSkin('rose-night-v1','合成默认','a'),makeSkin('local-custom-v1','合成自定义','b')]};
+    const request=vi.spyOn(ChatApi.prototype,'request').mockImplementation(async(path,method,body)=>{
+      if(path==='/api/round-skins/selection') {
+        payload={...payload,selected_skin:(body as {skin_id:string}).skin_id};
+        return structuredClone(payload);
+      }
+      if(path==='/api/round-skins/custom') {
+        payload={...payload,skins:[payload.skins[0],makeSkin('local-custom-v1','合成自定义','c')]};
+        return structuredClone(payload);
+      }
+      if(path==='/api/round-wallpapers/device') return {active_valid:false,rollback_available:false};
+      return structuredClone(payload);
+    });
+    const client=createConsoleQueryClient();
+    render(<QueryClientProvider client={client}><MemoryRouter initialEntries={['/display-preview?tab=skin']}><RoundDisplayApp/></MemoryRouter></QueryClientProvider>);
+    await waitFor(()=>expect(client.getQueryState(['round-skins'])?.fetchStatus).toBe('idle'));
+    expect(client.getQueryState(['round-skins'])?.error).toBeNull();
+    await waitFor(()=>expect((screen.getByRole('button',{name:'从当前皮肤开始编辑'}) as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.mouseDown(screen.getByRole('combobox',{name:'圆屏皮肤'}));
+    fireEvent.click(await screen.findByText('合成自定义',{selector:'.ant-select-item-option-content'}));
+    const save=screen.getByRole('button',{name:'保存预览选择'});
+    fireEvent.click(save);
+    const notice='电脑预览选择已保存；真机尚未下发。';
+    expect(await screen.findByText(notice)).toBeTruthy();
+    fireEvent.mouseDown(screen.getByRole('combobox',{name:'圆屏皮肤'}));
+    fireEvent.click(await screen.findByText('合成默认',{selector:'.ant-select-item-option-content'}));
+    expect(screen.queryByText(notice)).toBeNull();
+    fireEvent.mouseDown(screen.getByRole('combobox',{name:'圆屏皮肤'}));
+    fireEvent.click(await screen.findByText('合成自定义',{selector:'.ant-select-item-option-content'}));
+    expect(screen.getByText(notice)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button',{name:'从当前皮肤开始编辑'}));
+    fireEvent.change(screen.getByLabelText('皮肤颜色：背景'),{target:{value:'#112233'}});
+    fireEvent.click(screen.getByRole('button',{name:'保存为“我的自定义皮肤”'}));
+    await waitFor(()=>expect(screen.queryByRole('region',{name:'本机自定义皮肤编辑器'})).toBeNull());
+    await waitFor(()=>expect(client.getQueryData<{skins:{manifest_sha256:string}[]}>(['round-skins'])?.skins[1].manifest_sha256).toBe('c'.repeat(64)));
+    expect(screen.queryByText(notice)).toBeNull();
+    expect((save as HTMLButtonElement).disabled).toBe(true); // 仍选择同一 id，但编辑保存生成了新版本。
+    expect(request.mock.calls.some(([path])=>path==='/api/round-skins/device')).toBe(false);
+  });
+
   test('默认页面明确模拟边界并提供受限的本机皮肤编辑器', async () => {
     localStorage.clear();
     vi.spyOn(ChatApi.prototype, 'bootstrap').mockResolvedValue(undefined);
@@ -47,14 +96,17 @@ describe('圆屏状态协议与模拟器', () => {
     render(<QueryClientProvider client={queryClient}><MemoryRouter><RoundDisplayApp/></MemoryRouter></QueryClientProvider>);
     expect(screen.getByRole('heading', {name: '圆屏状态预览'})).toBeTruthy();
     expect(screen.getByText(/画布：360 × 360 px/)).toBeTruthy();
-    expect(screen.getByText('预览与真机采用同一版皮肤清单')).toBeTruthy();
+    expect(screen.getByText(/网页动画不证明新固件已在真机运行/)).toBeTruthy();
     expect(screen.getByRole('region', {name: '圆屏模拟画布'})).toBeTruthy();
-    expect(screen.getByText('1. 交互阶段')).toBeTruthy();
-    expect(screen.getByText('2. 情绪表达')).toBeTruthy();
-    expect(screen.getByText('3. 系统覆盖')).toBeTruthy();
-    expect(screen.getByText('4. 皮肤档案')).toBeTruthy();
+    expect(screen.getByText('交互阶段')).toBeTruthy();
+    expect(screen.getByText('情绪表达')).toBeTruthy();
+    expect(screen.getByText('系统覆盖')).toBeTruthy();
+    expect(screen.queryByRole('button', {name:'应用到真机'})).toBeNull();
+    fireEvent.click(screen.getByRole('tab', {name:'皮肤'}));
+    expect(screen.getByText('皮肤档案')).toBeTruthy();
     expect(screen.getByText('当前编辑/预览')).toBeTruthy();
     expect(screen.getByText('网页保存选择')).toBeTruthy();
+    fireEvent.click(screen.getByRole('tab', {name:'实机验证'}));
     expect(screen.getByText('最近真机回读')).toBeTruthy();
     expect(screen.getByText('真机显示模式')).toBeTruthy();
     expect(await screen.findByText('动态壁纸')).toBeTruthy();
@@ -62,8 +114,8 @@ describe('圆屏状态协议与模拟器', () => {
     const useSkinDisplay=screen.getByRole('button', {name:'切换为皮肤显示（会重启）'});
     expect(useSkinDisplay).toBeTruthy();
     expect(screen.getByText('不会自动检测')).toBeTruthy();
-    expect(screen.getByText('5. 真机五态观察')).toBeTruthy();
-    expect(screen.getByText('6. 动态壁纸素材库')).toBeTruthy();
+    expect(screen.getByText('真机五态观察')).toBeTruthy();
+    expect(screen.queryByText('6. 动态壁纸素材库')).toBeNull();
     expect(screen.getByText('先检测真机皮肤能力')).toBeTruthy();
     expect(screen.getByRole('button', {name:'检测真机皮肤能力'})).toBeTruthy();
     expect((screen.getByRole('button', {name:'应用到真机'}) as HTMLButtonElement).disabled).toBe(true);
@@ -74,6 +126,7 @@ describe('圆屏状态协议与模拟器', () => {
     expect(await screen.findByText('切换指令已发送，正在等待圆屏重连')).toBeTruthy();
     const reconnecting=screen.getByRole('button', {name:'等待圆屏重连'});
     expect(reconnecting.classList.contains('ant-btn-loading')).toBe(false);
+    fireEvent.click(screen.getByRole('tab', {name:'皮肤'}));
     const edit = screen.getByRole('button', {name:'从当前皮肤开始编辑'}) as HTMLButtonElement;
     await waitFor(() => expect(edit.disabled).toBe(false));
     fireEvent.click(edit);
@@ -81,6 +134,10 @@ describe('圆屏状态协议与模拟器', () => {
     expect(screen.getByLabelText('皮肤颜色：聆听')).toBeTruthy();
     expect(screen.getByRole('button', {name:'保存为“我的自定义皮肤”'})).toBeTruthy();
 
+    fireEvent.change(screen.getByLabelText('皮肤颜色：聆听'), {target:{value:'#123456'}});
+    expect((screen.getByLabelText('皮肤颜色：聆听') as HTMLInputElement).value).toBe('#123456');
+    fireEvent.click(screen.getByRole('tab', {name:'实机验证'}));
+    expect((screen.getByRole('button', {name:'应用到真机'}) as HTMLButtonElement).disabled).toBe(true);
     request.mockResolvedValueOnce({skin_api:1,skin_id:'rose-night-v1',manifest_sha256:'a'.repeat(64)});
     act(() => queryClient.setQueryData(['round-wallpapers','device'], {
       wallpaper_api:1,active_valid:false,active_slot:'',active_wallpaper_id:'',
@@ -88,9 +145,16 @@ describe('圆屏状态协议与模拟器', () => {
     }));
     expect(await screen.findByText('已确认切换为皮肤显示')).toBeTruthy();
     await screen.findByText(/真机支持皮肤协议/);
+    expect(screen.getByText('与当前预览不同')).toBeTruthy();
+    fireEvent.click(screen.getByRole('tab', {name:'皮肤'}));
+    expect((screen.getByLabelText('皮肤颜色：聆听') as HTMLInputElement).value).toBe('#123456');
+    fireEvent.click(screen.getByRole('button', {name:'取消编辑'}));
+    fireEvent.click(screen.getByRole('tab', {name:'实机验证'}));
     expect(screen.getByText('与当前预览一致')).toBeTruthy();
     fireEvent.click(screen.getByRole('checkbox',{name:'待机'}));
     expect(await screen.findByText(/观察记录已保存在当前浏览器/)).toBeTruthy();
     expect(localStorage.getItem(`longmemory:round-display-observations:v1:rose-night-v1:${'a'.repeat(64)}`)).toContain('idle');
+    fireEvent.click(screen.getByRole('tab', {name:'壁纸'}));
+    expect(await screen.findByText('6. 动态壁纸素材库')).toBeTruthy();
   });
 });

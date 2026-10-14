@@ -4,19 +4,22 @@ import json
 from pathlib import Path
 import sys
 import threading
+from tempfile import TemporaryDirectory
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / 'scripts/development/launcher'))
 from controller import ControllerError
 from preferences import DEFAULTS
 from web_app import create_server
+from events import LauncherEvents
 
 
 class PreviewController:
     """仅模拟启动器状态；所有进程、声音与设备事实都明确属于合成替身。"""
 
-    def __init__(self):
+    def __init__(self, root=None):
         self.lock = threading.RLock()
+        self.events = LauncherEvents(root)
         self.settings = {**DEFAULTS, 'model_profile': 'official',
                          'voice_model_profile': 'official', 'memory_backend': 'longmemory',
                          'memory_extraction': 'llm', 'memory_retrieval': 'hybrid'}
@@ -52,7 +55,7 @@ class PreviewController:
             self.version += 1
             return self.snapshot()
 
-    def action(self, action):
+    def action(self, action, *, request_id=None):
         with self.lock:
             if action == 'start':
                 self.state, self.pending = 'starting', 3
@@ -64,10 +67,13 @@ class PreviewController:
 
 
 if __name__ == '__main__':
-    server = create_server(PreviewController(), ROOT / 'web/react-chat/dist',
-                           token='synthetic-launcher-browser-test-token')
-    print(json.dumps({'origin': server.origin}), flush=True)
-    try:
-        server.serve_forever()
-    finally:
-        server.server_close()
+    with TemporaryDirectory(prefix='launcher-preview-') as directory:
+        preview = PreviewController(Path(directory))
+        server = create_server(preview, ROOT / 'web/react-chat/dist',
+                               token='synthetic-launcher-browser-test-token')
+        print(json.dumps({'origin': server.origin}), flush=True)
+        try:
+            server.serve_forever()
+        finally:
+            server.server_close()
+            preview.events.close()
