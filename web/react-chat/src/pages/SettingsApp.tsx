@@ -44,7 +44,8 @@ export function SettingsApp() {
       <div><small>当前模型</small><strong>{config.data?.model ?? '—'}</strong></div>
       <div><small>模型通道</small><strong>{config.data?.provider ?? '—'}</strong></div>
     </section>
-    <PersonalizationOverview api={api} ready={enabled} prefs={prefs} onSelectTab={selectTab}/>
+    <PersonalizationOverview api={api} ready={enabled} prefs={prefs} onSelectTab={selectTab}
+      availability={session.isError || config.isError ? 'failed' : session.isPending || config.isPending ? 'loading' : enabled ? 'ready' : 'disabled'}/>
       </>},
       {key:'model', label:'模型与服务', children:<Card title="模型与服务" extra={<span className="setting-scope">当前服务进程</span>}>
         <p>核对当前进程，并管理学校/官方两个本机配置档。页面永远不读取或显示已有 API Key，切换在重启后生效。</p>

@@ -170,6 +170,7 @@ test('只读实验服务不能误启动模型作业', async ({page}) => {
     if (request.method() === 'POST' && request.url().endsWith('/api/experiment-jobs/start')) starts.push(request.url());
   });
   await page.goto('/experiments-react');
+  await page.getByRole('button', {name:'运行实验', exact:true}).click();
   await expect(page.getByText(/当前服务仅查看档案/)).toBeVisible();
   await expect(page.getByRole('button', {name:'预检与核对预算'})).toBeDisabled();
   expect(starts).toEqual([]);

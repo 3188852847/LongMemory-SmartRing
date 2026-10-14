@@ -27,6 +27,11 @@
   .data-workspace-panel .experiment-run-list { max-height: 220px; overflow: auto; }
 }
 @media (max-width: 700px) {
+  .memory-source-drawer .ant-drawer-header { flex-wrap: wrap; gap: 12px; }
+  .memory-source-drawer .ant-drawer-header-title { flex: 1 1 100%; min-width: 0; }
+  .memory-source-drawer .ant-drawer-title { white-space: nowrap; }
+  .memory-source-drawer .ant-drawer-extra { margin-inline-start: 0; max-width: 100%; }
+  .memory-source-drawer .ant-drawer-extra .ant-btn { min-height: 44px; }
   .data-workspace-panel { max-height: none; overflow: visible; padding-inline: 0; }
   .data-workspace-panel .question-grid-react, .data-workspace-panel .device-grid { grid-template-columns: 1fr; }
   .data-workspace-panel .ant-list-item { flex-wrap: wrap; }

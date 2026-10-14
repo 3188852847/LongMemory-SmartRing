@@ -28,7 +28,7 @@ export function DiagnosticsPanel({snapshot, loading = false, error = false, onRe
   const headingId = useId();
   return <section className="observability-panel" aria-labelledby={headingId}>
     <Card title={<span id={headingId}>安全故障摘要</span>} extra={
-      <Button onClick={onRefresh} loading={loading}>刷新摘要</Button>
+      <Button aria-label="刷新摘要" onClick={onRefresh} loading={loading}>刷新摘要</Button>
     }>
       <p>摘要仅包含当前 API 进程观测到的请求。请求返回不代表后台任务完成，设备播放仍未确认。</p>
       {error && <Alert role="alert" type="error" showIcon title="摘要暂不可读取"

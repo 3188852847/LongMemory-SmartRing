@@ -23,7 +23,7 @@ describe('系统总览', () => {
     expect(screen.getAllByText('已连接').length).toBeGreaterThan(0);
     const details = screen.getByText('查看服务、回答与圆屏链路详情').closest('details')!;
     expect(details.open).toBe(false);
-    expect(screen.getByRole('link', {name:'文字聊天 输入、回答和本轮记忆证据'}).getAttribute('href')).toBe('/chat-react');
+    expect(screen.getByRole('link', {name:/^文字聊天\s*输入、回答和本轮记忆证据$/}).getAttribute('href')).toBe('/chat-react');
     fireEvent.click(screen.getByText('查看服务、回答与圆屏链路详情'));
     expect(details.open).toBe(true);
     expect(await screen.findByText('启动面板在线')).toBeTruthy();

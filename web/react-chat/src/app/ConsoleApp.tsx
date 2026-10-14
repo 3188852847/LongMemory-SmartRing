@@ -1,7 +1,7 @@
 import {lazy, Suspense} from 'react';
 import {QueryClientProvider} from '@tanstack/react-query';
-import {createBrowserRouter, createRoutesFromElements, Navigate, Outlet, Route, RouterProvider} from 'react-router-dom';
-import {UnsavedChangesProvider} from './UnsavedChanges';
+import {createBrowserRouter, createRoutesFromElements, Navigate, Route, RouterProvider} from 'react-router-dom';
+import {RouteWorkspace} from './RouteWorkspace';
 import {AppearanceProvider} from './AppearanceProvider';
 import {createConsoleQueryClient} from './queryClient';
 import {ChatApp} from '../pages/ChatApp';
@@ -21,7 +21,7 @@ const queryClient = createConsoleQueryClient();
 
 /** 应用装配层只建立共享上下文和路由，具体交互由页面与业务功能负责。 */
 const router = createBrowserRouter(createRoutesFromElements(
-  <Route element={<UnsavedChangesProvider><Outlet/></UnsavedChangesProvider>}>
+  <Route element={<RouteWorkspace/>}>
     <Route path="/overview" element={<Suspense fallback={<p className="page-loading">正在加载系统总览…</p>}><OverviewApp/></Suspense>}/>
     <Route path="/device" element={<Suspense fallback={<p className="page-loading">正在加载设备控制…</p>}><DeviceApp/></Suspense>}/>
     <Route path="/display-preview" element={<Suspense fallback={<p className="page-loading">正在加载圆屏预览…</p>}><RoundDisplayApp/></Suspense>}/>

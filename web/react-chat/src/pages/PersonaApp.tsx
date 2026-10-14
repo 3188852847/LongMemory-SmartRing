@@ -148,7 +148,7 @@ export function PersonaApp() {
     </Space>:<Empty description="尚无已接受的画像认识；候选需在“画像依据与候选”中复核后才会进入这里"/>}
   </Card>;
   const evidencePane = <>
-    <div className="scenario-toolbar"><Input aria-label="搜索已加载画像" allowClear value={query} maxLength={200} onChange={event=>setQuery(event.target.value)} placeholder="搜索画像标签或内容"/><Select aria-label="画像状态" value={filter} onChange={setFilter} options={[
+    <div className="scenario-toolbar"><Input aria-label="搜索已加载画像" allowClear value={query} maxLength={200} onChange={event=>setQuery(event.target.value)} placeholder="搜索画像标签或内容"/><Select aria-label="画像状态" value={filter} onChange={value=>setFilter(value)} options={[
       {value:'all',label:'全部状态'},{value:'candidate',label:'待复核'},{value:'active',label:'已接受'},
       {value:'rejected',label:'已拒绝'},{value:'stale',label:'已失效'},
     ]}/></div>

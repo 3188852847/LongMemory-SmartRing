@@ -5,6 +5,16 @@ import {ChatApi} from '../../api';
 import {PersonalizationOverview} from './PersonalizationOverview';
 
 describe('个性化状态总览', () => {
+  test('父级失败时禁用子查询不冒充读取中或已保存', () => {
+    const request = vi.spyOn(ChatApi.prototype,'request');
+    const client = new QueryClient({defaultOptions:{queries:{retry:false}}});
+    render(<QueryClientProvider client={client}><PersonalizationOverview api={new ChatApi()} ready={false} availability="failed"
+      prefs={{theme:'future',size:'normal',motion:'reduce',density:'comfortable',chatWidth:'focused'}} onSelectTab={()=>undefined}/></QueryClientProvider>);
+    expect(screen.getAllByText('设置服务读取失败').length).toBeGreaterThan(0);
+    expect(screen.queryByText('读取中')).toBeNull();
+    expect(screen.queryByText('下次启动选择已保存')).toBeNull();
+    expect(request).not.toHaveBeenCalled();
+  });
   test('区分网页选择、真机同步边界，并按需读取声音', async () => {
     const request = vi.spyOn(ChatApi.prototype, 'request').mockImplementation(async path => {
       if (path === '/api/assistant-role') return {current:{revision:3,name:'爱莉希雅',prompt:'测试提示词',saved_at:null},web:'next_turn',device:'check_required'};

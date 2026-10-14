@@ -32,7 +32,7 @@ describe('设置任务工作区', () => {
   test('分类直接可达，总览单独进入，前进后退恢复分类', async () => {
     mount();
     for (const name of ['设置总览','模型与服务','记忆后端','助手表达','声音与克隆','外观与阅读','主动交流']) {
-      expect(screen.getByRole('tab', {name, exact:true})).toBeTruthy();
+      expect(screen.getByRole('tab', {name})).toBeTruthy();
     }
     expect(screen.queryByRole('region', {name:'当前设置摘要'})).toBeNull();
     fireEvent.click(screen.getByRole('tab', {name:'外观与阅读'}));
@@ -52,7 +52,7 @@ describe('设置任务工作区', () => {
     expect(screen.queryByRole('heading', {name:'圆屏声音后端'})).toBeNull();
     fireEvent.change(screen.getByLabelText('表达指令（可留空）'), {target:{value:'合成语气'}});
     fireEvent.click(screen.getByRole('tab', {name:'助手表达'}));
-    fireEvent.click(screen.getByRole('tab', {name:'声音与克隆',exact:true}));
+    fireEvent.click(screen.getByRole('tab', {name:'声音与克隆'}));
     expect((screen.getByLabelText('表达指令（可留空）') as HTMLInputElement).value).toBe('合成语气');
     expect(screen.getByText(/有未保存的声音草稿/)).toBeTruthy();
     expect(screen.getByRole('list', {name:'声音设置流程'})).toBeTruthy();

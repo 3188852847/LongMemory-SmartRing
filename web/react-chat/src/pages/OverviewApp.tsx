@@ -65,7 +65,7 @@ export function OverviewApp() {
       action={<span className="overview-refresh-note">圆屏每 5 秒核对一次</span>}/>
     {session.isError && <Alert type="error" showIcon title="控制台会话不可用" description="网页后端可能已经停止。请回到启动面板查看受管服务状态；本页没有自动重启任何进程。"/>}
     <ConsoleStatusRail config={config.data} device={device.data} deviceFailed={device.isError} activeMemoryCount={memories.data?.total}/>
-      <Card className="overview-start" title="开始使用" extra={<Tag color={consoleReady ? 'green' : session.isError || config.isError ? 'red' : 'gold'}>{consoleReady ? '控制台就绪' : session.isError || config.isError ? '读取失败' : '正在核对'}</Tag>}>
+      <Card className="overview-start" title="开始使用" extra={<Tag color={consoleReady ? 'green' : session.isError || config.isError ? 'red' : 'gold'}>{consoleReady ? config.data?.provider === 'fake' ? '文字链路可测试（Fake）' : config.data?.enabled ? '网页控制台可用' : '聊天未启用' : session.isError || config.isError ? '读取失败' : '正在核对'}</Tag>}>
         <div className="overview-actions">
           <Link to="/chat-react"><strong>文字聊天</strong><span>输入、回答和本轮记忆证据</span></Link>
           <Link to="/device"><strong>设备与状态</strong><span>圆屏连接、音量、亮度和快照</span></Link>

@@ -107,6 +107,7 @@ export function ExperimentApp() {
     <DataWorkspace label="实验工作区" activeKey={workspace} onChange={setWorkspace} items={[
       {key:'archive',label:'档案与逐题对照',children:<>    <div className="experiment-layout">
       <Card className="experiment-archive-card" title="实验档案">
+        {runs.isSuccess && runs.data.items.length === 0 && <Alert type="info" title="还没有实验档案" description="准备冻结检索档案 → 运行对照 → 逐题复核。可在“运行实验”任务核对当前运行能力；本页不会自动创建档案或调用模型。"/>}
         <Input.Search aria-label="搜索实验" allowClear value={query} onChange={event => {setQuery(event.target.value); setPage(0);}} placeholder="模型、数据集或编号"/>
         <Select className="wide" aria-label="实验类型" value={filter} onChange={value => {setFilter(value); setPage(0);}} options={[{value:'all',label:'全部'},{value:'real',label:'真实模型回答'},{value:'fake',label:'Fake 工程验证'},{value:'retrieval',label:'仅检索'}]}/>
         <div className="experiment-run-list" aria-busy={runs.isLoading}>{filtered.slice(page*10,page*10+10).map(run => <button type="button" className="experiment-run" aria-pressed={selected===run.id} key={run.id} onClick={() => {if(run.id!==selected && canLeaveReview()) {setReviewDirty(false);setSelected(run.id,false);}}}><Space><Tag>{run.kind === 'retrieval' ? '仅检索' : run.provider === 'fake' ? 'Fake' : '真实回答'}</Tag><strong>{run.model ?? '模型未提供'}</strong></Space><span>{dateText(run.started_at)}<br/>{run.dataset} · {run.split} · {statusLabel(run.status)} {run.completed}/{run.total}<br/>{run.id.slice(-8)}</span></button>)}{!runs.isLoading && !filtered.length && <Empty description="没有匹配的实验"/>}</div>

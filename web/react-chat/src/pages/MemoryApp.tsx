@@ -1,6 +1,6 @@
 import {DataWorkspace, useWorkspaceParam} from '../features/data-workspace/DataWorkspace';
 import {useUnsavedChanges} from '../app/UnsavedChanges';
-import {useEffect, useRef, useState} from 'react';
+import {useEffect, useId, useRef, useState} from 'react';
 import {Alert, Button, Card, Checkbox, Descriptions, Drawer, Empty, Input, List, Modal, Select, Space, Switch, Tabs, Tag} from 'antd';
 import {Link, useSearchParams} from 'react-router-dom';
 import {ApiError, ChatApi, type DailyMemoryFeedback, type MemoryFeedbackKind} from '../api';
@@ -82,6 +82,7 @@ function DailyFeedbackReview({feedback}:{feedback:DailyMemoryFeedback}) {
 }
 
 export function MemoryApp() {
+  const sourceHeading = useId();
   const [searchParams, setSearchParams] = useSearchParams();
   const [workspace,setWorkspace] = useWorkspaceParam('view','browse',['browse','daily','consolidation','quality','runtime']);
   const [config, setConfig] = useState<MemoryConfig>();
@@ -196,6 +197,8 @@ export function MemoryApp() {
           fetchL0(0, '', 'all', 'all', '').catch(() => undefined),
           fetchDaily(),
         ]);
+        // L1 已按当前坐标读取，不再立即重复刷新并覆盖深链接的来源提示。
+        if (tab === 'l1') loadedCoordinate.current = browseCoordinate;
         setInitialized(true);
         setNotice('记忆已加载；可核对来源或切换任务。');
       } catch (error) {setNotice(memoryFailure(error, 'read'));}
@@ -586,7 +589,7 @@ export function MemoryApp() {
     ]}/>
     <p className="memory-status" role="status">{notice}</p>
     </AppShell>
-    <Drawer width={620} title="L1 原子记忆" open={Boolean(selectedL1)} onClose={closeL1} extra={<Space><Button onClick={()=>void openTemporalHistory()}>事实时间线</Button><Button disabled={!config?.allow_correction || selectedL1?.state !== 'active'} onClick={() => setCorrecting(true)}>纠正错误</Button><Button disabled={!config?.allow_change || selectedL1?.state !== 'active'} onClick={openChange}>记录变化</Button><Button danger disabled={!config?.allow_delete} onClick={() => setDeleting(true)}>删除</Button></Space>}>
+    <Drawer aria-labelledby={sourceHeading} className="memory-source-drawer" width={620} title={<span id={sourceHeading}>L1 原子记忆</span>} open={Boolean(selectedL1)} onClose={closeL1} extra={<Space wrap><Button onClick={()=>void openTemporalHistory()}>事实时间线</Button><Button disabled={!config?.allow_correction || selectedL1?.state !== 'active'} onClick={() => setCorrecting(true)}>纠正错误</Button><Button disabled={!config?.allow_change || selectedL1?.state !== 'active'} onClick={openChange}>记录变化</Button><Button danger disabled={!config?.allow_delete} onClick={() => setDeleting(true)}>删除</Button></Space>}>
       {selectedL1 && <><p className="detail-content">{selectedL1.content}</p><Descriptions column={1} size="small" items={[{key:'state',label:'层级与状态',children:<Space><Tag color="magenta">L1</Tag><Tag>{selectedL1.effective_state === 'expired' ? '已到期' : selectedL1.effective_state === 'not_started' ? '未生效' : selectedL1.state === 'active' ? '当前' : '已退役'}</Tag></Space>},{key:'id',label:'记忆 ID',children:selectedL1.id},{key:'time',label:'系统记录时间',children:displayTime(selectedL1.recorded_at)},{key:'validFrom',label:'事实开始生效',children:displayTime(selectedL1.valid_from)},{key:'validTo',label:'事实结束生效',children:displayTime(selectedL1.valid_to)},{key:'superseded',label:'取代它的记忆',children:selectedL1.superseded_by_id ?? '无'}]}/>
         <h3>L0 原始来源</h3>{selectedL1.sources.length ? selectedL1.sources.map(source => <Card size="small" className="source-card" key={`${source.source_message_id}:${source.source_type}`} title={<Space><Tag color="blue">L0</Tag><span>{sourceName(source.source_type)}</span></Space>}><p>{source.message?.content ?? '原始来源缺失，无法核对原文。'}</p><small>{source.message ? `${source.message.role === 'user' ? '用户' : '助手'} · ${displayTime(source.message.created_at)}` : source.source_message_id}</small></Card>) : <Empty description="这条 L1 没有可用来源，需要核查"/>}</>}
     </Drawer>

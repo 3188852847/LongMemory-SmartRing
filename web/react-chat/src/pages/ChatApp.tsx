@@ -58,15 +58,29 @@ export function ChatApp() {
   const memoryCount = useQuery({queryKey:['chat-active-memory-count'], enabled:Boolean(config?.enabled), retry:false,
     queryFn:() => api.request<MemoryPageSummary>('/api/memories?q=&state=active&offset=0&limit=1'), staleTime:30000});
   const focusedRequestId = searchParams.get('request_id');
+  const followLatest = useRef(true);
+  const previousChat = useRef<string | undefined>(undefined);
+  const [awayFromLatest, setAwayFromLatest] = useState(false);
   useEffect(() => {
     const focused = focusedRequestId ? document.getElementById(`turn-${focusedRequestId}`) : null;
     const viewport = messages.current;
     if (!viewport) return;
     // 只滚动消息容器，不能让浏览器把整个外壳/输入区带出视口。
-    viewport.scrollTop = focused
-      ? viewport.scrollTop + focused.getBoundingClientRect().top - viewport.getBoundingClientRect().top - 12
-      : viewport.scrollHeight;
+    const changedChat = previousChat.current !== chat?.chat_id;
+    previousChat.current = chat?.chat_id;
+    if (focused) {
+      viewport.scrollTop += focused.getBoundingClientRect().top - viewport.getBoundingClientRect().top - 12;
+      followLatest.current = false;
+    } else if (changedChat || followLatest.current) {
+      viewport.scrollTop = viewport.scrollHeight;
+      followLatest.current = true;
+      setAwayFromLatest(false);
+    }
   }, [chat?.chat_id, chat?.turns.length, focusedRequestId]);
+  function returnToLatest() {
+    if (messages.current) messages.current.scrollTop = messages.current.scrollHeight;
+    followLatest.current = true; setAwayFromLatest(false);
+  }
   useEffect(() => setEvidenceIndex(undefined), [chat?.chat_id]);
   // 窄窗口打开面板时消息被切换出去，将焦点送到新内容，收起后返回入口。
   useEffect(() => {if (panel) panelHeading.current?.focus();}, [panel, evidenceIndex]);
@@ -182,12 +196,17 @@ export function ChatApp() {
       <PageHeader eyebrow="日常使用" title="聊聊今天" action={<div className="page-header-actions"><span>{chat?.turns.length ?? 0} / 40 轮</span><MemoryCommandHelp/></div>}/>
       <div className="chat-tools" aria-label="聊天工作区工具">
         <span className="chat-current-title" title={chat?.title}>{chat?.title ?? '正在打开会话…'}</span>
-        <Button id="chat-tool-sessions" aria-expanded={panel === 'sessions'} aria-controls={panel ? 'chat-aux-panel' : undefined} onClick={() => togglePanel('sessions')}>会话</Button>
+        <Button id="chat-tool-sessions" aria-label="会话" aria-expanded={panel === 'sessions'} aria-controls={panel ? 'chat-aux-panel' : undefined} onClick={() => togglePanel('sessions')}>会话</Button>
         <Button id="chat-tool-evidence" aria-expanded={panel === 'evidence'} aria-controls={panel ? 'chat-aux-panel' : undefined} onClick={() => {setEvidenceIndex(undefined); togglePanel('evidence');}}>记忆证据</Button>
         <Button id="chat-tool-runtime" danger={config?.model_health?.state === 'unavailable'} aria-expanded={panel === 'runtime'} aria-controls={panel ? 'chat-aux-panel' : undefined} onClick={() => togglePanel('runtime')}>运行状态</Button>
         <Button disabled={disabled} onClick={() => changeChat()}>新聊天</Button>
+        {awayFromLatest && <Button onClick={returnToLatest}>回到最新</Button>}
       </div>
-      <div className={`chat-workspace${panel ? ' has-panel' : ''}`}><section ref={messages} className="messages" aria-label="聊天记录" tabIndex={0}>{!chat?.turns.length && <div className="empty"><h2>今天想聊些什么？</h2><p>可以说说今天的事，也可以继续上次的话题。</p></div>}
+      <div className={`chat-workspace${panel ? ' has-panel' : ''}`}><section ref={messages} className="messages" aria-label="聊天记录" tabIndex={0} onScroll={event => {
+        const viewport = event.currentTarget;
+        followLatest.current = viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop < 48;
+        setAwayFromLatest(!followLatest.current);
+      }}>{!chat?.turns.length && <div className="empty"><h2>今天想聊些什么？</h2><p>可以说说今天的事，也可以继续上次的话题。</p></div>}
         {chat?.turns.map((turn, i) => <article id={turn.request_id ? `turn-${turn.request_id}` : undefined} className={turn.request_id === focusedRequestId ? 'focused-chat-turn' : undefined} key={turn.request_id ?? i}><div className="bubble user"><strong>你</strong><p>{turn.input}</p></div><div className="bubble assistant"><strong>助手</strong><p>{turn.answer ?? '未获得完整回答。'}</p>{turn.answer&&<SpeechPlayer api={api} text={turn.answer}/>}<MemoryFeedbackControls turn={turn} disabled={busy || unknown} onSelect={kind => void setMemoryFeedback(turn,kind)}/></div>
           {turn.memory_command && <Alert className="memory-command-result" showIcon type={memoryCommandAlert(turn.memory_command.status)} title="实际记忆操作结果" description={turn.memory_command.notice}/>}
           {turn.follow_up_suggestion?.status === 'candidate_armed' && <Alert className="memory-command-result" showIcon type="success" title="一次性跟进已安排" description={`${new Date(turn.follow_up_suggestion.follow_up_at!).toLocaleString('zh-CN')} · ${turn.follow_up_suggestion.prompt_text}。到点仍会经过勿扰时段、频率和设备状态检查。`}/>}
@@ -212,8 +231,8 @@ export function ChatApp() {
         placeholder="写下想说的话…"/>
         <div className="send-row"><Select size="small" aria-label="发送快捷键" value={sendShortcut}
           options={[{value:'enter',label:'Enter 发送 · Shift+Enter 换行'},{value:'ctrl_enter',label:'Ctrl+Enter 发送 · Enter 换行'}]}
-          onChange={value => {setSendShortcut(value); saveSendShortcut(value);}}/><Button type="primary" htmlType="submit" loading={busy && Boolean(chat)} disabled={disabled || !draft.trim() || (chat?.turns.length ?? 0) >= 40}>发送</Button></div>
-        <p className="chat-status" role="status">{(chat?.turns.length ?? 0) >= 40 ? '本会话已达 40 轮，请新建聊天；长期记忆保留。' : notice}{config?.model_health?.state === 'unavailable' && ' 模型最近验证失败，可在运行状态中检测连接。'}</p>
+          onChange={value => {setSendShortcut(value); saveSendShortcut(value);}}/><Button aria-label="发送" type="primary" htmlType="submit" loading={busy && Boolean(chat)} disabled={disabled || !draft.trim() || (chat?.turns.length ?? 0) >= 40}>发送</Button></div>
+        <p className="chat-status" role="status" aria-label="聊天操作状态">{(chat?.turns.length ?? 0) >= 40 ? '本会话已达 40 轮，请新建聊天；长期记忆保留。' : notice}{config?.model_health?.state === 'unavailable' && ' 模型最近验证失败，可在运行状态中检测连接。'}</p>
         {unknown && <Button disabled={busy} onClick={() => void action(async () => {if (!chat) return; const result = await load(chat.chat_id); if (!result.pending && result.turns.length > chat.turns.length) setDraft(''); setNotice(result.pending ? '后台仍在处理，没有重发。' : '已查询。服务中断时不能据此保证未写入，请检查过程。');})}>只查询结果，不重发</Button>}
       </form>
     </AppShell>

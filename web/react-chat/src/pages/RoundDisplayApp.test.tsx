@@ -53,7 +53,7 @@ describe('圆屏状态协议与模拟器', () => {
     expect(screen.getByText('情绪表达')).toBeTruthy();
     expect(screen.getByText('系统覆盖')).toBeTruthy();
     expect(screen.queryByRole('button', {name:'应用到真机'})).toBeNull();
-    fireEvent.click(screen.getByRole('tab', {name:'皮肤', exact:true}));
+    fireEvent.click(screen.getByRole('tab', {name:'皮肤'}));
     expect(screen.getByText('皮肤档案')).toBeTruthy();
     expect(screen.getByText('当前编辑/预览')).toBeTruthy();
     expect(screen.getByText('网页保存选择')).toBeTruthy();
@@ -77,7 +77,7 @@ describe('圆屏状态协议与模拟器', () => {
     expect(await screen.findByText('切换指令已发送，正在等待圆屏重连')).toBeTruthy();
     const reconnecting=screen.getByRole('button', {name:'等待圆屏重连'});
     expect(reconnecting.classList.contains('ant-btn-loading')).toBe(false);
-    fireEvent.click(screen.getByRole('tab', {name:'皮肤', exact:true}));
+    fireEvent.click(screen.getByRole('tab', {name:'皮肤'}));
     const edit = screen.getByRole('button', {name:'从当前皮肤开始编辑'}) as HTMLButtonElement;
     await waitFor(() => expect(edit.disabled).toBe(false));
     fireEvent.click(edit);
@@ -97,7 +97,7 @@ describe('圆屏状态协议与模拟器', () => {
     expect(await screen.findByText('已确认切换为皮肤显示')).toBeTruthy();
     await screen.findByText(/真机支持皮肤协议/);
     expect(screen.getByText('与当前预览不同')).toBeTruthy();
-    fireEvent.click(screen.getByRole('tab', {name:'皮肤', exact:true}));
+    fireEvent.click(screen.getByRole('tab', {name:'皮肤'}));
     expect((screen.getByLabelText('皮肤颜色：聆听') as HTMLInputElement).value).toBe('#123456');
     fireEvent.click(screen.getByRole('button', {name:'取消编辑'}));
     fireEvent.click(screen.getByRole('tab', {name:'实机验证'}));

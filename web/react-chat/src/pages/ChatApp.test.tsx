@@ -30,6 +30,21 @@ function mount(snapshot: Snapshot, override?: (path: string, method: string, bod
 afterEach(() => vi.restoreAllMocks());
 
 describe('聊天工作区', () => {
+  test('回看时新回答不拉底，明确返回最新后恢复跟随', async () => {
+    mount({chat_id:'chat-synthetic',title:'合成会话',pending:false,turns:[turn(1)]}, (path, method) => {
+      if (path.endsWith('/messages') && method === 'POST') return turn(2);
+    });
+    await screen.findByText('会话已恢复，可以继续聊。');
+    const messages = screen.getByRole('region', {name:'聊天记录'});
+    Object.defineProperties(messages, {scrollHeight:{value:1000,configurable:true},clientHeight:{value:200,configurable:true}});
+    messages.scrollTop = 120; fireEvent.scroll(messages);
+    fireEvent.change(screen.getByRole('textbox', {name:'消息'}), {target:{value:'新的合成问题'}});
+    fireEvent.click(screen.getByRole('button', {name:'发送'}));
+    await screen.findByText('合成回答 2');
+    expect(messages.scrollTop).toBe(120);
+    fireEvent.click(screen.getByRole('button',{name:'回到最新'}));
+    expect(messages.scrollTop).toBe(1000);
+  });
   test('任意轮次证据可核对，辅助面板切换不清空草稿，收起返回键盘入口', async () => {
     mount({chat_id:'chat-synthetic', title:'合成会话', pending:false, turns:[turn(1),turn(2)]});
     await screen.findByText('合成回答 2');
@@ -39,16 +54,16 @@ describe('聊天工作区', () => {
     const evidence = screen.getByRole('region', {name:'本轮记忆证据'});
     expect(within(evidence).getByText('合成证据 1')).toBeTruthy();
     expect(within(evidence).getByRole('link', {name:'核对 L0 原话'}).getAttribute('href')).toBe('/memories?memory_id=memory-1');
-    fireEvent.click(screen.getByRole('button', {name:'会话', exact:true}));
+    fireEvent.click(screen.getByRole('button', {name:'会话'}));
     expect(screen.getByRole('textbox', {name:'查找会话'})).toBeTruthy();
     fireEvent.click(screen.getByRole('button', {name:'收起面板'}));
-    expect(document.activeElement).toBe(screen.getByRole('button', {name:'会话', exact:true}));
+    expect(document.activeElement).toBe(screen.getByRole('button', {name:'会话'}));
     expect((input as HTMLTextAreaElement).value).toBe('未发送的合成草稿');
     expect(screen.queryByRole('region', {name:'本轮记忆证据'})).toBeNull();
-    fireEvent.click(screen.getByRole('button', {name:'记忆证据', exact:true}));
+    fireEvent.click(screen.getByRole('button', {name:'记忆证据'}));
     expect(screen.getByText('合成证据 2')).toBeTruthy();
     fireEvent.keyDown(screen.getByRole('complementary', {name:'记忆证据面板'}), {key:'Escape'});
-    expect(document.activeElement).toBe(screen.getByRole('button', {name:'记忆证据', exact:true}));
+    expect(document.activeElement).toBe(screen.getByRole('button', {name:'记忆证据'}));
   });
 
   test('发送与记忆反馈仍经过原请求，反馈不重答', async () => {
@@ -58,7 +73,7 @@ describe('聊天工作区', () => {
     });
     await screen.findByText('会话已恢复，可以继续聊。');
     fireEvent.change(screen.getByRole('textbox', {name:'消息'}), {target:{value:'合成输入 1'}});
-    fireEvent.click(screen.getByRole('button', {name:'发送', exact:true}));
+    fireEvent.click(screen.getByRole('button', {name:'发送'}));
     await screen.findByText('合成回答 1');
     expect((screen.getByRole('textbox', {name:'消息'}) as HTMLTextAreaElement).value).toBe('');
     fireEvent.click(screen.getByRole('button', {name:'没想起已有记忆'}));
@@ -71,9 +86,9 @@ describe('聊天工作区', () => {
     mount({chat_id:'chat-synthetic', title:'合成会话', pending:false, turns:Array.from({length:40}, (_,i) => turn(i))});
     await screen.findByText('合成回答 39');
     expect((screen.getByRole('textbox', {name:'消息'}) as HTMLTextAreaElement).disabled).toBe(true);
-    expect((screen.getByRole('button', {name:'发送', exact:true}) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole('button', {name:'发送'}) as HTMLButtonElement).disabled).toBe(true);
     expect((screen.getByRole('button', {name:'新聊天'}) as HTMLButtonElement).disabled).toBe(false);
-    expect(screen.getByRole('status').textContent).toContain('已达 40 轮');
+    expect(screen.getByRole('status', {name:'聊天操作状态'}).textContent).toContain('已达 40 轮');
   });
 
   test('结果未知时保留只查询入口，不重复写入', async () => {

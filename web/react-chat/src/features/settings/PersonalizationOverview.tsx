@@ -29,15 +29,20 @@ const backendLabels:Record<TTSBackendId,string> = {
   edge:'EdgeTTS', voxcpm2:'VoxCPM2', sanotts:'sanoTTS', cosyvoice3:'CosyVoice 3',
 };
 
-function unavailable(query:{isError:boolean}) { return query.isError ? '读取失败' : '读取中'; }
-
 /**
  * 把分散的个性化配置放进同一张“事实表”。这里刻意不自动读取真机：
  * 真机读取会占用设备控制通道，而且预览选择不等于已经下发到设备。
  */
-export function PersonalizationOverview({api, ready, prefs, onSelectTab}:{
+export function PersonalizationOverview({api, ready, prefs, onSelectTab, availability = ready ? 'ready' : 'loading'}:{
   api:ChatApi; ready:boolean; prefs:AppearancePreferences; onSelectTab:(tab:string)=>void;
+  availability?: 'loading'|'failed'|'disabled'|'ready';
 }) {
+  function unavailable(query:{isError:boolean}) {
+    if (availability === 'failed') return '设置服务读取失败';
+    if (availability === 'disabled') return '当前服务未启用';
+    if (availability === 'loading') return '等待设置服务读取';
+    return query.isError ? '读取失败' : '读取中';
+  }
   const role = useQuery({queryKey:['assistant-role'], queryFn:()=>api.request<RoleSummary>('/api/assistant-role'), enabled:ready});
   const skins = useQuery({queryKey:['round-skins'], queryFn:()=>api.request<RoundSkins>('/api/round-skins'), enabled:ready});
   const proactive = useQuery({queryKey:['proactive-policy'], queryFn:()=>api.request<ProactivePolicy>('/api/proactive-policy'), enabled:ready});
@@ -47,7 +52,7 @@ export function PersonalizationOverview({api, ready, prefs, onSelectTab}:{
     enabled:false, retry:false,
   });
 
-  const rolePreferences = role.data ? readRolePreferences(role.data.current.prompt) : null;
+  const rolePreferences = role.data && ready ? readRolePreferences(role.data.current.prompt) : null;
   const selectedSkin = skins.data?.skins.find(item => item.id === skins.data?.selected_skin);
   const reference = voice.data?.profile?.reference;
   const referenceLabel = voice.data?.references?.find(item => item.id === reference)?.label ?? reference;
@@ -59,23 +64,23 @@ export function PersonalizationOverview({api, ready, prefs, onSelectTab}:{
       : voice.data.backend === 'edge' ? `${voice.data.voice ?? '默认音色'}` : '当前后端不支持设置';
   const currentTts = tts.data?.current_backend;
   const nextTts = tts.data?.next_start_backend;
-  const backendSummary = !tts.data ? unavailable(tts)
+  const backendSummary = !ready || !tts.data ? unavailable(tts)
     : !tts.data.enabled ? '当前进程未启用选择'
     : currentTts && nextTts && currentTts !== nextTts
       ? `本次 ${backendLabels[currentTts]}；下次 ${backendLabels[nextTts]}`
       : nextTts ? `下次 ${backendLabels[nextTts]}` : '没有可用选择';
   const voiceValue = `${backendSummary} · ${voiceDetail}`;
-  const voiceTiming = !tts.data ? unavailable(tts) : tts.data.restart_required
+  const voiceTiming = !ready || !tts.data ? unavailable(tts) : !tts.data.enabled ? '声音选择未启用' : tts.data.restart_required
     ? '停止并重启语音后' : tts.data.voice_running ? '本次／下次一致' : '下次启动选择已保存';
 
   const rows = [
     {key:'appearance', title:'控制台外观', value:`${themeLabels[prefs.theme]} · ${prefs.density === 'compact' ? '紧凑' : '舒展'}`, scope:'当前浏览器', timing:'立即生效', action:'appearance'},
-    {key:'role', title:'助手角色', value:role.data ? `${role.data.current.name} · 修订 ${role.data.current.revision}` : unavailable(role), scope:'网页对话', timing:'下一轮生效', action:'role'},
-    {key:'interaction', title:'表达与互动', value:rolePreferences?.enabled ? interactionLabels[rolePreferences.preferences.interactionStyle] : '使用角色提示词默认规则', scope:'网页；圆屏需同步角色', timing:'下一轮／同步后', action:'role'},
+    {key:'role', title:'助手角色', value:role.data && ready ? `${role.data.current.name} · 修订 ${role.data.current.revision}` : unavailable(role), scope:'网页对话', timing:ready && role.data ? '下一轮生效' : '尚未确认', action:'role'},
+    {key:'interaction', title:'表达与互动', value:!role.data || !ready ? unavailable(role) : rolePreferences?.enabled ? interactionLabels[rolePreferences.preferences.interactionStyle] : '使用角色提示词默认规则', scope:'网页；圆屏需同步角色', timing:ready && role.data ? '下一轮／同步后' : '尚未确认', action:'role'},
     {key:'voice', title:'声音方案', value:voiceValue, scope:'网页朗读＋圆屏 TTS', timing:voiceTiming, action:'voice'},
-    {key:'skin', title:'圆屏状态皮肤', value:selectedSkin?.name ?? (skins.data ? skins.data.selected_skin : unavailable(skins)), scope:'当前只是预览选择', timing:'真机需单独应用', action:'display'},
+    {key:'skin', title:'圆屏状态皮肤', value:!ready ? unavailable(skins) : selectedSkin?.name ?? (skins.data ? skins.data.selected_skin : unavailable(skins)), scope:'当前只是预览选择', timing:'真机需单独应用', action:'display'},
     {key:'wallpaper', title:'动态壁纸', value:'真机状态未自动读取', scope:'智能圆屏', timing:'在圆屏外观页发布', action:'display'},
-    {key:'proactive', title:'主动交流', value:proactive.data ? (proactive.data.enabled ? '已允许' : '已关闭') : unavailable(proactive), scope:'持久策略', timing:'保存后生效', action:'proactive'},
+    {key:'proactive', title:'主动交流', value:proactive.data && ready ? (proactive.data.enabled ? '已允许' : '已关闭') : unavailable(proactive), scope:'持久策略', timing:ready && proactive.data ? '保存后生效' : '尚未确认', action:'proactive'},
   ];
 
   return <section className="personalization-overview" aria-labelledby="personalization-overview-title">
@@ -94,7 +99,7 @@ export function PersonalizationOverview({api, ready, prefs, onSelectTab}:{
     </div>
     <div className="personalization-voice-read">
       <span>声音状态需要检查小智本地配置，因此不在打开页面时自动运行。</span>
-      <Button size="small" loading={voice.isFetching} onClick={() => void voice.refetch()}>读取声音状态</Button>
+      <Button size="small" disabled={!ready} loading={voice.isFetching} onClick={() => void voice.refetch()}>读取声音状态</Button>
     </div>
   </section>;
 }

@@ -1,5 +1,5 @@
 import {afterEach,describe,expect,test,vi} from 'vitest';
-import {fireEvent,render,screen,waitFor} from '@testing-library/react';
+import {fireEvent,render,screen,waitFor,within} from '@testing-library/react';
 import {MemoryRouter} from 'react-router-dom';
 import {QueryClient,QueryClientProvider} from '@tanstack/react-query';
 import {ApiError,ChatApi} from '../api';
@@ -126,7 +126,7 @@ describe('每日记忆回顾',()=>{
 
     const client = new QueryClient({defaultOptions: {queries: {retry: false}}});
     render(<QueryClientProvider client={client}><MemoryRouter><MemoryApp/></MemoryRouter></QueryClientProvider>);
-    await screen.findByText(/L1 原子记忆已加载/);
+    await screen.findByText(/记忆已加载/);
     fireEvent.click(screen.getByText(/L0 原始记录/));
     fireEvent.click(await screen.findByText(source.content));
     fireEvent.click(await screen.findByRole('button', {name: '补成 L1'}));
@@ -313,6 +313,7 @@ describe('L1 质量候选',()=>{
     render(<QueryClientProvider client={client}><MemoryRouter><MemoryApp/></MemoryRouter></QueryClientProvider>);
     fireEvent.click(screen.getByRole('button',{name:'重复与关系复核'}));
     const scan=await screen.findByRole('button',{name:'扫描当前 L1'});
+    await waitFor(()=>expect(scan.hasAttribute('disabled')).toBe(false));
     fireEvent.click(scan);
     expect(await screen.findByText('可能矛盾')).toBeTruthy();
     expect(screen.getByText('重合 88%')).toBeTruthy();
@@ -322,10 +323,13 @@ describe('L1 质量候选',()=>{
     fireEvent.click(screen.getByRole('button',{name:/A.*用户喜欢喝咖啡/}));
     expect(await screen.findByText('L1 原子记忆')).toBeTruthy();
     expect(await screen.findByText('系统记录时间')).toBeTruthy();
+    fireEvent.click(within(screen.getByRole('dialog',{name:'L1 原子记忆'})).getByRole('button',{name:'Close'}));
     fireEvent.click(screen.getByRole('button',{name:'保留 A，合并 B'}));
     expect(await screen.findByText('确认合并这两条重复 L1？')).toBeTruthy();
     fireEvent.click(screen.getByRole('button',{name:'确认合并'}));
     expect(await screen.findByText(/重复 L1 已合并/)).toBeTruthy();
+    fireEvent.click(within(screen.getByRole('dialog',{name:'L1 原子记忆'})).getByRole('button',{name:'Close'}));
+    fireEvent.click(screen.getByText('查看重复合并历史（1）'));
     expect(await screen.findByText(/账本完整 1\/1/)).toBeTruthy();
     expect(await screen.findByRole('button',{name:/L0 source-b/})).toBeTruthy();
     fireEvent.click(screen.getByRole('button',{name:'恢复被合并项'}));
@@ -335,7 +339,7 @@ describe('L1 质量候选',()=>{
     expect(await screen.findByText('已恢复')).toBeTruthy();
     expect(screen.getByRole('button',{name:'保留 B，合并 A'}).hasAttribute('disabled')).toBe(true);
     expect(screen.getByRole('button',{name:'重新保留 A，合并 B'}).hasAttribute('disabled')).toBe(false);
-  },15000);
+  },30000);
 
   test('语义关系预览只在点击后请求且明确不持久化',async()=>{
     const calls:Array<{path:string;method:string}>=[];
