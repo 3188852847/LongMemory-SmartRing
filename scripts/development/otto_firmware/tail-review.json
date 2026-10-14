@@ -1,0 +1,17 @@
+{
+  "original_image_sha256": "d4bd1827b792b257d7225d7139f2698d37eb6988a1630f5e745f2d9214735d3a",
+  "original_used_bytes": 352105,
+  "no_reachable_tail_consumers": true,
+  "classification": "Current indexed assets package ends at 352105. The non-FF unindexed bytes have undetermined origin. No current compiled-board read path to them was found; historical residue is an inference only. Preserve all bytes after new used length and retain original full partition for rollback.",
+  "code_evidence": [
+    "main/assets.cc: Assets selects LvglStrategy under HAVE_LVGL; header stored_files/stored_len control checksum and table; GetAssetData exclusively uses name-indexed table offsets and declared sizes.",
+    "main/assets.cc: Apply only loads model, font, emoji and background filenames referenced by unchanged index.json; no tail root or fixed-offset reader.",
+    "main/audio/wake_words/custom_wake_word.cc: uses Assets::GetAssetData(index.json); model is loaded by unchanged named srmodels.bin.",
+    "main/boards/viewe-smartring-plus/viewe-smartring-plus.cc: active wallpaper separately maps wallpaper_a or wallpaper_b; fallback wallpaper is retrieved by resource name.",
+    "main/assets.cc: Download is an explicitly requested overwrite path, not a tail consumer; old sector-aligned partial writes may leave historical residue, but exact historical cause is not asserted.",
+    "managed_components/espressif__esp_mmap_assets/esp_mmap_assets.c: generic access also derives data offsets from stored_files and table; unused indexed tail is not enumerated.",
+    "Repository search of main for assets label, 0x800000, mmap_root_, esp_partition_read/mmap and GetAssetData found no alternate current-board fixed-offset tail consumer.",
+    "K and main verified the indexed prefix equals known generated default assets, including all 23 resource sizes/hashes; M will independently verify against clean build generated_assets.bin before publishing the update."
+  ],
+  "authorization_scope": "Owner authorized necessary application and assets update with original active resources, NVS and wallpaper retained; main explicitly permitted evidence-based classification and minimal overwrite of unreachable residue on 2026-10-14. No serial or device action by M."
+}

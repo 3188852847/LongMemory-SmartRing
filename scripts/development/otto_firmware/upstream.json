@@ -1,0 +1,124 @@
+{
+  "repository": "https://github.com/txp666/otto-emoji-gif-component",
+  "commit": "970cf66906d7c30059faa2704e7002f06b8c3619",
+  "version": "1.3.0",
+  "license": "MIT",
+  "verified_on": "2026-10-14",
+  "files": [
+    {
+      "path": "LICENSE",
+      "git_blob_sha1": "84d9a37590dce3caa772061ac93dea249240d650",
+      "bytes": 1063
+    },
+    {
+      "path": "gifs/angry.gif",
+      "git_blob_sha1": "31678347b7d9d506ed6d3b77e74770468dbd2ba3",
+      "bytes": 35131
+    },
+    {
+      "path": "gifs/confident.gif",
+      "git_blob_sha1": "f6d180ef340ee460667f130d13e277f34150762c",
+      "bytes": 80122
+    },
+    {
+      "path": "gifs/confused.gif",
+      "git_blob_sha1": "cfe9baaf992c69387a134cd9fb7c06049a1d7448",
+      "bytes": 107068
+    },
+    {
+      "path": "gifs/cool.gif",
+      "git_blob_sha1": "0be3398f5eba18e77c7e70c42cc51cdfcc21fd2b",
+      "bytes": 99502
+    },
+    {
+      "path": "gifs/crying.gif",
+      "git_blob_sha1": "8ac1f74fa7d7004f238d0cd560b85e8752d6c159",
+      "bytes": 96092
+    },
+    {
+      "path": "gifs/delicious.gif",
+      "git_blob_sha1": "85043587e567497782f0a94677efad7898efe91d",
+      "bytes": 90728
+    },
+    {
+      "path": "gifs/embarrassed.gif",
+      "git_blob_sha1": "8298bd8b55adde5b92c50aa5152c816fe354887e",
+      "bytes": 39075
+    },
+    {
+      "path": "gifs/funny.gif",
+      "git_blob_sha1": "7203b32985cd4ab6186d56c65eed1ddfced353b5",
+      "bytes": 97836
+    },
+    {
+      "path": "gifs/happy.gif",
+      "git_blob_sha1": "5654984d8aca00158aecee79226cf8160ecfafd5",
+      "bytes": 39521
+    },
+    {
+      "path": "gifs/kissy.gif",
+      "git_blob_sha1": "8d1ca861704f2a0db48e8ae22ccafb2193fc1532",
+      "bytes": 84972
+    },
+    {
+      "path": "gifs/laughing.gif",
+      "git_blob_sha1": "83190e0729d71833f91127ba993927c782c80f26",
+      "bytes": 78215
+    },
+    {
+      "path": "gifs/loving.gif",
+      "git_blob_sha1": "18deb3104b695cbfe4b06190133a4b580bcaacd7",
+      "bytes": 78147
+    },
+    {
+      "path": "gifs/neutral.gif",
+      "git_blob_sha1": "4d7569051e78ee9ff20957adb0a30f2c0a098152",
+      "bytes": 26011
+    },
+    {
+      "path": "gifs/relaxed.gif",
+      "git_blob_sha1": "98f40328a70362e6eacb42cbd4b4053ea84c2e06",
+      "bytes": 72635
+    },
+    {
+      "path": "gifs/sad.gif",
+      "git_blob_sha1": "de77791cf0b7951dfcfbc0375a6d8f2cd7f5e489",
+      "bytes": 32503
+    },
+    {
+      "path": "gifs/shocked.gif",
+      "git_blob_sha1": "1b41babbd648841e66a772e3fd3b9e07a2b047a4",
+      "bytes": 126729
+    },
+    {
+      "path": "gifs/silly.gif",
+      "git_blob_sha1": "805efb133b8837a95391653aa69c95ea637f913d",
+      "bytes": 105610
+    },
+    {
+      "path": "gifs/sleepy.gif",
+      "git_blob_sha1": "33d73a1dd9e143f50f01eb7bb2c8a3dc7291dff4",
+      "bytes": 91193
+    },
+    {
+      "path": "gifs/surprised.gif",
+      "git_blob_sha1": "8d095666096c2b23bd71fc7cc24ede659320c631",
+      "bytes": 48890
+    },
+    {
+      "path": "gifs/thinking.gif",
+      "git_blob_sha1": "34bb43e63c6604fe2c4ba332dea94410dd820fe1",
+      "bytes": 84984
+    },
+    {
+      "path": "gifs/winking.gif",
+      "git_blob_sha1": "3a7ceab2fa20e4732c02c4046ad915901af2f490",
+      "bytes": 94495
+    },
+    {
+      "path": "idf_component.yml",
+      "git_blob_sha1": "384acec8b645c1326326378fbea3531b5ee99b12",
+      "bytes": 379
+    }
+  ]
+}

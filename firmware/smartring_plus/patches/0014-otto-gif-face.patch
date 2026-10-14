@@ -1,0 +1,292 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -18 +18 @@
+-set(PROJECT_VER "2.2.3")
++set(PROJECT_VER "2.2.3-otto0014")
+diff --git a/main/application.cc b/main/application.cc
+--- a/main/application.cc
++++ b/main/application.cc
+@@ -554 +554,4 @@
+-                Schedule([display, message = std::string(text->valuestring)]() {
++                Schedule([this, display, message = std::string(text->valuestring)]() {
++#if CONFIG_BOARD_TYPE_VIEWE_SMARTRING_PLUS
++                    if (GetDeviceState() != kDeviceStateListening) return;
++#endif
+@@ -569 +572 @@
+-                    display->SetEmotion(emotion_str.c_str());
++                    display->SetServerEmotion(emotion_str.c_str());
+diff --git a/main/display/display.h b/main/display/display.h
+--- a/main/display/display.h
++++ b/main/display/display.h
+@@ -36,0 +37,2 @@
++    // 服务端情绪与系统提示分开，原板型默认兼容既有 SetEmotion。
++    virtual void SetServerEmotion(const char* emotion) { SetEmotion(emotion); }
+diff --git a/main/display/lvgl_display/gif/lvgl_gif.cc b/main/display/lvgl_display/gif/lvgl_gif.cc
+--- a/main/display/lvgl_display/gif/lvgl_gif.cc
++++ b/main/display/lvgl_display/gif/lvgl_gif.cc
+@@ -8 +8 @@
+-    : gif_(nullptr), timer_(nullptr), last_call_(0), playing_(false), loaded_(false),
++    : gif_(nullptr), timer_(nullptr), last_call_(0), playing_(false), loaded_(false), decode_error_(false),
+@@ -31,0 +32,6 @@
++    // 先解码真实第一帧，切换立即可见；不把未初始化的索引画布当图像。
++    if (gd_get_frame(gif_) != 1) {
++        decode_error_ = true;
++        Cleanup();
++        return;
++    }
+@@ -201,0 +208,7 @@
++    if (has_next < 0) {
++        decode_error_ = true;
++        playing_ = false;
++        if (timer_) lv_timer_pause(timer_);
++        ESP_LOGE(TAG, "GIF frame decode failed");
++        return;
++    }
+diff --git a/main/display/lvgl_display/gif/lvgl_gif.h b/main/display/lvgl_display/gif/lvgl_gif.h
+--- a/main/display/lvgl_display/gif/lvgl_gif.h
++++ b/main/display/lvgl_display/gif/lvgl_gif.h
+@@ -49,0 +50 @@
++    bool HasDecodeError() const { return decode_error_; }
+@@ -98,0 +100 @@
++    bool decode_error_;
+diff --git a/main/boards/viewe-smartring-plus/viewe-smartring-plus.cc b/main/boards/viewe-smartring-plus/viewe-smartring-plus.cc
+--- a/main/boards/viewe-smartring-plus/viewe-smartring-plus.cc
++++ b/main/boards/viewe-smartring-plus/viewe-smartring-plus.cc
+@@ -13,0 +14 @@
++#include "otto_state.h"
+@@ -1030,2 +1031 @@
+-// 通知和字幕。动态壁纸存在时，它是所有日常交互状态的角色主视觉；
+-// 几何脸只在壁纸缺失或无法解码时作为固件内置回退。
++// 通知和字幕。默认 Otto，原壁纸可运行时选择；缺资源时逐级回退。
+@@ -1047,0 +1048,58 @@
++    otto::Model otto_state_;
++    bool wallpaper_view_ = false;  // 仅运行时选择，不写 NVS。
++    std::string active_gif_;
++    std::string active_face_;
++    std::string attempted_face_;
++    uint32_t attempted_at_ = 0;
++    otto::RetryGate retry_gate_;
++
++    void ClearGif() {
++        // 先解除 LVGL 对解码画布的引用，再释放唯一控制器。
++        if (wallpaper_image_) lv_image_set_src(wallpaper_image_, nullptr);
++        wallpaper_gif_.reset();
++        wallpaper_source_.reset();
++        wallpaper_ready_ = false;
++        active_gif_.clear();
++        active_face_.clear();
++    }
++
++    bool ShowOtto(const char* emotion) {
++        const char* normalized = otto::Normalize(emotion);
++        const unsigned index = otto::FaceIndex(normalized);
++        if (!retry_gate_.CanTry(index, lv_tick_get())) return false;
++        if (wallpaper_ready_ && active_face_ == normalized &&
++            wallpaper_gif_ && !wallpaper_gif_->HasDecodeError()) return true;
++        const std::string key = std::string("otto_") + normalized + ".gif";
++        void* data = nullptr;
++        size_t size = 0;
++        if (!Assets::GetInstance().GetAssetData(key, data, size)) return false;
++        // 固定、已校验资源才交给厂商无长度参数的 GIF 解码器。
++        if (size < 13 || std::memcmp(data, "GIF89a", 6) != 0) return false;
++        ClearGif();
++        auto source = std::make_unique<LvglRawImage>(data, size);
++        auto controller = std::make_unique<LvglGif>(source->image_dsc());
++        if (!controller->IsLoaded() || controller->width() != 240 || controller->height() != 240) {
++            retry_gate_.Fail(index, lv_tick_get());
++            return false;
++        }
++        if (!wallpaper_image_) {
++            wallpaper_image_ = lv_image_create(container_);
++            lv_obj_clear_flag(wallpaper_image_, LV_OBJ_FLAG_CLICKABLE);
++        }
++        lv_obj_set_size(wallpaper_image_, 240, 240);
++        lv_obj_center(wallpaper_image_);
++        lv_obj_remove_flag(wallpaper_image_, LV_OBJ_FLAG_HIDDEN);
++        wallpaper_source_ = std::move(source);
++        wallpaper_gif_ = std::move(controller);
++        active_gif_ = key;
++        active_face_ = normalized;
++        wallpaper_ready_ = true;
++        wallpaper_gif_->SetFrameCallback([this]() {
++            if (wallpaper_image_ && wallpaper_gif_)
++                lv_image_set_src(wallpaper_image_, wallpaper_gif_->image_dsc());
++        });
++        wallpaper_gif_->SetLoopCount(0);
++        lv_image_set_src(wallpaper_image_, wallpaper_gif_->image_dsc());
++        wallpaper_gif_->Start();
++        return true;
++    }
+@@ -1064 +1122 @@
+-        if (wallpaper_ready_ || container_ == nullptr) {
++        if ((wallpaper_ready_ && active_gif_ == "wallpaper") || container_ == nullptr || !retry_gate_.CanTry(21, lv_tick_get())) {
+@@ -1084,0 +1143 @@
++        ClearGif();
+@@ -1086,0 +1146 @@
++            retry_gate_.Fail(21, lv_tick_get());
+@@ -1091 +1151 @@
+-        wallpaper_image_ = lv_image_create(container_);
++        if (!wallpaper_image_) wallpaper_image_ = lv_image_create(container_);
+@@ -1093,0 +1154 @@
++        lv_obj_remove_flag(wallpaper_image_, LV_OBJ_FLAG_HIDDEN);
+@@ -1107 +1168 @@
+-        if (face_timer_ != nullptr) lv_timer_pause(face_timer_);
++        active_gif_ = "wallpaper";
+@@ -1115,0 +1177,22 @@
++        // 解码器回调只标记错误；另一个显示仲裁回调安全释放，不在自身回调删除自身。
++        if (wallpaper_gif_ && wallpaper_gif_->HasDecodeError()) {
++            retry_gate_.Fail(active_gif_ == "wallpaper" ? 21 : otto::FaceIndex(active_face_.c_str()), lv_tick_get());
++            ClearGif();
++            attempted_face_.clear();
++        }
++        if (!wallpaper_view_) {
++            const char* face = otto_state_.Face(lv_tick_get());
++            const uint32_t now = lv_tick_get();
++            if (attempted_face_ != face || uint32_t(now - attempted_at_) >= 1000) {
++                attempted_face_ = face;
++                attempted_at_ = now;
++                if (!ShowOtto(face) && !ShowOtto("neutral")) {
++                    TryLoadWallpaper();  // Otto 缺失/解码失败：原壁纸，再到原几何脸。
++                    if (!wallpaper_ready_ && wallpaper_image_)
++                        lv_obj_add_flag(wallpaper_image_, LV_OBJ_FLAG_HIDDEN);
++                }
++            }
++        } else {
++            TryLoadWallpaper();
++            if (!wallpaper_ready_) ShowOtto("neutral");
++        }
+@@ -1227 +1309,0 @@
+-        TryLoadWallpaper();
+@@ -1232 +1314 @@
+-        if (wallpaper_ready_) lv_timer_pause(face_timer_);
++        // 保留轻量仲裁定时器，及时结束插话提示；不分配逐帧图片。
+@@ -1252 +1333,0 @@
+-        TryLoadWallpaper();
+@@ -1264,0 +1346,2 @@
++            otto_state_.Transition(std::strcmp(status, Lang::Strings::CONNECTING) == 0 ?
++                otto::State::Connecting : otto::State::Idle, lv_tick_get());
+@@ -1267,0 +1351,2 @@
++            otto_state_.Transition(otto::State::Listening, lv_tick_get(),
++                std::strcmp(status, "已打断，请继续...") == 0);
+@@ -1269,0 +1355 @@
++            otto_state_.Transition(otto::State::Speaking, lv_tick_get());
+@@ -1271,0 +1358 @@
++            otto_state_.Transition(otto::State::Thinking, lv_tick_get());
+@@ -1280,4 +1367,3 @@
+-        if (value == "microphone") interaction_ = round_face::Interaction::Listening;
+-        else if (value == "thinking") interaction_ = round_face::Interaction::Thinking;
+-        else if (value == "speaking") interaction_ = round_face::Interaction::Speaking;
+-        else if (value == "triangle_exclamation" || value == "cloud_slash" || value == "wifi_off")
++        if (value == "microphone") {
++            interaction_ = round_face::Interaction::Listening;
++        } else if (value == "triangle_exclamation" || value == "cloud_slash" || value == "wifi_off") {
+@@ -1285,2 +1371,3 @@
+-        else current_emotion_ = value;
+-        // 不重置动画时钟；打断从正在显示的形状转向聆听，不从零重新播放。
++        }
++        otto_state_.SystemEmotion(value.c_str(), lv_tick_get());
++        current_emotion_ = otto_state_.emotion;
+@@ -1287,0 +1375,25 @@
++    }
++
++    void SetServerEmotion(const char* emotion) override {
++        if (!setup_ui_called_) return;
++        DisplayLockGuard lock(this);
++        otto_state_.Emotion(emotion);
++        current_emotion_ = otto_state_.emotion;
++        ApplyFace(current_emotion_.c_str());
++    }
++
++    bool SetFaceView(const std::string& view) {
++        if (view != "otto" && view != "wallpaper") throw std::invalid_argument("Unknown face view");
++        DisplayLockGuard lock(this);
++        wallpaper_view_ = view == "wallpaper";
++        ClearGif();
++        attempted_face_.clear();
++        if (wallpaper_image_) lv_obj_add_flag(wallpaper_image_, LV_OBJ_FLAG_HIDDEN);
++        ApplyFace(current_emotion_.c_str());
++        if (wallpaper_view_ && (active_gif_ != "wallpaper" || !wallpaper_image_ ||
++            lv_obj_has_flag(wallpaper_image_, LV_OBJ_FLAG_HIDDEN))) {
++            wallpaper_view_ = false;
++            ApplyFace(current_emotion_.c_str());
++            return false;
++        }
++        return true;
+@@ -1627,0 +1740,7 @@
++        mcp.AddUserOnlyTool("self.screen.set_round_face_view",
++            "Select otto or retained wallpaper for this boot only; no NVS changes",
++            PropertyList({Property("view", kPropertyTypeString)}),
++            [this](const PropertyList& properties) -> ReturnValue {
++                return static_cast<SmartRingFaceDisplay*>(display_)->SetFaceView(
++                    properties["view"].value<std::string>());
++            });
+diff --git a/main/boards/viewe-smartring-plus/otto_state.h b/main/boards/viewe-smartring-plus/otto_state.h
+new file mode 100644
+--- /dev/null
++++ b/main/boards/viewe-smartring-plus/otto_state.h
+@@ -0,0 +1,64 @@
++#pragma once
++#include <cstdint>
++#include <cstring>
++#include <string>
++
++// 只仲裁显示，真实采集/连接/播放仍由 Application 决定。
++namespace otto {
++inline constexpr const char* kNames[] = {"angry", "confident", "confused", "cool", "crying",
++        "delicious", "embarrassed", "funny", "happy", "kissy", "laughing", "loving",
++        "neutral", "relaxed", "sad", "shocked", "silly", "sleepy", "surprised",
++        "thinking", "winking"};
++inline const char* Normalize(const char* name) {
++    if (name) for (auto item : kNames) if (std::strcmp(name, item) == 0) return item;
++    return "neutral";
++}
++inline unsigned FaceIndex(const char* name) {
++    for (unsigned i = 0; i < 21; ++i) if (std::strcmp(name, kNames[i]) == 0) return i;
++    return 12; // neutral
++}
++struct RetryGate {
++    uint32_t failed_mask = 0;
++    uint32_t failed_at[22]{};
++    bool CanTry(unsigned index, uint32_t now) const {
++        return !(failed_mask & (1u << index)) || uint32_t(now - failed_at[index]) >= 1000;
++    }
++    void Fail(unsigned index, uint32_t now) {
++        failed_mask |= 1u << index;
++        failed_at[index] = now;
++    }
++};
++enum class State { Idle, Connecting, Listening, Thinking, Speaking, Error, Disconnected };
++struct Model {
++    State state = State::Idle;
++    std::string emotion = "neutral";
++    uint32_t interrupted_at = 0;
++    bool interrupted = false;
++    void Transition(State next, uint32_t now, bool interrupt = false) {
++        state = next;
++        interrupted = interrupt && next == State::Listening;
++        interrupted_at = now;
++        if (next != State::Speaking && next != State::Thinking) emotion = "neutral";
++    }
++    void Emotion(const char* name) {
++        // 协议没有 turnID：本轮思考/播放之外的 emotion 均不进入缓存。
++        if (state == State::Thinking || state == State::Speaking) emotion = Normalize(name);
++    }
++    void SystemEmotion(const char* name, uint32_t now) {
++        if (!name) return;
++        if (std::strcmp(name, "triangle_exclamation") == 0) Transition(State::Error, now);
++        else if (std::strcmp(name, "cloud_slash") == 0 || std::strcmp(name, "wifi_off") == 0)
++            Transition(State::Disconnected, now);
++        // thinking/speaking/microphone 是系统表现提示，绝不进入服务端情绪缓存。
++    }
++    const char* Face(uint32_t now) const {
++        if (state == State::Error) return "confused";
++        if (state == State::Disconnected) return "sad";
++        if (state == State::Thinking) return "thinking";
++        if (state == State::Speaking) return emotion.c_str();
++        // 650ms 只控制提示脸，既不等待一轮 GIF，也不延迟原采集逻辑。
++        if (interrupted && uint32_t(now - interrupted_at) < 650) return "surprised";
++        return "neutral";
++    }
++};
++}  // namespace otto

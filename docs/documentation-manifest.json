@@ -16,9 +16,22 @@
       "id": "otto-preview",
       "scope": "Otto固定素材获取、独立电脑预览、实际事件映射与未实施固件适配预算",
       "authority": "docs/guides/Otto动态表情预览-20261014.md",
-      "sources": ["firmware/smartring_plus/previews/otto/**", "scripts/development/otto_preview/**", "tests/unit/development/otto_state.test.cjs", "tests/unit/development/test_otto_preview.py"],
-      "related": ["docs/development/parallel/L-otto-preview-20261014.md"],
-      "tags": ["Otto", "GIF", "圆屏", "预览", "状态"],
+      "sources": [
+        "firmware/smartring_plus/previews/otto/**",
+        "scripts/development/otto_preview/**",
+        "tests/unit/development/otto_state.test.cjs",
+        "tests/unit/development/test_otto_preview.py"
+      ],
+      "related": [
+        "docs/development/parallel/L-otto-preview-20261014.md"
+      ],
+      "tags": [
+        "Otto",
+        "GIF",
+        "圆屏",
+        "预览",
+        "状态"
+      ],
       "review": "verified 2026-10-14: 固定元数据、21图真实预览、合成状态与只读0013预算；真实系统隐藏/偏好切换和固件/真机未验"
     },
     {
@@ -511,6 +524,27 @@
         "资源"
       ],
       "review": "verified 2026-10-14: K新完整备份、独立整片芯片MD5、实际OTA/app/assets解析、串口释放；0014写入与体验待后续"
+    },
+    {
+      "id": "otto-firmware-0014",
+      "scope": "0014 Otto 资源格式、原资源保留、显示仲裁与离线验证证据",
+      "authority": "docs/development/parallel/M-otto-firmware-20261014.md",
+      "sources": [
+        "firmware/smartring_plus/*/0014-otto-gif-face.*",
+        "scripts/development/otto_firmware/**",
+        "tests/unit/firmware/**",
+        "firmware/smartring_plus/otto/LICENSE.MIT"
+      ],
+      "related": [
+        "docs/guides/Otto动态表情固件-20261014.md",
+        "docs/adr/0179-otto-assets-and-display-arbitration.md"
+      ],
+      "tags": [
+        "固件",
+        "Otto",
+        "0014"
+      ],
+      "review": "verified 2026-10-14: 最终补丁、资源映像保留、实际解码/桥接与干净编译，设备运行待验收"
     }
   ],
   "old_path_rules": [
@@ -588,16 +622,42 @@
       "title": "Otto动态表情预览",
       "status": "current",
       "basis": "L独立预览的现行操作与方案入口；固件适配段落为未实施提议",
-      "review": {"state": "verified", "date": "2026-10-14", "scope": "固定来源/下载脚本、21图浏览器预览、合成仲裁与0013只读容量；不含固件/真机验收", "evidence": ["docs/development/parallel/L-otto-preview-20261014.md", "firmware/smartring_plus/previews/otto/asset-verification.json"]},
-      "tags": ["Otto", "GIF", "圆屏", "预览"]
+      "review": {
+        "state": "verified",
+        "date": "2026-10-14",
+        "scope": "固定来源/下载脚本、21图浏览器预览、合成仲裁与0013只读容量；不含固件/真机验收",
+        "evidence": [
+          "docs/development/parallel/L-otto-preview-20261014.md",
+          "firmware/smartring_plus/previews/otto/asset-verification.json"
+        ]
+      },
+      "tags": [
+        "Otto",
+        "GIF",
+        "圆屏",
+        "预览"
+      ]
     },
     {
       "path": "docs/development/parallel/L-otto-preview-20261014.md",
       "title": "L：Otto真实动态表情预览与状态方案",
       "status": "reference",
       "basis": "保留L阶段范围、来源、真实预览与合成验收、后续交接及未验证边界",
-      "review": {"state": "verified", "date": "2026-10-14", "scope": "L工作树实现、9项Node/5项Python测试、21图/692帧与浏览器操作证据；系统事件与设备不作通过结论", "evidence": ["firmware/smartring_plus/previews/otto/evidence/grid.jpg", "firmware/smartring_plus/previews/otto/evidence/compare.jpg"]},
-      "tags": ["Otto", "验收", "独立会话", "状态"]
+      "review": {
+        "state": "verified",
+        "date": "2026-10-14",
+        "scope": "L工作树实现、9项Node/5项Python测试、21图/692帧与浏览器操作证据；系统事件与设备不作通过结论",
+        "evidence": [
+          "firmware/smartring_plus/previews/otto/evidence/grid.jpg",
+          "firmware/smartring_plus/previews/otto/evidence/compare.jpg"
+        ]
+      },
+      "tags": [
+        "Otto",
+        "验收",
+        "独立会话",
+        "状态"
+      ]
     },
     {
       "path": "AGENTS.md",
@@ -4473,6 +4533,69 @@
         "备份",
         "资源",
         "COM3"
+      ]
+    },
+    {
+      "path": "docs/development/parallel/M-otto-firmware-20261014.md",
+      "title": "M：0014 Otto 固件适配与离线验证",
+      "status": "current",
+      "basis": "本轮指定固件实现与资源保留决策；仅覆盖0014离线交付，设备验收另登记。",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-14",
+        "scope": "对照最终7文件补丁、实际资源表及保留摘要、桥接/解码/合成测试与clean5/clean6结果；不覆盖设备运行。",
+        "evidence": [
+          "firmware/smartring_plus/experiments/0014-otto-gif-face.json",
+          "firmware/smartring_plus/patches/0014-otto-gif-face.patch"
+        ]
+      },
+      "tags": [
+        "固件",
+        "Otto",
+        "0014",
+        "离线验证"
+      ]
+    },
+    {
+      "path": "docs/guides/Otto动态表情固件-20261014.md",
+      "title": "Otto 动态表情固件 0014",
+      "status": "current",
+      "basis": "本轮指定固件实现与资源保留决策；仅覆盖0014离线交付，设备验收另登记。",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-14",
+        "scope": "对照最终7文件补丁、实际资源表及保留摘要、桥接/解码/合成测试与clean5/clean6结果；不覆盖设备运行。",
+        "evidence": [
+          "firmware/smartring_plus/experiments/0014-otto-gif-face.json",
+          "firmware/smartring_plus/patches/0014-otto-gif-face.patch"
+        ]
+      },
+      "tags": [
+        "固件",
+        "Otto",
+        "0014",
+        "操作交接"
+      ]
+    },
+    {
+      "path": "docs/adr/0179-otto-assets-and-display-arbitration.md",
+      "title": "ADR-0179：Otto 资源追加与显示仲裁",
+      "status": "reference",
+      "basis": "本轮指定固件实现与资源保留决策；仅覆盖0014离线交付，设备验收另登记。",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-14",
+        "scope": "对照最终7文件补丁、实际资源表及保留摘要、桥接/解码/合成测试与clean5/clean6结果；不覆盖设备运行。",
+        "evidence": [
+          "firmware/smartring_plus/experiments/0014-otto-gif-face.json",
+          "firmware/smartring_plus/patches/0014-otto-gif-face.patch"
+        ]
+      },
+      "tags": [
+        "adr",
+        "固件",
+        "Otto",
+        "资源"
       ]
     }
   ],

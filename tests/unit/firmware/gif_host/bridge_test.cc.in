@@ -1,0 +1,167 @@
+#include "controller/gif/lvgl_gif.h"
+#include "otto_state.h"
+#include <algorithm>
+#include <fstream>
+#include <iostream>
+#include <map>
+#include <vector>
+#include <cstring>
+#include <stdexcept>
+#define bzero(p,n) memset(p,0,n)
+#include "esp_log.h"
+#define TAG "host"
+extern "C" size_t input_length;
+static uint32_t tick;
+static bool in_gif_callback;
+static std::vector<lv_timer_t*> timers;
+extern "C" uint32_t lv_tick_get() { return tick; }
+extern "C" uint32_t lv_tick_elaps(uint32_t start) { return tick-start; }
+extern "C" lv_timer_t* lv_timer_create(void(*cb)(lv_timer_t*),int,void* user) {
+    auto*t=new lv_timer_t{cb,user,0};timers.push_back(t);return t;
+}
+extern "C" void lv_timer_delete(lv_timer_t*t) {
+    assert(!in_gif_callback);timers.erase(std::find(timers.begin(),timers.end(),t));delete t;
+}
+static void Advance() {
+    tick+=100;
+    auto snapshot=timers;
+    for(auto*t:snapshot) if(!t->paused) { in_gif_callback=true;t->callback(t);in_gif_callback=false; }
+}
+%RAW_IMAGE%
+class Assets {
+public:
+    std::map<std::string,std::vector<uint8_t>> files;
+    static Assets& GetInstance() { static Assets a;return a; }
+    bool GetAssetData(const std::string& name,void*&ptr,size_t&size) {
+        auto it=files.find(name);if(it==files.end())return false;
+        ptr=it->second.data();size=it->second.size();input_length=size;return true;
+    }
+};
+struct RoundWallpaperRecord { const void*data=nullptr;size_t size=0; };
+struct RoundWallpaperStore {
+    static RoundWallpaperStore& GetInstance(){static RoundWallpaperStore r;return r;}
+    bool GetActive(RoundWallpaperRecord&){return false;}
+};
+struct DisplayLockGuard { explicit DisplayLockGuard(void*){} };
+namespace round_face { enum class Interaction { Idle,Listening,Thinking,Speaking,Error }; }
+namespace Lang { namespace Strings {
+inline constexpr const char* STANDBY="standby";
+inline constexpr const char* CONNECTING="connecting";
+inline constexpr const char* LISTENING="listening";
+inline constexpr const char* SPEAKING="speaking";
+} }
+struct LvglDisplay {
+    virtual void SetStatus(const char*){}
+    virtual void SetEmotion(const char*){}
+    virtual void SetServerEmotion(const char*){}
+};
+class DisplayFixture:public LvglDisplay {
+public:
+    static constexpr const char* kWallpaperAssetName="round_wallpaper.gif";
+    lv_obj_t root{};
+    lv_obj_t*container_=&root,*left_eye_=&root,*right_eye_=&root,*mouth_=&root;
+    lv_obj_t*wallpaper_image_=nullptr;
+    std::unique_ptr<LvglRawImage> wallpaper_source_;
+    std::unique_ptr<LvglGif> wallpaper_gif_;
+    bool wallpaper_ready_=false,wallpaper_view_=false,setup_ui_called_=true;
+    int width_=360,height_=360;
+    std::string current_emotion_="neutral",active_gif_,active_face_,attempted_face_,visible;
+    uint32_t attempted_at_=0;
+    otto::Model otto_state_;
+    otto::RetryGate retry_gate_;
+    round_face::Interaction interaction_=round_face::Interaction::Idle;
+    ~DisplayFixture(){ClearGif();free(wallpaper_image_);}
+%CLEAR%
+%SHOW%
+%WALLPAPER%
+%APPLY%
+%STATUS%
+%SYSTEM%
+%SERVER%
+%VIEW%
+};
+static std::vector<uint8_t> Read(const char*name) {
+    std::ifstream f(name,std::ios::binary);assert(f);return {std::istreambuf_iterator<char>(f),{}};
+}
+static size_t AfterFrame(const std::vector<uint8_t>&data,bool first) {
+    input_length=data.size();gd_GIF*g=gd_open_gif_data(data.data());assert(g);
+    size_t pos=g->anim_start;
+    if(first){assert(gd_get_frame(g)==1);pos=g->f_rw_p;}
+    gd_close_gif(g);return pos;
+}
+int main() {
+    auto neutral=Read("neutral.gif"),happy=Read("happy.gif");
+    auto&files=Assets::GetInstance().files;
+    auto Load=[&](){files.clear();files["otto_neutral.gif"]=neutral;files["otto_happy.gif"]=happy;};
+    Load();
+    {
+        DisplayFixture d;
+        d.SetStatus(Lang::Strings::LISTENING);d.SetEmotion("microphone");
+        d.SetStatus("思考中...");d.SetEmotion("thinking");
+        assert(d.otto_state_.emotion=="neutral");
+        d.SetStatus(Lang::Strings::SPEAKING);assert(d.active_face_=="neutral");
+        d.SetStatus(Lang::Strings::LISTENING);d.SetStatus("思考中...");d.SetEmotion("thinking");
+        d.SetServerEmotion("happy");d.SetStatus(Lang::Strings::SPEAKING);assert(d.active_face_=="happy");
+        d.SetStatus(Lang::Strings::LISTENING);d.SetServerEmotion("thinking");assert(d.otto_state_.state==otto::State::Listening);
+        d.SetStatus("思考中...");d.SetServerEmotion("thinking");assert(d.otto_state_.emotion=="thinking");
+        d.SetEmotion("triangle_exclamation");d.SetServerEmotion("happy");assert(d.otto_state_.state==otto::State::Error);
+    }
+    assert(timers.empty()&&tracked_live()==0);
+    Load();
+    // 首帧损坏：真实 LvglGif 不 loaded，显示立即回 neutral。
+    files["otto_happy.gif"][AfterFrame(happy,false)]=0;
+    {
+        DisplayFixture d;d.SetStatus("思考中...");d.SetServerEmotion("happy");d.SetStatus(Lang::Strings::SPEAKING);
+        assert(d.active_face_=="neutral"&&!d.wallpaper_gif_->HasDecodeError());
+    }
+    assert(timers.empty()&&tracked_live()==0);
+    Load();
+    {
+        DisplayFixture d;d.SetStatus("思考中...");d.SetServerEmotion("happy");d.SetStatus(Lang::Strings::SPEAKING);
+        assert(d.active_face_=="happy");
+        auto&corrupt=files["otto_happy.gif"];corrupt[AfterFrame(corrupt,true)]=0;
+        Advance();assert(d.wallpaper_gif_->HasDecodeError());assert(timers.size()==1);
+        d.ApplyFace(d.current_emotion_.c_str());assert(d.active_face_=="neutral"&&timers.size()==1);
+        uint32_t failed_at=tick;
+        d.ApplyFace(d.current_emotion_.c_str());assert(d.active_face_=="neutral");
+        files["otto_happy.gif"]=happy;
+        tick=failed_at+999;d.ApplyFace(d.current_emotion_.c_str());assert(d.active_face_=="neutral");
+        tick=failed_at+1000;d.ApplyFace(d.current_emotion_.c_str());assert(d.active_face_=="happy");
+        d.wallpaper_gif_->Pause();assert(!d.wallpaper_gif_->HasDecodeError());
+        d.ApplyFace(d.current_emotion_.c_str());assert(d.active_face_=="happy");
+        d.wallpaper_gif_->SetLoopCount(1);d.wallpaper_gif_->Resume();
+        for(int i=0;i<40;i++)Advance();
+        assert(!d.wallpaper_gif_->IsPlaying()&&!d.wallpaper_gif_->HasDecodeError());
+        d.ApplyFace(d.current_emotion_.c_str());assert(d.active_face_=="happy");
+    }
+    assert(timers.empty()&&tracked_live()==0);
+    Load();
+    files["otto_neutral.gif"][AfterFrame(neutral,false)]=0;
+    auto wallpaper=neutral;wallpaper[6]=0x68;wallpaper[7]=1;wallpaper[8]=0x68;wallpaper[9]=1;
+    files["round_wallpaper.gif"]=wallpaper;
+    {DisplayFixture d;d.ApplyFace("neutral");assert(d.active_gif_=="wallpaper");assert(!(d.wallpaper_image_->flags&LV_OBJ_FLAG_HIDDEN));}
+    files.erase("round_wallpaper.gif");
+    {DisplayFixture d;d.ApplyFace("neutral");assert(d.visible=="geometry");}
+    assert(timers.empty()&&tracked_live()==0);
+    Load();files["round_wallpaper.gif"]=wallpaper;
+    {
+        DisplayFixture d;d.ApplyFace("neutral");assert(d.active_face_=="neutral");
+        assert(d.SetFaceView("wallpaper")&&d.active_gif_=="wallpaper");
+        assert(!(d.wallpaper_image_->flags&LV_OBJ_FLAG_HIDDEN)&&d.wallpaper_image_->w==360);
+        files["round_wallpaper.gif"][AfterFrame(wallpaper,true)]=0;
+        Advance();assert(d.wallpaper_gif_->HasDecodeError());
+        uint32_t failed_at=tick;
+        d.ApplyFace("neutral");assert(d.active_face_=="neutral"&&d.wallpaper_view_);
+        files["round_wallpaper.gif"]=wallpaper;
+        tick=failed_at+999;d.ApplyFace("neutral");assert(d.active_face_=="neutral");
+        tick=failed_at+1000;d.ApplyFace("neutral");assert(d.active_gif_=="wallpaper");
+        assert(!(d.wallpaper_image_->flags&LV_OBJ_FLAG_HIDDEN)&&timers.size()==1);
+        assert(d.SetFaceView("otto")&&d.active_face_=="neutral");
+        assert(!(d.wallpaper_image_->flags&LV_OBJ_FLAG_HIDDEN)&&d.wallpaper_image_->w==240);
+        files.erase("round_wallpaper.gif");
+        assert(!d.SetFaceView("wallpaper")&&!d.wallpaper_view_&&d.active_face_=="neutral");
+        assert(!(d.wallpaper_image_->flags&LV_OBJ_FLAG_HIDDEN));
+    }
+    assert(timers.empty()&&tracked_live()==0);
+    std::cout<<"Actual display bridge + LvglGif: system/server separation, first/mid decode failure, deferred safe cleanup, 1s retry, pause/end distinction, neutral/wallpaper/geometry fallback: passed\n";
+}

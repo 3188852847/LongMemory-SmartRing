@@ -1,0 +1,648 @@
+{
+  "id": "0014-otto-gif-face",
+  "status": "offline_delivery_ready",
+  "recorded_date": "2026-10-14",
+  "timezone": "Asia/Shanghai",
+  "source_baseline": "0013 / main repository a041b5f",
+  "sdk_commit": "735507283d5b2f9fb363a1901172dbd9e847945d",
+  "sdk_version": "5.5.4",
+  "lvgl_version": "9.4.0",
+  "component_lock": {
+    "bytes": 30856,
+    "sha256": "cfa751e181e1cbfdca7dd96c5c3a7147b1b660495eb7e5cac2a2c604e58157ce"
+  },
+  "sdkconfig": {
+    "bytes": 103621,
+    "sha256": "b871887bac42a703cd69529c7b09a3911a3452e79d7d22c1b8f63d146e3dc44e"
+  },
+  "dependencies_changed": false,
+  "config_changed": false,
+  "application_version": "2.2.3-otto0014",
+  "board": "viewe-smartring-plus",
+  "chip": "esp32s3",
+  "app_capacity": 4128768,
+  "app_free_bytes": 138128,
+  "delivery_build": "D:\\Dev\\esp-projects\\smart-ring\\build-otto0014-clean5",
+  "comparison_build": "D:\\Dev\\esp-projects\\smart-ring\\build-otto0014-clean6",
+  "builds": {
+    "delivery": {
+      "xiaozhi.bin": {
+        "bytes": 3990640,
+        "sha256": "b87f358d009bad469e82119067a5f8f3453f589696b9d1d22cc4502ce0dc684b"
+      },
+      "xiaozhi.elf": {
+        "bytes": 40158044,
+        "sha256": "5d7a14bb7684f71e8dddf499da769cd4a2f7d2fd0ed01c08b6f4218a1b585fa2"
+      },
+      "xiaozhi.map": {
+        "bytes": 24874491,
+        "sha256": "87d372983e4a5dbfc44e92758e307ce59b4566513b7e9e71e429ea1d7136404a"
+      },
+      "partition_table/partition-table.bin": {
+        "bytes": 3072,
+        "sha256": "d46bd51980cd6e15f0bf0c86f530d87a0bbc207144bd9442937b3c1a618a3ffd"
+      },
+      "generated_assets.bin": {
+        "bytes": 352105,
+        "sha256": "c31a144a0df77bfd8f70545d3af12e3b23f1501cc3b4865ebd91e0fcac965478"
+      }
+    },
+    "independent_clean": {
+      "xiaozhi.bin": {
+        "bytes": 3990640,
+        "sha256": "4530807c89dfb877ac34bc259b0f99756b183ac95f5ec02e948c426e287c26b1"
+      },
+      "xiaozhi.elf": {
+        "bytes": 40158044,
+        "sha256": "1e8a694320f217f7a53a72fc3486f91a130a9e39a713f9cc68e3f3dbbb4fdf01"
+      },
+      "xiaozhi.map": {
+        "bytes": 24874491,
+        "sha256": "87d372983e4a5dbfc44e92758e307ce59b4566513b7e9e71e429ea1d7136404a"
+      },
+      "partition_table/partition-table.bin": {
+        "bytes": 3072,
+        "sha256": "d46bd51980cd6e15f0bf0c86f530d87a0bbc207144bd9442937b3c1a618a3ffd"
+      },
+      "generated_assets.bin": {
+        "bytes": 352105,
+        "sha256": "c31a144a0df77bfd8f70545d3af12e3b23f1501cc3b4865ebd91e0fcac965478"
+      }
+    }
+  },
+  "partition_layout_unchanged": true,
+  "partitions": [
+    {
+      "name": "nvs",
+      "type": 1,
+      "subtype": 2,
+      "offset": "0x9000",
+      "bytes": 16384,
+      "flags": 0
+    },
+    {
+      "name": "otadata",
+      "type": 1,
+      "subtype": 0,
+      "offset": "0xd000",
+      "bytes": 8192,
+      "flags": 0
+    },
+    {
+      "name": "phy_init",
+      "type": 1,
+      "subtype": 1,
+      "offset": "0xf000",
+      "bytes": 4096,
+      "flags": 0
+    },
+    {
+      "name": "ota_0",
+      "type": 0,
+      "subtype": 16,
+      "offset": "0x20000",
+      "bytes": 4128768,
+      "flags": 0
+    },
+    {
+      "name": "ota_1",
+      "type": 0,
+      "subtype": 17,
+      "offset": "0x410000",
+      "bytes": 4128768,
+      "flags": 0
+    },
+    {
+      "name": "assets",
+      "type": 1,
+      "subtype": 130,
+      "offset": "0x800000",
+      "bytes": 2097152,
+      "flags": 0
+    },
+    {
+      "name": "wallpaper_a",
+      "type": 1,
+      "subtype": 64,
+      "offset": "0xa00000",
+      "bytes": 3145728,
+      "flags": 0
+    },
+    {
+      "name": "wallpaper_b",
+      "type": 1,
+      "subtype": 65,
+      "offset": "0xd00000",
+      "bytes": 3145728,
+      "flags": 0
+    }
+  ],
+  "patch": {
+    "bytes": 13616,
+    "sha256": "b8b54bd5ea708f7e16ee06b92f4424b963e2789c10a7941331122545fa033630"
+  },
+  "patch_context_lines": 0,
+  "patch_apply_option": "--unidiff-zero",
+  "sources": {
+    "CMakeLists.txt": {
+      "baseline_normalized_sha256": "7fd8b3b09247710bfc76f59e9096fb890edf82ec19bd4f083322578ac26148b1",
+      "result_normalized_sha256": "249820e3e0396720154104ad0836728a4a245ecbd19162711e45c893860aa61c"
+    },
+    "main/application.cc": {
+      "baseline_normalized_sha256": "71177e2848a9b6d42ed9473753c3d866172c7a0f6a2058dbc395ffa85487843d",
+      "result_normalized_sha256": "d7fd88fa50803a98611388bbafed829bc074b5dd43851443bea8129d5aecf366"
+    },
+    "main/display/display.h": {
+      "baseline_normalized_sha256": "23b8a0d55b02ba1154d42f0f14208a97c5d69f9ea27e1c4d2356b81eb762716c",
+      "result_normalized_sha256": "6fd42590a7baf8cd7043a2e18fb979ebdc87f0934c0edf506649944374a389d6"
+    },
+    "main/display/lvgl_display/gif/lvgl_gif.cc": {
+      "baseline_normalized_sha256": "a5ea5e932c3babe64676872df0ad8be5cbdf86606f7a253a971d5cad63ac5b0f",
+      "result_normalized_sha256": "0097eacf37050f55f8fa0376e67a10d077df7f517e8625c70c4965a71550e978"
+    },
+    "main/display/lvgl_display/gif/lvgl_gif.h": {
+      "baseline_normalized_sha256": "3416dce9faffa7918283dffbbec2bd3e8186d1a6b672bc9e1bb4e85a0920d0bb",
+      "result_normalized_sha256": "f18327bdc0fec90dd36339c952e2c27319b054453b9d2a839e05db3542b6cc4e"
+    },
+    "main/boards/viewe-smartring-plus/viewe-smartring-plus.cc": {
+      "baseline_normalized_sha256": "b3248d15cdf8578449af2dfe91aff13371d84dcddee57f020385fd5664f03cd9",
+      "result_normalized_sha256": "636942d8ae6cb4f7a336f14be5199c737f8c234c6a04525ba27dfb91851bb274"
+    },
+    "main/boards/viewe-smartring-plus/otto_state.h": {
+      "baseline_normalized_sha256": null,
+      "result_normalized_sha256": "b3edb212369a5abeadaff70bf8743567be5a36eb440cdff0776ed207b7422c4d"
+    }
+  },
+  "patch_forward_and_reverse_checked": true,
+  "image_checksum_and_validation_hash_valid": true,
+  "assets": {
+    "format": "vendor mmap_assets_table, <32sIIHH, ZZ prefix; unsigned-byte sum16",
+    "partition_offset": "0x800000",
+    "partition_capacity": 2097152,
+    "used_bytes": 1962530,
+    "write_bytes": 1966080,
+    "unused_by_index_bytes": 134622,
+    "original_used_bytes": 352105,
+    "original_image_sha256": "d4bd1827b792b257d7225d7139f2698d37eb6988a1630f5e745f2d9214735d3a",
+    "new_image_sha256": "a90519236d915d985e12940d753504011506e3a8135fc8d8a5dc62c55173053f",
+    "postwrite_partition_sha256": "5574d85a67b534caac78748573d3dcf8438c7fd3c5d0f14d3404d12fcf364024",
+    "erase_end_offset": 1966080,
+    "erase_end_address": "0x9e0000",
+    "unindexed_replaced_range": [
+      352105,
+      1962530
+    ],
+    "unindexed_replaced_bytes": 1610425,
+    "unindexed_replaced_nonff_bytes": 1598167,
+    "original_tail_nonff_bytes": 1731795,
+    "unindexed_remainder_preserved_offset": 1962530,
+    "unindexed_remainder_preserved_bytes": 134622,
+    "unindexed_remainder_sha256": "53803361fcd9e8c5bc156c7efe721c809e62826f571c27fc13b3fb69688a8b86",
+    "last_sector_original_padding_bytes": 3550,
+    "all_bytes_after_new_used_preserved": true,
+    "tail_review_applied": true,
+    "original_payload_region_preserved": true,
+    "original_index_json_unchanged": true,
+    "preserved_resources": [
+      {
+        "name": "srmodels.bin",
+        "bytes": 291042,
+        "sha256": "7c87dd7adb5a7623907b6354d49bea7f9289371262e6a57f15458fb8908c5814"
+      },
+      {
+        "name": "index.json",
+        "bytes": 1965,
+        "sha256": "2cf9513f54e7ee6d922477a328711c6c05d89127105706d0045115ab47beca64"
+      },
+      {
+        "name": "angry.png",
+        "bytes": 2451,
+        "sha256": "be9d1330cc89fba8152443682706961d335a4b263d1d55acaf18ac350f036102"
+      },
+      {
+        "name": "confident.png",
+        "bytes": 2555,
+        "sha256": "1d3d3327e169c4f03a16ed4a439f8468b87f8d608d17411e49d81ff89503dd2e"
+      },
+      {
+        "name": "confused.png",
+        "bytes": 2643,
+        "sha256": "dc1ac36de3ef1d9f1bbc8a547994b7844b37020d7a08a8ec8eb1a0c66b4fbd9f"
+      },
+      {
+        "name": "cool.png",
+        "bytes": 2503,
+        "sha256": "ab9f3746a88d538866e0f3b069c8f5f753ffdac8a4874533e6721457dff190e9"
+      },
+      {
+        "name": "crying.png",
+        "bytes": 3115,
+        "sha256": "223aa9135a113acc635045e91e00110d2a7948cfbe2f42095d7abc58a5596160"
+      },
+      {
+        "name": "delicious.png",
+        "bytes": 2669,
+        "sha256": "977c5bde8406eb57d5ccf878ae0aae30f493bcd770079d8e1217960a58d660e9"
+      },
+      {
+        "name": "embarrassed.png",
+        "bytes": 3385,
+        "sha256": "e7449313bef30a026e9c3a89c23ffca141da242666836b98574ea43a35967a54"
+      },
+      {
+        "name": "funny.png",
+        "bytes": 3615,
+        "sha256": "c5068269f9d0f28206add51a4881263a3353e08d91c9fec8bd3379dffa65d437"
+      },
+      {
+        "name": "happy.png",
+        "bytes": 2123,
+        "sha256": "5798855c917ab98168f4d54cc0f07ba5b62cfc1bfcf17956cf40b7321eb74c81"
+      },
+      {
+        "name": "kissy.png",
+        "bytes": 3193,
+        "sha256": "a980ebbaa95995d359ac8c07d15d6a3022701d6f441e9aa05c42fcb8d8a1fdba"
+      },
+      {
+        "name": "laughing.png",
+        "bytes": 3097,
+        "sha256": "2396f33a65df86c484eb6302f4229c63fe934279ab012c1ec711df86f98c982f"
+      },
+      {
+        "name": "loving.png",
+        "bytes": 2546,
+        "sha256": "f5a5443a84973bc7337a7be4de70b5fbf3e0d3b4df48e19cdf4d3b3535963919"
+      },
+      {
+        "name": "neutral.png",
+        "bytes": 1728,
+        "sha256": "112c9112e09cea0f1032c54fb193057ea567bc70a9ecdf69fb904387d7951ec1"
+      },
+      {
+        "name": "relaxed.png",
+        "bytes": 2603,
+        "sha256": "61af43fa6a882b4bd5a40a932a5e1a1f9399c9d3fb0fe9e78cf1110de234863f"
+      },
+      {
+        "name": "sad.png",
+        "bytes": 2402,
+        "sha256": "f72b5aef6dc96f32ea011eef8e0094aceb6756a9bbe01f8903f16ff9cf9829ad"
+      },
+      {
+        "name": "shocked.png",
+        "bytes": 3377,
+        "sha256": "3987dc5bf94868b6dafc69caf03b86d6ffbcfc58d2cff2c296de86df8860b1c2"
+      },
+      {
+        "name": "silly.png",
+        "bytes": 2924,
+        "sha256": "2f8980ab8a3a16779dca6859ec5c7e04a61c6baec26a915e827dce7d53017e84"
+      },
+      {
+        "name": "sleepy.png",
+        "bytes": 3041,
+        "sha256": "d88ab35bc3cf0796ce1d92e7116089fc79d6f77a077baf8bed14ef018468c544"
+      },
+      {
+        "name": "surprised.png",
+        "bytes": 2493,
+        "sha256": "6050e7957368703d8821e5ccda2568f9db58d3adf6881c05e86d639f28ead23a"
+      },
+      {
+        "name": "thinking.png",
+        "bytes": 2893,
+        "sha256": "4002133675d48c9218f9e5b071579f9bde4b946a17ba8eb6211b54f0868e37e5"
+      },
+      {
+        "name": "winking.png",
+        "bytes": 2672,
+        "sha256": "9791afffc812d05839651bed37f276b4df7ca455b1f73263189b06b8324a7c71"
+      }
+    ],
+    "added_resources": [
+      {
+        "name": "otto_angry.gif",
+        "bytes": 35131,
+        "sha256": "d67aeb6d7a8c5678cbc472757bf5bd5565967d70fc46e780a9ae260c738679b1",
+        "git_blob_sha1": "31678347b7d9d506ed6d3b77e74770468dbd2ba3"
+      },
+      {
+        "name": "otto_confident.gif",
+        "bytes": 80122,
+        "sha256": "2f498822df14c6d4654d6d4a9db87ba9ce55b625bea7484dad07164bbe0e15e9",
+        "git_blob_sha1": "f6d180ef340ee460667f130d13e277f34150762c"
+      },
+      {
+        "name": "otto_confused.gif",
+        "bytes": 107068,
+        "sha256": "244a67c812f8b6a39681258a16f38249f7c47d496ed77c7731ab6d5069ac0fab",
+        "git_blob_sha1": "cfe9baaf992c69387a134cd9fb7c06049a1d7448"
+      },
+      {
+        "name": "otto_cool.gif",
+        "bytes": 99502,
+        "sha256": "f332bd852f4d1ea7cc2b390626812ec0ce8171899c88bd71dd08dcc56f2bbc05",
+        "git_blob_sha1": "0be3398f5eba18e77c7e70c42cc51cdfcc21fd2b"
+      },
+      {
+        "name": "otto_crying.gif",
+        "bytes": 96092,
+        "sha256": "cad138dec2d92292df6d1d053375484d620e9e1f51e64c5b2a4f1d1d338bcd14",
+        "git_blob_sha1": "8ac1f74fa7d7004f238d0cd560b85e8752d6c159"
+      },
+      {
+        "name": "otto_delicious.gif",
+        "bytes": 90728,
+        "sha256": "23607f905f87b42ae40fe6c20e6e27ba3acf4700c803686606a8cb60b9e2eb93",
+        "git_blob_sha1": "85043587e567497782f0a94677efad7898efe91d"
+      },
+      {
+        "name": "otto_embarrassed.gif",
+        "bytes": 39075,
+        "sha256": "d9ab84a9839067e935d9db5811a0b113545f4b486ca1384a38353bb37312c915",
+        "git_blob_sha1": "8298bd8b55adde5b92c50aa5152c816fe354887e"
+      },
+      {
+        "name": "otto_funny.gif",
+        "bytes": 97836,
+        "sha256": "b3020524fcea2bcdb311bd84b0e6aa87000fbf4caf5f512e4918acc506bf8808",
+        "git_blob_sha1": "7203b32985cd4ab6186d56c65eed1ddfced353b5"
+      },
+      {
+        "name": "otto_happy.gif",
+        "bytes": 39521,
+        "sha256": "9d2c6701d7a7a81208a00cf4c76ec1ca64f1f6ddc4a884b94aa489cc71c120a3",
+        "git_blob_sha1": "5654984d8aca00158aecee79226cf8160ecfafd5"
+      },
+      {
+        "name": "otto_kissy.gif",
+        "bytes": 84972,
+        "sha256": "5a5f9067bc21e71813d0c9c6a0c17289dfc31f35459483e4ad131a3e1e029403",
+        "git_blob_sha1": "8d1ca861704f2a0db48e8ae22ccafb2193fc1532"
+      },
+      {
+        "name": "otto_laughing.gif",
+        "bytes": 78215,
+        "sha256": "2e571fdc66c48db6a00de204578bbe6eda71ae6a21953981cbc68be3ba733996",
+        "git_blob_sha1": "83190e0729d71833f91127ba993927c782c80f26"
+      },
+      {
+        "name": "otto_loving.gif",
+        "bytes": 78147,
+        "sha256": "3c466f82ceca7c239ea8d27a3fcb6091b63b179234c8350334fa074c0a0d7ff1",
+        "git_blob_sha1": "18deb3104b695cbfe4b06190133a4b580bcaacd7"
+      },
+      {
+        "name": "otto_neutral.gif",
+        "bytes": 26011,
+        "sha256": "edcb042a7ff48dcc0da0d7bafa7a08171e41ad9efe29d2bc5d552f0ed8b27eb7",
+        "git_blob_sha1": "4d7569051e78ee9ff20957adb0a30f2c0a098152"
+      },
+      {
+        "name": "otto_relaxed.gif",
+        "bytes": 72635,
+        "sha256": "ce22ef9b70f4b6602c8389c1f3080e6a479e5d7e7bd916d3c94da71ce33ae39e",
+        "git_blob_sha1": "98f40328a70362e6eacb42cbd4b4053ea84c2e06"
+      },
+      {
+        "name": "otto_sad.gif",
+        "bytes": 32503,
+        "sha256": "6fc08f07bc2275479ed692c0ae5f8c0fce761925696129fc233645df895b5cfb",
+        "git_blob_sha1": "de77791cf0b7951dfcfbc0375a6d8f2cd7f5e489"
+      },
+      {
+        "name": "otto_shocked.gif",
+        "bytes": 126729,
+        "sha256": "45141d5822624a890bf692842695589ac7a2c6126079dcbec45d746938640c43",
+        "git_blob_sha1": "1b41babbd648841e66a772e3fd3b9e07a2b047a4"
+      },
+      {
+        "name": "otto_silly.gif",
+        "bytes": 105610,
+        "sha256": "9a1573f1dabe504d283c5f3ae9a5be2fbeba8355b6a644917551bf086165ba8b",
+        "git_blob_sha1": "805efb133b8837a95391653aa69c95ea637f913d"
+      },
+      {
+        "name": "otto_sleepy.gif",
+        "bytes": 91193,
+        "sha256": "6a3f0622163ceec2a3698b77a644b3fe6e227b81432ec49c3373bfcc3d1b035c",
+        "git_blob_sha1": "33d73a1dd9e143f50f01eb7bb2c8a3dc7291dff4"
+      },
+      {
+        "name": "otto_surprised.gif",
+        "bytes": 48890,
+        "sha256": "36e782c38f3f714cdcc7d61e008d77645885115c72eee04cb9e2ffa31fa333f1",
+        "git_blob_sha1": "8d095666096c2b23bd71fc7cc24ede659320c631"
+      },
+      {
+        "name": "otto_thinking.gif",
+        "bytes": 84984,
+        "sha256": "105d1495832a48b17cc97782666ed6ccd766bbdbfce187f49ff17929f97f5b6c",
+        "git_blob_sha1": "34bb43e63c6604fe2c4ba332dea94410dd820fe1"
+      },
+      {
+        "name": "otto_winking.gif",
+        "bytes": 94495,
+        "sha256": "6ed0d8757fdf6bca59e5851ea7f968b6df13f2abf6fffb0f4ba512a09e68bfd2",
+        "git_blob_sha1": "3a7ceab2fa20e4732c02c4046ad915901af2f490"
+      }
+    ],
+    "original_resource_count": 23
+  },
+  "decoder_validation": {
+    "files": 21,
+    "frames": 692,
+    "switches": 2100,
+    "max_host_decoder_allocation_bytes": 326560,
+    "read_seek_bounds_checked": true,
+    "allocation_failure_checked": true,
+    "no_remaining_allocations": true,
+    "host_not_device_memory": true,
+    "results": [
+      {
+        "file": "angry.gif",
+        "frames": 30,
+        "peak_decoder_bytes_host": 308128,
+        "frame_fnv32": 3093520542,
+        "switches": 100
+      },
+      {
+        "file": "confident.gif",
+        "frames": 33,
+        "peak_decoder_bytes_host": 326560,
+        "frame_fnv32": 3443739927,
+        "switches": 100
+      },
+      {
+        "file": "confused.gif",
+        "frames": 33,
+        "peak_decoder_bytes_host": 326560,
+        "frame_fnv32": 37971384,
+        "switches": 100
+      },
+      {
+        "file": "cool.gif",
+        "frames": 33,
+        "peak_decoder_bytes_host": 326560,
+        "frame_fnv32": 2878677724,
+        "switches": 100
+      },
+      {
+        "file": "crying.gif",
+        "frames": 33,
+        "peak_decoder_bytes_host": 326560,
+        "frame_fnv32": 172481566,
+        "switches": 100
+      },
+      {
+        "file": "delicious.gif",
+        "frames": 33,
+        "peak_decoder_bytes_host": 326560,
+        "frame_fnv32": 435458864,
+        "switches": 100
+      },
+      {
+        "file": "embarrassed.gif",
+        "frames": 33,
+        "peak_decoder_bytes_host": 308128,
+        "frame_fnv32": 1034260245,
+        "switches": 100
+      },
+      {
+        "file": "funny.gif",
+        "frames": 33,
+        "peak_decoder_bytes_host": 326560,
+        "frame_fnv32": 2915693616,
+        "switches": 100
+      },
+      {
+        "file": "happy.gif",
+        "frames": 33,
+        "peak_decoder_bytes_host": 308128,
+        "frame_fnv32": 675921689,
+        "switches": 100
+      },
+      {
+        "file": "kissy.gif",
+        "frames": 33,
+        "peak_decoder_bytes_host": 326560,
+        "frame_fnv32": 279051728,
+        "switches": 100
+      },
+      {
+        "file": "laughing.gif",
+        "frames": 33,
+        "peak_decoder_bytes_host": 326560,
+        "frame_fnv32": 644534533,
+        "switches": 100
+      },
+      {
+        "file": "loving.gif",
+        "frames": 33,
+        "peak_decoder_bytes_host": 326560,
+        "frame_fnv32": 4118838757,
+        "switches": 100
+      },
+      {
+        "file": "neutral.gif",
+        "frames": 35,
+        "peak_decoder_bytes_host": 308128,
+        "frame_fnv32": 1578385680,
+        "switches": 100
+      },
+      {
+        "file": "relaxed.gif",
+        "frames": 33,
+        "peak_decoder_bytes_host": 326560,
+        "frame_fnv32": 1223506733,
+        "switches": 100
+      },
+      {
+        "file": "sad.gif",
+        "frames": 33,
+        "peak_decoder_bytes_host": 308128,
+        "frame_fnv32": 466268286,
+        "switches": 100
+      },
+      {
+        "file": "shocked.gif",
+        "frames": 33,
+        "peak_decoder_bytes_host": 326560,
+        "frame_fnv32": 4140902115,
+        "switches": 100
+      },
+      {
+        "file": "silly.gif",
+        "frames": 33,
+        "peak_decoder_bytes_host": 326560,
+        "frame_fnv32": 2502905709,
+        "switches": 100
+      },
+      {
+        "file": "sleepy.gif",
+        "frames": 33,
+        "peak_decoder_bytes_host": 326560,
+        "frame_fnv32": 4176346252,
+        "switches": 100
+      },
+      {
+        "file": "surprised.gif",
+        "frames": 33,
+        "peak_decoder_bytes_host": 308128,
+        "frame_fnv32": 794396416,
+        "switches": 100
+      },
+      {
+        "file": "thinking.gif",
+        "frames": 33,
+        "peak_decoder_bytes_host": 326560,
+        "frame_fnv32": 1309840468,
+        "switches": 100
+      },
+      {
+        "file": "winking.gif",
+        "frames": 33,
+        "peak_decoder_bytes_host": 326560,
+        "frame_fnv32": 982350593,
+        "switches": 100
+      }
+    ]
+  },
+  "display_bridge_validation": {
+    "passed": true,
+    "source": {
+      "source": "actual final otto0014 methods, no reimplementation of event or decoder arbitration",
+      "snippets_sha256": {
+        "CLEAR": "c7a48cb8f766287cf83d9088964023507bdf6fc1188ac3ef4b41bee273c42232",
+        "SHOW": "a03ecd6d9342dc303235fda25a8733b323d308d665d30df798bc4125a42e2f5d",
+        "WALLPAPER": "03b07183c2a075e2ae0fedd875bfdd9f4a109283af99968c6fdd4a33dcc2300f",
+        "STATUS": "5ad2f2b3b922aa6f868d0582e8bcc56762a76fef700489803263030b203bae2c",
+        "SYSTEM": "7d4f01812a11e075e8fbe84e6ffd71af58b383fa02dc87d06d26e146324f0d0b",
+        "SERVER": "a584ad13327fc993da0cd10b5a5ac515ca74ebf4ded739a1bc1b3c99b62b6269",
+        "VIEW": "dbdd94402d37f8b30b6e8ad4ba26531f83b712a005b92a68aa55014c32465da3",
+        "APPLY": "87c2bd4cc1a3d8703288d19c48800c93e193f6624fade56c32fd81607c6a354b",
+        "RAW_IMAGE": "86651b2db02e322d369a593913a9c8a9604ad371927b2dd9f672ae5013d5062c"
+      },
+      "excluded": "geometric fallback painting, actual LVGL rendering and hardware are stubbed; GIF algorithm/controller are real"
+    },
+    "cases": [
+      "System thinking never cached for Speaking; server thinking preserved.",
+      "Actual Listening -> status Thinking -> system thinking -> Speaking with no LLM is neutral; happy LLM is happy.",
+      "First-frame decode error -> neutral; mid-frame decode error -> deferred safe cleanup -> neutral.",
+      "Paused/finished decoder not treated as error; 999/1000ms retry boundary checked.",
+      "Neutral decoder failure -> retained wallpaper or geometry.",
+      "Otto -> wallpaper -> Otto checks image hidden flag and 240/360 dimensions.",
+      "Unavailable wallpaper returns false and shows visible Otto; wallpaper mid-frame error retries from neutral."
+    ]
+  },
+  "display_default": "Otto 240x240 centered",
+  "wallpaper_and_nvs_preserved": true,
+  "firmware_runtime_on_device_verified": false,
+  "serial_opened": false,
+  "flashed": false,
+  "limits": [
+    "No protocol turnID; previous-turn emotion arriving during new Thinking/Speaking cannot be distinguished.",
+    "Device frame rate, available heap with live audio, memory, voice and interleaving require owner/K validation."
+  ]
+}
