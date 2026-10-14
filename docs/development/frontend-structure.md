@@ -1,5 +1,7 @@
 # 前端源码组织
 
+本轮工作区、共享动态、草稿保护和安全摘要已整合，当前验收见[收口记录](parallel/收口-20261014.md)。下方 94 文件分类和 181 项测试数字属于第一批模块整理记录，不代替本轮验收。
+
 2026-10-14 新增 `launcher.html`/`app/launcher-main.tsx` 独立启动入口与 `features/launcher/`。它与控制台共用视觉组件和外观 Provider，控制 API 由独立本机主机提供，不依赖聊天服务先启动。`features/voice/` 新增 CosyVoice3 声音档案编辑，配置/试听/上传仍各有明确操作边界。见 [React 启动面板](../guides/React启动面板.md) 与 [参考声音](../guides/参考声音与克隆.md)。
 
 2026-10-14 将 `web/react-chat/src/` 原来平铺的 94 个文件按真实职责归类。运行路径、API、页面交互与样式保持原有行为；前端仍使用 React、React Router、TanStack Query 和 antd，没有新增依赖或升级锁文件。
@@ -15,6 +17,8 @@
 | `features/settings/` | 模型、角色、记忆后端与个性化设置；`proactive/` 保存主动交流设置 |
 | `features/experiments/` | 实验作业、回放与实验失败说明 |
 | `features/diagnostics/` | 当前服务状态诊断 |
+| `features/observability/` | 请求与阶段安全摘要、只读刷新和未知结果说明 |
+| `features/data-workspace/` | 六个数据页面共用的任务区、筛选和详情布局 |
 | `components/` | 跨页面复用的外壳、导航和页头 |
 | `api/` | `index.ts` 统一导出客户端与按领域划分的传输类型；`client.ts` 处理请求 |
 | `styles/` | 控制台全局样式 |
