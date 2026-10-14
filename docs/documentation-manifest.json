@@ -490,6 +490,27 @@
         "验收"
       ],
       "review": "verified 2026-10-14: K设备机械操作证据与限时启动观察；所有者视觉/语音体验未确认，Otto方向另讨论"
+    },
+    {
+      "id": "firmware-otto0014-current-backup",
+      "scope": "0014前COM3当前状态备份、实际布局与assets原分区交接；不代表0014已更新",
+      "authority": "docs/development/parallel/K-otto0014-flash-20261014.md",
+      "sources": [
+        "firmware/smartring_plus/*/0013-continuous-round-face.*"
+      ],
+      "related": [
+        "docs/development/parallel/K-firmware-flash-20261014.md",
+        "docs/guides/圆屏动态表情烧录-20261014.md"
+      ],
+      "tags": [
+        "Otto",
+        "0014",
+        "COM3",
+        "备份",
+        "assets",
+        "资源"
+      ],
+      "review": "verified 2026-10-14: K新完整备份、独立整片芯片MD5、实际OTA/app/assets解析、串口释放；0014写入与体验待后续"
     }
   ],
   "old_path_rules": [
@@ -4431,6 +4452,27 @@
         "烧录",
         "验收",
         "回退"
+      ]
+    },
+    {
+      "path": "docs/development/parallel/K-otto0014-flash-20261014.md",
+      "title": "K：Otto 0014 当前状态备份与资源交接",
+      "status": "current",
+      "basis": "本次新授权下的只读备份/资源交接实际证据；尚未写入0014",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-14",
+        "scope": "新完整16MB备份、独立设备摘要、活动槽、原assets结构与逐资源摘要、端口释放；不包含0014烧录/体验/实际重包容量；未索引尾部统计、当前构建983源码候选与索引/模型边界及历史快照比较",
+        "evidence": "otto0014-20261014-221931-db1e03ad私有backup-verification/current-layout-and-application/original-assets-metadata/asset-handoff/serial-release JSON；固定SDK消费者与打包实现；assets-tail-statistics/assets-read-path-audit/assets-index-and-model-bounds/assets-prior-snapshot-comparison JSON"
+      },
+      "tags": [
+        "并行",
+        "Otto",
+        "0014",
+        "固件",
+        "备份",
+        "资源",
+        "COM3"
       ]
     }
   ],
