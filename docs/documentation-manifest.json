@@ -460,6 +460,27 @@
         "请求标识"
       ],
       "review": "verified 2026-10-14: J后端及真实Edge摘要验收、H边界提示复测；仅当前请求/阶段摘要，不覆盖全语音链"
+    },
+    {
+      "id": "firmware-application-update-0013",
+      "scope": "2026-10-14 COM3仅应用更新的操作边界、备份回退与所有者实机验收步骤",
+      "authority": "docs/guides/圆屏动态表情烧录-20261014.md",
+      "sources": [
+        "firmware/smartring_plus/*/0013-continuous-round-face.*"
+      ],
+      "related": [
+        "docs/development/parallel/K-firmware-flash-20261014.md",
+        "docs/guides/恢复固件编译-20261014.md"
+      ],
+      "tags": [
+        "固件",
+        "烧录",
+        "备份",
+        "0013",
+        "COM3",
+        "验收"
+      ],
+      "review": "verified 2026-10-14: K设备机械操作证据与限时启动观察；所有者视觉/语音体验未确认，Otto方向另讨论"
     }
   ],
   "old_path_rules": [
@@ -4345,6 +4366,46 @@
       },
       "tags": [
         "versions"
+      ]
+    },
+    {
+      "path": "docs/development/parallel/K-firmware-flash-20261014.md",
+      "title": "K：0013 应用更新与重启前校验",
+      "status": "current",
+      "basis": "本次COM3获授权操作的实际备份、单应用写入、独立校验和启动证据；体验待验收",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-14",
+        "scope": "本次设备机械操作、实际范围、独立设备摘要/应用读回、12秒启动观察与串口释放；不覆盖所有者体验或Otto资源",
+        "evidence": "K私有backup-verification/prewrite-manifest/write-attempt/postwrite-verification/protected-regions-verification/reboot-observation JSON；0013构建摘要与固定SDK实现"
+      },
+      "tags": [
+        "并行",
+        "固件",
+        "烧录",
+        "备份",
+        "0013",
+        "COM3"
+      ]
+    },
+    {
+      "path": "docs/guides/圆屏动态表情烧录-20261014.md",
+      "title": "圆屏动态表情：0013 更新与实机验收",
+      "status": "current",
+      "basis": "本次0013更新后的操作与验收入口；以K实际证据区分机械通过和体验待验",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-14",
+        "scope": "实际保留范围、单槽回退边界、所有者验收步骤与壁纸优先规则；不宣称动画/声音或Otto实机通过",
+        "evidence": "K-firmware-flash-20261014设备记录；0013实验/补丁的协议、状态机、皮肤schema及壁纸优先契约"
+      },
+      "tags": [
+        "指南",
+        "圆屏",
+        "表情",
+        "烧录",
+        "验收",
+        "回退"
       ]
     }
   ],
