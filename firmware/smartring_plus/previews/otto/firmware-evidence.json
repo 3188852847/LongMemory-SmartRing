@@ -1,0 +1,141 @@
+{
+  "verified_on": "2026-10-14",
+  "scope": "read-only motion0013 source and build artifacts; not device contents",
+  "files": [
+    {
+      "name": "application.cc",
+      "bytes": 41976,
+      "sha256": "71177e2848a9b6d42ed9473753c3d866172c7a0f6a2058dbc395ffa85487843d"
+    },
+    {
+      "name": "viewe-smartring-plus.cc",
+      "bytes": 76839,
+      "sha256": "b3248d15cdf8578449af2dfe91aff13371d84dcddee57f020385fd5664f03cd9"
+    },
+    {
+      "name": "lvgl_gif.cc",
+      "bytes": 6224,
+      "sha256": "a5ea5e932c3babe64676872df0ad8be5cbdf86606f7a253a971d5cad63ac5b0f"
+    },
+    {
+      "name": "gifdec.c",
+      "bytes": 22702,
+      "sha256": "147323f75b4a852c7586e52db1c734c955d674c850e5a29a5ed4928e74e15ae4"
+    },
+    {
+      "name": "assets.cc",
+      "bytes": 21067,
+      "sha256": "2e8d051f1fe4b24f822c37e08308a985aa10c1e8d89b4f560efb160647c12d3b"
+    },
+    {
+      "name": "partitions/v2/16m.csv",
+      "bytes": 425,
+      "sha256": "14e63509d822060f4438aa3e2d4086f6c947210a283fd515d7f865072a9855cc"
+    },
+    {
+      "name": "xiaozhi.bin",
+      "bytes": 3986384,
+      "sha256": "2749e5266efc136b4502a9f4e9bdbec4179077bcf8e4f1bb77b60d49d0cdb24f"
+    },
+    {
+      "name": "generated_assets.bin",
+      "bytes": 352105,
+      "sha256": "c31a144a0df77bfd8f70545d3af12e3b23f1501cc3b4865ebd91e0fcac965478"
+    },
+    {
+      "name": "partition-table.bin",
+      "bytes": 3072,
+      "sha256": "d46bd51980cd6e15f0bf0c86f530d87a0bbc207144bd9442937b3c1a618a3ffd"
+    },
+    {
+      "name": "protocols/protocol.h",
+      "bytes": 3179,
+      "sha256": "5757644bfa501b9276a1808717e38dfcd49953167831ad2e4150d836606e2ac5"
+    },
+    {
+      "name": "protocols/protocol.cc",
+      "bytes": 2842,
+      "sha256": "e8e4a43a95182e1b6f63d1d52fa57e350d8a803223e2223e5589d35ba8b88bc8"
+    },
+    {
+      "name": "protocols/websocket_protocol.cc",
+      "bytes": 10541,
+      "sha256": "9560755fae0e1657223995817b1a5d0720747b6123926c2401c4a580b75642c9"
+    },
+    {
+      "name": "protocols/mqtt_protocol.cc",
+      "bytes": 13948,
+      "sha256": "f555738d12d6ef8e7b43dbe2cb45d6135de3d393b4f6374c99388457d34d6555"
+    }
+  ],
+  "partitions": [
+    {
+      "label": "nvs",
+      "type": 1,
+      "subtype": 2,
+      "offset": "0x9000",
+      "bytes": 16384
+    },
+    {
+      "label": "otadata",
+      "type": 1,
+      "subtype": 0,
+      "offset": "0xd000",
+      "bytes": 8192
+    },
+    {
+      "label": "phy_init",
+      "type": 1,
+      "subtype": 1,
+      "offset": "0xf000",
+      "bytes": 4096
+    },
+    {
+      "label": "ota_0",
+      "type": 0,
+      "subtype": 16,
+      "offset": "0x20000",
+      "bytes": 4128768
+    },
+    {
+      "label": "ota_1",
+      "type": 0,
+      "subtype": 17,
+      "offset": "0x410000",
+      "bytes": 4128768
+    },
+    {
+      "label": "assets",
+      "type": 1,
+      "subtype": 130,
+      "offset": "0x800000",
+      "bytes": 2097152
+    },
+    {
+      "label": "wallpaper_a",
+      "type": 1,
+      "subtype": 64,
+      "offset": "0xa00000",
+      "bytes": 3145728
+    },
+    {
+      "label": "wallpaper_b",
+      "type": 1,
+      "subtype": 65,
+      "offset": "0xd00000",
+      "bytes": 3145728
+    }
+  ],
+  "budget": {
+    "app_bytes": 3986384,
+    "app_slot_bytes": 4128768,
+    "app_free_bytes": 142384,
+    "gif_bytes": 1609459,
+    "build_assets_bytes": 352105,
+    "build_assets_plus_gifs_bytes": 1961564,
+    "assets_partition_bytes": 2097152,
+    "before_new_index_and_alignment_free_bytes": 135588,
+    "gif_pixel_memory_240_base_bytes": 288000,
+    "gif_pixel_memory_360_base_bytes": 648000
+  }
+}

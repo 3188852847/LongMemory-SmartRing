@@ -13,6 +13,15 @@
   },
   "topics": [
     {
+      "id": "otto-preview",
+      "scope": "Otto固定素材获取、独立电脑预览、实际事件映射与未实施固件适配预算",
+      "authority": "docs/guides/Otto动态表情预览-20261014.md",
+      "sources": ["firmware/smartring_plus/previews/otto/**", "scripts/development/otto_preview/**", "tests/unit/development/otto_state.test.cjs", "tests/unit/development/test_otto_preview.py"],
+      "related": ["docs/development/parallel/L-otto-preview-20261014.md"],
+      "tags": ["Otto", "GIF", "圆屏", "预览", "状态"],
+      "review": "verified 2026-10-14: 固定元数据、21图真实预览、合成状态与只读0013预算；真实系统隐藏/偏好切换和固件/真机未验"
+    },
+    {
       "id": "priorities",
       "scope": "当前执行优先级、完成标准和未排期候选",
       "authority": "ROADMAP.md",
@@ -553,6 +562,22 @@
     }
   ],
   "documents": [
+    {
+      "path": "docs/guides/Otto动态表情预览-20261014.md",
+      "title": "Otto动态表情预览",
+      "status": "current",
+      "basis": "L独立预览的现行操作与方案入口；固件适配段落为未实施提议",
+      "review": {"state": "verified", "date": "2026-10-14", "scope": "固定来源/下载脚本、21图浏览器预览、合成仲裁与0013只读容量；不含固件/真机验收", "evidence": ["docs/development/parallel/L-otto-preview-20261014.md", "firmware/smartring_plus/previews/otto/asset-verification.json"]},
+      "tags": ["Otto", "GIF", "圆屏", "预览"]
+    },
+    {
+      "path": "docs/development/parallel/L-otto-preview-20261014.md",
+      "title": "L：Otto真实动态表情预览与状态方案",
+      "status": "reference",
+      "basis": "保留L阶段范围、来源、真实预览与合成验收、后续交接及未验证边界",
+      "review": {"state": "verified", "date": "2026-10-14", "scope": "L工作树实现、9项Node/5项Python测试、21图/692帧与浏览器操作证据；系统事件与设备不作通过结论", "evidence": ["firmware/smartring_plus/previews/otto/evidence/grid.jpg", "firmware/smartring_plus/previews/otto/evidence/compare.jpg"]},
+      "tags": ["Otto", "验收", "独立会话", "状态"]
+    },
     {
       "path": "AGENTS.md",
       "title": "智慧圆屏项目协作规则",

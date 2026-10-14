@@ -1,0 +1,290 @@
+{
+  "commit": "970cf66906d7c30059faa2704e7002f06b8c3619",
+  "version": "1.3.0",
+  "license": "MIT",
+  "total_bytes": 1609459,
+  "valid_count": 21,
+  "items": [
+    {
+      "name": "neutral",
+      "expected_bytes": 26011,
+      "width": 240,
+      "height": 240,
+      "frames": 35,
+      "duration_ms": 2800,
+      "delays_ms": [
+        80
+      ],
+      "valid": true,
+      "sha256": "edcb042a7ff48dcc0da0d7bafa7a08171e41ad9efe29d2bc5d552f0ed8b27eb7"
+    },
+    {
+      "name": "happy",
+      "expected_bytes": 39521,
+      "width": 240,
+      "height": 240,
+      "frames": 33,
+      "duration_ms": 2640,
+      "delays_ms": [
+        80
+      ],
+      "valid": true,
+      "sha256": "9d2c6701d7a7a81208a00cf4c76ec1ca64f1f6ddc4a884b94aa489cc71c120a3"
+    },
+    {
+      "name": "laughing",
+      "expected_bytes": 78215,
+      "width": 240,
+      "height": 240,
+      "frames": 33,
+      "duration_ms": 2640,
+      "delays_ms": [
+        80
+      ],
+      "valid": true,
+      "sha256": "2e571fdc66c48db6a00de204578bbe6eda71ae6a21953981cbc68be3ba733996"
+    },
+    {
+      "name": "funny",
+      "expected_bytes": 97836,
+      "width": 240,
+      "height": 240,
+      "frames": 33,
+      "duration_ms": 2640,
+      "delays_ms": [
+        80
+      ],
+      "valid": true,
+      "sha256": "b3020524fcea2bcdb311bd84b0e6aa87000fbf4caf5f512e4918acc506bf8808"
+    },
+    {
+      "name": "sad",
+      "expected_bytes": 32503,
+      "width": 240,
+      "height": 240,
+      "frames": 33,
+      "duration_ms": 2640,
+      "delays_ms": [
+        80
+      ],
+      "valid": true,
+      "sha256": "6fc08f07bc2275479ed692c0ae5f8c0fce761925696129fc233645df895b5cfb"
+    },
+    {
+      "name": "angry",
+      "expected_bytes": 35131,
+      "width": 240,
+      "height": 240,
+      "frames": 30,
+      "duration_ms": 2400,
+      "delays_ms": [
+        80
+      ],
+      "valid": true,
+      "sha256": "d67aeb6d7a8c5678cbc472757bf5bd5565967d70fc46e780a9ae260c738679b1"
+    },
+    {
+      "name": "crying",
+      "expected_bytes": 96092,
+      "width": 240,
+      "height": 240,
+      "frames": 33,
+      "duration_ms": 2640,
+      "delays_ms": [
+        80
+      ],
+      "valid": true,
+      "sha256": "cad138dec2d92292df6d1d053375484d620e9e1f51e64c5b2a4f1d1d338bcd14"
+    },
+    {
+      "name": "loving",
+      "expected_bytes": 78147,
+      "width": 240,
+      "height": 240,
+      "frames": 33,
+      "duration_ms": 2640,
+      "delays_ms": [
+        80
+      ],
+      "valid": true,
+      "sha256": "3c466f82ceca7c239ea8d27a3fcb6091b63b179234c8350334fa074c0a0d7ff1"
+    },
+    {
+      "name": "embarrassed",
+      "expected_bytes": 39075,
+      "width": 240,
+      "height": 240,
+      "frames": 33,
+      "duration_ms": 2640,
+      "delays_ms": [
+        80
+      ],
+      "valid": true,
+      "sha256": "d9ab84a9839067e935d9db5811a0b113545f4b486ca1384a38353bb37312c915"
+    },
+    {
+      "name": "surprised",
+      "expected_bytes": 48890,
+      "width": 240,
+      "height": 240,
+      "frames": 33,
+      "duration_ms": 2640,
+      "delays_ms": [
+        80
+      ],
+      "valid": true,
+      "sha256": "36e782c38f3f714cdcc7d61e008d77645885115c72eee04cb9e2ffa31fa333f1"
+    },
+    {
+      "name": "shocked",
+      "expected_bytes": 126729,
+      "width": 240,
+      "height": 240,
+      "frames": 33,
+      "duration_ms": 2640,
+      "delays_ms": [
+        80
+      ],
+      "valid": true,
+      "sha256": "45141d5822624a890bf692842695589ac7a2c6126079dcbec45d746938640c43"
+    },
+    {
+      "name": "thinking",
+      "expected_bytes": 84984,
+      "width": 240,
+      "height": 240,
+      "frames": 33,
+      "duration_ms": 2640,
+      "delays_ms": [
+        80
+      ],
+      "valid": true,
+      "sha256": "105d1495832a48b17cc97782666ed6ccd766bbdbfce187f49ff17929f97f5b6c"
+    },
+    {
+      "name": "winking",
+      "expected_bytes": 94495,
+      "width": 240,
+      "height": 240,
+      "frames": 33,
+      "duration_ms": 2640,
+      "delays_ms": [
+        80
+      ],
+      "valid": true,
+      "sha256": "6ed0d8757fdf6bca59e5851ea7f968b6df13f2abf6fffb0f4ba512a09e68bfd2"
+    },
+    {
+      "name": "cool",
+      "expected_bytes": 99502,
+      "width": 240,
+      "height": 240,
+      "frames": 33,
+      "duration_ms": 2640,
+      "delays_ms": [
+        80
+      ],
+      "valid": true,
+      "sha256": "f332bd852f4d1ea7cc2b390626812ec0ce8171899c88bd71dd08dcc56f2bbc05"
+    },
+    {
+      "name": "relaxed",
+      "expected_bytes": 72635,
+      "width": 240,
+      "height": 240,
+      "frames": 33,
+      "duration_ms": 2640,
+      "delays_ms": [
+        80
+      ],
+      "valid": true,
+      "sha256": "ce22ef9b70f4b6602c8389c1f3080e6a479e5d7e7bd916d3c94da71ce33ae39e"
+    },
+    {
+      "name": "delicious",
+      "expected_bytes": 90728,
+      "width": 240,
+      "height": 240,
+      "frames": 33,
+      "duration_ms": 2640,
+      "delays_ms": [
+        80
+      ],
+      "valid": true,
+      "sha256": "23607f905f87b42ae40fe6c20e6e27ba3acf4700c803686606a8cb60b9e2eb93"
+    },
+    {
+      "name": "kissy",
+      "expected_bytes": 84972,
+      "width": 240,
+      "height": 240,
+      "frames": 33,
+      "duration_ms": 2640,
+      "delays_ms": [
+        80
+      ],
+      "valid": true,
+      "sha256": "5a5f9067bc21e71813d0c9c6a0c17289dfc31f35459483e4ad131a3e1e029403"
+    },
+    {
+      "name": "confident",
+      "expected_bytes": 80122,
+      "width": 240,
+      "height": 240,
+      "frames": 33,
+      "duration_ms": 2640,
+      "delays_ms": [
+        80
+      ],
+      "valid": true,
+      "sha256": "2f498822df14c6d4654d6d4a9db87ba9ce55b625bea7484dad07164bbe0e15e9"
+    },
+    {
+      "name": "sleepy",
+      "expected_bytes": 91193,
+      "width": 240,
+      "height": 240,
+      "frames": 33,
+      "duration_ms": 2640,
+      "delays_ms": [
+        80
+      ],
+      "valid": true,
+      "sha256": "6a3f0622163ceec2a3698b77a644b3fe6e227b81432ec49c3373bfcc3d1b035c"
+    },
+    {
+      "name": "silly",
+      "expected_bytes": 105610,
+      "width": 240,
+      "height": 240,
+      "frames": 33,
+      "duration_ms": 2640,
+      "delays_ms": [
+        80
+      ],
+      "valid": true,
+      "sha256": "9a1573f1dabe504d283c5f3ae9a5be2fbeba8355b6a644917551bf086165ba8b"
+    },
+    {
+      "name": "confused",
+      "expected_bytes": 107068,
+      "width": 240,
+      "height": 240,
+      "frames": 33,
+      "duration_ms": 2640,
+      "delays_ms": [
+        80
+      ],
+      "valid": true,
+      "sha256": "244a67c812f8b6a39681258a16f38249f7c47d496ed77c7731ab6d5069ac0fab"
+    }
+  ],
+  "verified_on": "2026-10-14",
+  "frame_decode": {
+    "method": "Windows System.Drawing/GDI+ SelectActiveFrame and Bitmap materialization",
+    "gif_count": 21,
+    "frames_decoded": 692,
+    "passed": true,
+    "not_lvgl_or_device_evidence": true
+  }
+}

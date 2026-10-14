@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Otto · 圆屏动态表情预览</title><link rel="stylesheet" href="/style.css"><script defer src="/state.js"></script><script defer src="/lifecycle.js"></script><script defer src="/app.js"></script></head>
+<body>
+<main>
+  <header><div><p class="eyebrow">智慧圆屏 / 独立素材实验室</p><h1>Otto，看看它如何回应。</h1><p class="intro">360 × 360 圆屏里的原始动态表情。先看真实素材，再决定设备适配。</p></div><span class="tag">电脑预览 · 无设备连接</span></header>
+  <section class="resource" aria-label="素材状态"><p id="asset-status" role="status">正在核对固定素材…</p><button id="refresh">重新检查素材</button><p class="small">来源 txp666/otto-emoji-gif-component · 1.3.0 · MIT · commit <code>970cf66906d7</code></p></section>
+  <section class="workspace" aria-label="圆屏预览与状态控制">
+    <div class="stage-panel">
+      <div class="section-title"><div><p class="eyebrow">ROUND DISPLAY</p><h2 id="current-face">neutral / 平静</h2></div><button id="play" aria-pressed="true">暂停动画</button></div>
+      <div id="stages" class="stages"></div>
+      <div class="toolbar"><label for="size">显示尺寸 <select id="size"><option value="native">240 原尺寸居中</option><option value="compare">并排比较</option><option value="scaled">360 等比放大</option></select></label><label for="view">预览内容 <select id="view"><option value="state">按状态仲裁</option><option value="manual">单表情循环</option></select></label></div>
+      <p class="small">圆形裁切；屏幕下方标签在预览外。实际 CSS 像素尺寸随窗口空间缩小，设备目标始终是 360 × 360。GIF 无音频，尚无口型同步。</p>
+      <p id="decision" class="decision" role="status"></p>
+      <details><summary>本地回退与减少动态演练</summary><p class="small">只模拟主预览故障，不更改原始素材或系统偏好。</p><label for="fault">素材回退演练 <select id="fault"><option value="none">正常素材</option><option value="missing">模拟当前素材缺失</option><option value="decode">模拟当前素材解码失败</option><option value="all">模拟全部素材不可用</option></select></label><p><button id="reduce-demo">演练减少动态偏好</button></p></details>
+    </div>
+    <aside class="controls"><p class="eyebrow">EVENT REHEARSAL</p><h2>状态切换演练</h2><p class="small">按钮只模拟已核对的事件。超时和映射为本轮方案，未接入固件。</p><div id="events" class="events"></div>
+      <label class="field" for="emotion">说话情绪 <select id="emotion"></select></label><button id="send-emotion">模拟 llm.emotion</button>
+      <div class="readout"><span>当前交互</span><strong id="current-state"></strong><span id="emotion-readout"></span></div>
+      <p id="event-source" class="small"></p><button id="timeout">推进到当前超时点（提议）</button><button id="recover">清除故障 / 回到待机</button>
+      <details><summary>优先级与回退</summary><p>错误/断线锁定 → 被打断短提示 → 聆听/思考/说话 → 待机。仅说话显示当前轮情绪；聆听不接受晚到情绪。</p><p>连接 15 秒、思考 20 秒超时进入错误（提议）；被打断 650 毫秒后回聆听（提议）。说话以 tts.stop 结束，不按 GIF 循环数结束。</p><p>素材缺失、指纹异常或浏览器解码失败 → neutral 原素材 → 静态“素材不可用”文字。回退不伪造连接恢复。</p></details>
+    </aside>
+  </section>
+  <section class="gallery-panel" aria-label="全部21个表情"><div class="section-title"><div><p class="eyebrow">EXPRESSION LIBRARY / 21</p><h2>每一种表情，都用原素材。</h2></div><label><input id="grid-play" type="checkbox">播放网格动画</label></div><p class="small">点击进入单表情循环。网格默认静帧；主预览可播放/暂停。减少动态效果偏好下默认暂停。</p><div id="gallery" class="gallery"></div></section>
+  <footer>固定上游指纹核对 ≠ 浏览器像素解码验收 ≠ LVGL 性能验收 ≠ 真机动态表情与语音验收。配置、壁纸和分区未修改。</footer>
+</main>
+</body></html>
