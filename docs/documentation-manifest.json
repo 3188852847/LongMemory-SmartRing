@@ -620,13 +620,13 @@
     {
       "path": "docs/development/parallel/N-otto-review-20261014.md",
       "title": "N：0014 Otto 烧录前独立审查",
-      "status": "pending",
-      "basis": "M动态源码的独立审查与合成边界证据；等待最终固定提交和壁纸入口修复，不作烧录验收通过",
+      "status": "reference",
+      "basis": "保留首轮问题、后续四项定向通过及最终冻结源码/clean5交付对齐；技术可交K写入，设备预写核对/读回与体验另验",
       "review": {
         "state": "verified",
         "date": "2026-10-14",
-        "scope": "限本次动态源码指纹、实际显示调用顺序宿主桩、公开默认23资源加合成尾的重包边界与两个壁纸入口问题；不含最终构建或设备",
-        "evidence": ["tests/unit/firmware/otto_review_checks.py", "tests/unit/firmware/otto_review_bridge.py", "tests/unit/firmware/otto_review_display.py", "docs/development/parallel/N-otto-review-20261014.md：后续定向复验追加结果；最终产物仍待对齐"]
+        "scope": "初次问题、四项修订定向通过、合成资源边界；9个复验源/7个记录源、clean5/clean6十个公开产物、镜像校验和assets摘要最终对齐；不含设备或私有包本体",
+        "evidence": ["tests/unit/firmware/otto_review_checks.py", "tests/unit/firmware/otto_review_bridge.py", "tests/unit/firmware/otto_review_display.py", "docs/development/parallel/N-otto-review-20261014.md：后续定向复验与最终冻结产物对齐追加结果"]
       },
       "tags": ["Otto", "独立审查", "状态", "资源", "烧录前"]
     },
