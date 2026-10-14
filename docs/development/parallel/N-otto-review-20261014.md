@@ -65,3 +65,43 @@ N 没有串口、复位、烧录、联网下载或日用服务操作，没有读
 | main/boards/viewe-smartring-plus/otto_state.h | `b3edb212369a5abeadaff70bf8743567be5a36eb440cdff0776ed207b7422c4d` |
 
 请主会话交付 M 最终提交号、审计补丁及源码指纹、最终干净构建目录与 app 大小/SHA-256、独立重建和镜像校验结论、精确 assets 写包 SHA-256 与完整分区写后预期 SHA-256、当前设备备份/活动槽已由 K 核对的摘要。N 随后只复核最终差异及上述待修项，不重做全仓测试，不替代 K 的设备核对或所有者真机体验。
+
+## 后续定向复验：四项修订已通过，最终产物待对齐
+
+2026-10-14 后续阶段。以上首轮记录保留；本节只更新所述四项问题的当前源码结论。**当前四项源码/宿主定向验收通过，首轮两个壁纸入口问题均已修复；最终 M 提交、审计补丁与新镜像尚未交付，因此本节尚不发出最终可烧录结论。** 不采用旧 clean2 构建替当前源码背书。
+
+本轮重新从当前 ASCII 源码提取 ClearGif、ShowOtto、TryLoadWallpaper、SetStatus、SetEmotion、SetServerEmotion、SetFaceView 及 ApplyFace 的生命周期/仲裁部分，重新复制当前 LvglGif/LvglRawImage/gifdec 实现。使用 M 的公开最小 LVGL/计时器/分配跟踪脚手架和断言模板；N 独立组装与编译，并增加30次视图往返、真实图片 src/隐藏标志及错误尺寸壁纸检查。几何脸绘制部分在宿主桩截除；gifdec 仅加输入读取/seek边界断言。未运行旧21图/每图100次解码循环。
+
+两个真实 GIF 来自公开的 M 定向测试素材副本，分别核对为此前固定来源 neutral `edcb042a7ff48dcc0da0d7bafa7a08171e41ad9efe29d2bc5d552f0ed8b27eb7`、happy `9d2c6701d7a7a81208a00cf4c76ec1ca64f1f6ddc4a884b94aa489cc71c120a3`。360×360壁纸为修改逻辑画布尺寸的合成 fixture（测试夹具），不读取原壁纸、不作原壁纸视觉验收。
+
+| 实际定向路径 | 结果 |
+|---|---|
+| Listening→STT thinking→系统thinking→Speaking，无llm | neutral，通过 |
+| Thinking缓存服务端happy→Speaking | happy，通过；Listening期迟到emotion不入缓存 |
+| 首帧损坏 | 未loaded，显示立即回neutral |
+| 后续帧损坏 | HasDecodeError标记；GIF回调不自删，显示仲裁随后解除引用和释放，回neutral |
+| 失败重试 | 999ms仍回退，1000ms可恢复；同时只存在1个活动GIF计时器 |
+| 正常Pause、有限循环结束 | 不标记解码错误、不强行回退 |
+| Otto失败、neutral失败 | 回壁纸；壁纸也缺失则回几何脸 |
+| Otto→wallpaper→Otto，连续30次 | 真实HIDDEN均解除；src等于当前控制器image_dsc；宽度360/240正确 |
+| wallpaper后续解码失败、修复后恢复 | 1s节流后恢复wallpaper，HIDDEN解除，不被neutral的ready永久挡住 |
+| 壁纸缺失/错误240×240尺寸 | SetFaceView返回false，取消wallpaper选择并保持可见neutral |
+| 对象结束后的计时器/分配 | 全部清理，无残留分配 |
+
+宿主工具：MSVC 19.51.36231，C++17，UTF-8。首次 N 宿主命令缺少C文件 `/utf-8` 导致中文注释解析失败，未执行测试；补齐参数后使用新目录重建并全部通过，失败目录保留。脚本：[otto_review_display.py](../../../tests/unit/firmware/otto_review_display.py)，输出仅在自己树 `data/test-tmp/otto-review-display-20261014-02/`。该脚本核对当前源码导入/复制路径并记录指纹，不修改M源码、主源码或设备。
+
+当前归一化 LF 文本 SHA-256：
+
+| 文件 | 后续定向复验指纹 |
+|---|---|
+| main/boards/viewe-smartring-plus/viewe-smartring-plus.cc | `636942d8ae6cb4f7a336f14be5199c737f8c234c6a04525ba27dfb91851bb274` |
+| main/boards/viewe-smartring-plus/otto_state.h | `b3edb212369a5abeadaff70bf8743567be5a36eb440cdff0776ed207b7422c4d` |
+| main/application.cc | `d7fd88fa50803a98611388bbafed829bc074b5dd43851443bea8129d5aecf366` |
+| main/display/display.h | `6fd42590a7baf8cd7043a2e18fb979ebdc87f0934c0edf506649944374a389d6` |
+| main/display/lvgl_display/gif/lvgl_gif.cc | `0097eacf37050f55f8fa0376e67a10d077df7f517e8625c70c4965a71550e978` |
+| main/display/lvgl_display/gif/lvgl_gif.h | `f18327bdc0fec90dd36339c952e2c27319b054453b9d2a839e05db3542b6cc4e` |
+| main/display/lvgl_display/gif/gifdec.c | `147323f75b4a852c7586e52db1c734c955d674c850e5a29a5ed4928e74e15ae4` |
+
+主会话补充的 K 983个当前构建源码和资源读取路径核对、当前整个assets与0013前快照相同，属于 K/主会话设备侧与来源证据。N 没有读取其备份；未索引尾仍不是空白、来源仍未知。此次不扩大写入或私有访问范围。
+
+下一步仅对齐 M 固定提交/新审计补丁/最终源码指纹与新构建公开产物；若指纹一致，无需重复上述定向测试。真实设备显示、并发语音、采集体验与保护区域读回仍由 K/所有者独立验收。
