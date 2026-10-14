@@ -4576,8 +4576,8 @@
       "review": {
         "state": "verified",
         "date": "2026-10-14",
-        "scope": "原快照、新同句柄当前检查点及NVS变化边界、两目标各一次写入、独立应用与完整2MB资源读回、全保护范围、15秒启动观察及串口释放；真实视觉/声音/打断/并发和实机回退未确认",
-        "evidence": "c41463c初次备份；update-current-20261014-231752-a787087e私有checkpoint-verification/update-verification/complete-assets-independent-readback/boot-observation/delivery-summary JSON；main正式L/M/N固定清单与11项离线拒绝检查"
+        "scope": "原快照、新同句柄当前检查点及NVS变化边界、两目标各一次写入、独立应用与完整2MB资源读回、全保护范围、15秒启动观察及串口释放；真实视觉/声音/打断/并发和实机回退未确认；主会话已对照M/N核对默认Otto与临时壁纸视图，不沿用0013壁纸优先说明",
+        "evidence": "c41463c初次备份；update-current-20261014-231752-a787087e私有checkpoint-verification/update-verification/complete-assets-independent-readback/boot-observation/delivery-summary JSON；main正式L/M/N固定清单与11项离线拒绝检查；M 57c8972/main6f260ea显示实现及N87f5154对齐；主会话独立读回字节/检查点/保护与启动元数据复核"
       },
       "tags": [
         "并行",
@@ -4660,8 +4660,8 @@
       "review": {
         "state": "verified",
         "date": "2026-10-14",
-        "scope": "实际版本、保留/写入范围、私有新检查点/目标回退路径及所有者验收步骤；不宣称真实视觉、声音、打断或语音并发通过",
-        "evidence": "K-otto0014-flash-20261014实际设备记录和update-current-20261014-231752-a787087e机器证据；正式main6f260ea/04b33a9固定产物"
+        "scope": "实际版本、保留/写入范围、私有新检查点/目标回退路径及所有者验收步骤；不宣称真实视觉、声音、打断或语音并发通过；主会话已对照M/N核对默认Otto与临时壁纸视图，不沿用0013壁纸优先说明",
+        "evidence": "K-otto0014-flash-20261014实际设备记录和update-current-20261014-231752-a787087e机器证据；正式main6f260ea/04b33a9固定产物；M 57c8972/main6f260ea显示实现及N87f5154对齐；主会话独立读回字节/检查点/保护与启动元数据复核"
       },
       "tags": [
         "指南",
