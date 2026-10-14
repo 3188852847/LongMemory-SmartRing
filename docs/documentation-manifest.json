@@ -618,6 +618,19 @@
   ],
   "documents": [
     {
+      "path": "docs/development/parallel/N-otto-review-20261014.md",
+      "title": "N：0014 Otto 烧录前独立审查",
+      "status": "pending",
+      "basis": "M动态源码的独立审查与合成边界证据；等待最终固定提交和壁纸入口修复，不作烧录验收通过",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-14",
+        "scope": "限本次动态源码指纹、实际显示调用顺序宿主桩、公开默认23资源加合成尾的重包边界与两个壁纸入口问题；不含最终构建或设备",
+        "evidence": ["tests/unit/firmware/otto_review_checks.py", "tests/unit/firmware/otto_review_bridge.py"]
+      },
+      "tags": ["Otto", "独立审查", "状态", "资源", "烧录前"]
+    },
+    {
       "path": "docs/guides/Otto动态表情预览-20261014.md",
       "title": "Otto动态表情预览",
       "status": "current",
