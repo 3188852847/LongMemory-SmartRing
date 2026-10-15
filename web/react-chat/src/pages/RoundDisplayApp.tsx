@@ -291,7 +291,7 @@ export function RoundDisplayApp() {
           <Space wrap className="round-skin-actions">
             <Select disabled={Boolean(draft) || saveCustom.isPending} aria-label="圆屏皮肤" value={selectedSkin} onChange={value => {setSelectedSkin(value); setDraft(undefined);}} style={{minWidth:220}}
               options={skins.data?.skins.map(item => ({value:item.id, label:item.name}))}/>
-            <Button type="primary" loading={saveSkin.isPending} disabled={!skins.data?.enabled || Boolean(draft) || selectedSkin === skins.data?.selected_skin}
+            <Button aria-label="保存预览选择" type="primary" loading={saveSkin.isPending} disabled={!skins.data?.enabled || Boolean(draft) || selectedSkin === skins.data?.selected_skin}
               onClick={() => saveSkin.mutate(selectedSkin)}>保存预览选择</Button>
             <Button disabled={!skin || Boolean(draft)} onClick={() => skin && setDraft(createDraft(skin))}>从当前皮肤开始编辑</Button>
           </Space>

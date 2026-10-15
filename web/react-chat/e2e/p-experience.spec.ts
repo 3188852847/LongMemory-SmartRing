@@ -79,6 +79,32 @@ test('真实 Otto 循环、21 张解码、暂停与网页状态优先级',async(
   expect(writes).toEqual([]);
 });
 
+test('21 张 Otto 原始 GIF 均有真实画面变化',async({page},info)=>{
+  test.skip(!process.env.SMART_RING_TEST_OTTO_ASSETS,'需要明确绑定已经下载的固定资源');
+  // 逐张等待一次完整 GIF 周期内的变化；只扩大这条批量检查的时间预算。
+  test.setTimeout(120_000);
+  await preferences(page);await page.setViewportSize({width:1440,height:900});await page.goto('/display-preview');
+  await chooseRadio(page,'逐张素材检查');
+  const image=page.locator('.otto-screen img');
+  const observations:Array<{name:string;hashes:string[];elapsed_ms:number}>=[];
+  for(const name of ['neutral','happy','laughing','funny','sad','angry','crying','loving','embarrassed','surprised','shocked','thinking','winking','cool','relaxed','delicious','kissy','confident','sleepy','silly','confused']) {
+    await page.getByRole('combobox',{name:'循环表情',exact:true}).click();
+    await page.locator('.ant-select-dropdown:visible .ant-select-item-option-content').filter({hasText:new RegExp(` · ${name}$`)}).click();
+    await expect(page.locator('.ant-select-dropdown:visible')).toHaveCount(0);
+    await expect(image).toHaveAttribute('src',new RegExp(`/${name}/loop.gif$`));
+    await expect.poll(()=>image.evaluate(node=>(node as HTMLImageElement).complete && (node as HTMLImageElement).naturalWidth===240)).toBe(true);
+    const start=Date.now(),hashes=new Set<string>();
+    while(hashes.size<2 && Date.now()-start<3200) {
+      const shot=await image.screenshot();const hash=createHash('sha256').update(shot).digest('hex');
+      if(!hashes.has(hash)) {hashes.add(hash);await info.attach(`${name}-frame-${hashes.size}`,{body:shot,contentType:'image/png'});}
+      if(hashes.size<2) await page.waitForTimeout(100);
+    }
+    observations.push({name,hashes:[...hashes],elapsed_ms:Date.now()-start});
+    expect(hashes.size,`${name} 应有实际显示帧变化`).toBeGreaterThan(1);
+  }
+  await info.attach('otto-21-loop-observations',{body:JSON.stringify(observations),contentType:'application/json'});
+});
+
 for(const width of [1366,390]) test(`Otto 更大字号/减少动态/失败与无素材 ${width}`,async({page},info)=>{
   await page.setViewportSize({width,height:width===390?844:768});await preferences(page,'larger','reduce');await page.emulateMedia({reducedMotion:'reduce'});
   await page.goto('/display-preview');
