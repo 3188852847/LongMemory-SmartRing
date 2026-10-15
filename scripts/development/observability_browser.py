@@ -37,7 +37,7 @@ def seed_diagnostics(root):
     for event, sequence in (("tts_service_entered", 1), ("tts_service_failed", 3)):
         observer.voice_event({"round_id": current_round, "event": event, "sequence": sequence,
                               "source": "cosyvoice", "http_request_id": speech_id})
-    # 稀疏合成文件仅用于核对实际 stat 预算；不读正文、不占用日用证据目录。
+    # 定长合成占位文件仅核对实际 stat 预算；不读正文、不占用日用证据目录。
     path = root / "data/logs/diagnostics/api-99999-0123456789abcdef.jsonl"
     with path.open("wb") as output:
         output.truncate(65 * 1024 * 1024)
