@@ -4,6 +4,8 @@
 
 2026-10-14 新增 `launcher.html`/`app/launcher-main.tsx` 独立启动入口与 `features/launcher/`。它与控制台共用视觉组件和外观 Provider，控制 API 由独立本机主机提供，不依赖聊天服务先启动。`features/voice/` 新增 CosyVoice3 声音档案编辑，配置/试听/上传仍各有明确操作边界。见 [React 启动面板](../guides/React启动面板.md) 与 [参考声音](../guides/参考声音与克隆.md)。
 
+2026-10-15 P/Q 组合增加 `features/device/OttoPreview.*` 的固定原图预览与静态首帧降级、`features/experiments/ExperimentPreparation.*` 的真实命令准备入口；聊天次要操作首次展开才挂载，收起后保留已挂载状态。`features/observability/` 继续由页面提供数据和刷新回调，兼容旧响应，并展示显式语音轮次、缺失阶段和只读日志容量。具体入口见 [React 聊天页](../guides/React聊天页.md)及[观测契约](observability-contract.md)，本轮源码与组合检查见 [S 报告](parallel/S-20261015.md)；尚未切换日用进程。
+
 2026-10-14 将 `web/react-chat/src/` 原来平铺的 94 个文件按真实职责归类。运行路径、API、页面交互与样式保持原有行为；前端仍使用 React、React Router、TanStack Query 和 antd，没有新增依赖或升级锁文件。
 
 | 路径 | 职责 |

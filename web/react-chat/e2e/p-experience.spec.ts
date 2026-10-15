@@ -118,3 +118,32 @@ for(const width of [1366,390]) test(`Otto 更大字号/减少动态/失败与无
   await page.route('**/api/otto-preview',route=>route.abort());await refresh.click();await expect(page.getByText('素材清单读取失败')).toBeVisible();
   await fits(page);
 });
+
+test('S Otto 旧请求迟到失败不能覆盖新阶段，离开页面不残留回调错误',async({page})=>{
+  test.skip(!process.env.SMART_RING_TEST_OTTO_ASSETS,'需要明确绑定已经下载的固定资源');
+  let release!:()=>void;
+  const blocked=new Promise<void>(resolve=>{release=resolve;});
+  let entered!:()=>void;
+  const started=new Promise<void>(resolve=>{entered=resolve;});
+  let completed!:()=>void;
+  const finished=new Promise<void>(resolve=>{completed=resolve;});
+  const errors:string[]=[];
+  page.on('pageerror',error=>errors.push(error.message));
+  await page.route('**/api/otto-preview/thinking/loop.gif',async route=>{
+    entered();await blocked;await route.abort();completed();
+  });
+  await preferences(page);await page.goto('/display-preview');
+  const image=page.locator('.otto-screen img');
+  await expect(image).toHaveAttribute('src',/neutral\/loop.gif$/);
+  await chooseRadio(page,'思考');await started;
+  await chooseRadio(page,'聆听');
+  await expect(image).toHaveAttribute('src',/neutral\/loop.gif$/);
+  release();await finished;
+  await expect.poll(()=>image.evaluate(node=>(node as HTMLImageElement).complete && (node as HTMLImageElement).naturalWidth===240)).toBe(true);
+  await expect(page.locator('.otto-caption')).toContainText('neutral');
+  await expect(page.locator('.otto-caption')).not.toContainText('不可用');
+  await chooseRadio(page,'被打断');
+  await page.goto('/chat-react');
+  await expect(page.getByRole('textbox',{name:'消息'})).toBeEnabled();
+  expect(errors).toEqual([]);
+});

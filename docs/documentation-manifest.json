@@ -297,7 +297,8 @@
         "src/longmemory/adapters/**"
       ],
       "related": [
-        "docs/architecture/overview.md"
+        "docs/architecture/overview.md",
+        "docs/development/parallel/S-20261015.md"
       ],
       "tags": [
         "流程",
@@ -336,14 +337,17 @@
       "related": [
         "docs/architecture/repository-structure.md",
         "docs/guides/React聊天页.md",
-        "docs/guides/外观设置.md"
+        "docs/guides/外观设置.md",
+        "docs/development/parallel/P-20261015.md",
+        "docs/development/parallel/Q-20261015.md",
+        "docs/development/parallel/S-20261015.md"
       ],
       "tags": [
         "网页",
         "前端",
         "React"
       ],
-      "review": "pending: 本轮只建立维护归属，未完成全篇实现核对"
+      "review": "partial verified 2026-10-15: P/Q新增组件职责、真实准备入口及S组合验收；其余模块历史记录与全篇结构未重审"
     },
     {
       "id": "visual-system",
@@ -372,11 +376,19 @@
         "src/longmemory/entrypoints/api/routes/device.py",
         "web/react-chat/src/pages/RoundDisplayApp*",
         "firmware/smartring_plus/motion/**",
-        "firmware/smartring_plus/patches/**"
+        "firmware/smartring_plus/patches/**",
+        "src/longmemory/entrypoints/api/otto_preview.py",
+        "web/react-chat/src/features/device/OttoPreview*",
+        "scripts/development/otto_firmware/otto_state.h",
+        "web/react-chat/e2e/p-experience.spec.ts",
+        "tests/unit/entrypoints/test_otto_preview_api.py"
       ],
       "related": [
         "docs/architecture/round-screen-skins.md",
-        "docs/development/界面与交互优化-20261014.md"
+        "docs/development/界面与交互优化-20261014.md",
+        "docs/development/parallel/P-20261015.md",
+        "docs/development/parallel/S-20261015.md",
+        "docs/guides/React聊天页.md"
       ],
       "tags": [
         "圆屏",
@@ -384,7 +396,7 @@
         "动画",
         "设备"
       ],
-      "review": "pending: 本轮只建立维护归属，未完成全篇实现核对"
+      "review": "partial verified 2026-10-15: S核对网页Otto与0015显示映射、原图/几何皮肤边界及浏览器证据；历史固件记录未批量重审，真实设备/声音未验"
     },
     {
       "id": "test-artifacts",
@@ -463,25 +475,44 @@
     },
     {
       "id": "safe-observability",
-      "scope": "当前进程请求与启动阶段摘要、默认日志元数据及未覆盖的真实语音链路",
+      "scope": "HTTP与显式语音包装器事件、固定日志累计元数据及未验真实阶段",
       "authority": "docs/development/observability-contract.md",
       "sources": [
         "src/longmemory/infrastructure/logging/diagnostics.py",
         "src/longmemory/entrypoints/api/observability.py",
         "src/longmemory/entrypoints/api/security.py",
         "web/react-chat/src/features/observability/**",
-        "scripts/development/launcher/events.py"
+        "scripts/development/launcher/events.py",
+        "src/longmemory/infrastructure/logging/retention.py",
+        "src/longmemory/infrastructure/logging/setup.py",
+        "src/longmemory/entrypoints/api/routes/memory_runtime.py",
+        "scripts/development/xiaozhi/voice_diagnostics.py",
+        "scripts/development/xiaozhi/voice_latency.py",
+        "scripts/development/xiaozhi/voice_input_latency.py",
+        "scripts/development/xiaozhi/longmemory_provider.py",
+        "scripts/development/xiaozhi/launch_with_memory.py",
+        "scripts/development/xiaozhi/cosyvoice_streaming.py",
+        "scripts/development/cosyvoice/service.py",
+        "scripts/development/observability_browser.py",
+        "web/react-chat/e2e/observability.spec.ts",
+        "web/react-chat/playwright.observability.config.ts",
+        "tests/unit/entrypoints/test_voice_observability_api.py",
+        "tests/unit/development/test_voice_diagnostics.py",
+        "tests/unit/infrastructure/test_log_retention.py"
       ],
       "related": [
         "docs/development/parallel/G-20261014.md",
-        "docs/development/parallel/J-20261014.md"
+        "docs/development/parallel/J-20261014.md",
+        "docs/development/parallel/Q-20261015.md",
+        "docs/adr/0180-explicit-voice-diagnostics-and-retention.md",
+        "docs/development/parallel/S-20261015.md"
       ],
       "tags": [
         "日志",
         "故障",
         "请求标识"
       ],
-      "review": "verified 2026-10-14: J后端及真实Edge摘要验收、H边界提示复测；仅当前请求/阶段摘要，不覆盖全语音链"
+      "review": "verified 2026-10-14 J/H原HTTP边界；2026-10-15 Q合成后端与独立前端、S源码/契约组合与新旧响应浏览器核对；不覆盖日用部署、真实厂家/Python3.10/模型/声音/设备"
     },
     {
       "id": "firmware-application-update-0013",
@@ -593,6 +624,31 @@
         "黑底"
       ],
       "review": "verified 2026-10-15: 实际方法宿主回归/负向对照、编译、指纹、正反补丁与仅应用交付；真机待验收"
+    },
+    {
+      "id": "pq-combination-20261015",
+      "scope": "P/Q固定输入的S独立组合审查、构建身份和隔离验收记录；待主会话合入",
+      "authority": "docs/development/parallel/S-20261015.md",
+      "sources": [
+        "web/react-chat/e2e/p-experience.spec.ts",
+        "web/react-chat/e2e/observability.spec.ts",
+        "web/react-chat/playwright.p-experience.config.ts",
+        "web/react-chat/playwright.integration.config.ts",
+        "tests/unit/entrypoints/test_otto_preview_api.py",
+        "tests/unit/entrypoints/test_voice_observability_api.py"
+      ],
+      "related": [
+        "docs/development/parallel/P-20261015.md",
+        "docs/development/parallel/Q-20261015.md",
+        "docs/adr/0180-explicit-voice-diagnostics-and-retention.md",
+        "ROADMAP.md"
+      ],
+      "tags": [
+        "S",
+        "整合",
+        "验收"
+      ],
+      "review": "verified 2026-10-15: 固定提交映射、独立定向源码审查和本轮合成验证；主合入/日用切换/真实语音及远程CI未验"
     }
   ],
   "old_path_rules": [
@@ -778,11 +834,12 @@
       "review": {
         "state": "verified",
         "date": "2026-10-15",
-        "scope": "R窄更新的A至J/0015完成状态与P/Q整合前进行中、R设计提案及真实验收边界；不将提案当实现",
+        "scope": "保留R已审查方案及0015边界；仅更新P/Q为组合通过待主合入，不宣称部署或真实语音通过",
         "evidence": [
           "docs/development/parallel/收口-20261014.md",
           "docs/development/parallel/K-otto0015-flash-20261015.md",
-          "docs/development/parallel/R-20261015.md"
+          "docs/development/parallel/R-20261015.md",
+          "docs/development/parallel/S-20261015.md"
         ]
       },
       "tags": []
@@ -3057,7 +3114,14 @@
       "status": "current",
       "basis": "按 ROADMAP、恢复/工程约定及本轮任务确定的维护入口；仅限定对应事实范围，语义核对另列",
       "review": {
-        "state": "pending"
+        "state": "verified",
+        "date": "2026-10-15",
+        "scope": "仅新增网页Otto/0015映射、原图与几何皮肤边界说明；其余历史固件与状态协议未全篇重审",
+        "evidence": [
+          "docs/development/parallel/S-20261015.md",
+          "docs/development/parallel/P-20261015.md",
+          "docs/development/parallel/Q-20261015.md"
+        ]
       },
       "tags": [
         "architecture"
@@ -3069,7 +3133,14 @@
       "status": "pending",
       "basis": "已盘点路径与标题，尚无本轮充分证据确定现行用途；保留原文等待任务核对",
       "review": {
-        "state": "pending"
+        "state": "verified",
+        "date": "2026-10-15",
+        "scope": "仅新增Otto原图不受几何皮肤参数影响、网页选择与设备能力检测边界；历史固件闭环未重验",
+        "evidence": [
+          "docs/development/parallel/S-20261015.md",
+          "docs/development/parallel/P-20261015.md",
+          "docs/development/parallel/Q-20261015.md"
+        ]
       },
       "tags": [
         "architecture"
@@ -3229,9 +3300,14 @@
       "basis": "按 ROADMAP、恢复/工程约定及本轮任务确定的维护入口；仅限定对应事实范围，语义核对另列",
       "review": {
         "state": "verified",
-        "date": "2026-10-14",
-        "scope": "仅本轮整合进度、导航、保留边界和新增模块段落；不代表全篇语义审计",
-        "evidence": "收口记录；J 106cff3；H 91de3ea；main生产源码一致与构建指纹核对"
+        "date": "2026-10-15",
+        "scope": "仅新增P/Q组件职责、准备入口及组合结果导航；其余整理/旧验收数字保持历史语境；原记录范围保留：仅本轮整合进度、导航、保留边界和新增模块段落；不代表全篇语义审计",
+        "evidence": [
+          "收口记录；J 106cff3；H 91de3ea；main生产源码一致与构建指纹核对",
+          "docs/development/parallel/S-20261015.md",
+          "docs/development/parallel/P-20261015.md",
+          "docs/development/parallel/Q-20261015.md"
+        ]
       },
       "tags": [
         "development"
@@ -3267,7 +3343,14 @@
       "status": "current",
       "basis": "本轮明确交付的观察契约",
       "review": {
-        "state": "pending"
+        "state": "verified",
+        "date": "2026-10-15",
+        "scope": "仅Q轮次/签名/来源/缺失、只读累计保留和兼容/部署边界；S合成源码及契约检查不替代真实语音",
+        "evidence": [
+          "docs/development/parallel/S-20261015.md",
+          "docs/development/parallel/P-20261015.md",
+          "docs/development/parallel/Q-20261015.md"
+        ]
       },
       "tags": [
         "隔离整合"
@@ -3545,7 +3628,14 @@
       "status": "pending",
       "basis": "已盘点路径与标题，尚无本轮充分证据确定现行用途；保留原文等待任务核对",
       "review": {
-        "state": "pending"
+        "state": "verified",
+        "date": "2026-10-15",
+        "scope": "仅P聊天操作收纳、日常名称、Otto/皮肤边界与实验准备入口；其余日用/模型/实机未重验",
+        "evidence": [
+          "docs/development/parallel/S-20261015.md",
+          "docs/development/parallel/P-20261015.md",
+          "docs/development/parallel/Q-20261015.md"
+        ]
       },
       "tags": [
         "guides"
@@ -4817,6 +4907,85 @@
         "R",
         "方案",
         "路线图"
+      ]
+    },
+    {
+      "path": "docs/development/parallel/P-20261015.md",
+      "title": "P：日常前端体验与后台Otto预览",
+      "status": "reference",
+      "basis": "P独立交付原记录保留；S已完成固定源码组合验收，待主合入",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-15",
+        "scope": "核对源提交、独立证据身份和边界；S重新运行组合检查，不将P旧证据当组合结果",
+        "evidence": [
+          "docs/development/parallel/S-20261015.md",
+          "docs/adr/0180-explicit-voice-diagnostics-and-retention.md"
+        ]
+      },
+      "tags": [
+        "P/Q",
+        "验收"
+      ]
+    },
+    {
+      "path": "docs/development/parallel/Q-20261015.md",
+      "title": "Q：语音诊断关联与日志累计保留",
+      "status": "reference",
+      "basis": "Q独立交付原记录保留；S组合全套已核对中断片段，真实日用未切换",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-15",
+        "scope": "核对真实调用者、签名/序号/并发/保留边界及组合检查；保留独立报告当时未验记录",
+        "evidence": [
+          "docs/development/parallel/S-20261015.md",
+          "docs/adr/0180-explicit-voice-diagnostics-and-retention.md"
+        ]
+      },
+      "tags": [
+        "P/Q",
+        "验收"
+      ]
+    },
+    {
+      "path": "docs/adr/0180-explicit-voice-diagnostics-and-retention.md",
+      "title": "ADR-0180：显式语音轮次观测与只读累计保留计划",
+      "status": "reference",
+      "basis": "Q最小观测/保留切片决策；主合入与真实日用切换待办",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-15",
+        "scope": "核对显式轮次、受信进程证明、有限去重、非阻断和只读预算；不等同真实语音全链路验收",
+        "evidence": [
+          "docs/development/parallel/S-20261015.md",
+          "docs/development/observability-contract.md",
+          "src/longmemory/infrastructure/logging/retention.py",
+          "scripts/development/xiaozhi/voice_diagnostics.py"
+        ]
+      },
+      "tags": [
+        "adr",
+        "语音",
+        "日志"
+      ]
+    },
+    {
+      "path": "docs/development/parallel/S-20261015.md",
+      "title": "S：P/Q组合审查与整合验收",
+      "status": "current",
+      "basis": "本隔离整合分支的实际组合证据；组合通过待主合入，未部署",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-15",
+        "scope": "固定输入映射、旧dist冻结、源码/契约审查、261组件与47项不同浏览器场景、后端并集、构建/送达与释放；不覆盖真实模型/声音/设备",
+        "evidence": [
+          "docs/development/parallel/P-20261015.md",
+          "docs/development/parallel/Q-20261015.md"
+        ]
+      },
+      "tags": [
+        "P/Q",
+        "验收"
       ]
     }
   ],

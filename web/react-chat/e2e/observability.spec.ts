@@ -137,3 +137,26 @@ test('Q 达到事件上限与观测持久化失败均明确提示，未提供清
   await expect(panel.getByRole('button')).toHaveCount(1);
   await expect(panel.getByRole('button', {name:/删除|清理|应用计划/})).toHaveCount(0);
 });
+
+test('S 兼容旧响应：缺少语音和容量字段仍显示原 HTTP 摘要', async ({page}, info) => {
+  await page.setViewportSize({width:390, height:844});
+  await page.route('**/api/observability', async route => {
+    const response = await route.fetch();
+    const snapshot = await response.json();
+    delete snapshot.voice;
+    delete snapshot.log_retention;
+    snapshot.requests.forEach((row: Record<string, unknown>) => delete row.voice_round_id);
+    await route.fulfill({response, json:snapshot});
+  });
+  await page.goto('/device?view=diagnostics');
+  const panel = page.locator('.observability-panel');
+  await expect(panel.getByText('执行结果未知，请重新读取状态')).toBeVisible();
+  await panel.locator('summary').filter({hasText:'语音轮次与缺失阶段'}).click();
+  await expect(panel.getByText(/当前进程尚未收到语音事件/)).toBeVisible();
+  await panel.locator('summary').filter({hasText:'历次日志容量与保留预算'}).click();
+  await expect(panel.getByText('当前服务尚未提供累计保留元数据。')).toBeVisible();
+  await expect(panel.locator('article')).toHaveCount(0);
+  await expect(panel.getByText(/固定目录已统计/)).toHaveCount(0);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+  await panel.screenshot({path:info.outputPath('s-legacy-summary.png')});
+});
