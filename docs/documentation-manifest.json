@@ -512,7 +512,7 @@
         "故障",
         "请求标识"
       ],
-      "review": "verified 2026-10-14 J/H原HTTP边界；2026-10-15 Q合成后端与独立前端、S源码/契约组合与新旧响应浏览器核对；不覆盖日用部署、真实厂家/Python3.10/模型/声音/设备"
+      "review": "verified 2026-10-14 J/H原HTTP边界；2026-10-15 Q合成后端与独立前端、S源码/契约组合与新旧响应浏览器核对；不覆盖日用部署、真实厂家/Python3.10/模型/声音/设备；S组合验收后由主会话a3d0208合入，真实厂家与日用部署未验"
     },
     {
       "id": "firmware-application-update-0013",
@@ -834,7 +834,7 @@
       "review": {
         "state": "verified",
         "date": "2026-10-15",
-        "scope": "保留R已审查方案及0015边界；仅更新P/Q为组合通过待主合入，不宣称部署或真实语音通过",
+        "scope": "P/Q软件隔离验收与a3d0208合入、日用服务未切换、R提案未实施及0015已有验收边界；窄核对本轮状态，不覆盖全仓",
         "evidence": [
           "docs/development/parallel/收口-20261014.md",
           "docs/development/parallel/K-otto0015-flash-20261015.md",
@@ -4913,11 +4913,11 @@
       "path": "docs/development/parallel/P-20261015.md",
       "title": "P：日常前端体验与后台Otto预览",
       "status": "reference",
-      "basis": "P独立交付原记录保留；S已完成固定源码组合验收，待主合入",
+      "basis": "本轮P/Q软件交付经S组合验收，以a3d0208合入主项目；日用切换与真实语音边界保留",
       "review": {
         "state": "verified",
         "date": "2026-10-15",
-        "scope": "核对源提交、独立证据身份和边界；S重新运行组合检查，不将P旧证据当组合结果",
+        "scope": "核对源提交、独立证据身份和边界；S重新运行组合检查，不将P旧证据当组合结果；主会话独立复核证据和源码内容，a3d0208合入，完成本轮软件任务后归档",
         "evidence": [
           "docs/development/parallel/S-20261015.md",
           "docs/adr/0180-explicit-voice-diagnostics-and-retention.md"
@@ -4932,11 +4932,11 @@
       "path": "docs/development/parallel/Q-20261015.md",
       "title": "Q：语音诊断关联与日志累计保留",
       "status": "reference",
-      "basis": "Q独立交付原记录保留；S组合全套已核对中断片段，真实日用未切换",
+      "basis": "本轮P/Q软件交付经S组合验收，以a3d0208合入主项目；日用切换与真实语音边界保留",
       "review": {
         "state": "verified",
         "date": "2026-10-15",
-        "scope": "核对真实调用者、签名/序号/并发/保留边界及组合检查；保留独立报告当时未验记录",
+        "scope": "核对真实调用者、签名/序号/并发/保留边界及组合检查；保留独立报告当时未验记录；主会话独立复核证据和源码内容，a3d0208合入，完成本轮软件任务后归档",
         "evidence": [
           "docs/development/parallel/S-20261015.md",
           "docs/adr/0180-explicit-voice-diagnostics-and-retention.md"
@@ -4973,11 +4973,11 @@
       "path": "docs/development/parallel/S-20261015.md",
       "title": "S：P/Q组合审查与整合验收",
       "status": "current",
-      "basis": "本隔离整合分支的实际组合证据；组合通过待主合入，未部署",
+      "basis": "本轮P/Q软件交付经S组合验收，以a3d0208合入主项目；日用切换与真实语音边界保留",
       "review": {
         "state": "verified",
         "date": "2026-10-15",
-        "scope": "固定输入映射、旧dist冻结、源码/契约审查、261组件与47项不同浏览器场景、后端并集、构建/送达与释放；不覆盖真实模型/声音/设备",
+        "scope": "固定输入映射、旧dist冻结、源码/契约审查、261组件与47项不同浏览器场景、后端并集、构建/送达与释放；不覆盖真实模型/声音/设备；主会话独立复核证据和源码内容，a3d0208合入，完成本轮软件任务后归档",
         "evidence": [
           "docs/development/parallel/P-20261015.md",
           "docs/development/parallel/Q-20261015.md"
