@@ -1,4 +1,10 @@
 /* 输入区占正常网格行，不用 fixed/sticky 遮挡历史内容或键盘焦点。 */
+.shell.workspace-shell.chat-shell .turn-tools { display: flex; flex-wrap: wrap; align-items: start; gap: 8px; margin-block: 6px 14px; }
+.shell.workspace-shell.chat-shell .turn-secondary-actions { min-width: 0; max-width: 100%; }
+.shell.workspace-shell.chat-shell .turn-secondary-actions[open] { flex-basis: 100%; padding: 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.shell.workspace-shell.chat-shell .turn-secondary-actions summary { min-height: 44px; padding: 10px 12px; cursor: pointer; color: var(--muted-strong); font-size: .85rem; }
+.shell.workspace-shell.chat-shell .turn-secondary-actions summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.shell.workspace-shell.chat-shell .turn-tools .turn-evidence-action { min-height: 44px; margin: 0; }
 .shell.workspace-shell.chat-shell { height: 100dvh; min-height: 0; overflow: hidden; }
 .shell.workspace-shell.chat-shell > main { min-height: 0; padding-block: 18px; overflow: hidden; }
 .shell.workspace-shell.chat-shell .shell-content { height: 100%; min-height: 0; display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto; gap: 12px; }

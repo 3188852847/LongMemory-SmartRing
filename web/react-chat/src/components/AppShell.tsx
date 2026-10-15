@@ -15,10 +15,10 @@ const NAV_GROUPS: Array<{label: string; items: Array<{
     {page: 'display', icon: '显', label: '圆屏预览', description: '状态、情绪与异常', to: '/display-preview'},
   ]},
   {label: '长期记忆', items: [
-    {page: 'memories', icon: 'L1', label: '原始与原子记忆', description: 'L0 来源与 L1 事实', to: '/memories'},
+    {page: 'memories', icon: '记', label: '原话与事实', description: '从对话查来源、纠正事实', to: '/memories'},
     {page: 'quality', icon: '质', label: '记忆质量', description: '跨日问题样本与诊断', to: '/memory-quality'},
-    {page: 'scenarios', icon: 'L2', label: '生活场景', description: 'L2 情境整理', to: '/scenarios'},
-    {page: 'personas', icon: 'L3', label: '用户画像', description: 'L3 长期认识', to: '/personas'},
+    {page: 'scenarios', icon: '景', label: '生活场景', description: '相关事实组成的经历', to: '/scenarios'},
+    {page: 'personas', icon: '像', label: '用户画像', description: '有来源的长期认识', to: '/personas'},
   ]},
   {label: '控制与观察', items: [
     {page: 'settings', icon: '设', label: '设置中心', description: '角色、声音与主动交流', to: '/settings'},
@@ -75,6 +75,7 @@ export function ConsoleNav({active, legacyPath}: {active: Page; legacyPath: stri
         {group.items.map(item => <NavItem key={item.page} item={item} active={active === item.page}/>)}
       </section>)}
     </nav>
+    <details className="legacy-entry memory-term-map"><summary>记忆名称与研究编号</summary><p>原话（L0）：保存的对话来源。事实（L1）：从原话提取的记忆。场景（L2）：相关事实组成的经历。画像（L3）：有来源的长期认识。</p><p>深层工具保留这些研究编号，可沿来源核对；模型推断仍需复核。</p></details>
     <details className="legacy-entry"><summary>兼容入口</summary>
       <a href={legacyPath}>打开原版页面</a><p>仅用于迁移期排障，日常操作请使用上方新版页面。</p>
     </details>

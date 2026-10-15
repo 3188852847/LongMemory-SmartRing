@@ -93,7 +93,7 @@ test('H04 390px 来源抽屉标题和全部动作可见，关闭保留筛选', a
   await expect(search).toBeEnabled();
   await search.fill('乌龙茶');await search.press('Enter');
   await page.locator('.memory-item').first().getByRole('button',{name:'查看来源'}).click();
-  const drawer=page.getByRole('dialog',{name:'L1 原子记忆'});
+  const drawer=page.getByRole('dialog',{name:'事实记忆（L1）'});
   await expect(drawer).toBeVisible();
   await expect.poll(async()=>{const box=await drawer.boundingBox();return Boolean(box && box.x>=0 && box.x+box.width<=391);}).toBe(true);
   for(const name of ['事实时间线','纠正错误','记录变化',/删\s*除/,'Close']) {

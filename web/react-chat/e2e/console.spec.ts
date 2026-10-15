@@ -27,7 +27,7 @@ test('文字聊天可保存并在刷新后恢复，React 页面可统一导航',
   await expect(page.getByRole('region', {name:'本轮记忆证据'})).toContainText('用户养了一只叫豆包的猫。');
   await page.getByRole('link', {name:'核对 L0 原话'}).click();
   await expect(page).toHaveURL(/\/memories\?memory_id=/);
-  const memoryDetail = page.getByRole('dialog', {name:'L1 原子记忆'});
+  const memoryDetail = page.getByRole('dialog', {name:'事实记忆（L1）'});
   await expect(memoryDetail).toBeVisible();
   await expect(memoryDetail.getByRole('heading', {name:'L0 原始来源'})).toBeVisible();
   await expect(page.getByText('我养了一只叫豆包的猫', {exact:true})).toBeVisible();
@@ -70,8 +70,8 @@ test('文字聊天可保存并在刷新后恢复，React 页面可统一导航',
   await themeSelect.click();
   await page.locator('.ant-select-dropdown:visible').getByText('未来控制台（推荐）', {exact:true}).click();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'future');
-  await page.getByRole('link', {name:'原始与原子记忆'}).click();
-  await expect(page.getByRole('heading', {name:'原始与原子记忆'})).toBeVisible();
+  await page.getByRole('link', {name:'原话与事实'}).click();
+  await expect(page.getByRole('heading', {name:'原话与事实'})).toBeVisible();
   const l1Row = page.locator('.memory-browser .memory-item').filter({
     hasText:'用户养了一只叫豆包的猫。',
   });
@@ -122,7 +122,7 @@ test('文字聊天可保存并在刷新后恢复，React 页面可统一导航',
   await deleteDialog.getByRole('button', {name:'确认删除 L1'}).click();
   await expect(page.getByText('L1 已删除；L0 原始对话仍保留。')).toBeVisible();
   await expect(page.locator('.ant-drawer-mask:visible')).toHaveCount(0);
-  await expect(page.getByRole('tab', {name:'L1 原子记忆 · 4'})).toBeVisible();
+  await expect(page.getByRole('tab', {name:'事实记忆（L1） · 4'})).toBeVisible();
   await expect(page.locator('.memory-browser .memory-item').filter({
     hasText:'用户现在养了一只叫布丁的猫。',
   })).toHaveCount(0);
@@ -132,7 +132,7 @@ test('文字聊天可保存并在刷新后恢复，React 页面可统一导航',
   await dailyReview.getByText('查看删除审计（1）').click();
   await expect(dailyReview.getByText(/已删除 L1：/).locator('code')).toHaveText(deletedMemoryId);
   await page.getByRole('button', {name:'浏览记忆', exact:true}).click();
-  await page.getByRole('tab', {name:/^L0 原始记录/}).click();
+  await page.getByRole('tab', {name:/^对话原话（L0）/}).click();
   await expect(page.locator('.memory-browser .memory-item').filter({
     hasText:'我养了一只叫豆包的猫',
   })).toHaveCount(1);
@@ -178,7 +178,7 @@ test('只读实验服务不能误启动模型作业', async ({page}) => {
 
 test('所有者可合并并恢复重复 L1，矛盾候选没有合并入口', async ({page}) => {
   await page.goto('/memories');
-  await expect(page.getByRole('heading', {name:'原始与原子记忆'})).toBeVisible();
+  await expect(page.getByRole('heading', {name:'原话与事实'})).toBeVisible();
   await page.getByRole('button', {name:'重复与关系复核', exact:true}).click();
   await page.getByRole('button', {name:'扫描当前 L1'}).click();
 
@@ -190,7 +190,7 @@ test('所有者可合并并恢复重复 L1，矛盾候选没有合并入口', as
   await expect(mergeDialog).toBeVisible();
   await mergeDialog.getByRole('button', {name:'确认合并'}).click();
   await expect(page.getByText(/重复 L1 已合并/)).toBeVisible();
-  const keptMemoryDetail = page.getByRole('dialog', {name:'L1 原子记忆'});
+  const keptMemoryDetail = page.getByRole('dialog', {name:'事实记忆（L1）'});
   await expect(keptMemoryDetail).toContainText('我喜欢乌龙茶。');
   await expect(keptMemoryDetail).toContainText('我确实喜欢乌龙茶');
   await keptMemoryDetail.locator('.ant-drawer-close').click();

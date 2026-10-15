@@ -32,7 +32,7 @@ for(const width of [1440,390]) for(const motion of ['full','reduce'] as const) {
     await expect(page.getByRole('combobox',{name:'主题'})).toBeVisible();
     await page.goto('/memories');
     await page.locator('.memory-item').first().getByRole('button',{name:'查看来源',exact:true}).click();
-    const source=page.getByRole('dialog',{name:'L1 原子记忆'});
+    const source=page.getByRole('dialog',{name:'事实记忆（L1）'});
     const remove=source.getByRole('button',{name:/删\s*除/});
     for(const close of ['escape','enter','pointer'] as const) {
       await remove.click();

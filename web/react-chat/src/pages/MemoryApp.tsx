@@ -511,10 +511,10 @@ export function MemoryApp() {
       <ConsoleNav active="memories" legacyPath="/memories-legacy"/>
       <Card size="small" className="memory-layer-guide" title="层级说明"><p><Tag color="magenta">L1</Tag><span>规范化、可召回的派生事实</span></p><p><Tag color="blue">L0</Tag><span>用户或助手当时说过的原文</span></p></Card>
     </>;
-  return <><AppShell subtitle="可追溯的个人记忆" className="memory-shell" sidebar={sidebar}><PageHeader eyebrow="长期记忆" title="原始与原子记忆" description="查看系统保存的原话和从中提取的可召回事实，并核对两者之间的来源关系。" meta={config?.database ?? '未指定记忆库'} action={<Space wrap><ManualMemoryAdd api={api} disabled={!config?.configured || !mode} onSaved={async memoryId => {await fetchL1(0, ''); setTab('l1'); setQuery(''); setAppliedQuery(''); setOffset('0'); setWorkspace('browse'); setNotice('明确事实已处理，列表已更新。'); if (memoryId) await openL1(memoryId);}}/><Button danger disabled={busy || !config?.allow_clear} onClick={() => void openClearMemories()}>重置长期记忆</Button><Button danger disabled={busy || !config?.allow_clear} onClick={() => void openWipeMemories()}>清除 L0–L3</Button><Button loading={busy} disabled={!config?.configured} onClick={() => void refresh(page.offset)}>刷新</Button></Space>}/>
+  return <><AppShell subtitle="可追溯的个人记忆" className="memory-shell" sidebar={sidebar}><PageHeader eyebrow="长期记忆" title="原话与事实" description="查看系统保存的原话和从中提取的可召回事实，并核对两者之间的来源关系。" meta={config?.database ?? '未指定记忆库'} action={<Space wrap><ManualMemoryAdd api={api} disabled={!config?.configured || !mode} onSaved={async memoryId => {await fetchL1(0, ''); setTab('l1'); setQuery(''); setAppliedQuery(''); setOffset('0'); setWorkspace('browse'); setNotice('明确事实已处理，列表已更新。'); if (memoryId) await openL1(memoryId);}}/><Button danger disabled={busy || !config?.allow_clear} onClick={() => void openClearMemories()}>重置长期记忆</Button><Button danger disabled={busy || !config?.allow_clear} onClick={() => void openWipeMemories()}>清除 L0–L3</Button><Button loading={busy} disabled={!config?.configured} onClick={() => void refresh(page.offset)}>刷新</Button></Space>}/>
     <DataWorkspace label="记忆工作区" activeKey={workspace} onChange={setWorkspace} items={[
-      {key:'browse',label:'浏览记忆',children:<>      <section className="memory-overview" aria-label="记忆概览"><div><small>当前视图</small><strong>{tab === 'l1' ? 'L1 原子记忆' : 'L0 原始记录'}</strong></div><div><small>记录数</small><strong>{page.total}</strong></div><div><small>回答时召回</small><strong className={mode?.use_enabled ? 'is-positive' : ''}>{mode?.use_enabled ? '已开启' : '已关闭'}</strong></div></section>
-      <section className="memory-browser"><Tabs activeKey={tab} onChange={switchTab} items={[{key: 'l1', label: `L1 原子记忆 · ${l1.total}`}, {key: 'l0', label: `L0 原始记录 · ${l0Loaded ? l0.total : '—'}`}]}/>
+      {key:'browse',label:'浏览记忆',children:<>      <section className="memory-overview" aria-label="记忆概览"><div><small>当前视图</small><strong>{tab === 'l1' ? '事实记忆（L1）' : '对话原话（L0）'}</strong></div><div><small>记录数</small><strong>{page.total}</strong></div><div><small>回答时召回</small><strong className={mode?.use_enabled ? 'is-positive' : ''}>{mode?.use_enabled ? '已开启' : '已关闭'}</strong></div></section>
+      <section className="memory-browser"><Tabs activeKey={tab} onChange={switchTab} items={[{key: 'l1', label: `事实记忆（L1） · ${l1.total}`}, {key: 'l0', label: `对话原话（L0） · ${l0Loaded ? l0.total : '—'}`}]}/>
       <div className="memory-toolbar"><Input.Search aria-label="搜索当前层级" value={query} maxLength={200} allowClear disabled={busy || !config?.configured} placeholder={tab === 'l1' ? '搜索原子事实' : '搜索原始对话'} onChange={e => setQuery(e.target.value)} onSearch={value=>{setAppliedQuery(value.trim());setOffset('0');if(value.trim()===appliedQuery && browseOffset===0)void refresh(0,value.trim());}}/>
         {tab === 'l1' ? <Select aria-label="L1 状态" value={l1State} disabled={busy || !config?.configured} onChange={value => {setL1State(value);setOffset('0');}} options={[{value:'active',label:'当前记忆'},{value:'retired',label:'已退役'},{value:'all',label:'全部 L1'}]}/>
           : <><Select aria-label="L0 角色" value={role} disabled={busy || !config?.configured} onChange={value => {setRole(value);setOffset('0');}} options={[{value:'all',label:'全部角色'},{value:'user',label:'用户原话'},{value:'assistant',label:'助手原话'}]}/>
@@ -589,7 +589,7 @@ export function MemoryApp() {
     ]}/>
     <p className="memory-status" role="status">{notice}</p>
     </AppShell>
-    <Drawer aria-labelledby={sourceHeading} className="memory-source-drawer" width={620} title={<span id={sourceHeading}>L1 原子记忆</span>} open={Boolean(selectedL1)} onClose={closeL1} extra={<Space wrap><Button onClick={()=>void openTemporalHistory()}>事实时间线</Button><Button disabled={!config?.allow_correction || selectedL1?.state !== 'active'} onClick={() => setCorrecting(true)}>纠正错误</Button><Button disabled={!config?.allow_change || selectedL1?.state !== 'active'} onClick={openChange}>记录变化</Button><Button danger disabled={!config?.allow_delete} onClick={() => setDeleting(true)}>删除</Button></Space>}>
+    <Drawer aria-labelledby={sourceHeading} className="memory-source-drawer" width={620} title={<span id={sourceHeading}>事实记忆（L1）</span>} open={Boolean(selectedL1)} onClose={closeL1} extra={<Space wrap><Button onClick={()=>void openTemporalHistory()}>事实时间线</Button><Button disabled={!config?.allow_correction || selectedL1?.state !== 'active'} onClick={() => setCorrecting(true)}>纠正错误</Button><Button disabled={!config?.allow_change || selectedL1?.state !== 'active'} onClick={openChange}>记录变化</Button><Button danger disabled={!config?.allow_delete} onClick={() => setDeleting(true)}>删除</Button></Space>}>
       {selectedL1 && <><p className="detail-content">{selectedL1.content}</p><Descriptions column={1} size="small" items={[{key:'state',label:'层级与状态',children:<Space><Tag color="magenta">L1</Tag><Tag>{selectedL1.effective_state === 'expired' ? '已到期' : selectedL1.effective_state === 'not_started' ? '未生效' : selectedL1.state === 'active' ? '当前' : '已退役'}</Tag></Space>},{key:'id',label:'记忆 ID',children:selectedL1.id},{key:'time',label:'系统记录时间',children:displayTime(selectedL1.recorded_at)},{key:'validFrom',label:'事实开始生效',children:displayTime(selectedL1.valid_from)},{key:'validTo',label:'事实结束生效',children:displayTime(selectedL1.valid_to)},{key:'superseded',label:'取代它的记忆',children:selectedL1.superseded_by_id ?? '无'}]}/>
         <h3>L0 原始来源</h3>{selectedL1.sources.length ? selectedL1.sources.map(source => <Card size="small" className="source-card" key={`${source.source_message_id}:${source.source_type}`} title={<Space><Tag color="blue">L0</Tag><span>{sourceName(source.source_type)}</span></Space>}><p>{source.message?.content ?? '原始来源缺失，无法核对原文。'}</p><small>{source.message ? `${source.message.role === 'user' ? '用户' : '助手'} · ${displayTime(source.message.created_at)}` : source.source_message_id}</small></Card>) : <Empty description="这条 L1 没有可用来源，需要核查"/>}</>}
     </Drawer>
@@ -604,7 +604,7 @@ export function MemoryApp() {
     </Modal>
     <Drawer
       width={620}
-      title="L0 原始记录"
+      title="对话原话（L0）"
       open={Boolean(selectedL0)}
       onClose={closeL0}
       extra={<Button
@@ -642,7 +642,7 @@ export function MemoryApp() {
       okButtonProps={{danger:true,disabled:!clearPreview?.l1_total || clearPhrase !== '清空我的记忆'}}
       onCancel={() => {if (!busy) {setClearing(false); setClearPreview(undefined); setClearPhrase('');}}}
       onOk={() => void clearMemories()}>
-      <p>这是一项开发期重置操作，会删除当前和已退役的全部 L1 原子记忆。依赖这些事实的当前 L2 场景和 L3 用户画像会变为失效，不再参与回答。</p>
+      <p>这是一项开发期重置操作，会删除当前和已退役的全部 事实记忆（L1）。依赖这些事实的当前 L2 场景和 L3 用户画像会变为失效，不再参与回答。</p>
       {clearPreview&&<Descriptions column={1} size="small" items={[
         {key:'l1',label:'将删除的 L1',children:`${clearPreview.l1_total} 条（当前 ${clearPreview.l1_active}，已退役 ${clearPreview.l1_retired}）`},
         {key:'l2',label:'将失效的当前 L2',children:`${clearPreview.affected_l2_current} 条`},

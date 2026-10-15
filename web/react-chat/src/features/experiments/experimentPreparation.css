@@ -1,0 +1,6 @@
+.experiment-preparation { display: grid; gap: 16px; min-width: 0; }
+.experiment-preparation .ant-card-head-title { white-space: normal; }
+.experiment-preparation-command { white-space: pre-wrap; overflow-wrap: anywhere; max-width: 100%; line-height: 1.7; padding: 16px; background: var(--surface-alt, var(--surface)); border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.experiment-preparation :is(button,summary) { min-height: 44px; }
+.experiment-preparation p { overflow-wrap: anywhere; }
+.experiment-preparation summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }

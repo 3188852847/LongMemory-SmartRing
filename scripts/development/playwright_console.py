@@ -79,11 +79,14 @@ def seed_owner_review_cases(database: Path) -> None:
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", type=int, required=True)
+    parser.add_argument("--otto-assets", type=Path, help="显式绑定只读固定 Otto 资源；省略时不借用其他工作树")
     args = parser.parse_args()
     if not 1024 <= args.port <= 65535:
         parser.error("port 必须在 1024–65535 之间")
 
-    with TemporaryDirectory(prefix="longmemory-playwright-") as directory:
+    temporary_root = Path(__file__).resolve().parents[2] / "data/test-tmp/playwright-console"
+    temporary_root.mkdir(parents=True, exist_ok=True)
+    with TemporaryDirectory(prefix="run-", dir=temporary_root) as directory:
         root = Path(directory)
         database = root / "synthetic.db"
         LongMemoryV1(database).close()
@@ -105,6 +108,7 @@ def main():
                 proactive_schedule_enabled=False,
                 allow_memory_correction=True,
                 allow_memory_delete=True,
+                otto_asset_root=args.otto_assets,
             )
             web.run_app(app, host="127.0.0.1", port=args.port, access_log=None, print=None)
         finally:

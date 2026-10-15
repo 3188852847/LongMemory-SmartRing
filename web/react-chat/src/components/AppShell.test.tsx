@@ -11,7 +11,7 @@ describe('控制台共享导航', () => {
 
     expect(screen.getByRole('link', {name: '智慧圆屏'}).getAttribute('href')).toBe('/overview');
     expect(screen.getByRole('link', {name: '系统总览'}).getAttribute('href')).toBe('/overview');
-    expect(screen.getByRole('link', {name: '原始与原子记忆'}).getAttribute('href')).toBe('/memories');
+    expect(screen.getByRole('link', {name: '原话与事实'}).getAttribute('href')).toBe('/memories');
     expect(screen.getByRole('link', {name: '设备状态'}).getAttribute('href')).toBe('/device');
     expect(screen.getByRole('link', {name: '圆屏预览'}).getAttribute('href')).toBe('/display-preview');
     expect(screen.getByRole('link', {name: '用户画像'}).getAttribute('href')).toBe('/personas');

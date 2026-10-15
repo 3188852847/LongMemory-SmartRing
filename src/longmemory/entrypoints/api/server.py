@@ -19,6 +19,7 @@ from .experiment_backend import ExperimentBackend
 from .experiment_jobs import ExperimentJobs
 from .routes.experiment_jobs import register_job_routes
 from .react_assets import register_react_routes
+from .otto_preview import register_otto_preview
 from .routes.assistant_role import register_role_routes
 from .routes.memory_runtime import register_memory_runtime_routes
 from .routes.memory_mode import register_memory_mode_routes
@@ -85,7 +86,8 @@ def create_app(*, port=8765, bridge=None, web_root=None, database=None, allow_me
                round_skin_store=None, round_wallpaper_library=None,
                round_wallpaper_delivery=None, launcher_status_file=None,
                semantic_relation_previewer=None, proactive_greeting_composer=None,
-               proactive_schedule_enabled=True, diagnostics=None, observability_root=None):
+               proactive_schedule_enabled=True, diagnostics=None, observability_root=None,
+               otto_asset_root=None):
     sessions = Sessions()
     assets = web_root or ROOT / "web"
     client = bridge if bridge is not None else XiaozhiControlClient(ROOT / "data/control/device-control.token")
@@ -133,6 +135,7 @@ def create_app(*, port=8765, bridge=None, web_root=None, database=None, allow_me
         app.router.add_get(path, static)
     register_react_routes(app, assets / 'react-chat/dist')
     app.router.add_get("/api/session", session, allow_head=False)
+    register_otto_preview(app, otto_asset_root)
     app.router.add_get("/api/runtime-status", runtime_status, allow_head=False)
     register_device_routes(app, client, operation_lock)
     memory_backend = MemoryBackend(

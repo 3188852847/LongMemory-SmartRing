@@ -19,8 +19,8 @@ import '../styles/chat-workspace.css';
 const api = new ChatApi();
 function memoryWarning(turn: Turn) {
   return turn.memory_warning === 'l1_persistence_failed'
-    ? '本轮 L0 原始对话已保存，但 L1 记忆写入失败。'
-    : '本轮 L0 原始对话已保存，但 L1 记忆提取失败。';
+    ? '本轮原话已保存，但事实记忆写入失败。'
+    : '本轮原话已保存，但事实记忆提取失败。';
 }
 function memoryCommandAlert(status: string) {
   if (status === 'applied' || status === 'explained' || status === 'cancelled') return 'success' as const;
@@ -160,7 +160,7 @@ export function ChatApp() {
       );
       setChat(current => current ? {...current, turns:current.turns.map(item =>
         item.request_id === turn.request_id ? {...item,memory_feedback:result.feedback} : item)} : current);
-      setNotice('本轮记忆表现已记录；没有重答，也没有修改 L0–L3。');
+      setNotice('本轮记忆表现已记录；没有重答，也没有修改原话、事实、场景或画像。');
     });
   }
   const disabled = busy || unknown || !chat;
@@ -207,16 +207,16 @@ export function ChatApp() {
         followLatest.current = viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop < 48;
         setAwayFromLatest(!followLatest.current);
       }}>{!chat?.turns.length && <div className="empty"><h2>今天想聊些什么？</h2><p>可以说说今天的事，也可以继续上次的话题。</p></div>}
-        {chat?.turns.map((turn, i) => <article id={turn.request_id ? `turn-${turn.request_id}` : undefined} className={turn.request_id === focusedRequestId ? 'focused-chat-turn' : undefined} key={turn.request_id ?? i}><div className="bubble user"><strong>你</strong><p>{turn.input}</p></div><div className="bubble assistant"><strong>助手</strong><p>{turn.answer ?? '未获得完整回答。'}</p>{turn.answer&&<SpeechPlayer api={api} text={turn.answer}/>}<MemoryFeedbackControls turn={turn} disabled={busy || unknown} onSelect={kind => void setMemoryFeedback(turn,kind)}/></div>
+        {chat?.turns.map((turn, i) => <article id={turn.request_id ? `turn-${turn.request_id}` : undefined} className={turn.request_id === focusedRequestId ? 'focused-chat-turn' : undefined} key={turn.request_id ?? i}><div className="bubble user"><strong>你</strong><p>{turn.input}</p></div><div className="bubble assistant"><strong>助手</strong><p>{turn.answer ?? '未获得完整回答。'}</p></div>
           {turn.memory_command && <Alert className="memory-command-result" showIcon type={memoryCommandAlert(turn.memory_command.status)} title="实际记忆操作结果" description={turn.memory_command.notice}/>}
           {turn.follow_up_suggestion?.status === 'candidate_armed' && <Alert className="memory-command-result" showIcon type="success" title="一次性跟进已安排" description={`${new Date(turn.follow_up_suggestion.follow_up_at!).toLocaleString('zh-CN')} · ${turn.follow_up_suggestion.prompt_text}。到点仍会经过勿扰时段、频率和设备状态检查。`}/>}
           {turn.follow_up_suggestion?.status === 'candidate_created_requires_proactive_enabled' && <Alert className="memory-command-result" showIcon type="info" title="已保存跟进候选" description={`${new Date(turn.follow_up_suggestion.follow_up_at!).toLocaleString('zh-CN')} · ${turn.follow_up_suggestion.prompt_text}。主动交流总开关目前关闭，因此尚未安排播报；可在“设置中心 → 主动交流”开启后核对并启用。`}/>}
           {turn.follow_up_suggestion?.status === 'not_created' && <Alert className="memory-command-result" showIcon type="warning" title="跟进候选未保存" description="本轮聊天和长期记忆仍已保存；可稍后在设置中心手动创建跟进。"/>}
           {turn.memory_processing === 'source_only' && <p className="memory-warning">{memoryWarning(turn)} 可继续聊天，之后需要重新整理这条来源。</p>}
           {turn.retrieval_warning === 'dense_retrieval_failed' && <p className="memory-warning">本轮本地 BGE 检索失败，已使用关键词结果继续回答；展开过程可查看实际策略。</p>}
-          {Boolean(turn.scenario_retrieved?.length) && <p className="scenario-trace">本轮使用 L2：{turn.scenario_retrieved!.map(item => item.title).join('、')}</p>}
-          {Boolean(turn.persona_retrieved?.length) && <p className="scenario-trace">本轮使用 L3：{turn.persona_retrieved!.map(item => item.label).join('、')}</p>}
-          <Button className="turn-evidence-action" aria-label={`查看第 ${i + 1} 轮记忆证据`} onClick={() => {setEvidenceIndex(i); setPanel('evidence');}}>{turnSummary(turn)}</Button></article>)}</section>
+          <div className="turn-tools"><details className="turn-secondary-actions"><summary aria-label={`第 ${i + 1} 轮朗读与反馈`}>朗读与反馈{turn.memory_feedback ? ' · 已记录' : ''}</summary>
+            {turn.answer&&<SpeechPlayer api={api} text={turn.answer}/>}<MemoryFeedbackControls turn={turn} disabled={busy || unknown} onSelect={kind => void setMemoryFeedback(turn,kind)}/>
+          </details><Button className="turn-evidence-action" title={turnSummary(turn)} aria-label={`查看第 ${i + 1} 轮记忆证据`} onClick={() => {setEvidenceIndex(i); setPanel('evidence');}}>记忆详情{turn.status !== 'completed' ? ' · 未完成' : ''}</Button></div></article>)}</section>
         {panel && <aside id="chat-aux-panel" className="chat-aux-panel" aria-label={panel === 'sessions' ? '会话管理' : panel === 'evidence' ? '记忆证据面板' : '运行状态面板'} onKeyDown={event => {if (event.key === 'Escape') {event.stopPropagation(); closePanel();}}}>
           <div className="chat-panel-heading"><h2 ref={panelHeading} tabIndex={-1}>{panel === 'sessions' ? '会话管理' : panel === 'evidence' ? evidenceIndex === undefined ? '本轮记忆证据' : `第 ${evidenceIndex + 1} 轮记忆证据` : '运行状态'}</h2><Button onClick={closePanel}>收起面板</Button></div>
           <div className="chat-panel-content">{panel === 'sessions' ? sessions : panel === 'evidence' ? <TurnMemoryEvidence turn={evidenceTurn}/> : <>

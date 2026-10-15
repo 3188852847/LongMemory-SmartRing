@@ -95,6 +95,7 @@ describe('圆屏状态协议与模拟器', () => {
     const queryClient=createConsoleQueryClient();
     render(<QueryClientProvider client={queryClient}><MemoryRouter><RoundDisplayApp/></MemoryRouter></QueryClientProvider>);
     expect(screen.getByRole('heading', {name: '圆屏状态预览'})).toBeTruthy();
+    fireEvent.click(screen.getByRole('radio',{name:'几何皮肤'}));
     expect(screen.getByText(/画布：360 × 360 px/)).toBeTruthy();
     expect(screen.getByText(/网页动画不证明新固件已在真机运行/)).toBeTruthy();
     expect(screen.getByRole('region', {name: '圆屏模拟画布'})).toBeTruthy();
