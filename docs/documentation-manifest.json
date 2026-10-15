@@ -777,9 +777,13 @@
       "basis": "按 ROADMAP、恢复/工程约定及本轮任务确定的维护入口；仅限定对应事实范围，语义核对另列",
       "review": {
         "state": "verified",
-        "date": "2026-10-14",
-        "scope": "限本次Otto资源/软件/技术审查/设备两目标更新与独立核验、启动及归档边界；所有者真实体验待反馈，不等于全篇或完整V1验收",
-        "evidence": "L 618aea9→804d81e；M 57c8972→6f260ea；N 87f5154→40bce14及后续追溯；K新检查点/独立读回/保护核验/15秒启动元数据与主会话复核"
+        "date": "2026-10-15",
+        "scope": "R窄更新的A至J/0015完成状态与P/Q整合前进行中、R设计提案及真实验收边界；不将提案当实现",
+        "evidence": [
+          "docs/development/parallel/收口-20261014.md",
+          "docs/development/parallel/K-otto0015-flash-20261015.md",
+          "docs/development/parallel/R-20261015.md"
+        ]
       },
       "tags": []
     },
@@ -4771,6 +4775,48 @@
         "前端",
         "诊断",
         "记忆方案"
+      ]
+    },
+    {
+      "path": "docs/requirements/记忆修复效果验证方案-20261015.md",
+      "title": "记忆修复效果验证方案",
+      "status": "draft",
+      "basis": "R已交付并经主会话审查的设计提案；首切片无模型合成召回核对，功能/API/表/迁移未实现",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-15",
+        "scope": "现有接口与拟议设计区分、处置/执行/召回/回答状态、冻结版本与合成矩阵、隐私和回退边界；仅设计审查，不是实现或效果验收",
+        "evidence": [
+          "docs/development/parallel/R-20261015.md",
+          "docs/development/parallel/I-20261014.md",
+          "docs/development/parallel/H-retest-20261014.md"
+        ]
+      },
+      "tags": [
+        "方案",
+        "记忆",
+        "修复",
+        "验证"
+      ]
+    },
+    {
+      "path": "docs/development/parallel/R-20261015.md",
+      "title": "R：记忆修复验证方案与路线同步",
+      "status": "reference",
+      "basis": "R方案与ROADMAP窄同步的实际交付；方案不授权生产实现",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-15",
+        "scope": "三份文档限定范围、已有源码引用与提案边界、0015与前轮完成状态；未进行业务或真实模型验证",
+        "evidence": [
+          "docs/requirements/记忆修复效果验证方案-20261015.md",
+          "ROADMAP.md"
+        ]
+      },
+      "tags": [
+        "R",
+        "方案",
+        "路线图"
       ]
     }
   ],
