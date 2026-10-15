@@ -505,14 +505,15 @@
         "docs/development/parallel/J-20261014.md",
         "docs/development/parallel/Q-20261015.md",
         "docs/adr/0180-explicit-voice-diagnostics-and-retention.md",
-        "docs/development/parallel/S-20261015.md"
+        "docs/development/parallel/S-20261015.md",
+        "docs/development/parallel/T-20261015.md"
       ],
       "tags": [
         "日志",
         "故障",
         "请求标识"
       ],
-      "review": "verified 2026-10-14 J/H原HTTP边界；2026-10-15 Q合成后端与独立前端、S源码/契约组合与新旧响应浏览器核对；不覆盖日用部署、真实厂家/Python3.10/模型/声音/设备；S组合验收后由主会话a3d0208合入，真实厂家与日用部署未验"
+      "review": "verified 2026-10-15: Q/S软件与合成边界保留；T日用装配、厂家线程交接、Python3.10至3.12认证及真实轮次包装事件已核对，所有者声音/插话/旧记忆回答正常；设备播放协议未确认，完整音频段与长周期未验"
     },
     {
       "id": "firmware-application-update-0013",
@@ -627,7 +628,7 @@
     },
     {
       "id": "pq-combination-20261015",
-      "scope": "P/Q固定输入的S独立组合审查、构建身份和隔离验收记录；待主会话合入",
+      "scope": "P/Q固定输入的S独立组合审查、构建身份和隔离验收记录；已由主会话a3d0208合入",
       "authority": "docs/development/parallel/S-20261015.md",
       "sources": [
         "web/react-chat/e2e/p-experience.spec.ts",
@@ -648,7 +649,32 @@
         "整合",
         "验收"
       ],
-      "review": "verified 2026-10-15: 固定提交映射、独立定向源码审查和本轮合成验证；主合入/日用切换/真实语音及远程CI未验"
+      "review": "verified 2026-10-15: 固定提交映射、定向源码审查及组合验证，主会话a3d0208合入；日用切换和真实语音另见T报告，不改写S当时证据，远程CI未验"
+    },
+    {
+      "id": "daily-cutover-20261015",
+      "scope": "T受控日用切换、配置数据保留、真实语音关联与所有者体验反馈",
+      "authority": "docs/development/parallel/T-20261015.md",
+      "sources": [
+        "scripts/development/xiaozhi/setup.py",
+        "tests/unit/development/test_xiaozhi_setup.py",
+        "scripts/development/launcher/web_app.py",
+        "scripts/development/xiaozhi/longmemory_provider.py",
+        "scripts/development/xiaozhi/voice_diagnostics.py",
+        "scripts/development/cosyvoice/service.py"
+      ],
+      "related": [
+        "ROADMAP.md",
+        "docs/development/并行优化-20261015.md",
+        "docs/development/parallel/S-20261015.md",
+        "docs/development/observability-contract.md"
+      ],
+      "tags": [
+        "T",
+        "日用切换",
+        "语音验收"
+      ],
+      "review": "verified 2026-10-15: 主会话核对已发布提供器字节、T报告与私有安全摘要、所有者直接反馈；设备播放协议与长期可靠性不在通过范围"
     }
   ],
   "old_path_rules": [
@@ -834,12 +860,13 @@
       "review": {
         "state": "verified",
         "date": "2026-10-15",
-        "scope": "P/Q软件隔离验收与a3d0208合入、日用服务未切换、R提案未实施及0015已有验收边界；窄核对本轮状态，不覆盖全仓",
+        "scope": "P/Q组合验收与a3d0208合入、T日用切换/配置数据保留和所有者真实语音体验通过；R提案未实施、0015既有边界保留，仅核对本轮状态",
         "evidence": [
           "docs/development/parallel/收口-20261014.md",
           "docs/development/parallel/K-otto0015-flash-20261015.md",
           "docs/development/parallel/R-20261015.md",
-          "docs/development/parallel/S-20261015.md"
+          "docs/development/parallel/S-20261015.md",
+          "docs/development/parallel/T-20261015.md"
         ]
       },
       "tags": []
@@ -4847,14 +4874,15 @@
       "path": "docs/development/并行优化-20261015.md",
       "title": "第二轮独立会话任务书",
       "status": "current",
-      "basis": "所有者2026-10-15明确授权的P前端/Q诊断/R记忆方案及路线同步边界；调度不代表完成",
+      "basis": "所有者P/Q/R、S整合与T日用切换授权及实际验收/合入/归档追溯入口",
       "review": {
         "state": "verified",
         "date": "2026-10-15",
-        "scope": "本轮授权、独占文件、接口协调、隔离和完成标准；实现/验收尚未发生",
+        "scope": "本轮授权、独占边界、P/Q/R/S/T交付与合入映射；主会话核对T安全摘要及所有者反馈，不扩大真实播放协议/长周期范围",
         "evidence": [
           "AGENTS.md",
-          "docs/development/并行优化-20261014.md"
+          "docs/development/并行优化-20261014.md",
+          "docs/development/parallel/T-20261015.md"
         ]
       },
       "tags": [
@@ -4951,7 +4979,7 @@
       "path": "docs/adr/0180-explicit-voice-diagnostics-and-retention.md",
       "title": "ADR-0180：显式语音轮次观测与只读累计保留计划",
       "status": "reference",
-      "basis": "Q最小观测/保留切片决策；主合入与真实日用切换待办",
+      "basis": "Q最小观测/保留切片决策；已合入，T日用切换和限定实机验证另见T报告",
       "review": {
         "state": "verified",
         "date": "2026-10-15",
@@ -4986,6 +5014,28 @@
       "tags": [
         "P/Q",
         "验收"
+      ]
+    },
+    {
+      "path": "docs/development/parallel/T-20261015.md",
+      "title": "T：日用服务切换与真实语音验收",
+      "status": "current",
+      "basis": "所有者明确授权的受控切换已完成；主会话直接收取实机反馈并审查T最终交付",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-15",
+        "scope": "已发布摘要修复、同版本部署/送达、12项配置保护、两库结构完整性、实际轮次关联和所有者声音/插话/旧记忆正常反馈；设备播放协议仍未确认，回退不覆盖新增对话",
+        "evidence": [
+          "docs/development/并行优化-20261015.md",
+          "docs/development/parallel/S-20261015.md",
+          "scripts/development/xiaozhi/setup.py",
+          "tests/unit/development/test_xiaozhi_setup.py"
+        ]
+      },
+      "tags": [
+        "T",
+        "日用切换",
+        "语音验收"
       ]
     }
   ],
