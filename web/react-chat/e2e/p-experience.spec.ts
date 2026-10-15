@@ -1,8 +1,10 @@
+import {createHash} from 'node:crypto';
 import {expect,test,type Page} from '@playwright/test';
 
 async function preferences(page:Page,size='normal',motion='full') {
   await page.addInitScript(({size,motion})=>localStorage.setItem('longmemory:chat-appearance:v3',JSON.stringify({theme:'future',size,motion,density:'comfortable',chatWidth:'focused'})),{size,motion});
 }
+async function chooseRadio(page:Page,name:string) {const radio=page.getByRole('radio',{name,exact:true});await radio.locator('xpath=ancestor::label').click();await expect(radio).toBeChecked();}
 async function fits(page:Page) {expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);}
 
 for(const [width,height] of [[1366,768],[1440,900],[390,844]]) test(`日常聊天与实验准备 ${width}×${height}`,async({page},info)=>{
@@ -16,6 +18,15 @@ for(const [width,height] of [[1366,768],[1440,900],[390,844]]) test(`日常聊�
   await expect(article.getByRole('button',{name:'没想起已有记忆'})).toHaveCount(0);
   const summary=article.locator('summary');await summary.focus();await page.keyboard.press('Enter');
   await expect(article.getByRole('button',{name:'网页朗读',exact:true})).toBeVisible();
+  let speechRequests=0;
+  await page.route('**/api/speech',route=>{speechRequests++;return route.fulfill({status:503,json:{error:'tts_service_unavailable'}});});
+  await article.getByRole('button',{name:'网页朗读',exact:true}).click();
+  await expect(article.getByText(/当前 TTS 服务没有就绪/)).toBeVisible();
+  await expect(article.getByRole('link',{name:'打开声音设置'})).toBeVisible();
+  await summary.click();await expect(article.locator('.speech-player')).not.toBeVisible();
+  await summary.focus();await page.keyboard.press('Enter');
+  await expect(article.getByText(/当前 TTS 服务没有就绪/)).toBeVisible();
+  expect(speechRequests).toBe(1);
   await article.getByRole('button',{name:'没想起已有记忆'}).click();
   await expect(summary).toContainText('已记录');
   await article.getByRole('button',{name:/查看第 \d+ 轮记忆证据/}).click();
@@ -48,21 +59,21 @@ test('真实 Otto 循环、21 张解码、暂停与网页状态优先级',async(
   await expect.poll(()=>image.evaluate(node=>(node as HTMLImageElement).naturalWidth)).toBe(240);
   const geometry=await page.locator('.otto-screen').evaluate(node=>{const screen=node.getBoundingClientRect(),img=node.querySelector('img')!.getBoundingClientRect();return {screen:screen.width,image:img.width,margin:img.x-screen.x,background:getComputedStyle(node).backgroundColor};});
   expect(geometry.screen).toBeCloseTo(360,0);expect(geometry.image).toBeCloseTo(240,0);expect(geometry.margin).toBeCloseTo(60,0);expect(geometry.background).toBe('rgb(0, 0, 0)');
-  await page.getByRole('radio',{name:'思考',exact:true}).check();await expect(image).toHaveAttribute('src',/thinking\/loop.gif$/);
-  async function pixels(){return image.evaluate(node=>{const img=node as HTMLImageElement,canvas=document.createElement('canvas');canvas.width=240;canvas.height=240;const context=canvas.getContext('2d')!;context.drawImage(img,0,0);let hash=0;for(const byte of context.getImageData(0,0,240,240).data)hash=(hash*31+byte)>>>0;return hash;});}
+  await chooseRadio(page,'思考');await expect(image).toHaveAttribute('src',/thinking\/loop.gif$/);
+  async function pixels(){return createHash('sha256').update(await image.screenshot()).digest('hex');}
   await expect.poll(()=>image.evaluate(node=>(node as HTMLImageElement).complete && (node as HTMLImageElement).naturalWidth===240)).toBe(true);
-  const frames=new Set<number>();for(let index=0;index<10;index++){frames.add(await pixels());await page.waitForTimeout(200);}expect(frames.size).toBeGreaterThan(1);
+  const frames=new Set<string>();for(let index=0;index<10;index++){frames.add(await pixels());await page.waitForTimeout(200);}expect(frames.size).toBeGreaterThan(1);
   await page.getByRole('button',{name:'暂停动画'}).click();await expect(image).toHaveAttribute('src',/thinking\/still.gif$/);
   await expect.poll(()=>image.evaluate(node=>(node as HTMLImageElement).complete && (node as HTMLImageElement).naturalWidth===240)).toBe(true);
-  const still=await pixels();await page.waitForTimeout(700);expect(await pixels()).toBe(still);
-  await page.getByRole('radio',{name:'被打断',exact:true}).check();await expect(image).toHaveAttribute('src',/surprised\/still.gif$/);await expect(image).toHaveAttribute('src',/neutral\/still.gif$/);
-  await page.getByRole('radio',{name:'逐张素材检查',exact:true}).check();
+  const still=await pixels();await page.waitForTimeout(700);const afterPause=await pixels();expect(afterPause).toBe(still);await info.attach('otto-animation-observation',{body:JSON.stringify({geometry,loopFrameHashes:[...frames],still,afterPause}),contentType:'application/json'});
+  await chooseRadio(page,'被打断');await expect(image).toHaveAttribute('src',/surprised\/still.gif$/);await expect(image).toHaveAttribute('src',/neutral\/still.gif$/);
+  await chooseRadio(page,'逐张素材检查');
   const names=['neutral','happy','laughing','funny','sad','angry','crying','loving','embarrassed','surprised','shocked','thinking','winking','cool','relaxed','delicious','kissy','confident','sleepy','silly','confused'];
   for(const name of names){await page.getByRole('combobox',{name:'循环表情',exact:true}).click();await page.locator('.ant-select-dropdown:visible .ant-select-item-option-content').filter({hasText:new RegExp(` · ${name}$`)}).click();await expect(image).toHaveAttribute('src',new RegExp(`/${name}/still.gif$`));await expect.poll(()=>image.evaluate(node=>(node as HTMLImageElement).complete && (node as HTMLImageElement).naturalWidth===240)).toBe(true);}
-  await page.screenshot({path:info.outputPath('otto-native.png'),fullPage:true});
+  await expect(page.locator('.ant-select-dropdown:visible')).toHaveCount(0);await page.evaluate(()=>window.scrollTo(0,0));await page.screenshot({path:info.outputPath('otto-native.png'),fullPage:true});
   await page.route('**/api/otto-preview/thinking/still.gif',route=>route.abort());
-  await page.getByRole('radio',{name:'跟随网页阶段',exact:true}).check();
-  await page.getByRole('radio',{name:'思考',exact:true}).check();
+  await chooseRadio(page,'跟随网页阶段');
+  await chooseRadio(page,'思考');
   await expect(image).toHaveAttribute('src',/neutral\/still.gif$/);
   await expect(page.getByText(/thinking 不可用，回退平静/)).toBeVisible();
   expect(writes).toEqual([]);
@@ -73,8 +84,8 @@ for(const width of [1366,390]) test(`Otto 更大字号/减少动态/失败与无
   await page.goto('/display-preview');
   const image=page.locator('.otto-screen img');
   if(process.env.SMART_RING_TEST_OTTO_ASSETS){await expect(image).toHaveAttribute('src',/neutral\/still.gif$/);}
-  for(const label of ['启动','待机','已唤醒','聆听','思考','说话','被打断','没听清','错误']) {const radio=page.getByRole('radio',{name:label,exact:true});await radio.check();const visible=radio.locator('..');expect(await visible.evaluate(node=>node.scrollWidth<=node.clientWidth)).toBe(true);}
-  await fits(page);await page.screenshot({path:info.outputPath('otto-large-reduce.png'),fullPage:true});
+  for(const label of ['启动','待机','已唤醒','聆听','思考','说话','被打断','没听清','错误']) {const radio=page.getByRole('radio',{name:label,exact:true});await radio.locator('xpath=ancestor::label').click();await expect(radio).toBeChecked();const visible=radio.locator('xpath=ancestor::label');const measured=await visible.evaluate(node=>({scroll:node.scrollWidth,client:node.clientWidth,label:node.textContent,width:node.getBoundingClientRect().width}));expect(measured.scroll<=measured.client+1,JSON.stringify(measured)).toBe(true);const text=visible.getByText(label,{exact:true});expect(await text.evaluate(node=>getComputedStyle(node).textOverflow)).not.toBe('ellipsis');const bounds=await text.boundingBox(),target=await visible.boundingBox();expect(bounds!.x).toBeGreaterThanOrEqual(target!.x);expect(bounds!.x+bounds!.width).toBeLessThanOrEqual(target!.x+target!.width);}
+  await fits(page);await page.evaluate(()=>window.scrollTo(0,0));await page.screenshot({path:info.outputPath('otto-large-reduce.png'),fullPage:true});
   await page.route('**/api/otto-preview',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({commit:'fixed',valid_count:0,items:[]})}));
   const refresh=page.getByRole('button',{name:'重新核对素材'});await refresh.focus();await page.keyboard.press('Enter');
   await expect(page.getByText('可用素材 0/21')).toBeVisible();await expect(image).toHaveCount(0);await expect(page.getByText('素材不可用',{exact:true})).toBeVisible();

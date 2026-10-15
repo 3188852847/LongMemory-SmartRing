@@ -38,7 +38,7 @@
 .shell.workspace-shell.chat-shell .chat-sidebar-panel label { margin: 12px 0 6px; font-size: .85rem; }
 .shell.workspace-shell.chat-shell .chat-composer { min-width: 0; margin: 0; padding: 12px 14px; border: 1px solid var(--border-strong); border-radius: var(--radius-md); background: var(--surface); box-shadow: none; }
 .shell.workspace-shell.chat-shell .chat-message-label { margin: 0 0 6px; font-size: .8rem; color: var(--muted-strong); }
-.shell.workspace-shell.chat-shell .chat-composer textarea { resize: none; max-height: 7rem; font-size: 1rem; }
+.shell.workspace-shell.chat-shell .chat-composer textarea { resize: none; max-height: 7rem; font-size: 1rem; transition-property: color, background-color, border-color, box-shadow; }
 .shell.workspace-shell.chat-shell .send-row { margin-top: 8px; padding: 0; gap: 10px; }
 .shell.workspace-shell.chat-shell .send-row .ant-select { min-width: 0; max-width: calc(100% - 70px); font-size: .8rem; }
 .shell.workspace-shell.chat-shell .chat-status { margin: 8px 0 0; max-height: 4.5em; overflow-y: auto; font-size: .8rem; line-height: 1.5; }

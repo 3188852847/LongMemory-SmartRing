@@ -119,7 +119,7 @@ test('大字号、减少动画与键盘分类导航', async ({page}) => {
   await page.keyboard.press('Enter');
   await expect(page.getByLabel('表达指令（可留空）')).toBeVisible();
   await page.goto('/display-preview');
-  await page.getByRole('radio',{name:'几何皮肤',exact:true}).check();
+  await page.getByRole('radio',{name:'几何皮肤',exact:true}).locator('xpath=ancestor::label').click();
   await expect(page.locator('.round-face .eye').first()).toHaveCSS('animation-name','none');
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
 });

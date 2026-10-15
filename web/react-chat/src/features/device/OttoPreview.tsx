@@ -69,7 +69,7 @@ export function OttoPreview({ready, interaction, system, caption}:{ready:boolean
     </div>
     <p className="otto-caption" role="status">{caption} · {face ?? '无可用表情'}{face && face !== requested ? `（${requested} 不可用，回退平静）` : ''} · {staticFrame?'静态首帧':'原图循环'}</p>
     <Space wrap><Button aria-pressed={paused} onClick={()=>setPaused(value=>!value)}>{paused?'播放动画':'暂停动画'}</Button>
-      <Button loading={inventory.isFetching} disabled={!ready} onClick={()=>{setFailed([]);void inventory.refetch();}}>重新核对素材</Button></Space>
+      <Button aria-label="重新核对素材" loading={inventory.isFetching} disabled={!ready} onClick={()=>{setFailed([]);void inventory.refetch();}}>重新核对素材</Button></Space>
     {inventory.isError && <Alert type="warning" title="素材清单读取失败" description="请重新核对；这不表示圆屏故障。"/>}
     {inventory.isSuccess && inventory.data.valid_count !== 21 && <Alert type="warning" title={`可用素材 ${inventory.data.valid_count}/21`} description="缺失或指纹不符的素材不会显示；优先回退平静，仍不可用则显示文字。"/>}
     <Radio.Group aria-label="Otto 预览方式" value={mode} onChange={event=>setMode(event.target.value)} options={[{value:'state',label:'跟随网页阶段'},{value:'manual',label:'逐张素材检查'}]}/>

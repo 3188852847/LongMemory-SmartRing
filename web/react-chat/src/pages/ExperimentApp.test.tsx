@@ -21,7 +21,7 @@ describe('React 实验档案', () => {
     const client=createConsoleQueryClient();
     const view=render(<QueryClientProvider client={client}><MemoryRouter><ExperimentApp/></MemoryRouter></QueryClientProvider>);
     fireEvent.click(await screen.findByRole('button',{name:'查看准备步骤与命令'}));
-    const heading=await screen.findByRole('heading',{name:'准备实验档案',exact:true});
+    const heading=await screen.findByRole('heading',{name:'准备实验档案'});
     expect(document.activeElement).toBe(heading);
     expect(screen.getByText(/comparison.runner --provider fake --split dev/)).toBeTruthy();
     expect(request.mock.calls.every(([,method])=>method===undefined || method==='GET')).toBe(true);

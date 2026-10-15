@@ -78,7 +78,7 @@ describe('聊天工作区', () => {
     expect((screen.getByRole('textbox', {name:'消息'}) as HTMLTextAreaElement).value).toBe('');
     expect(screen.queryByRole('button', {name:'没想起已有记忆'})).toBeNull();
     fireEvent.click(screen.getByText('朗读与反馈', {selector:'summary'}));
-    fireEvent.click(screen.getByRole('button', {name:'没想起已有记忆'}));
+    fireEvent.click(await screen.findByRole('button', {name:'没想起已有记忆'}));
     await screen.findByText('本轮记忆表现已记录；没有重答，也没有修改原话、事实、场景或画像。');
     expect(request.mock.calls.filter(([path]) => path.endsWith('/messages'))).toHaveLength(1);
     expect(request.mock.calls.find(([path]) => path.endsWith('/memory-feedback'))?.[2]).toEqual({kind:'recall_miss',expected_revision:0});

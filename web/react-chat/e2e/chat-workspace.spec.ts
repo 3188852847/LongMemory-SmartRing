@@ -45,7 +45,9 @@ for (const size of sizes) test(`聊天滚动、证据与输入 ${size.width}×${
   await input.fill('尚未发送的合成草稿');
   await expect(input).toBeInViewport();
   await expect(page.getByRole('button',{name:'发送',exact:true})).toBeInViewport();
+  const composerMetrics=()=>composer.evaluate(node=>({y:node.getBoundingClientRect().y,height:node.getBoundingClientRect().height,rows:getComputedStyle(document.querySelector('.shell-content')!).gridTemplateRows,tools:document.querySelector('.chat-tools')!.getBoundingClientRect().height,children:Array.from(node.children).map(child=>({class:child.className,height:child.getBoundingClientRect().height,font:getComputedStyle(child).fontSize,line:getComputedStyle(child).lineHeight}))}));
   const before = await composer.boundingBox();
+  const initialMetrics=await composerMetrics();
   const history = page.getByRole('region',{name:'聊天记录'});
   expect(await history.evaluate(node => node.scrollHeight > node.clientHeight)).toBe(true);
   await history.evaluate(node => {node.scrollTop = 0;});
@@ -56,6 +58,7 @@ for (const size of sizes) test(`聊天滚动、证据与输入 ${size.width}×${
   await expect(page.getByRole('region',{name:'本轮记忆证据'})).toContainText('合成证据 0');
   await expect(input).toHaveValue('尚未发送的合成草稿');
   await expect(input).toBeInViewport();
+  await test.info().attach('composer-layout',{body:JSON.stringify({before:initialMetrics,after:await composerMetrics()}),contentType:'application/json'});
   expect((await composer.boundingBox())?.y).toBeCloseTo(before!.y, 0);
   await page.getByRole('button',{name:'收起面板'}).click();
   await expect(page.getByRole('button',{name:'记忆证据',exact:true})).toBeFocused();
@@ -72,6 +75,7 @@ for (const size of sizes) test(`聊天滚动、证据与输入 ${size.width}×${
   await expect(page.getByText('发送后的合成回答',{exact:true})).toBeVisible();
   await expect(input).toHaveValue('');
   await expect(input).toBeInViewport();
+  await page.locator('.messages article').last().locator('summary').click();
   await page.locator('.messages article').last().getByRole('button',{name:'没想起已有记忆'}).click();
   await expect(page.getByRole('status')).toContainText('本轮记忆表现已记录');
   await page.reload();
