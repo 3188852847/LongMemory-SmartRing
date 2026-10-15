@@ -22,7 +22,7 @@
 | 语音、声线与助手表达 | [恢复语音](docs/guides/恢复语音-20261013.md)、[声音设置](docs/guides/声音设置.md)、[参考声音与克隆](docs/guides/参考声音与克隆.md)、[助手角色](docs/guides/助手角色设置.md) |
 | 固件与圆屏动画 | [恢复编译](docs/guides/恢复固件编译-20261014.md)、[界面优化证据](docs/development/界面与交互优化-20261014.md) |
 | 前端与控制契约 | [前端模块](docs/development/frontend-structure.md)、[启动器契约](docs/development/launcher-contract.md) |
-| 测试、CI 与并行修改 | [测试产物](docs/development/test-artifacts.md)、[CI](docs/development/continuous-integration.md)、[本轮任务书](docs/development/并行优化-20261014.md) |
+| 测试、CI 与并行修改 | [测试产物](docs/development/test-artifacts.md)、[CI](docs/development/continuous-integration.md)、[本轮任务书](docs/development/并行优化-20261015.md)、[前轮任务与固件记录](docs/development/并行优化-20261014.md) |
 
 ## 当前运行与恢复约束
 

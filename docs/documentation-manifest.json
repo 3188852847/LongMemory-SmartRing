@@ -4748,6 +4748,30 @@
         "烧录",
         "保护核验"
       ]
+    },
+    {
+      "path": "docs/development/并行优化-20261015.md",
+      "title": "第二轮独立会话任务书",
+      "status": "current",
+      "basis": "所有者2026-10-15明确授权的P前端/Q诊断/R记忆方案及路线同步边界；调度不代表完成",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-15",
+        "scope": "本轮授权、独占文件、接口协调、隔离和完成标准；实现/验收尚未发生",
+        "evidence": [
+          "AGENTS.md",
+          "docs/development/并行优化-20261014.md"
+        ]
+      },
+      "tags": [
+        "并行",
+        "P",
+        "Q",
+        "R",
+        "前端",
+        "诊断",
+        "记忆方案"
+      ]
     }
   ],
   "integration_sources": {
