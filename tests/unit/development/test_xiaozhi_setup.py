@@ -272,6 +272,10 @@ def test_update_memory_only_replaces_known_legacy_provider(tmp_path, monkeypatch
 def test_published_shared_runtime_provider_is_a_known_upgrade_source():
     """固定实机曾安装的发布版身份，避免以后误删受控升级路径。"""
     assert (
+        '82e43c8d59de69a5ddc8cc62eb2b96eee555efec36c339a800206bcab062253d'
+        in setup.LEGACY_MEMORY_PROVIDER_SHA256
+    )
+    assert (
         '631569ac42c2cd623590d4f26958747c59e6fd812a25c3c22601418ec2c79991'
         in setup.LEGACY_MEMORY_PROVIDER_SHA256
     )
