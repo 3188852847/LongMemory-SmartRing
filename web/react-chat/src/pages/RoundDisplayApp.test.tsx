@@ -72,7 +72,7 @@ describe('圆屏状态协议与模拟器', () => {
     expect(request.mock.calls.some(([path])=>path==='/api/round-skins/device')).toBe(false);
   });
 
-  test('默认页面明确模拟边界并提供受限的本机皮肤编辑器', async () => {
+  function mountSkinWorkspace(initialEntry='/display-preview') {
     localStorage.clear();
     vi.spyOn(ChatApi.prototype, 'bootstrap').mockResolvedValue(undefined);
     const skinPayload={
@@ -90,11 +90,18 @@ describe('圆屏状态协议与模拟器', () => {
         device_delivery:{enabled:true,requires_online_device:true,restart_after_publish:true}};
       if(path==='/api/round-wallpapers/device') return {wallpaper_api:1,active_valid:true,active_slot:'a',
         active_wallpaper_id:`wallpaper-${'b'.repeat(20)}`,active_sha256:'c'.repeat(64),active_size_bytes:1234,rollback_available:true};
+      if(path==='/api/otto-preview') return {commit:'synthetic',valid_count:0,items:[]};
       return skinPayload;
     });
     const queryClient=createConsoleQueryClient();
-    render(<QueryClientProvider client={queryClient}><MemoryRouter><RoundDisplayApp/></MemoryRouter></QueryClientProvider>);
+    render(<QueryClientProvider client={queryClient}><MemoryRouter initialEntries={[initialEntry]}><RoundDisplayApp/></MemoryRouter></QueryClientProvider>);
+    return {request,queryClient};
+  }
+
+  test('默认页面明确模拟边界并提供受限的本机皮肤编辑器', async () => {
+    mountSkinWorkspace();
     expect(screen.getByRole('heading', {name: '圆屏状态预览'})).toBeTruthy();
+    fireEvent.click(screen.getByRole('radio',{name:'几何皮肤'}));
     expect(screen.getByText(/画布：360 × 360 px/)).toBeTruthy();
     expect(screen.getByText(/网页动画不证明新固件已在真机运行/)).toBeTruthy();
     expect(screen.getByRole('region', {name: '圆屏模拟画布'})).toBeTruthy();
@@ -119,6 +126,12 @@ describe('圆屏状态协议与模拟器', () => {
     expect(screen.getByText('先检测真机皮肤能力')).toBeTruthy();
     expect(screen.getByRole('button', {name:'检测真机皮肤能力'})).toBeTruthy();
     expect((screen.getByRole('button', {name:'应用到真机'}) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  test('切换皮肤显示等待回读，编辑草稿与实机观察仍独立',async()=>{
+    const {request,queryClient}=mountSkinWorkspace('/display-preview?tab=device');
+    await screen.findByText('动态壁纸');
+    const useSkinDisplay=screen.getByRole('button',{name:'切换为皮肤显示（会重启）'});
     request.mockResolvedValueOnce({wallpaper_api:1,slot:'a',wallpaper_id:`wallpaper-${'b'.repeat(20)}`,
       sha256:'c'.repeat(64),size_bytes:1234,state:'skin_mode_restarting',operation_id:'d'.repeat(32)});
     fireEvent.click(useSkinDisplay);

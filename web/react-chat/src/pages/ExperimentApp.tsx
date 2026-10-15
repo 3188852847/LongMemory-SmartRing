@@ -7,6 +7,7 @@ import {ChatApi} from '../api';
 import {AppShell, ConsoleNav} from '../components/AppShell';
 import {PageHeader} from '../components/PageHeader';
 import {ExperimentJobs} from '../features/experiments/ExperimentJobs';
+import {ExperimentPreparation} from '../features/experiments/ExperimentPreparation';
 import {L1PolicyReplayCard} from '../features/experiments/L1PolicyReplayCard';
 import {evidenceLabel, filterRuns, groupLabel, statusLabel, verdictLabel} from '../../../assets/experiment-view.mjs';
 import {experimentFailure} from '../features/experiments/experimentFailure';
@@ -58,7 +59,12 @@ function ReviewForm({runId, questionId, row, detail, reviewer, onDirty}: {runId:
 
 /** 实验运行、档案阅读和人工复核共用后端契约；运行与阅读状态彼此隔离。 */
 export function ExperimentApp() {
-  const [workspace,setWorkspace] = useWorkspaceParam('view','archive',['archive','run','replay']);
+  const [workspace,setWorkspace] = useWorkspaceParam('view','archive',['archive','prepare','run','replay']);
+  useEffect(()=>{if (workspace === 'prepare') document.getElementById('experiment-preparation-heading')?.focus();},[workspace]);
+  function leavePreparation(next:string) {
+    setWorkspace(next);
+    requestAnimationFrame(()=>document.querySelector<HTMLElement>('.experiment-shell .data-workspace-panel:not([hidden])')?.focus({preventScroll:true}));
+  }
   const [query, setQuery] = useWorkspaceParam('q','');
   const [filter, setFilter] = useWorkspaceParam('kind','all',['all','real','fake','retrieval']);
   const [pageText,setPageText] = useWorkspaceParam('page','0');
@@ -107,7 +113,7 @@ export function ExperimentApp() {
     <DataWorkspace label="实验工作区" activeKey={workspace} onChange={setWorkspace} items={[
       {key:'archive',label:'档案与逐题对照',children:<>    <div className="experiment-layout">
       <Card className="experiment-archive-card" title="实验档案">
-        {runs.isSuccess && runs.data.items.length === 0 && <Alert type="info" title="还没有实验档案" description="准备冻结检索档案 → 运行对照 → 逐题复核。可在“运行实验”任务核对当前运行能力；本页不会自动创建档案或调用模型。"/>}
+        {runs.isSuccess && runs.data.items.length === 0 && <Alert type="info" title="还没有实验档案" description="先准备冻结的合成历史，再做检索与回答对照。本页不会自动运行。" action={<Button onClick={()=>setWorkspace('prepare')}>查看准备步骤与命令</Button>}/>}
         <Input.Search aria-label="搜索实验" allowClear value={query} onChange={event => {setQuery(event.target.value); setPage(0);}} placeholder="模型、数据集或编号"/>
         <Select className="wide" aria-label="实验类型" value={filter} onChange={value => {setFilter(value); setPage(0);}} options={[{value:'all',label:'全部'},{value:'real',label:'真实模型回答'},{value:'fake',label:'Fake 工程验证'},{value:'retrieval',label:'仅检索'}]}/>
         <div className="experiment-run-list" aria-busy={runs.isLoading}>{filtered.slice(page*10,page*10+10).map(run => <button type="button" className="experiment-run" aria-pressed={selected===run.id} key={run.id} onClick={() => {if(run.id!==selected && canLeaveReview()) {setReviewDirty(false);setSelected(run.id,false);}}}><Space><Tag>{run.kind === 'retrieval' ? '仅检索' : run.provider === 'fake' ? 'Fake' : '真实回答'}</Tag><strong>{run.model ?? '模型未提供'}</strong></Space><span>{dateText(run.started_at)}<br/>{run.dataset} · {run.split} · {statusLabel(run.status)} {run.completed}/{run.total}<br/>{run.id.slice(-8)}</span></button>)}{!runs.isLoading && !filtered.length && <Empty description="没有匹配的实验"/>}</div>
@@ -135,7 +141,8 @@ export function ExperimentApp() {
       </section>
     </div>
 </>},
-      {key:'run',label:'运行实验',children:<>    <ExperimentJobs api={api} ready={session.isSuccess} onOpen={reportId => void openResult(reportId)}/>
+      {key:'prepare',label:'准备档案',children:<ExperimentPreparation onArchive={()=>{leavePreparation('archive');void runs.refetch();}} onRun={()=>leavePreparation('run')}/>},
+      {key:'run',label:'运行实验',children:<><p><Button onClick={()=>setWorkspace('prepare')}>没有可用来源？查看准备步骤</Button></p>    <ExperimentJobs api={api} ready={session.isSuccess} onOpen={reportId => void openResult(reportId)}/>
 </>},
       {key:'replay',label:'L1 策略回放',children:<>    <L1PolicyReplayCard api={api} ready={session.isSuccess}/>
 </>},

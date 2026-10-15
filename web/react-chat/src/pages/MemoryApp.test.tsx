@@ -22,9 +22,9 @@ describe('每日记忆回顾',()=>{
     });
     const client=new QueryClient({defaultOptions:{queries:{retry:false}}});
     render(<QueryClientProvider client={client}><MemoryRouter><MemoryApp/></MemoryRouter></QueryClientProvider>);
-    expect(screen.getByText('L0 原始记录 · —')).toBeTruthy();
-    expect(await screen.findByText('L0 原始记录 · 35')).toBeTruthy();
-    expect(screen.queryByText('L0 原始记录 · 0')).toBeNull();
+    expect(screen.getByText('对话原话（L0） · —')).toBeTruthy();
+    expect(await screen.findByText('对话原话（L0） · 35')).toBeTruthy();
+    expect(screen.queryByText('对话原话（L0） · 0')).toBeNull();
   });
 
   test('从圆屏质量样本直达指定用户 L0',async()=>{
@@ -81,7 +81,7 @@ describe('每日记忆回顾',()=>{
     const today=new Date();
     const expectedDate=`${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
     expect(screen.getByLabelText('L0 日期').getAttribute('value')).toBe(expectedDate);
-    fireEvent.click(screen.getByText('L1 原子记忆 · 1'));
+    fireEvent.click(screen.getByText('事实记忆（L1） · 1'));
     fireEvent.click(screen.getByRole('button',{name:'每日回顾'}));
     const correctionButton=screen.getByRole('button',{name:'直接纠正'});
     await waitFor(()=>expect(correctionButton.hasAttribute('disabled')).toBe(false));
@@ -127,7 +127,7 @@ describe('每日记忆回顾',()=>{
     const client = new QueryClient({defaultOptions: {queries: {retry: false}}});
     render(<QueryClientProvider client={client}><MemoryRouter><MemoryApp/></MemoryRouter></QueryClientProvider>);
     await screen.findByText(/记忆已加载/);
-    fireEvent.click(screen.getByText(/L0 原始记录/));
+    fireEvent.click(screen.getByText(/对话原话（L0）/));
     fireEvent.click(await screen.findByText(source.content));
     fireEvent.click(await screen.findByRole('button', {name: '补成 L1'}));
     fireEvent.change(screen.getByLabelText('补记后的完整 L1'), {target: {value: promoted.content}});
@@ -321,14 +321,14 @@ describe('L1 质量候选',()=>{
     expect(await screen.findByText('已忽略')).toBeTruthy();
     expect(screen.getByText(/两条 L1 均未修改/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button',{name:/A.*用户喜欢喝咖啡/}));
-    expect(await screen.findByText('L1 原子记忆')).toBeTruthy();
+    expect(await screen.findByText('事实记忆（L1）')).toBeTruthy();
     expect(await screen.findByText('系统记录时间')).toBeTruthy();
-    fireEvent.click(within(screen.getByRole('dialog',{name:'L1 原子记忆'})).getByRole('button',{name:'Close'}));
+    fireEvent.click(within(screen.getByRole('dialog',{name:'事实记忆（L1）'})).getByRole('button',{name:'Close'}));
     fireEvent.click(screen.getByRole('button',{name:'保留 A，合并 B'}));
     expect(await screen.findByText('确认合并这两条重复 L1？')).toBeTruthy();
     fireEvent.click(screen.getByRole('button',{name:'确认合并'}));
     expect(await screen.findByText(/重复 L1 已合并/)).toBeTruthy();
-    fireEvent.click(within(screen.getByRole('dialog',{name:'L1 原子记忆'})).getByRole('button',{name:'Close'}));
+    fireEvent.click(within(screen.getByRole('dialog',{name:'事实记忆（L1）'})).getByRole('button',{name:'Close'}));
     fireEvent.click(screen.getByText('查看重复合并历史（1）'));
     expect(await screen.findByText(/账本完整 1\/1/)).toBeTruthy();
     expect(await screen.findByRole('button',{name:/L0 source-b/})).toBeTruthy();

@@ -6,6 +6,17 @@ import secrets
 from aiohttp import web
 
 from longmemory.infrastructure.logging.diagnostics import CODES, REQUEST_CONTEXT, log_inventory
+from longmemory.infrastructure.logging.retention import retention_plan
+
+
+def bind_voice_request(request):
+    context = REQUEST_CONTEXT.get()
+    if context is not None:
+        observer, request_id = context
+        try:
+            observer.bind_voice(request_id, request.headers.get("X-Voice-Round-Id"))
+        except Exception:
+            pass  # 仅观测失败不得改变业务。
 
 
 def operation_name(path):
@@ -25,7 +36,7 @@ def observability_middleware(observer):
     @web.middleware
     async def observe(request, handler):
         # 摘要和静态资源不产生新条目，避免页面资源加载挤掉真正的故障。
-        if request.path == "/api/observability" or not request.path.startswith("/api/"):
+        if request.path in {"/api/observability", "/api/internal/memory/voice-events"} or not request.path.startswith("/api/"):
             response = await handler(request)
             response.headers["X-Request-Id"] = secrets.token_hex(12)
             return response
@@ -55,10 +66,24 @@ def observability_middleware(observer):
 
 def register_observability(app, observer):
     async def status(_request):
-        return web.json_response({**observer.snapshot(), "logs": log_inventory(observer.root)})
+        return web.json_response({**observer.snapshot(), "logs": log_inventory(observer.root),
+                                  "log_retention": retention_plan(observer.root,
+                                      active_stream=observer.handler.baseFilename if observer.handler else None)})
+
+    async def voice_events(request):
+        # 此命名空间沿用内部 Memory Bearer/Host/回环认证；浏览器会话不能投递。
+        try:
+            body = await request.clone(client_max_size=2048).json()
+            observer.voice_event(body)
+        except (ValueError, TypeError, UnicodeError, web.HTTPRequestEntityTooLarge):
+            return web.json_response({"error": "invalid_voice_event"}, status=400)
+        except Exception:
+            return web.json_response({"error": "voice_observation_unavailable"}, status=503)
+        return web.json_response({"accepted": True}, status=202)
 
     async def close(_app):
         observer.close()
 
     app.router.add_get("/api/observability", status, allow_head=False)
+    app.router.add_post("/api/internal/memory/voice-events", voice_events)
     app.on_cleanup.append(close)

@@ -9,6 +9,24 @@ import {createConsoleQueryClient} from '../app/queryClient';
 afterEach(() => vi.restoreAllMocks());
 
 describe('React 实验档案', () => {
+  test('首次空档案能到达真实准备步骤，打开指南不启动实验', async()=>{
+    vi.spyOn(ChatApi.prototype,'bootstrap').mockResolvedValue(undefined);
+    const request=vi.spyOn(ChatApi.prototype,'request').mockImplementation(async(path)=>{
+      if(path==='/api/experiments') return {items:[],skipped:0,limited:false};
+      if(path==='/api/experiment-jobs/options') return {enabled:false,real_available:false,retrievals:[],context_default:4000,context_max:16000};
+      if(path==='/api/experiment-jobs') return {items:[]};
+      if(path==='/api/l1-policy-replay') return {sources:[],replays:[],skipped:0};
+      throw new Error('unexpected synthetic route');
+    });
+    const client=createConsoleQueryClient();
+    const view=render(<QueryClientProvider client={client}><MemoryRouter><ExperimentApp/></MemoryRouter></QueryClientProvider>);
+    fireEvent.click(await screen.findByRole('button',{name:'查看准备步骤与命令'}));
+    const heading=await screen.findByRole('heading',{name:'准备实验档案'});
+    expect(document.activeElement).toBe(heading);
+    expect(screen.getByText(/comparison.runner --provider fake --split dev/)).toBeTruthy();
+    expect(request.mock.calls.every(([,method])=>method===undefined || method==='GET')).toBe(true);
+    view.unmount();client.clear();
+  });
   test('逐题回答按文本展示，不解释为 HTML', async () => {
     vi.spyOn(ChatApi.prototype, 'bootstrap').mockResolvedValue(undefined);
     const calls: Array<[string, string | undefined, unknown]> = [];

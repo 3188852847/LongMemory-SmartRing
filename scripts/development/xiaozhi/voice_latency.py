@@ -8,6 +8,7 @@
 from datetime import datetime, timezone
 import threading
 import time
+from voice_diagnostics import CURRENT, VoiceRound, for_sentence
 
 from cosyvoice_segments import (
     install_cosyvoice_punctuation_policy,
@@ -166,14 +167,24 @@ class VoiceLatencyTracker:
 
     def bind_sentence(self, sentence_id=None):
         with self.lock:
-            if self.current is None or self.current["sentence_id"] is not None:
+            if self.current is None:
                 return
             candidate = sentence_id
             if candidate is None:
                 candidate = getattr(self.connection, "sentence_id", None)
             if candidate is None or candidate == self.current["previous_sentence_id"]:
                 return
+            if self.current["sentence_id"] is not None and candidate != self.current["sentence_id"]:
+                return
             self.current["sentence_id"] = candidate
+            trace = CURRENT.get()
+            if trace is not None and getattr(self.connection, "_longmemory_diagnostic_round", None) is trace:
+                rounds = getattr(self.connection, "_longmemory_diagnostic_sentences", None)
+                if rounds is None:
+                    rounds = self.connection._longmemory_diagnostic_sentences = {}
+                rounds[candidate] = trace
+                while len(rounds) > 32:
+                    del rounds[next(iter(rounds))]
 
     def mark(self, field, *, sentence_id=None, token=None):
         if field not in TIMING_FIELDS:
@@ -194,6 +205,9 @@ class VoiceLatencyTracker:
             item["timings"][field] = elapsed
             if item["timings"]["first_audio_sent_ms"] is not None:
                 self.last_audible = self._snapshot_item(item)
+            trace = for_sentence(self.connection, sentence_id) if sentence_id is not None else CURRENT.get()
+        if trace is not None and field == "first_audio_sent_ms":
+            trace.event("send_returned")
         # 日志只含固定阶段名和毫秒数，不含问题、回答、记忆或音色提示词。
         self.connection.logger.bind(tag="voice-latency").info(
             f"圆屏首句计时 stage={field} elapsed={elapsed}ms"
@@ -352,17 +366,29 @@ def _model_failure_code(error):
     return "model_request_failed"
 
 
-def _observe_generator(connection, responses, waiting=None):
+def _observe_generator(connection, responses, waiting=None, trace=None):
     produced_output = False
     try:
         for response in responses:
             if waiting is not None and not waiting.current():
+                if trace is not None:
+                    trace.event("cancelled")
                 return
             if _has_output(response):
                 produced_output = True
                 connection._longmemory_voice_latency.mark("llm_first_output_ms")
+                if trace is not None:
+                    trace.event("model_output")
             yield response
+        if trace is not None:
+            trace.event("model_returned")
+    except GeneratorExit:
+        if trace is not None:
+            trace.event("cancelled")
+        raise
     except Exception as error:
+        if trace is not None:
+            trace.event("model_timeout" if _model_failure_code(error) == "model_timeout" else "model_failed")
         is_current = waiting is None or waiting.current()
         if waiting is not None:
             waiting.cancel()
@@ -388,6 +414,7 @@ class _ObservedLLM:
         return getattr(self._provider, name)
 
     def _call(self, method_name, *args, **kwargs):
+        trace = CURRENT.get()
         tracker = self._connection._longmemory_voice_latency
         tracker.bind_sentence()
         # 只在圆屏本次请求中鼓励尽早形成可朗读的完整首句。共享 provider、
@@ -404,6 +431,8 @@ class _ObservedLLM:
             kwargs = {**kwargs, "dialogue": prepare_voice_dialogue(dialogue)}
         # 首次模型请求同时决定是否搜索；工具查询和最终答案另行计时。
         tracker.mark("llm_requested_ms")
+        if trace is not None:
+            trace.event("model_requested")
         try:
             waiting = getattr(self._connection, "_longmemory_waiting", None)
             if method_name == "response" and waiting is not None and waiting.current():
@@ -412,13 +441,15 @@ class _ObservedLLM:
             else:
                 responses = getattr(self._provider, method_name)(*args, **kwargs)
         except Exception as error:
+            if trace is not None:
+                trace.event("model_timeout" if _model_failure_code(error) == "model_timeout" else "model_failed")
             is_current = waiting is None or waiting.current()
             if waiting is not None:
                 waiting.cancel()
             if is_current:
                 tracker.fail(_model_failure_code(error))
             raise
-        return _observe_generator(self._connection, responses, waiting)
+        return _observe_generator(self._connection, responses, waiting, trace)
 
     def response(self, *args, **kwargs):
         return self._call("response", *args, **kwargs)
@@ -451,11 +482,23 @@ def _observe_components(connection):
             tracker = connection._longmemory_voice_latency
             tracker.bind_sentence()
             sentence_id = getattr(tts, "current_sentence_id", None)
+            trace = for_sentence(connection, sentence_id)
+            if trace is not None:
+                trace.event("tts_requested")
+            context_token = CURRENT.set(trace)
             handle = tracker.begin_tts_segment(sentence_id=sentence_id)
             active_segment.handle = handle
             try:
                 return original_stream(*args, **kwargs)
+            except BaseException:
+                if trace is not None:
+                    trace.event("tts_failed")
+                raise
             finally:
+                # 方法返回不等于成功合成；尤其供应商可能吞掉错误或返回空音频。
+                if trace is not None:
+                    trace.event("tts_returned")
+                CURRENT.reset(context_token)
                 tracker.complete_tts_segment(handle, sentence_id=sentence_id)
                 active_segment.handle = None
         tts.to_tts_stream = measured_stream
@@ -464,6 +507,9 @@ def _observe_components(connection):
             tracker = connection._longmemory_voice_latency
             tracker.bind_sentence()
             sentence_id = getattr(tts, "current_sentence_id", None)
+            trace = for_sentence(connection, sentence_id)
+            if trace is not None:
+                trace.event("tts_audio_ready")
             tracker.record_tts_audio_packet(
                 getattr(active_segment, "handle", None), sentence_id=sentence_id
             )
@@ -490,6 +536,16 @@ def install_voice_latency(connection_class):
     original = connection_class.chat
 
     def chat(connection, query, depth=0):
+        context_token = None
+        trace = CURRENT.get()
+        if depth == 0:
+            trace = trace or VoiceRound()
+            context_token = CURRENT.set(trace)
+            old = getattr(connection, "_longmemory_diagnostic_round", None)
+            if old is not None and old is not trace:
+                old.event("superseded")
+            connection._longmemory_diagnostic_round = trace
+            trace.event("chat_entered")
         if depth == 0:
             old_waiting = getattr(connection, "_longmemory_waiting", None)
             if old_waiting is not None:
@@ -499,15 +555,30 @@ def install_voice_latency(connection_class):
             connection._longmemory_voice_latency = VoiceLatencyTracker(connection)
         tracker = connection._longmemory_voice_latency
         turn_token = tracker.begin() if depth == 0 else None
-        _observe_components(connection)
         try:
+            _observe_components(connection)
             return original(connection, query, depth)
+        except BaseException:
+            if trace is not None:
+                trace.event("chat_failed")
+            raise
         finally:
             if depth == 0:
                 tracker.bind_sentence()
                 tracker.mark("response_completed_ms", token=turn_token)
+                trace.event("cancelled" if getattr(connection, "client_abort", False) else "chat_returned")
+                CURRENT.reset(context_token)
 
     connection_class.chat = chat
+    import inspect
+    original_close = getattr(connection_class, "close", None)
+    if inspect.iscoroutinefunction(original_close):
+        async def close(connection, *args, **kwargs):
+            trace = getattr(connection, "_longmemory_diagnostic_round", None)
+            if trace is not None:
+                trace.event("cancelled")
+            return await original_close(connection, *args, **kwargs)
+        connection_class.close = close
     connection_class._longmemory_latency_installed = True
 
 

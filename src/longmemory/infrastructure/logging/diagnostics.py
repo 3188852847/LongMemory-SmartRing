@@ -10,6 +10,7 @@ from logging.handlers import RotatingFileHandler
 import os
 from pathlib import Path
 import secrets
+import re
 import stat
 import threading
 import time
@@ -28,6 +29,20 @@ OPERATIONS = {"console", "chat", "device", "memory", "memory_runtime", "diagnost
 CODES = {"pending", "ok", "accepted", "server_error", "request_rejected", "response_unobserved",
          "bridge_not_configured", "bridge_unavailable", "bridge_timeout", "bridge_auth_failed",
          "bridge_invalid_response", "console_internal_error", "console_timeout", "device_offline"}
+VOICE_EVENTS = frozenset({
+    "asr_entered", "asr_handoff", "asr_failed", "chat_entered", "chat_returned",
+    "memory_requested", "memory_response", "memory_failed", "model_requested",
+    "model_output", "model_returned", "model_failed", "tts_requested", "tts_response",
+    "tts_audio_ready", "tts_returned", "tts_failed", "tts_cancelled", "tts_fallback",
+    "send_returned", "cancelled", "superseded", "chat_failed",
+    "asr_timeout", "memory_timeout", "model_timeout", "tts_timeout",
+    "tts_service_entered", "tts_service_returned", "tts_service_written", "tts_service_failed",
+    "tts_service_disconnected", "tts_service_busy",
+})
+
+
+def valid_trace_id(value):
+    return isinstance(value, str) and re.fullmatch(r"[0-9a-f]{24}", value) is not None
 
 
 class SafeRotatingHandler(RotatingFileHandler):
@@ -48,6 +63,7 @@ class Diagnostics:
         self.capacity = capacity
         self.rows = OrderedDict()
         self.started = {}
+        self.voice_rows = OrderedDict()
         self.lock = threading.RLock()
         self.handler = None
         self.write_failed = False
@@ -107,20 +123,86 @@ class Diagnostics:
                 "failed" if status >= 400 else "accepted" if mutating else "succeeded")
             row["code"] = code if code in CODES else ("server_error" if status >= 500 else
                 "request_rejected" if status >= 400 else "accepted" if mutating else "ok")
-            if self.handler:
-                # 直接使用私有 handler，不替换 root/logger；轮转失败只影响观测。
+            self._persist(row)
+
+    def _persist(self, row):
+        if self.handler:
+            # HTTP 摘要与语音事件共享本进程的既有有界流，不另建无限日志。
+            try:
+                self.handler.acquire()
                 try:
-                    self.handler.acquire()
-                    try:
-                        record = logging.LogRecord("longmemory.diagnostics", logging.INFO, "", 0,
-                                                   json.dumps(row, ensure_ascii=False), (), None)
-                        if self.handler.shouldRollover(record):
-                            self.handler.doRollover()
-                        logging.FileHandler.emit(self.handler, record)
-                    finally:
-                        self.handler.release()
-                except OSError:
-                    self.write_failed = True
+                    record = logging.LogRecord("longmemory.diagnostics", logging.INFO, "", 0,
+                                               json.dumps(row, ensure_ascii=False), (), None)
+                    if self.handler.shouldRollover(record):
+                        self.handler.doRollover()
+                    logging.FileHandler.emit(self.handler, record)
+                finally:
+                    self.handler.release()
+            except OSError:
+                self.write_failed = True
+
+    def bind_voice(self, request_id, round_id):
+        """仅由已通过内部认证的业务路由调用；客户端 HTTP ID 从不采用。"""
+        if not valid_trace_id(round_id):
+            return
+        with self.lock:
+            row = self.rows.get(request_id)
+            if row is not None:
+                row["voice_round_id"] = round_id
+
+    def voice_id(self, request_id):
+        with self.lock:
+            return self.rows.get(request_id, {}).get("voice_round_id")
+
+    def voice_event(self, item):
+        required = {"round_id", "event", "sequence"}
+        if (not isinstance(item, dict) or set(item) not in (required, required | {"http_request_id"}, required | {"http_request_id", "source"})
+                or not valid_trace_id(item.get("round_id")) or item.get("event") not in VOICE_EVENTS
+                or type(item.get("sequence")) is not int or not 1 <= item["sequence"] <= 64
+                or ("http_request_id" in item and not valid_trace_id(item["http_request_id"]))
+                or ("source" in item and item["source"] != "cosyvoice")
+                or (item.get("source") == "cosyvoice") != item["event"].startswith("tts_service_")):
+            raise ValueError("invalid_voice_event")
+        with self.lock:
+            row = self.voice_rows.setdefault(item["round_id"], {
+                "round_id": item["round_id"], "source": "authenticated_local_wrappers",
+                "events": [], "device_playback": "unconfirmed",
+            })
+            # 重复/迟到事件保留其原序号，不覆盖新轮；断号始终显式显示。
+            identity = lambda event: (event.get("source", "xiaozhi"),
+                event.get("http_request_id") if event.get("source") == "cosyvoice" else None, event["sequence"])
+            if not any(identity(event) == identity(item) for event in row["events"]) and len(row["events"]) < 128:
+                row["events"].append({key: value for key, value in item.items() if key != "round_id"})
+                row["events"].sort(key=identity)
+                self._persist({"kind": "voice_event", "time": datetime.now(UTC).isoformat(),
+                               "source": "authenticated_xiaozhi_wrapper", **item})
+            if len(row["events"]) >= 128:
+                row["truncated"] = True
+            while len(self.voice_rows) > self.capacity:
+                self.voice_rows.popitem(last=False)
+        return True
+
+    def voice_snapshot(self):
+        with self.lock:
+            rounds = deepcopy(list(reversed(self.voice_rows.values())))
+            for row in rounds:
+                names = {event["event"] for event in row["events"]}
+                row["state"] = ("cancelled" if names & {"cancelled", "superseded", "tts_cancelled", "tts_service_disconnected"}
+                                else "failure_observed" if any(name.endswith(("failed", "timeout", "busy")) for name in names)
+                                else "observing")
+                row["missing"] = [event for event in ("asr_handoff", "memory_response", "model_returned",
+                                                       "tts_audio_ready", "tts_service_returned", "send_returned") if event not in names]
+                source_sequences = {}
+                for event in row["events"]:
+                    key = (event.get("source", "xiaozhi"), event.get("http_request_id") if event.get("source") == "cosyvoice" else None)
+                    source_sequences.setdefault(key, set()).add(event["sequence"])
+                gaps = {key: sorted(set(range(1, max(sequences) + 1)) - sequences)
+                        for key, sequences in source_sequences.items()}
+                row["sequence_gaps"] = gaps.get(("xiaozhi", None), [])
+                row["source_gaps"] = [{"source": key[0], "http_request_id": key[1], "missing": missing}
+                                      for key, missing in gaps.items() if missing]
+            return {"scope": "current_api_process_received_events", "rounds": rounds,
+                    "delivery": "best_effort_no_retry", "device_playback": "unconfirmed"}
 
     def snapshot(self):
         with self.lock:
@@ -131,8 +213,9 @@ class Diagnostics:
             return {"schema_version": 1, "scope": "current_process", "capacity": self.capacity,
                     "persistence": "unavailable" if self.write_failed else "enabled" if self.handler else "disabled",
                     "requests": requests,
+                    "voice": self.voice_snapshot(),
                     "device_playback": "unconfirmed",
-                    "coverage": ["http_request", "memory_audit_context"],
+                    "coverage": ["http_request", "memory_audit_context", "authenticated_voice_events"],
                     "uncovered": ["asr", "tts", "device_playback", "background_completion"]}
 
     def close(self):

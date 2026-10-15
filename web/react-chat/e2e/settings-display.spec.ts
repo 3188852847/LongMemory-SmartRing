@@ -30,6 +30,7 @@ async function mockWorkspace(page:Page) {
     let response:unknown;
     if (path === '/api/session') response = {csrf:'synthetic-token'};
     else if (path === '/api/chat-config') response = {enabled:true,model:'fake',role:'合成助手',provider:'fake'};
+    else if (path === '/api/otto-preview') response = {commit:'synthetic',valid_count:0,items:[]};
     else if (path === '/api/voice-profile' && request.method() === 'GET') response = snapshot();
     else if (path === '/api/voice-references') response = {item:references[0],references};
     else if (path === '/api/voice-profile/preview') {await route.fulfill({contentType:'audio/wav',body:syntheticWav()}); return;}
@@ -118,6 +119,7 @@ test('大字号、减少动画与键盘分类导航', async ({page}) => {
   await page.keyboard.press('Enter');
   await expect(page.getByLabel('表达指令（可留空）')).toBeVisible();
   await page.goto('/display-preview');
+  await page.getByRole('radio',{name:'几何皮肤',exact:true}).locator('xpath=ancestor::label').click();
   await expect(page.locator('.round-face .eye').first()).toHaveCSS('animation-name','none');
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
 });

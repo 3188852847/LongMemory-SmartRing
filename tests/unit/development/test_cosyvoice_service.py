@@ -143,6 +143,52 @@ def test_health_capabilities_and_synthesis_contract(local_service):
     assert synth.calls[-1] == ("分块测试", "stream", False)
 
 
+def test_speech_ids_are_server_generated_and_stream_failure_does_not_mean_completed(local_service):
+    port, synth = local_service
+    connection = http.client.HTTPConnection("127.0.0.1", port, timeout=3)
+    supplied_round = "a" * 24
+    connection.request("POST", "/v1/audio/stream", body=json.dumps({"input": "private synthetic text", "stream": True}),
+        headers={"Content-Type": "application/json", "X-Voice-Round-Id": supplied_round, "X-Request-Id": "forged-secret"})
+    response = connection.getresponse()
+    request_id = response.getheader("X-Request-Id")
+    assert request_id != "forged-secret" and len(request_id) == 24
+    assert response.getheader("X-Voice-Round-Id") == supplied_round
+    response.read()
+    connection.close()
+    health = json.loads(request(port, "GET", "/health")[2])
+    row = next(row for row in health["speech_requests"] if row["request_id"] == request_id)
+    assert row["voice_round_id"] == supplied_round and row["association"] == "local_caller_claim"
+    assert row["stages"] == ["request_received", "synthesis_entered", "synthesis_returned", "response_written"]
+    assert row["device_playback"] == "unconfirmed" and "private" not in json.dumps(health)
+
+    def failed(*args, **kwargs):
+        yield b"synthetic-first-chunk"
+        raise TimeoutError("private-model-secret")
+    synth.stream_chunks = failed
+    status, _, _ = request(port, "POST", "/v1/audio/stream", {"input": "private text", "stream": True})
+    assert status == 200  # 响应头早已发出；不能冒充完整生成成功。
+    latest = json.loads(request(port, "GET", "/health")[2])["speech_requests"][0]
+    assert "synthesis_failed" in latest["stages"] and "synthesis_returned" not in latest["stages"]
+    assert "private" not in json.dumps(latest)
+
+
+def test_only_signed_round_headers_emit_service_events(local_service, monkeypatch):
+    observer = service._voice_observation
+    events = []
+    monkeypatch.setenv("LONGMEMORY_RUNTIME_TOKEN", "a" * 64)
+    monkeypatch.setattr(observer, "emit", events.append)
+    headers = observer.VoiceRound().headers()
+    port, _ = local_service
+    request(port, "POST", "/v1/audio/speech", {"input": "private text"}, headers)
+    assert {event["event"] for event in events} == {
+        "tts_service_entered", "tts_service_returned", "tts_service_written"}
+    assert all(event["round_id"] == headers["X-Voice-Round-Id"] and event["source"] == "cosyvoice" for event in events)
+    assert "X-Voice-Round-Proof" not in json.dumps(events) and "private" not in json.dumps(events)
+    events.clear()
+    request(port, "POST", "/v1/audio/speech", {"input": "ok"}, {**headers, "X-Voice-Round-Proof": "invalid"})
+    assert events == []
+
+
 @pytest.mark.parametrize("body", [
     {}, {"input": ""}, {"input": "x" * 601},
     {"input": "ok", "response_format": "mp3"}, {"input": "ok", "stream": True},

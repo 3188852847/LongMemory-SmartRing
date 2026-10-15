@@ -9,6 +9,7 @@ from uuid import UUID
 from aiohttp import web
 
 from longmemory.entrypoints.xiaozhi.mapping import extract_user_text
+from longmemory.entrypoints.api.observability import bind_voice_request
 
 
 def _retrieval_evidence(prepared):
@@ -59,6 +60,7 @@ def register_memory_runtime_routes(app, backend):
         return web.json_response({"version": 1, **result})
 
     async def prepare(request):
+        bind_voice_request(request)
         request = request.clone(client_max_size=32768)
         try:
             body = await request.json()
@@ -160,6 +162,7 @@ def register_memory_runtime_routes(app, backend):
     async def complete(request):
         """接收同机小智的最终助手文本；不代表音频已在设备播放完成。"""
 
+        bind_voice_request(request)
         request = request.clone(client_max_size=32768)
         try:
             body = await request.json()

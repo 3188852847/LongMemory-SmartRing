@@ -13,6 +13,7 @@ import requests
 
 from fast_voice_responses import fast_asset_for_text
 from cosyvoice_profiles import default_voice_active
+from voice_diagnostics import for_sentence
 
 
 STREAM_URL = "http://127.0.0.1:18770/v1/audio/stream"
@@ -79,6 +80,7 @@ def install_cosyvoice_streaming(tts, connection):
     def stream(text, opus_handler=None):
         original_text = text
         sentence_id = getattr(tts, "current_sentence_id", None)
+        trace = for_sentence(connection, sentence_id)
 
         def cancelled():
             # 新 chat 会重新清空 client_abort；捕获的旧话轮身份仍必须永久失效。
@@ -129,7 +131,10 @@ def install_cosyvoice_streaming(tts, connection):
                 json={"input": cleaned, "response_format": "wav", "stream": True, "cache": True},
                 timeout=(3, tts.tts_timeout),
                 stream=True,
+                headers=trace.headers() if trace is not None else {},
             ) as response:
+                if trace is not None:
+                    trace.event("tts_response", request_id=response.headers.get("X-Request-Id"))
                 response.raise_for_status()
                 expected = "application/vnd.longmemory.wav-chunks"
                 if response.headers.get("Content-Type") != expected:
@@ -147,14 +152,20 @@ def install_cosyvoice_streaming(tts, connection):
                 if not delivered:
                     raise ValueError("cosyvoice_stream_empty")
         except _SpeechCancelled:
+            if trace is not None:
+                trace.event("tts_cancelled")
             _reset_opus_encoder(tts.opus_encoder)
             return None
         except Exception as error:
+            if trace is not None:
+                trace.event("tts_timeout" if isinstance(error, requests.Timeout) else "tts_failed")
             # 解码、协议或发送失败时清除残留 PCM，避免污染回退或下一句话。
             _reset_opus_encoder(tts.opus_encoder)
             if cancelled():
                 return None
             if not delivered:
+                if trace is not None:
+                    trace.event("tts_fallback")
                 connection.logger.bind(tag="cosyvoice-stream").warning(
                     f"分块通道在首个音频前失败，回退完整 WAV：{type(error).__name__}"
                 )

@@ -5,6 +5,8 @@ chat 轮次领取；超过十秒的孤立结果自动失效，避免串到下一
 """
 
 import time
+import asyncio
+from voice_diagnostics import CURRENT, VoiceRound, ContextExecutor
 
 
 PENDING_SECONDS = 10
@@ -18,6 +20,9 @@ def install_voice_input_latency(asr_base_module):
     original_start = asr_base_module.startToChat
 
     async def handle_voice_stop(provider, connection, audio_task):
+        trace = VoiceRound()
+        token = CURRENT.set(trace)
+        trace.event("asr_entered")
         now_wall_ms = time.time() * 1000
         last_voice_ms = getattr(connection, "vad_last_voice_time", 0)
         endpoint_ms = None
@@ -30,10 +35,29 @@ def install_voice_input_latency(asr_base_module):
         }
         try:
             return await original_handle(provider, connection, audio_task)
+        except asyncio.CancelledError:
+            trace.event("cancelled")
+            raise
+        except TimeoutError:
+            trace.event("asr_timeout")
+            raise
+        except BaseException:
+            trace.event("asr_failed")
+            raise
         finally:
             connection.__dict__.pop("_longmemory_voice_input_active", None)
+            CURRENT.reset(token)
 
     async def start_to_chat(connection, text):
+        trace = CURRENT.get()
+        if trace is not None:
+            trace.event("asr_handoff")
+            try:
+                executor = getattr(connection, "executor", None)
+                if callable(getattr(executor, "submit", None)) and not isinstance(executor, ContextExecutor):
+                    connection.executor = ContextExecutor(executor, connection)
+            except Exception:
+                pass  # 不支持此提交边界时保留缺失，不能阻断原识别/聊天。
         active = getattr(connection, "_longmemory_voice_input_active", None)
         if isinstance(active, dict):
             elapsed = max(0, round((time.perf_counter() - active["started"]) * 1000))

@@ -14,6 +14,8 @@ import importlib.util
 import hashlib
 import ipaddress
 import json
+import re
+import secrets
 from pathlib import Path
 import struct
 import sys
@@ -21,6 +23,14 @@ from time import perf_counter
 import threading
 from typing import Protocol
 from voice_profiles import VoiceProfileStore
+
+try:
+    _VOICE_SPEC = importlib.util.spec_from_file_location("cosyvoice_safe_observation",
+        Path(__file__).resolve().parents[1] / "xiaozhi/voice_diagnostics.py")
+    _voice_observation = importlib.util.module_from_spec(_VOICE_SPEC)
+    _VOICE_SPEC.loader.exec_module(_voice_observation)
+except (OSError, ImportError, AttributeError, TypeError):
+    _voice_observation = None
 
 # 多个隔离 TTS 目录都可能有 trial.py。使用唯一模块名加载同目录文件，避免
 # 完整 pytest 进程中的 sys.modules 把 CosyVoice 与 VoxCPM2 试验模块串台。
@@ -289,6 +299,8 @@ class CosyVoiceHTTPServer(ThreadingHTTPServer):
         super().__init__(address, CosyVoiceHandler)
         self.synthesizer = synthesizer
         self.generation_gate = threading.Lock()
+        self.speech_requests = OrderedDict()
+        self.speech_requests_lock = threading.Lock()
 
 
 class CosyVoiceHandler(BaseHTTPRequestHandler):
@@ -297,6 +309,36 @@ class CosyVoiceHandler(BaseHTTPRequestHandler):
     def log_message(self, _format, *_args):
         # 不把合成文本写入长期日志。
         return
+
+    def end_headers(self):
+        request_id = getattr(self, "speech_request_id", None)
+        if request_id is not None:
+            self.send_header("X-Request-Id", request_id)
+            if self.voice_round_id is not None:
+                self.send_header("X-Voice-Round-Id", self.voice_round_id)
+        super().end_headers()
+
+    def _speech_stage(self, stage):
+        try:
+            with self.server.speech_requests_lock:
+                row = self.server.speech_requests.setdefault(self.speech_request_id, {
+                    "request_id": self.speech_request_id, "voice_round_id": self.voice_round_id,
+                    "association": "authenticated_wrapper" if getattr(self, "speech_trace", None) else (
+                        "local_caller_claim" if self.voice_round_id else "missing"),
+                    "device_playback": "unconfirmed", "stages": [],
+                })
+                row["stages"].append(stage)
+                while len(self.server.speech_requests) > 100:
+                    self.server.speech_requests.popitem(last=False)
+            trace = getattr(self, "speech_trace", None)
+            if trace is not None:
+                events = {"synthesis_entered": "tts_service_entered", "synthesis_returned": "tts_service_returned",
+                          "response_written": "tts_service_written", "synthesis_failed": "tts_service_failed",
+                          "client_disconnected": "tts_service_disconnected", "busy": "tts_service_busy"}
+                if stage in events:
+                    trace.event(events[stage])
+        except Exception:
+            pass
 
     def _json(self, status: int, body: dict) -> None:
         payload = json.dumps(body, ensure_ascii=False).encode("utf-8")
@@ -337,6 +379,12 @@ class CosyVoiceHandler(BaseHTTPRequestHandler):
         snapshot = getattr(diagnostics, "snapshot", None)
         if callable(snapshot):
             body["diagnostics"] = snapshot()
+        try:
+            with self.server.speech_requests_lock:
+                body["speech_requests"] = [dict(row, stages=list(row["stages"]))
+                                           for row in reversed(self.server.speech_requests.values())]
+        except Exception:
+            body["speech_observation"] = "unavailable"
         self._json(200, body)
 
     def do_OPTIONS(self):
@@ -351,6 +399,25 @@ class CosyVoiceHandler(BaseHTTPRequestHandler):
             self.rfile.read(length)
 
     def do_POST(self):
+        self.speech_request_id = secrets.token_hex(12)
+        supplied_round = self.headers.get("X-Voice-Round-Id", "")
+        self.voice_round_id = supplied_round if re.fullmatch(r"[0-9a-f]{24}", supplied_round) else None
+        self.speech_trace = None
+        try:
+            verified = _voice_observation.verified_round(self.headers) if _voice_observation else None
+            if verified is not None:
+                self.speech_trace = _voice_observation.VoiceRound(round_id=verified,
+                    source="cosyvoice", request_id=self.speech_request_id)
+        except Exception:
+            pass
+        self._speech_stage("request_received")
+        try:
+            return self._speech_post()
+        except (BrokenPipeError, ConnectionResetError):
+            self._speech_stage("client_disconnected")
+            raise
+
+    def _speech_post(self):
         if self.path not in {"/v1/audio/speech", "/v1/audio/stream"}:
             self._json(404, {"error": "not_found"})
             return
@@ -386,9 +453,11 @@ class CosyVoiceHandler(BaseHTTPRequestHandler):
             self._json(400, {"error": "invalid_request"})
             return
         if not self.server.generation_gate.acquire(blocking=False):
+            self._speech_stage("busy")
             self._json(503, {"error": "busy"})
             return
         try:
+            self._speech_stage("synthesis_entered")
             kwargs = {'use_cache': body.get('cache', True)}
             if 'voice_profile' in body:
                 # 仅用于网页草稿试听：完整白名单校验仍在 synthesizer 的档案库中。
@@ -405,13 +474,18 @@ class CosyVoiceHandler(BaseHTTPRequestHandler):
                     self.wfile.write(struct.pack("!I", len(chunk)))
                     self.wfile.write(chunk)
                     self.wfile.flush()
+                self._speech_stage("synthesis_returned")
+                self._speech_stage("response_written")
                 return
             audio = self.server.synthesizer.synthesize(text.strip(), **kwargs)
+            self._speech_stage("synthesis_returned")
         except (BrokenPipeError, ConnectionResetError):
+            self._speech_stage("client_disconnected")
             # 用户打断或 Xiaozhi 退出时，关闭生成器即可释放模型锁；无需把正常取消
             # 记录成合成故障，也不能在已经发送部分音频后回写 JSON。
             return
         except Exception:
+            self._speech_stage("synthesis_failed")
             if not streaming:
                 self._json(500, {"error": "synthesis_failed"})
             return
@@ -424,6 +498,7 @@ class CosyVoiceHandler(BaseHTTPRequestHandler):
         self.send_header('X-LongMemory-Voice-Profile', '1')
         self.end_headers()
         self.wfile.write(audio)
+        self._speech_stage("response_written")
 
 
 def loopback_address(value: str) -> str:

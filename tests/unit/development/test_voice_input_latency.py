@@ -1,10 +1,12 @@
 import asyncio
 import importlib.util
 from pathlib import Path
+import sys
 from types import SimpleNamespace
 
 
 SCRIPT = Path(__file__).resolve().parents[3] / "scripts/development/xiaozhi/voice_input_latency.py"
+sys.path.insert(0, str(SCRIPT.parent))
 SPEC = importlib.util.spec_from_file_location("voice_input_latency_test", SCRIPT)
 input_latency = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(input_latency)
