@@ -29,4 +29,20 @@ describe('安全故障摘要', () => {
     render(<DiagnosticsPanel snapshot={{...snapshot, requests: []}} onRefresh={() => {}}/>);
     expect(screen.getByText(/重启前记录未加载/)).toBeTruthy();
   });
+  it('展示显式轮次缺失和只读累计预算，不把方法返回视为播放成功', () => {
+    render(<DiagnosticsPanel snapshot={{...snapshot,
+      voice: {scope: 'current_api_process_received_events', delivery: 'best_effort_no_retry', device_playback: 'unconfirmed',
+        rounds: [{round_id: 'b'.repeat(24), source: 'authenticated_xiaozhi_wrapper', state: 'cancelled',
+          missing: ['send_returned'], sequence_gaps: [2], device_playback: 'unconfirmed',
+          events: [{sequence: 1, event: 'chat_entered'}, {sequence: 3, event: 'cancelled'}]}]},
+      log_retention: {mode: 'dry_run', budget_bytes: 67108864, min_age_days: 7, total_bytes: 80000000,
+        managed_bytes: 80000000, vendor_bytes: 0, candidate_bytes: 0, unresolved_bytes: 12891136,
+        complete: true, state: 'safe', deletion_available: false, candidate_streams: [], owners: {}},
+    }} onRefresh={() => {}}/>);
+    expect(screen.getByText(/已取消或已有新轮次/)).toBeTruthy();
+    expect(screen.getByText(/事件序号缺失/)).toBeTruthy();
+    expect(screen.getByText(/未执行删除/)).toBeTruthy();
+    expect(screen.getByText(/超出预算且受保护/)).toBeTruthy();
+    expect(screen.queryByText('播放完成')).toBeNull();
+  });
 });

@@ -95,6 +95,19 @@ def test_write_failure_does_not_break_control(tmp_path, monkeypatch):
     observer.close()
 
 
+def test_voice_persistence_failure_keeps_safe_memory_summary(tmp_path, monkeypatch):
+    observer = Diagnostics(tmp_path)
+    monkeypatch.setattr(observer.handler, "shouldRollover", lambda _: (_ for _ in ()).throw(OSError("private-secret")))
+    try:
+        observer.voice_event({"round_id": "a" * 24, "event": "memory_timeout", "sequence": 1})
+        snapshot = observer.snapshot()
+        assert snapshot["persistence"] == "unavailable"
+        assert snapshot["voice"]["rounds"][0]["state"] == "failure_observed"
+        assert "private" not in json.dumps(snapshot)
+    finally:
+        observer.close()
+
+
 def test_real_separate_processes_write_distinct_files(tmp_path):
     # 子进程只加载工作树源码、写合成目录，不调用服务或联网。
     source = Path(__file__).resolve().parents[3] / "src"

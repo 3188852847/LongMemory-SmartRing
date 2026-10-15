@@ -27,6 +27,9 @@ def log_event(event: str, **fields: object) -> None:
         observer, request_id = context
         observer.stage(request_id, event)
         fields = {**fields, "request_id": request_id}
+        voice_id = observer.voice_id(request_id)
+        if voice_id is not None:
+            fields["voice_round_id"] = voice_id
     LOGGER.info(json.dumps({
         "at": datetime.now(UTC).isoformat(), "event": event, **fields,
     }, ensure_ascii=False))

@@ -10,6 +10,7 @@ import os
 import runpy
 import sys
 import time
+from voice_diagnostics import CURRENT
 
 
 def install_pipeline_latency_policy(connection_class, *, mode, enable_asr_prefetch=False,
@@ -42,10 +43,18 @@ def observe_memory_operations(connection):
         # 捕获请求开始时所属句子；同一设备快速产生多轮输入时，旧请求可能晚于
         # 新请求完成，不能让它覆盖控制台显示的最近一轮首声计时。
         sentence_id = getattr(connection, "sentence_id", None)
+        trace = CURRENT.get()
+        tracker = getattr(connection, "_longmemory_voice_latency", None)
+        if tracker is not None:
+            tracker.bind_sentence(sentence_id)
+        if trace is not None:
+            trace.event("memory_requested")
         started = time.perf_counter()
         try:
             result = await original_query(*args, **kwargs)
         except Exception as error:
+            if trace is not None:
+                trace.event("memory_failed")
             tracker = getattr(connection, "_longmemory_voice_latency", None)
             if tracker is not None:
                 code = ("memory_response_invalid"

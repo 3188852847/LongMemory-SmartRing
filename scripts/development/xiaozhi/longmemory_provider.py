@@ -20,6 +20,11 @@ from urllib.parse import urlsplit
 
 from core.providers.memory.base import MemoryProviderBase, logger
 
+try:
+    import voice_diagnostics as _diagnostics
+except ImportError:
+    _diagnostics = None  # 单独复制旧教学入口时，观测缺失不能阻断记忆业务。
+
 
 class MemoryProvider(MemoryProviderBase):
     def __init__(self, config, summary_memory=None):
@@ -81,7 +86,8 @@ class MemoryProvider(MemoryProviderBase):
             url,
             data=body,
             method="POST",
-            headers={"Content-Type": "application/json", "Authorization": "Bearer " + token},
+            headers={"Content-Type": "application/json", "Authorization": "Bearer " + token,
+                     **(_diagnostics.headers() if _diagnostics else {})},
         )
         try:
             with self._lock, urlrequest.urlopen(request, timeout=20) as result:
@@ -91,7 +97,12 @@ class MemoryProvider(MemoryProviderBase):
                 if len(response_body) > 65536:
                     raise RuntimeError("response too large")
                 response = json.loads(response_body)
-        except (OSError, urlerror.URLError, ValueError, TypeError, RuntimeError, json.JSONDecodeError):
+                if _diagnostics:
+                    _diagnostics.event("memory_response", request_id=getattr(result, "headers", {}).get("X-Request-Id"))
+        except (OSError, urlerror.URLError, ValueError, TypeError, RuntimeError, json.JSONDecodeError) as error:
+            if _diagnostics:
+                _diagnostics.event("memory_timeout" if isinstance(error, TimeoutError)
+                    or isinstance(getattr(error, "reason", None), TimeoutError) else "memory_failed")
             raise RuntimeError("LongMemory Runtime 调用失败") from None
         return response
 
@@ -248,6 +259,7 @@ class MemoryProvider(MemoryProviderBase):
         # 完成回执；不能把后来的答案错误关联给旧 turn_id。
         with self._lock:
             self._pending_completion = {
+                "diagnostic_trace": _diagnostics.CURRENT.get() if _diagnostics else None,
                 "turn_id": response["turn_id"],
                 "retrieved_counts": {
                     "l1": response["retrieved"],
@@ -336,7 +348,8 @@ class MemoryProvider(MemoryProviderBase):
         body = json.dumps(completion).encode("utf-8")
         request = urlrequest.Request(
             target, data=body, method="POST",
-            headers={"Content-Type": "application/json", "Authorization": "Bearer " + token},
+            headers={"Content-Type": "application/json", "Authorization": "Bearer " + token,
+                     **(pending["diagnostic_trace"].headers() if pending.get("diagnostic_trace") else {})},
         )
         try:
             with self._lock, urlrequest.urlopen(request, timeout=5) as result:
