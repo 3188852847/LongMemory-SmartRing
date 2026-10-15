@@ -549,14 +549,17 @@
     },
     {
       "id": "firmware-otto0014-owner-acceptance",
-      "scope": "本次Otto0014已更新设备的操作、所有者体验验收和准确备份/目标回退入口",
+      "scope": "Otto当前0015应用修复后的所有者体验验收、当前备份/仅应用回退入口；保留0014阶段记录",
       "authority": "docs/guides/圆屏Otto动态表情更新-20261014.md",
       "sources": [
-        "firmware/smartring_plus/*/0014-otto-gif-face.*"
+        "firmware/smartring_plus/*/0014-otto-gif-face.*",
+        "firmware/smartring_plus/*/0015-otto-black-background.*"
       ],
       "related": [
         "docs/development/parallel/K-otto0014-flash-20261014.md",
-        "docs/guides/圆屏动态表情烧录-20261014.md"
+        "docs/guides/圆屏动态表情烧录-20261014.md",
+        "docs/development/parallel/K-otto0015-flash-20261015.md",
+        "docs/development/parallel/O-otto-black-background-20261015.md"
       ],
       "tags": [
         "Otto",
@@ -565,9 +568,10 @@
         "表情",
         "烧录",
         "验收",
-        "回退"
+        "回退",
+        "0015"
       ],
-      "review": "verified 2026-10-14: K实际设备结果/当前入口；M源码来源为已合main6f260ea，所有者体验未确认"
+      "review": "verified 2026-10-15: 本轮0015实际设备/独立读回和保护核验、当前入口与0014历史区分；所有者黑底/联网/声音待反馈"
     },
     {
       "id": "otto-black-background-0015",
@@ -4675,14 +4679,19 @@
     },
     {
       "path": "docs/guides/圆屏Otto动态表情更新-20261014.md",
-      "title": "智慧圆屏：Otto 0014 更新与验收",
+      "title": "智慧圆屏：Otto 更新与验收",
       "status": "current",
-      "basis": "本次正式0014更新后的操作与真实体验验收入口；原0013阶段另留参考",
+      "basis": "当前0015应用更新后的体验/备份/仅应用回退入口；保留0014历史记录并区分当前状态",
       "review": {
         "state": "verified",
-        "date": "2026-10-14",
-        "scope": "实际版本、保留/写入范围、私有新检查点/目标回退路径及所有者验收步骤；不宣称真实视觉、声音、打断或语音并发通过；主会话已对照M/N核对默认Otto与临时壁纸视图，不沿用0013壁纸优先说明",
-        "evidence": "K-otto0014-flash-20261014实际设备记录和update-current-20261014-231752-a787087e机器证据；正式main6f260ea/04b33a9固定产物；M 57c8972/main6f260ea显示实现及N87f5154对齐；主会话独立读回字节/检查点/保护与启动元数据复核"
+        "date": "2026-10-15",
+        "scope": "窄核对0015当前版本、实际单目标写入/保护、15秒日志未捕获idle、当前检查点与体验步骤；保留0014历史依据，不将其作为0015现状",
+        "evidence": [
+          "K-otto0014-flash-20261014实际设备记录和update-current-20261014-231752-a787087e机器证据；正式main6f260ea/04b33a9固定产物；M 57c8972/main6f260ea显示实现及N87f5154对齐；主会话独立读回字节/检查点/保护与启动元数据复核",
+          "docs/development/parallel/K-otto0015-flash-20261015.md",
+          "docs/development/parallel/O-otto-black-background-20261015.md",
+          "docs/development/并行优化-20261014.md"
+        ]
       },
       "tags": [
         "指南",
@@ -4691,7 +4700,8 @@
         "圆屏",
         "表情",
         "验收",
-        "回退"
+        "回退",
+        "0015"
       ]
     },
     {
@@ -4715,6 +4725,28 @@
         "0015",
         "黑底",
         "离线验证"
+      ]
+    },
+    {
+      "path": "docs/development/parallel/K-otto0015-flash-20261015.md",
+      "title": "K：0015应用更新与保护核验",
+      "status": "current",
+      "basis": "本轮0015应用单目标更新的实际设备核验；不替代所有者视觉与语音反馈",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-15",
+        "scope": "新当前备份与检查点、唯一应用写入、独立读回/填充、全保护区域/整片摘要、版本与串口状态；主会话独立复核，15秒未捕获idle",
+        "evidence": [
+          "docs/development/并行优化-20261014.md",
+          "docs/development/parallel/O-otto-black-background-20261015.md"
+        ]
+      },
+      "tags": [
+        "固件",
+        "Otto",
+        "0015",
+        "烧录",
+        "保护核验"
       ]
     }
   ],
