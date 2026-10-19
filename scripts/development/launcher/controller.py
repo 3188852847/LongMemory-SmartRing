@@ -125,7 +125,7 @@ class LauncherController:
                 raise ControllerError('设置含有不支持的字段。')
             choices = {**_CHOICES, 'model_profile': {'campus', 'official'},
                        'voice_model_profile': {'campus', 'official'},
-                       'memory_backend': {'longmemory', 'xiaozhi_local', 'none'}}
+                       'memory_backend': {'longmemory', 'hy_memory', 'xiaozhi_local', 'none'}}
             for key, value in values.items():
                 if key in _PATH_FIELDS:
                     if value != current[key]:

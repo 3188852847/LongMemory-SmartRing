@@ -5,7 +5,7 @@ from pathlib import Path
 import subprocess
 
 
-BACKENDS = {"longmemory", "xiaozhi_local", "none"}
+BACKENDS = {"longmemory", "hy_memory", "xiaozhi_local", "none"}
 
 
 def config_action(server: Path, project: Path, backend: str, *, apply=False,

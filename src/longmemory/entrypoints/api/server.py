@@ -300,7 +300,7 @@ def main():
     parser.add_argument("--enable-experiment-runs", action="store_true", help="允许网页确认后运行冻结检索回答对照；默认只读实验")
     parser.add_argument("--model-profile", choices=("campus", "official"), default="campus",
                         help="标记本进程实际加载的本机模型配置档")
-    parser.add_argument("--memory-backend", choices=("longmemory", "xiaozhi_local", "none"),
+    parser.add_argument("--memory-backend", choices=("longmemory", "hy_memory", "xiaozhi_local", "none"),
                         default="longmemory", help="标记本次圆屏进程实际选择的记忆后端")
     parser.add_argument("--tts-backend", choices=("edge", "voxcpm2", "sanotts", "cosyvoice3"),
                         default="edge", help="标记本次圆屏语音选择的 TTS 后端")
@@ -311,6 +311,11 @@ def main():
     parser.add_argument("--launcher-status-file", type=Path,
                         help="启动面板运行快照；只读展示，不据此控制进程")
     args = parser.parse_args()
+    if args.memory_backend == "hy_memory" and (
+            not args.enable_chat or args.enable_memory_consolidation
+            or args.enable_l1_sufficiency_shadow or args.enable_l2_sufficiency_shadow
+            or args.memory_extraction != "rules" or args.memory_retrieval != "keyword"):
+        parser.error("Hy 使用独立模型/召回设置，不接受旧提取、召回、整理或影子开关")
     if not 1024 <= args.port <= 65535:
         parser.error("port 必须在 1024–65535 之间")
     if args.allow_memory_delete and args.database is None:
@@ -381,13 +386,14 @@ def main():
         runtime = None
         try:
             # 只读预检；不能为了打开网页而创建或迁移用户的记忆库。
-            MemoryBackend(args.database).list_page(limit=1)
+            if args.memory_backend != "hy_memory":
+                MemoryBackend(args.database).list_page(limit=1)
             settings = load_model_settings(provider=args.chat_provider)
             role_prompt = (ROOT / "src/longmemory/prompts/personas" / (args.assistant_role + ".txt")).read_text(encoding="utf-8")
             role_prompt = role_prompt.replace("<memory></memory>", "（证据见独立 memory_evidence 消息。）")
             generator = (FakeAnswerGenerator() if settings.provider == "fake" else
                          OpenAICompatibleAnswerGenerator(settings, role_prompt=role_prompt))
-            if settings.provider == "openai_compatible":
+            if settings.provider == "openai_compatible" and args.memory_backend != "hy_memory":
                 from longmemory.application.proactive.greeting import (
                     ProactiveGreetingComposer,
                 )
@@ -482,7 +488,10 @@ def main():
                         encoder=encoder,
                         reviewer=OpenAICompatibleSemanticRelationReviewer(settings),
                     )
-            if args.memory_extraction == "llm":
+            if args.memory_backend == "hy_memory":
+                from longmemory.infrastructure.config.hy_deployment import build_daily_hy_runtime
+                runtime = build_daily_hy_runtime(ROOT)
+            elif args.memory_extraction == "llm":
                 method = DailyLLMMemory(
                     args.database,
                     producer=OpenAICompatibleCandidateProducer(settings),
@@ -507,22 +516,24 @@ def main():
                 method = LongMemoryV1(
                     args.database, existing_only=True, allow_cross_thread=True,
                 )
-            from longmemory.bootstrap import build_legacy_runtime
-            runtime = build_legacy_runtime(
-                args.database, method=method,
-                consolidation_scheduler=consolidation_scheduler,
-                l1_sufficiency_shadow=l1_sufficiency_shadow,
-                l2_sufficiency_shadow=l2_sufficiency_shadow,
-            )
-            chat_backend = ChatBackend(args.database, generator, provider=settings.provider,
+            if args.memory_backend != "hy_memory":
+                from longmemory.bootstrap import build_legacy_runtime
+                runtime = build_legacy_runtime(
+                    args.database, method=method,
+                    consolidation_scheduler=consolidation_scheduler,
+                    l1_sufficiency_shadow=l1_sufficiency_shadow,
+                    l2_sufficiency_shadow=l2_sufficiency_shadow,
+                )
+            chat_backend = ChatBackend(runtime.database, generator, provider=settings.provider,
                                        model=settings.model or "fake", role=args.assistant_role,
                                        runtime=runtime, model_endpoint=settings.base_url or None,
+                                       sidecar_database=args.database,
                                        insecure_model_transport=settings.base_url.startswith("http://"))
-            if args.allow_scenario_management and settings.provider == "openai_compatible":
+            if args.memory_backend != "hy_memory" and args.allow_scenario_management and settings.provider == "openai_compatible":
                 from longmemory.adapters.llm.scenario_candidate import OpenAICompatibleScenarioProposalProducer
                 scenario_producer = OpenAICompatibleScenarioProposalProducer(settings)
                 scenario_model = settings.model
-            if args.allow_persona_management and settings.provider == "openai_compatible":
+            if args.memory_backend != "hy_memory" and args.allow_persona_management and settings.provider == "openai_compatible":
                 from longmemory.adapters.llm.persona_candidate import OpenAICompatiblePersonaProposalProducer
                 persona_producer = OpenAICompatiblePersonaProposalProducer(settings)
                 persona_model = settings.model
@@ -557,7 +568,10 @@ def main():
     if chat_backend:
         extraction = "模型辅助（失败保留 L0）" if args.memory_extraction == "llm" else "规则基线"
         retrieval = "关键词＋本地 BGE 融合" if args.memory_retrieval == "hybrid" else "关键词基线"
-        print(f"文字聊天已启用：{args.chat_provider} / {args.assistant_role}；L1 提取={extraction}，召回={retrieval}，不驱动圆屏播音。")
+        if args.memory_backend == "hy_memory":
+            print("Hy 共享记忆已装配；圆屏完成后延后投递，旧主动交流暂停；设备播放待实机确认。")
+        else:
+            print(f"文字聊天已启用：{args.chat_provider} / {args.assistant_role}；L1 提取={extraction}，召回={retrieval}，不驱动圆屏播音。")
         if args.enable_l2_sufficiency_shadow:
             print("L2 证据充分性影子记录已启用：后台复核候选，但不会改变本轮注入或回答。")
         if args.enable_l1_sufficiency_shadow:
@@ -579,7 +593,7 @@ def main():
             )):
                 parser.error("壁纸投递只允许明确的 RFC1918 局域网 IPv4")
             wallpaper_delivery = RoundWallpaperDeliveryService(str(address))
-        web.run_app(create_app(port=args.port, database=args.database, allow_memory_delete=args.allow_memory_delete,
+        web.run_app(create_app(port=args.port, database=chat_backend.database if chat_backend else args.database, allow_memory_delete=args.allow_memory_delete,
                                allow_memory_correction=args.allow_memory_correction,
                                allow_scenario_management=args.allow_scenario_management,
                                allow_persona_management=args.allow_persona_management,

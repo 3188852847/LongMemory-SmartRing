@@ -8,6 +8,12 @@ from pathlib import Path
 
 
 BACKENDS = {
+    "hy_memory": {
+        "label": "Hy-Memory（独立新库）",
+        "provider": "LongMemory",
+        "description": "网页/圆屏共享 Hy；完成后派生记忆，旧主动交流暂停。需已验收的专属配置和新库。",
+        "persistent": True,
+    },
     "longmemory": {
         "label": "LongMemory（当前系统）",
         "provider": "LongMemory",

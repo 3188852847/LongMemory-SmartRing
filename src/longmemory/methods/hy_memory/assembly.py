@@ -91,7 +91,8 @@ class StateClient:
 
 
 def assemble_hy_backend(*, settings, state_directory, source_path, create=False,
-                        python=None, client_factory=None, create_sources=None):
+                        python=None, client_factory=None, create_sources=None,
+                        expected_python_version=None):
     from longmemory.bootstrap import assemble_backend
     root, source = Path(state_directory).resolve(), Path(source_path).resolve()
     if create_sources is None:
@@ -117,6 +118,11 @@ def assemble_hy_backend(*, settings, state_directory, source_path, create=False,
         source_path=source, management=HyAdministration(engine), create_sources=create_sources)
     try:
         assembly.method.wait_until_ready()
+        if expected_python_version is not None:
+            diagnostics = engine.sdk_call("diagnostics")
+            if (diagnostics.get("sdk_python") != expected_python_version
+                    or diagnostics.get("actual_sdk_version") != settings.sdk_version):
+                raise ValueError("hy_runtime_version_identity_mismatch")
         return assembly
     except BaseException:
         assembly.method.close()

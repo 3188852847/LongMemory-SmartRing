@@ -86,7 +86,8 @@ class MemoryProvider(MemoryProviderBase):
                 or parsed.query or parsed.fragment
                 or re.fullmatch(r"[0-9a-f]{64}", token) is None):
             raise RuntimeError("LongMemory Runtime 启动环境无效")
-        key = self._turn_key.get()
+        turn_context = getattr(self, "_turn_key", None)
+        key = turn_context.get() if turn_context is not None else None
         body_data = {"version": 1, "query": query}
         if key is not None:
             body_data.update(client_round_id=key, session_id=self._session_id)

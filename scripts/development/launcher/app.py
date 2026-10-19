@@ -424,6 +424,7 @@ def main():
         "voice": active_voice_model_profile,
     }
     memory_backend_labels = {
+        "Hy-Memory（独立新库，主动暂停）": "hy_memory",
         "LongMemory（分层、可追溯）": "longmemory",
         "小智本地摘要（轻量对照）": "xiaozhi_local",
         "无长期记忆（速度基线）": "none",

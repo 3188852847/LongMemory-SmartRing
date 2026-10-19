@@ -6,6 +6,7 @@
 
 from datetime import UTC, datetime, timedelta
 import json
+from hashlib import sha256
 from uuid import uuid4, uuid5, NAMESPACE_URL
 
 from longmemory.adapters.storage.sqlite_source_journal import SQLiteSourceJournal
@@ -23,14 +24,33 @@ class SQLitePlatformRounds:
                     state TEXT NOT NULL, expires_at TEXT NOT NULL,
                     prepared TEXT, assistant_id TEXT, completion TEXT,
                     complete_request_id TEXT, ended_reason TEXT,
-                    dispatch_claimed INTEGER NOT NULL DEFAULT 0);
+                    dispatch_claimed INTEGER NOT NULL DEFAULT 0,
+                    voice_round_id TEXT, cancel_request_id TEXT);
                 CREATE TABLE IF NOT EXISTS platform_round_feedback (
                     event_id TEXT PRIMARY KEY, target_event_id TEXT,
                     kind TEXT NOT NULL, recorded_at TEXT NOT NULL);
+                CREATE INDEX IF NOT EXISTS platform_round_deadline ON platform_rounds(state,expires_at);
             """)
+            # 兼容本轮首接口提交生成的合成来源库；只向已验明身份的来源库
+            # 增补平台元数据列，不触旧算法/个人主库或重放消息。
+            columns = {row[1] for row in connection.execute("PRAGMA table_info(platform_rounds)")}
+            for name in ("voice_round_id", "cancel_request_id"):
+                if name not in columns:
+                    connection.execute(f"ALTER TABLE platform_rounds ADD COLUMN {name} TEXT")
+            # 首接口候选把完整完成载荷存在此列；转为等价摘要即可保持回放，
+            # 原助手正文仍在来源表，避免账本重复保留一份正文。
+            for row in connection.execute("SELECT event_id,completion FROM platform_rounds WHERE completion LIKE '{%'").fetchall():
+                connection.execute("UPDATE platform_rounds SET completion=? WHERE event_id=?",
+                    (sha256(row[1].encode()).hexdigest(), row[0]))
             connection.execute("UPDATE platform_rounds SET state='uncertain' WHERE state='preparing'")
 
-    def reserve(self, *, client_round_id, session_id, request_id):
+    def expire(self):
+        with self.journal._connect() as connection:
+            rows = connection.execute("UPDATE platform_rounds SET state='timed_out',ended_reason='completion_timeout' "
+                "WHERE state='prepared' AND expires_at<? RETURNING event_id", (self.clock().isoformat(),)).fetchall()
+            return tuple(row[0] for row in rows)
+
+    def reserve(self, *, client_round_id, session_id, request_id, voice_round_id=None):
         with self.journal._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
             if connection.execute("SELECT 1 FROM platform_rounds WHERE client_round_id=?",
@@ -38,9 +58,9 @@ class SQLitePlatformRounds:
                 raise ValueError("round_screen_prepare_already_recorded")
             event_id = str(uuid4())
             connection.execute("INSERT INTO platform_rounds "
-                "(event_id,client_round_id,session_id,prepare_request_id,state,expires_at) "
-                "VALUES (?,?,?,?,'preparing',?)", (event_id, client_round_id, session_id,
-                    request_id, (self.clock() + timedelta(minutes=5)).isoformat()))
+                "(event_id,client_round_id,session_id,prepare_request_id,state,expires_at,voice_round_id) "
+                "VALUES (?,?,?,?,'preparing',?,?)", (event_id, client_round_id, session_id,
+                    request_id, (self.clock() + timedelta(minutes=5)).isoformat(), voice_round_id))
             return event_id
 
     def prepared(self, event_id, receipt):
@@ -65,7 +85,8 @@ class SQLitePlatformRounds:
                 "WHERE event_id=? AND state='prepared' AND expires_at<?", (event_id, self.clock().isoformat()))
             row = self._row(connection, event_id)
             return {key: row[key] for key in ("event_id", "client_round_id", "session_id",
-                "prepare_request_id", "state", "assistant_id", "complete_request_id", "ended_reason")}
+                "prepare_request_id", "state", "assistant_id", "complete_request_id", "ended_reason",
+                "voice_round_id", "cancel_request_id")}
 
     def claim_dispatch(self, event_id):
         with self.journal._connect() as connection:
@@ -73,7 +94,8 @@ class SQLitePlatformRounds:
                 "WHERE event_id=? AND state='completed' AND dispatch_claimed=0", (event_id,)).rowcount == 1
 
     def complete(self, *, event_id, answer, receipt, request_id=None, client_round_id=None):
-        payload = json.dumps({"answer": answer, "receipt": receipt}, sort_keys=True)
+        # 幂等比较只存摘要；助手原文只在 conversation_messages 归档一次。
+        payload = sha256(json.dumps({"answer": answer, "receipt": receipt}, sort_keys=True).encode()).hexdigest()
         with self.journal._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
             row = self._row(connection, event_id)
@@ -104,7 +126,7 @@ class SQLitePlatformRounds:
                                (assistant_id, payload, request_id, event_id))
             return assistant_id, True
 
-    def cancel(self, event_id, *, reason, client_round_id=None):
+    def cancel(self, event_id, *, reason, client_round_id=None, request_id=None):
         if reason not in {"cancelled", "superseded", "chat_failed", "completion_timeout"}:
             raise ValueError("round_screen_cancel_reason_invalid")
         with self.journal._connect() as connection:
@@ -118,6 +140,7 @@ class SQLitePlatformRounds:
             elif row["state"] in {"preparing", "prepared"}:
                 connection.execute("UPDATE platform_rounds SET state=?,ended_reason=? WHERE event_id=?",
                     ("timed_out" if reason == "completion_timeout" else "cancelled", reason, event_id))
+            connection.execute("UPDATE platform_rounds SET cancel_request_id=? WHERE event_id=?", (request_id, event_id))
         return self.status(event_id)
 
     def feedback(self, event, kind):

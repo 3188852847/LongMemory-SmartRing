@@ -222,6 +222,28 @@ def test_crash_during_prepare_is_uncertain_without_automatic_replay(tmp_path):
         runtime.close()
 
 
+def test_platform_metadata_columns_upgrade_preserves_existing_source_and_completion(tmp_path):
+    import sqlite3
+    runtime, engine = open_runtime(tmp_path)
+    turn = prepare(runtime)
+    result = complete(runtime, turn)
+    runtime.wait_for_deferred_observations()
+    runtime.close()
+    with sqlite3.connect(tmp_path / "sources.db") as connection:
+        connection.execute("ALTER TABLE platform_rounds DROP COLUMN voice_round_id")
+        connection.execute("ALTER TABLE platform_rounds DROP COLUMN cancel_request_id")
+        connection.execute("UPDATE platform_rounds SET completion=? WHERE event_id=?",
+            (json.dumps({"answer": "我记下你的表达了。", "receipt": memory_receipt(turn)}, sort_keys=True), turn.event.event_id))
+    runtime, engine = open_runtime(tmp_path, create=False)
+    try:
+        assert runtime.source_detail(turn.event.event_id)["content"] == "我喜欢合成蓝莓茶"
+        assert runtime.round_screen_status(turn.event.event_id)["voice_round_id"] is None
+        assert complete(runtime, turn).assistant_message_id == result.assistant_message_id
+        assert not engine.calls
+    finally:
+        runtime.close()
+
+
 def test_real_http_neutral_prepare_completion_cancel_and_authentication(tmp_path):
     import asyncio
     import socket
@@ -245,7 +267,7 @@ def test_real_http_neutral_prepare_completion_cancel_and_authentication(tmp_path
         try:
             await runner.setup()
             await web.SockSite(runner, sock).start()
-            headers = {"Authorization": "Bearer " + "d" * 64}
+            headers = {"Authorization": "Bearer " + "d" * 64, "X-Voice-Round-Id": "b" * 24}
             async with ClientSession() as client:
                 url = base + "/api/internal/memory/prepare"
                 body = {"version": 1, "query": "我喜欢合成蓝莓茶", "client_round_id": "e" * 32, "session_id": "a" * 32}
@@ -256,6 +278,7 @@ def test_real_http_neutral_prepare_completion_cancel_and_authentication(tmp_path
                 assert prepared["memory_protocol"] == 2
                 assert "retrieval_evidence" not in prepared and "scenario_retrieved" not in prepared
                 assert prepared["memory_receipt"]["retrieved_count"] == 0
+                assert runtime.round_screen_status(prepared["turn_id"])["voice_round_id"] == "b" * 24
                 assert (await client.post(url, json=body, headers=headers)).status == 409
                 completion = {"version": 1, "memory_protocol": 2, "turn_id": prepared["turn_id"],
                     "answer": "合成助手回答", "client_round_id": "e" * 32, "memory_receipt": prepared["memory_receipt"]}
@@ -271,10 +294,34 @@ def test_real_http_neutral_prepare_completion_cancel_and_authentication(tmp_path
                 cancellation = {"version": 1, "turn_id": second["turn_id"], "client_round_id": "f" * 32, "reason": "superseded"}
                 response = await client.post(base + "/api/internal/memory/cancel", json=cancellation, headers=headers)
                 assert (await response.json())["state"] == "cancelled"
-                assert app["proactive_loop"] is None if "proactive_loop" in app else True
+                assert runtime.round_screen_status(second["turn_id"])["cancel_request_id"] is not None
                 assert runtime.status()["proactive"]["state"] == "paused_backend_unsupported"
         finally:
             await runner.cleanup()
             backend.close()
             sock.close()
     asyncio.run(run())
+
+
+def test_formal_server_selects_hy_sources_and_preserves_original_sidecar_base(tmp_path, monkeypatch):
+    import sys
+    from longmemory.entrypoints.api import server
+    from longmemory.infrastructure.config import hy_deployment
+    runtime, engine = open_runtime(tmp_path)
+    original = tmp_path / "original-personal.db"
+    original.write_bytes(b"synthetic-original-do-not-open")
+    before = original.read_bytes()
+    selected = {}
+    monkeypatch.setattr(hy_deployment, "build_daily_hy_runtime", lambda root: runtime)
+    monkeypatch.setattr(server.MemoryBackend, "list_page", lambda *args, **kwargs: pytest.fail("Hy startup must not read legacy database"))
+    monkeypatch.setattr(server, "create_app", lambda **kwargs: selected.update(kwargs) or "synthetic-app")
+    monkeypatch.setattr(server.web, "run_app", lambda app, **kwargs: None)
+    monkeypatch.delenv("LONGMEMORY_RUNTIME_TOKEN", raising=False)
+    monkeypatch.setattr(sys, "argv", ["longmemory-api", "--enable-chat", "--chat-provider", "fake",
+        "--memory-backend", "hy_memory", "--database", str(original), "--disable-proactive-schedule"])
+    server.main()
+    backend = selected["chat_backend"]
+    assert selected["database"] == runtime.database
+    assert backend.sidecar_database == original
+    assert backend.roles.path == tmp_path / "original-personal.db.role.sqlite3"
+    assert original.read_bytes() == before

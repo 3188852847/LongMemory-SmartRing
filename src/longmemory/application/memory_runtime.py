@@ -7,6 +7,7 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from threading import RLock
 from time import perf_counter
 from uuid import uuid4
+import re
 from longmemory.application.round_screen_turns import memory_receipt, validate_receipt, PlatformTurnCompletion
 from longmemory.application.round_screen_memory_feedback import classify_explicit_round_screen_feedback
 
@@ -100,13 +101,15 @@ class MemoryRuntime:
                  consolidation_scheduler: LowFrequencyConsolidationScheduler | None = None,
                  l1_sufficiency_shadow=None,
                  l2_sufficiency_shadow=None,
-                 clock=None, backend_assembly=None, round_screen_store=None) -> None:
+                 clock=None, backend_assembly=None, round_screen_store=None,
+                 state_identity=None) -> None:
         self.database = database.resolve()
         # Runtime 只编排统一方法契约。具体使用规则、LLM 提取还是其他方法，
         # 必须由进程入口的装配层决定，不能在应用层偷偷选择实现。
         self._method = method
         self._round_screen_store = round_screen_store
         self.backend_assembly = backend_assembly
+        self._state_identity = state_identity
         self._lock = RLock()
         self._closed = False
         self._write_enabled = True
@@ -508,14 +511,22 @@ class MemoryRuntime:
             future.add_done_callback(self._deferred_done)
             return True
 
-    def prepare_round_screen(self, text, *, client_round_id, session_id, request_id=None):
+    def prepare_round_screen(self, text, *, client_round_id, session_id, request_id=None, voice_round_id=None):
         with self._lock:
             self._ensure_open()
+            if any(not isinstance(value, str) or re.fullmatch(r"[0-9a-f]{24,32}", value) is None
+                   for value in (client_round_id, session_id)):
+                raise ValueError("round_screen_metadata_invalid")
+            if any(value is not None and (not isinstance(value, str) or re.fullmatch(r"[0-9a-f]{24}", value) is None)
+                   for value in (request_id, voice_round_id)):
+                raise ValueError("round_screen_request_identity_invalid")
             store = self._round_screen_store
             if store is None:
                 raise ValueError("round_screen_platform_unavailable")
+            for expired in store.expire():
+                self._deferred_events.pop(expired, None)
             event_id = store.reserve(client_round_id=client_round_id, session_id=session_id,
-                                     request_id=request_id)
+                                     request_id=request_id, voice_round_id=voice_round_id)
             try:
                 prepared = self.prepare_user(text, event_id=event_id, session_id=session_id,
                                              defer_slow_observation=True)
@@ -539,10 +550,11 @@ class MemoryRuntime:
                 self.complete_deferred_observation(turn_id, resume_pending=True)
             return PlatformTurnCompletion(assistant_id, created)
 
-    def cancel_round_screen(self, turn_id, *, reason, client_round_id=None):
+    def cancel_round_screen(self, turn_id, *, reason, client_round_id=None, request_id=None):
         with self._lock:
             self._ensure_open()
-            result = self._round_screen_store.cancel(turn_id, reason=reason, client_round_id=client_round_id)
+            result = self._round_screen_store.cancel(turn_id, reason=reason, client_round_id=client_round_id,
+                                                    request_id=request_id)
             self._deferred_events.pop(turn_id, None)
             return result
 
@@ -712,11 +724,15 @@ class MemoryRuntime:
     def status(self) -> dict:
         with self._lock:
             self._ensure_open()
+            if self._round_screen_store is not None:
+                for expired in self._round_screen_store.expire():
+                    self._deferred_events.pop(expired, None)
             self._method.wait_until_ready()
             return {
                 "ready": True,
                 "method": self._method.name,
                 "implementation_version": self._method.implementation_version,
+                "state_identity": self._state_identity,
                 "retrieval": getattr(self._method, "retrieval_name", "unknown"),
                 "database": str(self.database),
                 "state_resources": ([{"name": item.name, "kind": item.kind,

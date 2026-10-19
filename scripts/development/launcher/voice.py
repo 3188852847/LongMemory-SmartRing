@@ -9,6 +9,7 @@ import time
 
 
 MEMORY_PROVIDERS = {
+    "hy_memory": "LongMemory",
     "longmemory": "LongMemory",
     "xiaozhi_local": "mem_local_short",
     "none": "nomem",
@@ -32,7 +33,7 @@ def memory_contract_matches(config, root, database, backend):
     if not all(Path(memory[key]).resolve() == value.resolve() for key, value in expected.items()):
         return False
     selected = config["Memory"].get(MEMORY_PROVIDERS[backend], {})
-    expected_type = {"longmemory": "longmemory", "xiaozhi_local": "mem_local_short", "none": "nomem"}[backend]
+    expected_type = {"longmemory": "longmemory", "hy_memory": "longmemory", "xiaozhi_local": "mem_local_short", "none": "nomem"}[backend]
     return selected.get("type") == expected_type
 
 

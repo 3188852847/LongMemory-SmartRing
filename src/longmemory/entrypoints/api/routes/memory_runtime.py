@@ -57,6 +57,11 @@ def register_memory_runtime_routes(app, backend):
     if backend is None:
         return
 
+    def neutral_runtime():
+        # 兼容仅实现旧 prepare/complete 的教学入口；正式 ChatBackend 必有 Runtime。
+        runtime = backend.memory_runtime() if callable(getattr(backend, "memory_runtime", None)) else None
+        return runtime is not None and not runtime.legacy_sqlite
+
     async def status(_request):
         result = await asyncio.to_thread(backend.memory_runtime().status)
         return web.json_response({"version": 1, **result})
@@ -78,7 +83,9 @@ def register_memory_runtime_routes(app, backend):
                         raise ValueError
                 metadata = {key: body[key] for key in ("client_round_id", "session_id")}
                 metadata["request_id"] = request.get("diagnostic_request_id")
-            elif not backend.memory_runtime().legacy_sqlite:
+                voice_round_id = request.headers.get("X-Voice-Round-Id", "")
+                metadata["voice_round_id"] = voice_round_id if re.fullmatch(r"[0-9a-f]{24}", voice_round_id) else None
+            elif neutral_runtime():
                 raise ValueError
         except (ValueError, TypeError, UnicodeError):
             return web.json_response({"error": "invalid_memory_request", "version": 1}, status=400)
@@ -174,7 +181,7 @@ def register_memory_runtime_routes(app, backend):
             # 独立字段交给薄适配器，以便和普通记忆证据使用不同提示契约。
             "command_reply": command_reply,
         }
-        if not backend.memory_runtime().legacy_sqlite:
+        if neutral_runtime():
             for key in ("retrieval_evidence", "scenario_use_enabled", "scenario_retrieved",
                         "persona_use_enabled", "persona_retrieved"):
                 response.pop(key)
@@ -197,7 +204,7 @@ def register_memory_runtime_routes(app, backend):
                         or not isinstance(body["client_round_id"], str)
                         or re.fullmatch(r"[0-9a-f]{24,32}", body["client_round_id"]) is None
                         or not isinstance(body["memory_receipt"], dict)
-                        or backend.memory_runtime().legacy_sqlite):
+                        or not neutral_runtime()):
                     raise ValueError
                 try:
                     result = await asyncio.to_thread(backend.complete_round_screen_turn,
@@ -274,7 +281,8 @@ def register_memory_runtime_routes(app, backend):
             if runtime.legacy_sqlite:
                 return web.json_response({"error": "round_screen_platform_unavailable"}, status=501)
             state = await asyncio.to_thread(runtime.cancel_round_screen, body["turn_id"],
-                reason=body["reason"], client_round_id=body["client_round_id"])
+                reason=body["reason"], client_round_id=body["client_round_id"],
+                request_id=request.get("diagnostic_request_id"))
             return web.json_response({"version": 1, "state": state["state"]})
         except (ValueError, TypeError, KeyError, UnicodeError):
             return web.json_response({"error": "round_screen_cancel_invalid"}, status=409)

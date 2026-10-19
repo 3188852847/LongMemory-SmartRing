@@ -65,6 +65,30 @@ def test_command_preserves_paths_and_does_not_enable_deletion_or_jobs(options):
     assert cmd[cmd.index("--launcher-status-file") + 1].endswith("data\\control\\launcher-status.json")
 
 
+def test_hy_selection_pauses_old_scheduling_and_ignores_old_algorithm_flags(options, monkeypatch):
+    from longmemory.infrastructure.config import hy_deployment
+    source = options.root / "data/databases/hy-sources.db"
+    source.parent.mkdir(parents=True)
+    source.touch()
+    state = options.root / "data/memory/hy-daily"
+    state.mkdir(parents=True)
+    (state / "hy-state.json").write_text("{}")
+    monkeypatch.setattr(hy_deployment, "load_hy_deployment", lambda root: SimpleNamespace(
+        source_path=source, state_directory=state))
+    selected = replace(options, memory_backend="hy_memory", memory_extraction="llm",
+        memory_retrieval="hybrid", enable_memory_consolidation=True,
+        enable_l1_sufficiency_shadow=True, enable_l2_sufficiency_shadow=True)
+    _, cmd, _ = runtime.build_commands(selected, uv="synthetic-uv")[0]
+    assert cmd[cmd.index("--memory-backend") + 1] == "hy_memory"
+    assert cmd[cmd.index("--memory-extraction") + 1] == "rules"
+    assert cmd[cmd.index("--memory-retrieval") + 1] == "keyword"
+    assert "--disable-proactive-schedule" in cmd
+    assert "--embedding-model-dir" not in cmd
+    assert "--enable-memory-consolidation" not in cmd
+    assert "--enable-l1-sufficiency-shadow" not in cmd
+    assert "--enable-l2-sufficiency-shadow" not in cmd
+
+
 def test_ready_view_model_keeps_console_voice_and_speech_states_independent():
     loading = view_model.ready_services(
         voice=True,

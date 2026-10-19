@@ -125,7 +125,7 @@ def build_commands(options, uv=None):
         raise ValueError("未知圆屏语音模式。")
     if options.voice_latency_mode not in {"realtime", "original"}:
         raise ValueError("未知圆屏响应策略。")
-    if options.memory_backend not in {"longmemory", "xiaozhi_local", "none"}:
+    if options.memory_backend not in {"longmemory", "hy_memory", "xiaozhi_local", "none"}:
         raise ValueError("未知圆屏记忆后端。")
     if (options.model_profile == "campus" or
             (options.voice and options.voice_mode == "pipeline"
@@ -144,6 +144,14 @@ def build_commands(options, uv=None):
     if options.vad_profile not in {"normal", "noisy", "close_talk"}:
         raise ValueError("未知拾音环境档位。")
     root = options.root.resolve()
+    hy_selected = options.memory_backend == "hy_memory"
+    if hy_selected:
+        if options.voice and options.voice_mode != "pipeline":
+            raise ValueError("Hy 圆屏接入仅支持原语音主链路。")
+        from longmemory.infrastructure.config.hy_deployment import load_hy_deployment
+        deployment = load_hy_deployment(root)
+        if not deployment.source_path.is_file() or not (deployment.state_directory / "hy-state.json").is_file():
+            raise ValueError("Hy 新库尚未由受控切换初始化；普通启动不会建库。")
     if not options.database.is_file():
         raise ValueError("请选择已有日常数据库；启动器不会创建或迁移数据库。")
     env_file = {"campus": "local/config/.env", "official": "local/config/.env.deepseek.local"}[options.model_profile]
@@ -158,15 +166,15 @@ def build_commands(options, uv=None):
                "python", "-m", "longmemory.entrypoints.api", "--port", str(options.port),
                "--database", str(options.database.resolve()), "--enable-chat",
                "--chat-provider", "openai_compatible", "--assistant-role", options.role,
-               "--memory-extraction", options.memory_extraction,
-               "--memory-retrieval", options.memory_retrieval,
+               "--memory-extraction", "rules" if hy_selected else options.memory_extraction,
+               "--memory-retrieval", "keyword" if hy_selected else options.memory_retrieval,
                "--tts-backend", options.tts_backend,
                "--xiaozhi-server", str(options.voice_root.resolve()),
                "--launcher-status-file", str(root / "data/control" / LAUNCHER_STATUS_NAME),
                "--memory-audit-log", str(root / "data/logs/xiaozhi-demo-v1.jsonl")]
     console.extend(["--model-profile", options.model_profile])
     console.extend(["--memory-backend", options.memory_backend])
-    if not options.voice:
+    if not options.voice or hy_selected:
         # 文字模式保留圆屏联系设置，但不启动无法投递的圆屏定时任务。
         console.append("--disable-proactive-schedule")
     # 媒体工具是用户已安装的本地依赖。启动器只发现并传递路径，
@@ -180,12 +188,12 @@ def build_commands(options, uv=None):
     console.append("--allow-scenario-management")
     # L3 只能由本机页面显式创建候选并复核；尚不参与回答。
     console.append("--allow-persona-management")
-    if options.enable_memory_consolidation:
+    if options.enable_memory_consolidation and not hy_selected:
         console.append("--enable-memory-consolidation")
-    if options.enable_l1_sufficiency_shadow:
+    if options.enable_l1_sufficiency_shadow and not hy_selected:
         # 只观测 L1 候选是否足以回答；默认关闭且不修改正式上下文。
         console.append("--enable-l1-sufficiency-shadow")
-    if options.enable_l2_sufficiency_shadow:
+    if options.enable_l2_sufficiency_shadow and not hy_selected:
         # 影子审计只旁路记录 L2 证据是否足够，不改变本轮注入和回答。
         # 默认关闭，因为每个存在 L2 候选的用户问题会增加一次模型请求。
         console.append("--enable-l2-sufficiency-shadow")
@@ -193,7 +201,7 @@ def build_commands(options, uv=None):
         # 这里只授予服务端能力；浏览器仍需打开具体 L1 并二次确认。
         # 当前删除保留 L0 原话，因此不能显示成“彻底遗忘”。
         console.append("--allow-memory-delete")
-    if options.memory_retrieval == "hybrid":
+    if options.memory_retrieval == "hybrid" and not hy_selected:
         if not options.embedding_model_dir.is_dir():
             raise ValueError("混合召回需要已有的本地 BGE 快照目录。")
         console.extend(["--embedding-model-dir", str(options.embedding_model_dir.resolve())])
