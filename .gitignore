@@ -28,6 +28,9 @@ htmlcov/
 data/control/
 data/databases/*
 !data/databases/.gitkeep
+# 本次正式Hy SDK/Chroma及管理scope/审计是私有持久状态，不能进入Git。
+/data/memory/hy-daily-20261019/
+/data/memory/hy-campus-daily-20261019/
 data/logs/*
 !data/logs/.gitkeep
 data/exports/*

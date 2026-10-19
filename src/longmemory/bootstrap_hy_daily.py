@@ -64,18 +64,22 @@ def build_owned_daily_runtime(root, deployment, *, create=False, encoder_loader=
     model, identity = model_loader(root)
     if model.model != prototype.llm.model or prototype.embedding_dimensions != 512:
         raise ValueError("daily_selected_model_or_dimension_changed")
-    budget = ExistingCampaignBudget(root / CAMPAIGN_RELATIVE)
-    if budget.policy.model != model.model:
-        raise ValueError("daily_campaign_selected_model_changed")
-    proof_file = root / "local/config/hy-memory/price-verification.json"
-    if proof_file.is_symlink() or not proof_file.is_file() or proof_file.stat().st_size > 8192:
-        raise ValueError("daily_price_currency_verification_required")
-    proof = json.loads(proof_file.read_text(encoding="utf-8"))
-    if (proof.get("currency") != "CNY" or proof.get("currency_verified") is not True or proof.get("model") != model.model
-            or proof.get("credential_sha256") != hashlib.sha256(model.api_key.encode()).hexdigest()):
-        raise ValueError("daily_price_currency_verification_required")
-    if type(proof.get("valid_until_unix")) in (int, float) and proof["valid_until_unix"] > time():
-        budget.renew_verified_price({key:value for key,value in proof.items() if key != "credential_sha256"})
+    if identity.get("profile") == "campus":
+        from longmemory.infrastructure.config.campus_calls import open_campus_calls
+        budget = open_campus_calls(root, model, create=create)
+    else:
+        budget = ExistingCampaignBudget(root / CAMPAIGN_RELATIVE)
+        if budget.policy.model != model.model:
+            raise ValueError("daily_campaign_selected_model_changed")
+        proof_file = root / "local/config/hy-memory/price-verification.json"
+        if proof_file.is_symlink() or not proof_file.is_file() or proof_file.stat().st_size > 8192:
+            raise ValueError("daily_price_currency_verification_required")
+        proof = json.loads(proof_file.read_text(encoding="utf-8"))
+        if (proof.get("currency") != "CNY" or proof.get("currency_verified") is not True or proof.get("model") != model.model
+                or proof.get("credential_sha256") != hashlib.sha256(model.api_key.encode()).hexdigest()):
+            raise ValueError("daily_price_currency_verification_required")
+        if type(proof.get("valid_until_unix")) in (int, float) and proof["valid_until_unix"] > time():
+            budget.renew_verified_price({key:value for key,value in proof.items() if key != "credential_sha256"})
     encoder = encoder_loader(root)
     provider_identity = hashlib.sha256(json.dumps({"model": identity, "embedding": encoder.identity}, sort_keys=True).encode()).hexdigest()
     if encoder.identity != prototype.embedding.model or provider_identity != prototype.provider_identity:
@@ -86,7 +90,9 @@ def build_owned_daily_runtime(root, deployment, *, create=False, encoder_loader=
         if management_file.is_symlink() or management_file.stat().st_size > 8192:
             raise ValueError("hy_management_verification_invalid")
         management_verification = json.loads(management_file.read_text(encoding="utf-8"))
-    gateway = gateway_factory(settings=model, budget=budget, encoder=encoder, currency_verified=True)
+    authority = ({"currency_verified": False, "free_policy_verified": True}
+                 if identity.get("profile") == "campus" else {"currency_verified": True})
+    gateway = gateway_factory(settings=model, budget=budget, encoder=encoder, **authority)
     owned = OwnedHyModels(gateway, budget)
     runtime = None
     try:

@@ -130,6 +130,57 @@ def management_receipt(root):
     return path
 
 
+def test_campus_free_runtime_restart_recall_preserves_official_unknown(tmp_path):
+    _, _, deployment, paid = arrange(tmp_path)
+    paid.finish(paid.reserve("answer"), None, successful=False)
+    before = paid.report()
+    encoder = Encoder()
+    model = ModelSettings(provider="openai_compatible", base_url="http://127.0.0.1:23456/synthetic/v1",
+        api_key="synthetic-campus-only", model="DeepSeek-V4-Flash", allow_http=True, max_tokens=512, timeout_seconds=30)
+    identity = {"profile":"campus", "request_model":model.model, "endpoint_sha256":sha256(model.base_url.encode()).hexdigest(),
+        "credential_present":True, "billing_policy":"owner_confirmed_free"}
+    provider = sha256(json.dumps({"model":identity,"embedding":encoder.identity},sort_keys=True).encode()).hexdigest()
+    deployment.settings = replace(deployment.settings, llm=replace(deployment.settings.llm,model=model.model),
+        provider_identity=provider, include_profile=True)
+    directory = tmp_path/"local/config/hy-memory"
+    (directory/"price-verification.json").write_text('{}')  # 校园免费不冒称已核官方CNY。
+    (directory/"provider-policy.json").write_text(json.dumps({"version":1,"profile":"campus",
+        "billing_mode":"owner_confirmed_free","personal_cost_micro_cny":0,"source":"owner_confirmation",
+        "confirmed_date":"2026-10-19","endpoint_sha256":identity["endpoint_sha256"],"request_model":model.model,
+        "credential_sha256":sha256(model.api_key.encode()).hexdigest(),"ledger_path":"data/databases/campus-calls.sqlite3"}))
+    management_receipt(tmp_path)
+    gateways=[]
+    def remote(payload):
+        request=json.loads(payload);assert request['model']=='DeepSeek-V4-Flash'
+        return 200,json.dumps({"model":model.model,"choices":[{"finish_reason":"stop","message":{"role":"assistant",
+            "content":json.dumps({"memory":[{"content":"合成用户喜欢茶","tags":[],"owner":"user"}],"intentions":[],"basic_info":{}})}}],
+            "usage":{"prompt_tokens":100,"completion_tokens":20,"total_tokens":120}}).encode()
+    def factory(**kwargs):
+        assert kwargs['currency_verified'] is False and kwargs['free_policy_verified'] is True
+        gateway=ModelGateway(**kwargs,remote=remote);gateways.append(gateway);return gateway
+    def open_runtime(create):
+        return build_owned_daily_runtime(tmp_path,deployment,create=create,encoder_loader=lambda root:encoder,
+            model_loader=lambda root:(model,identity),gateway_factory=factory)
+    runtime=open_runtime(True)
+    try:
+        prepared=runtime.prepare_user('合成用户喜欢茶')
+        assert prepared.observation.processing_status=='completed'
+        assert runtime.administer_extension('hy_memory','workspace')['profile']
+        assert runtime._method.recall('茶').retrieved
+        assert runtime.external_model_settings('answer').timeout_seconds==30
+        assert runtime.external_model_settings('voice').max_tokens==512
+    finally:runtime.close()
+    runtime=open_runtime(False)
+    try:
+        assert runtime._method.recall('茶').retrieved
+        status=runtime.status()['external_models']
+        assert status['billing_policy']=='owner_confirmed_free' and status['personal_cost_micro_cny']==0
+        assert status['account_currency_verified'] is False and status['unknown_or_inflight']==0
+    finally:runtime.close()
+    for gateway in gateways:assert_closed(gateway)
+    assert paid.report()==before
+
+
 def test_verified_daily_management_create_reopen_profile_scope_and_bad_receipt_cleanup(tmp_path):
     open_runtime, gateways, deployment, budget = arrange(tmp_path)
     deployment.settings = replace(deployment.settings, include_profile=True)

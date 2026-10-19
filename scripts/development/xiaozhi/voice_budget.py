@@ -21,7 +21,8 @@ def validate_configuration(body):
     if (url.scheme != "http" or url.hostname != "127.0.0.1" or url.port in {None, 0, 8767, 8000, 8003}
             or url.path != "/voice/v1" or url.username or url.password or url.query or url.fragment
             or not isinstance(body["api_key"], str) or re.fullmatch(r"[A-Za-z0-9_-]{32,128}", body["api_key"]) is None
-            or body["model_name"] not in {"deepseek-v4-flash", "deepseek-flash"}
+            or not isinstance(body["model_name"], str) or not 1 <= len(body["model_name"]) <= 200
+            or any(ord(char) < 32 or ord(char) == 127 for char in body["model_name"])
             or type(body["max_tokens"]) is not int or not 1 <= body["max_tokens"] <= 8192
             or type(body["timeout"]) not in (int, float) or not 0 < body["timeout"] <= 1200
             or type(body["max_retries"]) is not int or body["max_retries"] != 0):

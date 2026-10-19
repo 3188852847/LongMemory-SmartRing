@@ -1,6 +1,8 @@
 """自有回环模型网关：同一预算覆盖 Hy、旧提取、回答器；BGE 留在主环境。"""
 
 from contextlib import AbstractContextManager, contextmanager
+import asyncio
+from concurrent.futures import Future
 from dataclasses import replace
 import hashlib
 import hmac
@@ -8,7 +10,7 @@ import http.client
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import secrets
-import socket
+from queue import Queue
 from threading import Lock, Thread
 from urllib.parse import urlsplit
 
@@ -29,13 +31,19 @@ def selected_model(root):
         raise ValueError("selected_web_voice_models_differ")
     settings = store.settings(web)
     url = urlsplit(settings.base_url)
-    if url.scheme != "https" or url.hostname != "api.deepseek.com" or url.port not in {None,443} or url.path.rstrip("/") not in {"","/v1"}:
-        raise ValueError("selected_endpoint_price_unverified")
-    if settings.model not in {"deepseek-v4-flash","deepseek-flash"}:
-        raise ValueError("selected_model_price_unverified")
-    return settings, {"profile":web,"request_model":settings.model,
+    if web == "official":
+        if url.scheme != "https" or url.hostname != "api.deepseek.com" or url.port not in {None,443} or url.path.rstrip("/") not in {"","/v1"}:
+            raise ValueError("selected_endpoint_price_unverified")
+        if settings.model not in {"deepseek-v4-flash","deepseek-flash"}:
+            raise ValueError("selected_model_price_unverified")
+    elif web != "campus" or url.scheme not in {"http", "https"} or (url.scheme == "http" and not settings.allow_http):
+        raise ValueError("selected_profile_transport_unverified")
+    identity = {"profile":web,"request_model":settings.model,
         "endpoint_sha256":hashlib.sha256(settings.base_url.encode()).hexdigest(),
         "credential_present":bool(settings.api_key)}
+    if web == "campus":
+        identity["billing_policy"] = "owner_confirmed_free"
+    return settings, identity
 
 
 def verify_cny_account(settings):
@@ -57,12 +65,17 @@ def verify_cny_account(settings):
 
 
 class ModelGateway(AbstractContextManager):
-    def __init__(self, *, settings, budget, encoder, currency_verified=False, remote=None, remote_stream=None):
-        if not currency_verified:
+    def __init__(self, *, settings, budget, encoder, currency_verified=False, free_policy_verified=False,
+                 remote=None, remote_stream=None):
+        from longmemory.infrastructure.config.campus_calls import FreeCampusCalls
+        free = isinstance(budget, FreeCampusCalls)
+        if free and not free_policy_verified:
+            raise ValueError("owner_free_policy_verification_required")
+        if not free and not currency_verified:
             raise ValueError("billing_currency_required")
         if settings.model != budget.policy.model:
             raise ValueError("budget_provider_model_mismatch")
-        if (budget.policy.input_window_bound<2_097_152 or budget.policy.output_window_bound<524_288
+        if not free and (budget.policy.input_window_bound<2_097_152 or budget.policy.output_window_bound<524_288
                 or budget.policy.input_micro_cny_per_token<2 or budget.policy.output_micro_cny_per_token<8):
             raise ValueError("budget_unproven_upper_bound")
         self.settings, self.budget, self.encoder = settings, budget, encoder
@@ -70,7 +83,7 @@ class ModelGateway(AbstractContextManager):
         self._paid_lock, self._embedding_lock = Lock(), Lock()
         self._remote = remote or self._send
         self._remote_stream = remote_stream or self._send_stream
-        self._connections, self._connections_lock = set(), Lock()
+        self._streams, self._connections_lock = set(), Lock()
         self._closed = False
         self.embedding_calls = 0
         self.embedding_inputs = 0
@@ -126,13 +139,11 @@ class ModelGateway(AbstractContextManager):
             return
         self._closed = True
         with self._connections_lock:
-            for connection in tuple(self._connections):
-                if connection.sock is not None:
-                    try:
-                        connection.sock.shutdown(socket.SHUT_RDWR)
-                    except OSError:
-                        pass
-                connection.close()
+            for loop, task in tuple(self._streams):
+                try:
+                    loop.call_soon_threadsafe(task.cancel)
+                except RuntimeError:
+                    pass
         if self.thread.is_alive():
             self.server.shutdown()
         self.server.server_close()
@@ -140,8 +151,10 @@ class ModelGateway(AbstractContextManager):
             self.thread.join(timeout=5)
 
     def local_settings(self, phase, *, max_tokens=1024):
+        from longmemory.infrastructure.config.campus_calls import FreeCampusCalls
         return replace(self.settings,base_url=self.base+f"/{phase}/v1",api_key=self.token,
-            allow_http=True,max_tokens=max_tokens,timeout_seconds=max(60,self.settings.timeout_seconds*2))
+            allow_http=True,max_tokens=max_tokens,timeout_seconds=(self.settings.timeout_seconds
+                if isinstance(self.budget, FreeCampusCalls) else max(60,self.settings.timeout_seconds*2)))
 
     def embed(self,body,role):
         if body.get("model") != self.encoder.identity or role not in {"query","document"}:
@@ -180,6 +193,7 @@ class ModelGateway(AbstractContextManager):
             if self._closed:
                 raise BudgetStopped("gateway_closed")
             aid=self.budget.reserve(phase)
+            status, usage, failure = None, None, None
             try:
                 status,data=self._remote(payload)
                 parsed=json.loads(data)
@@ -188,17 +202,23 @@ class ModelGateway(AbstractContextManager):
                 self.responses.append({"attempt_id":aid,"phase":phase,"http_status":status,
                     "response_model":parsed.get("model") if isinstance(parsed,dict) else None,
                     "usage":usage,"finish_reason":((parsed.get("choices") or [{}])[0].get("finish_reason") if isinstance(parsed,dict) else None)})
-                if status!=200:return 502,{"error":"selected_provider_failed"}
+                if status!=200:
+                    failure = "provider_http_error"
+                    return 502,{"error":"selected_provider_failed"}
                 return status,parsed
             except Exception:
+                failure = "transport_error"
                 # 如果已结算再发生本地处理错误，保留该结算；未结算保持整次最坏预留。
                 try:self.budget.finish(aid,None,successful=False)
                 except BudgetStopped:pass
                 return 502,{"error":"selected_provider_transport_failed"}
+            finally:
+                self._record_result(aid, status=status, failure=failure, done=status==200 and failure is None,
+                    forwarded=False, usage_seen=usage is not None)
 
     def _send(self,payload):
         url=urlsplit(self.settings.base_url)
-        connection=http.client.HTTPSConnection(url.hostname,443,timeout=self.settings.timeout_seconds)
+        connection=self._provider_connection(url)
         try:
             connection.request("POST",url.path.rstrip("/")+"/chat/completions",body=payload,
                 headers={"Content-Type":"application/json","Authorization":"Bearer "+self.settings.api_key})
@@ -208,29 +228,88 @@ class ModelGateway(AbstractContextManager):
             return response.status,data
         finally:connection.close()
 
+    def _provider_connection(self, url):
+        if url.scheme == "https":
+            return http.client.HTTPSConnection(url.hostname, url.port or 443, timeout=self.settings.timeout_seconds)
+        if url.scheme == "http" and self.settings.allow_http:
+            return http.client.HTTPConnection(url.hostname, url.port or 80, timeout=self.settings.timeout_seconds)
+        raise ValueError("provider_transport_not_authorized")
+
+    def _record_result(self, aid, **metadata):
+        try:
+            self.budget.record_gateway_result(aid, **metadata)
+        except Exception:
+            # 诊断写失败不能改写已结算费用，也不能放弃原来的unknown预留。
+            pass
+
     @contextmanager
     def _send_stream(self, payload):
+        import aiohttp
         url = urlsplit(self.settings.base_url)
-        connection = http.client.HTTPSConnection(url.hostname, 443, timeout=self.settings.timeout_seconds)
+        if url.scheme not in {"http", "https"} or (url.scheme == "http" and not self.settings.allow_http):
+            raise ValueError("provider_transport_not_authorized")
+        # 只替换上游流传输。异步取消不依赖另一个线程关闭正在readline的
+        # BufferedReader；不先缓存完整回答，不重试，也不跟随重定向。
+        loop, packets, headers, end = asyncio.new_event_loop(), Queue(), Future(), object()
+        async def pump():
+            timeout = aiohttp.ClientTimeout(total=None, sock_connect=self.settings.timeout_seconds,
+                sock_read=self.settings.timeout_seconds)
+            try:
+                async with aiohttp.ClientSession(timeout=timeout, cookie_jar=aiohttp.DummyCookieJar(),
+                        read_bufsize=131072) as session:
+                    async with session.post(self.settings.base_url.rstrip("/")+"/chat/completions",
+                            data=payload, allow_redirects=False,
+                            headers={"Content-Type":"application/json","Authorization":"Bearer "+self.settings.api_key}) as response:
+                        headers.set_result(response.status)
+                        total = 0
+                        async for line in response.content:
+                            total += len(line)
+                            if len(line) > 131072 or total > 32*MAX_BODY:
+                                raise ValueError("provider_stream_too_large")
+                            packets.put(line)
+            except BaseException as error:
+                safe = ValueError("provider_stream_invalid") if isinstance(error, ValueError) else OSError("provider_stream_interrupted")
+                if not headers.done():
+                    headers.set_exception(safe)
+                packets.put(safe)
+            finally:
+                packets.put(end)
+        task = loop.create_task(pump())
+        def run():
+            asyncio.set_event_loop(loop)
+            try:
+                loop.run_until_complete(task)
+                loop.run_until_complete(loop.shutdown_asyncgens())
+            finally:
+                loop.close()
+        thread = Thread(target=run, name="hy-provider-stream")
         with self._connections_lock:
-            self._connections.add(connection)
+            if self._closed:
+                task.cancel()
+                loop.run_until_complete(asyncio.gather(task, return_exceptions=True));loop.close()
+                raise ValueError("gateway_closed")
+            self._streams.add((loop, task))
+            thread.start()
         try:
-            connection.request("POST", url.path.rstrip("/") + "/chat/completions", body=payload,
-                headers={"Content-Type": "application/json", "Authorization": "Bearer " + self.settings.api_key})
-            response = connection.getresponse()
             def lines():
                 while True:
-                    line = response.readline(131073)
-                    if not line:
+                    line = packets.get()
+                    if line is end:
                         break
-                    if len(line) > 131072:
-                        raise ValueError("provider_stream_line_too_large")
+                    if isinstance(line, Exception):
+                        raise line
                     yield line
-            yield response.status, lines()
+            yield headers.result(timeout=self.settings.timeout_seconds+1), lines()
         finally:
-            connection.close()
+            try:
+                loop.call_soon_threadsafe(task.cancel)
+            except RuntimeError:
+                pass
+            thread.join(timeout=5)
             with self._connections_lock:
-                self._connections.discard(connection)
+                self._streams.discard((loop, task))
+            if thread.is_alive():
+                raise RuntimeError("provider_stream_close_unconfirmed")
 
     def stream(self, body, handler):
         """边收边转发真实SSE；最终usage和DONE均成功转发才释放最坏预留。
@@ -252,9 +331,11 @@ class ModelGateway(AbstractContextManager):
                 raise BudgetStopped("gateway_closed")
             aid = self.budget.reserve("answer")
             usage, done, total, event_lines = None, False, 0, []
+            status, failure, writing, forwarded = None, None, False, False
             try:
                 with self._remote_stream(payload) as (status, lines):
                     if status != 200:
+                        failure = "provider_http_error"
                         handler.respond(502, {"error": "selected_provider_failed"})
                     else:
                         handler.send_response(200)
@@ -270,8 +351,10 @@ class ModelGateway(AbstractContextManager):
                             if total > 32 * MAX_BODY:
                                 raise ValueError("provider_stream_too_large")
                             event_lines.append(line)
+                            writing = True
                             handler.wfile.write(line)
                             handler.wfile.flush()
+                            writing, forwarded = False, True
                             if line.strip():
                                 continue
                             data = b"\n".join(row[5:].strip() for row in event_lines if row.startswith(b"data:"))
@@ -285,10 +368,20 @@ class ModelGateway(AbstractContextManager):
                                     raise ValueError("provider_stream_invalid")
                                 if packet.get("usage") is not None:
                                     usage = packet["usage"]
+                if self._closed:
+                    failure = "gateway_closed"
+                elif status == 200 and not done:
+                    failure = "missing_done"
+                elif done and usage is None:
+                    failure = "missing_usage"
                 self.budget.finish(aid, usage, successful=done)
-            except Exception:
+            except Exception as error:
+                failure = ("client_disconnected" if writing else "gateway_closed" if self._closed
+                    else "stream_invalid" if isinstance(error, (ValueError, TypeError)) else "transport_error")
                 self.budget.finish(aid, None, successful=False)
                 # 已发SSE头后只终止连接，不追加JSON或伪造DONE，调用者不得自动重试。
                 handler.close_connection = True
+            self._record_result(aid, status=status, failure=failure, done=done,
+                forwarded=forwarded, usage_seen=usage is not None)
             self.responses.append({"attempt_id": aid, "phase": "answer", "stream": True,
-                "completed": done, "usage": usage if done else None})
+                "completed": done, "usage": usage if done else None, "failure": failure, "http_status": status})
