@@ -67,15 +67,18 @@ export function AppShell({subtitle, className = '', layout = 'page', sidebar, ch
 }
 
 /** React 内部页面使用客户端路由；原版入口只保留为迁移期回退。 */
-export function ConsoleNav({active, legacyPath}: {active: Page; legacyPath: string}) {
+export function ConsoleNav({active, legacyPath, memoryEngine}: {active: Page; legacyPath: string; memoryEngine?:'hy'}) {
+  const groups=memoryEngine==='hy'?NAV_GROUPS.map(group=>group.label==='长期记忆'?{...group,items:[
+    {page:'memories' as Page,icon:'记',label:'我的记忆',description:'内容、来源与明确纠正',to:'/memories'},
+  ]}:group):NAV_GROUPS;
   return <>
     <nav className="console-nav" aria-label="控制台导航">
-      {NAV_GROUPS.map(group => <section className="nav-group" key={group.label}>
+      {groups.map(group => <section className="nav-group" key={group.label}>
         <h2>{group.label}</h2>
         {group.items.map(item => <NavItem key={item.page} item={item} active={active === item.page}/>)}
       </section>)}
     </nav>
-    <details className="legacy-entry memory-term-map"><summary>记忆名称与研究编号</summary><p>原话（L0）：保存的对话来源。事实（L1）：从原话提取的记忆。场景（L2）：相关事实组成的经历。画像（L3）：有来源的长期认识。</p><p>深层工具保留这些研究编号，可沿来源核对；模型推断仍需复核。</p></details>
+    {memoryEngine==='hy'?<details className="legacy-entry memory-term-map"><summary>关于这份记忆</summary><p>Hy 从独立新库积累。条目、基本画像与平台来源分别核对；旧库保留。</p><p>保留层与尚未启用的图谱、意图、深层认知加工不会显示成已可用功能。</p></details>:<details className="legacy-entry memory-term-map"><summary>记忆名称与研究编号</summary><p>原话（L0）：保存的对话来源。事实（L1）：从原话提取的记忆。场景（L2）：相关事实组成的经历。画像（L3）：有来源的长期认识。</p><p>深层工具保留这些研究编号，可沿来源核对；模型推断仍需复核。</p></details>}
     <details className="legacy-entry"><summary>兼容入口</summary>
       <a href={legacyPath}>打开原版页面</a><p>仅用于迁移期排障，日常操作请使用上方新版页面。</p>
     </details>

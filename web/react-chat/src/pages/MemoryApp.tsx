@@ -9,6 +9,7 @@ import {PageHeader} from '../components/PageHeader';
 import {ManualMemoryAdd} from '../features/memory/ManualMemoryAdd';
 import {memoryFailure, type MemoryFailurePhase} from '../features/memory/memoryFailure';
 import {ConsolidationOverview} from '../features/memory/ConsolidationStatusCard';
+import {HyMemoryWorkspace} from '../features/memory/HyMemoryWorkspace';
 
 type MemoryConfig = {
   representation?: 'method_defined';
@@ -53,7 +54,6 @@ type TemporalHistoryItem = L1Summary & {valid_from:string|null;valid_to:string|n
 type TemporalHistory = {selected_memory_id:string;has_explicit_change:boolean;items:TemporalHistoryItem[]};
 
 const api = new ChatApi();
-const managementLabels:Record<string,string> = {listing:'条目列表',detail:'详情',correction:'纠正',deletion:'删除',temporal_history:'历史事实',scenarios:'情景',personas:'画像'};
 const displayTime = (value?: string | null) => value ? new Date(value).toLocaleString('zh-CN') : '未记录';
 const sourceName = (value: string) => value === 'user_stated' ? '用户陈述' : value === 'user_corrected' ? '用户纠正' : value;
 const localDateText = (date=new Date()) => `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
@@ -90,9 +90,6 @@ export function MemoryApp() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [workspace,setWorkspace] = useWorkspaceParam('view','browse',['browse','daily','consolidation','quality','runtime']);
   const [config, setConfig] = useState<MemoryConfig>();
-  const [engineItems, setEngineItems] = useState<Array<{item_id:string;content:string;kind:string;source_event_ids:string[]|null}>>([]);
-  const [engineLoaded, setEngineLoaded] = useState(false);
-  const [engineTotal, setEngineTotal] = useState(0);
   const [mode, setMode] = useState<RuntimeMode>();
   const [modeDraft, setModeDraft] = useState({write_enabled: true, use_enabled: true, scenario_use_enabled: false, persona_use_enabled: false});
   const [tab,setTab] = useWorkspaceParam('layer','l1',['l1','l0']);
@@ -191,16 +188,7 @@ export function MemoryApp() {
         await api.bootstrap();
         const current = await api.request<MemoryConfig>('/api/memory-config');
         setConfig(current);
-        if (current.representation === 'method_defined') {
-          if (current.management_capabilities?.listing) {
-            const page = await api.request<{items:typeof engineItems;total:number}>('/api/memory-engine/items');
-            setEngineItems(page.items);
-            setEngineTotal(page.total);
-            setEngineLoaded(true);
-          }
-          setNotice('当前使用独立记忆引擎；条目按引擎自身结构展示。旧 L1、情景和画像管理未接入。');
-          return;
-        }
+        if (current.representation === 'method_defined') return;
         if (!current.configured) {setNotice('启动时没有指定记忆库；页面不会自动创建数据库。'); return;}
         try {
           const runtime = await api.request<RuntimeMode>('/api/memory-mode');
@@ -524,14 +512,8 @@ export function MemoryApp() {
   }
 
   const page = tab === 'l1' ? l1 : l0;
-  if (config?.representation === 'method_defined') {
-    return <AppShell subtitle="记忆引擎" className="memory-shell" sidebar={<ConsoleNav active="memories" legacyPath="/memories-legacy"/>}>
-      <PageHeader eyebrow="长期记忆" title="引擎条目" description="显示引擎提供的记忆表示和实际管理能力。" meta={config.method}/>
-      <Alert type={!busy&&config.management_capabilities?.listing&&!engineLoaded?'error':'info'} showIcon message={notice}/>
-      <Card title="管理能力"><Space wrap>{Object.entries(config.management_capabilities ?? {}).map(([key,supported])=><Tag key={key}>{managementLabels[key]??key}：{supported?'支持':'不支持'}</Tag>)}</Space></Card>
-      <Card title="记忆条目">{engineLoaded&&<p className="subtle">已显示 {engineItems.length} 条，共 {engineTotal} 条。{engineTotal>engineItems.length?'当前页面仅展示首批条目。':''}</p>}<List dataSource={engineItems} locale={{emptyText:config.management_capabilities?.listing?(engineLoaded?'尚无条目':'尚未成功读取'):'当前引擎不提供条目列表'}} renderItem={item=><List.Item key={item.item_id}><List.Item.Meta title={item.content} description={<><Tag>{item.kind}</Tag><span>{item.source_event_ids===null?'来源过程未提供':`来源 ${item.source_event_ids.length} 条`}</span></>}/></List.Item>}/></Card>
-    </AppShell>;
-  }
+  if (!config) return <AppShell subtitle="核对当前记忆引擎" className="memory-shell" sidebar={<ConsoleNav active="memories" legacyPath="/memories-legacy"/>}><PageHeader eyebrow="长期记忆" title="我的记忆" description="正在确认当前引擎与管理能力。"/><Alert type={busy?'info':'error'} showIcon title={notice} action={!busy?<Button onClick={()=>window.location.reload()}>重新连接</Button>:undefined}/></AppShell>;
+  if (config.representation === 'method_defined') return <HyMemoryWorkspace api={api} method={config.method} capabilities={config.management_capabilities}/>;
   const sidebar = <>
       <ConsoleNav active="memories" legacyPath="/memories-legacy"/>
       <Card size="small" className="memory-layer-guide" title="层级说明"><p><Tag color="magenta">L1</Tag><span>规范化、可召回的派生事实</span></p><p><Tag color="blue">L0</Tag><span>用户或助手当时说过的原文</span></p></Card>
