@@ -13,8 +13,59 @@
   },
   "topics": [
     {
+      "id": "hy-real-model-candidate",
+      "scope": "V精确候选的真实模型/BGE、同池对比与预算结果，保留样本和冷启动限制",
+      "authority": "docs/guides/Hy-Memory真实模型验证-20261019.md",
+      "sources": [
+        "src/longmemory/evaluation/comparison/hy_real_*.py",
+        "src/longmemory/methods/hy_memory/model_gateway.py",
+        "src/longmemory/methods/hy_memory/budget.py",
+        "src/longmemory/adapters/llm/local_embedding.py",
+        "tests/unit/evaluation/test_hy_real*.py",
+        "tests/integration/test_hy_memory_gateway.py"
+      ],
+      "related": [
+        "docs/development/parallel/V-real-model-20261019.md"
+      ],
+      "tags": [
+        "Hy-Memory",
+        "真实模型",
+        "预算"
+      ],
+      "review": "reference 2026-10-19: X接入V精确五提交，真实数字归属V候选；X未重跑真实付费评估"
+    },
+    {
+      "id": "hy-memory-management-candidate",
+      "scope": "Y的Hy专属管理扩展/页面与原子能力门控；保留HTTP暂停码和RPC待验缺口",
+      "authority": "docs/guides/Hy记忆管理.md",
+      "sources": [
+        "src/longmemory/methods/hy_memory/administration.py",
+        "src/longmemory/methods/hy_memory/method.py",
+        "src/longmemory/entrypoints/api/method_management.py",
+        "src/longmemory/entrypoints/api/routes/memory_engine.py",
+        "web/react-chat/src/features/memory/HyMemoryWorkspace*",
+        "web/react-chat/src/features/memory/hy-memory.css",
+        "web/react-chat/src/api/memoryEngine.ts",
+        "web/react-chat/src/pages/MemoryApp*",
+        "tests/unit/methods/test_hy_management_http.py",
+        "web/react-chat/e2e/hy-memory.spec.ts",
+        "web/react-chat/e2e/hy-static-server.mjs",
+        "web/react-chat/playwright.hy.config.ts"
+      ],
+      "related": [
+        "docs/development/hy-memory-management-contract.md",
+        "docs/development/parallel/Y-hy-memory-ui-20261019.md"
+      ],
+      "tags": [
+        "Hy-Memory",
+        "管理",
+        "能力门控"
+      ],
+      "review": "reference 2026-10-19: X接入Y精确五提交并组合Python测试；前端验收属于Y候选，Z组合构建及真实管理RPC未验"
+    },
+    {
       "id": "hy-roundscreen-daily-deployment",
-      "scope": "平台圆屏轮次/完成/取消/反馈及可信Hy日用装配与条件切换；不判定V模型或Y管理验收",
+      "scope": "平台圆屏轮次及可信Hy日用装配、原十元池与受控真实流式候选；切换和管理RPC未验",
       "authority": "docs/guides/Hy-Memory圆屏与日用装配-20261019.md",
       "sources": [
         "src/longmemory/adapters/storage/sqlite_platform_rounds.py",
@@ -39,7 +90,23 @@
         "tests/unit/infrastructure/test_hy_deployment.py",
         "tests/unit/development/test_launcher.py",
         "tests/integration/test_hy_roundscreen_sdk.py",
-        "tests/integration/memory_pipeline/test_xiaozhi_bridge.py"
+        "tests/integration/memory_pipeline/test_xiaozhi_bridge.py",
+        "src/longmemory/bootstrap_hy_daily.py",
+        "src/longmemory/infrastructure/config/hy_campaign.py",
+        "src/longmemory/methods/hy_memory/model_gateway.py",
+        "src/longmemory/entrypoints/api/xiaozhi_model_profiles.py",
+        "scripts/development/xiaozhi/voice_budget.py",
+        "scripts/development/xiaozhi/config_paths.py",
+        "scripts/development/xiaozhi/fast_voice_responses.py",
+        "config/examples/hy-daily-settings.example.json",
+        "config/examples/hy-price-verification.example.json",
+        "config/examples/hy-management-verification.example.json",
+        "tests/integration/test_hy_daily_lifecycle.py",
+        "tests/unit/entrypoints/test_hy_runtime_extension.py",
+        "tests/unit/entrypoints/test_hy_owned_model_check.py",
+        "tests/unit/methods/test_hy_daily_stream.py",
+        "tests/unit/infrastructure/test_hy_campaign.py",
+        "tests/unit/development/test_hy_voice_budget.py"
       ],
       "related": [
         "docs/development/parallel/X-hy-roundscreen-20261019.md",
@@ -48,7 +115,8 @@
         "docs/architecture/overview.md",
         "docs/architecture/workflows.md",
         "docs/development/configuration.md",
-        "docs/development/launcher-contract.md"
+        "docs/development/launcher-contract.md",
+        "docs/adr/0184-shared-campaign-budget-and-owned-model-gateway.md"
       ],
       "tags": [
         "Hy-Memory",
@@ -56,7 +124,7 @@
         "来源",
         "条件切换"
       ],
-      "review": "verified 2026-10-19: X代码/合成与真实SDK禁网桥；VY组合及日用切换未验"
+      "review": "verified 2026-10-19: X隔离组合、真实SDK与CPU BGE、合成费用和真实HTTP流式转发；未调用付费模型/更新实际池/切换日用；管理RPC待交接"
     },
     {
       "id": "hy-memory-isolated-integration",
@@ -861,6 +929,114 @@
   ],
   "documents": [
     {
+      "path": "docs/development/parallel/V-real-model-20261019.md",
+      "title": "V：真实模型与本地 BGE 验证",
+      "status": "reference",
+      "basis": "V精确候选真实模型验证原记录；X只接入不改写历史",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-19",
+        "scope": "精确候选接入和文档链接核对；证据归属及未验项见X第二阶段记录",
+        "evidence": [
+          "docs/development/parallel/X-hy-roundscreen-20261019.md"
+        ]
+      },
+      "tags": [
+        "Hy-Memory",
+        "候选接入"
+      ]
+    },
+    {
+      "path": "docs/guides/Hy-Memory真实模型验证-20261019.md",
+      "title": "Hy-Memory 真实模型与本地向量验证",
+      "status": "current",
+      "basis": "V真实模型候选指南；不等于日用部署验收",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-19",
+        "scope": "精确候选接入和文档链接核对；证据归属及未验项见X第二阶段记录",
+        "evidence": [
+          "docs/development/parallel/X-hy-roundscreen-20261019.md"
+        ]
+      },
+      "tags": [
+        "Hy-Memory",
+        "候选接入"
+      ]
+    },
+    {
+      "path": "docs/development/hy-memory-management-contract.md",
+      "title": "Hy 记忆管理接线契约",
+      "status": "current",
+      "basis": "Y管理扩展契约；X保留实际暂停HTTP码缺口",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-19",
+        "scope": "精确候选接入和文档链接核对；证据归属及未验项见X第二阶段记录",
+        "evidence": [
+          "docs/development/parallel/X-hy-roundscreen-20261019.md"
+        ]
+      },
+      "tags": [
+        "Hy-Memory",
+        "候选接入"
+      ]
+    },
+    {
+      "path": "docs/development/parallel/Y-hy-memory-ui-20261019.md",
+      "title": "Y：Hy 记忆管理重设计与受控管理适配",
+      "status": "reference",
+      "basis": "Y精确候选管理重设计原记录；X不改写历史",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-19",
+        "scope": "精确候选接入和文档链接核对；证据归属及未验项见X第二阶段记录",
+        "evidence": [
+          "docs/development/parallel/X-hy-roundscreen-20261019.md"
+        ]
+      },
+      "tags": [
+        "Hy-Memory",
+        "候选接入"
+      ]
+    },
+    {
+      "path": "docs/guides/Hy记忆管理.md",
+      "title": "Hy 记忆管理",
+      "status": "current",
+      "basis": "Y管理候选指南；实际写入仍受RPC与资源验证门控",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-19",
+        "scope": "精确候选接入和文档链接核对；证据归属及未验项见X第二阶段记录",
+        "evidence": [
+          "docs/development/parallel/X-hy-roundscreen-20261019.md"
+        ]
+      },
+      "tags": [
+        "Hy-Memory",
+        "候选接入"
+      ]
+    },
+    {
+      "path": "docs/adr/0184-shared-campaign-budget-and-owned-model-gateway.md",
+      "title": "ADR-0184：续用原十元池与日用模型网关所有权",
+      "status": "reference",
+      "basis": "原十元池和网关所有权决定；实际续期和日用切换未执行",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-19",
+        "scope": "精确候选接入和文档链接核对；证据归属及未验项见X第二阶段记录",
+        "evidence": [
+          "docs/development/parallel/X-hy-roundscreen-20261019.md"
+        ]
+      },
+      "tags": [
+        "Hy-Memory",
+        "候选接入"
+      ]
+    },
+    {
       "path": "docs/guides/Hy-Memory圆屏与日用装配-20261019.md",
       "title": "Hy-Memory 圆屏与日用装配",
       "status": "current",
@@ -868,11 +1044,14 @@
       "review": {
         "state": "verified",
         "date": "2026-10-19",
-        "scope": "X代码/合成与真实SDK禁网桥及条件切换清单；VY组合和日用未验",
+        "scope": "X两阶段实现、原池/流式合成组合和真实SDK/BGE；实际付费/管理RPC/日用切换未验",
         "evidence": [
           "tests/unit/entrypoints/test_platform_roundscreen.py",
           "tests/integration/test_hy_roundscreen_sdk.py",
-          "tests/unit/infrastructure/test_hy_deployment.py"
+          "tests/unit/infrastructure/test_hy_deployment.py",
+          "tests/integration/test_hy_daily_lifecycle.py",
+          "tests/unit/methods/test_hy_daily_stream.py",
+          "tests/unit/infrastructure/test_hy_campaign.py"
         ]
       },
       "tags": [
@@ -890,11 +1069,14 @@
       "review": {
         "state": "verified",
         "date": "2026-10-19",
-        "scope": "X代码/合成与真实SDK禁网桥及条件切换清单；VY组合和日用未验",
+        "scope": "X两阶段实现、原池/流式合成组合和真实SDK/BGE；实际付费/管理RPC/日用切换未验",
         "evidence": [
           "tests/unit/entrypoints/test_platform_roundscreen.py",
           "tests/integration/test_hy_roundscreen_sdk.py",
-          "tests/unit/infrastructure/test_hy_deployment.py"
+          "tests/unit/infrastructure/test_hy_deployment.py",
+          "tests/integration/test_hy_daily_lifecycle.py",
+          "tests/unit/methods/test_hy_daily_stream.py",
+          "tests/unit/infrastructure/test_hy_campaign.py"
         ]
       },
       "tags": [

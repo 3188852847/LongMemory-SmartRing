@@ -15,7 +15,7 @@ X 本轮新增平台圆屏轮次、完成/取消/反馈及可信 Hy 日用选择
 1. 适配器构建实现 `MemoryMethod` 的引擎，`observe(event)` 可以是完整组合 pipeline；不要求拆开私有提取/索引/存储。
 2. 调用 `bootstrap.assemble_backend(method=..., resources=(StateResource(...),), source_path=..., management=..., create_sources=...)`。新来源库仅 `create_sources=True` 排他创建；重开用 `False`，不迁移旧个人库。来源文件不能落在引擎资源目录内部。
 3. `build_backend_runtime(assembly)` 装配应用运行时；`ChatBackend` 显式注入该 Runtime，`create_app(memory_runtime=runtime, chat_backend=...)` 使用同一个实例管理和聊天。`ChatBackend.database` 在新装配中使用平台来源路径；显式 `sidecar_database` 可沿用原基址的网页会话/角色旁库，与引擎隔离。该兼容字段不是“所有后端都是数据库”的约束。
-4. `management=None` 或能力为假就拒绝。`/api/memory-engine` 暴露能力和资源，`/items` 支持列表、详情、纠正和删除；`/sources/{event_id}` 读取原角色/时间/正文，`/retry` 仅接受显式预期尝试 ID。纠正/删除还受服务器启动权限约束，纠正和恢复受运行期写开关约束。旧 `/api/memories`、情景/画像/主动交流等端点在新后端返回 501，不打开旧库。当前 React 管理页只增加中立条目与能力展示，尚无新引擎编辑表单。
+4. `management=None` 或能力为假就拒绝。`/api/memory-engine` 暴露能力和资源，`/items` 支持列表、详情、纠正和删除；`/sources/{event_id}` 读取原角色/时间/正文，`/retry` 仅接受显式预期尝试 ID。纠正/删除还受服务器启动权限约束，纠正和恢复受运行期写开关约束。旧 `/api/memories`、情景/画像/主动交流等端点在新后端返回 501，不打开旧库。Y候选已按Hy重设计管理页，专属受控动作经`administer_extension`，不是通用原子修订能力；实际写门仍需V真实RPC/独占/后台写关闭证明，不由页面或HTTP开启，见[管理契约](../development/hy-memory-management-contract.md)。
 
 新装配的来源与投递语义：
 
@@ -27,6 +27,8 @@ X 本轮新增平台圆屏轮次、完成/取消/反馈及可信 Hy 日用选择
 - 未适配的自然纠错、历史事实、来源解释、明确补记和陪伴控制返回 `unsupported` 回执；不是模型推测执行结果。一次“下一轮”的应用内临时方式保留。旧 L1 审计和影子复核在新后端明确不支持，不静默读取旧表。圆屏完成/反馈改走平台来源侧中立账本，助手不投递事实引擎；完整流程在完成后延后执行，不能继承旧两阶段延迟保证。低频整理与影子不自动启用，旧主动交流明确暂停。
 
 Hy 是用户指定的长期主要目标；可从独立新库积累，旧引擎保留作对照/回退。不迁移旧派生层、不删除任何个人数据。V 已通过 `assemble_backend` 接入；SDK 由所有者安装，助手只读复用独立解释器，未获取外部资源。运行与预算边界见 [Hy 指南](../guides/Hy-Memory隔离接入与验证-20261019.md)。
+
+V真实合成阶段与Y管理候选已由主会话交X接力；X托管网关同时约束Hy、网页/圆屏回答与连接检查，日用初期共用原十元池，不自动新建/重置。新费用/流式/所有权边界见[ADR-0184](../adr/0184-shared-campaign-budget-and-owned-model-gateway.md)；真实17题不是新候选的日用或设备验收。
 
 平台契约位于 `src/longmemory/methods/contracts.py`。`MemoryEvent` 是允许输入的消息，
 `ObservationResult` 描述记忆操作，`MemorySupport` 提供上下文与可选过程；它们不引用 AtomicMemory。
