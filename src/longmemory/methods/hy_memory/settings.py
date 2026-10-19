@@ -41,13 +41,16 @@ class HySettings:
     model_mode: str = "disabled"
     managed_gateway: bool = False
     provider_identity: str = ""
+    management_writes_enabled: bool = False
+    management_exclusive_profile: bool = False
 
     def __post_init__(self):
         if self.sdk_version != SDK_VERSION or not self.user_id.strip() or not self.agent_id.strip():
             raise ValueError("hy_identity_invalid")
         if type(self.embedding_dimensions) is not int or not 1 <= self.embedding_dimensions <= 65536:
             raise ValueError("hy_dimensions_invalid")
-        if type(self.network_authorized) is not bool or type(self.include_profile) is not bool:
+        if any(type(value) is not bool for value in (self.network_authorized, self.include_profile,
+                self.managed_gateway, self.management_writes_enabled, self.management_exclusive_profile)):
             raise ValueError("hy_flag_invalid")
         if self.model_mode not in {"disabled", "synthetic_transport"} or (self.network_authorized and self.model_mode == "synthetic_transport"):
             raise ValueError("hy_model_mode_invalid")
@@ -81,6 +84,9 @@ class HySettings:
         public = self.public()
         for key in ("network_authorized", "max_external_requests", "timeout_seconds", "max_output_tokens"):
             public.pop(key)
+        # 管理写是当前进程的可信权限，不改变既有库的模型/维度身份。
+        public.pop("management_writes_enabled")
+        public.pop("management_exclusive_profile")
         for name in ("llm","embedding"):
             public[name].pop("allow_loopback_http",None)
         if self.managed_gateway:
