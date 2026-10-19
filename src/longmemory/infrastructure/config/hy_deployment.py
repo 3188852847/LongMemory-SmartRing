@@ -68,6 +68,8 @@ def load_hy_deployment(root):
 def build_daily_hy_runtime(root, *, create=False):
     from longmemory.bootstrap import build_hy_memory_runtime
     deployment = load_hy_deployment(root)
+    if not deployment.settings.network_authorized or deployment.settings.model_mode == "synthetic_transport":
+        raise ValueError("hy_daily_real_model_configuration_required")
     return build_hy_memory_runtime(settings=deployment.settings, python=deployment.python,
         state_directory=deployment.state_directory, source_path=deployment.source_path, create=create,
         expected_python_version=deployment.python_version)

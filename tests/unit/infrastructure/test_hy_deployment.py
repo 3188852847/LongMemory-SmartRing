@@ -6,7 +6,7 @@ from dataclasses import asdict
 
 import pytest
 
-from longmemory.infrastructure.config.hy_deployment import load_hy_deployment
+from longmemory.infrastructure.config.hy_deployment import load_hy_deployment, build_daily_hy_runtime
 from longmemory.methods.hy_memory.settings import HySettings
 
 
@@ -33,6 +33,13 @@ def test_fixed_files_explicit_paths_and_pinned_identity_without_implicit_creatio
     assert deployment.settings.identity() == settings.identity()
     assert deployment.state_directory == tmp_path / "data/memory/hy-daily"
     assert not deployment.state_directory.exists() and not deployment.source_path.exists()
+
+
+def test_daily_entry_rejects_offline_or_simulated_models_before_initializing_state(tmp_path):
+    setup_config(tmp_path)
+    with pytest.raises(ValueError, match="real_model_configuration_required"):
+        build_daily_hy_runtime(tmp_path, create=True)
+    assert not (tmp_path / "data").exists()
 
 
 @pytest.mark.parametrize("change", [
