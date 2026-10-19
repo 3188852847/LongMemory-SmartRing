@@ -28,7 +28,7 @@
       ],
       "related": ["docs/development/parallel/V-hy-memory-20261019.md", "docs/development/parallel/W-hy-review-integration-20261019.md", "docs/architecture/method-boundary.md", "docs/requirements/主动交流阶段方案-20261019.md"],
       "tags": ["Hy-Memory", "隔离", "来源", "对比", "主动交流后续"],
-      "review": "verified 2026-10-19: W后端559 passed/2 skipped含4项真实SDK；协议修复，第二阶段前端11项/TS/Vite通过且旧产物保留；两项既有失败接受另行跟踪；main待主会话，真实模型/日用/主动调度未验"
+      "review": "verified 2026-10-19: W后端559/2skip含4项SDK及前端11项/TS/Vite；主会话另34项通过，f6dc99f合入推送且远端同SHA；两项旧失败保留，真实模型/日用/主动调度未验"
     },
     {
       "id": "otto-preview",
@@ -826,8 +826,8 @@
       "path": "docs/development/parallel/W-hy-review-integration-20261019.md",
       "title": "W：Hy-Memory 独立审查、整合候选与主动交流规划",
       "status": "reference",
-      "basis": "本地整合候选、后端与第二阶段前端独立验收；main合入/推送待主会话，不是日用发布",
-      "review": {"state": "verified", "date": "2026-10-19", "scope": "U/V映射、W559/2skip含4项SDK、前端串行移交11项/TS/Vite及旧产物保护；两项旧失败保留并接受另行跟踪，规划仍draft", "evidence": ["f251f98", "1dda701", "tests/unit/methods/test_hy_memory_process.py", "tests/integration/test_hy_memory_sdk_offline.py", "web/react-chat/src/pages/MemoryApp.test.tsx", "docs/requirements/主动交流阶段方案-20261019.md"]},
+      "basis": "W最终候选8587af2经主会话f6dc99f合入推送；本节收据待主会话接入，日用未切换",
+      "review": {"state": "verified", "date": "2026-10-19", "scope": "U/V映射、W后端/前端证据；主会话34项、敏感扫描0、候选同树和远端同SHA收据；U/W归档待收据接入，V保留待办，规划仍draft", "evidence": ["f251f98", "8587af2", "f6dc99f07e636a5fcbddfea8c60371b348b02c89", "tests/unit/methods/test_hy_memory_process.py", "tests/integration/test_hy_memory_sdk_offline.py", "web/react-chat/src/pages/MemoryApp.test.tsx", "docs/requirements/主动交流阶段方案-20261019.md"]},
       "tags": ["W", "Hy-Memory", "审查", "整合", "主动交流"]
     },
     {
@@ -835,7 +835,7 @@
       "title": "Hy-Memory 隔离接入与验证",
       "status": "current",
       "basis": "本轮固定来源、所有者专属安装与实际离线接入操作；限定SDK加模拟模型，不表示真实模型质量或日用切换",
-      "review": {"state": "verified", "date": "2026-10-19", "scope": "V固定来源和实际装配/零外部请求；W协议清理/显式测试路径、首批提示及前端11项/TS/Vite补验；真实质量和日用未验", "evidence": ["tests/unit/methods/test_hy_memory_backend.py", "tests/integration/test_hy_memory_sdk_offline.py", "tests/unit/evaluation/test_hy_memory_runner.py", "docs/development/parallel/W-hy-review-integration-20261019.md"]},
+      "review": {"state": "verified", "date": "2026-10-19", "scope": "V装配/零外部请求，W协议/首批提示与前端补验；主会话f6dc99f合入推送收据；真实质量和日用未验", "evidence": ["tests/unit/methods/test_hy_memory_backend.py", "tests/integration/test_hy_memory_sdk_offline.py", "tests/unit/evaluation/test_hy_memory_runner.py", "docs/development/parallel/W-hy-review-integration-20261019.md"]},
       "tags": ["Hy-Memory", "隔离", "SDK", "比较"]
     },
     {
@@ -3191,7 +3191,7 @@
       "review": {
         "state": "verified",
         "date": "2026-10-19",
-        "scope": "U装配/来源/管理边界与V/W真实SDK加模拟模型，W前端补验和未切日用说明；未对历史章节或全篇作语义验收",
+        "scope": "U边界与V/W隔离验收，W前端补验、主会话f6dc99f合入推送及未切日用说明；未对历史章节或全篇作语义验收",
         "evidence": [
           "b52e0e3",
           "77c7342",
