@@ -24,6 +24,19 @@ CHINESE_MEMORY_POLICY=("\n适配本地中文向量模型：记忆content、归�
     "人名、地名等专名保留原文。不要把助手建议当作用户决定。")
 
 
+def _verify_official_settings(settings):
+    try:
+        url = urlsplit(settings.base_url)
+        if url.scheme != "https" or url.hostname != "api.deepseek.com" or url.port not in {None,443} or url.path.rstrip("/") not in {"","/v1"}:
+            raise ValueError("selected_endpoint_price_unverified")
+        if url.username or url.password or url.query or url.fragment:
+            raise ValueError("selected_endpoint_price_unverified")
+    except (TypeError, ValueError):
+        raise ValueError("selected_endpoint_price_unverified") from None
+    if not isinstance(settings.model, str) or settings.model not in {"deepseek-v4-flash","deepseek-flash"}:
+        raise ValueError("selected_model_price_unverified")
+
+
 def selected_model(root):
     store = ModelProfileStore(root)
     web, voice = store.selected("web"), store.selected("voice")
@@ -32,10 +45,7 @@ def selected_model(root):
     settings = store.settings(web)
     url = urlsplit(settings.base_url)
     if web == "official":
-        if url.scheme != "https" or url.hostname != "api.deepseek.com" or url.port not in {None,443} or url.path.rstrip("/") not in {"","/v1"}:
-            raise ValueError("selected_endpoint_price_unverified")
-        if settings.model not in {"deepseek-v4-flash","deepseek-flash"}:
-            raise ValueError("selected_model_price_unverified")
+        _verify_official_settings(settings)
     elif web != "campus" or url.scheme not in {"http", "https"} or (url.scheme == "http" and not settings.allow_http):
         raise ValueError("selected_profile_transport_unverified")
     identity = {"profile":web,"request_model":settings.model,
@@ -48,6 +58,7 @@ def selected_model(root):
 
 def verify_cny_account(settings):
     """只返回币种和可用标记；余额数字不输出、不入报告。"""
+    _verify_official_settings(settings)
     connection = http.client.HTTPSConnection("api.deepseek.com",timeout=settings.timeout_seconds)
     try:
         connection.request("GET","/user/balance",headers={"Authorization":"Bearer "+settings.api_key})
