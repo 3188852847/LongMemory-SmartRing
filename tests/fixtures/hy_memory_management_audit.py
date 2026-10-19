@@ -107,6 +107,45 @@ def audit(directory):
                 except HyManagementDenied:pass
                 else:raise AssertionError('chain deletion must be rejected before SDK')
             assert snapshot()==before
+            if target == 'head':
+                # 保留真实SDK生成的演化链返回结构，经平台method/admin再投影。
+                from longmemory.methods.hy_memory.method import HyMemoryMethod
+                from longmemory.methods.hy_memory.administration import HyAdministration, HyManagementConflict
+                from longmemory.methods.contracts import MemoryEvent
+                class LocalClient:
+                    def __init__(self): self.state = state
+                    def __getattr__(self, name):
+                        def rpc(*args, **kwargs):
+                            if args: kwargs['query'] = args[0]
+                            return service.execute(name, kwargs)
+                        return rpc
+                    def close(self): pass
+                method = HyMemoryMethod(settings=settings, client_factory=LocalClient)
+                admin = HyAdministration(method, serialized_writes=True)
+                with admin._ledger() as db:
+                    db.execute('INSERT INTO operations VALUES (?,?,?,?,?,?,?,?,NULL)',
+                        ('historical-audit','synthetic-hash','correct',ids['middle'],
+                         'historical-correction-source','a'*64,'completed','2026-10-19T00:00:00+00:00'))
+                recalled = method.recall('中间事实')
+                assert any(row.item_id == ids['head'] and 'historical-correction-source' in row.source_event_ids for row in recalled.retrieved)
+                revision = admin.get_item(ids['head']).revision
+                request = str(uuid5(NAMESPACE_URL,'delete-head-refused'))
+                try:
+                    admin.extension('delete', item_id=ids['head'], request_id=request,
+                        expected_revision=revision, source=MemoryEvent('hy-management:'+request,'user',
+                            '删除这条记忆：'+ids['head'],datetime.now(UTC)))
+                except HyManagementConflict: pass
+                else: raise AssertionError('platform must refuse chain deletion before running audit')
+                assert admin.extension('operations')['total'] == 1
+                with admin._ledger() as db:
+                    db.execute("UPDATE operations SET state='uncertain'")
+                recalled = method.recall('中间事实')
+                assert all(row.item_id != ids['head'] for row in recalled.retrieved)
+                assert '中间事实' not in recalled.context
+                assert recalled.warning_code == 'hy_management_uncertain_items_excluded'
+                result['platform_evolution_overlay_and_uncertain_exclusion'] = True
+                result['platform_delete_refused_without_uncertain_audit'] = True
+                method.close()
             # 只在本合成库直接实测原生公开 delete；不把它开放为 worker 的链操作。
             native=client.delete(ids[target]);after=snapshot()
             assert native['success'] is True

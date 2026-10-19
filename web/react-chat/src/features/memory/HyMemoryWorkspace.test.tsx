@@ -119,6 +119,21 @@ test('不确定写入禁用重复提交，绝不显示成功',async()=>{
 
 test('时间未知及无效格式如实呈现',()=>{expect(memoryTime(null)).toBe('时间未记录');expect(memoryTime('invalid')).toBe('时间格式未知');});
 
+test('确定性删除拒绝保留说明，不误报不确定或永久锁住条目',async()=>{
+  let writes=0;
+  setup('/memories?item=synthetic-1',path=>{if(path.endsWith('/deletion')){writes++;throw new ApiError('hy_management_delete_evolution_refused',409);}});
+  fireEvent.click(await screen.findByRole('button',{name:'删除这条记忆'}));
+  const modal=(await screen.findByText('删除这条引擎记忆',{selector:'.ant-modal-title span'})).closest('[role=dialog]') as HTMLElement;
+  fireEvent.click(within(modal).getByRole('checkbox'));
+  fireEvent.click(within(modal).getByRole('button',{name:/确认删除条目/}));
+  expect(await within(modal).findByText('操作未执行')).toBeTruthy();
+  expect(within(modal).getByText(/不能单独删除，以免恢复旧事实。当前有效条目/)).toBeTruthy();
+  expect(within(modal).queryByText(/结果未确认，已禁止重复提交/)).toBeNull();
+  expect(writes).toBe(1);
+  fireEvent.click(within(modal).getByRole('button',{name:'取消'}));
+  await waitFor(()=>expect(screen.getByRole('button',{name:'纠正这条记忆'}).hasAttribute('disabled')).toBe(false));
+});
+
 test('组装画像在自己的详情核对，不把聚合编号交给普通条目 get',async()=>{
   const request=setup('/memories?view=profile',(path)=>{
     if(path==='/api/memory-engine/hy/workspace')return {...workspace,profile:true};

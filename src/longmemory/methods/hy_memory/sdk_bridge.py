@@ -32,6 +32,7 @@ class HyItem:
     sdk_score: float | None
     # 仅从独立透传的 meta 读取来源；不从正文/metadata 猜测证据。
     source_event_ids: tuple[str, ...] | None
+    visible_memory_ids: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -95,8 +96,18 @@ def _item(row: Any, channel: str) -> HyItem:
     layer = row.get("layer")
     if layer is not None:
         layer = _text(layer)
-    return HyItem(_text(row.get("memory_id")), _text(row.get("content")), channel,
-                  layer, _number(row.get("score")), _sources(row.get("meta")))
+    memory_id = _text(row.get("memory_id"))
+    chain = row.get("evolution_chain")
+    visible = [memory_id]
+    if chain is not None:
+        if not isinstance(chain, list) or len(chain) > 1000:
+            raise HyResponseError("hy_invalid_evolution_chain")
+        for version in chain:
+            if not isinstance(version, dict):
+                raise HyResponseError("hy_invalid_evolution_chain")
+            visible.append(_text(version.get("node_id")))
+    return HyItem(memory_id, _text(row.get("content")), channel,
+                  layer, _number(row.get("score")), _sources(row.get("meta")), tuple(dict.fromkeys(visible)))
 
 
 def normalize_search(response: Any, profile_response: Any = None) -> HyRecall:

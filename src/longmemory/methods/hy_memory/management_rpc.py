@@ -30,6 +30,44 @@ class HyManagementDenied(ValueError):
     """未进入 SDK 写操作；不携带外部正文或身份。"""
 
 
+def validate_owned_row(row, settings, memory_id, *, writable=False):
+    """平台写前和worker复查使用相同的确定性范围规则。"""
+    if (not isinstance(row, dict) or row.get("memory_id") != memory_id
+            or row.get("user_id") != settings.user_id or row.get("agent_id") != settings.agent_id
+            or row.get("source") != "vdb"):
+        raise HyManagementDenied("hy_management_item_scope_unproven")
+    meta = row.get("meta")
+    if (not isinstance(meta, list) or not meta or any(not isinstance(entry, dict)
+            or entry.get("namespace") != SOURCE_NAMESPACE or entry.get("role") != "user" for entry in meta)):
+        raise HyManagementDenied("hy_management_source_scope_unproven")
+    try:
+        sources = _sources(meta)
+    except HyResponseError:
+        sources = None
+    if not sources:
+        raise HyManagementDenied("hy_management_source_scope_unproven")
+    if writable and (row.get("layer") not in {"l2_fact", "l3_summary"}
+            or row.get("status") != "active" or row.get("is_latest") is not True):
+        raise HyManagementDenied("hy_management_item_read_only")
+    return row
+
+
+def validate_write_input(operation, arguments):
+    memory_id = ManagementRPC._identifier(arguments["memory_id"])
+    if operation == "update":
+        content = arguments["content"]
+        if not isinstance(content, str) or not content.strip() or len(content) > 1000 or "\0" in content:
+            raise HyManagementDenied("hy_management_content_invalid")
+    return memory_id
+
+
+def validate_management_write(row, settings, operation, arguments):
+    memory_id = validate_write_input(operation, arguments)
+    validate_owned_row(row, settings, memory_id, writable=True)
+    if operation == "delete" and (row.get("supersedes") != [] or row.get("superseded_by") != []):
+        raise HyManagementDenied("hy_management_delete_evolution_refused")
+
+
 def owner_lease_held(workspace):
     """只探测已存在的 owner 锁；不创建/接管租约，唯一拥有者仍归 X/Y。"""
     try:
@@ -103,21 +141,7 @@ class ManagementRPC:
         return value
 
     def _owned(self, memory_id, *, writable=False):
-        row = self.client.get(memory_id)
-        if (not isinstance(row, dict) or row.get("memory_id") != memory_id
-                or row.get("user_id") != self.settings.user_id
-                or row.get("agent_id") != self.settings.agent_id
-                or row.get("source") != "vdb"):
-            raise HyManagementDenied("hy_management_item_scope_unproven")
-        meta = row.get("meta")
-        if (not isinstance(meta, list) or not meta or any(not isinstance(entry, dict)
-                or entry.get("namespace") != SOURCE_NAMESPACE or entry.get("role") != "user"
-                for entry in meta) or not _sources(meta)):
-            raise HyManagementDenied("hy_management_source_scope_unproven")
-        if writable and (row.get("layer") not in {"l2_fact", "l3_summary"}
-                or row.get("status") != "active" or row.get("is_latest") is not True):
-            raise HyManagementDenied("hy_management_item_read_only")
-        return row
+        return validate_owned_row(self.client.get(memory_id), self.settings, memory_id, writable=writable)
 
     def execute(self, operation, arguments):
         expected = ({"memory_id", "content"} if operation == "update"
@@ -130,14 +154,11 @@ class ManagementRPC:
         memory_id = self._identifier(arguments["memory_id"])
         if not caps[operation]:
             raise HyManagementDenied("hy_management_operation_unavailable")
-        if operation == "update":
-            content = arguments["content"]
-            if not isinstance(content, str) or not content.strip() or len(content) > 1000 or "\0" in content:
-                raise HyManagementDenied("hy_management_content_invalid")
-        row=self._owned(memory_id, writable=operation in {"update","delete"})
-        if operation == "delete" and (row.get("supersedes") != [] or row.get("superseded_by") != []):
-            # SDK 删除任意链成员都会修复其他节点；不能把链尾称为安全叶节点。
-            raise HyManagementDenied("hy_management_delete_evolution_refused")
+        if operation in {"update", "delete"}:
+            validate_write_input(operation, arguments)
+            validate_management_write(self.client.get(memory_id), self.settings, operation, arguments)
+        else:
+            self._owned(memory_id)
         # 不调用 add/重新提取，不把平台来源伪装进 SDK meta；不做任何自动重试。
         result = getattr(self.client, operation)(**arguments)
         if operation == "history":

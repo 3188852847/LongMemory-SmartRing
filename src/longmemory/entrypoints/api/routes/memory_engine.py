@@ -42,7 +42,9 @@ def register_memory_engine_routes(app, runtime, *, allow_delete=False, allow_cor
             return web.json_response({"error": "hy_management_unavailable"}, status=503)
         except LookupError:
             return web.json_response({"error": "memory_item_or_source_not_found"}, status=404)
-        except ValueError:
+        except ValueError as error:
+            if str(error) == "memory_write_paused":
+                return web.json_response({"error": "memory_write_paused"}, status=403)
             return web.json_response({"error": "memory_operation_rejected"}, status=409)
 
     def selected():

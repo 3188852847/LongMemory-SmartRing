@@ -9,6 +9,7 @@ import json
 import os
 import uuid
 import argparse
+import tempfile
 
 SERVER_PARTS = ("local", "runtime", "xiaozhi-esp32-server", "main", "xiaozhi-server")
 
@@ -60,15 +61,19 @@ def _digest(data):
 
 def _atomic(path: Path, data: bytes):
     path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_name(path.name + "." + uuid.uuid4().hex + ".tmp")
+    temporary = None
     try:
-        with temporary.open("xb") as handle:
+        # 深工作树中的目标本身可合法打开；重复目标长名再加UUID会超过
+        # Windows原生路径上限。短随机独占临时名仍在同目录原子替换。
+        with tempfile.NamedTemporaryFile(mode="wb", prefix=".c-", dir=path.parent, delete=False) as handle:
+            temporary = Path(handle.name)
             handle.write(data)
             handle.flush()
             os.fsync(handle.fileno())
         temporary.replace(path)
     finally:
-        temporary.unlink(missing_ok=True)
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
 
 
 def render_runtime_config(server: Path, *, model_override=None):

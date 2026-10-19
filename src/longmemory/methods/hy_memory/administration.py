@@ -10,6 +10,7 @@ import sqlite3
 from longmemory.methods.backend_contracts import ManagementCapabilities, MemoryItem, MemoryPage
 from longmemory.methods.contracts import UnsupportedCapabilityError
 from .sdk_bridge import HyResponseError, SOURCE_NAMESPACE, _item
+from .management_rpc import ManagementRPC, HyManagementDenied, validate_management_write
 
 
 class HyManagementConflict(ValueError):
@@ -79,7 +80,9 @@ class HyAdministration:
             page = result.get("vdb") if isinstance(result, dict) else None
             if not isinstance(page, dict) or not isinstance(page.get("memories"), list) or type(page.get("total")) is not int or page["total"] < 0 or len(page["memories"]) > limit:
                 raise HyResponseError("hy_management_invalid_response")
-            items = tuple(self._record(row) for row in page["memories"])
+            # SDK list不含get的版本链/置信字段。统一从完整get构造修订，
+            # 否则用户刚在列表读到的修订会被详情/写前检查误判为过期。
+            items = tuple(self.get_item(self._record(row).item_id) for row in page["memories"])
             if page["total"] < offset + len(items) and items:
                 raise HyResponseError("hy_management_invalid_response")
             return MemoryPage(items, page["total"], offset, limit)
@@ -224,6 +227,18 @@ class HyAdministration:
                 raise HyManagementConflict("hy_management_revision_conflict")
             if item.kind not in {"l2_fact", "l3_summary"}:
                 raise UnsupportedCapabilityError("hy_management_item_kind_read_only")
+            try:
+                ManagementRPC._identifier(item_id)
+                row = self.method.sdk_call("get", memory_id=item_id)
+                validate_management_write(row, self.method.settings, "update" if action == "correct" else "delete",
+                    {"memory_id":item_id, **({"content":content} if action == "correct" else {})})
+                current = self._record(row)
+                if current.revision != expected_revision:
+                    raise HyManagementConflict("hy_management_revision_conflict")
+            except HyManagementDenied as error:
+                # 已知未调用SDK写的拒绝不写running，更不能被记成uncertain；
+                # worker仍独立复查相同规则，不能由平台预检查取代。
+                raise HyManagementConflict(str(error)) from None
             db.execute("INSERT INTO operations VALUES (?,?,?,?,?,?,?,?,NULL)",
                 (request_id, payload_hash, action, item_id, source.event_id, expected_revision,
                  "running", datetime.now(UTC).isoformat()))

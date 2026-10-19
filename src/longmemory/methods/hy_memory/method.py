@@ -54,7 +54,13 @@ class HyMemoryMethod:
             items, excluded = [], False
             management = getattr(self, "_management", None)
             for item in selected:
-                sources, uncertain = management.source_overlay(item.memory_id) if management else ((), False)
+                sources, uncertain = (), False
+                # SDK把可见旧版本正文拼在链头内；必须同时检查每个可见版本的
+                # 管理来源和未确认状态，不能仅按新链头ID放行历史正文。
+                for memory_id in item.visible_memory_ids or (item.memory_id,):
+                    overlay, blocked = management.source_overlay(memory_id) if management else ((), False)
+                    sources += overlay
+                    uncertain = uncertain or blocked
                 if uncertain:
                     excluded = True
                     continue

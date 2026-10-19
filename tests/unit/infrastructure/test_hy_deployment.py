@@ -42,6 +42,17 @@ def test_daily_entry_rejects_offline_or_simulated_models_before_initializing_sta
     assert not (tmp_path / "data").exists()
 
 
+@pytest.mark.parametrize("flag", ["management_writes_enabled", "management_exclusive_profile"])
+def test_daily_settings_cannot_self_authorize_management_without_trusted_receipt(tmp_path, flag):
+    setup_config(tmp_path)
+    path = tmp_path / "local/config/hy-memory/settings.json"
+    settings = json.loads(path.read_text()); settings[flag] = True
+    path.write_text(json.dumps(settings))
+    with pytest.raises(ValueError, match="management_flags_require_verification"):
+        load_hy_deployment(tmp_path)
+    assert not (tmp_path / "data").exists()
+
+
 @pytest.mark.parametrize("change", [
     {"version": 2}, {"url": "https://forbidden.invalid"},
     {"python_version": "3.10.20"},

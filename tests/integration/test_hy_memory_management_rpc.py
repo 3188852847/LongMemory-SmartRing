@@ -4,6 +4,7 @@ from dataclasses import replace
 from contextlib import contextmanager
 from datetime import UTC,datetime
 import json
+import os
 from pathlib import Path
 import subprocess
 
@@ -16,7 +17,7 @@ from longmemory.methods.hy_memory.assembly import HyState
 
 
 ROOT=Path(__file__).resolve().parents[2]
-SDK=ROOT/'local/runtime/hy-memory/.venv/Scripts/python.exe'
+SDK=Path(os.environ.get('LONGMEMORY_TEST_HY_PYTHON',str(ROOT/'local/runtime/hy-memory/.venv/Scripts/python.exe')))
 pytestmark=pytest.mark.skipif(not SDK.is_file(),reason='owner-installed SDK required')
 
 
@@ -120,3 +121,5 @@ def test_real_sdk_full_node_audit_update_raw_preservation_and_chain_delete_effec
     assert report['native_chain_delete']['head']['native_restored_predecessor']
     assert report['native_chain_delete']['middle']['native_changed_node_count']==3
     assert report['native_chain_delete']['tail']['native_changed_node_count']==2
+    assert report['platform_evolution_overlay_and_uncertain_exclusion']
+    assert report['platform_delete_refused_without_uncertain_audit']

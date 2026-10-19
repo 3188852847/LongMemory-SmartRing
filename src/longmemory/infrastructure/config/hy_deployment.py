@@ -59,7 +59,10 @@ def load_hy_deployment(root):
     sources = _path(root, data["source_path"], parent="data/databases")
     if state == sources or sources.is_relative_to(state) or state.is_relative_to(sources):
         raise ValueError("hy_deployment_resources_overlap")
-    settings = HySettings.from_wire(_read(directory / "settings.json"))
+    raw_settings = _read(directory / "settings.json")
+    if any(raw_settings.get(name, False) is not False for name in ("management_writes_enabled", "management_exclusive_profile")):
+        raise ValueError("hy_deployment_management_flags_require_verification")
+    settings = HySettings.from_wire(raw_settings)
     if settings.identity() != data["settings_identity"]:
         raise ValueError("hy_deployment_model_identity_mismatch")
     return HyDeployment(settings, python, state, sources, data["python_version"])

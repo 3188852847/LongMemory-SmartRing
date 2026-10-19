@@ -4,6 +4,7 @@ from pathlib import Path
 from time import time
 import hashlib
 import json
+import os
 
 import pytest
 
@@ -14,7 +15,7 @@ from longmemory.methods.hy_memory.budget import PricePolicy,SharedBudget
 from longmemory.methods.hy_memory.model_gateway import ModelGateway
 from longmemory.methods.hy_memory.settings import Endpoint,HySettings
 
-SDK=Path(__file__).resolve().parents[2]/"local/runtime/hy-memory/.venv/Scripts/python.exe"
+SDK=Path(os.environ.get("LONGMEMORY_TEST_HY_PYTHON",str(Path(__file__).resolve().parents[2]/"local/runtime/hy-memory/.venv/Scripts/python.exe")))
 
 
 @pytest.mark.skipif(not SDK.is_file(),reason="isolated SDK missing")

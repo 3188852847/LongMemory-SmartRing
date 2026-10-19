@@ -19,6 +19,7 @@ from longmemory.methods.hy_memory.budget import SharedBudget, PricePolicy
 from longmemory.methods.hy_memory.model_gateway import ModelGateway
 from longmemory.methods.hy_memory.settings import HySettings, Endpoint
 from longmemory.application.round_screen_turns import memory_receipt
+from longmemory.methods.hy_memory.assembly import management_primitives_identity
 
 
 SDK = Path(os.environ.get("LONGMEMORY_TEST_HY_PYTHON", "missing-sdk"))
@@ -120,6 +121,55 @@ def test_currency_proof_for_another_credential_cannot_start_or_charge(tmp_path):
     with pytest.raises(ValueError,match="price_currency_verification"):
         open_runtime(True)
     assert not gateways and budget.report()["attempt_count"]==1
+
+
+def management_receipt(root):
+    path = root / "local/config/hy-memory/management-verification.json"
+    path.write_text(json.dumps({"sdk_version":"2.0.3", "rpc_source_sha256":management_primitives_identity(),
+        "real_sdk_rpc_verified":True, "semantic_background_writes_disabled":True}))
+    return path
+
+
+def test_verified_daily_management_create_reopen_profile_scope_and_bad_receipt_cleanup(tmp_path):
+    open_runtime, gateways, deployment, budget = arrange(tmp_path)
+    path = management_receipt(tmp_path)
+    assert not deployment.settings.management_writes_enabled
+    for create in (True, False):
+        runtime = open_runtime(create)
+        try:
+            workspace = runtime.administer_extension("hy_memory", "workspace")
+            assert workspace["correction"] and workspace["deletion"] and workspace["profile"]
+            assert runtime.administer_extension("hy_memory", "profile") == {"item": None}
+            assert runtime._method.engine._client.state._lease is not None
+            assert runtime._method.journal._lease is not None
+            assert (deployment.state_directory / "management-scope.json").is_file()
+        finally:
+            runtime.close()
+        assert_closed(gateways[-1])
+    proof = json.loads(path.read_text()); proof["rpc_source_sha256"] = "0" * 64
+    path.write_text(json.dumps(proof))
+    with pytest.raises(ValueError, match="verification_identity"):
+        open_runtime(False)
+    assert_closed(gateways[-1])
+    assert budget.report()["attempt_count"] == 1
+
+
+def test_preexisting_daily_space_does_not_gain_profile_proof_from_new_receipt(tmp_path):
+    open_runtime, gateways, deployment, budget = arrange(tmp_path)
+    runtime = open_runtime(True)
+    try:
+        workspace = runtime.administer_extension("hy_memory", "workspace")
+        assert not workspace["correction"] and not workspace["profile"]
+    finally:
+        runtime.close()
+    management_receipt(tmp_path)
+    runtime = open_runtime(False)
+    try:
+        workspace = runtime.administer_extension("hy_memory", "workspace")
+        assert workspace["correction"] and not workspace["profile"]
+        assert not (deployment.state_directory / "management-scope.json").exists()
+    finally:
+        runtime.close()
 
 
 @pytest.mark.skipif(not os.environ.get("LONGMEMORY_TEST_BGE_ROOT"), reason="explicit existing CPU BGE root required")

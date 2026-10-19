@@ -19,8 +19,9 @@ class Client:
     def __init__(self, root):
         self.state = SimpleNamespace(root=root, _lease=object())
         self.row = {"memory_id": "synthetic-item", "content": "合成用户喜欢茶", "layer": "l2_fact",
-            "user_id": "synthetic-user", "agent_id": "synthetic-agent", "status": "ACTIVE",
-            "source": SOURCE_NAMESPACE, "meta": [{"namespace": SOURCE_NAMESPACE, "source_event_ids": ["synthetic-source"]}]}
+            "user_id": "synthetic-user", "agent_id": "synthetic-agent", "status": "active",
+            "is_latest": True, "supersedes": [], "superseded_by": [],
+            "source": "vdb", "meta": [{"namespace": SOURCE_NAMESPACE, "role":"user", "source_event_ids": ["synthetic-source"]}]}
         self.calls = []
         self.fail_after_write = False
 
@@ -150,6 +151,39 @@ def test_delete_is_single_item_replay_and_sources_preserved(tmp_path):
     assert sum(name == "delete" for name, _ in client.calls) == 1
 
 
+@pytest.mark.parametrize("fields", [
+    {"supersedes": ["older"]}, {"superseded_by": ["newer"]},
+    {"supersedes": ["older"], "superseded_by": ["newer"]},
+    {"supersedes": None}, {"is_latest": False}, {"status": "superseded"},
+])
+def test_delete_ineligible_item_rejected_before_running_audit(tmp_path, fields):
+    client, admin = setup(tmp_path)
+    client.row.update(fields)
+    args = correction(admin)
+    args.pop("content")
+    args["source"] = MemoryEvent(args["source"].event_id, "user", "删除这条记忆：synthetic-item", datetime.now(UTC))
+    with pytest.raises(HyManagementConflict):
+        admin.extension("delete", **args)
+    assert admin.extension("operations")["total"] == 0
+    assert not any(name == "delete" for name, _ in client.calls)
+
+
+@pytest.mark.parametrize("change,content", [
+    ({"is_latest":False}, "合成纠正"), ({"status":"superseded"}, "合成纠正"),
+    ({}, "合成\0纠正"),
+    ({"meta":[{"namespace":SOURCE_NAMESPACE,"role":"assistant","source_event_ids":["s"]}]}, "合成纠正"),
+    ({"meta":[{"namespace":"foreign","role":"user","source_event_ids":["s"]}]}, "合成纠正"),
+])
+def test_deterministic_correction_rejection_has_no_running_or_uncertain(tmp_path, change, content):
+    client, admin = setup(tmp_path)
+    client.row.update(change)
+    with pytest.raises((HyManagementConflict, UnsupportedCapabilityError)):
+        args = correction(admin, content=content)
+        admin.extension("correct", **args)
+    assert admin.extension("operations")["total"] == 0
+    assert not any(name == "update" for name, _ in client.calls)
+
+
 @pytest.mark.parametrize("field,value", [("user_id", "foreign"), ("agent_id", "foreign"), ("source", "foreign")])
 def test_scope_rejected_before_management(tmp_path, field, value):
     client, admin = setup(tmp_path)
@@ -160,6 +194,7 @@ def test_scope_rejected_before_management(tmp_path, field, value):
 def test_unknown_sources_and_time_are_not_invented_and_history_is_projected(tmp_path):
     client, admin = setup(tmp_path)
     client.row.pop("meta")
+    client.row["source"] = SOURCE_NAMESPACE  # 显式namespace仍可投影来源未知；真实get缺范围时拒绝。
     item = admin.get_item("synthetic-item")
     assert item.source_event_ids is None and item.recorded_at is None
     history = admin.extension("history", item_id=item.item_id)
