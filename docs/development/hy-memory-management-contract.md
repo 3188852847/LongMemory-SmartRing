@@ -1,0 +1,42 @@
+# Hy 记忆管理接线契约
+
+日期：2026-10-19。Y 的可审阅接线提案；未接线的动作不宣称可用。本文件只覆盖记忆管理，不修改通用 MemoryMethod 的层级含义。
+
+## 确认的底层事实
+
+已只读检查所有者安装的 `hy-memory==2.0.3` 的 `client.py`：`get/list_memories` 可读；`get_user_profile(user_id=...)` 只按 user 隔离；`history(memory_id)` 返回历史数组（关闭历史时也返回空数组）；`update(memory_id, content)` / `delete(memory_id)` 没有 expected_revision。list 只返回 ACTIVE、可接受 layers，不支持正文查询或 source 过滤。SDK update 不能同时提交平台纠正来源。不能把它包装成原生 CAS（比较并交换）或跨存储事务。
+
+## V 接力：受限 RPC（远程过程调用）
+
+沿用现有 JSONL envelope / 超时即关闭 / 稳定脱敏错误。不接受客户端路径、user/agent/source 的 HTTP 覆盖。
+
+| Python client 方法 | 固定参数 | 返回 / 错误 |
+|---|---|---|
+| `management_capabilities()` | 无 | `{"protocol":1,"history":bool,"profile":bool,"update":bool,"delete":bool,"exclusive_user_profile":bool}`；只有核对 SDK API / 当前配置后为真，默认 false。profile 须独占 user、当前 agent/source 范围证明，否则 false。 |
+| `history(memory_id=...)` | 非空字符串 ID；先在 Y 按 user/agent/source 核对当前条目 | SDK history 数组；未知字段不透传 HTTP，Y 白名单投影。空数组表示“未记录或无变化”，不等于没有历史变化。 |
+| `update(memory_id=..., content=...)` | ID / 明确用户纠正正文；不接受任意 kwargs | SDK `success is True` 且 memory_id 一致，随后 Y 独立 get 验证正文。异常可能部分提交，绝不自动重试。不得调用 add/模型重新提取来冒充纠正。 |
+| `delete(memory_id=...)` | 单条 ID；不提供 delete_all | SDK `success is True`，随后 Y 独立 get 确认不存在。仅引擎条目删除，平台来源/历史/备份保留。 |
+
+现有 `get_user_profile(user_id=...)` 继续使用；Y method 的 sdk_call 增加白名单。若真实 SDK update/delete 的副作用不满足当前单条范围，capability 必须 false 并给出阻塞证据；不能仅为 UI 打开动作。
+
+## X 接力：Runtime 扩展入口
+
+请在 Runtime 增加 `administer_extension(namespace, operation, **arguments)`，namespace 仅 `hy_memory`，operation 白名单：`workspace`, `profile`, `history`, `operations`, `correct`, `delete`。在现有 Runtime 串行锁内检查 open / assembly / `management.extension_namespace`，调用 `management.extension(operation, **arguments)`；不向 HTTP 暴露对象或任意方法名。
+
+`correct/delete` 均检查运行期 write_enabled；启动权限由 Y 路由继续检查。`correct` 的 `source` 必须是平台新建真实 user 事件，正文与 content 相同，归档后调用 extension；`delete` 也传入真实用户明确删除指令来源，先归档，不能伪造助手/模型为权威。来源归档后管理失败不撤销原文、不自动向 observe 投递。重放同 request_id 应使用同 source.event_id，避免重复来源；推荐 source ID 为 `hy-management:<request_id>`。Y 路由创建来源，HTTP 不接受用户指定 event_id/时间/角色。
+
+`workspace` 返回管理能力与限制；`profile/history/operations` 为只读。Y 不绕过缺失扩展：未装配时 API 501、UI 显示具体限制。现有中立 listing/detail 继续可用。通用 correction/deletion 能力仍 false，因为它们要求原子修订比较。
+
+## Y 的操作语义
+
+Y 在 Hy method 的同一 RLock 内校验条目 user/agent/source、比较完整可见修订指纹、持久写 running 审计、调用一次 SDK、独立读回，再写 completed；全程沿既有 engine.owner 独占租约，SDK 后台语义写必须关闭。此保证叫“唯一拥有者串行修订检查”，不是 SDK 原生 CAS。不能允许第二 writer 绕过租约。若不能核对该前提，写能力 false。
+
+审计位于可信 Hy state root 下 `management.sqlite3`，不接受 HTTP 路径。记录 request_id、动作、条目、预期修订、用户 source ID、内容摘要、时间、结果状态及稳定错误码；原文保留在平台来源账本，审计不复制完整正文。重复同请求不重发 SDK，异载荷同 ID 拒绝。异常/读回不符标 uncertain；取得新独占拥有权后原 running 变 uncertain。uncertain 不自动重试，UI 要求先重新核对；completed 纠正来源通过该审计补入详情，不能假称 SDK meta 已更改。
+
+## HTTP 与 UI
+
+在现有 `/api/memory-engine/hy` 下：GET workspace、profile、operations；GET items/{id}/history；POST items/{id}/corrections、POST items/{id}/deletion。写 body 为 `{request_id,revision,content}` 或 `{request_id,revision,confirmation:"删除这条记忆"}`，请求共享会话/同源/CSRF 与启动权限。错误 403 权限/暂停，404 缺失，409 修订/请求冲突，501 能力/接线不支持，503 不确定/引擎失败。失败不显示成功、不自动重试。
+
+前端分页使用真实 offset/limit/total。SDK 无正文检索，当前页筛选明确标范围，不借 search 触发可能写状态或外部费用。基本画像按 capability 启用，未知来源/时间、部分来源读取失败如实显示。L4/L5 保留层、Graph/Intention/System2 未启用；旧库独立保留，不提供旧库按钮的隐式回落。
+
+该接线须主会话协调 V/X，Y 不编辑其文件或向其发送工具消息。前端/模拟契约通过后仍需 V 实 SDK 离线管理验证、X Runtime 守卫验证、三方组合审查；本文件不代表已完成日用验收。
