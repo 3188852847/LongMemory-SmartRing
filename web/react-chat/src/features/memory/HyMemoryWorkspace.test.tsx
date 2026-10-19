@@ -130,7 +130,9 @@ test('确定性删除拒绝保留说明，不误报不确定或永久锁住条�
   expect(within(modal).getByText(/不能单独删除，以免恢复旧事实。当前有效条目/)).toBeTruthy();
   expect(within(modal).queryByText(/结果未确认，已禁止重复提交/)).toBeNull();
   expect(writes).toBe(1);
-  fireEvent.click(within(modal).getByRole('button',{name:'取消'}));
+  const cancel=within(modal).getByRole('button',{name:/取\s*消/});
+  await waitFor(()=>expect(cancel.hasAttribute('disabled')).toBe(false));
+  fireEvent.click(cancel);
   await waitFor(()=>expect(screen.getByRole('button',{name:'纠正这条记忆'}).hasAttribute('disabled')).toBe(false));
 });
 
