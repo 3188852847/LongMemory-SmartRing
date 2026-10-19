@@ -7,6 +7,8 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from threading import RLock
 from time import perf_counter
 from uuid import uuid4
+from longmemory.application.round_screen_turns import memory_receipt, validate_receipt, PlatformTurnCompletion
+from longmemory.application.round_screen_memory_feedback import classify_explicit_round_screen_feedback
 
 from longmemory.methods.contracts import (
     MemoryEvent,
@@ -98,11 +100,12 @@ class MemoryRuntime:
                  consolidation_scheduler: LowFrequencyConsolidationScheduler | None = None,
                  l1_sufficiency_shadow=None,
                  l2_sufficiency_shadow=None,
-                 clock=None, backend_assembly=None) -> None:
+                 clock=None, backend_assembly=None, round_screen_store=None) -> None:
         self.database = database.resolve()
         # Runtime 只编排统一方法契约。具体使用规则、LLM 提取还是其他方法，
         # 必须由进程入口的装配层决定，不能在应用层偷偷选择实现。
         self._method = method
+        self._round_screen_store = round_screen_store
         self.backend_assembly = backend_assembly
         self._lock = RLock()
         self._closed = False
@@ -139,9 +142,10 @@ class MemoryRuntime:
 
     def prepare_user(
         self, text: str, *, defer_slow_observation: bool = False,
+        event_id: str | None = None, session_id: str | None = None,
     ) -> PreparedMemoryTurn:
         started = perf_counter()
-        event = MemoryEvent(str(uuid4()), "user", text, self._clock())
+        event = MemoryEvent(event_id or str(uuid4()), "user", text, self._clock(), session_id)
         lock_started = perf_counter()
         with self._lock:
             lock_acquired = perf_counter()
@@ -475,12 +479,18 @@ class MemoryRuntime:
             follow_up_suggestion, temporary_interaction,
         )
 
-    def complete_deferred_observation(self, event_id: str) -> bool:
+    def complete_deferred_observation(self, event_id: str, *, resume_pending=False) -> bool:
         """把已完成回答对应的 L1 派生交给受管队列；重复回执不重复提交。"""
 
         with self._lock:
             self._ensure_open()
             event = self._deferred_events.pop(event_id, None)
+            if event is None and resume_pending and self._round_screen_store is not None:
+                # 仅由这次明确完成回执恢复尚未调用引擎的 pending；重启不扫库重放。
+                detail = self._method.source_detail(event_id)
+                if detail["state"] == "pending":
+                    event = MemoryEvent(event_id, detail["role"], detail["content"],
+                        datetime.fromisoformat(detail["occurred_at"]), detail["session_id"])
             if event is None or self._closing:
                 return False
             # V44 账本和失败事件也属于 SQLite 写入，必须在 Runtime 锁内。
@@ -497,6 +507,49 @@ class MemoryRuntime:
             self._deferred_last_result = {"state": "running", "warning_code": None}
             future.add_done_callback(self._deferred_done)
             return True
+
+    def prepare_round_screen(self, text, *, client_round_id, session_id, request_id=None):
+        with self._lock:
+            self._ensure_open()
+            store = self._round_screen_store
+            if store is None:
+                raise ValueError("round_screen_platform_unavailable")
+            event_id = store.reserve(client_round_id=client_round_id, session_id=session_id,
+                                     request_id=request_id)
+            try:
+                prepared = self.prepare_user(text, event_id=event_id, session_id=session_id,
+                                             defer_slow_observation=True)
+                store.prepared(event_id, memory_receipt(prepared))
+            except BaseException:
+                store.failed(event_id)
+                raise
+            feedback = store.feedback(prepared.event, classify_explicit_round_screen_feedback(text))
+            return prepared, feedback
+
+    def complete_round_screen(self, *, turn_id, answer, receipt, client_round_id=None, request_id=None):
+        with self._lock:
+            self._ensure_open()
+            if not isinstance(answer, str) or not answer.strip() or len(answer) > 16000:
+                raise ValueError("round_screen_answer_invalid")
+            validate_receipt(receipt)
+            assistant_id, created = self._round_screen_store.complete(event_id=turn_id,
+                answer=answer, receipt=receipt, request_id=request_id, client_round_id=client_round_id)
+            # 来源与助手关联已持久提交，然后才排队；后台失败由来源账本保存。
+            if self._round_screen_store.claim_dispatch(turn_id):
+                self.complete_deferred_observation(turn_id, resume_pending=True)
+            return PlatformTurnCompletion(assistant_id, created)
+
+    def cancel_round_screen(self, turn_id, *, reason, client_round_id=None):
+        with self._lock:
+            self._ensure_open()
+            result = self._round_screen_store.cancel(turn_id, reason=reason, client_round_id=client_round_id)
+            self._deferred_events.pop(turn_id, None)
+            return result
+
+    def round_screen_status(self, turn_id):
+        with self._lock:
+            self._ensure_open()
+            return self._round_screen_store.status(turn_id)
 
     def retry_failed_observation(
         self, source_message_id: str, *, expected_attempt_id: str,
@@ -600,8 +653,8 @@ class MemoryRuntime:
             for future in futures:
                 future.result()
 
-    def record_assistant(self, text: str) -> ObservationResult:
-        event = MemoryEvent(str(uuid4()), "assistant", text, self._clock())
+    def record_assistant(self, text: str, *, session_id=None) -> ObservationResult:
+        event = MemoryEvent(str(uuid4()), "assistant", text, self._clock(), session_id)
         with self._lock:
             self._ensure_open()
             return self._method.observe(event)
@@ -674,6 +727,8 @@ class MemoryRuntime:
                 "management_capabilities": (asdict(self.backend_assembly.management.capabilities)
                     if self.backend_assembly and self.backend_assembly.management else {}),
                 "legacy_sqlite": self.legacy_sqlite,
+                "proactive": ({"available": False, "state": "paused_backend_unsupported"}
+                              if not self.legacy_sqlite else {"available": True, "state": "managed_by_policy"}),
                 "write_enabled": self._write_enabled,
                 "use_enabled": self._use_enabled,
                 "scenario_use_enabled": self._scenario_use_enabled,

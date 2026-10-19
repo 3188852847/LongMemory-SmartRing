@@ -123,11 +123,13 @@ def build_backend_runtime(assembly: BackendAssembly, *, clock=None) -> MemoryRun
     if assembly.legacy_sqlite:
         raise ValueError("旧引擎应使用 build_legacy_runtime。")
     from longmemory.application.backend_commands import UnsupportedBackendCommands
+    from longmemory.adapters.storage.sqlite_platform_rounds import SQLitePlatformRounds
     sources = next((item.path for item in assembly.resources if item.name == "platform_sources"), None)
     if sources is None:
         raise ValueError("platform_sources_required")
     return MemoryRuntime(sources, method=assembly.method, backend_assembly=assembly,
                          memory_command_handler=UnsupportedBackendCommands(assembly.method),
+                         round_screen_store=SQLitePlatformRounds(assembly.method.journal, clock=clock),
                          clock=clock)
 
 

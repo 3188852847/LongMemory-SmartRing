@@ -576,6 +576,96 @@ def test_bridge_scripts_have_python310_syntax():
         ast.parse((SCRIPTS / name).read_text(encoding='utf-8'), feature_version=(3, 10))
 
 
+def test_neutral_provider_cross_thread_turn_keys_and_unknown_counts(provider_class, config, monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+    from uuid import uuid4
+    provider = provider_class(config)
+    provider.init_memory(config["allowed_device_id"], None)
+    calls = []
+
+    class Response:
+        status = 200
+        def __init__(self, data): self.data = data
+        def __enter__(self): return self
+        def __exit__(self, *_args): pass
+        def read(self, _limit): return json.dumps(self.data).encode()
+
+    def open_request(request, timeout):
+        body = json.loads(request.data)
+        calls.append((request.full_url, body))
+        if request.full_url.endswith('/prepare'):
+            return Response({"version": 1, "memory_protocol": 2, "turn_id": str(uuid4()),
+                "added": None, "retrieved": None, "context": "合成记忆",
+                "memory_receipt": {"retrieved_count": None, "retrieval_strategy": None, "evidence": None}})
+        if request.full_url.endswith('/cancel'):
+            return Response({"version": 1, "state": "cancelled"})
+        return Response({"version": 1, "assistant_event_id": str(uuid4()), "created": True,
+            "playback_acknowledgement": "unavailable"})
+
+    monkeypatch.setenv("LONGMEMORY_MEMORY_TRANSPORT", "runtime")
+    monkeypatch.setenv("LONGMEMORY_RUNTIME_URL", "http://127.0.0.1:23456/api/internal/memory/prepare")
+    monkeypatch.setenv("LONGMEMORY_RUNTIME_TOKEN", "d" * 64)
+    monkeypatch.setattr("urllib.request.urlopen", open_request)
+
+    def query(text):
+        key, token = provider.begin_turn()
+        try:
+            assert "合成记忆" in asyncio.run(provider.query_memory(text))
+            return key
+        finally:
+            provider.end_turn(token)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        keys = list(pool.map(query, ("合成用户甲", "合成用户乙")))
+    assert keys[0] != keys[1]
+    assert provider.record_completed_turn("回答乙", turn_key=keys[1])
+    assert provider.cancel_turn(keys[0], "superseded")
+    completion = next(body for url, body in calls if url.endswith('/complete'))
+    assert completion["client_round_id"] == keys[1]
+    assert "retrieved_counts" not in completion and "retrieval_evidence" not in completion
+    assert completion["memory_receipt"]["retrieved_count"] is None
+    assert not provider.record_completed_turn("迟到回答甲", turn_key=keys[0])
+
+
+def test_wrapper_captures_only_own_assistant_and_supersedes_concurrent_turn():
+    from contextvars import ContextVar
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Event
+    wrapper = load_script("launch_with_memory")
+    first_entered, second_finished = Event(), Event()
+    key_context = ContextVar("synthetic_turn", default=None)
+    completed, cancelled = [], []
+    class Memory:
+        def begin_turn(self):
+            from uuid import uuid4
+            key = uuid4().hex
+            return key, key_context.set(key)
+        def end_turn(self, token): key_context.reset(token)
+        def record_completed_turn(self, answer, *, turn_key): completed.append((turn_key, answer))
+        def cancel_turn(self, key, reason): cancelled.append((key, reason))
+    class Dialogue:
+        def __init__(self): self.dialogue = []
+        def put(self, message): self.dialogue.append(message)
+    class Connection:
+        def __init__(self):
+            self.memory, self.dialogue = Memory(), Dialogue()
+            self.client_abort = False
+        def chat(self, query, depth=0):
+            if query == "甲":
+                first_entered.set()
+                assert second_finished.wait(3)
+            self.dialogue.put(SimpleNamespace(role="assistant", content="回答" + query))
+            if query == "乙": second_finished.set()
+    wrapper.install_answer_completion(Connection)
+    connection = Connection()
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        first = pool.submit(connection.chat, "甲")
+        assert first_entered.wait(3)
+        second = pool.submit(connection.chat, "乙")
+        first.result(), second.result()
+    assert [answer for _, answer in completed] == ["回答乙"]
+    assert len(cancelled) == 1 and cancelled[0][1] == "superseded"
+
+
 def test_real_upstream_dialogue_injects_context_if_available():
     source = ROOT / 'local/runtime/xiaozhi-esp32-server/main/xiaozhi-server/core/utils/dialogue.py'
     if not source.is_file():

@@ -36,7 +36,7 @@ class Chat:
 
 
 def register_chat_routes(app, backend):
-    store = ChatStore(backend.database) if backend else None
+    store = ChatStore(getattr(backend, "sidecar_database", backend.database)) if backend else None
     chats = {key: Chat(**value) for key, value in store.load().items()} if store else {}
     # 崩溃中断不是模型失败或“未写入”：保留请求号，禁止自动重复执行。
     for chat in chats.values():
@@ -436,7 +436,8 @@ def register_chat_routes(app, backend):
 
     async def finish(key, chat, request_id, text, history):
         try:
-            result = await asyncio.to_thread(backend.run, text, history)
+            metadata = {"session_id": "web:" + key} if getattr(backend, "_runtime", None) is not None and not backend.memory_runtime().legacy_sqlite else {}
+            result = await asyncio.to_thread(backend.run, text, history, **metadata)
             result["request_id"] = request_id
             chat.turns.append(result)
             chat.request_ids[request_id] = result

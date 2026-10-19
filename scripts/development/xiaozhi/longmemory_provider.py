@@ -14,6 +14,8 @@ from pathlib import Path
 import re
 import subprocess
 import threading
+from contextvars import ContextVar
+from uuid import uuid4
 from urllib import error as urlerror
 from urllib import request as urlrequest
 from urllib.parse import urlsplit
@@ -50,6 +52,9 @@ class MemoryProvider(MemoryProviderBase):
                 raise ValueError("LongMemory 必须使用 data 下的 xiaozhi-demo 专用文件")
         self._lock = threading.Lock()
         self._pending_completion = None
+        self._pending_completions = {}
+        self._turn_key = ContextVar("memory_turn_key", default=None)
+        self._session_id = uuid4().hex
         self._suppressed_internal_queries = []
 
     def init_memory(self, role_id, llm, **kwargs):
@@ -81,7 +86,11 @@ class MemoryProvider(MemoryProviderBase):
                 or parsed.query or parsed.fragment
                 or re.fullmatch(r"[0-9a-f]{64}", token) is None):
             raise RuntimeError("LongMemory Runtime 启动环境无效")
-        body = json.dumps({"version": 1, "query": query}).encode("utf-8")
+        key = self._turn_key.get()
+        body_data = {"version": 1, "query": query}
+        if key is not None:
+            body_data.update(client_round_id=key, session_id=self._session_id)
+        body = json.dumps(body_data).encode("utf-8")
         request = urlrequest.Request(
             url,
             data=body,
@@ -130,6 +139,7 @@ class MemoryProvider(MemoryProviderBase):
         return response
 
     def _request(self, query):
+        turn_key = self._turn_key.get()
         query = self._validate_query(query)
         with self._lock:
             normalized_query = query.strip()
@@ -146,11 +156,19 @@ class MemoryProvider(MemoryProviderBase):
             response = self._subprocess_request(query)
         else:
             raise RuntimeError("LongMemory 传输方式无效")
+        neutral = response.get("memory_protocol") == 2
         if (response.get("version") != 1 or not isinstance(response.get("context"), str)
                 or not isinstance(response.get("turn_id"), str)
-                or type(response.get("added")) is not int
-                or type(response.get("retrieved")) is not int):
+                or not (type(response.get("added")) is int or (neutral and response.get("added") is None))
+                or not (type(response.get("retrieved")) is int or (neutral and response.get("retrieved") is None))):
             raise RuntimeError("LongMemory 返回协议无效")
+        if neutral:
+            receipt = response.get("memory_receipt")
+            if (not isinstance(receipt, dict) or set(receipt) != {"retrieved_count", "retrieval_strategy", "evidence"}
+                    or receipt["retrieved_count"] != response["retrieved"]
+                    or (receipt["evidence"] is not None and not isinstance(receipt["evidence"], list))
+                    or turn_key is None):
+                raise RuntimeError("LongMemory 返回协议无效")
         command_reply = response.get("command_reply")
         if command_reply is not None and (
                 not isinstance(command_reply, str) or not command_reply.strip()
@@ -258,7 +276,7 @@ class MemoryProvider(MemoryProviderBase):
         # 顶层 chat 完成后由启动适配器取走一次。覆盖旧值表示旧回答没有得到
         # 完成回执；不能把后来的答案错误关联给旧 turn_id。
         with self._lock:
-            self._pending_completion = {
+            pending = {
                 "diagnostic_trace": _diagnostics.CURRENT.get() if _diagnostics else None,
                 "turn_id": response["turn_id"],
                 "retrieved_counts": {
@@ -269,6 +287,14 @@ class MemoryProvider(MemoryProviderBase):
                 "retrieval_evidence": retrieval_evidence,
                 "retrieval_strategy": retrieval_strategy,
             }
+            if neutral:
+                pending.update(memory_protocol=2, memory_receipt=receipt, client_round_id=turn_key)
+            if turn_key is None:
+                self._pending_completion = pending
+            else:
+                if len(self._pending_completions) >= 8:
+                    raise RuntimeError("LongMemory 待完成轮次过多")
+                self._pending_completions[turn_key] = pending
         if command_reply is not None:
             reply = html.escape(command_reply, quote=False)
             context = (
@@ -310,14 +336,24 @@ class MemoryProvider(MemoryProviderBase):
                 raise RuntimeError("LongMemory 内部输入标记过多")
             self._suppressed_internal_queries.append(query.strip())
 
-    def record_completed_turn(self, answer: str) -> bool:
+    def begin_turn(self):
+        key = uuid4().hex
+        return key, self._turn_key.set(key)
+
+    def end_turn(self, token):
+        self._turn_key.reset(token)
+
+    def record_completed_turn(self, answer: str, *, turn_key=None) -> bool:
         """至多回传一次最终文本；失败不重试，避免重复或错配回答。"""
 
         if not isinstance(answer, str) or not answer.strip() or len(answer) > 16000:
             return False
         with self._lock:
-            pending = self._pending_completion
-            self._pending_completion = None
+            if turn_key is None:
+                pending = self._pending_completion
+                self._pending_completion = None
+            else:
+                pending = self._pending_completions.pop(turn_key, None)
         if pending is None:
             return False
         source_url = os.environ.get("LONGMEMORY_RUNTIME_URL", "")
@@ -340,10 +376,15 @@ class MemoryProvider(MemoryProviderBase):
             "answer": answer,
             "retrieved_counts": pending["retrieved_counts"],
         }
+        if pending.get("memory_protocol") == 2:
+            completion = {"version": 1, "memory_protocol": 2,
+                "turn_id": pending["turn_id"], "answer": answer,
+                "memory_receipt": pending["memory_receipt"],
+                "client_round_id": pending["client_round_id"]}
         # 字段缺省兼容更新期间的旧 Runtime；新 Runtime 会返回并持久化精确索引。
-        if pending.get("retrieval_evidence") is not None:
+        if pending.get("memory_protocol") != 2 and pending.get("retrieval_evidence") is not None:
             completion["retrieval_evidence"] = pending["retrieval_evidence"]
-        if pending.get("retrieval_strategy") is not None:
+        if pending.get("memory_protocol") != 2 and pending.get("retrieval_strategy") is not None:
             completion["retrieval_strategy"] = pending["retrieval_strategy"]
         body = json.dumps(completion).encode("utf-8")
         request = urlrequest.Request(
@@ -362,6 +403,29 @@ class MemoryProvider(MemoryProviderBase):
         except (OSError, urlerror.URLError, ValueError, TypeError,
                 RuntimeError, json.JSONDecodeError):
             raise RuntimeError("LongMemory 回答回执失败") from None
+        return True
+
+    def cancel_turn(self, turn_key, reason="cancelled"):
+        with self._lock:
+            pending = self._pending_completions.pop(turn_key, None)
+        if pending is None or pending.get("memory_protocol") != 2:
+            return False
+        source = urlsplit(os.environ.get("LONGMEMORY_RUNTIME_URL", ""))
+        token = os.environ.get("LONGMEMORY_RUNTIME_TOKEN", "")
+        if (source.scheme != "http" or source.hostname != "127.0.0.1"
+                or source.path != "/api/internal/memory/prepare" or source.username or source.password
+                or source.query or source.fragment or re.fullmatch(r"[0-9a-f]{64}", token) is None):
+            raise RuntimeError("LongMemory Runtime 启动环境无效")
+        body = json.dumps({"version": 1, "turn_id": pending["turn_id"],
+            "client_round_id": pending["client_round_id"], "reason": reason}).encode("utf-8")
+        request = urlrequest.Request(source._replace(path="/api/internal/memory/cancel").geturl(),
+            data=body, method="POST", headers={"Content-Type": "application/json", "Authorization": "Bearer " + token})
+        try:
+            with urlrequest.urlopen(request, timeout=5) as response:
+                if response.status != 200:
+                    raise RuntimeError
+        except Exception:
+            raise RuntimeError("LongMemory 取消回执失败") from None
         return True
 
     async def query_memory(self, query: str) -> str:

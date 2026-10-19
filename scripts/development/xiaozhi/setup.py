@@ -28,6 +28,8 @@ CUSTOM_TTS_URLS = {
     "cosyvoice3": "http://127.0.0.1:18770/v1/audio/speech",
 }
 LEGACY_MEMORY_PROVIDER_SHA256 = {
+    # T 20261015 部署版；X 已核对主源码与实际消费副本同摘要，只允许精确升级。
+    "98998f2fcf28c754bc39336129b072c737dd2cc58ef9505137625661452ce018",
     # Q 显式语音关联接入前的日用发布版，与 e15a867 文件字节完全相同。
     "82e43c8d59de69a5ddc8cc62eb2b96eee555efec36c339a800206bcab062253d",
     # 明确日期历史证据字段加入 Runtime、但薄适配器尚未同步契约的已发布版本。

@@ -10,6 +10,7 @@ import os
 import runpy
 import sys
 import time
+from threading import Lock
 from voice_diagnostics import CURRENT
 
 
@@ -45,6 +46,7 @@ def observe_memory_operations(connection):
         sentence_id = getattr(connection, "sentence_id", None)
         trace = CURRENT.get()
         tracker = getattr(connection, "_longmemory_voice_latency", None)
+        initial_tracker = tracker
         if tracker is not None:
             tracker.bind_sentence(sentence_id)
         if trace is not None:
@@ -60,7 +62,8 @@ def observe_memory_operations(connection):
                 code = ("memory_response_invalid"
                         if str(error) == "LongMemory 返回协议无效"
                         else "memory_runtime_failed")
-                tracker.bind_sentence(sentence_id)
+                if tracker is not initial_tracker:
+                    tracker.bind_sentence(sentence_id)
                 tracker.fail(code, stage="memory")
             # 固定上游在查询记忆前已发送 FIRST，却会在这里的异常分支直接
             # return，遗漏 LAST。补发同一 sentence_id 的结束动作，避免圆屏
@@ -127,17 +130,58 @@ def install_answer_completion(connection_class):
     if getattr(connection_class, "_longmemory_completion_installed", False):
         return
     original = connection_class.chat
+    capture = ContextVar("round_answer_capture", default=None)
+    capture_lock = Lock()
 
     def chat(connection, query, depth=0):
         before = len(connection.dialogue.dialogue)
-        result = original(connection, query, depth)
         memory = connection.memory
+        owned = depth == 0 and callable(getattr(memory, "begin_turn", None))
+        turn_key, token = memory.begin_turn() if owned else (None, None)
+        record = {"answers": [], "superseded": False}
+        capture_token = None
+        if owned:
+            with capture_lock:
+                previous = getattr(connection, "_longmemory_active_completion", None)
+                if previous is not None:
+                    previous["superseded"] = True
+                connection._longmemory_active_completion = record
+                dialogue = connection.dialogue
+                if not getattr(dialogue, "_longmemory_capture_installed", False) and callable(getattr(dialogue, "put", None)):
+                    put = dialogue.put
+
+                    def capture_put(message):
+                        current = capture.get()
+                        if (current is not None and getattr(message, "role", None) == "assistant"
+                                and isinstance(getattr(message, "content", None), str) and message.content.strip()):
+                            current["answers"].append(message.content)
+                        return put(message)
+
+                    dialogue.put = capture_put
+                    dialogue._longmemory_capture_installed = True
+            capture_token = capture.set(record)
+        try:
+            result = original(connection, query, depth)
+        except BaseException:
+            if owned:
+                try:
+                    memory.cancel_turn(turn_key, "chat_failed")
+                except Exception:
+                    connection.logger.bind(tag="LongMemory").error("回答失败状态回执失败；不会自动重试")
+            raise
+        finally:
+            if owned:
+                memory.end_turn(token)
+                capture.reset(capture_token)
+                with capture_lock:
+                    if getattr(connection, "_longmemory_active_completion", None) is record:
+                        connection._longmemory_active_completion = None
         # 上游 chat() 的正常分支并不都返回 True：direct_answer 在已经把
         # 助手文本写入对话并送入 TTS 队列后会直接返回 None。因此完成依据
         # 必须是“本次顶层调用新增了助手文本”，不能依赖厂商内部返回值。
         if (depth == 0 and query
                 and callable(getattr(memory, "record_completed_turn", None))):
-            answers = [
+            answers = record["answers"] if owned else [
                 item.content for item in connection.dialogue.dialogue[before:]
                 if getattr(item, "role", None) == "assistant"
                 and isinstance(getattr(item, "content", None), str)
@@ -145,13 +189,23 @@ def install_answer_completion(connection_class):
             ]
             if answers:
                 try:
-                    memory.record_completed_turn("\n".join(answers))
+                    if owned and (record["superseded"] or getattr(connection, "client_abort", False)):
+                        memory.cancel_turn(turn_key, "superseded" if record["superseded"] else "cancelled")
+                    elif owned:
+                        memory.record_completed_turn("\n".join(answers), turn_key=turn_key)
+                    else:
+                        memory.record_completed_turn("\n".join(answers))
                 except Exception:
                     # 语音回答已经进入播放队列，归档失败不能伪装成聊天失败；
                     # 只输出稳定错误，不记录回答正文。
                     connection.logger.bind(tag="LongMemory").error(
                         "回答完成回执失败；本轮不会自动重试"
                     )
+            elif owned:
+                try:
+                    memory.cancel_turn(turn_key, "cancelled" if getattr(connection, "client_abort", False) else "chat_failed")
+                except Exception:
+                    connection.logger.bind(tag="LongMemory").error("未完成回答状态回执失败；不会自动重试")
         return result
 
     connection_class.chat = chat
