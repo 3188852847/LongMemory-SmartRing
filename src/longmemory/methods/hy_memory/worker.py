@@ -10,6 +10,7 @@ from pathlib import Path
 import socket
 import sys
 from threading import Lock, local
+from urllib.parse import urlsplit
 
 from .process_client import MAX_LINE
 from .sdk_bridge import SDK_VERSION
@@ -22,6 +23,7 @@ class RequestBudget:
         self.settings = settings
         self.attempts = 0
         self.simulated_requests = 0
+        self.local_gateway_requests = 0
         self._lock = Lock()
 
     def claim(self, url):
@@ -32,9 +34,10 @@ class RequestBudget:
             if self.attempts >= self.settings.max_external_requests:
                 raise RuntimeError("hy_request_budget_exhausted")
             self.attempts += 1
+            if urlsplit(str(url)).scheme == "http":self.local_gateway_requests += 1
 
     def report(self):
-        return {"external_http_attempts": self.attempts, "external_tokens": None, "cost": None,
+        return {"external_http_attempts": self.attempts-self.local_gateway_requests, "local_gateway_requests":self.local_gateway_requests,"external_tokens": None, "cost": None,
                 "simulated_model_requests":self.simulated_requests, "model_mode":self.settings.model_mode,
                 "input_token_estimator":"sdk_character_fallback_no_bpe_download",
                 "actual_sdk_version":getattr(self,"actual_sdk_version",None),
@@ -43,14 +46,17 @@ class RequestBudget:
                 "token_and_currency_limits_enforced": False}
 
 
-def install_network_denial():
+def install_network_denial(allowed_addresses=()):
     """保留 Windows asyncio 必需的 stdlib socketpair，仅放行其内部回环自连接。"""
     pair_context = local()
-    connect, connect_ex, pair = socket.socket.connect, socket.socket.connect_ex, socket.socketpair
+    connect, connect_ex, pair, resolve = socket.socket.connect, socket.socket.connect_ex, socket.socketpair, socket.getaddrinfo
+    allowed_addresses=set(allowed_addresses)
     def guarded(original):
         def run(sock, address):
             if getattr(pair_context, "active", False) and isinstance(address, tuple) and address[0] in {"127.0.0.1", "::1"}:
                 return original(sock, address)
+            if isinstance(address,tuple) and address[:2] in allowed_addresses:
+                return original(sock,address)
             raise OSError("hy_network_disabled")
         return run
     def local_pair(*args, **kwargs):
@@ -61,11 +67,14 @@ def install_network_denial():
             pair_context.active = False
     def deny(*args, **kwargs):
         raise OSError("hy_network_disabled")
+    def local_resolve(host,port,*args,**kwargs):
+        if (host,port) in allowed_addresses:return resolve(host,port,*args,**kwargs)
+        raise OSError("hy_network_disabled")
     socket.socketpair = local_pair
     socket.socket.connect = guarded(connect)
     socket.socket.connect_ex = guarded(connect_ex)
     socket.socket.sendto = deny
-    socket.getaddrinfo = deny
+    socket.getaddrinfo = local_resolve
 
 
 def create_sdk(settings, workspace, *, create):
@@ -74,6 +83,10 @@ def create_sdk(settings, workspace, *, create):
     # 默认在 socket 层拒绝网络，包含库初始化的遥测/意外网络路径。
     if not settings.network_authorized:
         install_network_denial()
+    elif settings.managed_gateway:
+        install_network_denial([(urlsplit(endpoint.base_url).hostname,urlsplit(endpoint.base_url).port) for endpoint in (settings.llm,settings.embedding)])
+    else:
+        raise ValueError("hy_real_requests_require_shared_budget_gateway")
     os.environ["MEMORY_DATA_DIR"] = str(workspace)
     sdk = workspace / "sdk"
     if not create and not (sdk / "vector/chroma.sqlite3").is_file():
@@ -110,6 +123,10 @@ def create_sdk(settings, workspace, *, create):
 
         async def handle_async_request(self, request):
             budget.claim(request.url)
+            if request.url.path.endswith("/embeddings"):
+                # search RPC 的查询用 BGE 查询前缀；add 内部 reconcile 的查询无法
+                # 从标准 Embedding API 区分，仍按 document，实验明确记录该差异。
+                request.headers["X-Hy-Embedding-Role"] = "query" if getattr(budget,"operation",None)=="search" else "document"
             response = await self.inner.handle_async_request(request)
             # 重定向不发给未经配置的端点；SDK 内部 retry 也受统一计数上限约束。
             if 300 <= response.status_code < 400:
@@ -166,6 +183,7 @@ class ProtocolService:
         if operation not in {"add", "search", "get_user_profile", "get", "list_memories"}:
             raise ValueError("hy_worker_operation_not_allowed")
         arguments = dict(arguments)
+        self.budget.operation = operation
         if operation == "add":
             arguments["memory_at"] = datetime.fromisoformat(arguments["memory_at"])
         return getattr(self.client, operation)(**arguments)

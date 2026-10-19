@@ -14,10 +14,12 @@ class Endpoint:
     base_url: str = "https://blocked.invalid/v1"
     model: str = "unconfigured"
     api_key: str = field(default="synthetic-disabled", repr=False)
+    allow_loopback_http: bool = False
 
     def __post_init__(self):
         url = urlsplit(self.base_url)
-        if url.scheme != "https" or not url.hostname or url.username or url.password or url.query or url.fragment:
+        local_http = self.allow_loopback_http and url.scheme == "http" and url.hostname in {"127.0.0.1","::1"} and url.port not in {None,0,8767,8000,8003}
+        if (url.scheme != "https" and not local_http) or not url.hostname or url.username or url.password or url.query or url.fragment:
             raise ValueError("hy_endpoint_requires_explicit_https")
         if not self.model.strip() or not self.api_key.strip():
             raise ValueError("hy_endpoint_incomplete")
@@ -37,6 +39,8 @@ class HySettings:
     include_profile: bool = False
     sdk_version: str = SDK_VERSION
     model_mode: str = "disabled"
+    managed_gateway: bool = False
+    provider_identity: str = ""
 
     def __post_init__(self):
         if self.sdk_version != SDK_VERSION or not self.user_id.strip() or not self.agent_id.strip():
@@ -47,6 +51,9 @@ class HySettings:
             raise ValueError("hy_flag_invalid")
         if self.model_mode not in {"disabled", "synthetic_transport"} or (self.network_authorized and self.model_mode == "synthetic_transport"):
             raise ValueError("hy_model_mode_invalid")
+        if self.managed_gateway and (len(self.provider_identity)!=64 or any(c not in "0123456789abcdef" for c in self.provider_identity)
+                or not all(endpoint.allow_loopback_http and urlsplit(endpoint.base_url).scheme=="http" for endpoint in (self.llm,self.embedding))):
+            raise ValueError("hy_managed_gateway_identity_invalid")
         for value, maximum in ((self.max_external_requests, 100000), (self.timeout_seconds, 600), (self.max_output_tokens, 16000)):
             if type(value) is not int or not 0 <= value <= maximum:
                 raise ValueError("hy_budget_invalid")
@@ -74,6 +81,12 @@ class HySettings:
         public = self.public()
         for key in ("network_authorized", "max_external_requests", "timeout_seconds", "max_output_tokens"):
             public.pop(key)
+        for name in ("llm","embedding"):
+            public[name].pop("allow_loopback_http",None)
+        if self.managed_gateway:
+            for name in ("llm","embedding"):public[name].pop("endpoint_sha256")
+        else:
+            public.pop("managed_gateway"); public.pop("provider_identity")
         return hashlib.sha256(json.dumps(public, sort_keys=True).encode()).hexdigest()
 
     @classmethod
