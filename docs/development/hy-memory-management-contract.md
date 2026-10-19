@@ -45,11 +45,15 @@ Y 在 Hy method 的同一 RLock 内校验条目 user/agent/source、比较完整
 
 前端分页使用真实 offset/limit/total。SDK 无正文检索，当前页筛选明确标范围，不借 search 触发可能写状态或外部费用。基本画像按 capability 启用，未知来源/时间、部分来源读取失败如实显示。L4/L5 保留层、Graph/Intention/System2 未启用；旧库独立保留，不提供旧库按钮的隐式回落。
 
-该接线须主会话协调 V/X，Y 不编辑其文件或向其发送工具消息。前端/模拟契约通过后仍需 V 实 SDK 离线管理验证、X Runtime 守卫验证、三方组合审查；本文件不代表已完成日用验收。
+V/X 接线与 Z 组合软件验收已完成，真实 SDK 副作用和前后端证据见 [Z 报告](parallel/Z-hy-release-integration-20261019.md)，不代表已切换日用或设备体验通过。
+
+Z收尾：平台/worker共用确定性写资格检查，写running前拒绝非法ID/NUL、历史非latest、未证明来源/非user，worker写前重查；删除仅允许显式孤立当前L2/L3。列表以完整get构造稳定修订；暂停精确403/`memory_write_paused`。可见演化版本ID一并保留，completed来源逐版本叠加，任一可见版本running/uncertain则排除整段链头。
+
+可信回执覆盖worker/process/management_rpc/sdk_bridge四文件摘要，在SDK创建前核验后才设置进程管理flag，日用settings不能自行授权。首次空库证明与重开核对、两份owner锁、实际RPC能力共同决定画像与受控写。见 [ADR-0185](../adr/0185-verified-hy-management-and-visible-history.md)。
 
 ## ADR（架构决策记录）HY-UI-001：专属受控管理
 
-状态：Y 已实现候选，待 V/X 接线和主会话组合审查；不改变已接受的 ADR-0181。
+状态：方案由 ADR-0185 接受并经 Z 组合软件验收；保留 Y 初始问题与替代方案，不改变 ADR-0181，不提前填日用/实机结果。
 
 问题：通用管理契约要求原子修订，SDK 未提供；直接启用通用写会误报并发保证，使用 SDK update 又无法带上新用户来源。
 

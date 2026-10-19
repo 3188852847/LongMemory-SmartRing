@@ -25,18 +25,19 @@
         "tests/integration/test_hy_memory_gateway.py"
       ],
       "related": [
-        "docs/development/parallel/V-real-model-20261019.md"
+        "docs/development/parallel/V-real-model-20261019.md",
+        "docs/development/parallel/Z-hy-release-integration-20261019.md"
       ],
       "tags": [
         "Hy-Memory",
         "真实模型",
         "预算"
       ],
-      "review": "reference 2026-10-19: X接入V精确五提交，真实数字归属V候选；X未重跑真实付费评估"
+      "review": "reference 2026-10-19: V原条件17题由Z独立逐题/来源/封存摘要复核，未重采保留集；Z另1条开发组合探针单列，原池累计196请求/0.496332元上界"
     },
     {
       "id": "hy-memory-management-candidate",
-      "scope": "Y的Hy专属管理扩展/页面与原子能力门控；保留HTTP暂停码和RPC待验缺口",
+      "scope": "Hy专属受控管理、可信开启、稳定修订与可见历史隔离；软件验收完成，日用体验待验",
       "authority": "docs/guides/Hy记忆管理.md",
       "sources": [
         "src/longmemory/methods/hy_memory/administration.py",
@@ -50,22 +51,37 @@
         "tests/unit/methods/test_hy_management_http.py",
         "web/react-chat/e2e/hy-memory.spec.ts",
         "web/react-chat/e2e/hy-static-server.mjs",
-        "web/react-chat/playwright.hy.config.ts"
+        "web/react-chat/playwright.hy.config.ts",
+        "src/longmemory/methods/hy_memory/management_rpc.py",
+        "src/longmemory/methods/hy_memory/sdk_bridge.py",
+        "src/longmemory/methods/hy_memory/worker.py",
+        "src/longmemory/methods/hy_memory/process_client.py",
+        "tests/unit/methods/test_hy_management_guards.py",
+        "tests/unit/methods/test_hy_memory_administration.py",
+        "tests/unit/methods/test_hy_release_evolution.py",
+        "tests/integration/test_hy_release_management.py",
+        "tests/integration/test_hy_memory_management_rpc.py",
+        "tests/fixtures/hy_memory_management_audit.py",
+        "tests/fixtures/hy_release_http_server.py",
+        "web/react-chat/e2e/hy-release-live.spec.ts",
+        "web/react-chat/playwright.z-live.config.ts"
       ],
       "related": [
         "docs/development/hy-memory-management-contract.md",
-        "docs/development/parallel/Y-hy-memory-ui-20261019.md"
+        "docs/development/parallel/Y-hy-memory-ui-20261019.md",
+        "docs/development/parallel/Z-hy-release-integration-20261019.md",
+        "docs/adr/0185-verified-hy-management-and-visible-history.md"
       ],
       "tags": [
         "Hy-Memory",
         "管理",
         "能力门控"
       ],
-      "review": "reference 2026-10-19: X接入Y精确五提交并组合Python测试；前端验收属于Y候选，Z组合构建及真实管理RPC未验"
+      "review": "verified 2026-10-19: Z876/4skip含真实SDK与Runtime/HTTP管理、38组件/TS/构建、8拦截及1真实HTTP浏览器；日用切换与实机体验未验"
     },
     {
       "id": "hy-roundscreen-daily-deployment",
-      "scope": "平台圆屏轮次及可信Hy日用装配、原十元池与受控真实流式候选；切换和管理RPC未验",
+      "scope": "平台圆屏轮次、可信Hy装配、原十元池与真实流式；软件通过，切换交X",
       "authority": "docs/guides/Hy-Memory圆屏与日用装配-20261019.md",
       "sources": [
         "src/longmemory/adapters/storage/sqlite_platform_rounds.py",
@@ -116,7 +132,9 @@
         "docs/architecture/workflows.md",
         "docs/development/configuration.md",
         "docs/development/launcher-contract.md",
-        "docs/adr/0184-shared-campaign-budget-and-owned-model-gateway.md"
+        "docs/adr/0184-shared-campaign-budget-and-owned-model-gateway.md",
+        "docs/development/parallel/Z-hy-release-integration-20261019.md",
+        "docs/adr/0185-verified-hy-management-and-visible-history.md"
       ],
       "tags": [
         "Hy-Memory",
@@ -124,7 +142,7 @@
         "来源",
         "条件切换"
       ],
-      "review": "verified 2026-10-19: X隔离组合、真实SDK与CPU BGE、合成费用和真实HTTP流式转发；未调用付费模型/更新实际池/切换日用；管理RPC待交接"
+      "review": "verified 2026-10-19: Z876/4skip、真实SDK/BGE/跨版本桥、原池两次真实请求及流式；196请求/0.496332元上界/unknown0，不代表设备播放或已切换"
     },
     {
       "id": "hy-memory-isolated-integration",
@@ -929,6 +947,48 @@
   ],
   "documents": [
     {
+      "path": "docs/adr/0185-verified-hy-management-and-visible-history.md",
+      "title": "ADR-0185：经实证开启的Hy管理与可见历史隔离",
+      "status": "reference",
+      "basis": "已接受的本轮受限串行管理与持久资源决定；不代表日用已切换",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-19",
+        "scope": "本轮可信开启/拒绝/历史隔离与交接段落对照真实组合证据；不把软件验收当切换或实机",
+        "evidence": [
+          "docs/development/parallel/Z-hy-release-integration-20261019.md",
+          "69d3ab671c0b22cd7357e2d7e8637ed21ea1bba3",
+          "tests/integration/test_hy_release_management.py"
+        ]
+      },
+      "tags": [
+        "Hy-Memory",
+        "ADR",
+        "管理"
+      ]
+    },
+    {
+      "path": "docs/development/parallel/Z-hy-release-integration-20261019.md",
+      "title": "Z：Hy最终组合审查与日用放行验收",
+      "status": "reference",
+      "basis": "本轮精确提交、独立复核、组合结果、构建资源与未切换边界",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-19",
+        "scope": "本轮可信开启/拒绝/历史隔离与交接段落对照真实组合证据；不把软件验收当切换或实机",
+        "evidence": [
+          "docs/development/parallel/Z-hy-release-integration-20261019.md",
+          "69d3ab671c0b22cd7357e2d7e8637ed21ea1bba3",
+          "tests/integration/test_hy_release_management.py"
+        ]
+      },
+      "tags": [
+        "Hy-Memory",
+        "Z",
+        "组合验收"
+      ]
+    },
+    {
       "path": "docs/development/parallel/V-real-model-20261019.md",
       "title": "V：真实模型与本地 BGE 验证",
       "status": "reference",
@@ -968,13 +1028,15 @@
       "path": "docs/development/hy-memory-management-contract.md",
       "title": "Hy 记忆管理接线契约",
       "status": "current",
-      "basis": "Y管理扩展契约；X保留实际暂停HTTP码缺口",
+      "basis": "Z组合软件验收后的当前管理/部署契约；正式切换与设备体验仍待X/所有者",
       "review": {
         "state": "verified",
         "date": "2026-10-19",
-        "scope": "精确候选接入和文档链接核对；证据归属及未验项见X第二阶段记录",
+        "scope": "本轮可信开启/拒绝/历史隔离与交接段落对照真实组合证据；不把软件验收当切换或实机",
         "evidence": [
-          "docs/development/parallel/X-hy-roundscreen-20261019.md"
+          "docs/development/parallel/Z-hy-release-integration-20261019.md",
+          "69d3ab671c0b22cd7357e2d7e8637ed21ea1bba3",
+          "tests/integration/test_hy_release_management.py"
         ]
       },
       "tags": [
@@ -1004,13 +1066,15 @@
       "path": "docs/guides/Hy记忆管理.md",
       "title": "Hy 记忆管理",
       "status": "current",
-      "basis": "Y管理候选指南；实际写入仍受RPC与资源验证门控",
+      "basis": "Z组合软件验收后的当前管理/部署契约；正式切换与设备体验仍待X/所有者",
       "review": {
         "state": "verified",
         "date": "2026-10-19",
-        "scope": "精确候选接入和文档链接核对；证据归属及未验项见X第二阶段记录",
+        "scope": "本轮可信开启/拒绝/历史隔离与交接段落对照真实组合证据；不把软件验收当切换或实机",
         "evidence": [
-          "docs/development/parallel/X-hy-roundscreen-20261019.md"
+          "docs/development/parallel/Z-hy-release-integration-20261019.md",
+          "69d3ab671c0b22cd7357e2d7e8637ed21ea1bba3",
+          "tests/integration/test_hy_release_management.py"
         ]
       },
       "tags": [
@@ -1040,18 +1104,15 @@
       "path": "docs/guides/Hy-Memory圆屏与日用装配-20261019.md",
       "title": "Hy-Memory 圆屏与日用装配",
       "status": "current",
-      "basis": "X候选接口/可信资源与条件切换步骤；尚未日用部署",
+      "basis": "Z组合软件验收后的当前管理/部署契约；正式切换与设备体验仍待X/所有者",
       "review": {
         "state": "verified",
         "date": "2026-10-19",
-        "scope": "X两阶段实现、原池/流式合成组合和真实SDK/BGE；实际付费/管理RPC/日用切换未验",
+        "scope": "本轮可信开启/拒绝/历史隔离与交接段落对照真实组合证据；不把软件验收当切换或实机",
         "evidence": [
-          "tests/unit/entrypoints/test_platform_roundscreen.py",
-          "tests/integration/test_hy_roundscreen_sdk.py",
-          "tests/unit/infrastructure/test_hy_deployment.py",
-          "tests/integration/test_hy_daily_lifecycle.py",
-          "tests/unit/methods/test_hy_daily_stream.py",
-          "tests/unit/infrastructure/test_hy_campaign.py"
+          "docs/development/parallel/Z-hy-release-integration-20261019.md",
+          "69d3ab671c0b22cd7357e2d7e8637ed21ea1bba3",
+          "tests/integration/test_hy_release_management.py"
         ]
       },
       "tags": [
