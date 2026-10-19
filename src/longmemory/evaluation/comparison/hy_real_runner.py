@@ -148,6 +148,7 @@ def main(argv=None):
     run=ROOT/"experiments/runs"/("vreal-"+uuid4().hex[:10]);run.mkdir(parents=True,exist_ok=False)
     write_json(run/"condition.json",condition)
     write_json(run/"billing-check.json",billing)
+    write_json(run/"budget-before.json",budget.report())
     print(json.dumps({"run":str(run),"stage":"starting","budget":budget.report()["held_or_settled_upper_micro_cny"]},ensure_ascii=False),flush=True)
     with ModelGateway(settings=model,budget=budget,encoder=encoder,currency_verified=True) as gateway:
         provider_identity=hashlib.sha256(json.dumps({"model":model_identity,"embedding":encoder.identity},sort_keys=True).encode()).hexdigest()

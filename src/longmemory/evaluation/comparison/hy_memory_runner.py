@@ -84,10 +84,12 @@ def run_hy_comparison(dataset, *, output_root, hy_opener, generator_factory=Fake
         "state_layout":{baseline_name:"sealed/b", "hy_memory_pro_chat":"sealed/h", "questions":"q/<b|h>/<index>"},
         "answer_model":model_metadata, "hy":hy_metadata,
         "system_prompt_sha256":hashlib.sha256(SYSTEM_PROMPT.encode()).hexdigest(), "scorer":SCORER_VERSION,
-        "prompt_hash_scope":"shared_answer_prompt_reference; fake_generator_does_not_execute_prompt",
+        "prompt_hash_scope":("shared_answer_prompt_reference; fake_generator_does_not_execute_prompt"
+            if model_metadata.get("simulated",True) else "executed_shared_answer_prompt"),
         "limitations":["not_strict_frozen_protocol", "hy_clone_semantic_mutation_not_ruled_out",
             "same_history_different_extraction_retrieval", "sdk_scores_not_comparable", "lexical_proxy_requires_review",
-            "fake_or_simulated_models_are_not_quality_evidence", "no_observed_cost_or_external_tokens"]}
+            *(["fake_or_simulated_models_are_not_quality_evidence", "no_observed_cost_or_external_tokens"]
+              if model_metadata.get("simulated",True) else ["external_usage_requires_gateway_ledger", "currency_upper_is_not_invoice"])]}
     (run / "history.json").write_text(json.dumps(history_payload(dataset), ensure_ascii=False, indent=2), encoding="utf-8")
     manifest["baseline_name"]=baseline_name
     names = (baseline_name, "hy_memory_pro_chat")
