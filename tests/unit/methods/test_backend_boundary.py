@@ -221,6 +221,8 @@ def test_failed_pipeline_explicit_retry_persists_once(tmp_path, after_write):
         engine.fail, engine.fail_after_write = not after_write, after_write
         turn = runtime.prepare_user("合成事实")
         assert turn.observation.processing_status == "source_only"
+        if not after_write:
+            assert turn.support.context == "" and turn.support.retrieved == ()
         status = runtime.source_status(turn.event.event_id)
         assert status["state"] == "failed"
         assert "secret" not in json.dumps(status)
