@@ -38,12 +38,12 @@ for(const viewport of [{width:1920,height:1080},{width:1366,height:768},{width:3
   await page.setViewportSize(viewport);const state=await synthetic(page);
   await page.goto('/memories');await expect(page.getByRole('heading',{name:'我的记忆',exact:true})).toBeVisible();
   await expect(page.getByText(item.content,{exact:true})).toBeVisible();await noHorizontalOverflow(page);
-  await page.screenshot({path:testInfo.outputPath(`hy-items-${viewport.width}.png`),fullPage:true});
+  await page.screenshot({animations:'disabled',path:testInfo.outputPath(`hy-items-${viewport.width}.png`),fullPage:true});
   await page.getByRole('button',{name:'查看详情'}).first().click();
   const drawer=page.getByRole('dialog',{name:'记忆详情'});await expect(drawer).toBeVisible();
   const select=drawer.getByRole('combobox',{name:'选择一条来源回看'});await select.selectOption('synthetic-source-one');
   await expect(drawer.getByText('我周末一般去河边，带着相机随便走走。')).toBeVisible();
-  await page.screenshot({path:testInfo.outputPath(`hy-source-${viewport.width}.png`)});
+  await page.screenshot({animations:'disabled',path:testInfo.outputPath(`hy-source-${viewport.width}.png`)});
   await drawer.getByRole('button',{name:'读取这条变化记录'}).click();await expect(drawer.getByText('此前：周末喜欢在公园散步。')).toBeVisible();
   await expect(drawer.getByRole('button',{name:'刷新这条变化记录'})).toBeFocused();
   await page.keyboard.press('Escape');await expect(drawer).not.toBeVisible();
@@ -61,7 +61,7 @@ test('大字号、长内容、减少动态、键盘与纠正草稿',async({page}
   const drawer=page.getByRole('dialog',{name:'记忆详情'});await drawer.getByRole('button',{name:'纠正这条记忆'}).click();
   const modal=page.getByRole('dialog',{name:'纠正这条记忆'});await expect(modal).toBeVisible();
   await modal.getByLabel('正确的内容').fill('周末现在更喜欢去植物园散步。');
-  await page.screenshot({path:testInfo.outputPath('hy-correction-large.png')});
+  await page.screenshot({animations:'disabled',path:testInfo.outputPath('hy-correction-large.png')});
   await page.keyboard.press('Tab');expect(await modal.evaluate(el=>el.contains(document.activeElement))).toBe(true);
   await modal.getByRole('checkbox').check();await modal.getByRole('button',{name:'保存纠正'}).dblclick();
   await expect(page.getByText(/纠正已完成。平台原话保留/)).toBeVisible();expect(state.writes).toHaveLength(1);expect(state.errors).toEqual([]);
@@ -70,7 +70,7 @@ test('大字号、长内容、减少动态、键盘与纠正草稿',async({page}
 test('画像、变化、处理状态和旧书签守卫',async({page},testInfo)=>{
   const state=await synthetic(page);
   await page.goto('/personas');await expect(page).toHaveURL(/\/memories\?view=profile$/);
-  await expect(page.getByText(/这份合成画像需要沿来源核对/)).toBeVisible();await page.screenshot({path:testInfo.outputPath('hy-profile.png'),fullPage:true});
+  await expect(page.getByText(/这份合成画像需要沿来源核对/)).toBeVisible();await page.screenshot({animations:'disabled',path:testInfo.outputPath('hy-profile.png'),fullPage:true});
   await page.getByRole('button',{name:'记录与变化',exact:true}).click();await expect(page.getByText('还没有管理操作记录')).toBeVisible();
   await page.getByRole('button',{name:'处理状态',exact:true}).click();await expect(page.getByText('等待设备完成回执')).toBeVisible();
   expect(state.unexpected).toEqual([]);expect(state.errors).toEqual([]);
@@ -84,7 +84,7 @@ test('加载、空、失败、未知来源及能力拒绝',async({browser},testI
     else if(name==='error')await expect(page.getByText('记忆列表读取失败')).toBeVisible();
     else await expect(page.getByText(item.content,{exact:true})).toBeVisible();
     if(name==='unsupported'){await page.getByRole('button',{name:'基本画像',exact:true}).click();await expect(page.getByText('基本画像暂不可读取')).toBeVisible();}
-    await noHorizontalOverflow(page);await page.screenshot({path:testInfo.outputPath(`hy-state-${name}.png`),fullPage:true});expect(state.errors).toEqual([]);expect(state.unexpected).toEqual([]);await page.close();
+    await noHorizontalOverflow(page);await page.screenshot({animations:'disabled',path:testInfo.outputPath(`hy-state-${name}.png`),fullPage:true});expect(state.errors).toEqual([]);expect(state.unexpected).toEqual([]);await page.close();
   }
 });
 
@@ -92,7 +92,7 @@ test('未知结果明确显示并阻止重新提交',async({page},testInfo)=>{
   const state=await synthetic(page,{uncertain:true});await page.goto('/memories?view=activity');
   await expect(page.getByText('结果不确定',{exact:true})).toBeVisible();await page.getByRole('button',{name:'核对条目'}).click();
   await expect(page.getByText('这条记忆有未确认操作')).toBeVisible();await expect(page.getByRole('button',{name:'纠正这条记忆'})).toBeDisabled();
-  await page.screenshot({path:testInfo.outputPath('hy-uncertain.png'),fullPage:true});expect(state.writes).toEqual([]);
+  await page.screenshot({animations:'disabled',path:testInfo.outputPath('hy-uncertain.png'),fullPage:true});expect(state.writes).toEqual([]);
 });
 
 test('窄屏大字号与跨页草稿保护',async({page},testInfo)=>{
@@ -101,7 +101,7 @@ test('窄屏大字号与跨页草稿保护',async({page},testInfo)=>{
   await page.route('**/synthetic-start',route=>route.fulfill({contentType:'text/html; charset=utf-8',body:'<meta charset="utf-8"><a href="/memories">打开合成记忆页</a>'}));
   await page.goto('/synthetic-start');await page.getByRole('link',{name:'打开合成记忆页'}).click();
   await expect(page.getByText(item.content,{exact:true})).toBeVisible();await page.evaluate(()=>document.documentElement.dataset.reading='larger');
-  await noHorizontalOverflow(page);await page.screenshot({path:testInfo.outputPath('hy-mobile-large.png'),fullPage:true});
+  await noHorizontalOverflow(page);await page.screenshot({animations:'disabled',path:testInfo.outputPath('hy-mobile-large.png'),fullPage:true});
   await page.getByRole('button',{name:'查看详情'}).first().click();await page.getByRole('button',{name:'纠正这条记忆'}).click();
   const modal=page.getByRole('dialog',{name:'纠正这条记忆'});await modal.getByLabel('正确的内容').fill('合成草稿仍在，不应被浏览器返回丢弃。');
   // 第一次返回只撤销详情的 query 坐标，仍在同一页面；草稿应继续保留。
