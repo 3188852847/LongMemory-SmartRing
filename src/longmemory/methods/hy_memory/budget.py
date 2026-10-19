@@ -44,7 +44,21 @@ class PricePolicy:
                 + self.output_window_bound*self.output_micro_cny_per_token)
 
 
-class SharedBudget:
+class GatewayDiagnostics:
+    def record_gateway_result(self, aid, *, status=None, failure=None, done=False, forwarded=False, usage_seen=False):
+        """仅持久化传输结果元数据；不保存消息、供应商响应或异常正文，不改费用状态。"""
+        if status is not None and (type(status) is not int or not 100 <= status <= 599):
+            raise ValueError("gateway_diagnostic_status_invalid")
+        if failure not in {None, "provider_http_error", "transport_error", "stream_invalid",
+                           "client_disconnected", "gateway_closed", "missing_usage", "missing_done"}:
+            raise ValueError("gateway_diagnostic_failure_invalid")
+        with self._connect() as connection:
+            connection.execute("CREATE TABLE IF NOT EXISTS gateway_results (attempt_id TEXT PRIMARY KEY, status INTEGER, failure TEXT, done INTEGER, forwarded INTEGER, usage_seen INTEGER, recorded REAL)")
+            connection.execute("INSERT OR IGNORE INTO gateway_results VALUES (?,?,?,?,?,?,?)",
+                (aid, status, failure, int(done), int(forwarded), int(usage_seen), time()))
+
+
+class SharedBudget(GatewayDiagnostics):
     def __init__(self, path: Path, *, policy=None, create=False):
         self.path = path.resolve()
         if create:

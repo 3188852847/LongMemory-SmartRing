@@ -4,6 +4,7 @@ import json
 from threading import Event
 from time import time
 import http.client
+import sqlite3
 
 import pytest
 
@@ -90,4 +91,8 @@ def test_interrupted_stream_keeps_complete_reservation_without_retry(tmp_path, f
         assert len(calls) == 1
         assert budget.report()["unknown_or_inflight"] == 1
         assert budget.report()["held_or_settled_upper_micro_cny"] == budget.policy.reservation
+        with sqlite3.connect(budget.path) as connection:
+            failure_code = connection.execute("SELECT failure FROM gateway_results").fetchone()[0]
+        assert failure_code == {"missing_usage":"missing_usage", "missing_done":"missing_done",
+            "provider_crash":"transport_error", "client_abort":"client_disconnected"}[failure]
     finally: server.close()

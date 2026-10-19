@@ -13,6 +13,38 @@
   },
   "topics": [
     {
+      "id": "hy-campus-free-forward",
+      "scope": "所有者确认免费校园策略、HTTP前缀与大小写、前向资源分段及官方unknown保留；候选未部署",
+      "authority": "docs/guides/Hy-Memory圆屏与日用装配-20261019.md",
+      "sources": [
+        ".gitignore",
+        "src/longmemory/infrastructure/config/campus_calls.py",
+        "src/longmemory/bootstrap_hy_daily.py",
+        "src/longmemory/methods/hy_memory/model_gateway.py",
+        "src/longmemory/methods/hy_memory/budget.py",
+        "scripts/development/xiaozhi/voice_budget.py",
+        "config/examples/hy-campus-provider-policy.example.json",
+        "tests/unit/infrastructure/test_campus_calls.py",
+        "tests/unit/methods/test_hy_cny_guard.py",
+        "tests/unit/methods/test_hy_daily_stream.py",
+        "tests/integration/test_hy_campus_transport.py",
+        "tests/integration/test_hy_daily_lifecycle.py"
+      ],
+      "related": [
+        "docs/adr/0186-owner-confirmed-free-campus-and-forward-state.md",
+        "docs/development/parallel/X-hy-roundscreen-20261019.md",
+        "docs/development/configuration.md",
+        "docs/development/troubleshooting.md"
+      ],
+      "tags": [
+        "校园",
+        "免费政策",
+        "前向状态",
+        "Hy-Memory"
+      ],
+      "review": "verified 2026-10-19: X b1/e146隔离SDK与真实校园最小合成probe、原197笔及policy不变；902pass/5skip/1未改Tk失败另独立pass、窄守卫25pass；正式校园未部署；aaf3afc下游慢读关闭窄修复20pass，原未知保留"
+    },
+    {
       "id": "hy-real-model-candidate",
       "scope": "V精确候选的真实模型/BGE、同池对比与预算结果，保留样本和冷启动限制",
       "authority": "docs/guides/Hy-Memory真实模型验证-20261019.md",
@@ -81,7 +113,7 @@
     },
     {
       "id": "hy-roundscreen-daily-deployment",
-      "scope": "平台圆屏轮次、可信Hy装配、原十元池与真实流式；软件通过，切换交X",
+      "scope": "平台圆屏/可信Hy装配；官方main729590c已技术切换但真实unknown导致模型暂停，校园前向候选待终验",
       "authority": "docs/guides/Hy-Memory圆屏与日用装配-20261019.md",
       "sources": [
         "src/longmemory/adapters/storage/sqlite_platform_rounds.py",
@@ -134,7 +166,8 @@
         "docs/development/launcher-contract.md",
         "docs/adr/0184-shared-campaign-budget-and-owned-model-gateway.md",
         "docs/development/parallel/Z-hy-release-integration-20261019.md",
-        "docs/adr/0185-verified-hy-management-and-visible-history.md"
+        "docs/adr/0185-verified-hy-management-and-visible-history.md",
+        "docs/adr/0186-owner-confirmed-free-campus-and-forward-state.md"
       ],
       "tags": [
         "Hy-Memory",
@@ -142,7 +175,7 @@
         "来源",
         "条件切换"
       ],
-      "review": "verified 2026-10-19: Z876/4skip、真实SDK/BGE/跨版本桥、原池两次真实请求及流式；196请求/0.496332元上界/unknown0，不代表设备播放或已切换"
+      "review": "verified 2026-10-19: 前阶段Z/X证据保留；所有者字幕/声音反馈通过，官方197笔含1 unknown保留；X校园免费候选已最小验证、未部署，问答/记忆/插话待实机"
     },
     {
       "id": "hy-memory-isolated-integration",
@@ -947,6 +980,26 @@
   ],
   "documents": [
     {
+      "path": "docs/adr/0186-owner-confirmed-free-campus-and-forward-state.md",
+      "title": "ADR-0186：所有者确认校园免费与前向独立空间",
+      "status": "reference",
+      "basis": "所有者免费决定与主会话批准前向目标；候选待Z审查部署",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-19",
+        "scope": "决定/原池与来源保留、X候选及验证归属；不当校园已部署",
+        "evidence": [
+          "docs/development/parallel/X-hy-roundscreen-20261019.md"
+        ]
+      },
+      "tags": [
+        "ADR",
+        "校园",
+        "免费政策",
+        "来源分段"
+      ]
+    },
+    {
       "path": "docs/adr/0185-verified-hy-management-and-visible-history.md",
       "title": "ADR-0185：经实证开启的Hy管理与可见历史隔离",
       "status": "reference",
@@ -1104,15 +1157,16 @@
       "path": "docs/guides/Hy-Memory圆屏与日用装配-20261019.md",
       "title": "Hy-Memory 圆屏与日用装配",
       "status": "current",
-      "basis": "Z组合软件验收后的当前管理/部署契约；正式切换与设备体验仍待X/所有者",
+      "basis": "X四阶段事实、官方unknown保留与校园免费前向候选；未冒充校园已部署或问答实机通过",
       "review": {
         "state": "verified",
         "date": "2026-10-19",
-        "scope": "本轮可信开启/拒绝/历史隔离与交接段落对照真实组合证据；不把软件验收当切换或实机",
+        "scope": "仅新增官方暂停取证、所有者免费决定、X b1/e146隔离测试/最小真实校园合成与未部署边界；历史验收保留",
         "evidence": [
-          "docs/development/parallel/Z-hy-release-integration-20261019.md",
-          "69d3ab671c0b22cd7357e2d7e8637ed21ea1bba3",
-          "tests/integration/test_hy_release_management.py"
+          "docs/development/parallel/X-hy-roundscreen-20261019.md",
+          "b1f22dc421b1b6d519db1df9060c49899c87ccde",
+          "e146ce22caff9d9c909a4e44401f84797776ef0e",
+          "aaf3afc87e43301e4be50da8f4d839c65ff99649"
         ]
       },
       "tags": [
@@ -1126,18 +1180,16 @@
       "path": "docs/development/parallel/X-hy-roundscreen-20261019.md",
       "title": "X：Hy-Memory 圆屏适配、可信装配与条件日用切换",
       "status": "reference",
-      "basis": "本轮隔离实现与验收记录，后续切换未执行",
+      "basis": "X四阶段事实、官方unknown保留与校园免费前向候选；未冒充校园已部署或问答实机通过",
       "review": {
         "state": "verified",
         "date": "2026-10-19",
-        "scope": "X两阶段实现、原池/流式合成组合和真实SDK/BGE；实际付费/管理RPC/日用切换未验",
+        "scope": "仅新增官方暂停取证、所有者免费决定、X b1/e146隔离测试/最小真实校园合成与未部署边界；历史验收保留",
         "evidence": [
-          "tests/unit/entrypoints/test_platform_roundscreen.py",
-          "tests/integration/test_hy_roundscreen_sdk.py",
-          "tests/unit/infrastructure/test_hy_deployment.py",
-          "tests/integration/test_hy_daily_lifecycle.py",
-          "tests/unit/methods/test_hy_daily_stream.py",
-          "tests/unit/infrastructure/test_hy_campaign.py"
+          "docs/development/parallel/X-hy-roundscreen-20261019.md",
+          "b1f22dc421b1b6d519db1df9060c49899c87ccde",
+          "e146ce22caff9d9c909a4e44401f84797776ef0e",
+          "aaf3afc87e43301e4be50da8f4d839c65ff99649"
         ]
       },
       "tags": [
@@ -3775,14 +3827,15 @@
       "review": {
         "state": "verified",
         "date": "2026-10-19",
-        "scope": "仅U新增的后端装配、来源所有权、管理能力与未切换边界；未对历史章节或全篇作语义验收；X仅核对新增平台圆屏/可信装配段落与引用，未重验整篇历史结论",
+        "scope": "仅U新增的后端装配、来源所有权、管理能力与未切换边界；未对历史章节或全篇作语义验收；X仅核对新增平台圆屏/可信装配段落与引用，未重验整篇历史结论；X仅新增校园免费候选/官方unknown故障段，未重审历史全篇",
         "evidence": [
           "b52e0e3",
           "77c7342",
           "tests/unit/methods/test_backend_boundary.py",
           "docs/development/parallel/U-memory-boundary-20261019.md",
           "docs/development/parallel/X-hy-roundscreen-20261019.md",
-          "docs/guides/Hy-Memory圆屏与日用装配-20261019.md"
+          "docs/guides/Hy-Memory圆屏与日用装配-20261019.md",
+          "docs/development/parallel/X-hy-roundscreen-20261019.md"
         ]
       },
       "tags": [
@@ -4082,7 +4135,12 @@
       "status": "pending",
       "basis": "已盘点路径与标题，尚无本轮充分证据确定现行用途；保留原文等待任务核对",
       "review": {
-        "state": "pending"
+        "state": "pending",
+        "date": "2026-10-19",
+        "scope": "；X仅新增校园免费候选/官方unknown故障段，未重审历史全篇",
+        "evidence": [
+          "docs/development/parallel/X-hy-roundscreen-20261019.md"
+        ]
       },
       "tags": [
         "development"

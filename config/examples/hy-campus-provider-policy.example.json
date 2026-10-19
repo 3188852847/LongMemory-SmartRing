@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "profile": "campus",
+  "billing_mode": "owner_confirmed_free",
+  "personal_cost_micro_cny": 0,
+  "source": "owner_confirmation",
+  "confirmed_date": "2026-10-19",
+  "endpoint_sha256": "FILL_VERIFIED_CAMPUS_ENDPOINT_DIGEST",
+  "request_model": "DeepSeek-V4-Flash",
+  "credential_sha256": "FILL_PRIVATE_CREDENTIAL_DIGEST",
+  "ledger_path": "data/databases/hy-campus-calls-20261019.sqlite3"
+}
