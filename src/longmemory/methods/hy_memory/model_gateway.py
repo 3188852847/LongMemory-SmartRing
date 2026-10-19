@@ -16,6 +16,9 @@ from .budget import BudgetStopped
 
 
 MAX_BODY = 2_000_000
+CHINESE_MEMORY_POLICY=("\n适配本地中文向量模型：记忆content、归纳和检索query使用简体中文，"
+    "保留事实的否定、日期和不确定性。JSON字段名、工具名及工具调用规范保持原样；"
+    "人名、地名等专名保留原文。不要把助手建议当作用户决定。")
 
 
 def selected_model(root):
@@ -136,6 +139,12 @@ class ModelGateway(AbstractContextManager):
         if type(body.get("max_tokens")) is not int or not 1 <= body["max_tokens"] <= 8192:
             raise ValueError("output_limit_required")
         body=dict(body)
+        if phase=="hy":
+            messages=[dict(message) for message in body.get("messages",[])]
+            system=next((message for message in messages if message.get("role")=="system" and isinstance(message.get("content"),str)),None)
+            if system is None:raise ValueError("hy_system_prompt_required")
+            system["content"]+=CHINESE_MEMORY_POLICY
+            body["messages"]=messages
         body["thinking"]={"type":"disabled"}
         # 独立核实 API 全窗口上界来预留；不拿下面的 body 字节数估 token。
         payload=json.dumps(body,ensure_ascii=False).encode()

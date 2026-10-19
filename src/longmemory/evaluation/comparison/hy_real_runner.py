@@ -17,7 +17,7 @@ from longmemory.adapters.llm.openai_compatible import OpenAICompatibleAnswerGene
 from longmemory.evaluation.runner import provenance
 from longmemory.methods.hy_memory.assembly import assemble_hy_backend
 from longmemory.methods.hy_memory.budget import PricePolicy,SharedBudget
-from longmemory.methods.hy_memory.model_gateway import ModelGateway,selected_model,verify_cny_account
+from longmemory.methods.hy_memory.model_gateway import ModelGateway,selected_model,verify_cny_account,CHINESE_MEMORY_POLICY
 from longmemory.methods.hy_memory.settings import Endpoint,HySettings
 from .dataset import load_dataset
 from .hy_memory_runner import run_hy_comparison
@@ -66,6 +66,7 @@ class AuditedMethod:
     def __init__(self,method,directory,settings,*,create_engine,create_sources):
         self.method,self.directory,self.settings=method,directory,settings
         self.new=create_engine;self.query_clone=not create_engine and create_sources
+        self.reopened=not create_engine and not create_sources
         self.observed=[];self.closed=False
         self.before=sdk_view(method,settings)
         write_json(directory/"inventory-open.json",self.before)
@@ -77,14 +78,20 @@ class AuditedMethod:
         if self.closed:return
         audit={}
         try:
-            if self.new:
+            if self.new or self.reopened:
                 completed=next(((event,result) for event,result in self.observed if event.role=="user" and result.processing_status=="completed"),None)
+                if completed is None and self.reopened:
+                    for event in self.method.journal.events():
+                        _,state=self.method.journal.get(event.event_id)
+                        if event.role=="user" and state["state"]=="completed":
+                            completed=(event,self.method.journal.result(state["result"]));break
                 if completed:
                     event,result=completed
                     before=sdk_view(self.method,self.settings)
                     replay=self.method.observe(event)
                     audit["completed_event_replay_same_result"]=asdict(replay)==asdict(result)
                     audit["replay_active_view_unchanged"]=sdk_view(self.method,self.settings)==before
+                    audit["replayed_after_restart"]=self.reopened
             after=sdk_view(self.method,self.settings)
             write_json(self.directory/"inventory-close.json",after)
             audit["active_view_unchanged_during_lifecycle"]=self.before==after
@@ -130,6 +137,7 @@ def main(argv=None):
         "answer_prompt_sha256":hashlib.sha256(SYSTEM_PROMPT.encode()).hexdigest(),
         "baseline_extraction_prompt_sha256":PROMPT_SHA256,"baseline_extraction_prompt_version":PROMPT_VERSION,
         "context_chars":4000,"answer_max_tokens":model.max_tokens,"thinking":"disabled_for_all_conditions",
+        "hy_language_adapter_sha256":hashlib.sha256(CHINESE_MEMORY_POLICY.encode()).hexdigest(),
         "price_policy_sha256":budget.report()["price_policy_sha256"]}
     if args.split=="holdout":
         if args.dev_campaign is None:raise ValueError("holdout_requires_frozen_dev_campaign")

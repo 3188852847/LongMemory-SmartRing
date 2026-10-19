@@ -59,7 +59,7 @@ def test_gateway_counts_all_roles_and_rejects_server_tools(tmp_path):
     gateway=ModelGateway(settings=settings,budget=budget,encoder=Encoder(),currency_verified=True,remote=remote)
     try:
         for role in ("hy","baseline","answer"):
-            assert gateway.complete(role,{"model":settings.model,"max_tokens":512,"messages":[]})[0]==200
+            assert gateway.complete(role,{"model":settings.model,"max_tokens":512,"messages":[{"role":"system","content":"合成测试"}]})[0]==200
         assert budget.report()["attempt_count"]==3
         assert all(item["thinking"]=={"type":"disabled"} for item in sent)
         with pytest.raises(ValueError):gateway.complete("hy",{"model":settings.model,"max_tokens":512,"tools":[{"type":"web_search"}]})

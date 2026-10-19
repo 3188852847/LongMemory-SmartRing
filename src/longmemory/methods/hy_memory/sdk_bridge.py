@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime
 import math
 from typing import Any, Protocol
+from dataclasses import replace
 
 
 SDK_VERSION = "2.0.3"
@@ -117,6 +118,8 @@ def normalize_search(response: Any, profile_response: Any = None) -> HyRecall:
             raise HyResponseError("hy_invalid_profile")
         if profile_response["profile"] is not None:
             profile = _item(profile_response["profile"], "profile")
+            if "basic_info" in profile_response["profile"]:
+                profile=replace(profile,content="[当前用户画像；不证明任意历史日期的状态]\n"+profile.content)
     return HyRecall(_text(response.get("request_id")), tuple(items), profile,
                     _elapsed(response.get("elapsed_ms")))
 

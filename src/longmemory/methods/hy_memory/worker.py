@@ -15,6 +15,7 @@ from urllib.parse import urlsplit
 from .process_client import MAX_LINE
 from .sdk_bridge import SDK_VERSION
 from .settings import HySettings
+from .source_evidence import enrich_profile,enrich_search
 
 
 class RequestBudget:
@@ -186,7 +187,12 @@ class ProtocolService:
         self.budget.operation = operation
         if operation == "add":
             arguments["memory_at"] = datetime.fromisoformat(arguments["memory_at"])
-        return getattr(self.client, operation)(**arguments)
+        response=getattr(self.client, operation)(**arguments)
+        if operation=="search":
+            response=enrich_search(self.client,response,arguments.get("user_ids",[]))
+        elif operation=="get_user_profile":
+            response=enrich_profile(self.client,response,arguments["user_id"])
+        return response
 
 
 def main(*, service=None):
