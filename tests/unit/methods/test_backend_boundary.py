@@ -432,3 +432,18 @@ def test_empty_input_is_rejected_before_archival(tmp_path, text):
         assert not engine.data["events"]
     finally:
         runtime.close()
+
+
+def test_assistant_cannot_be_correction_authority(tmp_path):
+    runtime, _ = directory_runtime(tmp_path)
+    try:
+        runtime.prepare_user("合成用户事实")
+        item = runtime.administer("listing", "list_items").items[0]
+        with pytest.raises(ValueError, match="memory_correction_source_must_be_user"):
+            runtime.administer("correction", "correct_item", item.item_id, "助手猜测",
+                expected_revision=item.revision, source=MemoryEvent("assistant-correction", "assistant", "助手猜测", NOW))
+        assert runtime.administer("detail", "get_item", item.item_id) == item
+        with pytest.raises(LookupError):
+            runtime.source_detail("assistant-correction")
+    finally:
+        runtime.close()

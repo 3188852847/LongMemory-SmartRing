@@ -622,6 +622,8 @@ class MemoryRuntime:
                 raise ValueError("management_operation_invalid")
             if capability == "correction" and not self._write_enabled:
                 raise ValueError("memory_write_paused")
+            if capability == "correction" and kwargs["source"].role != "user":
+                raise ValueError("memory_correction_source_must_be_user")
             if capability == "correction" and not self.legacy_sqlite:
                 # 新引擎管理来源也先归档；管理失败不声称跨存储回滚。
                 self._method.archive(kwargs["source"])
