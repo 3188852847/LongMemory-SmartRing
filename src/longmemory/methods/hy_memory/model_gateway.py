@@ -10,6 +10,7 @@ import http.client
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import secrets
+import socket
 from queue import Queue
 from threading import Lock, Thread
 from urllib.parse import urlsplit
@@ -95,12 +96,28 @@ class ModelGateway(AbstractContextManager):
         self._remote = remote or self._send
         self._remote_stream = remote_stream or self._send_stream
         self._streams, self._connections_lock = set(), Lock()
+        self._downstreams = set()
         self._closed = False
         self.embedding_calls = 0
         self.embedding_inputs = 0
         self.responses = []
         gateway = self
         class Handler(BaseHTTPRequestHandler):
+            # 只限制自有回环客户端的阻塞读写，不改变上游模型30秒设置。
+            timeout = 1.0
+            def setup(self):
+                super().setup()
+                with gateway._connections_lock:
+                    gateway._downstreams.add(self.connection)
+            def handle(self):
+                if not gateway._closed:
+                    super().handle()
+            def finish(self):
+                try:
+                    super().finish()
+                finally:
+                    with gateway._connections_lock:
+                        gateway._downstreams.discard(self.connection)
             def log_message(self,*args): pass
             def do_POST(self):
                 if not hmac.compare_digest(self.headers.get("Authorization",""),"Bearer "+gateway.token):
@@ -146,15 +163,22 @@ class ModelGateway(AbstractContextManager):
         self.close()
 
     def close(self):
-        if self._closed:
-            return
-        self._closed = True
         with self._connections_lock:
-            for loop, task in tuple(self._streams):
-                try:
-                    loop.call_soon_threadsafe(task.cancel)
-                except RuntimeError:
-                    pass
+            if self._closed:
+                return
+            self._closed = True
+            streams, downstreams = tuple(self._streams), tuple(self._downstreams)
+        # 不持登记锁执行取消/shutdown或join：处理线程finally也需取此锁。
+        for loop, task in streams:
+            try:
+                loop.call_soon_threadsafe(task.cancel)
+            except RuntimeError:
+                pass
+        for connection in downstreams:
+            try:
+                connection.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass
         if self.thread.is_alive():
             self.server.shutdown()
         self.server.server_close()
@@ -387,7 +411,7 @@ class ModelGateway(AbstractContextManager):
                     failure = "missing_usage"
                 self.budget.finish(aid, usage, successful=done)
             except Exception as error:
-                failure = ("client_disconnected" if writing else "gateway_closed" if self._closed
+                failure = ("gateway_closed" if self._closed else "client_disconnected" if writing
                     else "stream_invalid" if isinstance(error, (ValueError, TypeError)) else "transport_error")
                 self.budget.finish(aid, None, successful=False)
                 # 已发SSE头后只终止连接，不追加JSON或伪造DONE，调用者不得自动重试。

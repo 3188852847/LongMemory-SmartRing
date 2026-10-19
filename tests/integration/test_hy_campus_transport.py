@@ -11,12 +11,14 @@ import subprocess
 from threading import Thread
 from threading import Event
 from time import monotonic
+from time import sleep,time
 
 import pytest
 
 from longmemory.infrastructure.config.campus_calls import FreeCampusCalls
 from longmemory.infrastructure.config.settings import ModelSettings
 from longmemory.methods.hy_memory.model_gateway import ModelGateway
+from longmemory.methods.hy_memory.budget import SharedBudget,PricePolicy
 
 
 class Encoder:
@@ -148,3 +150,62 @@ def test_close_interrupts_http10_stream_and_restart_preserves_unknown(tmp_path):
         release.set();server.close()
         if connection:connection.close()
         provider.shutdown();provider.server_close();thread.join(5)
+
+
+@pytest.mark.parametrize('billing',['free','paid'])
+def test_close_interrupts_owned_slow_reader_without_releasing_unknown(tmp_path,billing):
+    import http.client,socket
+    sent=[]
+    @contextmanager
+    def remote(payload):
+        def lines():
+            packet=b'data: '+json.dumps({'choices':[{'delta':{'content':'x'*100000}}]}).encode()+b'\n'
+            for index in range(100):
+                sent.append(index);yield packet;yield b'\n'
+            yield b'data: [DONE]\n';yield b'\n'
+        yield 200,lines()
+    if billing=='free':
+        model=ModelSettings(provider='openai_compatible',base_url='http://127.0.0.1:9/synthetic',api_key='synthetic-only',
+            model='DeepSeek-V4-Flash',allow_http=True,timeout_seconds=30)
+        calls=FreeCampusCalls(tmp_path/'calls.sqlite3',proof={'request_model':model.model,'source':'owner_confirmation'},create=True)
+        server=ModelGateway(settings=model,budget=calls,encoder=object(),free_policy_verified=True,remote_stream=remote)
+    else:
+        model=ModelSettings(provider='openai_compatible',base_url='https://api.deepseek.com',api_key='synthetic-only',model='deepseek-v4-flash')
+        calls=SharedBudget(tmp_path/'budget.sqlite3',policy=PricePolicy(expires_at_unix=time()+60),create=True)
+        server=ModelGateway(settings=model,budget=calls,encoder=object(),currency_verified=True,remote_stream=remote)
+    raw=connection=response=closer=None;done=Event()
+    try:
+        server.__enter__();assert not server.server.daemon_threads
+        raw=socket.create_connection(('127.0.0.1',server.server.server_port),timeout=3)
+        raw.setsockopt(socket.SOL_SOCKET,socket.SO_RCVBUF,1024)
+        connection=http.client.HTTPConnection('127.0.0.1',server.server.server_port,timeout=3);connection.sock=raw
+        connection.request('POST','/voice/v1/chat/completions',body=json.dumps({'model':model.model,'stream':True,'max_tokens':512,'messages':[]}),
+            headers={'Authorization':'Bearer '+server.token,'Content-Type':'application/json'})
+        response=connection.getresponse();assert response.status==200
+        last=-1;stable=0
+        for _ in range(60):
+            sleep(.05);stable=stable+1 if len(sent)==last else 0;last=len(sent)
+            if stable>=4 and sent:break
+        def close():
+            try:server.close()
+            finally:done.set()
+        closer=Thread(target=close);closer.start()
+        assert done.wait(2),'close must finish while the client remains connected and does not read'
+        closer.join(1);assert not closer.is_alive() and not server.thread.is_alive()
+        assert not server._streams and not server._downstreams
+        if billing=='paid':
+            report=calls.report();assert report['unknown_or_inflight']==1
+            assert report['held_or_settled_upper_micro_cny']==calls.policy.reservation
+        else:
+            assert calls.status()['unknown_or_inflight']==1 and calls.status()['personal_cost_micro_cny']==0
+        with sqlite3.connect(calls.path) as db:
+            assert db.execute('SELECT failure,done FROM gateway_results').fetchone()==('gateway_closed',0)
+    finally:
+        if raw:
+            try:raw.shutdown(socket.SHUT_RDWR)
+            except OSError:pass
+        if response:response.close()
+        if connection:connection.close()
+        if raw:raw.close()
+        if closer:closer.join(5)
+        server.close()
