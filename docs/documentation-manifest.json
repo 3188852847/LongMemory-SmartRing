@@ -675,6 +675,36 @@
         "语音验收"
       ],
       "review": "verified 2026-10-15: 主会话核对已发布提供器字节、T报告与私有安全摘要、所有者直接反馈；设备播放协议与长期可靠性不在通过范围"
+    },
+    {
+      "id": "memory-engine-boundary",
+      "scope": "显式后端替换、中立管理条目、平台来源与失败投递边界",
+      "authority": "docs/architecture/method-boundary.md",
+      "sources": [
+        "src/longmemory/methods/contracts.py",
+        "src/longmemory/methods/backend_contracts.py",
+        "src/longmemory/bootstrap.py",
+        "src/longmemory/application/managed_memory.py",
+        "src/longmemory/application/backend_commands.py",
+        "src/longmemory/application/memory_runtime.py",
+        "src/longmemory/adapters/storage/sqlite_source_journal.py",
+        "src/longmemory/entrypoints/api/method_management.py",
+        "src/longmemory/entrypoints/api/routes/memory_engine.py",
+        "src/longmemory/entrypoints/api/server.py",
+        "tests/unit/methods/test_backend_boundary.py"
+      ],
+      "related": [
+        "docs/adr/0181-neutral-memory-backend-and-platform-sources.md",
+        "docs/development/parallel/U-memory-boundary-20261019.md",
+        "docs/development/configuration.md"
+      ],
+      "tags": [
+        "memory",
+        "backend",
+        "来源",
+        "解耦"
+      ],
+      "review": "verified 2026-10-19: U真实装配与合成契约；Hy/前端构建/日用切换未验，详见U记录"
     }
   ],
   "old_path_rules": [
@@ -3086,11 +3116,19 @@
     },
     {
       "path": "docs/architecture/method-boundary.md",
-      "title": "方法边界与阶段 A 使用说明",
-      "status": "pending",
-      "basis": "已盘点路径与标题，尚无本轮充分证据确定现行用途；保留原文等待任务核对",
+      "title": "方法与后端替换边界",
+      "status": "current",
+      "basis": "U通用后端实际装配和能力拒绝契约；保留阶段A及实验历史边界",
       "review": {
-        "state": "pending"
+        "state": "verified",
+        "date": "2026-10-19",
+        "scope": "仅U新增的后端装配、来源所有权、管理能力与未切换边界；未对历史章节或全篇作语义验收",
+        "evidence": [
+          "b52e0e3",
+          "77c7342",
+          "tests/unit/methods/test_backend_boundary.py",
+          "docs/development/parallel/U-memory-boundary-20261019.md"
+        ]
       },
       "tags": [
         "architecture"
@@ -3103,9 +3141,14 @@
       "basis": "按 ROADMAP、恢复/工程约定及本轮任务确定的维护入口；仅限定对应事实范围，语义核对另列",
       "review": {
         "state": "verified",
-        "date": "2026-10-14",
-        "scope": "仅本轮整合进度、导航、保留边界和新增模块段落；不代表全篇语义审计",
-        "evidence": "收口记录；J 106cff3；H 91de3ea；main生产源码一致与构建指纹核对"
+        "date": "2026-10-19",
+        "scope": "仅U新增的后端装配、来源所有权、管理能力与未切换边界；未对历史章节或全篇作语义验收",
+        "evidence": [
+          "b52e0e3",
+          "77c7342",
+          "tests/unit/methods/test_backend_boundary.py",
+          "docs/development/parallel/U-memory-boundary-20261019.md"
+        ]
       },
       "tags": [
         "architecture"
@@ -3203,7 +3246,15 @@
       "status": "current",
       "basis": "按 ROADMAP、恢复/工程约定及本轮任务确定的维护入口；仅限定对应事实范围，语义核对另列",
       "review": {
-        "state": "pending"
+        "state": "verified",
+        "date": "2026-10-19",
+        "scope": "仅U新增的后端装配、来源所有权、管理能力与未切换边界；未对历史章节或全篇作语义验收",
+        "evidence": [
+          "b52e0e3",
+          "77c7342",
+          "tests/unit/methods/test_backend_boundary.py",
+          "docs/development/parallel/U-memory-boundary-20261019.md"
+        ]
       },
       "tags": [
         "architecture"
@@ -3287,7 +3338,15 @@
       "status": "current",
       "basis": "按 ROADMAP、恢复/工程约定及本轮任务确定的维护入口；仅限定对应事实范围，语义核对另列",
       "review": {
-        "state": "pending"
+        "state": "verified",
+        "date": "2026-10-19",
+        "scope": "仅U新增的后端装配、来源所有权、管理能力与未切换边界；未对历史章节或全篇作语义验收",
+        "evidence": [
+          "b52e0e3",
+          "77c7342",
+          "tests/unit/methods/test_backend_boundary.py",
+          "docs/development/parallel/U-memory-boundary-20261019.md"
+        ]
       },
       "tags": [
         "development"
@@ -5036,6 +5095,48 @@
         "T",
         "日用切换",
         "语音验收"
+      ]
+    },
+    {
+      "path": "docs/adr/0181-neutral-memory-backend-and-platform-sources.md",
+      "title": "ADR-0181：显式记忆后端与平台来源所有权",
+      "status": "reference",
+      "basis": "本轮已接受的后端/来源边界决策，不宣称Hy真实运行或日用迁移",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-19",
+        "scope": "本轮用户决定、实际接口/提交/隔离验证与未验/待合入边界",
+        "evidence": [
+          "b52e0e3",
+          "77c7342",
+          "tests/unit/methods/test_backend_boundary.py"
+        ]
+      },
+      "tags": [
+        "memory",
+        "backend",
+        "U"
+      ]
+    },
+    {
+      "path": "docs/development/parallel/U-memory-boundary-20261019.md",
+      "title": "U：记忆层可替换边界补完整",
+      "status": "reference",
+      "basis": "U独立会话的实际代码、合成验证与待合入记录",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-19",
+        "scope": "本轮用户决定、实际接口/提交/隔离验证与未验/待合入边界",
+        "evidence": [
+          "b52e0e3",
+          "77c7342",
+          "tests/unit/methods/test_backend_boundary.py"
+        ]
+      },
+      "tags": [
+        "memory",
+        "backend",
+        "U"
       ]
     }
   ],

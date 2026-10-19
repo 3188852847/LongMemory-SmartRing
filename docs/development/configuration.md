@@ -4,6 +4,8 @@
 
 ## 当前目录契约
 
+记忆算法替换的显式 Python 装配见[方法边界](../architecture/method-boundary.md)。`MemoryBackendStore` 保存的圆屏后端指针仍是现有三种选项，本轮未新增 Hy 日用选项、未编辑任何 `local/config`。新后端合成验收分别指定引擎资源目录与平台来源文件；不把旧 `--database` 当作任意后端目录，也不自动创建/迁移个人库。安装、下载和实际切换仍由所有者/后续明确范围处理。
+
 | 内容 | 位置 | Git |
 |---|---|---|
 | 学校 / 官方模型档案 | `local/config/.env`、`local/config/.env.deepseek.local` | 忽略 |
