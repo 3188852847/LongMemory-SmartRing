@@ -4,12 +4,14 @@ import asyncio
 from dataclasses import asdict
 from hashlib import sha256
 import sqlite3
+import re
 from uuid import UUID
 
 from aiohttp import web
 
 from longmemory.entrypoints.xiaozhi.mapping import extract_user_text
 from longmemory.entrypoints.api.observability import bind_voice_request
+from longmemory.application.round_screen_turns import memory_receipt
 
 
 def _retrieval_evidence(prepared):
@@ -55,6 +57,11 @@ def register_memory_runtime_routes(app, backend):
     if backend is None:
         return
 
+    def neutral_runtime():
+        # 兼容仅实现旧 prepare/complete 的教学入口；正式 ChatBackend 必有 Runtime。
+        runtime = backend.memory_runtime() if callable(getattr(backend, "memory_runtime", None)) else None
+        return runtime is not None and not runtime.legacy_sqlite
+
     async def status(_request):
         result = await asyncio.to_thread(backend.memory_runtime().status)
         return web.json_response({"version": 1, **result})
@@ -64,14 +71,28 @@ def register_memory_runtime_routes(app, backend):
         request = request.clone(client_max_size=32768)
         try:
             body = await request.json()
-            if not isinstance(body, dict) or set(body) != {"version", "query"} or body.get("version") != 1:
+            if (not isinstance(body, dict) or set(body) not in (
+                    {"version", "query"}, {"version", "query", "client_round_id", "session_id"})
+                    or body.get("version") != 1):
                 raise ValueError
             text = extract_user_text(body.get("query"))
+            metadata = {}
+            if "client_round_id" in body:
+                for name in ("client_round_id", "session_id"):
+                    if not isinstance(body[name], str) or re.fullmatch(r"[0-9a-f]{24,32}", body[name]) is None:
+                        raise ValueError
+                metadata = {key: body[key] for key in ("client_round_id", "session_id")}
+                metadata["request_id"] = request.get("diagnostic_request_id")
+                voice_round_id = request.headers.get("X-Voice-Round-Id", "")
+                metadata["voice_round_id"] = voice_round_id if re.fullmatch(r"[0-9a-f]{24}", voice_round_id) else None
+            elif neutral_runtime():
+                raise ValueError
         except (ValueError, TypeError, UnicodeError):
             return web.json_response({"error": "invalid_memory_request", "version": 1}, status=400)
-        prepared, feedback = await asyncio.to_thread(
-            backend.prepare_round_screen_user, text,
-        )
+        try:
+            prepared, feedback = await asyncio.to_thread(backend.prepare_round_screen_user, text, **metadata)
+        except ValueError:
+            return web.json_response({"error": "round_screen_prepare_conflict", "version": 1}, status=409)
         feedback_notice = None
         if feedback is not None and feedback.recorded:
             feedback_notice = {
@@ -122,7 +143,7 @@ def register_memory_runtime_routes(app, backend):
             if prepared.memory_command is not None
             else feedback_notice or follow_up_notice
         )
-        return web.json_response({
+        response = {
             "version": 1,
             "context": prepared.support.context,
             "turn_id": prepared.event.event_id,
@@ -159,7 +180,21 @@ def register_memory_runtime_routes(app, backend):
             # 小智当前 Memory 插槽不能直接短路回答；把应用层固定回执作为
             # 独立字段交给薄适配器，以便和普通记忆证据使用不同提示契约。
             "command_reply": command_reply,
-        })
+        }
+        if neutral_runtime():
+            for key in ("retrieval_evidence", "scenario_use_enabled", "scenario_retrieved",
+                        "persona_use_enabled", "persona_retrieved"):
+                response.pop(key)
+            response.update(memory_protocol=2, memory_receipt=memory_receipt(prepared))
+            response["external_model_pause"] = prepared.observation.warning_code == "external_model_budget_paused"
+        return web.json_response(response)
+
+    async def voice_model_configuration(_request):
+        try:
+            result = await asyncio.to_thread(backend.memory_runtime().voice_model_configuration)
+        except ValueError:
+            return web.json_response({"error": "owned_model_service_unavailable"}, status=503)
+        return web.json_response(result)
 
     async def complete(request):
         """接收同机小智的最终助手文本；不代表音频已在设备播放完成。"""
@@ -168,6 +203,26 @@ def register_memory_runtime_routes(app, backend):
         request = request.clone(client_max_size=32768)
         try:
             body = await request.json()
+            if isinstance(body, dict) and body.get("memory_protocol") == 2:
+                required_v2 = {"version", "memory_protocol", "turn_id", "answer", "memory_receipt", "client_round_id"}
+                if (set(body) != required_v2 or body["version"] != 1
+                        or not isinstance(body["answer"], str) or not body["answer"].strip()
+                        or len(body["answer"]) > 16000 or not isinstance(body["turn_id"], str)
+                        or str(UUID(body["turn_id"])) != body["turn_id"]
+                        or not isinstance(body["client_round_id"], str)
+                        or re.fullmatch(r"[0-9a-f]{24,32}", body["client_round_id"]) is None
+                        or not isinstance(body["memory_receipt"], dict)
+                        or not neutral_runtime()):
+                    raise ValueError
+                try:
+                    result = await asyncio.to_thread(backend.complete_round_screen_turn,
+                        turn_id=body["turn_id"], answer=body["answer"], retrieved_counts=None,
+                        receipt=body["memory_receipt"], client_round_id=body["client_round_id"],
+                        request_id=request.get("diagnostic_request_id"))
+                except ValueError as error:
+                    return web.json_response({"version": 1, "error": str(error)}, status=409)
+                return web.json_response({"version": 1, "assistant_event_id": result.assistant_message_id,
+                    "created": result.created, "playback_acknowledgement": "unavailable"})
             required = {"version", "turn_id", "answer", "retrieved_counts"}
             optional = {"retrieval_evidence", "retrieval_strategy"}
             allowed_shapes = tuple(required | fields for fields in (
@@ -220,6 +275,28 @@ def register_memory_runtime_routes(app, backend):
             "playback_acknowledgement": "unavailable",
         })
 
+    async def cancel(request):
+        bind_voice_request(request)
+        try:
+            body = await request.clone(client_max_size=2048).json()
+            if (not isinstance(body, dict) or set(body) != {"version", "turn_id", "reason", "client_round_id"}
+                    or body["version"] != 1 or not isinstance(body["turn_id"], str)
+                    or str(UUID(body["turn_id"])) != body["turn_id"]
+                    or not isinstance(body["client_round_id"], str)
+                    or re.fullmatch(r"[0-9a-f]{24,32}", body["client_round_id"]) is None):
+                raise ValueError
+            runtime = backend.memory_runtime()
+            if runtime.legacy_sqlite:
+                return web.json_response({"error": "round_screen_platform_unavailable"}, status=501)
+            state = await asyncio.to_thread(runtime.cancel_round_screen, body["turn_id"],
+                reason=body["reason"], client_round_id=body["client_round_id"],
+                request_id=request.get("diagnostic_request_id"))
+            return web.json_response({"version": 1, "state": state["state"]})
+        except (ValueError, TypeError, KeyError, UnicodeError):
+            return web.json_response({"error": "round_screen_cancel_invalid"}, status=409)
+
     app.router.add_get("/api/internal/memory/status", status, allow_head=False)
     app.router.add_post("/api/internal/memory/prepare", prepare)
     app.router.add_post("/api/internal/memory/complete", complete)
+    app.router.add_post("/api/internal/memory/cancel", cancel)
+    app.router.add_get("/api/internal/memory/model-configuration", voice_model_configuration, allow_head=False)

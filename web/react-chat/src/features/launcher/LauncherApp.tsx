@@ -15,7 +15,7 @@ const fields: Array<{key: keyof LauncherSettings; label: string; options: Array<
   {key: 'voice_model_profile', label: '圆屏模型', options: models},
   {key: 'memory_extraction', label: '记忆提取', options: [{value: 'llm', label: '模型辅助提取'}, {value: 'rules', label: '规则提取'}]},
   {key: 'memory_retrieval', label: '记忆召回', options: [{value: 'hybrid', label: '关键词 + BGE 混合召回'}, {value: 'keyword', label: '关键词召回'}]},
-  {key: 'memory_backend', label: '记忆系统', options: [{value: 'longmemory', label: '智慧圆屏长期记忆'}, {value: 'xiaozhi_local', label: '小智本地记忆'}, {value: 'none', label: '不启用记忆'}]},
+  {key: 'memory_backend', label: '记忆系统', options: [{value: 'hy_memory', label: 'Hy-Memory（新库，主动交流暂停）'}, {value: 'longmemory', label: '原智慧圆屏长期记忆'}, {value: 'xiaozhi_local', label: '小智本地记忆'}, {value: 'none', label: '不启用记忆'}]},
   {key: 'voice_mode', label: '语音链路', options: [{value: 'pipeline', label: '本地语音链路'}, {value: 'doubao_realtime', label: '豆包实时语音（备用）'}]},
   {key: 'voice_latency_mode', label: '语音响应', options: [{value: 'realtime', label: '实时优先'}, {value: 'original', label: '原策略（对照）'}]},
   {key: 'vad_profile', label: '聆听环境', options: [{value: 'normal', label: '正常环境'}, {value: 'noisy', label: '嘈杂环境'}, {value: 'close_talk', label: '近距离说话'}]},
@@ -170,7 +170,8 @@ export function LauncherApp({api, pollMs = 1200}: {api: LauncherApi; pollMs?: nu
       {draft && <div className="launcher-settings-form">
         <TransitionSurface identity={settingsGroup}>
           {settingsGroup === 'daily' && <div className="launcher-switch-row"><label htmlFor="launcher-voice">连接圆屏语音</label><Switch id="launcher-voice" checked={draft.voice} disabled={settingsLocked} onChange={voice => setDraft({...draft, voice})}/></div>}
-          {fields.filter(field => settingsGroups.find(group => group.value === settingsGroup)?.keys.includes(field.key)).map(field => <div className="launcher-field" key={field.key}><label htmlFor={`launcher-${field.key}`}>{field.label}</label><Select id={`launcher-${field.key}`} options={field.options} value={String(draft[field.key])} disabled={settingsLocked} onChange={value => setDraft({...draft, [field.key]: value})}/></div>)}
+          {fields.filter(field => settingsGroups.find(group => group.value === settingsGroup)?.keys.includes(field.key)).map(field => <div className="launcher-field" key={field.key}><label htmlFor={`launcher-${field.key}`}>{field.label}</label><Select id={`launcher-${field.key}`} options={field.options} value={String(draft[field.key])} disabled={settingsLocked || (draft.memory_backend === 'hy_memory' && ['memory_extraction', 'memory_retrieval'].includes(field.key))} onChange={value => setDraft({...draft, [field.key]: value})}/></div>)}
+          {settingsGroup === 'memory' && draft.memory_backend === 'hy_memory' && <Alert type="info" showIcon title="Hy 使用独立的新记忆库和模型设置。旧提取/召回选项暂不生效，旧主动交流暂停；保存后需重启并核对实际后端。"/>}
           {settingsGroup === 'daily' && <div className="launcher-field"><label htmlFor="launcher-ip">电脑局域网 IP</label><Input id="launcher-ip" value={draft.lan_ip} placeholder="填写圆屏可访问的电脑 IPv4 地址" maxLength={64} disabled={settingsLocked} onChange={event => setDraft({...draft, lan_ip: event.target.value})}/></div>}
           {settingsGroup === 'voice' && <div className="launcher-engine"><span>当前声音引擎</span><strong>{draft.tts_backend === 'cosyvoice3' ? 'CosyVoice 3' : draft.tts_backend}</strong><p>声音与助手表达的详细选项，请进入陪伴空间查看。</p></div>}
           {settingsGroup === 'display' && <><div className="launcher-switch-row"><span>持续光效</span><AmbientMotionToggle/></div><p className="launcher-config-summary">光效立即改变当前浏览器，不需要保存，也不会启停服务。减少动画设置始终优先。</p></>}

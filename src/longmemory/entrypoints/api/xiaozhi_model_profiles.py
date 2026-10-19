@@ -14,11 +14,12 @@ from longmemory.application.chat.contracts import AnswerGenerationError
 
 
 class XiaozhiModelProfiles:
-    def __init__(self, project: Path, server: Path, profiles):
+    def __init__(self, project: Path, server: Path, profiles, *, model_settings_factory=None):
         self.project = Path(project).resolve()
         self.server = Path(server).resolve()
         self.profiles = profiles
         self.lock = asyncio.Lock()
+        self.model_settings_factory = model_settings_factory
 
     def _inspect_one(self, profile: str) -> dict:
         python = self.server / ".venv/Scripts/python.exe"
@@ -63,7 +64,8 @@ class XiaozhiModelProfiles:
             profile = self.profiles.selected("voice")
             checked_at = datetime.now(UTC).isoformat()
             try:
-                settings = self.profiles.settings(profile)
+                settings = (self.model_settings_factory() if self.model_settings_factory is not None
+                            else self.profiles.settings(profile))
                 answer = await asyncio.to_thread(
                     OpenAICompatibleAnswerGenerator(settings).generate,
                     query="请只回复：连接正常", memory_context="",

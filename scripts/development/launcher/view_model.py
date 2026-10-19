@@ -66,6 +66,7 @@ def summary_text(
         experimental.append("L2 旁路质检")
     experimental_label = "、".join(experimental) + "已开启" if experimental else "均关闭"
     backend_label = {
+        "hy_memory": "Hy-Memory（旧主动交流暂停）",
         "longmemory": "LongMemory",
         "xiaozhi_local": "小智本地摘要",
         "none": "无长期记忆",
@@ -164,6 +165,7 @@ def starting_services(*, voice, tts_backend, model_profile, voice_model_profile,
         "官方 DeepSeek" if voice_model_profile == "official" else "学校模型"
     )
     memory_label = {
+        "hy_memory": "Hy-Memory（旧主动交流暂停）",
         "longmemory": "LongMemory",
         "xiaozhi_local": "小智本地摘要",
         "none": "无长期记忆",

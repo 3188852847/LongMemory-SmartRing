@@ -174,11 +174,11 @@ def load_memory_backend(path: Path) -> str:
         value = data.get("selected_backend") if isinstance(data, dict) else None
     except (OSError, ValueError, TypeError):
         value = None
-    return value if value in {"longmemory", "xiaozhi_local", "none"} else "longmemory"
+    return value if value in {"longmemory", "hy_memory", "xiaozhi_local", "none"} else "longmemory"
 
 
 def save_memory_backend(path: Path, backend: str) -> None:
-    if backend not in {"longmemory", "xiaozhi_local", "none"}:
+    if backend not in {"longmemory", "hy_memory", "xiaozhi_local", "none"}:
         raise ValueError("launcher_memory_backend_invalid")
     body = {"version": 1, "selected_backend": backend}
     path.parent.mkdir(parents=True, exist_ok=True)

@@ -1,0 +1,6 @@
+{
+  "sdk_version":"2.0.3",
+  "rpc_source_sha256":"FILL_VERIFIED_MANAGEMENT_PRIMITIVES_IDENTITY",
+  "real_sdk_rpc_verified":false,
+  "semantic_background_writes_disabled":false
+}

@@ -2,11 +2,23 @@
 
 import json
 import os
+import hashlib
+from dataclasses import replace
 from pathlib import Path
 
 from longmemory.methods.backend_contracts import StateResource
 from .method import HyMemoryMethod, HyAdministration
 from .process_client import HyProcessClient
+
+
+def management_primitives_identity():
+    from .sdk_bridge import SDK_VERSION
+    directory = Path(__file__).parent
+    digest = hashlib.sha256(SDK_VERSION.encode())
+    for name in ("worker.py", "process_client.py", "management_rpc.py", "sdk_bridge.py"):
+        digest.update(name.encode())
+        digest.update((directory / name).read_bytes().replace(b"\r\n", b"\n"))
+    return digest.hexdigest()
 
 
 class HyState:
@@ -91,7 +103,8 @@ class StateClient:
 
 
 def assemble_hy_backend(*, settings, state_directory, source_path, create=False,
-                        python=None, client_factory=None, create_sources=None):
+                        python=None, client_factory=None, create_sources=None,
+                        expected_python_version=None, management_verification=None):
     from longmemory.bootstrap import assemble_backend
     root, source = Path(state_directory).resolve(), Path(source_path).resolve()
     if create_sources is None:
@@ -102,6 +115,16 @@ def assemble_hy_backend(*, settings, state_directory, source_path, create=False,
         raise FileExistsError("hy_source_already_exists")
     if client_factory is None and (python is None or not Path(python).is_file()):
         raise FileNotFoundError("hy_dedicated_python_required")
+    if management_verification is not None:
+        proof = management_verification
+        required = {"sdk_version", "rpc_source_sha256", "real_sdk_rpc_verified", "semantic_background_writes_disabled"}
+        if (not isinstance(proof, dict) or set(proof) != required or proof["sdk_version"] != settings.sdk_version
+                or proof["rpc_source_sha256"] != management_primitives_identity()
+                or proof["real_sdk_rpc_verified"] is not True or proof["semantic_background_writes_disabled"] is not True):
+            raise ValueError("hy_management_verification_identity_mismatch")
+        # 仅可信装配接收本轮真实SDK验收回执。画像还须worker在首次空库
+        # 建证、每次重开核对持久证明和外部owner锁；旧库不会补发证明。
+        settings = replace(settings, management_writes_enabled=True, management_exclusive_profile=True)
     state = HyState(root, settings, create=create)
     def factory():
         state.acquire()
@@ -117,6 +140,20 @@ def assemble_hy_backend(*, settings, state_directory, source_path, create=False,
         source_path=source, management=HyAdministration(engine), create_sources=create_sources)
     try:
         assembly.method.wait_until_ready()
+        if expected_python_version is not None:
+            diagnostics = engine.sdk_call("diagnostics")
+            if (diagnostics.get("sdk_python") != expected_python_version
+                    or diagnostics.get("actual_sdk_version") != settings.sdk_version):
+                raise ValueError("hy_runtime_version_identity_mismatch")
+        if management_verification is not None:
+            if state._lease is None or assembly.method.journal._lease is None:
+                raise ValueError("hy_management_exclusive_ownership_missing")
+            assembly.management.extension("workspace")
+            # 只有RPC实际宣告该原语可用时才开受控串行门。delete不满足单条语义
+            # 时继续为false，不能为让页面出现按钮而放宽SDK限制。
+            protocol = assembly.management._protocol()
+            if protocol.get("update") is True or protocol.get("delete") is True:
+                assembly.management.serialized_writes = True
         return assembly
     except BaseException:
         assembly.method.close()

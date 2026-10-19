@@ -12,6 +12,7 @@ from sync_role import commit_change
 
 
 PROFILES = {
+    "hy_memory": "LongMemory",
     "longmemory": "LongMemory",
     "xiaozhi_local": "mem_local_short",
     "none": "nomem",

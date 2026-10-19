@@ -54,3 +54,12 @@ def test_build_failure_keeps_all_questions_in_denominator(tmp_path):
     assert report["status"] == "completed_with_errors"
     assert report["summary"]["hy_memory_pro_chat"]["failed"] == 2
     assert report["summary"]["hy_memory_pro_chat"]["answer_denominator_all_questions"] == 2
+
+
+def test_real_metadata_requires_ledger_and_does_not_claim_fake_prompt(tmp_path):
+    _, report = run_hy_comparison(dev_slice(), output_root=tmp_path, hy_opener=opener,
+        model_metadata={"provider":"test", "simulated":False})
+    manifest=report["manifest"]
+    assert manifest["prompt_hash_scope"] == "executed_shared_answer_prompt"
+    assert "external_usage_requires_gateway_ledger" in manifest["limitations"]
+    assert "no_observed_cost_or_external_tokens" not in manifest["limitations"]

@@ -132,6 +132,18 @@ class HyProcessClient:
     def diagnostics(self):
         return self._rpc("diagnostics")
 
+    def management_capabilities(self):
+        return self._rpc("management_capabilities")
+
+    def history(self, *, memory_id):
+        return self._rpc("history", memory_id=memory_id)
+
+    def update(self, *, memory_id, content):
+        return self._rpc("update", memory_id=memory_id, content=content)
+
+    def delete(self, *, memory_id):
+        return self._rpc("delete", memory_id=memory_id)
+
     def close(self):
         with self._lock:
             if not self._closed:

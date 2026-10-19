@@ -41,8 +41,10 @@ from .role_settings import RoleSettings
 
 class ChatBackend:
     def __init__(self, database: Path, generator, *, provider="fake", model="fake",
-                 role="plain_v1", runtime=None, model_endpoint=None, insecure_model_transport=False):
+                 role="plain_v1", runtime=None, model_endpoint=None, insecure_model_transport=False,
+                 sidecar_database=None):
         self.database = database.resolve()
+        self.sidecar_database = (sidecar_database or database).resolve()
         if runtime is not None and not runtime.legacy_sqlite and runtime.database != self.database:
             raise ValueError("chat_platform_source_path_mismatch")
         self.generator = generator
@@ -50,7 +52,7 @@ class ChatBackend:
         # 只保留不含凭据的端点；供本机设置页辨认当前启动配置，绝不返回 API Key。
         self.model_endpoint = model_endpoint if provider != "fake" else None
         self.insecure_model_transport = bool(insecure_model_transport and provider != "fake")
-        self.roles = RoleSettings(self.database, role)
+        self.roles = RoleSettings(self.sidecar_database, role)
         # 延迟打开让错误仍在一次请求的固定错误边界内返回；生产服务器和
         # 内部语音接口随后复用同一个实例，不再每轮重新装配记忆引擎。
         self._runtime = runtime
@@ -96,11 +98,13 @@ class ChatBackend:
 
     def complete_round_screen_turn(
         self, *, turn_id, answer, retrieved_counts, retrieval_evidence=None,
-        retrieval_strategy=None,
+        retrieval_strategy=None, receipt=None, client_round_id=None, request_id=None,
     ):
         """归档小智实际生成的回答；关联表与助手 L0 在同一事务提交。"""
 
-        self._require_legacy_diagnostics()
+        if not self.memory_runtime().legacy_sqlite:
+            return self.memory_runtime().complete_round_screen(turn_id=turn_id, answer=answer,
+                receipt=receipt, client_round_id=client_round_id, request_id=request_id)
 
         result = SQLiteRoundScreenTurnStore(self.database).record(
             user_message_id=turn_id,
@@ -116,14 +120,17 @@ class ChatBackend:
         self.memory_runtime().complete_deferred_observation(turn_id)
         return result
 
-    def prepare_round_screen_user(self, text):
+    def prepare_round_screen_user(self, text, *, client_round_id=None, session_id=None, request_id=None, voice_round_id=None):
         """准备圆屏输入，并尝试记录对上一轮的严格显式质量反馈。"""
 
+        if not self.memory_runtime().legacy_sqlite:
+            prepared, feedback = self.memory_runtime().prepare_round_screen(text,
+                client_round_id=client_round_id, session_id=session_id, request_id=request_id,
+                voice_round_id=voice_round_id)
+            return prepared, (RoundScreenMemoryFeedbackResult(**feedback) if feedback else None)
         prepared = self.memory_runtime().prepare_user(
             text, defer_slow_observation=True,
         )
-        if not self.memory_runtime().legacy_sqlite:
-            return prepared, None
         try:
             feedback = SQLiteRoundScreenMemoryFeedbackStore(
                 self.database,
@@ -236,6 +243,8 @@ class ChatBackend:
                 "subject": "user:self",
                 "provider": self.provider, "model": self.model, "role": role['name'], "role_revision": role['revision'],
                 "database": str(self.database), "history_persistent": True,
+                "state_identity": runtime["state_identity"],
+                "proactive": runtime["proactive"],
                 "memory_write_enabled": runtime["write_enabled"],
                 "memory_use_enabled": runtime["use_enabled"],
                 "scenario_use_enabled": runtime["scenario_use_enabled"],
@@ -250,7 +259,7 @@ class ChatBackend:
                 "insecure_model_transport": self.insecure_model_transport,
                 "speaks_on_device": False}
 
-    def run(self, text, history):
+    def run(self, text, history, *, session_id=None):
         """在工作线程内复用常驻 Runtime；等待模型时不占记忆锁或写事务。
 
         返回实际阶段结果：模型失败不撤销已经记住的用户陈述，也不伪装
@@ -282,7 +291,7 @@ class ChatBackend:
             generator = self.generator
             if role['revision'] and self.provider != 'fake':
                 generator = generator.with_role_prompt(role['prompt'])
-            prepared = runtime.prepare_user(text)
+            prepared = runtime.prepare_user(text, session_id=session_id if not runtime.legacy_sqlite else None)
             event, observed, support = prepared.event, prepared.observation, prepared.support
             result["memory_write_enabled"] = prepared.write_enabled
             result["memory_use_enabled"] = prepared.use_enabled
@@ -354,7 +363,7 @@ class ChatBackend:
                 raise AnswerGenerationError("empty_answer", code="model_response_invalid")
             self._record_model_health("available")
             result["answer"] = answer
-            assistant = runtime.record_assistant(answer)
+            assistant = runtime.record_assistant(answer, session_id=session_id if not runtime.legacy_sqlite else None)
             result.update(status="completed", assistant_saved=True, assistant_event_id=assistant.event_id)
         except AnswerGenerationError as error:
             result["error"] = error.code

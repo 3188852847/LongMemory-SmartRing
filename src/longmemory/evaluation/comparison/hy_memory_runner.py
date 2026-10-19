@@ -43,7 +43,8 @@ def _copy_engine(source, target):
 
 
 def run_hy_comparison(dataset, *, output_root, hy_opener, generator_factory=FakeAnswerGenerator,
-                      split="dev", context_chars=4000, model_metadata=None, hy_metadata=None):
+                      split="dev", context_chars=4000, model_metadata=None, hy_metadata=None,
+                      baseline_opener=None, baseline_name="longmemory_v1"):
     """hy_opener(directory, create_engine, create_sources) 返回拥有 close 的 assembly。
 
     只创建新的运行和题目副本。Hy 题目副本使用新空来源账本，构建账本保留于
@@ -51,6 +52,8 @@ def run_hy_comparison(dataset, *, output_root, hy_opener, generator_factory=Fake
     """
     if split not in {"dev", "holdout"} or type(context_chars) is not int or not 1 <= context_chars <= 16000:
         raise ValueError("hy_comparison_options_invalid")
+    if baseline_name not in {"longmemory_v1","longmemory_daily_llm_bge"} or (baseline_name!="longmemory_v1" and baseline_opener is None):
+        raise ValueError("baseline_adapter_required")
     questions = [question for question in dataset.questions if question.split == split]
     if not questions:
         raise ValueError("hy_comparison_no_questions")
@@ -78,15 +81,18 @@ def run_hy_comparison(dataset, *, output_root, hy_opener, generator_factory=Fake
     manifest = {"protocol":PROTOCOL, "started_at":datetime.now(UTC).isoformat(), "code":provenance(),
         "python":platform.python_version(), "dataset":{"name":dataset.name,"version":dataset.version,"sha256":dataset.sha256},
         "split":split, "question_ids":[q.id for q in questions], "context_chars":context_chars,
-        "state_layout":{"longmemory_v1":"sealed/b", "hy_memory_pro_chat":"sealed/h", "questions":"q/<b|h>/<index>"},
+        "state_layout":{baseline_name:"sealed/b", "hy_memory_pro_chat":"sealed/h", "questions":"q/<b|h>/<index>"},
         "answer_model":model_metadata, "hy":hy_metadata,
         "system_prompt_sha256":hashlib.sha256(SYSTEM_PROMPT.encode()).hexdigest(), "scorer":SCORER_VERSION,
-        "prompt_hash_scope":"shared_answer_prompt_reference; fake_generator_does_not_execute_prompt",
+        "prompt_hash_scope":("shared_answer_prompt_reference; fake_generator_does_not_execute_prompt"
+            if model_metadata.get("simulated",True) else "executed_shared_answer_prompt"),
         "limitations":["not_strict_frozen_protocol", "hy_clone_semantic_mutation_not_ruled_out",
             "same_history_different_extraction_retrieval", "sdk_scores_not_comparable", "lexical_proxy_requires_review",
-            "fake_or_simulated_models_are_not_quality_evidence", "no_observed_cost_or_external_tokens"]}
+            *(["fake_or_simulated_models_are_not_quality_evidence", "no_observed_cost_or_external_tokens"]
+              if model_metadata.get("simulated",True) else ["external_usage_requires_gateway_ledger", "currency_upper_is_not_invoice"])]}
     (run / "history.json").write_text(json.dumps(history_payload(dataset), ensure_ascii=False, indent=2), encoding="utf-8")
-    names = ("longmemory_v1", "hy_memory_pro_chat")
+    manifest["baseline_name"]=baseline_name
+    names = (baseline_name, "hy_memory_pro_chat")
     rows = [{"method":name,"question_id":q.id,"category":q.category,"query":q.query,"status":"interrupted","error":"not_run"}
             for name in names for q in questions]
     report = {"manifest":manifest,"builds":{},"questions":rows,"status":"running"}
@@ -105,7 +111,7 @@ def run_hy_comparison(dataset, *, output_root, hy_opener, generator_factory=Fake
         record = report["builds"][name] = {"status":"failed","observations":[]}
         try:
             assembly = hy_opener(build, create_engine=True, create_sources=True) if name == names[1] else None
-            method = assembly.method if assembly else open_method(name, build, frozen=False)
+            method = assembly.method if assembly else (baseline_opener(build,create=True) if baseline_opener else open_method(name, build, frozen=False))
             for event in dataset.history:
                 result = method.observe(event) if assembly else observe_history(method, event)
                 record["observations"].append(asdict(result))
@@ -119,7 +125,7 @@ def run_hy_comparison(dataset, *, output_root, hy_opener, generator_factory=Fake
             method = None
             # 同路径独立重开，不用 recall 写访问状态来证明持久化。
             reopened = hy_opener(build, create_engine=False, create_sources=False) if assembly else None
-            method = reopened.method if reopened else open_method(name, build, frozen=True)
+            method = reopened.method if reopened else (baseline_opener(build,create=False) if baseline_opener else open_method(name, build, frozen=True))
             method.wait_until_ready()
             method.close()
             method = None
@@ -159,7 +165,7 @@ def run_hy_comparison(dataset, *, output_root, hy_opener, generator_factory=Fake
                 else:
                     _copy_engine(build, clone / "engine")
                     before = file_hashes(clone / "engine")
-                    method = open_method(name, clone / "engine", frozen=True)
+                    method = baseline_opener(clone/"engine",create=False) if baseline_opener else open_method(name, clone / "engine", frozen=True)
                 phase = "recall"
                 support = method.recall(question.query)
                 row["support"] = asdict(support)

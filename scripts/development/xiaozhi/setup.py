@@ -28,6 +28,8 @@ CUSTOM_TTS_URLS = {
     "cosyvoice3": "http://127.0.0.1:18770/v1/audio/speech",
 }
 LEGACY_MEMORY_PROVIDER_SHA256 = {
+    # T 20261015 部署版；X 已核对主源码与实际消费副本同摘要，只允许精确升级。
+    "98998f2fcf28c754bc39336129b072c737dd2cc58ef9505137625661452ce018",
     # Q 显式语音关联接入前的日用发布版，与 e15a867 文件字节完全相同。
     "82e43c8d59de69a5ddc8cc62eb2b96eee555efec36c339a800206bcab062253d",
     # 明确日期历史证据字段加入 Runtime、但薄适配器尚未同步契约的已发布版本。
@@ -239,6 +241,9 @@ def prepare_environment(server_dir: Path, ffmpeg_dir: Path, voice_mode="pipeline
     env["HF_HUB_OFFLINE"] = "1"
     env["PYTHONUTF8"] = "1"
     env["PYTHONUNBUFFERED"] = "1"
+    if env.get("LONGMEMORY_MEMORY_BACKEND") == "hy_memory":
+        for key in ("LONGMEMORY_LLM_API_KEY", "OPENAI_API_KEY", "DEEPSEEK_API_KEY"):
+            env.pop(key, None)
     return env
 
 
@@ -353,7 +358,14 @@ def main() -> int:
             command.extend(["--voice-latency-mode", args.voice_latency_mode])
         if args.device_control:
             command.append("--device-control")
-        render_runtime_config(server_dir)
+        model_override = None
+        if os.environ.get("LONGMEMORY_MEMORY_BACKEND") == "hy_memory":
+            from voice_budget import load_owned_configuration
+            model_override = load_owned_configuration()
+        if model_override is None:
+            render_runtime_config(server_dir)
+        else:
+            render_runtime_config(server_dir, model_override=model_override)
         return subprocess.call(command, cwd=server_dir,
                                env=prepare_environment(server_dir, args.ffmpeg_dir, args.voice_mode))
     except FileExistsError:

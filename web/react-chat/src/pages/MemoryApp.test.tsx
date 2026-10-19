@@ -11,16 +11,18 @@ test('独立引擎只展示中立条目和实际能力，不读取旧派生端�
   vi.spyOn(ChatApi.prototype,'bootstrap').mockResolvedValue(undefined);
   const request=vi.spyOn(ChatApi.prototype,'request').mockImplementation(async path=>{
     if(path==='/api/memory-config') return {configured:true,database:null,representation:'method_defined',method:'synthetic_directory',management_capabilities:{listing:true,detail:true,correction:false,scenarios:false,personas:false}} as never;
-    if(path==='/api/memory-engine/items') return {items:[{item_id:'node-1',content:'合成图节点',kind:'graph_node',source_event_ids:['source-1']}],total:26,offset:0,limit:25} as never;
+    if(path.startsWith('/api/memory-engine/items?')) return {items:[{item_id:'node-1',content:'合成图节点',kind:'graph_node',source_event_ids:['source-1']}],total:26,offset:0,limit:25} as never;
+    if(path==='/api/memory-engine') return {method:'synthetic_directory',write_enabled:false,use_enabled:true,management_capabilities:{listing:true,detail:true}} as never;
     throw new Error(`unexpected legacy path: ${path}`);
   });
   const client=new QueryClient({defaultOptions:{queries:{retry:false}}});
   render(<QueryClientProvider client={client}><MemoryRouter><MemoryApp/></MemoryRouter></QueryClientProvider>);
   expect(await screen.findByText('合成图节点')).toBeTruthy();
-  expect(screen.getByText('情景：不支持')).toBeTruthy();
-  expect(screen.getByText('已显示 1 条，共 26 条。当前页面仅展示首批条目。')).toBeTruthy();
+  expect(screen.getByText('1–1 / 26')).toBeTruthy();
+  expect(screen.getByText('当前有效条目，按记录时间从新到旧。共 26 条。')).toBeTruthy();
+  expect(screen.getByRole('button',{name:'下一页'}).hasAttribute('disabled')).toBe(false);
   expect(screen.queryByRole('button',{name:'清除 L0–L3'})).toBeNull();
-  expect(request.mock.calls.map(([path])=>path)).toEqual(['/api/memory-config','/api/memory-engine/items']);
+  expect(request.mock.calls.map(([path])=>path).sort()).toEqual(['/api/memory-config','/api/memory-engine','/api/memory-engine/items?limit=25&offset=0'].sort());
 });
 
 describe('每日记忆回顾',()=>{
@@ -38,7 +40,7 @@ describe('每日记忆回顾',()=>{
     });
     const client=new QueryClient({defaultOptions:{queries:{retry:false}}});
     render(<QueryClientProvider client={client}><MemoryRouter><MemoryApp/></MemoryRouter></QueryClientProvider>);
-    expect(screen.getByText('对话原话（L0） · —')).toBeTruthy();
+    expect(screen.queryByText('对话原话（L0） · 0')).toBeNull();
     expect(await screen.findByText('对话原话（L0） · 35')).toBeTruthy();
     expect(screen.queryByText('对话原话（L0） · 0')).toBeNull();
   });
@@ -79,7 +81,7 @@ describe('每日记忆回顾',()=>{
 
     const client=new QueryClient({defaultOptions:{queries:{retry:false}}});
     render(<QueryClientProvider client={client}><MemoryRouter><MemoryApp/></MemoryRouter></QueryClientProvider>);
-    fireEvent.click(screen.getByRole('button',{name:'每日回顾'}));
+    fireEvent.click(await screen.findByRole('button',{name:'每日回顾'}));
     expect(await screen.findByText(/每日记忆回顾/)).toBeTruthy();
     expect((await screen.findAllByText('用户喜欢乌龙茶。')).length).toBeGreaterThanOrEqual(2);
     expect(screen.getByText('新增 1')).toBeTruthy();
@@ -98,7 +100,7 @@ describe('每日记忆回顾',()=>{
     const expectedDate=`${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
     expect(screen.getByLabelText('L0 日期').getAttribute('value')).toBe(expectedDate);
     fireEvent.click(screen.getByText('事实记忆（L1） · 1'));
-    fireEvent.click(screen.getByRole('button',{name:'每日回顾'}));
+    fireEvent.click(await screen.findByRole('button',{name:'每日回顾'}));
     const correctionButton=screen.getByRole('button',{name:'直接纠正'});
     await waitFor(()=>expect(correctionButton.hasAttribute('disabled')).toBe(false));
     fireEvent.click(correctionButton);
@@ -327,7 +329,7 @@ describe('L1 质量候选',()=>{
     });
     const client=new QueryClient({defaultOptions:{queries:{retry:false}}});
     render(<QueryClientProvider client={client}><MemoryRouter><MemoryApp/></MemoryRouter></QueryClientProvider>);
-    fireEvent.click(screen.getByRole('button',{name:'重复与关系复核'}));
+    fireEvent.click(await screen.findByRole('button',{name:'重复与关系复核'}));
     const scan=await screen.findByRole('button',{name:'扫描当前 L1'});
     await waitFor(()=>expect(scan.hasAttribute('disabled')).toBe(false));
     fireEvent.click(scan);
@@ -373,7 +375,7 @@ describe('L1 质量候选',()=>{
     });
     const client=new QueryClient({defaultOptions:{queries:{retry:false}}});
     render(<QueryClientProvider client={client}><MemoryRouter><MemoryApp/></MemoryRouter></QueryClientProvider>);
-    fireEvent.click(screen.getByRole('button',{name:'重复与关系复核'}));
+    fireEvent.click(await screen.findByRole('button',{name:'重复与关系复核'}));
     const button=await screen.findByRole('button',{name:'运行一次预览'});
     expect(calls.some(call=>call.path.includes('semantic-relations'))).toBe(false);
     fireEvent.click(button);

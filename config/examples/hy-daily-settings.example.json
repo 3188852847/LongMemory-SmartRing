@@ -1,0 +1,16 @@
+{
+  "user_id": "user:self",
+  "agent_id": "smartring-daily",
+  "embedding_dimensions": 512,
+  "llm": {"base_url":"http://127.0.0.1:9/hy/v1","model":"deepseek-v4-flash","api_key":"ephemeral-replaced-at-launch","allow_loopback_http":true},
+  "embedding": {"base_url":"http://127.0.0.1:9/hy/v1","model":"FILL_VERIFIED_BGE_IDENTITY","api_key":"ephemeral-replaced-at-launch","allow_loopback_http":true},
+  "network_authorized": true,
+  "max_external_requests": 10000,
+  "timeout_seconds": 120,
+  "max_output_tokens": 2048,
+  "include_profile": true,
+  "sdk_version": "2.0.3",
+  "model_mode": "disabled",
+  "managed_gateway": true,
+  "provider_identity": "FILL_VERIFIED_PROVIDER_IDENTITY"
+}

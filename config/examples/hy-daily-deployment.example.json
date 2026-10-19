@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "python": "local/runtime/hy-memory/.venv/Scripts/python.exe",
+  "python_version": "3.12.13",
+  "python_sha256": "FILL_FROM_VERIFIED_INTERPRETER",
+  "state_directory": "data/memory/hy-daily-v1",
+  "source_path": "data/databases/xiaozhi-demo-hy-sources-v1.sqlite3",
+  "settings_identity": "FILL_FROM_VERIFIED_HY_SETTINGS_IDENTITY"
+}
