@@ -1,6 +1,6 @@
 # 方法与后端替换边界
 
-2026-10-19 增补：以下“新后端装配”是 U 的实际实现；Hy-Memory 专用适配与真实运行由 V 单独交付，目录型替身不作为 Hy 验收。决定见 [ADR-0181](../adr/0181-neutral-memory-backend-and-platform-sources.md)，证据见 [U 记录](../development/parallel/U-memory-boundary-20261019.md)。日用选择和个人库没有切换。
+2026-10-19 增补：以下“新后端装配”是 U 的实际实现；V 已交付 Hy-Memory 专用适配与真实 SDK/Chroma＋模拟模型验证，W 完成隔离后端审查和回归。目录型替身与模拟模型都不证明真实模型效果。决定见 [ADR-0181](../adr/0181-neutral-memory-backend-and-platform-sources.md)，证据见 [U 记录](../development/parallel/U-memory-boundary-20261019.md)、[V 记录](../development/parallel/V-hy-memory-20261019.md)与 [W 审查](../development/parallel/W-hy-review-integration-20261019.md)。日用选择和个人库没有切换，前端动态验证仍待环境。
 
 ## 新后端装配
 
@@ -24,7 +24,7 @@
 - 纠正来源先归档再调用管理适配器；管理修订比较须由适配器原子执行。新后端跨存储管理失败不承诺回滚原文。删除只删除引擎条目，平台原文保留，不等于隐私擦除。
 - 未适配的自然纠错、历史事实、来源解释、明确补记和陪伴控制返回 `unsupported` 回执；不是模型推测执行结果。一次“下一轮”的应用内临时方式保留。旧 L1 审计、圆屏完成关联/反馈、影子复核在新后端明确不支持，不静默读取旧表。低频整理与影子不自动启用。
 
-Hy 是用户指定的长期主要目标；可从独立新库积累，旧引擎保留作对照/回退。不迁移旧派生层、不删除任何个人数据。`assemble_backend` 是 V 的接入点；本轮未安装 Hy 或获取外部资源。
+Hy 是用户指定的长期主要目标；可从独立新库积累，旧引擎保留作对照/回退。不迁移旧派生层、不删除任何个人数据。V 已通过 `assemble_backend` 接入；SDK 由所有者安装，助手只读复用独立解释器，未获取外部资源。运行与预算边界见 [Hy 指南](../guides/Hy-Memory隔离接入与验证-20261019.md)。
 
 平台契约位于 `src/longmemory/methods/contracts.py`。`MemoryEvent` 是允许输入的消息，
 `ObservationResult` 描述记忆操作，`MemorySupport` 提供上下文与可选过程；它们不引用 AtomicMemory。
@@ -40,8 +40,9 @@ src/longmemory/methods/         # 方法级入口，与应用/实验入口解耦
 │  └─ method.py                # 状态生命周期与旧组件适配
 ├─ dialogue_chunks/             # 同会话两条消息分块的批处理对照
 │  └─ method.py                # 原始事件封存、角色/时间/来源与关键词召回
-└─ llm_extract/                # D1 实验专用模型提取条件，未加入日常工厂
-   └─ method.py                # 事务外候选生成、原子落库、候选审计及冻结读取
+├─ llm_extract/                # D1 实验专用模型提取条件，未加入日常工厂
+│  └─ method.py                # 事务外候选生成、原子落库、候选审计及冻结读取
+└─ hy_memory/                  # 显式可选接入，独立SDK进程、只读管理与私有资源身份
 ```
 
 `core/` 保留现有实现；`application/memory_turn.py` 提供 observe/recall，prepare 保留旧日常流程。

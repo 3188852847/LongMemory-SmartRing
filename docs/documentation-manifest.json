@@ -26,9 +26,9 @@
         "tests/integration/test_hy_memory_sdk_offline.py",
         "tests/fixtures/hy_memory_fake_worker.py"
       ],
-      "related": ["docs/development/parallel/V-hy-memory-20261019.md", "docs/architecture/method-boundary.md"],
+      "related": ["docs/development/parallel/V-hy-memory-20261019.md", "docs/development/parallel/W-hy-review-integration-20261019.md", "docs/architecture/method-boundary.md", "docs/requirements/主动交流阶段方案-20261019.md"],
       "tags": ["Hy-Memory", "隔离", "来源", "对比", "主动交流后续"],
-      "review": "verified 2026-10-19: U接力、专属安装、真实SDK/Chroma加模拟模型、来源/重启/失败窗口/副本；真实模型质量和日用/主动调度未验"
+      "review": "verified 2026-10-19: W独立审查及559 passed/2 skipped含4项真实SDK；协议畸形回包清理修复；前端动态未验与两项既有失败见W报告；真实模型质量和日用/主动调度未验"
     },
     {
       "id": "otto-preview",
@@ -714,7 +714,8 @@
       "related": [
         "docs/adr/0181-neutral-memory-backend-and-platform-sources.md",
         "docs/development/parallel/U-memory-boundary-20261019.md",
-        "docs/development/configuration.md"
+        "docs/development/configuration.md",
+        "docs/development/parallel/W-hy-review-integration-20261019.md"
       ],
       "tags": [
         "memory",
@@ -722,7 +723,25 @@
         "来源",
         "解耦"
       ],
-      "review": "verified 2026-10-19: U真实装配与合成契约；Hy/前端构建/日用切换未验，详见U记录"
+      "review": "verified 2026-10-19: U中立装配及W后端独立回归；V/W真实SDK加模拟模型通过；前端动态/真实模型质量/日用仍未验，保留U历史"
+    },
+    {
+      "id": "proactive-next-stage-plan",
+      "scope": "Hy目标下的中立事项跟进首切片提议、现有策略复用和独立阶段验收；不表示实施授权或现行能力",
+      "authority": "docs/requirements/主动交流阶段方案-20261019.md",
+      "sources": [
+        "src/longmemory/core/proactive/**",
+        "src/longmemory/application/proactive/**",
+        "src/longmemory/application/follow_up_suggestions.py",
+        "src/longmemory/adapters/storage/sqlite_follow_up_store.py",
+        "src/longmemory/adapters/storage/sqlite_proactive_runtime_state.py",
+        "src/longmemory/adapters/device_control/proactive_delivery.py",
+        "src/longmemory/entrypoints/api/proactive_backend.py",
+        "src/longmemory/entrypoints/api/proactive_runtime_backend.py"
+      ],
+      "related": ["docs/development/parallel/W-hy-review-integration-20261019.md", "docs/guides/Hy-Memory隔离接入与验证-20261019.md", "docs/requirements/记忆修复效果验证方案-20261015.md"],
+      "tags": ["主动交流", "Hy-Memory", "事项跟进", "draft"],
+      "review": "pending: W核对当前代码与边界，首切片/新ADR/持久化/实施范围待主会话定案，验收矩阵未执行"
     }
   ],
   "old_path_rules": [
@@ -796,11 +815,27 @@
   ],
   "documents": [
     {
+      "path": "docs/requirements/主动交流阶段方案-20261019.md",
+      "title": "主动交流阶段方案",
+      "status": "draft",
+      "basis": "W审查后基于现有策略/跟进/账本提出首切片；等待主会话定案，未实现、迁移或启动",
+      "review": {"state": "pending", "scope": "现有代码已核对；提议接口、ADR、阶段门槛与日用范围待确定"},
+      "tags": ["主动交流", "事项跟进", "Hy-Memory", "draft"]
+    },
+    {
+      "path": "docs/development/parallel/W-hy-review-integration-20261019.md",
+      "title": "W：Hy-Memory 独立审查、整合候选与主动交流规划",
+      "status": "reference",
+      "basis": "本地整合候选与实际独立验收；不代表main合入、前端动态通过或日用发布",
+      "review": {"state": "verified", "date": "2026-10-19", "scope": "U/V提交映射、W协议修复、559/2skip及4项真实SDK、两项既有失败和前端未验、规划边界", "evidence": ["f251f98", "tests/unit/methods/test_hy_memory_process.py", "tests/integration/test_hy_memory_sdk_offline.py", "docs/requirements/主动交流阶段方案-20261019.md"]},
+      "tags": ["W", "Hy-Memory", "审查", "整合", "主动交流"]
+    },
+    {
       "path": "docs/guides/Hy-Memory隔离接入与验证-20261019.md",
       "title": "Hy-Memory 隔离接入与验证",
       "status": "current",
       "basis": "本轮固定来源、所有者专属安装与实际离线接入操作；限定SDK加模拟模型，不表示真实模型质量或日用切换",
-      "review": {"state": "verified", "date": "2026-10-19", "scope": "固定来源、安装失败与成功记录、实际装配/来源/能力、零外部请求、复制协议与后续边界", "evidence": ["tests/unit/methods/test_hy_memory_backend.py", "tests/integration/test_hy_memory_sdk_offline.py", "tests/unit/evaluation/test_hy_memory_runner.py"]},
+      "review": {"state": "verified", "date": "2026-10-19", "scope": "V固定来源和实际装配/零外部请求；W协议清理、测试解释器显式路径、首批列表提示及后续规划引用；前端动态与真实质量未验", "evidence": ["tests/unit/methods/test_hy_memory_backend.py", "tests/integration/test_hy_memory_sdk_offline.py", "tests/unit/evaluation/test_hy_memory_runner.py", "docs/development/parallel/W-hy-review-integration-20261019.md"]},
       "tags": ["Hy-Memory", "隔离", "SDK", "比较"]
     },
     {
@@ -3152,16 +3187,17 @@
       "path": "docs/architecture/method-boundary.md",
       "title": "方法与后端替换边界",
       "status": "current",
-      "basis": "U通用后端实际装配和能力拒绝契约；保留阶段A及实验历史边界",
+      "basis": "U通用后端契约和V/W可选隔离接入状态；保留阶段A及实验历史边界",
       "review": {
         "state": "verified",
         "date": "2026-10-19",
-        "scope": "仅U新增的后端装配、来源所有权、管理能力与未切换边界；未对历史章节或全篇作语义验收",
+        "scope": "U装配/来源/管理边界与W新增V真实SDK加模拟模型、目录和未验说明；未对历史章节或全篇作语义验收",
         "evidence": [
           "b52e0e3",
           "77c7342",
           "tests/unit/methods/test_backend_boundary.py",
-          "docs/development/parallel/U-memory-boundary-20261019.md"
+          "docs/development/parallel/U-memory-boundary-20261019.md",
+          "docs/development/parallel/W-hy-review-integration-20261019.md"
         ]
       },
       "tags": [
