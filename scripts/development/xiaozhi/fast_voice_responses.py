@@ -103,6 +103,9 @@ def install_fast_voice_responses(connection_class):
                     memory.query_memory(query), connection.loop
                 )
                 future.result()
+                fixed = getattr(memory, "fixed_reply_for_current_turn", None)
+                if callable(fixed):
+                    response = fixed() or response
             except Exception:
                 connection.logger.bind(tag="fast-voice").warning(
                     "寒暄归档失败；本轮继续播放本地回答且不自动重试"

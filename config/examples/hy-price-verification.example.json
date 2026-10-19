@@ -1,0 +1,11 @@
+{
+  "source":"https://api-docs.deepseek.com/zh-cn/quick_start/pricing/",
+  "verified_at_unix":0,
+  "valid_until_unix":0,
+  "model":"deepseek-v4-flash",
+  "currency":"CNY",
+  "currency_verified":false,
+  "credential_sha256":"FILL_PRIVATE_VERIFIED_ACCOUNT_CREDENTIAL_DIGEST",
+  "input_micro_cny_per_token":2,
+  "output_micro_cny_per_token":8
+}

@@ -110,6 +110,7 @@ class MemoryRuntime:
         self._round_screen_store = round_screen_store
         self.backend_assembly = backend_assembly
         self._state_identity = state_identity
+        self._model_service = None
         self._lock = RLock()
         self._closed = False
         self._write_enabled = True
@@ -153,6 +154,18 @@ class MemoryRuntime:
         with self._lock:
             lock_acquired = perf_counter()
             self._ensure_open()
+            if self._model_service is not None:
+                notice = self._model_service.pause_notice()
+                if notice:
+                    self._method.archive(event)
+                    from longmemory.application.natural_memory_commands import NaturalMemoryCommandResult
+                    return PreparedMemoryTurn(event,
+                        ObservationResult(event.event_id, (), "source_only", "external_model_budget_paused"),
+                        MemorySupport(str(uuid4()), "", (), "budget_paused"),
+                        self._write_enabled, self._use_enabled, False, (), False, (),
+                        MemoryPreparationTimings((lock_acquired - lock_started) * 1000, 0, 0, 0, 0, 0,
+                                                 (perf_counter() - started) * 1000),
+                        NaturalMemoryCommandResult("budget", "paused", notice))
             command_started = perf_counter()
             command = None
             next_selection = classify_next_turn_interaction(text)
@@ -563,6 +576,28 @@ class MemoryRuntime:
             self._ensure_open()
             return self._round_screen_store.status(turn_id)
 
+    def attach_model_service(self, service):
+        """只供可信装配领取关闭责任，HTTP不提供替换模型服务的接口。"""
+        with self._lock:
+            self._ensure_open()
+            if self._model_service is not None or self._closing:
+                raise ValueError("model_service_already_owned_or_closing")
+            self._model_service = service
+
+    def external_model_settings(self, phase="answer"):
+        with self._lock:
+            self._ensure_open()
+            if self._model_service is None:
+                raise ValueError("owned_model_service_unavailable")
+            return self._model_service.model_settings(phase)
+
+    def voice_model_configuration(self):
+        with self._lock:
+            self._ensure_open()
+            if self._model_service is None:
+                raise ValueError("owned_model_service_unavailable")
+            return self._model_service.voice_configuration()
+
     def retry_failed_observation(
         self, source_message_id: str, *, expected_attempt_id: str,
     ) -> dict:
@@ -702,6 +737,46 @@ class MemoryRuntime:
                 raise ValueError("source_status_unsupported")
             return status(event_id)
 
+    def administer_extension(self, namespace, operation, **arguments):
+        """专属管理也经过统一串行和来源守卫，不能从HTTP任意调用方法。"""
+        from longmemory.methods.contracts import UnsupportedCapabilityError
+        allowed = {"workspace", "profile", "history", "operations", "correct", "delete"}
+        with self._lock:
+            self._ensure_open()
+            assembly = self.backend_assembly
+            admin = assembly.management if assembly else None
+            if (namespace != "hy_memory" or operation not in allowed or self.legacy_sqlite
+                    or admin is None or getattr(admin, "extension_namespace", None) != namespace
+                    or not callable(getattr(admin, "extension", None))):
+                raise UnsupportedCapabilityError("memory_management_extension_unsupported")
+            if operation in {"correct", "delete"}:
+                if not self._write_enabled:
+                    raise ValueError("memory_write_paused")
+                source = arguments.get("source")
+                request_id, item_id = arguments.get("request_id"), arguments.get("item_id")
+                from uuid import UUID
+                try:
+                    valid_id = isinstance(request_id, str) and str(UUID(request_id)) == request_id
+                except ValueError:
+                    valid_id = False
+                expected = arguments.get("content") if operation == "correct" else f"删除这条记忆：{item_id}"
+                if (not valid_id or not isinstance(source, MemoryEvent) or source.role != "user"
+                        or source.event_id != "hy-management:" + request_id or source.content != expected):
+                    raise ValueError("memory_management_user_source_invalid")
+                try:
+                    previous = self._method.source_detail(source.event_id)
+                except LookupError:
+                    pass
+                else:
+                    if previous["role"] != "user" or previous["content"] != source.content:
+                        raise ValueError("memory_management_source_conflict")
+                    # HTTP重放会产生新接收时间；复用第一次真实来源，不能冲突覆盖。
+                    source = MemoryEvent(source.event_id, "user", previous["content"],
+                        datetime.fromisoformat(previous["occurred_at"]), previous["session_id"])
+                self._method.archive(source)
+                arguments["source"] = source
+            return admin.extension(operation, **arguments)
+
     def source_detail(self, event_id):
         with self._lock:
             self._ensure_open()
@@ -733,6 +808,7 @@ class MemoryRuntime:
                 "method": self._method.name,
                 "implementation_version": self._method.implementation_version,
                 "state_identity": self._state_identity,
+                "external_models": self._model_service.status() if self._model_service is not None else None,
                 "retrieval": getattr(self._method, "retrieval_name", "unknown"),
                 "database": str(self.database),
                 "state_resources": ([{"name": item.name, "kind": item.kind,
@@ -844,6 +920,8 @@ class MemoryRuntime:
                     if self._memory_command_handler is not None:
                         self._memory_command_handler.close()
                     self._closed = True
+                    if self._model_service is not None:
+                        self._model_service.close()
 
     def _ensure_open(self) -> None:
         if self._closed:

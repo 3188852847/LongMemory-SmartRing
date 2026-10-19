@@ -241,6 +241,9 @@ def prepare_environment(server_dir: Path, ffmpeg_dir: Path, voice_mode="pipeline
     env["HF_HUB_OFFLINE"] = "1"
     env["PYTHONUTF8"] = "1"
     env["PYTHONUNBUFFERED"] = "1"
+    if env.get("LONGMEMORY_MEMORY_BACKEND") == "hy_memory":
+        for key in ("LONGMEMORY_LLM_API_KEY", "OPENAI_API_KEY", "DEEPSEEK_API_KEY"):
+            env.pop(key, None)
     return env
 
 
@@ -355,7 +358,14 @@ def main() -> int:
             command.extend(["--voice-latency-mode", args.voice_latency_mode])
         if args.device_control:
             command.append("--device-control")
-        render_runtime_config(server_dir)
+        model_override = None
+        if os.environ.get("LONGMEMORY_MEMORY_BACKEND") == "hy_memory":
+            from voice_budget import load_owned_configuration
+            model_override = load_owned_configuration()
+        if model_override is None:
+            render_runtime_config(server_dir)
+        else:
+            render_runtime_config(server_dir, model_override=model_override)
         return subprocess.call(command, cwd=server_dir,
                                env=prepare_environment(server_dir, args.ffmpeg_dir, args.voice_mode))
     except FileExistsError:

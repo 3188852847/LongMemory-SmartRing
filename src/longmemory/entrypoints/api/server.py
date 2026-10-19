@@ -218,7 +218,8 @@ def create_app(*, port=8765, bridge=None, web_root=None, database=None, allow_me
     ) if xiaozhi_server and chat_backend else None)
     register_tts_backend_routes(app, tts_backend_store, current_runtime_status)
     voice_profiles = voice_model_profiles or (
-        XiaozhiModelProfiles(ROOT, xiaozhi_server, model_profile_store)
+        XiaozhiModelProfiles(ROOT, xiaozhi_server, model_profile_store,
+            model_settings_factory=(lambda: runtime.external_model_settings("answer")) if runtime is not None and not legacy_sqlite else None)
         if xiaozhi_server and model_profile_store else None
     )
     register_model_profile_routes(app, model_profile_store, voice_profiles)
@@ -313,6 +314,7 @@ def main():
     args = parser.parse_args()
     if args.memory_backend == "hy_memory" and (
             not args.enable_chat or args.enable_memory_consolidation
+            or args.enable_experiment_runs
             or args.enable_l1_sufficiency_shadow or args.enable_l2_sufficiency_shadow
             or args.memory_extraction != "rules" or args.memory_retrieval != "keyword"):
         parser.error("Hy 使用独立模型/召回设置，不接受旧提取、召回、整理或影子开关")
@@ -378,7 +380,7 @@ def main():
         from longmemory.core.memory.extraction.candidates import PREPROCESSOR_VERSION
         from longmemory.adapters.llm.openai_compatible import OpenAICompatibleAnswerGenerator
         from longmemory.core.memory.retrieval.service import HybridMemoryRetriever
-        from longmemory.infrastructure.config.settings import load_model_settings
+        from longmemory.infrastructure.config.settings import load_model_settings, ModelSettings
         from longmemory.methods.daily_llm.method import DailyLLMMemory
         from longmemory.methods.longmemory_v1.method import LongMemoryV1
         from .chat_backend import ChatBackend
@@ -388,10 +390,10 @@ def main():
             # 只读预检；不能为了打开网页而创建或迁移用户的记忆库。
             if args.memory_backend != "hy_memory":
                 MemoryBackend(args.database).list_page(limit=1)
-            settings = load_model_settings(provider=args.chat_provider)
+            settings = ModelSettings() if args.memory_backend == "hy_memory" else load_model_settings(provider=args.chat_provider)
             role_prompt = (ROOT / "src/longmemory/prompts/personas" / (args.assistant_role + ".txt")).read_text(encoding="utf-8")
             role_prompt = role_prompt.replace("<memory></memory>", "（证据见独立 memory_evidence 消息。）")
-            generator = (FakeAnswerGenerator() if settings.provider == "fake" else
+            generator = (None if args.memory_backend == "hy_memory" else FakeAnswerGenerator() if settings.provider == "fake" else
                          OpenAICompatibleAnswerGenerator(settings, role_prompt=role_prompt))
             if settings.provider == "openai_compatible" and args.memory_backend != "hy_memory":
                 from longmemory.application.proactive.greeting import (
@@ -491,6 +493,9 @@ def main():
             if args.memory_backend == "hy_memory":
                 from longmemory.infrastructure.config.hy_deployment import build_daily_hy_runtime
                 runtime = build_daily_hy_runtime(ROOT)
+                settings = runtime.external_model_settings("answer")
+                generator = (FakeAnswerGenerator() if settings.provider == "fake" else
+                             OpenAICompatibleAnswerGenerator(settings, role_prompt=role_prompt))
             elif args.memory_extraction == "llm":
                 method = DailyLLMMemory(
                     args.database,
@@ -528,7 +533,7 @@ def main():
                                        model=settings.model or "fake", role=args.assistant_role,
                                        runtime=runtime, model_endpoint=settings.base_url or None,
                                        sidecar_database=args.database,
-                                       insecure_model_transport=settings.base_url.startswith("http://"))
+                                       insecure_model_transport=settings.base_url.startswith("http://") and args.memory_backend != "hy_memory")
             if args.memory_backend != "hy_memory" and args.allow_scenario_management and settings.provider == "openai_compatible":
                 from longmemory.adapters.llm.scenario_candidate import OpenAICompatibleScenarioProposalProducer
                 scenario_producer = OpenAICompatibleScenarioProposalProducer(settings)
@@ -548,7 +553,7 @@ def main():
                 if consolidation_scheduler is not None:
                     consolidation_scheduler.close()
             parser.error("文字聊天配置无效：请检查已有数据库版本、模型环境变量和角色文件。未建库或迁移。")
-        if settings.base_url.startswith("http://"):
+        if settings.base_url.startswith("http://") and args.memory_backend != "hy_memory":
             print("警告：模型 HTTP 会明文传输凭据、对话和检索证据；仅用于已确认风险的校园网合成体验。")
     if not all((ROOT / "web" / path).is_file() for path, _mime in STATIC_FILES.values()):
         parser.error("控制台静态资源缺失；当前入口需要从完整源代码仓库可编辑安装后启动")

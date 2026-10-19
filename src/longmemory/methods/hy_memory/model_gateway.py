@@ -1,6 +1,6 @@
 """自有回环模型网关：同一预算覆盖 Hy、旧提取、回答器；BGE 留在主环境。"""
 
-from contextlib import AbstractContextManager
+from contextlib import AbstractContextManager, contextmanager
 from dataclasses import replace
 import hashlib
 import hmac
@@ -8,6 +8,7 @@ import http.client
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import secrets
+import socket
 from threading import Lock, Thread
 from urllib.parse import urlsplit
 
@@ -56,7 +57,7 @@ def verify_cny_account(settings):
 
 
 class ModelGateway(AbstractContextManager):
-    def __init__(self, *, settings, budget, encoder, currency_verified=False, remote=None):
+    def __init__(self, *, settings, budget, encoder, currency_verified=False, remote=None, remote_stream=None):
         if not currency_verified:
             raise ValueError("billing_currency_required")
         if settings.model != budget.policy.model:
@@ -68,6 +69,9 @@ class ModelGateway(AbstractContextManager):
         self.token = secrets.token_urlsafe(32)
         self._paid_lock, self._embedding_lock = Lock(), Lock()
         self._remote = remote or self._send
+        self._remote_stream = remote_stream or self._send_stream
+        self._connections, self._connections_lock = set(), Lock()
+        self._closed = False
         self.embedding_calls = 0
         self.embedding_inputs = 0
         self.responses = []
@@ -82,7 +86,12 @@ class ModelGateway(AbstractContextManager):
                     size = int(self.headers.get("Content-Length","0"))
                     if not 0 < size <= MAX_BODY: raise ValueError("size")
                     body = json.loads(self.rfile.read(size))
-                    if self.path == "/hy/v1/embeddings":
+                    if self.path == "/voice/v1/chat/completions" and body.get("stream") is True:
+                        gateway.stream(body, self)
+                    elif self.path == "/voice/v1/chat/completions":
+                        status, payload = gateway.complete("answer", body)
+                        self.respond(status, payload)
+                    elif self.path == "/hy/v1/embeddings":
                         result = gateway.embed(body,self.headers.get("X-Hy-Embedding-Role","document"))
                         self.respond(200,result)
                     elif self.path in paths:
@@ -101,7 +110,7 @@ class ModelGateway(AbstractContextManager):
                 except (BrokenPipeError,ConnectionResetError):pass
         self.server = ThreadingHTTPServer(("127.0.0.1",0),Handler)
         self.server.daemon_threads = False
-        if self.server.server_port in {8767,8000,8003}:
+        if self.server.server_port in {8766,8767,8768,8000,8003,18767,18768,18769,18770}:
             self.server.server_close(); raise ValueError("gateway_daily_port_rejected")
         self.base = f"http://127.0.0.1:{self.server.server_port}"
         self.thread = Thread(target=self.server.serve_forever,daemon=True)
@@ -110,7 +119,25 @@ class ModelGateway(AbstractContextManager):
         self.thread.start(); return self
 
     def __exit__(self,*args):
-        self.server.shutdown(); self.server.server_close(); self.thread.join(timeout=5)
+        self.close()
+
+    def close(self):
+        if self._closed:
+            return
+        self._closed = True
+        with self._connections_lock:
+            for connection in tuple(self._connections):
+                if connection.sock is not None:
+                    try:
+                        connection.sock.shutdown(socket.SHUT_RDWR)
+                    except OSError:
+                        pass
+                connection.close()
+        if self.thread.is_alive():
+            self.server.shutdown()
+        self.server.server_close()
+        if self.thread.is_alive():
+            self.thread.join(timeout=5)
 
     def local_settings(self, phase, *, max_tokens=1024):
         return replace(self.settings,base_url=self.base+f"/{phase}/v1",api_key=self.token,
@@ -150,6 +177,8 @@ class ModelGateway(AbstractContextManager):
         payload=json.dumps(body,ensure_ascii=False).encode()
         if len(payload)>MAX_BODY:raise ValueError("model_payload_too_large")
         with self._paid_lock:
+            if self._closed:
+                raise BudgetStopped("gateway_closed")
             aid=self.budget.reserve(phase)
             try:
                 status,data=self._remote(payload)
@@ -178,3 +207,88 @@ class ModelGateway(AbstractContextManager):
             if len(data)>MAX_BODY:raise ValueError("provider_response_too_large")
             return response.status,data
         finally:connection.close()
+
+    @contextmanager
+    def _send_stream(self, payload):
+        url = urlsplit(self.settings.base_url)
+        connection = http.client.HTTPSConnection(url.hostname, 443, timeout=self.settings.timeout_seconds)
+        with self._connections_lock:
+            self._connections.add(connection)
+        try:
+            connection.request("POST", url.path.rstrip("/") + "/chat/completions", body=payload,
+                headers={"Content-Type": "application/json", "Authorization": "Bearer " + self.settings.api_key})
+            response = connection.getresponse()
+            def lines():
+                while True:
+                    line = response.readline(131073)
+                    if not line:
+                        break
+                    if len(line) > 131072:
+                        raise ValueError("provider_stream_line_too_large")
+                    yield line
+            yield response.status, lines()
+        finally:
+            connection.close()
+            with self._connections_lock:
+                self._connections.discard(connection)
+
+    def stream(self, body, handler):
+        """边收边转发真实SSE；最终usage和DONE均成功转发才释放最坏预留。
+
+        取消、缺usage、断流或本地写失败保留unknown；不缓存整回答再伪分块。
+        供应商密钥、原始错误和消息正文不进入预算/诊断。
+        """
+        if (not isinstance(body, dict) or body.get("model") != self.settings.model
+                or body.get("stream") is not True or type(body.get("max_tokens")) is not int
+                or not 1 <= body["max_tokens"] <= 8192
+                or any(not isinstance(tool, dict) or tool.get("type") != "function" for tool in (body.get("tools") or []))):
+            raise ValueError("voice_stream_payload_invalid")
+        body = dict(body, thinking={"type": "disabled"}, stream_options={"include_usage": True})
+        payload = json.dumps(body, ensure_ascii=False).encode()
+        if len(payload) > MAX_BODY:
+            raise ValueError("model_payload_too_large")
+        with self._paid_lock:
+            if self._closed:
+                raise BudgetStopped("gateway_closed")
+            aid = self.budget.reserve("answer")
+            usage, done, total, event_lines = None, False, 0, []
+            try:
+                with self._remote_stream(payload) as (status, lines):
+                    if status != 200:
+                        handler.respond(502, {"error": "selected_provider_failed"})
+                    else:
+                        handler.send_response(200)
+                        handler.send_header("Content-Type", "text/event-stream; charset=utf-8")
+                        handler.send_header("Cache-Control", "no-store")
+                        handler.send_header("Connection", "close")
+                        handler.end_headers()
+                        handler.close_connection = True
+                        for line in lines:
+                            if self._closed or not isinstance(line, bytes) or len(line) > 131072:
+                                raise ValueError("provider_stream_interrupted")
+                            total += len(line)
+                            if total > 32 * MAX_BODY:
+                                raise ValueError("provider_stream_too_large")
+                            event_lines.append(line)
+                            handler.wfile.write(line)
+                            handler.wfile.flush()
+                            if line.strip():
+                                continue
+                            data = b"\n".join(row[5:].strip() for row in event_lines if row.startswith(b"data:"))
+                            event_lines.clear()
+                            if data == b"[DONE]":
+                                done = True
+                                break
+                            if data:
+                                packet = json.loads(data)
+                                if not isinstance(packet, dict):
+                                    raise ValueError("provider_stream_invalid")
+                                if packet.get("usage") is not None:
+                                    usage = packet["usage"]
+                self.budget.finish(aid, usage, successful=done)
+            except Exception:
+                self.budget.finish(aid, None, successful=False)
+                # 已发SSE头后只终止连接，不追加JSON或伪造DONE，调用者不得自动重试。
+                handler.close_connection = True
+            self.responses.append({"attempt_id": aid, "phase": "answer", "stream": True,
+                "completed": done, "usage": usage if done else None})

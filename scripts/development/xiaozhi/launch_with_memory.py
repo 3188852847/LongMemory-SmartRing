@@ -118,6 +118,9 @@ def isolate_memory_initialization(connection_class, provider_class):
             # 即使非法设备初始化失败，它也不能复用合法设备的记忆对象。
             connection.memory = provider_class(config)
         result = original(connection)
+        if os.environ.get("LONGMEMORY_MEMORY_BACKEND") == "hy_memory":
+            from voice_budget import BudgetNoticeLLM
+            connection.llm = BudgetNoticeLLM(connection.llm, connection.memory)
         observe_memory_operations(connection)
         return result
 
@@ -287,6 +290,10 @@ def main():
     # 不改系统环境或网页策略；面板选择在重启时生效。
     install_pipeline_latency_policy(ConnectionHandler, mode=args.voice_latency_mode,
                                     enable_asr_prefetch=True, enable_http_keepalive=True)
+    if os.environ.get("LONGMEMORY_MEMORY_BACKEND") == "hy_memory":
+        from core.providers.llm.openai import openai as provider_module
+        from voice_budget import install_no_retry_gateway_client
+        install_no_retry_gateway_client(provider_module)
     # 快速通道必须位于时序包装器内部，才能像普通回答一样记录真实首包。
     install_fast_voice_responses(ConnectionHandler)
     install_voice_latency(ConnectionHandler)

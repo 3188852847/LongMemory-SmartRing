@@ -309,6 +309,10 @@ def test_formal_server_selects_hy_sources_and_preserves_original_sidecar_base(tm
     from longmemory.infrastructure.config import hy_deployment
     runtime, engine = open_runtime(tmp_path)
     original = tmp_path / "original-personal.db"
+    from types import SimpleNamespace
+    from longmemory.infrastructure.config.settings import ModelSettings
+    runtime.attach_model_service(SimpleNamespace(model_settings=lambda phase: ModelSettings(),
+        status=lambda: {"state": "available"}, pause_notice=lambda: None, close=lambda: None))
     original.write_bytes(b"synthetic-original-do-not-open")
     before = original.read_bytes()
     selected = {}
@@ -325,3 +329,22 @@ def test_formal_server_selects_hy_sources_and_preserves_original_sidecar_base(tm
     assert backend.sidecar_database == original
     assert backend.roles.path == tmp_path / "original-personal.db.role.sqlite3"
     assert original.read_bytes() == before
+
+
+def test_budget_pause_archives_user_and_returns_local_notice_without_engine_calls(tmp_path):
+    from types import SimpleNamespace
+    runtime, engine = open_runtime(tmp_path)
+    runtime.attach_model_service(SimpleNamespace(status=lambda:{"state":"paused","reason":"budget_price_expired"},
+        pause_notice=lambda:"共享预算暂停，原话已保留。", close=lambda:None))
+    backend = ChatBackend(runtime.database, FakeAnswerGenerator(), runtime=runtime)
+    try:
+        turn = prepare(runtime)
+        assert turn.observation.warning_code == "external_model_budget_paused"
+        assert turn.memory_command.notice == "共享预算暂停，原话已保留。"
+        complete(runtime, turn, answer=turn.memory_command.notice)
+        assert not engine.calls
+        assert runtime.source_status(turn.event.event_id)["state"] == "archived"
+        result = backend.run("合成网页原话", (), session_id="web:synthetic")
+        assert result["answer_source"] == "application_command"
+        assert result["answer"] == "共享预算暂停，原话已保留。"
+    finally: backend.close()

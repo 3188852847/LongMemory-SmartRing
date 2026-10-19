@@ -71,7 +71,7 @@ def _atomic(path: Path, data: bytes):
         temporary.unlink(missing_ok=True)
 
 
-def render_runtime_config(server: Path):
+def render_runtime_config(server: Path, *, model_override=None):
     """启动前生成字节相同的厂家消费副本；拒绝覆盖手工变动的副本。
 
 回执仅包含摘要及相对路径，绝不包含 YAML、密钥或角色正文。副本和来源
@@ -79,15 +79,29 @@ def render_runtime_config(server: Path):
 """
     project = managed_project(server)
     if project is None:
+        if model_override is not None:
+            raise ValueError("owned_gateway_requires_managed_project")
         return {"managed": False}
     source = config_path(server)
     target = Path(server) / "data/.config.yaml"
     marker = target.with_name(".config.source.json")
     for path in (source, target, marker):
         _safe(path, project)
-    content = source.read_bytes()
+    original_source = source.read_bytes()
+    content = original_source
     if not content or len(content) > 1024 * 1024:
         raise ValueError("invalid_canonical_config")
+    if model_override is not None:
+        from voice_budget import validate_configuration
+        import yaml
+        model_override = validate_configuration(model_override)
+        config = yaml.safe_load(content)
+        name = config["selected_module"]["LLM"]
+        if name != "CampusLLM" or config["LLM"][name].get("type") != "openai":
+            raise ValueError("owned_gateway_provider_mismatch")
+        config["LLM"][name].update({key: model_override[key] for key in
+            ("base_url", "api_key", "model_name", "max_tokens", "timeout")})
+        content = yaml.safe_dump(config, allow_unicode=True, sort_keys=False).encode("utf-8")
     digest = _digest(content)
     if target.exists() and (not target.is_file() or target.stat().st_size > 1024 * 1024):
         raise ValueError("invalid_runtime_config")
@@ -106,9 +120,11 @@ def render_runtime_config(server: Path):
             handle.write(old)
     if old != content:
         _atomic(target, content)
-    if source.read_bytes() != content or target.read_bytes() != content:
+    if source.read_bytes() != original_source or target.read_bytes() != content:
         raise ValueError("config_generation_unverified")
     body = {"version": 1, "source": "local/config/xiaozhi.yaml", "sha256": digest}
+    if model_override is not None:
+        body.update(canonical_sha256=_digest(original_source), model_projection="owned_hy_gateway")
     _atomic(marker, json.dumps(body, indent=2).encode("utf-8"))
     return {"managed": True, "sha256": digest}
 

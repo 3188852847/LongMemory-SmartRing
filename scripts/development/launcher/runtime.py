@@ -426,7 +426,7 @@ class Manager:
                 tts_checked = tts_config_action(
                     options.voice_root, options.root, options.tts_backend
                 )
-                model_checked = model_config_action(
+                model_checked = {"config_matches": True} if options.memory_backend == "hy_memory" else model_config_action(
                     options.voice_root, options.root, options.voice_model_profile
                 )
                 memory_checked = memory_config_action(
@@ -452,7 +452,7 @@ class Manager:
                         apply=True, expected_digest=tts_checked["digest"],
                     )
                     config_changed = True
-                if config_changed:
+                if config_changed and options.memory_backend != "hy_memory":
                     model_checked = model_config_action(
                         options.voice_root, options.root, options.voice_model_profile
                     )
@@ -496,6 +496,7 @@ class Manager:
                 f"http://127.0.0.1:{options.port}/api/internal/memory/prepare"
             ),
             LONGMEMORY_RUNTIME_TOKEN=runtime_token,
+            LONGMEMORY_MEMORY_BACKEND=options.memory_backend,
         )
         try:
             for name, command, cwd in commands:

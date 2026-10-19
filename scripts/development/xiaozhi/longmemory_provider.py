@@ -290,6 +290,10 @@ class MemoryProvider(MemoryProviderBase):
             }
             if neutral:
                 pending.update(memory_protocol=2, memory_receipt=receipt, client_round_id=turn_key)
+                if response.get("external_model_pause") is True:
+                    if command_reply is None:
+                        raise RuntimeError("LongMemory 返回协议无效")
+                    pending["fixed_reply"] = command_reply
             if turn_key is None:
                 self._pending_completion = pending
             else:
@@ -343,6 +347,11 @@ class MemoryProvider(MemoryProviderBase):
 
     def end_turn(self, token):
         self._turn_key.reset(token)
+
+    def fixed_reply_for_current_turn(self):
+        key = self._turn_key.get()
+        with self._lock:
+            return self._pending_completions.get(key, {}).get("fixed_reply")
 
     def record_completed_turn(self, answer: str, *, turn_key=None) -> bool:
         """至多回传一次最终文本；失败不重试，避免重复或错配回答。"""

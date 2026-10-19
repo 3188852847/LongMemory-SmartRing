@@ -136,12 +136,12 @@ def build_backend_runtime(assembly: BackendAssembly, *, clock=None, state_identi
 
 def build_hy_memory_runtime(*, settings, state_directory, source_path, create=False,
                             python=None, client_factory=None, clock=None,
-                            expected_python_version=None) -> MemoryRuntime:
+                            expected_python_version=None, management_verification=None) -> MemoryRuntime:
     """显式 Hy 接入；默认日用/旧工厂不变，配置与 SDK 解释器由可信调用者提供。"""
     from longmemory.methods.hy_memory.assembly import assemble_hy_backend
     assembly = assemble_hy_backend(settings=settings, state_directory=state_directory,
         source_path=source_path, create=create, python=python, client_factory=client_factory,
-        expected_python_version=expected_python_version)
+        expected_python_version=expected_python_version, management_verification=management_verification)
     try:
         return build_backend_runtime(assembly, clock=clock, state_identity=settings.identity())
     except BaseException:

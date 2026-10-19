@@ -186,7 +186,15 @@ def register_memory_runtime_routes(app, backend):
                         "persona_use_enabled", "persona_retrieved"):
                 response.pop(key)
             response.update(memory_protocol=2, memory_receipt=memory_receipt(prepared))
+            response["external_model_pause"] = prepared.observation.warning_code == "external_model_budget_paused"
         return web.json_response(response)
+
+    async def voice_model_configuration(_request):
+        try:
+            result = await asyncio.to_thread(backend.memory_runtime().voice_model_configuration)
+        except ValueError:
+            return web.json_response({"error": "owned_model_service_unavailable"}, status=503)
+        return web.json_response(result)
 
     async def complete(request):
         """接收同机小智的最终助手文本；不代表音频已在设备播放完成。"""
@@ -291,3 +299,4 @@ def register_memory_runtime_routes(app, backend):
     app.router.add_post("/api/internal/memory/prepare", prepare)
     app.router.add_post("/api/internal/memory/complete", complete)
     app.router.add_post("/api/internal/memory/cancel", cancel)
+    app.router.add_get("/api/internal/memory/model-configuration", voice_model_configuration, allow_head=False)
