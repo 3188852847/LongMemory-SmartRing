@@ -1,0 +1,2 @@
+# Owner resolves only in the dedicated Hy environment; root uv.lock is unchanged.
+hy-memory==2.0.3

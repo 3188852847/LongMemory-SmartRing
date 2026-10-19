@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "synthetic": true,
+  "name": "hy-memory-common-task-dev",
+  "version": "1.0.0",
+  "history": [
+    {"event_id":"dev-01","role":"user","content":"我是合成用户林澄，长期喜欢无糖乌龙茶。","occurred_at":"2026-01-01T09:00:00+08:00","session_id":"dev-session-1"},
+    {"event_id":"dev-02","role":"assistant","content":"你可以试试拿铁，也可以考虑养一只兔子。","occurred_at":"2026-01-01T09:00:01+08:00","session_id":"dev-session-1"},
+    {"event_id":"dev-03","role":"user","content":"那只是你的建议，我没有决定养兔子，也没有说喜欢拿铁。","occurred_at":"2026-01-01T09:00:02+08:00","session_id":"dev-session-1"},
+    {"event_id":"dev-04","role":"user","content":"我目前住在青禾市。","occurred_at":"2026-01-01T09:01:00+08:00","session_id":"dev-session-1"},
+    {"event_id":"dev-05","role":"user","content":"我的猫叫小墨。","occurred_at":"2026-01-01T09:02:00+08:00","session_id":"dev-session-1"},
+    {"event_id":"dev-06","role":"user","content":"再说一遍，我的猫叫小墨。","occurred_at":"2026-01-01T09:03:00+08:00","session_id":"dev-session-1"},
+    {"event_id":"dev-07","role":"user","content":"2026年1月2日到1月3日我临时住在松桥旅馆，1月4日起不再住旅馆。","occurred_at":"2026-01-02T09:00:00+08:00","session_id":"dev-session-2"},
+    {"event_id":"dev-08","role":"user","content":"我的蓝色笔记本放在书房第二层抽屉。","occurred_at":"2026-01-02T09:01:00+08:00","session_id":"dev-session-2"},
+    {"event_id":"dev-09","role":"user","content":"2026年1月5日我搬到石泉市了，从今天起常住石泉市，不再住青禾市。","occurred_at":"2026-01-05T09:00:00+08:00","session_id":"dev-session-3"},
+    {"event_id":"dev-10","role":"user","content":"纠正一下，猫的名字写作小默，不是小墨。","occurred_at":"2026-01-05T09:01:00+08:00","session_id":"dev-session-3"},
+    {"event_id":"dev-11","role":"user","content":"我妹妹叫林夏，她喜欢茉莉花茶；那是她的口味，我仍喜欢无糖乌龙茶。","occurred_at":"2026-01-05T09:02:00+08:00","session_id":"dev-session-3"},
+    {"event_id":"dev-12","role":"user","content":"蓝色笔记本已经挪到客厅柜子的顶层，书房抽屉里现在没有它。","occurred_at":"2026-01-05T09:03:00+08:00","session_id":"dev-session-3"}
+  ],
+  "questions": [
+    {"id":"dev-q01","split":"dev","category":"stable_preference","query":"我通常喜欢喝什么茶？","abstain":false,"answer_contains":"无糖乌龙茶","evidence_sets":[["dev-01"],["dev-11"]]},
+    {"id":"dev-q02","split":"dev","category":"fact_change","query":"截至2026年1月6日，我常住哪座城市？","abstain":false,"answer_contains":"石泉市","evidence_sets":[["dev-09"]]},
+    {"id":"dev-q03","split":"dev","category":"negation_correction","query":"我的猫名字正确写法是什么？","abstain":false,"answer_contains":"小默","evidence_sets":[["dev-10"]]},
+    {"id":"dev-q04","split":"dev","category":"temporary_expiry","query":"2026年1月6日我还临时住在松桥旅馆吗？","abstain":false,"answer_contains":"不","required_terms":["不","旅馆"],"evidence_sets":[["dev-07"]]},
+    {"id":"dev-q05","split":"dev","category":"cross_session","query":"我的蓝色笔记本现在在哪里，之前在哪里？","abstain":false,"answer_contains":"客厅","required_terms":["客厅","顶层","书房","抽屉"],"evidence_sets":[["dev-08","dev-12"]]},
+    {"id":"dev-q06","split":"dev","category":"unknown_abstain","query":"我的护照号码是什么？","abstain":true,"answer_contains":null,"evidence_sets":[]},
+    {"id":"dev-q07","split":"dev","category":"assistant_not_user","query":"我最喜欢哪一种咖啡？","abstain":true,"answer_contains":null,"evidence_sets":[]},
+    {"id":"dev-q08","split":"dev","category":"subject_attribution","query":"我妹妹喜欢什么茶？","abstain":false,"answer_contains":"茉莉花茶","evidence_sets":[["dev-11"]]},
+    {"id":"dev-q09","split":"dev","category":"historical_fact","query":"2026年1月1日我住在哪里？","abstain":false,"answer_contains":"青禾市","evidence_sets":[["dev-04"]]},
+    {"id":"dev-q10","split":"dev","category":"assistant_suggestion_rejected","query":"我已经决定养兔子了吗？","abstain":false,"answer_contains":"没有","evidence_sets":[["dev-03"]]}
+  ]
+}

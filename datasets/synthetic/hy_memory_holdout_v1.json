@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "synthetic": true,
+  "name": "hy-memory-common-task-holdout",
+  "version": "1.0.0",
+  "history": [
+    {"event_id":"holdout-01","role":"user","content":"我是合成用户许岚，我喜欢散步时听器乐，不喜欢听有歌词的歌。","occurred_at":"2026-02-01T10:00:00+08:00","session_id":"holdout-session-1"},
+    {"event_id":"holdout-02","role":"user","content":"我在白榆实验室工作，办公地点是东楼。","occurred_at":"2026-02-01T10:01:00+08:00","session_id":"holdout-session-1"},
+    {"event_id":"holdout-03","role":"assistant","content":"也许你会喜欢跑马拉松，可以开始准备了。","occurred_at":"2026-02-01T10:02:00+08:00","session_id":"holdout-session-1"},
+    {"event_id":"holdout-04","role":"user","content":"我没说要参加马拉松。","occurred_at":"2026-02-01T10:03:00+08:00","session_id":"holdout-session-1"},
+    {"event_id":"holdout-05","role":"user","content":"我的自行车叫青雀。","occurred_at":"2026-02-02T10:00:00+08:00","session_id":"holdout-session-2"},
+    {"event_id":"holdout-06","role":"user","content":"2026年2月2日至4日我临时借用银灰色雨伞，2月5日归还，之后不再持有。","occurred_at":"2026-02-02T10:01:00+08:00","session_id":"holdout-session-2"},
+    {"event_id":"holdout-07","role":"user","content":"纠正车名的字：应该是青鹊，不是青雀。","occurred_at":"2026-02-06T10:00:00+08:00","session_id":"holdout-session-3"},
+    {"event_id":"holdout-08","role":"user","content":"白榆实验室从2026年2月6日起搬到西楼，东楼是以前的办公室。","occurred_at":"2026-02-06T10:01:00+08:00","session_id":"holdout-session-3"},
+    {"event_id":"holdout-09","role":"user","content":"我弟弟许川喜欢爵士人声，我的散步口味还是器乐。","occurred_at":"2026-02-06T10:02:00+08:00","session_id":"holdout-session-3"}
+  ],
+  "questions": [
+    {"id":"holdout-q01","split":"holdout","category":"stable_preference","query":"我散步时喜欢听哪类音乐？","abstain":false,"answer_contains":"器乐","evidence_sets":[["holdout-01"],["holdout-09"]]},
+    {"id":"holdout-q02","split":"holdout","category":"negation_correction","query":"我的自行车正确名字是什么？","abstain":false,"answer_contains":"青鹊","evidence_sets":[["holdout-07"]]},
+    {"id":"holdout-q03","split":"holdout","category":"fact_change","query":"2026年2月7日我办公的楼在哪里？","abstain":false,"answer_contains":"西楼","evidence_sets":[["holdout-08"]]},
+    {"id":"holdout-q04","split":"holdout","category":"temporary_expiry","query":"2026年2月7日我还持有借来的银灰色雨伞吗？","abstain":false,"answer_contains":"不","required_terms":["不","雨伞"],"evidence_sets":[["holdout-06"]]},
+    {"id":"holdout-q05","split":"holdout","category":"cross_session","query":"我在哪个实验室工作，它原来和现在分别在哪栋楼？","abstain":false,"answer_contains":"白榆","required_terms":["白榆","东楼","西楼"],"evidence_sets":[["holdout-02","holdout-08"]]},
+    {"id":"holdout-q06","split":"holdout","category":"assistant_not_user","query":"我准备参加哪场马拉松比赛？","abstain":true,"answer_contains":null,"evidence_sets":[]},
+    {"id":"holdout-q07","split":"holdout","category":"unknown_abstain","query":"我弟弟的手机号是多少？","abstain":true,"answer_contains":null,"evidence_sets":[]}
+  ]
+}
