@@ -25,6 +25,9 @@ class MethodCapabilities:
     # 允许所有者对已有 L0 的失败/中断提取进行一次显式恢复。该能力不表示
     # 可以重跑正常 NOOP，更不表示后台会自动重试模型请求。
     failed_observation_recovery: bool = False
+    # 同一 event_id/载荷重放不会重复派生；只有真实实现后才可声明。
+    # 平台归档与引擎提交之间没有跨存储事务，崩溃后能否安全重试取决于它。
+    idempotent_observation: bool = False
 
 
 @dataclass(frozen=True, slots=True)
