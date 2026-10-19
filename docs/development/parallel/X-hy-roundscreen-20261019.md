@@ -183,3 +183,48 @@ V已有真实模型10/10＋7/7属于其精确候选小样本结果；X本轮不�
 X未用工具向其他会话发送消息，未merge main或push；主树只做获授权的私有部署/正式入口操作，源码及本次文档编辑仍在X隔离树。旧库、代码/构建检查点、新空间、全部工作树/分支/SDK/证据保留。后续回退须正式停机后保留完整新引擎/来源/审计/伴随文件及原池，不能恢复旧DB覆盖新对话或消费，也不能切回旧直连规避同一十元池。
 
 21:08:10收尾只读汇总仍为196/496332/unknown0、设备0会话；私有`cutover-receipt.json` SHA-256为`0f4a2558c20f4d238c1ea098e1a849dc68e9add2dc5eda4f8ce7ece185f84b5a`，不含Key、令牌、余额或对话正文。两份本轮变更Markdown正式strict通过、findings=[]；清单仅更新X主题/两份文档的现行状态与证据归属。未改源码，沿Z软件验收加本节实际运行核验，不为文档收尾重复模型测试或收费采样。
+
+## 第四阶段：真实unknown定位与校园免费前向候选
+
+所有者自然唤醒后反馈有字幕和声音，但说共享额度暂停；字幕/声音仅按该反馈登记通过，正常模型问答/长期记忆/插话未通过。21:43只读HTTP和原池核对确定：external_models.reason=budget_global_limit_reached，原池197次，其中196次settled共496332微元；21:41:38新增answer `0c34217080074bc28db42725f7be7c82`为unknown，held8388608、token_bound2621440、prompt/completion均null。合计8884940微元是已结算上界＋未知最坏预留，不是确认消费8.884940元；核价至22:53:33，当时未过期。
+
+本次真实中断根因未定位：旧实现没有持久HTTP状态、失败阶段、usage/DONE证据；厂家近期日志仅能看到后续429预算拒绝，没有该笔可追溯usage。读取仅聚合时间/level/固定错误码，不输出真实正文；没有读个人源内容、猜0费用或释放预留，没有再发官方付费probe。原197条attempt及policy与本轮取证快照逐项相同，attempt元数据整体SHA为`67a48dc8aeb9d8de1941e022e8fa28f45c16bc843645d02c9c618fa154231b99`。新增诊断不能倒填该笔旧证据。
+
+### 费用新决定及空间批准
+
+所有者明确学校免费提供、之前已配置，要求复用校园。主会话确认该事实足以支持个人费用0策略，不再索Key或学校价目/CNY余额证明，并批准必要最小校园合成验证。只读找到原campus档案：openai_compatible、HTTP、已有allow_http=true、请求模型`DeepSeek-V4-Flash`、512 token/30秒、Key存在，端点摘要`cb27d4c3c189cb641daf59963fb9c4f0efdbed1cd34691f686c26a889b79f703`；真实地址/Key不进报告，不推断内部权重。原官方模型小写白名单不能误拒学校大写名，也不能把学校Key发往官方余额API。
+
+主会话/Z基于X元数据核对批准前向配对：原来源8条、archived6/pending2；5轮、completed3/cancelled2；SDK memory_operations/pipeline_logs、Chroma embeddings/embedding_metadata/queue均0，可见事实节点尚无。没有读content/prompt/response。新目标`data/memory/hy-campus-daily-20261019`、`data/databases/hy-campus-sources-20261019.sqlite3`，免费审计`data/databases/hy-campus-calls-20261019.sqlite3`。原官方引擎/8来源/轮次/197账本/unknown完整保留、不改旧identity、不自动重放/迁移，旧聊天/角色旁库原位，两段来源不自动互相解析链接；所有者已由主会话获知分段限制。
+
+### 实现与明确限制
+
+- 复用同一ModelGateway/Runtime/HySettings，以受控profile和provider-policy区分官方原池与校园免费调用审计；不是另开十元池。免费授权与官方CNY核验分开，account_currency_verified=false；缺usage/中断仍unknown、不把token补0，但已确认免费调用不会制造付费最坏预留而锁死后续免费请求。
+- selected_model保留模型大小写/端口/路径和HTTP同意；普通请求按实际scheme选择HTTPConnection/HTTPSConnection。流式同源发送、禁重定向/重试，边收边转发。校园回答512 token/30秒，Hy提取保留原显式设置。voice_budget只消费认证回环配置，不硬编码官方模型别名；网关仍要求请求模型与可信选定模型逐字相同。
+- SharedBudget和免费审计可记HTTP状态、受控失败码、DONE/转发/usage出现标记，不存消息、供应商响应或异常正文，不改变金融状态。真实原unknown保持原状。
+- 新关闭用例实证同步HTTPResponse缓冲读锁阻塞：原实现、仅保存socket引用、覆盖will_close的尝试均未通过原2秒断言。线程栈显示读线程仍readline，关闭线程卡fp.close；未调宽阈值或削弱unknown。最终仅流式上游采用项目原固定aiohttp3.13.2可取消读取，线程/循环由自有上下文回收，无新依赖/锁升级。这是另一个离线可重复缺陷，不声称解释了原真实unknown。
+- 两个正式引擎目录各有精确.gitignore规则；X与主树git ls-files核对无个人memory数据tracked。正式免费审计属于既有data/databases忽略范围，未删除/移动/提交个人库。
+
+核心代码已冻结为`b1f22dc421b1b6d519db1df9060c49899c87ccde`。主会话随后发现共用选择器扩展后旧V real runner可能把campus settings交给硬编码官方的verify_cny_account；明确只授权X补这一处。窄修复`e146ce22caff9d9c909a4e44401f84797776ef0e`在任何HTTP连接前共用官方scheme/host/port/path/模型校验，拒绝校园和错端点，防止校园Key发送官方。没有扩大CLI重构或调用模型。其余实现保持冻结交Z。
+
+Z随后在合成下游停读场景复现另一关闭阻塞，主会话串行明确归X仅补这一项。X将Z原脚本复制到自己的忽略目录，修改前同样超过原2秒、须主动关客户端才退出；没有改Z树。窄修复`aaf3afc87e43301e4be50da8f4d839c65ff99649`登记自有下游socket，close只在锁内标记/摘取，锁外取消上游并shutdown下游，再等非daemon处理线程；回环socket阻塞读写有界，不改变上游模型30秒。原复现修复后约0.75秒内完成。免费/付费两种慢读者均在客户端仍连接且不读时关闭，线程/登记集合收回，unknown及付费完整最坏预留保留；没有通过daemon或放宽断言掩盖残留。代码再次冻结，未顺便改其他实现。
+
+### 本轮实际验证
+
+| 检查 | 实际结果与边界 |
+|---|---|
+| 首轮免费/原池/流式/消费配置/真实厂家SDK定向 | 29 passed，4.86秒 |
+| 实际SDK生命周期及预算组合（关闭窄修复前） | 43 passed /1 skipped，56.19秒；含校园合成提取→重启→召回、管理scope及官方unknown原样保留。skip为未显式绑定实际BGE根目录，随后真实校园探针实际使用主固定CPU BGE |
+| 最后HTTP流式/关闭定向 | 18 passed，5.95秒；HTTP真实端口/API前缀/大小写、普通SSE、增量tool_calls、空choices usage、缺usage后继续免费调用、关闭中断/重开保留unknown；实际厂家提供器＋小智Python3.10 SDK在200及上游400均只请求一次、max_retries0 |
+| 较大受影响组合 | 902 passed /5 skipped /1 failed，148.52秒。唯一失败为未改Tk测试test_boolean_option_uses_explicit_live_state_instead_of_checkbox_glyph初始化报TclError invalid command name tcl_findLibrary；该测试及launcher/app.py相对8298无差异，随后同一精确用例独立1 passed/0.17秒。保留组合失败，不因独立通过称全组合全绿，不改GUI或加skip |
+| 跳过说明 | Windows测试符号链接权限、Otto未绑定素材、旧桥默认只在X查厂家源码/环境两项，以及未为pytest设实际BGE根目录。显式3.10 SDK/厂家测试已运行，真实探针已加载固定CPU BGE |
+| 官方余额入口窄守卫 | e146ce2上25 passed/0.26秒；8种校园/错误端点或模型均在构造连接前拒绝、0网络/Key不外发；其余为原预算与免费策略定向。未重跑较大组合或收费模型 |
+| 下游慢读关闭窄修复 | aaf3afc上20 passed/7.36秒，含真实HTTP/厂家SDK、上游取消、免费/付费慢读者、缺usage/unknown及CNY守卫。Z原脚本X复制版前失败/后0.75秒的收据均保留；未再跑大组合或校园/官方真实probe |
+| 最小真实校园验证 | 首次仅合成短句协议探针200/真实SSE/usage/DONE；随后隔离实际SDK+固定512维CPU BGE完成1条新合成事实提取、重启召回，再经网页回答与圆屏SSE同校园网关完成，共3次审计调用，无unknown。合成问句取消保留、不为采样再提取；内容/实际token只留忽略目录，不进公开报告，不重跑V dev/holdout或宣称校园17题成绩 |
+
+本轮准确私有收据根在X `data/test-tmp/x-campus-repair-20261019/`：`validation-summary.json`、`campus-probe-receipt.json`、`campus-runtime-live-receipt.json`与`handoff/receipt.json`。最小真实闭环归属b1f22dc；e146只加官方余额预检，不改校园传输/身份，不伪称再次联网测了校园。候选provider身份`92fdc37ee5f7f435d9e0f985508455c000fbcb433faf52fa1d051c14613ab683`，settings身份`78506bce149bb51ccedb4c8563a8d35597cd2d4c0c21972e98160c037090d04a`；管理RPC仍c0bf摘要。handoff含deployment/settings/provider-policy/management-verification四候选文件逐项摘要，未写入主配置。
+
+最后代码为aaf3afc（含b1/e146）；新增`downstream-close-receipt.json`记录原样复现前后的路径/结果和20项定向，validation-summary已追加两笔窄修复的精确归属。最小真实校园probe没有因窄修复重复调用。代码与文档提交分开，Z可按精确代码串行复核，不将文档等待当实现继续修改许可。
+
+本节交付时生产仍为main729590c官方空间、模型暂停；没有提前部署候选、改profile指针、启停服务或碰原197笔费用。主会话已把b1/e146/aaf3交Z隔离终审；收尾文档另提交，待Z结论/已推送精确main交接后X才独占受控部署。届时先新一致性检查点、核对批准新目标不存在、切换同一免费网关、一次create、同Runtime/审计/保护核验；失败暂停候选并保留所有空间，不恢复官方直连。决策见[ADR-0186](../../adr/0186-owner-confirmed-free-campus-and-forward-state.md)。
+
+本轮文档收尾：5份受影响Markdown正式strict通过，findings=[]；新增ADR-0186及校园主题，配置/排障/指南只同步当前边界。候选SDK解释器摘要仍560b9ef7d856608ab8da02ded2dc8a1951ad1f424c382c0ec6a698874165a18e，requirements.lock仍706ce91ace29062d86a73db6a5845d9081e5e5b87660f52de8737d6c7f0345d7，管理c0bf摘要不变，已实际重算入handoff收据。文档本地提交与代码aaf3分开；未提前填校园main、部署/实机通过。
