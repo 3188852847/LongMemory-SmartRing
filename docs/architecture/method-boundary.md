@@ -4,6 +4,8 @@
 
 ## 新后端装配
 
+X 本轮新增平台圆屏轮次、完成/取消/反馈及可信 Hy 日用选择，仍在独立树验收/待组合阶段，未切换个人库或服务。接口与时机见 [Hy 圆屏/日用装配](../guides/Hy-Memory圆屏与日用装配-20261019.md)、[ADR-0183](../adr/0183-platform-roundscreen-and-hy-deployment.md)和 [X 记录](../development/parallel/X-hy-roundscreen-20261019.md)。旧 U/V/W 记录中的圆屏未适配是当时事实，不代表本轮已通过真实模型/设备验收。
+
 实际依赖为：`server → bootstrap → BackendAssembly → MemoryRuntime → MemoryMethod`；管理通过 `MemoryAdministration`，平台原文通过 `ManagedMemoryMethod → SQLiteSourceJournal → SQLiteConversationStore`。旧引擎另由 `build_legacy_runtime` 接入原自然纠错、时间事实、临时方式、情景/画像与可选影子/整理；新装配不会自动获得这些 SQL 提供器。
 
 `methods/backend_contracts.py` 定义中立条目、分页、管理能力和 `StateResource`。一个状态可由目录和多个文件组成；条目可以是摘要、图节点、块或事实。来源 ID、记录时间、有效区间各自保留，未知为 `None`；不强迫外部方法伪装成 `AtomicMemory` 或 L0–L3。分数和召回策略仍由方法命名，不强制同量纲。
@@ -12,7 +14,7 @@
 
 1. 适配器构建实现 `MemoryMethod` 的引擎，`observe(event)` 可以是完整组合 pipeline；不要求拆开私有提取/索引/存储。
 2. 调用 `bootstrap.assemble_backend(method=..., resources=(StateResource(...),), source_path=..., management=..., create_sources=...)`。新来源库仅 `create_sources=True` 排他创建；重开用 `False`，不迁移旧个人库。来源文件不能落在引擎资源目录内部。
-3. `build_backend_runtime(assembly)` 装配应用运行时；`ChatBackend` 显式注入该 Runtime，`create_app(memory_runtime=runtime, chat_backend=...)` 使用同一个实例管理和聊天。`ChatBackend.database` 在新装配中使用平台来源路径，旁边的网页会话/角色旁库继续与引擎隔离。该兼容字段不是“所有后端都是数据库”的约束。
+3. `build_backend_runtime(assembly)` 装配应用运行时；`ChatBackend` 显式注入该 Runtime，`create_app(memory_runtime=runtime, chat_backend=...)` 使用同一个实例管理和聊天。`ChatBackend.database` 在新装配中使用平台来源路径；显式 `sidecar_database` 可沿用原基址的网页会话/角色旁库，与引擎隔离。该兼容字段不是“所有后端都是数据库”的约束。
 4. `management=None` 或能力为假就拒绝。`/api/memory-engine` 暴露能力和资源，`/items` 支持列表、详情、纠正和删除；`/sources/{event_id}` 读取原角色/时间/正文，`/retry` 仅接受显式预期尝试 ID。纠正/删除还受服务器启动权限约束，纠正和恢复受运行期写开关约束。旧 `/api/memories`、情景/画像/主动交流等端点在新后端返回 501，不打开旧库。当前 React 管理页只增加中立条目与能力展示，尚无新引擎编辑表单。
 
 新装配的来源与投递语义：
@@ -22,7 +24,7 @@
 - 组合调用采用保守串行锁，可能阻塞同 Runtime 的读取；不继承 DailyLLM 两阶段路径的延迟保证。引擎返回失败会保留原文和 `failed`。引擎提交与来源账本没有跨存储事务，崩溃窗口的 `running` 在下次取得独占来源拥有权后变为 `uncertain`。
 - 已完成 event_id 重复请求返回持久结果；同 ID 异载荷拒绝。失败/不确定投递仅在引擎真实声明 `idempotent_observation=True` 时允许显式重试；该声明的真实保证由适配器实现并验证。否则明确拒绝，不能保证跨存储 exactly-once。单来源库有操作系统生命周期锁，避免第二拥有者错误接管进行中的投递。
 - 纠正来源先归档再调用管理适配器；管理修订比较须由适配器原子执行。新后端跨存储管理失败不承诺回滚原文。删除只删除引擎条目，平台原文保留，不等于隐私擦除。
-- 未适配的自然纠错、历史事实、来源解释、明确补记和陪伴控制返回 `unsupported` 回执；不是模型推测执行结果。一次“下一轮”的应用内临时方式保留。旧 L1 审计、圆屏完成关联/反馈、影子复核在新后端明确不支持，不静默读取旧表。低频整理与影子不自动启用。
+- 未适配的自然纠错、历史事实、来源解释、明确补记和陪伴控制返回 `unsupported` 回执；不是模型推测执行结果。一次“下一轮”的应用内临时方式保留。旧 L1 审计和影子复核在新后端明确不支持，不静默读取旧表。圆屏完成/反馈改走平台来源侧中立账本，助手不投递事实引擎；完整流程在完成后延后执行，不能继承旧两阶段延迟保证。低频整理与影子不自动启用，旧主动交流明确暂停。
 
 Hy 是用户指定的长期主要目标；可从独立新库积累，旧引擎保留作对照/回退。不迁移旧派生层、不删除任何个人数据。V 已通过 `assemble_backend` 接入；SDK 由所有者安装，助手只读复用独立解释器，未获取外部资源。运行与预算边界见 [Hy 指南](../guides/Hy-Memory隔离接入与验证-20261019.md)。
 
