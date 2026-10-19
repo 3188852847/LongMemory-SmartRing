@@ -4,6 +4,7 @@ const item={item_id:'synthetic-1',content:'周末会去河边散步，通常带�
 const status={method:'hy_memory_pro_chat',write_enabled:true,use_enabled:true,management_capabilities:{listing:true,detail:true},deferred_observation:{supported:true,awaiting_completion:1,running_or_queued:0,last_result:{state:'completed',warning_code:null}}};
 const caps={protocol:1,profile:true,history:true,operations:true,correction:true,deletion:true,write_enabled:true,use_enabled:true,revision_check:'exclusive_owner_serialized',native_atomic_revision:false};
 async function synthetic(page:Page,options:{empty?:boolean;error?:boolean;unsupported?:boolean;uncertain?:boolean;long?:boolean;delay?:boolean}={}) {
+  let releaseList=()=>{};const listGate=options.delay?new Promise<void>(resolve=>{releaseList=resolve;}):Promise.resolve();
   const writes:string[]=[];const errors:string[]=[];const external:string[]=[];const unexpected:string[]=[];
   page.on('pageerror',error=>errors.push(error.message));
   await page.route('**/*',async route=>{const request=route.request();const url=new URL(request.url());
@@ -15,7 +16,7 @@ async function synthetic(page:Page,options:{empty?:boolean;error?:boolean;unsupp
     if(url.pathname==='/api/memory-engine')return ok(status);
     if(url.pathname==='/api/memory-engine/hy/workspace')return options.unsupported?ok({error:'memory_backend_capability_unsupported'},501):ok(caps);
     if(url.pathname==='/api/memory-engine/items'){
-      if(options.delay)await new Promise(resolve=>setTimeout(resolve,300));
+      await listGate;
       if(options.error)return ok({error:'hy_management_unavailable'},503);
       const offset=Number(url.searchParams.get('offset')??0);
       return ok({items:options.empty?[]:offset?[{...item,item_id:'synthetic-last',content:'最后一条合成记忆。',source_event_ids:null,recorded_at:null}]:[item,{...item,item_id:'synthetic-2',kind:'l3_summary',content:'最近聊过一次工作节奏：上午集中写作，下午处理杂事。',source_event_ids:null,recorded_at:null},{...item,item_id:'synthetic-3',content:options.long?'很长的合成内容。'.repeat(160):'家里的猫叫豆包，喜欢趴在窗台晒太阳。',source_event_ids:[]},{...item,item_id:'synthetic-4',kind:'l4_identity',content:'更喜欢先听建议的理由，再决定要不要行动。'}],total:options.empty?0:26,offset,limit:25});
@@ -29,7 +30,7 @@ async function synthetic(page:Page,options:{empty?:boolean;error?:boolean;unsupp
     if(url.pathname.endsWith('/corrections')||url.pathname.endsWith('/deletion')){writes.push(request.postData()??'');await new Promise(resolve=>setTimeout(resolve,150));return options.uncertain?ok({error:'hy_management_outcome_uncertain'},503):ok({state:'completed',request_id:JSON.parse(request.postData()!).request_id,replayed:false,platform_sources_preserved:true});}
     unexpected.push(url.pathname);return ok({error:'unexpected_synthetic_endpoint'},501);
   });
-  return {writes,errors,external,unexpected};
+  return {writes,errors,external,unexpected,releaseList};
 }
 async function noHorizontalOverflow(page:Page) {expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth+1)).toBe(true);}
 
@@ -78,7 +79,7 @@ test('画像、变化、处理状态和旧书签守卫',async({page},testInfo)=>
 test('加载、空、失败、未知来源及能力拒绝',async({browser},testInfo)=>{
   for(const name of ['delay','empty','error','unsupported'] as const){const page=await browser.newPage({viewport:{width:390,height:844}});const state=await synthetic(page,{[name]:true});
     await page.goto('/memories');
-    if(name==='delay')await expect(page.getByRole('status',{name:'正在读取记忆'})).toBeVisible();
+    if(name==='delay'){await expect(page.getByRole('status',{name:'正在读取记忆'})).toBeVisible();state.releaseList();}
     if(name==='empty')await expect(page.getByText('这一页还没有记忆条目')).toBeVisible();
     else if(name==='error')await expect(page.getByText('记忆列表读取失败')).toBeVisible();
     else await expect(page.getByText(item.content,{exact:true})).toBeVisible();
