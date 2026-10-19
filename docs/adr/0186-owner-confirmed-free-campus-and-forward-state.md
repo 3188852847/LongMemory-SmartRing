@@ -1,6 +1,6 @@
 # ADR-0186：所有者确认校园免费与前向独立空间
 
-日期：2026-10-19。状态：接受用户费用决定与主会话批准的前向边界；本轮代码候选待Z复核、主会话合入推送后再部署。追加[ADR-0184](0184-shared-campaign-budget-and-owned-model-gateway.md)和[ADR-0185](0185-verified-hy-management-and-visible-history.md)，不改写官方原池或其真实验收结果。
+日期：2026-10-19。状态：接受用户费用决定与主会话批准的前向边界；Z终审后已合入推送main6d12559，X于22:25完成校园正式技术切换，所有者正常问答/长期记忆/插话仍待验。追加[ADR-0184](0184-shared-campaign-budget-and-owned-model-gateway.md)和[ADR-0185](0185-verified-hy-management-and-visible-history.md)，不改写官方原池或其真实验收结果。
 
 ## 原因与决定
 

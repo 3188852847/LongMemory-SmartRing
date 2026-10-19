@@ -228,3 +228,35 @@ Z随后在合成下游停读场景复现另一关闭阻塞，主会话串行明�
 本节交付时生产仍为main729590c官方空间、模型暂停；没有提前部署候选、改profile指针、启停服务或碰原197笔费用。主会话已把b1/e146/aaf3交Z隔离终审；收尾文档另提交，待Z结论/已推送精确main交接后X才独占受控部署。届时先新一致性检查点、核对批准新目标不存在、切换同一免费网关、一次create、同Runtime/审计/保护核验；失败暂停候选并保留所有空间，不恢复官方直连。决策见[ADR-0186](../../adr/0186-owner-confirmed-free-campus-and-forward-state.md)。
 
 本轮文档收尾：5份受影响Markdown正式strict通过，findings=[]；新增ADR-0186及校园主题，配置/排障/指南只同步当前边界。候选SDK解释器摘要仍560b9ef7d856608ab8da02ded2dc8a1951ad1f424c382c0ec6a698874165a18e，requirements.lock仍706ce91ace29062d86a73db6a5845d9081e5e5b87660f52de8737d6c7f0345d7，管理c0bf摘要不变，已实际重算入handoff收据。文档本地提交与代码aaf3分开；未提前填校园main、部署/实机通过。
+
+## 第五阶段：校园正式技术切换
+
+2026-10-19 22:18接主会话正式交接，最终候选`cdf8ffa0f969f15b7a0437fbdb7f594d215a75e8`已由协调会话merge --no-ff为main **`6d12559bc3b883cce8d439fab022ddcf72aa588a`**并push。X独立核对ls-remote同SHA、main与cdf完整tree相同；保护X旧HEAD到`codex/x-campus-pre-cutover-20261019`后仅ff该main。源码保持冻结，没有再跑模型/旧大组合或改源实现。Z此前对aaf3原慢读脚本在客户端仍连接停读时0.765秒关闭，原2秒门槛及20项复核通过；CNY零网络拒绝、免费/付费unknown保留均核实，主会话明确放行。
+
+### 新检查点与实际部署
+
+新私有检查点`local/archive/hy-campus-cutover/20261019-221946/`，最终`checkpoint.json` SHA-256 **`7a3a5c83d7777d17a9c3840b1598ec70c7596824a4b4a3aa8c45828a742b119a`**。先核对自有launcher PID16840和精确后代、无用户活动会话，保存69份配置/偏好/声音与所选参考文件/消费副本/提供器/44份构建等文件及旧729590c源码归档。预停止比较第一次把动态launcher-status快照纳入稳定比较而中断，实际仅该正常刷新文件变化、没有发停机动作；核清人工配置稳定后正式shutdown一次，不重复启停或强杀。
+
+确认旧launcher/自有API/SDK/语音/声音进程和端口释放后，才复制完整旧官方Hy目录10文件及伴随文件，逐文件SHA相同；其中2份SDK SQLite完整性检查通过。另用SQLite backup取得旧个人主库、聊天旁库、原官方来源库和原预算池4份一致性副本，完整性/每表计数匹配；原角色旁库仍不存在，按缺失记录保留。官方来源仍8条/5轮，原197次attempt和policy逐项等于第四阶段快照，含unknown及续价审计，不改旧identity或重放pending。无关回环8768 PID49284未动。
+
+四份handoff文件逐项重算后同目录原子替换deployment/settings/management-verification并新增provider-policy，保留原人工env/Key和官方price-verification。web/voice指针同选campus，原HTTP同意已保存true，没有索Key、调用官方余额或续官方价格。批准的新引擎/来源/审计三个目标均原本不存在，显式create一次；画像scope、两个owner、管理能力和7850身份通过，免费审计0次，来源/轮次0。干净关闭后另留新空引擎全目录及来源/免费审计的初始一致性备份，再由正式入口重开已有空间，没有删库/随机换目录重试。
+
+前端沿原已验包44文件/1759035字节/整体`588fdcc014fe571de451b81de223bb61263952eb7732e410c0dabe2a0613e8a4`，逐项核对不变，没有重建。唯一根`启动智慧圆屏.cmd`打开新launcher，认证受限动作start只请求一次；实际启动API+SDK+小智+CosyVoice3，22:25:28正式ready。
+
+### 技术验收与保护
+
+| 本轮实际检查 | 结果 |
+|---|---|
+| 正式服务归属 | launcher64040；API/网关60348、专属SDK22084、语音57832、CosyVoice24192均为本次launcher后代。API8767、语音8766/8000/8003、CosyVoice18770及本次局域网8768监听；原无关回环8768仍为49284 |
+| 正式Hy身份 | 实际chat-config与memory-engine为hy_memory_pro_chat、sdk-2.0.3-adapter-1，settings身份78506bce149bb51ccedb4c8563a8d35597cd2d4c0c21972e98160c037090d04a，新source及新引擎路径均准确；provider身份92fdc37ee5f7f435d9e0f985508455c000fbcb433faf52fa1d051c14613ab683；首次scope摘要674a3e8597764c8893d2937a55b82201f48f4aa03611c208dd2fc226121626af |
+| 调用政策与三链路接线 | available、owner_confirmed_free、personal_cost_micro_cny0、account_currency_verified=false、official_budget_reused_or_released=false。web/voice配置指针同campus，实际回答器/语音消费同回环网关38242的answer/voice路径；模型逐字为DeepSeek-V4-Flash，回答512 token/30秒。Hy worker仅领取同网关hy端点，SDK及管理实际版本由可信装配核对 |
+| 管理/主动边界 | scope及两个owner在实际初始化核对，正式Hy workspace profile/history/correction/deletion true，native_atomic_revision false；通用原子写能力仍false。旧主动paused_backend_unsupported，整理/影子不启用 |
+| 技术验收时计数 | 22:24—22:25免费审计attempt0/unknown0，新用户来源/投递/轮次/反馈均0，未向新个人库注合成、代发问答或播放；这不是要求后续所有者真实输入仍为0 |
+| 保护 | 原两env、人工YAML、launcher/tts/backend偏好、声音/参考WAV及元数据、皮肤配置、官方核价文件SHA不变；仅模型指针和4份已授权Hy配置切换。消费YAML只替换选中LLM，将其还原后其余结构与人工来源相同。旧官方目录所有文件SHA不变，旧主库/旁库/官方来源/原预算每表计数不变，197条attempt与policy逐项不变；壁纸/绑定/设备固件/串口未操作 |
+| Git保护 | 主树两正式Hy目录、原/新source和新免费审计三SQLite均命中精确/既有忽略；git ls-files在memory无记录、databases仅.gitkeep。原主树其他未跟踪用户材料保留，没有个人库tracked或提交 |
+
+主会话随后独立只读复核正式8767的校园身份、web/voice=campus、available/0个人费用/未核账户币种/attempt0/unknown0/未复用官方池，未调模型或写个人来源；已交所有者自然唤醒验收。22:25设备控制面仍0会话，沿第四阶段源码核对不能据此判断Wi-Fi故障。原先所有者字幕/声音反馈属于官方阶段，不代替这次校园正常回答；正常回答、真实偏好跨轮召回/来源、纠正及插话仍由所有者随后验证，X不代测或读取正文。
+
+本次实际私有收据：同检查点`installed-campus.json`、`campus-initialization.json`、`live-campus-verification.json`、`startup-latest.json`和`campus-cutover-receipt.json`；最后一份SHA-256为 **`306157140a3d615431366e15d3d984770b4e6a240396779f3cbbcf269eee2b7d`**。它记录技术验收时刻的0计数与保护关系，不随所有者后续活动重写成“合成污染”。本轮助手模型/余额请求0，不对官方核价续期，不改其unknown。
+
+追溯：V/Y原软件提交→Z组合；X b1f22dc＋e146ce2＋aaf3afc→Z关闭/20项终审→文档cdf8ffa→主会话main6d12559并推送/独立ls-remote核对→X本节实际切换→本地部署记录提交交主会话整合。V会话01a15363-8120-7400-a9db-8f9142104b12、Y会话01a153e0-5cf5-7763-b944-7031e8a1c548保留原已归档软件记录；Z会话01a15404-7df1-7f92-818f-e25093730b61本次软件已验收/合入无待工作，主会话可归档，树/SDK/证据保留。X会话01a153df-8682-7e33-80b5-1102ee2b54c8保留待所有者真实反馈，不归档。X未merge/push，源实现冻结；若后续失败，正式停候选并保留所有新旧库/来源/审计/账本，不能清unknown、恢复旧DB覆盖新增内容或启用官方直连。

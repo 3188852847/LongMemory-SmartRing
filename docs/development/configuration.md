@@ -1,6 +1,6 @@
 # 本机配置集中管理
 
-2026-10-19：固定Hy入口为`local/config/hy-memory/deployment.json`与`settings.json`，校验解释器摘要/模型身份/精确资源路径；HTTP只选择后端枚举，普通启动只重开。X已按main729590c完成官方Hy正式技术切换，随后官方unknown预留触发暂停。所有者确认学校免费后，已实现校园前向候选，尚待Z/主会话核对部署。原角色、声音和会话旁库沿用，完整现行状态见[Hy日用装配](../guides/Hy-Memory圆屏与日用装配-20261019.md)。
+2026-10-19：固定Hy入口为`local/config/hy-memory/deployment.json`与`settings.json`，校验解释器摘要/模型身份/精确资源路径；HTTP只选择后端枚举，普通启动只重开。官方旧空间/unknown账本保留；所有者确认校园免费后，X已按已推送main6d12559完成校园前向空间正式技术切换，实际问答体验待所有者。原角色、声音和会话旁库沿用，完整现行状态见[Hy日用装配](../guides/Hy-Memory圆屏与日用装配-20261019.md)。
 
 校园候选保留既有campus档案、HTTP传输同意和请求模型大小写；`local/config/hy-memory/provider-policy.json`保存所有者免费确认、端点/模型/凭据摘要及独立调用审计相对路径，形状见[模板](../../config/examples/hy-campus-provider-policy.example.json)。这不是学校CNY账户回执，也不改变官方十元账本/unknown。原官方配置/空间/来源保留，不能只改profile指针或旧状态identity硬开新模型。新空间/来源分段边界见[ADR-0186](../adr/0186-owner-confirmed-free-campus-and-forward-state.md)。
 
