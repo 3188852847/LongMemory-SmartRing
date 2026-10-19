@@ -2,7 +2,9 @@
 
 日期：2026-10-19，Asia/Shanghai。工作树 `local/worktrees/w-hy-review-integration-20261019`，分支 `codex/w-hy-review-integration-20261019`，会话 ID `01a1539f-0689-7ed3-9ce0-c098a15a17e0`。共同基线 `147cbc117d4f88f5775dd02076ab9970871238a8`，起点为 V 最终 `8b28d0a9b2f989b630e13f707a146dfc555a6644`；初始干净，未创建新树。仅本地提交，不 merge main、不 push、不向其他会话发消息、不自行归档。
 
-## 审查结论与交付边界
+## 首轮审查结论与交付边界
+
+以下至“第二阶段”前保留 `1dda701` 首轮交付状态。最新结论见文末第二阶段：前端缺口已补验，主会话接受两项既有失败另行跟踪，本次可选隔离接入可合 main；尚未由 W 合入/推送。
 
 **后端作为可选隔离接入的代码审查通过，修复后组合回归通过；这不是无条件 main 验收或日用发布。** 主会话仍需处理前端动态验证缺口和两项再次复现的既有测试失败，决定整合范围。没有发现本批后端代码尚未修复的合入阻断缺陷；没有把旧失败改写为成功。
 
@@ -92,3 +94,37 @@ pnpm.cmd build # 包含tsc --noEmit与Vite构建
 U 会话 `01a15362-e6ae-72c2-bf03-bfb4f3844ba6`；V 会话 `01a15363-8120-7400-a9db-8f9142104b12`；W 会话 `01a1539f-0689-7ed3-9ce0-c098a15a17e0`。保留 [U 原报告](U-memory-boundary-20261019.md) 的首次 2132 passed/7 skipped/4 failed 和 React 未验，以及 [V 报告](V-hy-memory-20261019.md) 的分阶段数量；本轮结果不倒推旧全量成功。
 
 文档只同步方法边界、Hy指南、W报告、主动交流草案与清单；未改 AGENTS/根 README/CHANGELOG/ROADMAP、U/V历史报告或已接受ADR。正式 `check_docs.py --only <上述四份Markdown> --strict --json` 返回0，正文检查4份，warning/error 0；仅Hy指南的实验计划链接为私有目录边界 note，未读取目标。`--base 8b28d0a` 的关联检查无 unmapped，候选文档逐项按范围判断，不改写历史记录。`git diff --check` 和提交范围/敏感内容检查通过；文档链接检查不证明全仓语义或未执行验收。
+
+## 第二阶段：前端串行移交与合入前补验
+
+所有者要求“没问题就合入推送，再把主动交流第一阶段的方案给我看看”。主会话据此安排 W 补完前端；两项既有失败明确接受为此次可选隔离接入的已知基线问题另行跟踪，不扩大本轮修改旧语音启动器/诊断。首轮失败数量、准确用例与源码未变事实保留在上文，不宣称全量绿。
+
+**最终结论：可选隔离接入可合 main，无本轮剩余合入阻断；W 只交本地候选，main 合入/推送仍由主会话执行。** 前端补验无新缺陷，无需代码修复/cherry-pick；本阶段只改文档，未重复运行559项后端组合。前端组件测试、类型和构建通过不代表浏览器视觉、真实模型或设备体验已验收。
+
+### 移交与旧产物保护
+
+主会话明确串行移交已有隔离树 `local/worktrees/p-frontend-experience-20261015`，覆盖默认只使用 W 的工作树约束；该树原 P/S 工作已交付合入归档，无其他任务进程。W 重新核对：工作树干净，原分支 `codex/s-pq-integration-20261015`，完整 HEAD `36ebf3a0c6bc784c7b5697c4b026c6b5a2817f82`；除当前诊断 shell 无 node/pnpm/cmd/powershell 进程引用此树。`node_modules` 是本树实体目录，其 package 解析到本树 `.pnpm`，没有新增共享目录/联接，没有安装或下载。
+
+切换前将原 `web/react-chat/dist` 与 `test-results` 共174个文件复制到 W 私有检查点 `local/archive/frontend/wfe-b78d32de`，清单记原分支、完整SHA、逐文件SHA-256，逐项比对副本相同。其余 ignored 证据/缓存保留原位，无 reset/clean/删除。新建原先不存在的分支 `codex/w-hy-frontend-validation-20261019`，使用 `git switch --no-overwrite-ignore -c ... 1dda701fc87df0d40be329bf5b67f724c876a577`，未同时 checkout W 分支，原 S 分支保留。
+
+构建后再次校验174个原文件摘要全部不变、S分支仍指原SHA、验证树 tracked 内容与 `1dda701` 完全一致且干净。原 `data/test-tmp`/历史证据没有清理或作为新输出目录；新生产构建独占 W 的 `data/test-tmp/wfe-5f8a3137`，没有覆盖原dist或供任何生产服务消费。该验证分支/旧分支、检查点与构建输出均保留，不擅自清理。
+
+### 工具、锁与实际检查
+
+两树 `web/react-chat/package.json` SHA-256 都为 `3b935512fe8abb810de9e35805c708976843416da2ce1cefe67f3463ce081541`，`pnpm-lock.yaml` 都为 `c0e083751833a86c21a0f4cfa7cf66d8a8621d1459b91a66991dcfbe6ad6fdd9`，前后未变。Node 来自既有 fnm 会话 `node.exe`，版本 `v24.21.0`。稳定入口 `D:/01-开发环境/02-Node.js/bin/pnpm.cmd` 实际报告12.9.1，项目仍固定11.19.0；未在项目内调用包管理器以触发版本获取，也未变 packageManager/锁。直接用 Node 执行该验证树现有 TypeScript 7.0.2、Vitest 5.0.0、Vite 8.2.2 CLI，工具版本与项目声明一致。该检查证明已装依赖上的代码检查，不冒充 pnpm11.19.0 干净重装可复现验收。
+
+所有下列命令的显式 workdir 均为移交树 `web/react-chat`；源码身份为 W `1dda701`，没有在主检出操作：
+
+| 实际命令 | 实际结果 |
+|---|---|
+| `node.exe node_modules/vitest/vitest.mjs run src/pages/MemoryApp.test.tsx --maxWorkers=2 --fileParallelism=false` | **1 file / 11 tests passed**，54.50秒；覆盖新增中立引擎/首批总数与同页旧功能用例，无跳过。 |
+| `node.exe node_modules/typescript/bin/tsc --noEmit` | 退出0，无类型错误，1.79秒。 |
+| `node.exe node_modules/vite/bin/vite.js build --outDir <W新专属目录>` | 退出0，1614模块，Vite报告3.70秒；本次进程设置 `RAYON_NUM_THREADS=2`、`UV_THREADPOOL_SIZE=2`。 |
+
+Vite保留两项非阻断提示：输出位于项目外所以不清空、共享chunk约689KB超过默认500KB提示；未为使输出安静更改阈值/配置，未触发下载。新构建43个文件的逐项摘要、工具/测试结果保存在同一私有检查点的 `w-validation.json`；`MemoryApp-C0-Mz2aE.js` 实际含首批提示，未提交原产物。构建后无该树 Vitest 任务残留进程；没有启动浏览器、生产服务、调度或设备连接。
+
+### 最新追溯与待办
+
+完整链路为 U原提交→V接入（上表）→W代码修复 `f251f98569a4fee6d1ccb3a5d563d556a940c60a`→首轮文档候选 `1dda701fc87df0d40be329bf5b67f724c876a577`→移交树同一tracked身份上前端11项/TS/构建通过→本报告第二阶段本地文档候选（完整SHA随最终回复）→main合入提交待主会话；W会话仍为 `01a1539f-0689-7ed3-9ce0-c098a15a17e0`。
+
+main本批合入前的软件验证缺口已关闭；两项旧失败接受为已知基线问题，远程CI未执行。真实模型/整轮共享硬预算、日用选择/配置、设备完成与反馈关联、声音/打断/播放体验等日用阻塞项保持。主动交流方案仍draft，用户本次只要求查看，不实施、迁移或开启调度。第二阶段四份Markdown正式strict返回0、warning/error为0（仅原实验链接私有边界note），`git diff --check`通过；本轮不修改U/V历史报告、根入口或已接受ADR。

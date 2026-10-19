@@ -1,6 +1,6 @@
 # 方法与后端替换边界
 
-2026-10-19 增补：以下“新后端装配”是 U 的实际实现；V 已交付 Hy-Memory 专用适配与真实 SDK/Chroma＋模拟模型验证，W 完成隔离后端审查和回归。目录型替身与模拟模型都不证明真实模型效果。决定见 [ADR-0181](../adr/0181-neutral-memory-backend-and-platform-sources.md)，证据见 [U 记录](../development/parallel/U-memory-boundary-20261019.md)、[V 记录](../development/parallel/V-hy-memory-20261019.md)与 [W 审查](../development/parallel/W-hy-review-integration-20261019.md)。日用选择和个人库没有切换，前端动态验证仍待环境。
+2026-10-19 增补：以下“新后端装配”是 U 的实际实现；V 已交付 Hy-Memory 专用适配与真实 SDK/Chroma＋模拟模型验证，W 完成隔离后端审查和回归，并在串行移交的独立前端树完成 MemoryApp 11项组件测试、TypeScript 检查和生产构建。目录型替身与模拟模型都不证明真实模型效果。决定见 [ADR-0181](../adr/0181-neutral-memory-backend-and-platform-sources.md)，证据见 [U 记录](../development/parallel/U-memory-boundary-20261019.md)、[V 记录](../development/parallel/V-hy-memory-20261019.md)与 [W 审查](../development/parallel/W-hy-review-integration-20261019.md)。main 合入待主会话，日用选择和个人库没有切换。
 
 ## 新后端装配
 
