@@ -14,7 +14,7 @@
   "topics": [
     {
       "id": "hy-campus-free-forward",
-      "scope": "所有者确认校园免费、前向资源分段与官方unknown保留；main6d12559已正式技术切换，所有者校园体验待验",
+      "scope": "所有者确认校园免费与正式前向切换；自然唤醒正常回答/字幕/声音反馈通过，长期记忆/纠正/插话待验",
       "authority": "docs/guides/Hy-Memory圆屏与日用装配-20261019.md",
       "sources": [
         ".gitignore",
@@ -42,7 +42,7 @@
         "前向状态",
         "Hy-Memory"
       ],
-      "review": "verified 2026-10-19: Z对aaf原慢读复现0.765秒与20项放行；X按已推送main6d12559切换，空空间一次create/同网关/免费available/两owner/保护核对，官方197条及policy不变；真实校园回答/记忆/插话待所有者"
+      "review": "verified 2026-10-19: Z对aaf原慢读复现0.765秒与20项放行；X按已推送main6d12559切换，空空间一次create/同网关/免费available/两owner/保护核对，官方197条及policy不变；真实校园回答/记忆/插话待所有者；所有者随后明确正常校园回答/字幕/声音通过，仅此范围，长期记忆/来源/纠正/插话未验"
     },
     {
       "id": "hy-real-model-candidate",
@@ -113,7 +113,7 @@
     },
     {
       "id": "hy-roundscreen-daily-deployment",
-      "scope": "平台圆屏/可信Hy装配；官方旧unknown保留，校园main6d12559已正式技术切换，实机体验待验",
+      "scope": "平台圆屏/可信Hy装配；校园正常回答/字幕/声音按所有者反馈通过，官方unknown保留，长期记忆/插话待验",
       "authority": "docs/guides/Hy-Memory圆屏与日用装配-20261019.md",
       "sources": [
         "src/longmemory/adapters/storage/sqlite_platform_rounds.py",
@@ -1157,11 +1157,11 @@
       "path": "docs/guides/Hy-Memory圆屏与日用装配-20261019.md",
       "title": "Hy-Memory 圆屏与日用装配",
       "status": "current",
-      "basis": "X五阶段实际记录，校园main6d12559正式技术切换；所有者当前正常校园问答/记忆/插话未代填",
+      "basis": "X五阶段及所有者校园正常回答/字幕/声音反馈；长期记忆闭环、纠正及插话待验",
       "review": {
         "state": "verified",
         "date": "2026-10-19",
-        "scope": "仅本次Z放行/主会话推送与X受控校园部署、检查点/原197条/来源分段/同Runtime/免费政策/保护项实际核验，前阶段历史数字保留",
+        "scope": "仅本次Z放行/主会话推送与X受控校园部署、检查点/原197条/来源分段/同Runtime/免费政策/保护项实际核验，前阶段历史数字保留；主会话转达所有者自然唤醒你好后的正常校园回答/字幕/声音通过，仅窄范围反馈，不读取正文或复验服务",
         "evidence": [
           "docs/development/parallel/X-hy-roundscreen-20261019.md",
           "b1f22dc421b1b6d519db1df9060c49899c87ccde",
@@ -1181,11 +1181,11 @@
       "path": "docs/development/parallel/X-hy-roundscreen-20261019.md",
       "title": "X：Hy-Memory 圆屏适配、可信装配与条件日用切换",
       "status": "reference",
-      "basis": "X五阶段实际记录，校园main6d12559正式技术切换；所有者当前正常校园问答/记忆/插话未代填",
+      "basis": "X五阶段及所有者校园正常回答/字幕/声音反馈；长期记忆闭环、纠正及插话待验",
       "review": {
         "state": "verified",
         "date": "2026-10-19",
-        "scope": "仅本次Z放行/主会话推送与X受控校园部署、检查点/原197条/来源分段/同Runtime/免费政策/保护项实际核验，前阶段历史数字保留",
+        "scope": "仅本次Z放行/主会话推送与X受控校园部署、检查点/原197条/来源分段/同Runtime/免费政策/保护项实际核验，前阶段历史数字保留；主会话转达所有者自然唤醒你好后的正常校园回答/字幕/声音通过，仅窄范围反馈，不读取正文或复验服务",
         "evidence": [
           "docs/development/parallel/X-hy-roundscreen-20261019.md",
           "b1f22dc421b1b6d519db1df9060c49899c87ccde",
