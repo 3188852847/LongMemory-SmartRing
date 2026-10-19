@@ -97,7 +97,9 @@ class HyProcessClient:
                 if not line or len(line) > MAX_LINE:
                     raise ValueError("response")
                 response = json.loads(line)
-                if not isinstance(response, dict) or response.get("id") != self._counter:
+                if (not isinstance(response, dict) or type(response.get("id")) is not int
+                        or response["id"] != self._counter or type(response.get("ok")) is not bool
+                        or (response["ok"] and "result" not in response)):
                     raise ValueError("response")
             except Exception:
                 self._stop()

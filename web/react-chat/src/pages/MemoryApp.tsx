@@ -92,6 +92,7 @@ export function MemoryApp() {
   const [config, setConfig] = useState<MemoryConfig>();
   const [engineItems, setEngineItems] = useState<Array<{item_id:string;content:string;kind:string;source_event_ids:string[]|null}>>([]);
   const [engineLoaded, setEngineLoaded] = useState(false);
+  const [engineTotal, setEngineTotal] = useState(0);
   const [mode, setMode] = useState<RuntimeMode>();
   const [modeDraft, setModeDraft] = useState({write_enabled: true, use_enabled: true, scenario_use_enabled: false, persona_use_enabled: false});
   const [tab,setTab] = useWorkspaceParam('layer','l1',['l1','l0']);
@@ -192,8 +193,9 @@ export function MemoryApp() {
         setConfig(current);
         if (current.representation === 'method_defined') {
           if (current.management_capabilities?.listing) {
-            const page = await api.request<{items:typeof engineItems}>('/api/memory-engine/items');
+            const page = await api.request<{items:typeof engineItems;total:number}>('/api/memory-engine/items');
             setEngineItems(page.items);
+            setEngineTotal(page.total);
             setEngineLoaded(true);
           }
           setNotice('当前使用独立记忆引擎；条目按引擎自身结构展示。旧 L1、情景和画像管理未接入。');
@@ -527,7 +529,7 @@ export function MemoryApp() {
       <PageHeader eyebrow="长期记忆" title="引擎条目" description="显示引擎提供的记忆表示和实际管理能力。" meta={config.method}/>
       <Alert type={!busy&&config.management_capabilities?.listing&&!engineLoaded?'error':'info'} showIcon message={notice}/>
       <Card title="管理能力"><Space wrap>{Object.entries(config.management_capabilities ?? {}).map(([key,supported])=><Tag key={key}>{managementLabels[key]??key}：{supported?'支持':'不支持'}</Tag>)}</Space></Card>
-      <Card title="记忆条目"><List dataSource={engineItems} locale={{emptyText:config.management_capabilities?.listing?(engineLoaded?'尚无条目':'尚未成功读取'):'当前引擎不提供条目列表'}} renderItem={item=><List.Item key={item.item_id}><List.Item.Meta title={item.content} description={<><Tag>{item.kind}</Tag><span>{item.source_event_ids===null?'来源过程未提供':`来源 ${item.source_event_ids.length} 条`}</span></>}/></List.Item>}/></Card>
+      <Card title="记忆条目">{engineLoaded&&<p className="subtle">已显示 {engineItems.length} 条，共 {engineTotal} 条。{engineTotal>engineItems.length?'当前页面仅展示首批条目。':''}</p>}<List dataSource={engineItems} locale={{emptyText:config.management_capabilities?.listing?(engineLoaded?'尚无条目':'尚未成功读取'):'当前引擎不提供条目列表'}} renderItem={item=><List.Item key={item.item_id}><List.Item.Meta title={item.content} description={<><Tag>{item.kind}</Tag><span>{item.source_event_ids===null?'来源过程未提供':`来源 ${item.source_event_ids.length} 条`}</span></>}/></List.Item>}/></Card>
     </AppShell>;
   }
   const sidebar = <>

@@ -11,13 +11,14 @@ test('独立引擎只展示中立条目和实际能力，不读取旧派生端�
   vi.spyOn(ChatApi.prototype,'bootstrap').mockResolvedValue(undefined);
   const request=vi.spyOn(ChatApi.prototype,'request').mockImplementation(async path=>{
     if(path==='/api/memory-config') return {configured:true,database:null,representation:'method_defined',method:'synthetic_directory',management_capabilities:{listing:true,detail:true,correction:false,scenarios:false,personas:false}} as never;
-    if(path==='/api/memory-engine/items') return {items:[{item_id:'node-1',content:'合成图节点',kind:'graph_node',source_event_ids:['source-1']}],total:1,offset:0,limit:25} as never;
+    if(path==='/api/memory-engine/items') return {items:[{item_id:'node-1',content:'合成图节点',kind:'graph_node',source_event_ids:['source-1']}],total:26,offset:0,limit:25} as never;
     throw new Error(`unexpected legacy path: ${path}`);
   });
   const client=new QueryClient({defaultOptions:{queries:{retry:false}}});
   render(<QueryClientProvider client={client}><MemoryRouter><MemoryApp/></MemoryRouter></QueryClientProvider>);
   expect(await screen.findByText('合成图节点')).toBeTruthy();
   expect(screen.getByText('情景：不支持')).toBeTruthy();
+  expect(screen.getByText('已显示 1 条，共 26 条。当前页面仅展示首批条目。')).toBeTruthy();
   expect(screen.queryByRole('button',{name:'清除 L0–L3'})).toBeNull();
   expect(request.mock.calls.map(([path])=>path)).toEqual(['/api/memory-config','/api/memory-engine/items']);
 });

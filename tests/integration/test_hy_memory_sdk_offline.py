@@ -3,6 +3,7 @@
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
+import os
 
 import pytest
 
@@ -15,7 +16,10 @@ from longmemory.evaluation.comparison.hy_memory_runner import run_hy_comparison
 
 
 ROOT = Path(__file__).resolve().parents[2]
-SDK_PYTHON = ROOT / "local/runtime/hy-memory/.venv/Scripts/python.exe"
+SDK_PYTHON = Path(os.environ.get("LONGMEMORY_TEST_HY_PYTHON",
+    str(ROOT / "local/runtime/hy-memory/.venv/Scripts/python.exe"))).resolve()
+if os.environ.get("LONGMEMORY_TEST_HY_PYTHON") and not SDK_PYTHON.is_file():
+    raise pytest.UsageError("LONGMEMORY_TEST_HY_PYTHON must point to an owner-installed interpreter")
 pytestmark = pytest.mark.skipif(not SDK_PYTHON.is_file(), reason="owner-installed isolated Hy environment missing")
 EVENT = MemoryEvent("real-sdk-synthetic-1", "user", "合成用户喜欢无糖乌龙茶", datetime(2026,1,1,tzinfo=UTC), "synthetic-session")
 
@@ -55,6 +59,8 @@ def test_real_sdk_simulated_models_management_recall_and_restart(tmp_path):
         assert page.total == 1
         item = runtime.administer("detail","get_item",page.items[0].item_id)
         assert item.source_event_ids == (EVENT.event_id,)
+        after_page = runtime.administer("listing","list_items",state="active",limit=1,offset=1)
+        assert after_page.total == page.total and after_page.items == ()
         support = runtime._method.recall("合成用户喜欢什么茶")
         assert support.retrieved[0].source_event_ids == (EVENT.event_id,)
         assert support.retrieved[0].dense_score is None
