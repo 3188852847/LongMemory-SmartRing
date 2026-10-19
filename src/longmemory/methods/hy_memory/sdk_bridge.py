@@ -1,4 +1,4 @@
-"""固定 SDK 的低层边界；不冒充尚未交付的 U 方法/管理契约。"""
+"""固定 SDK 的低层边界；U 方法/管理适配位于独立 method 模块。"""
 
 from dataclasses import dataclass
 from datetime import datetime

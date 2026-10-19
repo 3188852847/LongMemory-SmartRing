@@ -24,8 +24,9 @@ def prepare_development(path: Path) -> dict:
             "question_ids": [question.id for question in dataset.questions],
             "categories": sorted({question.category for question in dataset.questions}),
             "sdk_run": False, "answer_run": False,
-            "pending": ["U_contract_commit", "isolated_sdk_environment", "explicit_model_endpoints_and_budget",
-                        "restart_persistence", "semantic_and_telemetry_freeze_audit", "real_qa"]}
+            "assembly_implemented": True, "runtime_environment_checked": False,
+            "pending": ["verify_owner_installed_environment", "explicit_model_endpoints_and_budget",
+                        "real_model_semantic_state_audit", "real_qa_quality"]}
 
 
 def changed_files(before: dict[str, str], after: dict[str, str]) -> dict:

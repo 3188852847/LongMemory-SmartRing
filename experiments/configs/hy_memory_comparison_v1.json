@@ -1,6 +1,6 @@
 {
-  "status": "plan_not_executable_runner",
-  "protocol": "hy-memory-common-history-qa-draft-v1",
+  "status": "offline_assembly_validated_real_model_comparison_pending",
+  "protocol": "hy-closed-source-per-question-clone-qa-v1",
   "dev_dataset": "datasets/synthetic/hy_memory_dev_v1.json",
   "holdout_dataset": "datasets/synthetic/hy_memory_holdout_v1.json",
   "methods": ["longmemory_v1", "hy_memory_pro_chat"],
@@ -18,5 +18,6 @@
     {"id": "freeze_probe", "action": "search repeated query, close SDK, inspect stores", "expected": "classify logical deletion, access counters, cache/history and byte changes separately; unknown changes block strict frozen claim"}
   ],
   "report": ["code_commit", "source_sha256", "sdk_version", "dependency_lock_sha256", "python_os", "dataset_sha256", "method_config", "model_endpoint_hashes", "model_ids", "prompt_sha256", "run_time", "all_question_statuses", "partial_write_state", "source_coverage", "observable_calls_latency_usage_cost_only", "condition_differences"],
-  "pending": ["U stable contract SHA", "owner installs isolated SDK", "explicit external endpoints and enforceable budget", "real SDK persistence and freeze audit", "common answer model run"]
+  "validated": ["U stable contracts integrated", "owner installed isolated SDK", "real SDK plus simulated models persistence/source/uncertain-window", "per-question cloned source isolation"],
+  "pending": ["explicit real endpoints/models/dimensions/data出口", "enforceable token/currency limits if required", "complete semantic mutation audit", "real common answer model dev/holdout comparison"]
 }

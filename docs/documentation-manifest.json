@@ -13,6 +13,24 @@
   },
   "topics": [
     {
+      "id": "hy-memory-isolated-integration",
+      "scope": "Hy固定版本、专属进程配置、来源管理映射、逐题副本比较与零外部调用验收",
+      "authority": "docs/guides/Hy-Memory隔离接入与验证-20261019.md",
+      "sources": [
+        "src/longmemory/methods/hy_memory/**",
+        "src/longmemory/evaluation/comparison/hy_memory_*.py",
+        "config/examples/hy-memory/**",
+        "datasets/synthetic/hy_memory_*.json",
+        "tests/unit/methods/test_hy_memory_*.py",
+        "tests/unit/evaluation/test_hy_memory_*.py",
+        "tests/integration/test_hy_memory_sdk_offline.py",
+        "tests/fixtures/hy_memory_fake_worker.py"
+      ],
+      "related": ["docs/development/parallel/V-hy-memory-20261019.md", "docs/architecture/method-boundary.md"],
+      "tags": ["Hy-Memory", "隔离", "来源", "对比", "主动交流后续"],
+      "review": "verified 2026-10-19: U接力、专属安装、真实SDK/Chroma加模拟模型、来源/重启/失败窗口/副本；真实模型质量和日用/主动调度未验"
+    },
+    {
       "id": "otto-preview",
       "scope": "Otto固定素材获取、独立电脑预览、实际事件映射与未实施固件适配预算",
       "authority": "docs/guides/Otto动态表情预览-20261014.md",
@@ -777,6 +795,22 @@
     }
   ],
   "documents": [
+    {
+      "path": "docs/guides/Hy-Memory隔离接入与验证-20261019.md",
+      "title": "Hy-Memory 隔离接入与验证",
+      "status": "current",
+      "basis": "本轮固定来源、所有者专属安装与实际离线接入操作；限定SDK加模拟模型，不表示真实模型质量或日用切换",
+      "review": {"state": "verified", "date": "2026-10-19", "scope": "固定来源、安装失败与成功记录、实际装配/来源/能力、零外部请求、复制协议与后续边界", "evidence": ["tests/unit/methods/test_hy_memory_backend.py", "tests/integration/test_hy_memory_sdk_offline.py", "tests/unit/evaluation/test_hy_memory_runner.py"]},
+      "tags": ["Hy-Memory", "隔离", "SDK", "比较"]
+    },
+    {
+      "path": "docs/development/parallel/V-hy-memory-20261019.md",
+      "title": "V：Hy-Memory 接入与隔离验证",
+      "status": "reference",
+      "basis": "分阶段保留首轮预检和U接力后的实际结果、失败事实及尚未验收项",
+      "review": {"state": "verified", "date": "2026-10-19", "scope": "本会话文件/测试/SDK实测/安装授权记录；不推及U全量或真实模型效果", "evidence": ["docs/guides/Hy-Memory隔离接入与验证-20261019.md", "tests/integration/test_hy_memory_sdk_offline.py"]},
+      "tags": ["V", "Hy-Memory", "交付", "主动交流后续"]
+    },
     {
       "path": "docs/development/parallel/N-otto-review-20261014.md",
       "title": "N：0014 Otto 烧录前独立审查",

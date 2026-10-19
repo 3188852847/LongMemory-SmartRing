@@ -1,6 +1,6 @@
 # V：Hy-Memory 预检、合成样本与低层预接入
 
-日期：2026-10-19，Asia/Shanghai。工作树 `local/worktrees/v-hy-memory-20261019`，分支 `codex/v-hy-memory-20261019`，起点 `147cbc117d4f88f5775dd02076ab9970871238a8`。会话 ID `01a15363-8120-7400-a9db-8f9142104b12`。本轮为 A/B 与独立 C 的阶段交付，**完整接入/真实 SDK/真实模型实验未完成**；尚未收到主会话提供的 U 稳定提交 SHA。
+日期：2026-10-19，Asia/Shanghai。工作树 `local/worktrees/v-hy-memory-20261019`，分支 `codex/v-hy-memory-20261019`，起点 `147cbc117d4f88f5775dd02076ab9970871238a8`。会话 ID `01a15363-8120-7400-a9db-8f9142104b12`。本报告保留两阶段记录；下面至“第二阶段”前为首轮 `1e03d1d` 的历史状态，当时没有 U 提交/SDK。当前已接 U，真实 SDK/Chroma＋模拟模型已验；真实模型质量与日用切换仍未验。
 
 ## 实际交付
 
@@ -49,3 +49,67 @@ SDK 许可 Apache-2.0；第三方和可选模型各自许可独立。Python >=3.
 清单 sources 建议：`src/longmemory/methods/hy_memory/**`、`src/longmemory/evaluation/comparison/hy_memory_preparation.py`、`config/examples/hy-memory/**`、两份数据集与测试；实验计划属私有目录边界提示，不添加到检查器允许读取目录。现行架构/方法文档由 U 更新；本报告只提供建议。
 
 追溯：任务 V → 本报告所在本地交付提交（精确 SHA 随最终回复）→ 42 项离线测试通过、真实 SDK/模型与 U 接入 pending → 合入待主会话 → 会话 `01a15363-8120-7400-a9db-8f9142104b12`。仅提交 V 分支，不 merge、不 push、不向其他会话发消息。本阶段交付不满足整项完成/归档条件。
+
+## 第二阶段：U 接力、安装排障与真实 SDK 隔离验证
+
+主会话按所有者要求交付五个精确 U SHA，并追加有限装配/文档清单编辑归属；已顺序 cherry-pick，无冲突：
+
+| U 原提交 | V 接入提交 |
+|---|---|
+| `83b5b6dcceca281acea718d0f4be75b3bfe302f0` | `5855e4e9f0c6ba07b7c60402ba6fcfc5345dc6db` |
+| `b52e0e32d8f2c1c930698da3e1569c3dd5acd836` | `6fefb2662afd5b0c58a3f269b737c1d1a0f43acf` |
+| `77c73421de2f55c891c3988bff5236e99e222b42` | `e12d336c49412981ed53e213a68cca4756b998e4` |
+| `4deee7ba9cf155ce23028ed9a739a5b97845e8f1` | `68a752dca0aa4bbe8fd7de63f5ccfd0825c0c4eb` |
+| `e4087f7c9090298a9966f8ab539068f4cdebca23` | `972793a5ed23c9f15e5a72fc9dd83c07e04105af` |
+
+接力不是 U 全量验收/main 合入。保留 [U 原报告](U-memory-boundary-20261019.md) 的 489 passed/2 skipped、首次全量 2132 passed/7 skipped/4 failed 和 React 未构建状态；本轮组合定向结果不倒推这些检查全绿。
+
+### 安装失败与实际安装
+
+所有者先成功创建专属 `.venv`，原命令因 langdetect 无 Python 3 wheel 失败；仅放行 langdetect 后再次因 jieba 无 wheel 失败。原预检漏查直接依赖 wheel，是本轮命令缺陷，保留两次失败事实。主会话随后核对官方 PyPI/源码无原生扩展，只放行固定 `langdetect==1.0.9` / `jieba==0.42.1` 纯 Python sdist 打包；其他依赖保留 wheel 限制。没有全面允许原生源码编译、换源、改根锁或安装工具链。
+
+所有者完成官方源完整哈希锁和同步，pip check 报 102 包兼容。主会话只读核实 Python 3.12.13、Hy 2.0.3、langdetect 1.0.9、jieba 0.42.1、Chroma 1.5.9、Kuzu 0.11.3；锁 SHA-256 `706ce91ace29062d86a73db6a5845d9081e5e5b87660f52de8737d6c7f0345d7`。API preflight 成功但未构造 client。本会话收到安装完成后才使用该环境运行，没有与所有者争用或执行安装/重新解析锁。
+
+`Install-Isolated.ps1`/requirements/指南已修正两项例外，可接续现存空环境，已有完整锁复用，失败即停。脚本为 UTF-8 BOM，实际 PowerShell 语法解析无错误；没有执行安装脚本。此前“先交锁再安装”是首轮预案，不是新审批硬规则。所有者已完成安装，无需重装。
+
+### 实际实现与边界
+
+- 新增 Hy 专属 settings/method/assembly/process_client/worker，`bootstrap.build_hy_memory_runtime()` 只是有限显式接线；U 中立契约/运行时/来源账本未扩张。主解释器不导入 SDK；专属解释器以 `-I` 启动，JSONL 只经管道。显式凭据不进 argv/报告，不默认读取已有配置或密钥。
+- U 账本先保存角色/时间/session，再只向 Hy 投递用户消息；助手仅平台归档。SDK 成功不编造逐项写轨迹。完成事件重开后持久回放，冲突载荷拒绝；SDK 非原生幂等，failed/uncertain 不盲目重试。state/source 分离，身份/资源文件校验，未取来源独占锁不启动引擎；引擎目录另有生命周期锁，不能用另一来源账本绕过活跃引擎拥有者；重开不建缺失库。
+- 管理忠实支持 active 无查询列表、详情、原生 kind、存在时 gmt_created 记录时间、可得来源；query/非 active 筛选明确拒绝。revision 只作稳定只读内容摘要，不能当原子比较保证；纠正/删除/旧派生能力拒绝。HTTP 同 U 会话/CSRF/权限护栏，旧 L1/画像/情景/主动端点返回不支持。
+- worker graph/intention/coding/search-dedup/strength/访问回写/搜索历史关闭；清理继承的密钥与 MEMORY 等环境，独占 home/temp/logs。默认网络拒绝，模拟 transport 在本地返回固定向量/固定测试事实，外部请求数 0；SDK token 估算强制其字符回退，避免隐式 BPE 下载。此估算和模拟响应不冒充供应商 token/质量。
+- SDK HTTP transport 有单 worker 生命周期内跨 LLM/Embedding 总次数硬上限、端点范围、重定向拒绝，SDK/OpenAI HTTP 不自动重试。跨题目副本/回答器的整轮共享预算、token/金额硬上限未实现，不能把单 worker 上限当整轮上限；真实网络/密钥尚未授权，CLI 仅无密钥离线配置。
+- `hy_memory_runner` 使用独立命名 `hy-closed-source-per-question-clone-qa-v1`，复用现有数据/评分/提示参考/4000 字符预算。构建关闭和同路径重开后封存，每题复制引擎并新建空来源账本，封存源摘要必须不变；原历史账本保留在构建目录。副本字节变化显式列出，语义不变仍未知，不放宽旧 strict frozen runner、不跨方法统一分数。错误与构建失败保留全部分母。
+
+### 真实 SDK 实测与修复证据
+
+1. Windows asyncio 的 socketpair 内部自连接被首版全 socket 禁网误拦，真实初始化失败为 OSError。已仅允许标准库 socketpair 上下文内的内部回环自连接；外部 Python socket/SDK HTTP 仍拒绝，没有允许日用端口。
+2. 真实 SDK 构造、空管理列表、关闭/独立进程重开通过。pro graph-off 初始化 Chroma/cache；没有初始化 Kuzu 图库，不宣称图功能验收。
+3. 首次模拟模型写入失败定位到 2.0.3 LLM `max_retries` 实际为总尝试次数，配置 0 会零尝试失败；改为 1，Embedding/OpenAI HTTP 仍为 0。没有修改安装包。
+4. 真实 SDK＋模拟模型成功写一条合成事实，列表/详情/召回均返回原 `source_event_ids`；观察到 4 个本地模拟请求、0 外部 HTTP。关闭/重开保留一条；完成事件重放不增加写入，助手仅平台归档。
+5. 禁用模型时真实 SDK 写失败，平台来源保留 failed；回执失败注入发生在真实 SDK 写入后，重开为 uncertain 且拒绝重试，实际引擎条目仍一条。没有跨存储 exactly-once 或失败必无副作用承诺。
+6. 真实 SDK 最小逐题副本 smoke 已运行到报告/评分，Fake 回答仅验证工程链路。封存源摘要不变；副本实际观察到 `sdk/vector/chroma.sqlite3` 与 SDK 默认日志变化，未证明语义状态不变，不能作为冻结或模型质量验收。
+7. 首次组合回归为 120 passed/1 failed，失败为深测试目录 copytree 的 WinError 206；独立复制复现目标路径估计 289 字符。实验内部 run/方法/题目目录改短并保留报告映射，不改系统策略或迁移 ASCII 路径。随后复制/runner 三项定向回归通过。
+
+最终组合检查为 `tests/unit/methods tests/unit/entrypoints tests/unit/application tests/unit/architecture` 加 Hy 准备/runner、既有 comparison 及真实 SDK 离线集成：**549 passed / 2 skipped**（74.18 秒）。两跳过为本机符号链接权限、未显式绑定 Otto 固定资源；不是 Hy 测试跳过。四项真实 SDK 测试实际执行通过。新增 HTTP 合成用例使用系统分配临时端口，验证 Hy 经同一鉴权/来源管理、助手归档、旧端点/写能力拒绝，不访问日用端口。
+
+随后补齐“另一来源账本不能绕过同一活跃引擎拥有者”的目录锁和实际诊断元数据，Hy 后端/runner/真实 SDK 18 项定向通过；最后完整 Hy 专属范围 **44 passed**（26.65 秒），覆盖最终运行代码。准备命令状态字段同步后另有 3 项通过；只做文档/注释更新未重复扩大业务测试。最终差异和敏感内容检查无发现，正式两文档 strict 再次通过。
+
+新代码导入与 pytest rootdir 均核对为 V，借主解释器只读运行 pytest，SDK 实际运行在专属子进程。独立随机回环 HTTP 测试未连日用端口。没有访问个人库/共享私有配置/真实对话/设备，未开调度。独立原始证据在本树忽略的合成临时/实验目录，未提交原始产物。
+
+### 后续主动交流重点与接口缺口
+
+所有者新增方向：“后续，应该会侧重于主动交流能力的开发”。只记录后续重点，本轮没有扩为主动交流实现、开启调度或切换日用。现有许可、频率/时段/勿扰、在线/空闲、一次性跟进和结果账本保留；Hy Intention/到期字段不等于主动联系完成。
+
+过渡路径为 Hy 提供相关记忆/事项证据 → 独立主动交流层判断是否/何时/说什么并执行许可/打扰控制 → 设备桥执行 → 回应/取消等结果可追溯反馈。精确缺口：
+
+- `recall()` 当前仅上下文/可选来源，未提供中立的“待处理事项＋时间窗口＋状态＋证据版本”读取契约；未来按具体需求定义，不能把 Hy L7 塞成平台约定。
+- 新后端旧圆屏完成关联、反馈和结果入账尚未适配；来源事件/本次回答/主动事项/设备播放回执之间缺少中立关联，不能复用旧 L1 ID 假装已接。
+- 取消、回应、过期与已发送状态如何关联原事项/来源、保持许可检查和避免重复发送尚未定义；Hy 修订原子写能力不足，不能让调度层依赖其私有写行为。
+- U 新引擎仍拒绝旧陪伴/跟进命令，server 非 legacy 不装主动调度。本轮继续保持此限制；后续独立定范围/验收，不重写旧主动代码或预建大框架。
+
+### 当前接力状态
+
+U 接力、SDK 安装、Hy 方法/只读管理/独立进程和比较副本入口已实现并作离线验证。剩余为真实 LLM/Embedding/回答模型、维度/出口/硬预算条件下的开发与保留比较，以及日用/设备/主动交流另行范围；未做效果结论。清单已按新增归属正式登记本指南/报告/源码主题。正式 `check_docs --only <指南> --only <V报告> --strict --json` 返回 0：检查正文 2 份，warning/error 0；仅实验计划链接为私有目录边界 note。没有依赖首轮内存登记，也不把链接检查当全篇语义或全仓验收。
+
+追溯：V 首轮 `1e03d1df9e164966dc9c86207c1d8b7e363a30f4` → 五个 U 接力提交 → 本报告所在第二阶段本地提交（精确 SHA 随最终回复）→ 实际定向/真实 SDK＋模拟模型验收见上 → main 合入/推送待主会话 → 会话 `01a15363-8120-7400-a9db-8f9142104b12`。本会话不 merge、不 push、不向其他会话发工具消息，未归档。

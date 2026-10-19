@@ -131,6 +131,19 @@ def build_backend_runtime(assembly: BackendAssembly, *, clock=None) -> MemoryRun
                          clock=clock)
 
 
+def build_hy_memory_runtime(*, settings, state_directory, source_path, create=False,
+                            python=None, client_factory=None, clock=None) -> MemoryRuntime:
+    """显式 Hy 接入；默认日用/旧工厂不变，配置与 SDK 解释器由可信调用者提供。"""
+    from longmemory.methods.hy_memory.assembly import assemble_hy_backend
+    assembly = assemble_hy_backend(settings=settings, state_directory=state_directory,
+        source_path=source_path, create=create, python=python, client_factory=client_factory)
+    try:
+        return build_backend_runtime(assembly, clock=clock)
+    except BaseException:
+        assembly.method.close()
+        raise
+
+
 @contextmanager
 def open_memory_service(database_path: Path, *, method_name: str = "longmemory_v1"):
     """仅装配记忆能力；退出时关闭 SQLite，不创建/调用回答器。"""

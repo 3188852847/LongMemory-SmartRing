@@ -1,0 +1,9 @@
+{
+  "sdk_version": "2.0.3",
+  "user_id": "v-synthetic-only",
+  "agent_id": "v_synthetic",
+  "embedding_dimensions": 8,
+  "timeout_seconds": 60,
+  "max_output_tokens": 1024,
+  "include_profile": false
+}
