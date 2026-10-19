@@ -100,6 +100,9 @@ def build_owned_daily_runtime(root, deployment, *, create=False, encoder_loader=
             state_directory=deployment.state_directory, source_path=deployment.source_path,
             create=create, expected_python_version=deployment.python_version,
             management_verification=management_verification)
+        if settings.include_profile and not runtime.administer_extension("hy_memory", "workspace").get("profile"):
+            # UI能力关闭还不够：回答注入也不能使用范围未证明的聚合画像。
+            raise ValueError("daily_profile_injection_scope_unproven")
         runtime.attach_model_service(owned)
         return runtime
     except BaseException:

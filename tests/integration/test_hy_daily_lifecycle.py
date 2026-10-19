@@ -132,6 +132,7 @@ def management_receipt(root):
 
 def test_verified_daily_management_create_reopen_profile_scope_and_bad_receipt_cleanup(tmp_path):
     open_runtime, gateways, deployment, budget = arrange(tmp_path)
+    deployment.settings = replace(deployment.settings, include_profile=True)
     path = management_receipt(tmp_path)
     assert not deployment.settings.management_writes_enabled
     for create in (True, False):
@@ -162,6 +163,8 @@ def test_preexisting_daily_space_does_not_gain_profile_proof_from_new_receipt(tm
         assert not workspace["correction"] and not workspace["profile"]
     finally:
         runtime.close()
+
+
     management_receipt(tmp_path)
     runtime = open_runtime(False)
     try:
@@ -170,6 +173,15 @@ def test_preexisting_daily_space_does_not_gain_profile_proof_from_new_receipt(tm
         assert not (deployment.state_directory / "management-scope.json").exists()
     finally:
         runtime.close()
+
+
+def test_daily_requested_profile_injection_without_scope_fails_and_closes_owned_gateway(tmp_path):
+    open_runtime, gateways, deployment, budget = arrange(tmp_path)
+    deployment.settings = replace(deployment.settings, include_profile=True)
+    with pytest.raises(ValueError, match="profile_injection_scope_unproven"):
+        open_runtime(True)
+    assert_closed(gateways[-1])
+    assert budget.report()["attempt_count"] == 1
 
 
 @pytest.mark.skipif(not os.environ.get("LONGMEMORY_TEST_BGE_ROOT"), reason="explicit existing CPU BGE root required")
