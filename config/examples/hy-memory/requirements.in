@@ -1,0 +1,5 @@
+# Owner resolves only in the dedicated Hy environment; root uv.lock is unchanged.
+hy-memory==2.0.3
+# Only these reviewed pure-Python sdists may build; Python 3 wheels unavailable.
+langdetect==1.0.9
+jieba==0.42.1

@@ -126,8 +126,10 @@ def register_memory_runtime_routes(app, backend):
             "version": 1,
             "context": prepared.support.context,
             "turn_id": prepared.event.event_id,
-            "added": sum(item.operation == "add" for item in prepared.observation.writes),
-            "retrieved": len(prepared.support.retrieved or ()),
+            "added": (sum(item.operation == "add" for item in prepared.observation.writes)
+                      if prepared.observation.writes is not None else None),
+            "retrieved": (len(prepared.support.retrieved)
+                          if prepared.support.retrieved is not None else None),
             "retrieval_evidence": _retrieval_evidence(prepared),
             "memory_processing": prepared.observation.processing_status,
             "memory_warning": prepared.observation.warning_code,

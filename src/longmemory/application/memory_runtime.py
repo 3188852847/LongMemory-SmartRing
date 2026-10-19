@@ -1,6 +1,6 @@
 """日常入口共享的常驻记忆运行时，不包含网页或小智协议。"""
 
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from concurrent.futures import Future, ThreadPoolExecutor
@@ -14,6 +14,7 @@ from longmemory.methods.contracts import (
     MemorySupport,
     ObservationResult,
     RetrievedTrace,
+    require_management,
 )
 from longmemory.application.scenario_recall import ScenarioRecallItem, ScenarioRecallResult
 from longmemory.application.persona_recall import PersonaRecallItem, PersonaRecallResult
@@ -87,8 +88,8 @@ class MemoryRuntime:
     """持有一个长期存活的记忆方法实例，并安全服务多个入口线程。
 
     SQLite 连接本身不适合被多个线程同时操作，所以这里用互斥锁把一次
-    observe/recall 或助手归档作为不可交错的运行时操作。模型生成不在锁内，
-    因而慢模型不会阻塞另一入口读取记忆。
+    observe/recall 或助手归档作为不可交错的运行时操作。旧两阶段提取把模型
+    计算移出锁；外部组合 pipeline 保守串行，不能保证同样的读取延迟。
     """
 
     def __init__(self, database: Path, *, method: MemoryMethod, scenario_provider=None,
@@ -97,11 +98,12 @@ class MemoryRuntime:
                  consolidation_scheduler: LowFrequencyConsolidationScheduler | None = None,
                  l1_sufficiency_shadow=None,
                  l2_sufficiency_shadow=None,
-                 clock=None) -> None:
+                 clock=None, backend_assembly=None) -> None:
         self.database = database.resolve()
         # Runtime 只编排统一方法契约。具体使用规则、LLM 提取还是其他方法，
         # 必须由进程入口的装配层决定，不能在应用层偷偷选择实现。
         self._method = method
+        self.backend_assembly = backend_assembly
         self._lock = RLock()
         self._closed = False
         self._write_enabled = True
@@ -220,11 +222,12 @@ class MemoryRuntime:
             ):
                 # 本轮回答不需要等模型把“当前这句话”派生为 L1；先保存
                 # L0，再用此前已经完成的记忆召回。回答完成回执会触发补写。
-                observation = self._method.archive(event)
+                defer = getattr(self._method, "defer_observation", self._method.archive)
+                observation = defer(event)
                 self._deferred_events[event.event_id] = event
                 observation = ObservationResult(
                     event.event_id, (), processing_status="source_only",
-                    warning_code="l1_extraction_deferred",
+                    warning_code=observation.warning_code or "l1_extraction_deferred",
                 )
             else:
                 observation = (self._method.observe(event) if self._write_enabled
@@ -529,6 +532,15 @@ class MemoryRuntime:
         self, event: MemoryEvent, start_audit: bool = True,
         persist_failure: bool = True,
     ) -> ObservationResult:
+        complete_pipeline = getattr(self._method, "complete_archived_observation", None)
+        if complete_pipeline is not None:
+            # 外部 add 可能把提取/写入组合在一起，不要求它暴露私有阶段。
+            # 该保守路径串行整个调用；不声称具备旧两阶段路径的并发延迟。
+            with self._lock:
+                self._ensure_open()
+                if not self._write_enabled:
+                    return ObservationResult(event.event_id, (), "source_only", "observation_paused")
+                return complete_pipeline(event)
         # 网络模型调用不持 Runtime 锁；网页查看、设备召回和状态读取不会
         # 因 2–5 秒的候选生成而一起卡住。只有最终 SQLite 补写需要互斥。
         extracted = self._method.extract_archived(
@@ -594,6 +606,56 @@ class MemoryRuntime:
             self._ensure_open()
             return self._method.observe(event)
 
+    @property
+    def legacy_sqlite(self):
+        # 未提供 assembly 的既有调用方沿用原兼容路径；新装配显式传入。
+        return self.backend_assembly is None or self.backend_assembly.legacy_sqlite
+
+    def administer(self, capability, operation, *args, **kwargs):
+        with self._lock:
+            self._ensure_open()
+            assembly = self.backend_assembly
+            admin = require_management(assembly.management if assembly else None, capability)
+            allowed = {"listing": "list_items", "detail": "get_item",
+                       "correction": "correct_item", "deletion": "delete_item"}
+            if allowed.get(capability) != operation:
+                raise ValueError("management_operation_invalid")
+            if capability == "correction" and not self._write_enabled:
+                raise ValueError("memory_write_paused")
+            if capability == "correction" and kwargs["source"].role != "user":
+                raise ValueError("memory_correction_source_must_be_user")
+            if capability == "correction" and not self.legacy_sqlite:
+                # 新引擎管理来源也先归档；管理失败不声称跨存储回滚。
+                self._method.archive(kwargs["source"])
+            return getattr(admin, operation)(*args, **kwargs)
+
+    def source_status(self, event_id):
+        with self._lock:
+            self._ensure_open()
+            status = getattr(self._method, "source_status", None)
+            if status is None:
+                raise ValueError("source_status_unsupported")
+            return status(event_id)
+
+    def source_detail(self, event_id):
+        with self._lock:
+            self._ensure_open()
+            detail = getattr(self._method, "source_detail", None)
+            if detail is None:
+                from longmemory.methods.contracts import UnsupportedCapabilityError
+                raise UnsupportedCapabilityError("source_detail_unsupported")
+            return detail(event_id)
+
+    def retry_source(self, event_id, *, expected_attempt_id):
+        with self._lock:
+            self._ensure_open()
+            if not self._write_enabled:
+                raise ValueError("memory_write_paused")
+            retry = getattr(self._method, "retry_observation", None)
+            if retry is None:
+                raise ValueError("source_retry_unsupported")
+            return retry(event_id, expected_attempt_id=expected_attempt_id)
+
     def status(self) -> dict:
         with self._lock:
             self._ensure_open()
@@ -604,6 +666,14 @@ class MemoryRuntime:
                 "implementation_version": self._method.implementation_version,
                 "retrieval": getattr(self._method, "retrieval_name", "unknown"),
                 "database": str(self.database),
+                "state_resources": ([{"name": item.name, "kind": item.kind,
+                                      "path": str(item.path)}
+                                     for item in self.backend_assembly.resources]
+                                    if self.backend_assembly else []),
+                "method_capabilities": asdict(self._method.capabilities),
+                "management_capabilities": (asdict(self.backend_assembly.management.capabilities)
+                    if self.backend_assembly and self.backend_assembly.management else {}),
+                "legacy_sqlite": self.legacy_sqlite,
                 "write_enabled": self._write_enabled,
                 "use_enabled": self._use_enabled,
                 "scenario_use_enabled": self._scenario_use_enabled,

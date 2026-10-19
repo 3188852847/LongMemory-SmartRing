@@ -1,0 +1,23 @@
+{
+  "status": "template_not_consumed_by_runtime",
+  "sdk_version": "2.0.3",
+  "source_commit": "2a4c5e38e78a42ae0acae1fe6f12cfcd8ecb64ed",
+  "mode": "pro",
+  "scene": "chat",
+  "reader": "legacy",
+  "graph": false,
+  "profile": "separate_api_opt_in_exclusive_synthetic_user",
+  "synthetic_only": true,
+  "data_root": "experiments/runs/hy-memory/<new-run-id>",
+  "network_authorized": false,
+  "llm": {"base_url": "", "model": "", "api_key_env": "HY_SYNTHETIC_LLM_KEY"},
+  "embedding": {"base_url": "", "model": "", "dimensions": null, "api_key_env": "HY_SYNTHETIC_EMBEDDING_KEY"},
+  "budget": {"max_external_requests": 0, "max_external_tokens": 0, "max_cost": 0, "currency": null},
+  "retrieval_audit_env": {
+    "MEMORY_SEARCH_DEDUP_ENABLED": "false",
+    "MEMORY_RECALL_STRENGTH_ENABLED": "false",
+    "MEMORY_RECALL_ACCESS_TRACKING": "false",
+    "MEMORY_HISTORY_RECORD_SEARCHES": "false"
+  },
+  "warning": "These flags alone do not prove frozen retrieval. No automatic endpoint/key/environment fallback is authorized."
+}

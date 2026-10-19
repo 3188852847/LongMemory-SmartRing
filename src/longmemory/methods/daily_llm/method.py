@@ -41,6 +41,9 @@ class DailyLLMMemory:
 
     name = "longmemory_daily_llm_v2"
     implementation_version = "1"
+
+    def source_detail(self, event_id):
+        return self._base.source_detail(event_id)
     capabilities = MethodCapabilities(
         source_trace=True,
         deferred_observation=True,

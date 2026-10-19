@@ -1,0 +1,205 @@
+"""仅供独立解释器启动的 SDK worker；stdout 只写协议，不回传 SDK 错误正文。"""
+
+from contextlib import redirect_stdout, redirect_stderr
+from datetime import datetime
+from importlib import metadata
+import json
+import os
+import platform
+from pathlib import Path
+import socket
+import sys
+from threading import Lock, local
+
+from .process_client import MAX_LINE
+from .sdk_bridge import SDK_VERSION
+from .settings import HySettings
+
+
+class RequestBudget:
+    """单 worker 生命周期上限；不是多个题目副本/进程共享的整轮预算。"""
+    def __init__(self, settings):
+        self.settings = settings
+        self.attempts = 0
+        self.simulated_requests = 0
+        self._lock = Lock()
+
+    def claim(self, url):
+        endpoints = (self.settings.llm.base_url.rstrip("/") + "/", self.settings.embedding.base_url.rstrip("/") + "/")
+        with self._lock:
+            if not self.settings.network_authorized or not any(str(url).startswith(base) for base in endpoints):
+                raise RuntimeError("hy_network_denied")
+            if self.attempts >= self.settings.max_external_requests:
+                raise RuntimeError("hy_request_budget_exhausted")
+            self.attempts += 1
+
+    def report(self):
+        return {"external_http_attempts": self.attempts, "external_tokens": None, "cost": None,
+                "simulated_model_requests":self.simulated_requests, "model_mode":self.settings.model_mode,
+                "input_token_estimator":"sdk_character_fallback_no_bpe_download",
+                "actual_sdk_version":getattr(self,"actual_sdk_version",None),
+                "sdk_python":getattr(self,"sdk_python",None),
+                "hard_limit": {"external_requests": self.settings.max_external_requests},
+                "token_and_currency_limits_enforced": False}
+
+
+def install_network_denial():
+    """保留 Windows asyncio 必需的 stdlib socketpair，仅放行其内部回环自连接。"""
+    pair_context = local()
+    connect, connect_ex, pair = socket.socket.connect, socket.socket.connect_ex, socket.socketpair
+    def guarded(original):
+        def run(sock, address):
+            if getattr(pair_context, "active", False) and isinstance(address, tuple) and address[0] in {"127.0.0.1", "::1"}:
+                return original(sock, address)
+            raise OSError("hy_network_disabled")
+        return run
+    def local_pair(*args, **kwargs):
+        pair_context.active = True
+        try:
+            return pair(*args, **kwargs)
+        finally:
+            pair_context.active = False
+    def deny(*args, **kwargs):
+        raise OSError("hy_network_disabled")
+    socket.socketpair = local_pair
+    socket.socket.connect = guarded(connect)
+    socket.socket.connect_ex = guarded(connect_ex)
+    socket.socket.sendto = deny
+    socket.getaddrinfo = deny
+
+
+def create_sdk(settings, workspace, *, create):
+    if metadata.version("hy-memory") != SDK_VERSION:
+        raise ValueError("hy_sdk_version_mismatch")
+    # 默认在 socket 层拒绝网络，包含库初始化的遥测/意外网络路径。
+    if not settings.network_authorized:
+        install_network_denial()
+    os.environ["MEMORY_DATA_DIR"] = str(workspace)
+    sdk = workspace / "sdk"
+    if not create and not (sdk / "vector/chroma.sqlite3").is_file():
+        raise FileNotFoundError("hy_existing_vector_store_missing")
+    import httpx
+    from hy_memory import HyMemoryClient, MemoryConfig
+    # SDK 自带 len//4 回退；预置不可用标记，避免 token 估算器隐式下载 BPE 文件。
+    # 不是供应商 token 用量，不用于收费推断。
+    from hy_memory.utils import token_count
+    token_count._encoder = False
+    budget = RequestBudget(settings)
+    budget.actual_sdk_version = metadata.version("hy-memory")
+    budget.sdk_python = platform.python_version()
+
+    def synthetic_response(request):
+        with budget._lock:
+            budget.simulated_requests += 1
+        body = json.loads(request.content)
+        if request.url.path.endswith("/embeddings"):
+            inputs = body["input"] if isinstance(body["input"], list) else [body["input"]]
+            return httpx.Response(200, json={"data":[{"object":"embedding", "index":i,
+                "embedding":[1.0] + [0.0] * (settings.embedding_dimensions-1)} for i in range(len(inputs))]})
+        if request.url.path.endswith("/chat/completions"):
+            # 固定一条测试事实；与历史/题目无关，不能用于质量比较。
+            content = json.dumps({"memory":[{"content":"合成用户喜欢无糖乌龙茶", "tags":["synthetic"], "owner":"user"}], "intentions":[], "basic_info":{}}, ensure_ascii=False)
+            return httpx.Response(200, json={"id":"synthetic-completion", "object":"chat.completion",
+                "model":"synthetic-offline", "choices":[{"index":0,"finish_reason":"stop",
+                "message":{"role":"assistant","content":content}}]})
+        raise RuntimeError("hy_mock_endpoint_unknown")
+
+    class BoundedTransport(httpx.AsyncBaseTransport):
+        def __init__(self):
+            self.inner = httpx.AsyncHTTPTransport(retries=0)
+
+        async def handle_async_request(self, request):
+            budget.claim(request.url)
+            response = await self.inner.handle_async_request(request)
+            # 重定向不发给未经配置的端点；SDK 内部 retry 也受统一计数上限约束。
+            if 300 <= response.status_code < 400:
+                await response.aclose()
+                raise RuntimeError("hy_redirect_denied")
+            return response
+
+        async def aclose(self):
+            await self.inner.aclose()
+
+    def endpoint(value):
+        return {"provider":"openai", "base_url":value.base_url, "api_key":value.api_key,
+                "model":value.model, "timeout":settings.timeout_seconds, "max_retries":0}
+    config = MemoryConfig.from_dict({
+        "vector_store":{"provider":"chroma", "persist_directory":str(sdk / "vector"),
+                        "embedding_dims":settings.embedding_dimensions, "collection_name":"smartring_synthetic"},
+        "graph_store":{"db_path":str(sdk / "graph")},
+        "cache":{"backend":"sqlite", "db_path":str(sdk / "cache.db"),
+                 "enable_profile_cache":False, "enable_system2_queue":False, "enable_intention_cache":False},
+        "history":{"enable":False, "db_path":str(sdk / "history.db"), "record_searches":False},
+        "coding":{"enable":False, "db_path":str(sdk / "coding.db")},
+        # 2.0.3 LLM 的 max_retries 实际是总尝试次数，1 才是单次、无重试。
+        "llm":{**endpoint(settings.llm), "max_retries":1, "max_tokens":settings.max_output_tokens,
+               "agent_max_tokens":settings.max_output_tokens, "enable_query_rewrite":False, "enable_intention":False},
+        "embedder":{**endpoint(settings.embedding), "embedding_dims":settings.embedding_dimensions},
+        "recall":{"strength_enabled":False, "access_tracking_enabled":False},
+        "enable_graph":False, "metrics_enabled":False, "debug":False,
+    })
+    config.http_transport_factory = (lambda: httpx.MockTransport(synthetic_response)) if settings.model_mode == "synthetic_transport" else BoundedTransport
+    client = HyMemoryClient(config=config, mode="pro")
+    return client, budget
+
+
+class ProtocolService:
+    def __init__(self, factory=create_sdk):
+        self.factory = factory
+        self.client = self.budget = None
+
+    def execute(self, operation, arguments):
+        if operation == "initialize":
+            if self.client is not None:
+                raise ValueError("hy_worker_already_initialized")
+            self.client, self.budget = self.factory(HySettings.from_wire(arguments["settings"]),
+                Path(arguments["workspace"]), create=arguments["create"])
+            return {"ready":True, "sdk_version":SDK_VERSION}
+        if self.client is None:
+            raise ValueError("hy_worker_not_initialized")
+        if operation == "diagnostics":
+            return self.budget.report()
+        if operation == "close":
+            self.client.close()
+            self.client = None
+            return {"closed":True}
+        if operation not in {"add", "search", "get_user_profile", "get", "list_memories"}:
+            raise ValueError("hy_worker_operation_not_allowed")
+        arguments = dict(arguments)
+        if operation == "add":
+            arguments["memory_at"] = datetime.fromisoformat(arguments["memory_at"])
+        return getattr(self.client, operation)(**arguments)
+
+
+def main(*, service=None):
+    service = service or ProtocolService()
+    output = sys.stdout
+    with open(os.devnull, "w", encoding="utf-8") as sink:
+        while True:
+            line = sys.stdin.readline(MAX_LINE + 1)
+            if not line or len(line) > MAX_LINE:
+                break
+            request_id = None
+            operation = None
+            try:
+                request = json.loads(line)
+                request_id, operation = request["id"], request["operation"]
+                with redirect_stdout(sink), redirect_stderr(sink):
+                    result = service.execute(operation, request["arguments"])
+                response = {"id":request_id, "ok":True, "result":result}
+                encoded = json.dumps(response, ensure_ascii=False)
+                if len(encoded) > MAX_LINE:
+                    raise ValueError("hy_response_too_large")
+            except Exception as exc:
+                encoded = json.dumps({"id":request_id, "ok":False, "error":"hy_worker_failed", "error_type":type(exc).__name__})
+            output.write(encoded + "\n")
+            output.flush()
+            if operation == "close":
+                break
+        if service.client is not None:
+            # 父进程异常退出导致 stdin EOF 时也关闭 SDK，不留下后台 loop。
+            try:
+                with redirect_stdout(sink), redirect_stderr(sink):
+                    service.client.close()
+            except Exception:
+                pass

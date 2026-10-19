@@ -48,6 +48,21 @@ _CONFIRM_DELETE = frozenset({"确认删除这条记忆", "确认删除", "是的
 _CANCEL_DELETE = frozenset({"取消删除", "不要删除了", "算了，不删了", "算了不删了"})
 
 
+def classify_memory_command(text: str) -> str | None:
+    """只识别既有严格语法，供不支持旧自然管理的新后端明确拒绝。"""
+    text = text.strip()
+    normalized = text.rstrip("。！？!? ")
+    if normalized in _CONFIRM_DELETE or normalized in _CANCEL_DELETE:
+        return "delete"
+    if normalized in _EXCLUDE_WITHOUT_CONTENT or _EXCLUDE.fullmatch(text):
+        return "exclude"
+    for kind, pattern in (("include", _INCLUDE), ("correct", _CORRECTION),
+                          ("change", _CHANGE), ("delete", _DELETE), ("source", _SOURCE)):
+        if pattern.fullmatch(text):
+            return kind
+    return None
+
+
 @dataclass(frozen=True, slots=True)
 class NaturalMemoryCommandResult:
     """一次自然语言操作的可观察结果；None 表示普通聊天。"""

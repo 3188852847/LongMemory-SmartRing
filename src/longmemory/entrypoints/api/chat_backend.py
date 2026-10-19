@@ -43,6 +43,8 @@ class ChatBackend:
     def __init__(self, database: Path, generator, *, provider="fake", model="fake",
                  role="plain_v1", runtime=None, model_endpoint=None, insecure_model_transport=False):
         self.database = database.resolve()
+        if runtime is not None and not runtime.legacy_sqlite and runtime.database != self.database:
+            raise ValueError("chat_platform_source_path_mismatch")
         self.generator = generator
         self.provider, self.model, self.role = provider, model, role
         # 只保留不含凭据的端点；供本机设置页辨认当前启动配置，绝不返回 API Key。
@@ -87,11 +89,18 @@ class ChatBackend:
                     self._runtime = build_memory_runtime(self.database)
         return self._runtime
 
+    def _require_legacy_diagnostics(self):
+        if not self.memory_runtime().legacy_sqlite:
+            from longmemory.methods.contracts import UnsupportedCapabilityError
+            raise UnsupportedCapabilityError("memory_backend_capability_unsupported")
+
     def complete_round_screen_turn(
         self, *, turn_id, answer, retrieved_counts, retrieval_evidence=None,
         retrieval_strategy=None,
     ):
         """归档小智实际生成的回答；关联表与助手 L0 在同一事务提交。"""
+
+        self._require_legacy_diagnostics()
 
         result = SQLiteRoundScreenTurnStore(self.database).record(
             user_message_id=turn_id,
@@ -113,6 +122,8 @@ class ChatBackend:
         prepared = self.memory_runtime().prepare_user(
             text, defer_slow_observation=True,
         )
+        if not self.memory_runtime().legacy_sqlite:
+            return prepared, None
         try:
             feedback = SQLiteRoundScreenMemoryFeedbackStore(
                 self.database,
@@ -131,25 +142,30 @@ class ChatBackend:
     def round_screen_memory_feedback(self):
         """读取圆屏反馈的无正文诊断索引。"""
 
+        self._require_legacy_diagnostics()
         return SQLiteRoundScreenMemoryFeedbackStore(self.database).list_events()
 
     def round_screen_memory_feedback_detail(self, event_id):
         """按需读取一条圆屏问题的原始问答与召回证据。"""
 
+        self._require_legacy_diagnostics()
         return SQLiteRoundScreenMemoryFeedbackStore(self.database).get_event(event_id)
 
     def memory_feedback_review_states(self, targets):
         """读取质量样本当前复核状态；目标中不包含聊天正文。"""
+        self._require_legacy_diagnostics()
 
         return SQLiteMemoryFeedbackReviewStore(self.database).current(tuple(targets))
 
     def record_memory_feedback_review(self, **values):
         """追加一次质量复核事件，不修改任何长期记忆。"""
+        self._require_legacy_diagnostics()
 
         return SQLiteMemoryFeedbackReviewStore(self.database).record(**values)
 
     def list_l2_sufficiency_shadow(self, *, limit=50):
         """列出影子运行；是否正在启用由 Runtime 状态单独给出。"""
+        self._require_legacy_diagnostics()
 
         result = SQLiteL2SufficiencyShadowStore(self.database).list_recent(
             limit=limit,
@@ -160,10 +176,12 @@ class ChatBackend:
         return result
 
     def get_l2_sufficiency_shadow(self, user_message_id):
+        self._require_legacy_diagnostics()
         return SQLiteL2SufficiencyShadowStore(self.database).get(user_message_id)
 
     def review_l2_sufficiency_shadow(self, user_message_id, **values):
         """追加人工复核事件；不修改影子原判或正式回答。"""
+        self._require_legacy_diagnostics()
 
         return SQLiteL2SufficiencyShadowStore(self.database).review(
             user_message_id=user_message_id, **values,
@@ -171,6 +189,7 @@ class ChatBackend:
 
     def list_l1_sufficiency_shadow(self, *, limit=50):
         """列出 L1 影子运行；正文仍只从原表按需读取。"""
+        self._require_legacy_diagnostics()
 
         result = SQLiteL1SufficiencyShadowStore(self.database).list_recent(
             limit=limit,
@@ -181,10 +200,12 @@ class ChatBackend:
         return result
 
     def get_l1_sufficiency_shadow(self, user_message_id):
+        self._require_legacy_diagnostics()
         return SQLiteL1SufficiencyShadowStore(self.database).get(user_message_id)
 
     def review_l1_sufficiency_shadow(self, user_message_id, **values):
         """追加 L1 人工复核事件；不修改原判、候选或回答。"""
+        self._require_legacy_diagnostics()
 
         return SQLiteL1SufficiencyShadowStore(self.database).review(
             user_message_id=user_message_id, **values,
@@ -192,6 +213,7 @@ class ChatBackend:
 
     def list_l1_extraction_audit(self, *, limit=50):
         """读取脱敏提取结果；刻意不返回用户原文。"""
+        self._require_legacy_diagnostics()
 
         connection = open_database(self.database)
         try:
@@ -201,6 +223,7 @@ class ChatBackend:
 
     def retry_l1_extraction(self, source_message_id, *, expected_attempt_id):
         """将所有者的一次显式恢复请求交给常驻 Runtime 的受管队列。"""
+        self._require_legacy_diagnostics()
 
         return self.memory_runtime().retry_failed_observation(
             source_message_id, expected_attempt_id=expected_attempt_id,
@@ -278,11 +301,11 @@ class ChatBackend:
                 if prepared.temporary_interaction is not None else None
             )
             result.update(user_saved=True, event_id=event.event_id,
-                          writes=[asdict(item) for item in observed.writes],
+                          writes=([asdict(item) for item in observed.writes] if observed.writes is not None else None),
                           memory_processing=observed.processing_status,
                           memory_warning=observed.warning_code)
             result.update(call_id=support.call_id, memory_context=support.context,
-                          retrieved=[asdict(item) for item in support.retrieved],
+                          retrieved=([asdict(item) for item in support.retrieved] if support.retrieved is not None else None),
                           retrieval_strategy=support.retrieval_strategy,
                           retrieval_warning=support.warning_code)
             # 高精度控制命令已经由应用层完成并生成真实回执。此处不再让

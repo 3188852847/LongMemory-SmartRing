@@ -6,6 +6,7 @@ import time
 from collections import OrderedDict
 
 from aiohttp import web
+from longmemory.methods.contracts import UnsupportedCapabilityError
 
 COOKIE = "lm_console_session"
 MAX_AGE = 8 * 60 * 60
@@ -71,6 +72,8 @@ def security_middleware(authority: str, sessions: Sessions, internal_token: str 
             response = web.json_response({"error": "request_rejected"}, status=error.status)
         except asyncio.TimeoutError:
             response = web.json_response({"error": "console_timeout"}, status=504)
+        except UnsupportedCapabilityError:
+            response = web.json_response({"error": "memory_backend_capability_unsupported"}, status=501)
         except Exception:
             # 未预期异常也不回传路径、原始响应或配置内容；前端不能据此宣称未执行。
             response = web.json_response({"error": "console_internal_error"}, status=500)

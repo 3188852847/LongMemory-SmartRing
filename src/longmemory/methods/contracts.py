@@ -20,11 +20,15 @@ class MethodCapabilities:
     feedback_learning: bool = False
     frozen_evaluation: bool = False
     # 日常圆屏入口可先归档 L0，待回答已经进入语音链路后再派生 L1。
-    # 只有明确实现两阶段接口的方法才能声明，不能用名字猜测能力。
+    # 只有明确实现延后投递接口的方法才能声明，不能用名字猜测能力；
+    # 组合 pipeline 不必拆出内部提取阶段。
     deferred_observation: bool = False
     # 允许所有者对已有 L0 的失败/中断提取进行一次显式恢复。该能力不表示
     # 可以重跑正常 NOOP，更不表示后台会自动重试模型请求。
     failed_observation_recovery: bool = False
+    # 同一 event_id/载荷重放不会重复派生；只有真实实现后才可声明。
+    # 平台归档与引擎提交之间没有跨存储事务，崩溃后能否安全重试取决于它。
+    idempotent_observation: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -123,3 +127,13 @@ def require_capability(method: MemoryMethod, capability: str) -> None:
         raise ValueError("未知的方法能力名称。")
     if not getattr(method.capabilities, capability):
         raise UnsupportedCapabilityError(f"方法不支持能力：{capability}")
+
+
+def require_management(administration, capability: str):
+    """管理能力守卫也属于中立契约；应用层不依赖具体适配器。"""
+    if capability not in {"listing", "detail", "correction", "deletion",
+                          "temporal_history", "scenarios", "personas"}:
+        raise ValueError("未知的管理能力。")
+    if administration is None or not getattr(administration.capabilities, capability):
+        raise UnsupportedCapabilityError(f"管理不支持能力：{capability}")
+    return administration
