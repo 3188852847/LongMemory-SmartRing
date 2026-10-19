@@ -114,3 +114,54 @@ V 新增本报告和真实验证指南的链接/旧路径检查无发现；两�
 交给 X 的网关契约为：保持所选模型身份，使用相同预算账本及有效核价策略，生命周期先启动自有随机网关，再把仅本地端点/口令和稳定 provider_identity 传给 Hy；停止时由所有者关闭自己创建的网关/worker。当前真实 runner 的 10 元账本只用于本次实验，不能在日用启动中自动新建另一轮额度来规避总额。日用服务的生命周期/预算策略接入由 X 按授权范围实现并验收，V 未代改。
 
 Y 的 method/administration/管理 UI 尚未并入 V 树，本结果不是三方组合验收。后续主动交流仍按“Hy 供记忆证据，独立主动层管许可/时机/内容，设备桥执行并关联反馈”，本轮未开启调度、未完成该能力迁移。
+
+## 管理 RPC 接力：HY-RPC-002（2026-10-19）
+
+ADR（架构决策记录）HY-RPC-002 状态为低层专项通过、组合待验收。选择“原生单条 update＋严格孤立 delete＋可信空库范围证明”，而非直接开放原生 delete 或给旧库猜测独占范围：前者会恢复/重挂其他事实，后者没有可核验来源起点。代价是保留一份随状态备份的证明、链成员不支持删除，并依赖 X/Y 的唯一拥有者与串行审计；可随时关闭管理开关回退只读，不迁移或清理旧数据。
+
+主会话随后授权 V 按 Y 最终 `6067f9e31c9c8ca8e9abb266c39700737775017b` 的 `docs/development/hy-memory-management-contract.md` 实施低层管理协议。只读核对该提交/文件，未 cherry-pick X/Y、未修改 method/administration/runtime/bootstrap/assembly。`model_gateway.py` 的流式日用适配已明确转交 X，本段未编辑该文件。真实保留集不重跑、不用剩余额度采样；原 17 题结论仍对应 `d4b1777` 的冻结条件，不能改称当前新源码重新通过了付费保留验收。
+
+实现提交 `8199703768d9171faf3879439c6418615d4080e3`；真实包专项测试提交 `023050091381fda1fdd24d8e0ae983e56f5e93ee`。源码摘要 `dd69023d1df753c536a1705e4fb7b0ef4bdf6f18caa7215e3a1ec608e5f8996f`。改动仅 worker/process_client/settings、新增 management_rpc 与专项测试；现有 profile/get/list/diagnostics 保留，profile 仅接受配置的 user，add 固定配置的 user/agent 和 `SOURCE_NAMESPACE`，拒绝覆盖身份。
+
+| Client 接口 | 固定参数及结果 |
+|---|---|
+| `management_capabilities()` | protocol=1，history/profile/update/delete/exclusive_user_profile 布尔；额外提供 history_recording=false 和 limitations。实际 SDK 版本、API、配置及范围证明共同决定能力。 |
+| `history(memory_id=...)` | 仅非空字符串 ID，不接收 user/source/path；先 get 校验当前条目属于配置 user/agent 且全部 meta 为本 namespace 的 user 来源，再返回 SDK 数组。当前关闭 SDK history，空数组不表示未发生变化。 |
+| `update(memory_id=..., content=...)` | ID＋1–1000 字符明确正文；ACTIVE、is_latest=true 的 L2/L3；原生 update 结果，memory_id 必须相同。仅 content/embedding 更新，不调用 add/重新提取，不伪造 expected_revision。 |
+| `delete(memory_id=...)` | 仅同范围、ACTIVE/current L2/L3，且 supersedes 与 superseded_by 都明确为空数组的孤立条目；原生 success=true/deleted_count=1，随后由 Y 独立 get 核对。链头/中间/尾全部拒绝；链尾也不是安全的“叶节点”。 |
+
+任何多余参数、路径式 ID、空值、保留层、未知归属、助手来源或混合 namespace 均在进入 SDK 写操作前拒绝。`get.source=vdb` 只证明存储通道，业务来源另外按透传 meta 验证，不能把两者混同。SDK 异常及错误/不完整写回执保留 state_unknown，不重试、不回滚、不声称跨存储事务。
+
+### 可信配置与画像范围证明
+
+新增 `HySettings.management_writes_enabled=False`、`management_exclusive_profile=False`，严格布尔。均为运行策略，不改变既有持久身份；离线 JSON loader 不接收这两项，不允许普通文件/HTTP 开启。X 必须在可信装配显式构造：写能力另需 Y 的 serialized_writes、Runtime write_enabled、启动权限、唯一租约和方法锁；worker 开关不替代这些守卫。
+
+画像默认 false，include_profile/API 存在都不能证明管理范围独占。新日用空间要开放，X 须先持有该 state root 的 engine.owner 独占租约，用明确的独占 user/agent/namespace＋`management_exclusive_profile=True` 在空 SDK 目录 `create=True` 初始化。worker 在构造成功后以排他新建方式写 `management-scope.json`，绑定 protocol/SDK/模型维度身份/user/agent/namespace 与“空库由受限 worker 创建”的起点。普通 add 固定同一身份，更新/删除不允许改归属；禁止其他 writer 绕过租约或直接写库。
+
+重开时原证明必须逐项匹配，且实际 owner 字节锁仍被持有；证明丢失/被改、锁释放、旧库后来打开开关均保持 profile=false，不扫描/猜测来源，不给非空旧库补发证明。该文件应随整个 state resource 备份和恢复。范围证明是可信装配和受限写入口的契约，不是对任意外部导入库的来源鉴定。Windows 字节锁连读取锁定字节都会拒绝，探测改用 fstat 长度＋非阻塞锁检查；未创建或接管 owner 锁。
+
+### 真实 SDK 副作用与零费用证据
+
+复用既有 Hy 2.0.3 专属环境，不安装、不改环境、不开私有配置、无供应商请求。使用 synthetic_transport＋socket 禁网的新合成 Chroma 库；测试拓扑仅由 fixture 内部种入，**实际更新/删除使用 SDK 公开 API**，没有把内部种入接口暴露为管理协议。
+
+| 实测操作 | 完整合成 MemoryNode 集合核对 |
+|---|---|
+| L2 update、L3 update | 各只改变目标 1 个节点；原 RAW、其他节点、meta/custom 不变；每次 1 个合成 embedding 请求、无 LLM。 |
+| 孤立 L2 delete | 仅目标消失，RAW 保留；无模型请求；关闭后重开仍不存在。 |
+| profile/history | 节点集合不变，无模型请求；SDK history 未启用，history.db 不存在。 |
+| 原生删除链头 | 目标删除＋前驱变更，共 2 节点；前驱恢复 ACTIVE/is_latest=true。 |
+| 原生删除链中间 | 目标删除＋前后驱重挂，共 3 节点。 |
+| 原生删除链尾 | 目标删除＋后继重挂，共 2 节点。 |
+| worker 删除任意链成员 | 全部在 SDK 写前拒绝，完整节点集合不变。 |
+
+原生 update 确实重新向量化；worker 明确限制 update 只能请求 embedding，delete 禁止模型网络请求。更新只在已核对的本地 Chroma、graph/coding/retrieval-clause 关闭、无 tag/retrieval-clause 后端支持时声明能力；真实使用需已授权的本地 BGE 网关，专项为显式合成 transport。未给其他后端/图模式声明同样边界。日志/cache 等文件可能变化，这不是逐字节无写；删除不是 RAW/平台来源/历史/备份的隐私擦除。
+
+最终独立 SDK 审计在 `experiments/runs/vmgmt-fafe68e1/result.json`，SDK `client.py` SHA-256 `358145e038beace94c8307b8cc5516c305b96e78f845a782b173892d493e9084`；同目录保留源码/预算身份。新增 34 项管理守卫单测＋3 项真实 SDK 集成通过；相关整体回归 **104 项通过**。补充拒绝联接的 owner 探测后，35 项定向复核通过，最终专项审计在干净 `0230500` 再次通过。首轮 fixture 把非 UUID ID 与 Chroma 映射后的 UUID 主键比较导致失败，已改为 UUID 测试拓扑，未放宽节点相等断言；Windows 锁探测实际问题已按错误证据修实现。
+
+付费账本仍为同一 `local/runtime/hy-memory/real-validation-20261019/budget.db`：194 次、0.491022 元上界、unknown/inflight=0，**本段费用增量 0**。未重建额度、未调用供应商币种/生成接口，也没有日用/设备动作。
+
+### X/Z 必须完成的接线核查
+
+X 在可信新空间按以上条件设置开关并保留范围证明，Runtime 守卫/独占生命周期与 Y 的串行审计仍需组合验收。Z 应在 Y 写入 running 审计前使用已读取的 SDK 行检查删除资格（层/ACTIVE/current/两个链数组），把不支持链删除作为明确拒绝；worker 仍做独立复核。否则现 Y 对任何写 RPC 异常都会保守记 uncertain，虽然 V 在写前拒绝没有改库，仍会造成条目锁定。这是精确接线待办，V 没有越界改 Y 或宣称该问题已解决。
+
+本段不提供原生 CAS、跨库事务、delete_all、修改画像/RAW 或连带链写入。X/Z 文档清单和三方 UI/Runtime/真实 SDK 组合验收完成前，不能仅凭低层专项宣布日用管理已通过。
