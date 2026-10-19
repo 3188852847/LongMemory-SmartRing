@@ -134,3 +134,52 @@ V已有真实模型10/10＋7/7属于其精确候选小样本结果；X本轮不�
 当前管理RPC的新增精确提交仍待主会话交付，管理写门保持false；Z还须审查流式计费、实际候选/构建、真实组合probe（只由Z统筹原池）及回退费用边界。日用切换仍未交接/未执行，播放unconfirmed。新决定见[ADR-0184](../../adr/0184-shared-campaign-budget-and-owned-model-gateway.md)，最新配置与步骤见[日用装配指南](../../guides/Hy-Memory圆屏与日用装配-20261019.md)。
 
 第二阶段追溯：主会话精确V/Y交接 → 上表10个本地接入提交 → X受控装配/流式代码`e4137816c08189c34f93082416bc53cf87ef5974` → 814/5skip及独立真实SDK/BGE验收 → 本报告文档提交 → Z组合/合入/推送/日用切换均待执行 → X会话`01a153df-8682-7e33-80b5-1102ee2b54c8`。本地分支未merge main、未推送，未向其他会话发送消息。
+
+## 第三阶段：main交接后的正式服务切换
+
+日期2026-10-19，北京时间20:53取得检查点，20:59技术验收通过。主会话明确交付唯一日用进程/私有配置操作所有权及已推送main `729590c10113f44321c31022e4b6377c19fc0e08`，候选为Z `9901b5372093e544a9077b1e9a91331d338ea149`。X保护原交付HEAD `e1f36c6`到本地`codex/x-hy-roundscreen-pre-cutover-20261019`，仅ff当前X分支到该main；实际核对main与Z完整tree相同，`git ls-remote --heads origin main`独立返回同一main SHA。没有在X合并main、推送或改源码。
+
+### 身份与检查点
+
+| 项目 | 本轮实际核对 |
+|---|---|
+| 已验前端包 | 主会话交接的P前端树`data/test-tmp/z-ui-20261019/build-v1`，44文件/1759035字节；X按sorted(relative_posix_path + NUL + sha256 + LF)独立重算整体`588fdcc014fe571de451b81de223bb61263952eb7732e410c0dabe2a0613e8a4`。部署后逐文件相同，没有重建 |
+| Z源码/管理 | 公开源码摘要`f8562f4576ede1581a63b9b42abb1bfc894c895637117a90d14f819ff716172f`属于Z收据；X独立核对精确main/Z tree相同及管理函数重算`c0bf03ea3cb31e51528e503ee5cd5d251d672a847e49091c462bb71e8a802026` |
+| 候选配置 | Z handoff的deployment/settings/management-verification三文件逐项摘要一致后复制；settings身份`5fea60cced324e29fb003de8629687f64864e203e9776288c8bd3664260c7449`，provider身份`7d1029727454df601253f0f92d46fafc886f07aa435137f47bf4138227ea49e2` |
+| 新私有检查点 | `local/archive/hy-cutover/20261019-205331/`；`checkpoint.json` SHA-256 `3f912db20c4194441786d55b974c30095e17397ef9d07bcf18f8d76b921717c0`。含64份逐项核对文件、旧源码3126c651的Git归档、旧构建、必要人工配置/偏好/消费副本/提供器/所选声音档案与参考文件；3份SQLite一致性备份分别为旧主库、聊天旁库、原预算池，完整性与每表计数均相同。角色旁库原本不存在，按缺失记录保留 |
+| 新资源 | `data/memory/hy-daily-20261019`及`data/databases/hy-daily-sources-20261019.sqlite3`原本均不存在，只显式create一次。首次持久scope证明SHA `bc1d292ebfa4c3b0a7a58028ecde1d64ff0ba6d83e63a0d39c7f1bfbf6b9f1f4`，重开和实际服务身份相同 |
+
+旧磁盘main已由协调会话更新，因此检查点另用已知切换前源码提交3126c651作Git归档；不能据当前磁盘HEAD追认10月18日旧launcher的内存版本。旧launcher PID41900（父42932）通过其认证发现和正式shutdown退出。首次即时检查早于异步socket释放，随后等待确认18767/35486释放、两个进程退出，没有重复发送shutdown或强杀。无关Codex PID49284的回环8768保持原样；本次壁纸服务成功绑定原局域网IP的8768，与回环监听并存，没有改端口或操作其他会话。
+
+部署先将已核对包复制到新staging，逐文件验证后将原dist保留为检查点`old-dist-live/`，再安装新dist。三份候选配置和新核价回执进入`local/config/hy-memory/`。首次初始化成功后，X自用检查脚本两次分别误用能力键`correct`（实际`correction`）和ManagedMemoryMethod包装层路径而失败；产品初始化/重开本身成功，证据保留，没有删除/重建/换新目录。核对实际代码后仅create=False重开，能力、两份owner和身份均通过。来源表`conversation_messages/source_dispatch/platform_rounds/platform_round_feedback`均0，身份元数据行1正常；没有把元数据行误认成用户事实。
+
+### 原池、正式启动与保护核对
+
+切换前新核对[官方价格](https://api-docs.deepseek.com/zh-cn/quick_start/pricing/)仍支持原请求名、输入2元/百万及输出8元/百万保守上界；使用既有官方档案做一次只读CNY/账户可用检查。仅保存CNY/可用标记及当前凭据摘要，未输出或记录余额/Key。核价有效至2026-10-19 22:53:33，最长两小时；正式装配只续原池expires_at_unix，所有其他policy字段和196条attempt记录与检查点逐项相同，price_renewals仅新增1行，没有重置或释放预留。
+
+本轮新指针为hy_memory，人工launcher偏好仍为圆屏/CosyVoice3/official/原role。从唯一根`启动智慧圆屏.cmd`正式重开新launcher，再经其受限认证动作请求start一次，实际启动API、SDK、小智与声音服务。不是仅保存后端偏好。最终技术收据在同一检查点的`installed-candidate.json`、`initialization.json`、`live-api-verification.json`、`protection-and-voice-projection.json`、`budget-renewal-verification.json`及`final-health.json`；配置/令牌和初始化日志仅留私有位置，不提交。
+
+| 实际检查 | 结果与边界 |
+|---|---|
+| 正式launcher/进程归属 | 新launcher PID16840；API/网关59052、专属SDK58676、语音51852、CosyVoice53768均属本次launcher后代。启动器报告ready，API、小智、CosyVoice3就绪；不会据此声称设备播放 |
+| 网页与同Runtime | 实际GET chat-config和memory-engine均指向新来源文件、相同5fea身份及`hy_memory_pro_chat`/`sdk-2.0.3-adapter-1`。主会话另独立HTTP复核同一状态、预算与管理能力，未调模型/写个人来源 |
+| 语音接线 | 厂家消费副本只替换选中CampusLLM为自有127.0.0.1网关`/voice/v1`；和网页`/answer/v1`端口相同。供应商Key没有作为该选中消费Key；将消费LLM还原为人工来源后其余YAML结构完全相同。Memory薄桥消费源码与main逐字节一致，摘要`2c8036183634adc99d6e807ad28098e494d7a55181f569aa48de5f6aa5b9c2cd`。设备尚无真实会话，不把配置接线冒充圆屏已经调用Hy |
+| 能力与调度 | 实际Hy workspace的profile/history/correction/deletion true，native_atomic_revision false；通用原子纠正/删除仍false。两份owner在可信装配中核对，首次scope可重开，旧主动交流`paused_backend_unsupported`，未开整理/影子/主动联系 |
+| 预算/来源 | 仍196请求、496332微元＝0.496332元保守上界，unknown0，external_models available；X未发付费模型探针或连接检查。真实用户来源/轮次0，未向个人新库注入合成对话 |
+| 保留项 | 原env、人工YAML、launcher/model/tts偏好、声音/参考音频、皮肤配置逐项SHA不变；原主库与聊天旁库每表计数不变，角色旁库继续不存在。未触及壁纸库或设备配置/固件/串口，不以电脑检查声称设备NVS已读回验证 |
+| 日志与健康 | CosyVoice `/health` ready；只聚合当前时间窗15条厂家日志元数据，ERROR/CRITICAL计数0，不输出正文。这不是未来无故障保证或声音验收 |
+
+技术就绪（technical-ready）成立；21:01:55和21:07:04只读复查设备控制面仍connection_count=0、ready=false、reason=device_offline，8000未见已建立连接。所有者向主会话报告通电联网、尚未唤醒，这与0会话并不矛盾：X只读核对保留固件`application.cc`的HandleStartListeningEvent/HandleWakeWordDetectedEvent→ContinueOpenAudioChannel/ContinueWakeWordInvoke，以及WebsocketProtocol::OpenAudioChannel→Connect，idle在开始聆听/唤醒时才打开WebSocket；CloseAudioChannel会释放连接。厂家WebSocketServer只在真实连接后处理ConnectionHandler，控制面只统计当前connections集合。因此device_offline不等于物理/Wi-Fi联网故障，不能单凭0连接要求修网络；此为保留源码行为，不是串口读取设备状态。由所有者按平常方式唤醒后分别验连接和体验，如有屏幕错误再据实际文字定位。没有为取样唤醒、播放、发送聊天、远程重启或刷写设备。主会话继续安排所有者先验证声音/字幕与真实偏好隔轮长期召回/管理来源，插话最后；中断若产生unknown须原样保留，不能重置费用。
+
+### 追溯与会话状态
+
+| 任务 | 提交/验收 → 本次main | 会话与收尾 |
+|---|---|---|
+| V真实模型及管理RPC | 原V/Y十提交映射见第二阶段；V新增RPC `8199703`、`0230500`、`481befd`经Z重验 → `729590c10113f44321c31022e4b6377c19fc0e08` | V `01a15363-8120-7400-a9db-8f9142104b12`；主会话回传已交付/验收/合入，无待工作并已归档 |
+| Y管理重设计 | `dee2cf4`→`6067f9e`五提交经X接入、Z组合修复与构建 → 同一main | Y `01a153e0-5cf5-7763-b944-7031e8a1c548`；主会话回传同样已归档，原Y分支/证据保留 |
+| Z最终组合 | `bf65ccf`、`69d3ab6`、`2f0212a`及最终报告候选`9901b5372093e544a9077b1e9a91331d338ea149`；876/4skip＋最后23项、TS/38组件/构建、8合成＋1真实HTTP浏览器、原池2次开发探针 → 同一main | Z `01a15404-7df1-7f92-818f-e25093730b61`；主会话回传同样已归档，源码树/构建/SDK环境保留 |
+| X本次切换 | 保护`e1f36c6`后ff精确已推送main，完成本节实际操作和技术验收；本报告本地提交另交主会话接入，不提前填合入号 | X `01a153df-8682-7e33-80b5-1102ee2b54c8`继续保留待所有者体验反馈，不归档 |
+
+X未用工具向其他会话发送消息，未merge main或push；主树只做获授权的私有部署/正式入口操作，源码及本次文档编辑仍在X隔离树。旧库、代码/构建检查点、新空间、全部工作树/分支/SDK/证据保留。后续回退须正式停机后保留完整新引擎/来源/审计/伴随文件及原池，不能恢复旧DB覆盖新对话或消费，也不能切回旧直连规避同一十元池。
+
+21:08:10收尾只读汇总仍为196/496332/unknown0、设备0会话；私有`cutover-receipt.json` SHA-256为`0f4a2558c20f4d238c1ea098e1a849dc68e9add2dc5eda4f8ce7ece185f84b5a`，不含Key、令牌、余额或对话正文。两份本轮变更Markdown正式strict通过、findings=[]；清单仅更新X主题/两份文档的现行状态与证据归属。未改源码，沿Z软件验收加本节实际运行核验，不为文档收尾重复模型测试或收费采样。

@@ -81,7 +81,7 @@
     },
     {
       "id": "hy-roundscreen-daily-deployment",
-      "scope": "平台圆屏轮次、可信Hy装配、原十元池与真实流式；软件通过，切换交X",
+      "scope": "平台圆屏轮次、可信Hy装配、同十元池与流式；main729590c已正式服务切换，技术就绪，真实设备体验待所有者",
       "authority": "docs/guides/Hy-Memory圆屏与日用装配-20261019.md",
       "sources": [
         "src/longmemory/adapters/storage/sqlite_platform_rounds.py",
@@ -142,7 +142,7 @@
         "来源",
         "条件切换"
       ],
-      "review": "verified 2026-10-19: Z876/4skip、真实SDK/BGE/跨版本桥、原池两次真实请求及流式；196请求/0.496332元上界/unknown0，不代表设备播放或已切换"
+      "review": "verified 2026-10-19: Z软件验收保留；X按已推送main729590c部署精确包、空库一次初始化/重开/两owner/同Runtime与网关、196请求496332微元unknown0；受保护摘要/旧库计数不变；控制面0会话不证明Wi-Fi故障，真实声音/问答/打断未验"
     },
     {
       "id": "hy-memory-isolated-integration",
@@ -1104,15 +1104,15 @@
       "path": "docs/guides/Hy-Memory圆屏与日用装配-20261019.md",
       "title": "Hy-Memory 圆屏与日用装配",
       "status": "current",
-      "basis": "Z组合软件验收后的当前管理/部署契约；正式切换与设备体验仍待X/所有者",
+      "basis": "X三阶段实际记录与正式技术切换；设备实际对话/播放/打断仍待所有者",
       "review": {
         "state": "verified",
         "date": "2026-10-19",
-        "scope": "本轮可信开启/拒绝/历史隔离与交接段落对照真实组合证据；不把软件验收当切换或实机",
+        "scope": "仅本轮main729590c与Z包实际切换、私有一致性检查点/保护项/原池/正式技术健康；前阶段历史证据保留，不代填设备体验",
         "evidence": [
+          "docs/development/parallel/X-hy-roundscreen-20261019.md",
           "docs/development/parallel/Z-hy-release-integration-20261019.md",
-          "69d3ab671c0b22cd7357e2d7e8637ed21ea1bba3",
-          "tests/integration/test_hy_release_management.py"
+          "729590c10113f44321c31022e4b6377c19fc0e08"
         ]
       },
       "tags": [
@@ -1126,18 +1126,15 @@
       "path": "docs/development/parallel/X-hy-roundscreen-20261019.md",
       "title": "X：Hy-Memory 圆屏适配、可信装配与条件日用切换",
       "status": "reference",
-      "basis": "本轮隔离实现与验收记录，后续切换未执行",
+      "basis": "X三阶段实际记录与正式技术切换；设备实际对话/播放/打断仍待所有者",
       "review": {
         "state": "verified",
         "date": "2026-10-19",
-        "scope": "X两阶段实现、原池/流式合成组合和真实SDK/BGE；实际付费/管理RPC/日用切换未验",
+        "scope": "仅本轮main729590c与Z包实际切换、私有一致性检查点/保护项/原池/正式技术健康；前阶段历史证据保留，不代填设备体验",
         "evidence": [
-          "tests/unit/entrypoints/test_platform_roundscreen.py",
-          "tests/integration/test_hy_roundscreen_sdk.py",
-          "tests/unit/infrastructure/test_hy_deployment.py",
-          "tests/integration/test_hy_daily_lifecycle.py",
-          "tests/unit/methods/test_hy_daily_stream.py",
-          "tests/unit/infrastructure/test_hy_campaign.py"
+          "docs/development/parallel/X-hy-roundscreen-20261019.md",
+          "docs/development/parallel/Z-hy-release-integration-20261019.md",
+          "729590c10113f44321c31022e4b6377c19fc0e08"
         ]
       },
       "tags": [
