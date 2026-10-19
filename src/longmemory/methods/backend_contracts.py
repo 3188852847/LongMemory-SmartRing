@@ -1,11 +1,11 @@
 """应用后端装配与管理契约；不要求 SQLite、原子事实或 L0–L3。"""
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Literal, Protocol
 
-from .contracts import MemoryEvent, MemoryMethod, UnsupportedCapabilityError
+from .contracts import MemoryEvent, MemoryMethod, require_management
 
 
 @dataclass(frozen=True, slots=True)
@@ -87,12 +87,3 @@ class BackendAssembly:
     resources: tuple[StateResource, ...]
     management: MemoryAdministration | None = None
     legacy_sqlite: bool = False
-
-
-def require_management(administration: MemoryAdministration | None,
-                       capability: str) -> MemoryAdministration:
-    if capability not in ManagementCapabilities.__dataclass_fields__:
-        raise ValueError("未知的管理能力。")
-    if administration is None or not getattr(administration.capabilities, capability):
-        raise UnsupportedCapabilityError(f"管理不支持能力：{capability}")
-    return administration

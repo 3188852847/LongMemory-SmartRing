@@ -87,7 +87,13 @@ def create_app(*, port=8765, bridge=None, web_root=None, database=None, allow_me
                round_wallpaper_delivery=None, launcher_status_file=None,
                semantic_relation_previewer=None, proactive_greeting_composer=None,
                proactive_schedule_enabled=True, diagnostics=None, observability_root=None,
-               otto_asset_root=None):
+               otto_asset_root=None, memory_runtime=None):
+    # 显式新后端必须同时支配聊天和管理，禁止管理悄悄打开另一套旧库。
+    if memory_runtime is not None and chat_backend is not None:
+        if chat_backend.memory_runtime() is not memory_runtime:
+            raise ValueError("chat_and_management_runtime_mismatch")
+    runtime = memory_runtime or (getattr(chat_backend, "_runtime", None) if chat_backend else None)
+    legacy_sqlite = runtime is None or runtime.legacy_sqlite
     sessions = Sessions()
     assets = web_root or ROOT / "web"
     client = bridge if bridge is not None else XiaozhiControlClient(ROOT / "data/control/device-control.token")
@@ -153,6 +159,26 @@ def create_app(*, port=8765, bridge=None, web_root=None, database=None, allow_me
         semantic_relation_previewer=semantic_relation_previewer,
         proactive_greeting_composer=proactive_greeting_composer,
     )
+    if not legacy_sqlite:
+        from .method_management import UnsupportedLegacyMemoryBackend
+        memory_backend = UnsupportedLegacyMemoryBackend(runtime)
+    elif runtime is not None and runtime.backend_assembly is not None and database is not None:
+        from .method_management import LegacyMemoryAdministration
+        runtime.backend_assembly = replace(runtime.backend_assembly,
+            management=LegacyMemoryAdministration(memory_backend))
+    from .routes.memory_engine import register_memory_engine_routes
+    def selected_memory_runtime():
+        selected = runtime or (chat_backend.memory_runtime() if chat_backend else None)
+        if selected is None:
+            from .errors import MemoryAccessError
+            raise MemoryAccessError("memory_runtime_unavailable", 503)
+        if selected.legacy_sqlite and selected.backend_assembly is not None and database is not None:
+            from .method_management import LegacyMemoryAdministration
+            selected.backend_assembly = replace(selected.backend_assembly,
+                management=LegacyMemoryAdministration(memory_backend))
+        return selected
+    register_memory_engine_routes(app, selected_memory_runtime, allow_delete=allow_memory_delete,
+                                  allow_correction=allow_memory_correction)
 
     async def scheduled_tick():
         if operation_lock.locked():
@@ -162,7 +188,7 @@ def create_app(*, port=8765, bridge=None, web_root=None, database=None, allow_me
 
     proactive_schedule = (
         ProactiveScheduleLoop(scheduled_tick)
-        if database is not None and proactive_schedule_enabled else None
+        if legacy_sqlite and database is not None and proactive_schedule_enabled else None
     )
 
     async def start_proactive_schedule(_app):
@@ -346,12 +372,6 @@ def main():
         )
         from longmemory.core.memory.extraction.candidates import PREPROCESSOR_VERSION
         from longmemory.adapters.llm.openai_compatible import OpenAICompatibleAnswerGenerator
-        from longmemory.application.memory_runtime import MemoryRuntime
-        from longmemory.adapters.storage.sqlite_scenario_recall import SQLiteScenarioRecallProvider
-        from longmemory.adapters.storage.sqlite_persona_recall import SQLitePersonaRecallProvider
-        from longmemory.adapters.storage.sqlite_temporal_recall import SQLiteTemporalRecallProvider
-        from longmemory.adapters.storage.sqlite_natural_memory_commands import SQLiteNaturalMemoryCommandHandler
-        from longmemory.adapters.storage.sqlite_temporary_interaction import SQLiteTemporaryInteractionProvider
         from longmemory.core.memory.retrieval.service import HybridMemoryRetriever
         from longmemory.infrastructure.config.settings import load_model_settings
         from longmemory.methods.daily_llm.method import DailyLLMMemory
@@ -478,44 +498,22 @@ def main():
                         model=settings.model,
                     ),
                 )
-                runtime = MemoryRuntime(args.database, method=method,
-                                        scenario_provider=SQLiteScenarioRecallProvider(args.database),
-                                        persona_provider=SQLitePersonaRecallProvider(args.database),
-                                        temporal_provider=SQLiteTemporalRecallProvider(args.database),
-                                        memory_command_handler=SQLiteNaturalMemoryCommandHandler(args.database),
-                                        temporary_interaction_provider=SQLiteTemporaryInteractionProvider(args.database),
-                                        consolidation_scheduler=consolidation_scheduler,
-                                        l1_sufficiency_shadow=l1_sufficiency_shadow,
-                                        l2_sufficiency_shadow=l2_sufficiency_shadow)
             elif retriever_factory is not None:
                 method = LongMemoryV1(
                     args.database, existing_only=True, allow_cross_thread=True,
                     retriever_factory=retriever_factory,
                 )
-                runtime = MemoryRuntime(args.database, method=method,
-                                        scenario_provider=SQLiteScenarioRecallProvider(args.database),
-                                        persona_provider=SQLitePersonaRecallProvider(args.database),
-                                        temporal_provider=SQLiteTemporalRecallProvider(args.database),
-                                        memory_command_handler=SQLiteNaturalMemoryCommandHandler(args.database),
-                                        temporary_interaction_provider=SQLiteTemporaryInteractionProvider(args.database),
-                                        consolidation_scheduler=consolidation_scheduler,
-                                        l1_sufficiency_shadow=l1_sufficiency_shadow,
-                                        l2_sufficiency_shadow=l2_sufficiency_shadow)
             else:
                 method = LongMemoryV1(
                     args.database, existing_only=True, allow_cross_thread=True,
                 )
-                runtime = MemoryRuntime(
-                    args.database, method=method,
-                    scenario_provider=SQLiteScenarioRecallProvider(args.database),
-                    persona_provider=SQLitePersonaRecallProvider(args.database),
-                    temporal_provider=SQLiteTemporalRecallProvider(args.database),
-                    memory_command_handler=SQLiteNaturalMemoryCommandHandler(args.database),
-                    temporary_interaction_provider=SQLiteTemporaryInteractionProvider(args.database),
-                    consolidation_scheduler=consolidation_scheduler,
-                    l1_sufficiency_shadow=l1_sufficiency_shadow,
-                    l2_sufficiency_shadow=l2_sufficiency_shadow,
-                )
+            from longmemory.bootstrap import build_legacy_runtime
+            runtime = build_legacy_runtime(
+                args.database, method=method,
+                consolidation_scheduler=consolidation_scheduler,
+                l1_sufficiency_shadow=l1_sufficiency_shadow,
+                l2_sufficiency_shadow=l2_sufficiency_shadow,
+            )
             chat_backend = ChatBackend(args.database, generator, provider=settings.provider,
                                        model=settings.model or "fake", role=args.assistant_role,
                                        runtime=runtime, model_endpoint=settings.base_url or None,

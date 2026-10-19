@@ -431,9 +431,9 @@ class MemoryBackend:
     def clear_memories(self, expected_revision):
         return self.atomic_memories.clear_memories(expected_revision)
 
-    def correct(self, memory_id, corrected_content, expected_revision):
+    def correct(self, memory_id, corrected_content, expected_revision, *, source_event=None):
         return self.atomic_memories.correct(
-            memory_id, corrected_content, expected_revision,
+            memory_id, corrected_content, expected_revision, source_event=source_event,
         )
 
     def record_change(

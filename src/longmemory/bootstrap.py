@@ -24,7 +24,9 @@ from longmemory.adapters.storage.sqlite_temporal_recall import (
 from longmemory.core.common.identifiers import MemoryId
 from longmemory.infrastructure.logging.setup import log_event
 from longmemory.methods.factory import create_method
+from longmemory.methods.contracts import MemoryMethod
 from longmemory.methods.longmemory_v1.method import LongMemoryV1
+from longmemory.methods.backend_contracts import BackendAssembly, StateResource
 
 
 def _legacy_method(database_path: Path, method_name: str) -> LongMemoryV1:
@@ -53,13 +55,79 @@ def build_memory_runtime(database_path: Path, *, clock=None) -> MemoryRuntime:
         existing_only=True,
         allow_cross_thread=True,
     )
-    return MemoryRuntime(database_path, method=method,
-                         scenario_provider=SQLiteScenarioRecallProvider(database_path),
-                         temporal_provider=SQLiteTemporalRecallProvider(database_path),
-                         memory_command_handler=SQLiteNaturalMemoryCommandHandler(database_path),
-                         temporary_interaction_provider=(
-                             SQLiteTemporaryInteractionProvider(database_path)
-                         ),
+    return build_legacy_runtime(database_path, method=method, clock=clock,
+                                include_personas=False)
+
+
+def build_legacy_runtime(database_path: Path, *, method, include_personas=True,
+                         clock=None, management=None, **extensions) -> MemoryRuntime:
+    """只有显式旧适配器可装配 SQLite 派生能力，不按路径后缀猜测。"""
+    from longmemory.methods.daily_llm.method import DailyLLMMemory
+    from longmemory.adapters.storage.sqlite_persona_recall import SQLitePersonaRecallProvider
+    from longmemory.entrypoints.api.method_management import LegacyMemoryAdministration
+    from longmemory.entrypoints.api.memory_backend import MemoryBackend
+    if not isinstance(method, (LongMemoryV1, DailyLLMMemory)):
+        raise TypeError("非旧引擎必须使用 build_backend_runtime。")
+    providers = {}
+    try:
+        providers["scenario_provider"] = SQLiteScenarioRecallProvider(database_path)
+        providers["temporal_provider"] = SQLiteTemporalRecallProvider(database_path)
+        providers["memory_command_handler"] = SQLiteNaturalMemoryCommandHandler(database_path)
+        providers["temporary_interaction_provider"] = SQLiteTemporaryInteractionProvider(database_path)
+        if include_personas:
+            providers["persona_provider"] = SQLitePersonaRecallProvider(database_path)
+        return MemoryRuntime(database_path, method=method, clock=clock,
+            backend_assembly=BackendAssembly(method, (
+                StateResource("legacy_state", database_path.resolve(), "file"),
+            ), management=management or LegacyMemoryAdministration(MemoryBackend(database_path)),
+                legacy_sqlite=True), **providers, **extensions)
+    except BaseException:
+        for provider in providers.values():
+            close = getattr(provider, "close", None)
+            if close:
+                close()
+        method.close()
+        raise
+
+
+def assemble_backend(*, method: MemoryMethod, resources: tuple[StateResource, ...],
+                     source_path: Path, management=None, create_sources=False) -> BackendAssembly:
+    """新后端显式接入点；不注册任意模块路径，不安装或切换日用引擎。
+
+    method.observe 是完整 add/pipeline，平台不依赖其内部阶段；只有用户消息
+    会投递给它。来源库独立新建/重开，不能与引擎资源重叠。
+    """
+    from longmemory.adapters.storage.sqlite_source_journal import SQLiteSourceJournal
+    from longmemory.application.managed_memory import ManagedMemoryMethod
+    source = source_path.resolve()
+    try:
+        import json
+        for resource in resources:
+            path = resource.path.resolve()
+            if source == path or (resource.kind == "directory" and source.is_relative_to(path)):
+                raise ValueError("source_and_engine_state_overlap")
+        identity = json.dumps({"method": method.name, "version": method.implementation_version,
+            "resources": sorted((item.name, str(item.path.resolve()), item.kind) for item in resources)}, sort_keys=True)
+        journal = SQLiteSourceJournal(source, engine_name=identity, create=create_sources)
+        managed = ManagedMemoryMethod(method, journal)
+    except BaseException:
+        method.close()
+        raise
+    return BackendAssembly(managed, resources + (
+        StateResource("platform_sources", source, "file"),
+    ), management=management)
+
+
+def build_backend_runtime(assembly: BackendAssembly, *, clock=None) -> MemoryRuntime:
+    """结构不同的新引擎不能继承旧 SQL 自然纠错/历史/画像等能力。"""
+    if assembly.legacy_sqlite:
+        raise ValueError("旧引擎应使用 build_legacy_runtime。")
+    from longmemory.application.backend_commands import UnsupportedBackendCommands
+    sources = next((item.path for item in assembly.resources if item.name == "platform_sources"), None)
+    if sources is None:
+        raise ValueError("platform_sources_required")
+    return MemoryRuntime(sources, method=assembly.method, backend_assembly=assembly,
+                         memory_command_handler=UnsupportedBackendCommands(assembly.method),
                          clock=clock)
 
 

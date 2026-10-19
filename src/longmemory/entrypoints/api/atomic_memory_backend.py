@@ -923,7 +923,7 @@ class AtomicMemoryBackend:
                 "web_chat_archive_preserved", "existing_backups_preserved",
             )}, "wiped": True}
 
-    def correct(self, memory_id, corrected_content, expected_revision):
+    def correct(self, memory_id, corrected_content, expected_revision, *, source_event=None):
         """在一个 SQLite 事务中保存纠正来源、新事实和取代关系。"""
 
         with self._open_database(write_capability="correction") as connection:
@@ -936,8 +936,14 @@ class AtomicMemoryBackend:
             ):
                 raise MemoryAccessError("memory_changed")
             try:
+                from longmemory.core.conversation.models import ConversationMessage, MessageRole
                 result = service.correct_memory(
-                    MemoryId(memory_id), corrected_content
+                    MemoryId(memory_id), corrected_content,
+                    source_message=(ConversationMessage(
+                        MessageId(source_event.event_id), MessageRole(source_event.role),
+                        source_event.content, source_event.occurred_at,
+                    ) if source_event else None),
+                    occurred_at=source_event.occurred_at if source_event else None,
                 )
             except LookupError:
                 raise MemoryAccessError("memory_not_found", 404) from None

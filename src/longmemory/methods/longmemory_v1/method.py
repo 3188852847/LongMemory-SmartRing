@@ -163,6 +163,15 @@ class LongMemoryV1:
             self.connection.close()
             self._closed = True
 
+    def source_detail(self, event_id):
+        self._ensure_open()
+        message = self.conversation_store.get(MessageId(event_id))
+        if message is None:
+            raise LookupError("source_not_found")
+        return {"event_id": str(message.id), "role": message.role.value,
+                "content": message.content, "occurred_at": message.created_at.isoformat(),
+                "session_id": None, "state": "unknown", "attempt_id": None}
+
     def _ensure_open(self) -> None:
         if self._closed:
             raise RuntimeError("记忆方法已经关闭。")
