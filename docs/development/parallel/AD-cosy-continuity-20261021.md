@@ -159,3 +159,118 @@ RTF、最大/累计欠载、误抢话/续说取消、打断后最后旧声及新
 不能替代该矩阵或所有者设备体验，未通过仍 buffered。组合观测接线归 AI。
 
 公共文档清单/主题索引归整合会话同步，AD 不越界编辑；历史 ADR-0190 与 X 结果保留。
+
+## 第二阶段：无需下载的真实GPU评测衔接
+
+主会话后续要求继续取消/缓冲评测衔接，尚未批准任何GPU加载。本阶段只新增
+`scripts/development/cosyvoice/benchmark_ad_continuity.py`、
+`scripts/development/cosyvoice/benchmark_ad_client.py` 和
+`tests/unit/development/test_ad_cosy_benchmark.py`，并追加本记录；不编辑 X 的两个
+历史 benchmark、AG 加速模块、AI 接线或第一阶段服务/播放实现。
+
+只读核对 AG 提交 `e6e8db5c82775360b920c3888a104fc0d0242938` 的记录和能力接口。
+`probe(..., include_gpu=False)` 仅报告 blocked/needs_isolated_validation，不表示实例
+加速就绪。当前最小矩阵使用既有 torch fp16＋hidden-only 原模型，不安装 TensorRT、
+vLLM、ORT-GPU，不运行编译/导出，也不把 AG 的候选适配当日用热开关。
+
+### 可执行入口和矩阵
+
+从实际分配、已提交且干净的候选工作树执行；AI组合后将下面 `$benchRoot` 改为
+AI已审查的组合树。计划入口无GPU、无需收据、不访问声音档案或联网：
+
+```powershell
+$benchRoot = 'D:/03-项目/01-正式项目/智慧圆屏/local/worktrees/ad-cosy-continuity-20261021'
+$productionRoot = 'D:/03-项目/01-正式项目/智慧圆屏'
+& "$productionRoot/.venv/Scripts/python.exe" -B -X utf8 "$benchRoot/scripts/development/cosyvoice/benchmark_ad_continuity.py" --plan
+```
+
+真实执行前，主会话独立协调日用停稳、AG等GPU使用者退出、当前声音身份和恢复检查点，
+再创建真实JSON收据。AD不创建收据或自行停服。收据字段：
+
+| 字段 | 约束 |
+|---|---|
+| `schema_version` / `scope` | 整数1 / `ad-cosy-continuity` |
+| `window_id` | 主会话实际窗口标识，非空；不能用CPU fixture当授权 |
+| `checkout` / `candidate_commit` | 实际组合树绝对路径和当前完整HEAD，要求Git干净 |
+| `production_root` | 获准只读模型/声音资源所在主项目绝对路径 |
+| `exclusive_gpu` / `production_stopped` / `other_gpu_workers_stopped` | 均须主会话核实后设为true |
+| `expires_at_utc` | 主会话填写有时区的真实UTC截止；启动时至少覆盖max_seconds＋10秒 |
+| `max_seconds` | 60–480；程序不延长或自动取得窗口 |
+
+只有收到该真实收据后，主会话可在相同工作树运行：
+
+```powershell
+$receiptPath = '<主会话真实窗口收据的绝对路径>'
+$runOutput = "$benchRoot/data/test-tmp/ad-gpu-<真实窗口唯一标识>"
+& "$productionRoot/.venv/Scripts/python.exe" -B -X utf8 "$benchRoot/scripts/development/cosyvoice/benchmark_ad_continuity.py" --run --receipt $receiptPath --production-root $productionRoot --cosy-python "$productionRoot/local/runtime/CosyVoice/.venv/Scripts/python.exe" --output $runOutput --max-seconds 480
+```
+
+该命令是交接方案，**本阶段没有执行**。输出目录必须全新且位于候选树
+`data/test-tmp/` 下，拒绝覆盖。模型worker限现装独立Cosy Python3.10，Opus客户端
+限现装小智Python3.10；主Python仅管窗口和自有Job，不混装依赖。
+
+矩阵为两类现行自然段×buffered/adaptive×三个重复，共12个正常调用，按重复交替
+模式顺序，每个配对同种子、同声线、同参考音、同精度，关闭回复缓存。另有三种
+取消，每种随后在同一编码器执行一个正常新轮，共3对、6轮。模型构造、默认参考
+暖机和选中声线暖机另记，全部包含在480秒worker硬限内；主会话另留预检/收尾和
+日用恢复时间。全文已可用，不在该矩阵虚构LLM文字到达或ASR等待。
+
+### 不抢日用GPU和不写个人库
+
+父进程核对主会话收据、候选HEAD/干净状态、两个解释器路径，再执行只读
+`nvidia-smi --query-compute-apps`；存在任何计算进程就拒绝，不按名称结束它们。
+worker获准导入模型前再次核对收据、源码固定提交/干净状态与GPU空闲。
+这些检查不自动授予独占，仍须主会话在整个窗口禁止AG/日用等启动GPU工作。
+
+worker在收到管道许可前不加载模型。父进程先将其加入专属Windows Job，之后才
+发送收据和执行参数；模型、随机端口HTTP和CPU客户端均在该任务树内。到时或
+异常只清理自有Job，等其整树退出，写 `owned-job-cleanup.json`；加入Job失败则
+只结束刚创建、尚在等待许可的自有子进程。程序不调用日用停止/重启入口，
+日用恢复由主会话在确认自有GPU进程退出后按原服务所有权执行。
+
+服务只监听随机环回端口，拒绝全部日用端口。模型进程和客户端封住外部socket/DNS，
+启用HF离线，沿用现有ModelScope只读离线保护。所有可写缓存放在本次输出目录，
+WeText FST仅经现有相对ASCII路径只读使用；不创建联接、不回写外部源码/依赖。
+仅在真实窗口内读取既有选中声音，并在每次调用前后核对同一声音上下文摘要。
+构造的公共默认参考暖机与随后当前选中声线的暖机/实测分开记录；报告保存
+`voice_scope.selected_uses_default_voice` 与选中声线摘要。选中声线若不同，公共参考
+暖机结果不替代它的首声或质量验收；`selected_voice_quality_verified` 始终为false，
+直到所有者另行审听/实机验收。不会为得到更快数字切换声线。
+固定合成句和生成声音只写忽略的独立证据目录，不连接记忆SDK、个人数据库、
+真实学校模型、麦克风或设备；原始音频/日志/JSON不得提交Git。
+
+### 指标含义和放行边界
+
+- `rounds[].first_opus_ms`：首次可解码帧，可能包含前导静音；不是用户端首有效声音。
+- `first_energy_qualified_opus_ms`：至少5ms样本幅值≥200 PCM16的首帧，排除静音和
+  单点脉冲；仍未证明语义、声线质量或扬声器发声。未找到时保持null，不填0。
+- `audio_ms`、`opus_frames`、`total_ms`、`estimated_playback_end_ms`：分别为原生音频
+  时长、可播放帧数、客户端TTS调用墙钟、按到达曲线推算的播放结束；两种结束时间不混用。
+- `server_generation_rtf`：每自然段从服务请求开始到最后生成PCM的墙钟之和/原生
+  音频时长，包含先前块的传输背压；取消样本保持null，不以截短分母比较。
+- `client_tts_wall_rtf`：客户端TTS墙钟/接收音频时长，明确替代旧客户端歧义字段
+  `rtf`；`continuity[].client_receive_rtf` 另含读流/重采样/预取背压。
+- `estimated_supply_gap_ms` / `estimated_max_gap_ms`：累计/最大供给欠载；不是声卡测量。
+- `cancel_to_client_return_ms` / `server_cleanup_wait_ms` / `packets_after_cancel`：分别为
+  触发取消到本次客户端调用返回、随后健康轮询等待（50ms粒度）、触发后新增旧轮帧数。
+  它们不能相加冒充设备残音时长，不能收回已交付的帧。读线程退出和新轮完整性另查。
+
+报告按case/mode给样本数、中位/最大值，保留原始逐帧到达曲线、独立声音文件和
+清理摘要。`engine_status`始终needs_isolated_validation、自动放行false，成功跑完
+矩阵也不表示可以部署。连续性/音质退化保留buffered回退，由主会话及所有者另验。
+
+AI指出 `llm_first_output_ms` 可能由工具输出触发，本入口明确不使用它作为首文本；
+整链路另看 `model_first_text_ms` 和真实ASR话音结束时间。最终验收仍为所有者说完
+到首个有效回答声音，排除等待提示/推理内容，并观察连续性、误抢话、续说取消、
+插话残音与记忆一致性。该TTS-only基准既不测记忆也不能证明上述整链路通过。
+
+### 第二阶段CPU实际验证
+
+首次专属20项通过（4.42s）：收据边界、GPU占用拒绝、配对矩阵、静音/脉冲门、
+五个真实随机环回HTTP/Opus调用（buffered/adaptive与三种取消）。随后增加父Job
+许可顺序、超时清理、加入失败清理与无收据worker拒绝，连同第一阶段AD用例
+54项通过（11.89s）。全部为CPU/mock/合成正弦波，未运行真实GPU worker。
+最终字段/声线范围补充后专属 **25项通过（4.62s）**，两个新增脚本通过Python3.10
+语法解析，`git diff --check`通过。不改写第一阶段254项的范围。
+
+公共清单由AI接力增加本阶段两个新脚本及专属测试source关联；AD未越界编辑清单。
