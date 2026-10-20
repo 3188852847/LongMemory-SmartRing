@@ -545,7 +545,7 @@
         "tests/integration/test_hy_memory_management_rpc.py",
         "tests/fixtures/hy_memory_management_audit.py",
         "tests/fixtures/hy_release_http_server.py",
-        "web/react-chat/e2e/hy-release-live.spec.ts",
+        "web/react-chat/e2e-live/hy-release-live.spec.ts",
         "web/react-chat/playwright.z-live.config.ts"
       ],
       "related": [

@@ -2,14 +2,10 @@ import {defineConfig, devices} from '@playwright/test';
 import {mkdirSync} from 'node:fs';
 import {dirname, resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {testPort} from '../../scripts/ci/browser_test_ports.mjs';
 
 const repository=resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const python=process.env.SMART_RING_TEST_PYTHON || resolve(repository,'.venv/Scripts/python.exe');
-function testPort(value:string|undefined,fallback:number) {
-  const port=Number(value ?? fallback);
-  if(!Number.isInteger(port)||port<1024||port>65535||[8767,8000,8003].includes(port))throw new Error('需要独立的合成测试端口');
-  return port;
-}
 const port=testPort(process.env.SMART_RING_TEST_PORT,18777);
 const observationPort=testPort(process.env.SMART_RING_OBSERVABILITY_TEST_PORT,18892);
 if(port===observationPort)throw new Error('普通主机与观测主机必须使用不同端口');
