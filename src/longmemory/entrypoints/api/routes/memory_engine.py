@@ -26,7 +26,8 @@ def _json(value):
     return value
 
 
-def register_memory_engine_routes(app, runtime, *, allow_delete=False, allow_correction=False):
+def register_memory_engine_routes(app, runtime, *, allow_delete=False, allow_correction=False,
+                                  snapshot_runtime=None):
     async def invoke(function, *args, **kwargs):
         try:
             return web.json_response(_json(await asyncio.to_thread(function, *args, **kwargs)))
@@ -140,6 +141,25 @@ def register_memory_engine_routes(app, runtime, *, allow_delete=False, allow_cor
             raise web.HTTPBadRequest()
         return await invoke(lambda: invoke_hy_management(selected(), "profile"))
 
+    async def hy_mechanisms(request):
+        if request.query or request.can_read_body:
+            raise web.HTTPBadRequest()
+        try:
+            def read():
+                # 常规selected可懒创建Runtime；观察只接受显式peek或已存在对象。
+                if snapshot_runtime is not None:
+                    target = snapshot_runtime()
+                else:
+                    target = runtime if not callable(runtime) else None
+                if target is None:
+                    raise MemoryAccessError("memory_runtime_unavailable", 503)
+                return invoke_hy_management(target, "mechanisms")
+            return await invoke(read)
+        except RuntimeError as error:
+            # 关闭等运行异常只给稳定错误，不把外部异常正文传给浏览器。
+            code = "hy_mechanisms_busy" if str(error) == "hy_mechanisms_busy" else "hy_mechanisms_unavailable"
+            return web.json_response({"error": code}, status=503)
+
     async def hy_history(request):
         if request.query:
             raise web.HTTPBadRequest()
@@ -194,6 +214,7 @@ def register_memory_engine_routes(app, runtime, *, allow_delete=False, allow_cor
     app.router.add_get("/api/memory-engine/sources/{event_id}", source, allow_head=False)
     app.router.add_post("/api/memory-engine/sources/{event_id}/retry", retry)
     app.router.add_get("/api/memory-engine/hy/workspace", hy_workspace, allow_head=False)
+    app.router.add_get("/api/memory-engine/hy/mechanisms", hy_mechanisms, allow_head=False)
     app.router.add_get("/api/memory-engine/hy/profile", hy_profile, allow_head=False)
     app.router.add_get("/api/memory-engine/hy/operations", hy_operations, allow_head=False)
     app.router.add_get("/api/memory-engine/hy/items/{item_id}/history", hy_history, allow_head=False)

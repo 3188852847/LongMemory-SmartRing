@@ -181,8 +181,14 @@ def create_app(*, port=8765, bridge=None, web_root=None, database=None, allow_me
             selected.backend_assembly = replace(selected.backend_assembly,
                 management=LegacyMemoryAdministration(memory_backend))
         return selected
+    def existing_memory_runtime():
+        return runtime or (getattr(chat_backend, "_runtime", None) if chat_backend else None)
     register_memory_engine_routes(app, selected_memory_runtime, allow_delete=allow_memory_delete,
-                                  allow_correction=allow_memory_correction)
+                                  allow_correction=allow_memory_correction,
+                                  snapshot_runtime=existing_memory_runtime)
+    from .routes.memory_identity import register_memory_identity_route
+    register_memory_identity_route(app, existing_memory_runtime,
+        legacy_configured=legacy_sqlite and database is not None)
 
     async def scheduled_tick():
         if operation_lock.locked():

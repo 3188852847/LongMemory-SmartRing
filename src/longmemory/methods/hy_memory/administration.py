@@ -165,7 +165,16 @@ class HyAdministration:
             return {"items": [dict(row) for row in rows], "total": total, "limit": limit, "offset": offset}
 
     def extension(self, operation, **arguments):
-        with self.method._lock:
+        if not self.method._lock.acquire(blocking=operation != "mechanisms"):
+            raise RuntimeError("hy_mechanisms_busy")
+        try:
+            if operation == "mechanisms":
+                if arguments:
+                    raise ValueError("hy_mechanisms_arguments_invalid")
+                if self.method._closed:
+                    raise RuntimeError("hy_mechanisms_unavailable")
+                from .mechanisms import describe_mechanisms
+                return describe_mechanisms(self.method)
             if operation == "workspace":
                 protocol = self._protocol()
                 return {"protocol": 1, "profile": bool(protocol.get("profile") and protocol.get("exclusive_user_profile")),
@@ -212,6 +221,8 @@ class HyAdministration:
             if operation in {"correct", "delete"}:
                 return self._mutate(operation, **arguments)
             raise UnsupportedCapabilityError("hy_management_operation_unsupported")
+        finally:
+            self.method._lock.release()
 
     def _mutate(self, action, *, item_id, request_id, expected_revision, source, content=None):
         caps = self._protocol()

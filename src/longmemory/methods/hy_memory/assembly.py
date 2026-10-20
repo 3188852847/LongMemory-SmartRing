@@ -138,6 +138,8 @@ def assemble_hy_backend(*, settings, state_directory, source_path, create=False,
             state.release()
             raise
     engine = HyMemoryMethod(settings=settings, client_factory=factory)
+    # 只记录可信标准装配声明，不探测worker、不将自定义factory当作标准SDK。
+    engine._mechanism_profile = "standard_worker" if client_factory is None else None
     assembly = assemble_backend(method=engine, resources=(StateResource("hy_state", root, "directory"),),
         source_path=source, management=HyAdministration(engine), create_sources=create_sources)
     try:

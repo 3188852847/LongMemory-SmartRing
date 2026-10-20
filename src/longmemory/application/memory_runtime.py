@@ -767,9 +767,14 @@ class MemoryRuntime:
     def administer_extension(self, namespace, operation, **arguments):
         """专属管理也经过统一串行和来源守卫，不能从HTTP任意调用方法。"""
         from longmemory.methods.contracts import UnsupportedCapabilityError
-        allowed = {"workspace", "profile", "history", "operations", "correct", "delete"}
-        with self._lock:
+        allowed = {"workspace", "profile", "history", "operations", "correct", "delete", "mechanisms"}
+        # 仪表盘读取不能排在长模型/写入操作之后；未取得一致快照就明确busy。
+        if not self._lock.acquire(blocking=operation != "mechanisms"):
+            raise RuntimeError("hy_mechanisms_busy")
+        try:
             self._ensure_open()
+            if operation == "mechanisms" and self._closing:
+                raise RuntimeError("hy_mechanisms_unavailable")
             assembly = self.backend_assembly
             admin = assembly.management if assembly else None
             if (namespace != "hy_memory" or operation not in allowed or self.legacy_sqlite
@@ -802,7 +807,14 @@ class MemoryRuntime:
                         datetime.fromisoformat(previous["occurred_at"]), previous["session_id"])
                 self._method.archive(source)
                 arguments["source"] = source
-            return admin.extension(operation, **arguments)
+            result = admin.extension(operation, **arguments)
+            if operation == "mechanisms":
+                # status()会过期处理圆屏账本；展示只观察当前内存门，不触碰持久状态。
+                result = {**result, "runtime": {**result["runtime"],
+                    "write_enabled": self._write_enabled, "use_enabled": self._use_enabled}}
+            return result
+        finally:
+            self._lock.release()
 
     def source_detail(self, event_id):
         with self._lock:
@@ -822,6 +834,21 @@ class MemoryRuntime:
             if retry is None:
                 raise ValueError("source_retry_unsupported")
             return retry(event_id, expected_attempt_id=expected_attempt_id)
+
+    def identity(self) -> dict:
+        """全站导航身份：只读内存，不初始化方法、不刷新账本或等模型锁。"""
+        if not self._lock.acquire(blocking=False):
+            raise RuntimeError("memory_identity_busy")
+        try:
+            self._ensure_open()
+            if self._closing:
+                raise RuntimeError("memory_identity_unavailable")
+            return {"schema_version": 1, "configured": True,
+                    "method": self._method.name,
+                    "representation": "atomic_fact" if self.legacy_sqlite else "method_defined",
+                    "legacy_sqlite": self.legacy_sqlite, "state": "available"}
+        finally:
+            self._lock.release()
 
     def status(self) -> dict:
         with self._lock:
