@@ -33,7 +33,8 @@
       "related": [
         "docs/adr/0190-cosyvoice-continuous-audio-delivery.md",
         "docs/adr/0166-cosyvoice-measured-runtime-optimization.md",
-        "docs/guides/语音等待提示与首答时长-20261020.md"
+        "docs/guides/语音等待提示与首答时长-20261020.md",
+        "docs/development/parallel/Z-low-latency-review-20261020.md"
       ],
       "tags": [
         "CosyVoice",
@@ -74,7 +75,8 @@
       ],
       "related": [
         "docs/adr/0191-hy-short-input-and-owned-provider-session.md",
-        "docs/development/parallel/V-voice-observation-20261020.md"
+        "docs/development/parallel/V-voice-observation-20261020.md",
+        "docs/development/parallel/Z-low-latency-review-20261020.md"
       ],
       "tags": [
         "Hy-Memory",
@@ -6059,6 +6061,31 @@
         "等待提示",
         "首答时长",
         "组合审查"
+      ]
+    },
+    {
+      "path": "docs/development/parallel/Z-low-latency-review-20261020.md",
+      "title": "Z：Memory 与 Cosy 低延迟组合审查",
+      "status": "reference",
+      "basis": "精确V/X组合、三项P2接力及独立复验、冻结测量重算和两源码管理回执/校园接力；不替代日用性能或设备验收",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-20",
+        "scope": "冻结提交与合成SDK/CPU/Opus/真实Windows检查，清单冲突保留双方；最终干净HEAD的管理工具实际结果另存忽略交接收据，校园和设备仍待X/所有者",
+        "evidence": [
+          "docs/development/parallel/V-memory-low-latency-20261020.md",
+          "docs/development/parallel/X-cosy-streaming-20261020.md",
+          "tests/integration/test_hy_memory_management_rpc.py",
+          "tests/integration/test_hy_release_management.py",
+          "tests/unit/development/test_cosyvoice_unadapted_cleanup.py",
+          "tests/unit/development/test_hy_windows_owned_processes.py"
+        ]
+      },
+      "tags": [
+        "Z",
+        "低延迟",
+        "组合审查",
+        "管理回执"
       ]
     }
   ],
