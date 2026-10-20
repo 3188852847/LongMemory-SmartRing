@@ -113,7 +113,7 @@ def validate_result(result, operation, layer, *, limit=20):
             raise HyResponseError("hy_layer_data_invalid_semantics")
         if provenance:
             value = record["provenance"]
-            if (layer not in LAYERS[2:5] or not isinstance(value,dict)
+            if (layer not in (LAYERS[0],*LAYERS[2:5],LAYERS[7]) or not isinstance(value,dict)
                     or set(value)!={"status","semantic_source_complete","dependency_basis","injection_allowed"}
                     or value["status"] not in {"verbatim_user","explicit_correction","model_inference_unverified"}
                     or value["dependency_basis"] not in {"explicit_correction","scope_context_envelope","legacy_unobserved","verbatim_current_input","raw_exact_match"}
@@ -282,6 +282,10 @@ class LayerDataRPC:
         item["source_event_ids"] = list(dict.fromkeys(s for ids in sources for s in ids)) if all(ids is not None for ids in sources) else None
         if item["source_event_ids"] is not None and len(item["source_event_ids"]) > 16:
             item["source_event_ids"] = None
+        provenance=getattr(self.budget,"provenance",None)
+        if provenance is not None:
+            # 聚合完整性必须覆盖全部存储版本；单字段/链头来源不能代表全画像。
+            item["provenance"]=provenance.profile_description(nodes)
         return item, [_record(row, summary=True) for row in rows], None
 
     async def _execute(self, operation, arguments):
@@ -318,7 +322,7 @@ class LayerDataRPC:
             provenance = getattr(self.budget,"provenance",None)
             async def project(row, *, detail=False):
                 item = self._project(row,detail=detail)
-                if provenance is not None and layer in LAYERS[2:5]:
+                if provenance is not None and layer in (*LAYERS[2:5],LAYERS[7]):
                     item["provenance"] = await provenance.describe(self.client._vector_store._payload_to_node(row))
                 return item
             if detail:
@@ -382,7 +386,7 @@ class LayerDataRPC:
                 payload[key] = value.timestamp() if value is not None else None
             item = _record(payload, detail=detail)
             item.update(semantic_kind="model_inference", execution_authorized=False,
-                derivation_state=state, evidence_memory_ids=evidence_ids, updated_at=_time(payload["gmt_modified"]))
+                derivation_state=state if meta and evidence_ids else "isolated", evidence_memory_ids=evidence_ids, updated_at=_time(payload["gmt_modified"]))
             projected.append(item)
         result.update(coverage="graph_complete", reason_code="schema_injection_isolated" if state == "isolated" else None,
             data_state="present" if projected else "unknown")

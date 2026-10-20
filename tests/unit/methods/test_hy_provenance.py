@@ -3,8 +3,9 @@
 import asyncio
 from types import SimpleNamespace as NS
 import sqlite3
+import pytest
 
-from longmemory.methods.hy_memory.provenance import ProvenanceGuard, INFERENCE_PREFIX
+from longmemory.methods.hy_memory.provenance import ProvenanceGuard, INFERENCE_PREFIX, INTENTION_INFERENCE_PREFIX
 from longmemory.methods.hy_memory.sdk_bridge import SOURCE_NAMESPACE
 
 
@@ -117,4 +118,77 @@ def test_correction_requires_completed_audit_and_exact_new_hash(tmp_path):
         assert "source:old" not in capture[0]
         literal.content="未经核验的其他内容。"
         assert not await guard.allowed(literal)
+    asyncio.run(run())
+
+
+def test_batch_capture_uses_one_ledger_connection_and_keeps_scope_bound(tmp_path,monkeypatch):
+    async def run():
+        store,_,guard,_,_=setup(tmp_path)
+        for i in range(1000):
+            item=node("batch-"+str(i),"合成概括"+str(i),source="event-"+str(i))
+            store.nodes[item.node_id]=item
+        original=sqlite3.connect
+        connects=[]
+        def connect(*args,**kwargs):
+            connects.append(args[0])
+            return original(*args,**kwargs)
+        monkeypatch.setattr(sqlite3,"connect",connect)
+        state=await guard.begin_add({"request_id":"next","data":[{"role":"user","content":"下一条。"}]})
+        assert len(connects)==1
+        assert all("node:batch-"+str(i) in state[0] and "source:event-"+str(i) in state[0] for i in range(1000))
+        assert "legacy:unverified" in state[0]
+        assert guard.diagnostics()["node_count"]==1005
+        from longmemory.methods.hy_memory import provenance
+        monkeypatch.setattr(provenance,"LIMIT",1000)
+        with pytest.raises(ValueError,match="context_envelope_unproven"):
+            await guard.begin_add({"request_id":"over","data":[]})
+        assert len(connects)==1  # 超过上限先拒绝，不提取/落库/新开账本。
+    asyncio.run(run())
+
+
+def test_direct_dependency_edges_keep_transitive_invalidation_without_flattening(tmp_path):
+    async def run():
+        store,_,guard,literal,_=setup(tmp_path)
+        store.nodes.pop("legacy")
+        for name in ("b","c"):
+            state=await guard.begin_add({"request_id":name,"data":[{"role":"user","content":"另一条输入"+name}]})
+            token=guard.capture.set(state)
+            try:
+                await store.upsert(node(name,"模型生成"+name,source=name))
+            finally:
+                guard.end_add(token)
+            if name=="b":
+                store.nodes.pop("raw");store.nodes.pop("quote")
+        assert "source:old" not in state[0] and "node:b" in state[0]
+        guard.invalidate({"memory_id":"quote","meta":literal.custom["meta"]},"delete")
+        assert not await guard.allowed(store.nodes["b"]) and not await guard.allowed(store.nodes["c"])
+    asyncio.run(run())
+
+
+def test_unverified_intention_and_empty_schema_keep_explicit_origin_warning(tmp_path):
+    async def run():
+        _,_,guard,_,_=setup(tmp_path)
+        intention=node("intention","未来安排",layer="l7_intention",source="future")
+        projected=await guard.project_intention(intention,intention.content)
+        assert projected.startswith(INTENTION_INFERENCE_PREFIX)
+        assert await guard.project_intention(intention,projected)==projected
+        assert "语义来源尚未证实完整" in await guard.project_schema([],"无证据的模型输出")
+        profile=node("profile","name=甲",layer="l0_basic_info")
+        profile.agent_id="";profile.source="default"
+        status=guard.profile_description([profile])
+        assert status["semantic_source_complete"] is False and status["status"]=="model_inference_unverified"
+    asyncio.run(run())
+
+
+def test_snapshot_admission_matches_single_record_gate_before_and_after_management(tmp_path):
+    async def run():
+        store,_,guard,literal,_=setup(tmp_path)
+        for managed in (False,True):
+            if managed:
+                guard.invalidate({"memory_id":"quote","meta":literal.custom["meta"]},"delete")
+            nodes=list(store.nodes.values())
+            snapshot=guard.ledger_snapshot(nodes)
+            by_id={n.node_id:n for n in nodes}
+            for n in nodes:
+                assert guard.allowed_from(n,snapshot,by_id)==await guard.allowed(n)
     asyncio.run(run())

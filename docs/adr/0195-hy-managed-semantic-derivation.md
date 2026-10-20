@@ -76,6 +76,16 @@ worker从原LLM地址推导同origin固定 `/hy-background/v1` 别名，不接�
 
 不以公共HTTP/provider层禁初始化替代底层约束。`HyMemoryMethod.sdk_call` 对semantic_status/semantic_task采用非阻塞锁；锁忙抛SemanticBusy `hy_semantic_status_busy`，真实未初始化或已关闭对象抛HyResponseError `hy_semantic_unavailable`，在wait_until_ready之前拒绝。HyAdministration同样经此边界，不会为读状态启动factory/SDK/worker。语义写操作的既有显式初始化行为保持原样。主会话/AI应把这两个稳定原因码映射为busy/unavailable，不补启动引擎。
 
+### 聚合/意图来源标记与账本批量快照补充
+
+AI独立回放指出92d40492只为normal添加来源不足标签，L0和L7仍可能只显示“当前画像/未来意图”。现分别在正式与候选相同的read_profile/read_intentions投影中补“语义来源尚未证实完整”；不把未来类型标签当作来源证明。L0聚合与L7逐层DTO复用原四字段可选provenance，不新增status枚举；L0始终保守为model_inference_unverified、semantic_source_complete=false，并检查全部存储版本的可注入性，不因部分字段有来源而宣布全画像完整。L7完整逐字用户输入/RAW匹配才能称为原话，其余保持未证实。无可重读证据的L6不注入，逐层节点也标isolated；空证据不能被helper默认为来源完整。
+
+原begin_add逐节点SQLite读取在10000节点的纯本地对照中达到约2.8秒，可能进入网页同步prepare_user，因此不能作为可接受的前台成本。本地来源门改为一次账本读事务，按每块900参数批量读取相关records/retired；相关correction审计至多再开一个只读连接、分块读取并取每项最新审计。之后在内存完成范围、摘要、退出来源、原话和纠正状态判断，保留10001结果探测/10000处理上限；超界仍拒绝，不搬进recall。
+
+直接潜在依赖保持，传递失效由持久节点边负责，不把每个祖先包络重复复制到新节点；未观测旧概括额外携带legacy未证实屏障，任意管理都会使相关派生链失效。它不作为语义引用或平台来源暴露。diagnostics.provenance_capture分列node_count、list_ms、ledger_ms、projection_ms、elapsed_ms、ledger/audit连接及查询次数、node_limit，无原文/模型输出。
+
+同SSD/工作树/解释器，固定92d40492旧代码与新门在1000、10000个合成未跟踪L2上各运行三次；连接数3N→1，最终复测中位数分别338.234→7.668 ms、2812.197→49.217 ms。原直接依赖集合均为新集合子集，新增项仅为保守旧概括屏障。完整数值及最终guard文件摘要见[成本收据](../development/parallel/AB-provenance-cost-20261021.json)。对照没有导入SDK/模型，不包含Chroma枚举、提取、最终回答或网页延后边界，不能称为端到端延迟；AI另负责公共回答正确延后提取。本AB未改ChatBackend/公共Runtime。
+
 真实 SDK、Chroma、Kuzu 与新合成库验证了原生归纳、L7 System1 提取、来源、过期、任务重复/重开、后台召回并行和管理派生隔离。模型使用禁网替身；真实模型质量、真实学校调用、日用库向前启用、完整 HTTP/前端组合及圆屏声音/打断均没有由本分支验收。具体命令、数量和接力事项以 AB 记录为准。
 
 后续补充：2026-10-21主会话另行批准的单次真实校园原生验证已执行，结果见 [AB校园记录](../development/parallel/AB-campus-l6-l7-20261021.md)。4次学校LLM、15次总HTTP、16.407秒，实际产出L6/L7各1条；同时发现新增L2概括继承既有上下文但仅标当前输入来源的语义限制。该补充不改写上面禁网阶段的证据，也不代表长期质量、最终AI组合、生产部署或设备验收通过；无需为后续指纹变化重复真实请求。

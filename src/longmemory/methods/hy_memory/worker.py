@@ -85,6 +85,7 @@ class RequestBudget:
                 "management_llm_attempts_blocked":self.management_llm_attempts_blocked,
                 "semantic_local_prepared_ms":getattr(self,"semantic_local_prepared_ms",None),
                 "background_lane":self.background.snapshot(),
+                "provenance_capture":self.provenance.diagnostics() if hasattr(self,'provenance') else None,
                 "hard_limit": {"external_requests": self.settings.max_external_requests},
                 "token_and_currency_limits_enforced": False}
 

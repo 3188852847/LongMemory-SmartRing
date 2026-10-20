@@ -380,14 +380,16 @@ async def read_profile(client, settings, budget):
     provenance = getattr(budget,"provenance",None)
     if provenance is not None:
         # L0原生聚合包含所有历史版本；不能仅隐藏一版后仍返回残留聚合。
-        rows = await provenance.list(user_id=settings.user_id,limit=10001,with_vectors=False,
-            layers=["l0_basic_info"])
-        if len(rows)>10000 or not all([await provenance.allowed(node) for node in rows]):
+        if not item["provenance"]["injection_allowed"]:
             return {"profile":None}
     # 字段及来源均由固定SDK纯合并函数/逐版本同范围读取取得；这里仅适配
     # 既有profile结果形状，不调用会扫描图目录/等待write loop的公开聚合API。
     sources = item["source_event_ids"]
-    return {"profile": {"memory_id": item["native_id"], "content": item["content"], "layer": "l0_basic_info",
+    content=item["content"]
+    if provenance is not None and not item["provenance"]["semantic_source_complete"]:
+        from .provenance import PROFILE_INFERENCE_PREFIX
+        content=PROFILE_INFERENCE_PREFIX+content
+    return {"profile": {"memory_id": item["native_id"], "content": content, "layer": "l0_basic_info",
         "basic_info": item["basic_info"], "field_sources": item["field_sources"],
         "meta": [{"namespace": SOURCE_NAMESPACE, "source_event_ids": sources}] if sources else None}}
 
@@ -408,6 +410,8 @@ async def read_intentions(client, settings, embedding, *, limit=3):
             if hit["node_id"] in embeddings:
                 hit["node"].embedding = list(embeddings[hit["node_id"]])
     kept, _ = _partition_duplicates(survivors, _get_dedup_threshold())
-    return [{"memory_id": hit["node_id"], "content": hit["node"].content,
+    provenance=getattr(client,"_platform_provenance",None)
+    return [{"memory_id": hit["node_id"], "content": (await provenance.project_intention(hit["node"],hit["node"].content)
+            if provenance is not None else hit["node"].content),
         "layer": "l7_intention", "score": hit.get("score"),
         "meta": (hit["node"].custom or {}).get("meta")} for hit in kept[:limit]]

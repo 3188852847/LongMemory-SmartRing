@@ -1,0 +1,175 @@
+{
+  "baseline_commit": "92d40492",
+  "baseline_blob_sha256": "5edafd4ebb23ea2a945dacb687c3e333ea54131c7b5fc1694230a48aa78621f1",
+  "scope": "guard.begin_add only; synthetic untracked L2; same SSD/worktree/interpreter; no SDK/vector store/model load",
+  "repetitions": 3,
+  "new_school_calls": 0,
+  "sdk_imported": false,
+  "cases": [
+    {
+      "node_count": 1000,
+      "baseline_median_ms": 338.234,
+      "batched_median_ms": 7.668,
+      "samples": {
+        "baseline": [
+          {
+            "elapsed_ms": 336.996,
+            "sqlite_connections": 3000,
+            "dependency_count": 2001,
+            "stages": null
+          },
+          {
+            "elapsed_ms": 339.656,
+            "sqlite_connections": 3000,
+            "dependency_count": 2001,
+            "stages": null
+          },
+          {
+            "elapsed_ms": 338.234,
+            "sqlite_connections": 3000,
+            "dependency_count": 2001,
+            "stages": null
+          }
+        ],
+        "batched": [
+          {
+            "elapsed_ms": 7.668,
+            "sqlite_connections": 1,
+            "dependency_count": 2002,
+            "stages": {
+              "node_count": 1000,
+              "list_ms": 0.003600027412176132,
+              "ledger_ms": 3.6999000003561378,
+              "projection_ms": 3.007399966008961,
+              "elapsed_ms": 6.711099995300174,
+              "ledger_connections": 1,
+              "audit_connections": 0,
+              "ledger_queries": 5,
+              "audit_queries": 0,
+              "node_limit": 10000
+            }
+          },
+          {
+            "elapsed_ms": 7.523,
+            "sqlite_connections": 1,
+            "dependency_count": 2002,
+            "stages": {
+              "node_count": 1000,
+              "list_ms": 0.003500026650726795,
+              "ledger_ms": 3.703000023961067,
+              "projection_ms": 2.980799996294081,
+              "elapsed_ms": 6.687600049190223,
+              "ledger_connections": 1,
+              "audit_connections": 0,
+              "ledger_queries": 5,
+              "audit_queries": 0,
+              "node_limit": 10000
+            }
+          },
+          {
+            "elapsed_ms": 7.814,
+            "sqlite_connections": 1,
+            "dependency_count": 2002,
+            "stages": {
+              "node_count": 1000,
+              "list_ms": 0.0027999049052596092,
+              "ledger_ms": 4.0284000569954515,
+              "projection_ms": 2.97220004722476,
+              "elapsed_ms": 7.003700011409819,
+              "ledger_connections": 1,
+              "audit_connections": 0,
+              "ledger_queries": 5,
+              "audit_queries": 0,
+              "node_limit": 10000
+            }
+          }
+        ]
+      },
+      "old_direct_dependency_set_preserved": true,
+      "additional_conservative_legacy_barrier": true
+    },
+    {
+      "node_count": 10000,
+      "baseline_median_ms": 2812.197,
+      "batched_median_ms": 49.217,
+      "samples": {
+        "baseline": [
+          {
+            "elapsed_ms": 2937.484,
+            "sqlite_connections": 30000,
+            "dependency_count": 20001,
+            "stages": null
+          },
+          {
+            "elapsed_ms": 2812.197,
+            "sqlite_connections": 30000,
+            "dependency_count": 20001,
+            "stages": null
+          },
+          {
+            "elapsed_ms": 2781.496,
+            "sqlite_connections": 30000,
+            "dependency_count": 20001,
+            "stages": null
+          }
+        ],
+        "batched": [
+          {
+            "elapsed_ms": 51.188,
+            "sqlite_connections": 1,
+            "dependency_count": 20002,
+            "stages": {
+              "node_count": 10000,
+              "list_ms": 0.002100015990436077,
+              "ledger_ms": 19.904499989934266,
+              "projection_ms": 30.15080001205206,
+              "elapsed_ms": 50.05760001949966,
+              "ledger_connections": 1,
+              "audit_connections": 0,
+              "ledger_queries": 25,
+              "audit_queries": 0,
+              "node_limit": 10000
+            }
+          },
+          {
+            "elapsed_ms": 49.217,
+            "sqlite_connections": 1,
+            "dependency_count": 20002,
+            "stages": {
+              "node_count": 10000,
+              "list_ms": 0.002399901859462261,
+              "ledger_ms": 20.1678000157699,
+              "projection_ms": 27.92980009689927,
+              "elapsed_ms": 48.10020001605153,
+              "ledger_connections": 1,
+              "audit_connections": 0,
+              "ledger_queries": 25,
+              "audit_queries": 0,
+              "node_limit": 10000
+            }
+          },
+          {
+            "elapsed_ms": 48.688,
+            "sqlite_connections": 1,
+            "dependency_count": 20002,
+            "stages": {
+              "node_count": 10000,
+              "list_ms": 0.001999898813664913,
+              "ledger_ms": 19.820000045001507,
+              "projection_ms": 27.725800056941807,
+              "elapsed_ms": 47.54790000151843,
+              "ledger_connections": 1,
+              "audit_connections": 0,
+              "ledger_queries": 25,
+              "audit_queries": 0,
+              "node_limit": 10000
+            }
+          }
+        ]
+      },
+      "old_direct_dependency_set_preserved": true,
+      "additional_conservative_legacy_barrier": true
+    }
+  ],
+  "batched_guard_sha256": "c9a73aea32a03f596373df2e492300889ec2483e49d2b094f434af7ed83635d8"
+}

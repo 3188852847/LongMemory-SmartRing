@@ -115,6 +115,31 @@ def test_real_native_evolve_graph_content_sources_restart_and_readonly_intention
         open_backend(tmp_path,create=False)
 
 
+def test_real_unverified_profile_intention_formal_candidate_labels_and_batch_capture_diagnostics(tmp_path):
+    assembly=open_backend(tmp_path,scenario="projection")
+    engine=assembly.method.engine
+    try:
+        formal=engine.recall("检查资料")
+        profile=next(row for row in formal.retrieved if row.item_id=="ab-profile")
+        intention=next(row for row in formal.retrieved if row.item_id=="ab-intention-live")
+        assert "当前画像由模型提取／聚合；语义来源尚未证实完整" in profile.content
+        assert "未来意图由模型提取；语义来源尚未证实完整" in intention.content
+        snapshot=engine.candidate_snapshot(query_embedding=[1.0]+[0.0]*7,limit=10)
+        for channel in ("profile","proactive"):
+            assert all("语义来源尚未证实完整" in row["content"] for row in snapshot["items"] if row["channel"]==channel)
+        assert layer(engine,"l0_basic_info")["items"][0]["provenance"]["semantic_source_complete"] is False
+        assert all(row["provenance"]["semantic_source_complete"] is False for row in layer(engine,"l7_intention")["items"])
+        event=MemoryEvent("ab-batch-capture","user","独立合成输入。",datetime.now(UTC),"ab-batch")
+        assert assembly.method.observe(event).processing_status=="completed"
+        capture=engine.sdk_call("diagnostics")["provenance_capture"]
+        assert capture["node_count"]==11 and capture["node_limit"]==10000
+        assert capture["ledger_connections"]==1 and capture["audit_connections"]==0
+        assert all(capture[key]>=0 for key in ("list_ms","ledger_ms","projection_ms","elapsed_ms"))
+        wait_task(engine,"add:"+hashlib.sha256(event.event_id.encode()).hexdigest())
+    finally:
+        assembly.method.close()
+
+
 @pytest.mark.parametrize("scenario", ["slow", "blocked_write_loop"])
 def test_native_background_does_not_hold_foreground_rpc_and_correction_isolates_old_derivatives(tmp_path,scenario):
     assembly = open_backend(tmp_path,scenario=scenario)
