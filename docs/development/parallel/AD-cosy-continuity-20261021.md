@@ -189,11 +189,13 @@ $productionRoot = 'D:/03-项目/01-正式项目/智慧圆屏'
 
 | 字段 | 约束 |
 |---|---|
-| `schema_version` / `scope` | 整数1 / `ad-cosy-continuity` |
+| `schema_version` / `scope` | 整数2 / `ad-cosy-project-model-window`；取代旧v1物理独占含义，见下方WDDM修复 |
 | `window_id` | 主会话实际窗口标识，非空；不能用CPU fixture当授权 |
 | `checkout` / `candidate_commit` | 实际组合树绝对路径和当前完整HEAD，要求Git干净 |
 | `production_root` | 获准只读模型/声音资源所在主项目绝对路径 |
-| `exclusive_gpu` / `production_stopped` / `other_gpu_workers_stopped` | 均须主会话核实后设为true |
+| `project_model_window` / `production_stopped` / `other_gpu_model_workers_stopped` | 均须主会话核实后设为true |
+| `physical_gpu_exclusive` | 必须false，Windows桌面仍共享 |
+| `shared_desktop_baseline` | 主会话逐项审查的精确身份，不是程序名白名单；字段见下文 |
 | `expires_at_utc` | 主会话填写有时区的真实UTC截止；启动时至少覆盖max_seconds＋10秒 |
 | `max_seconds` | 60–480；程序不延长或自动取得窗口 |
 
@@ -217,10 +219,10 @@ $runOutput = "$benchRoot/data/test-tmp/ad-gpu-<真实窗口唯一标识>"
 
 ### 不抢日用GPU和不写个人库
 
-父进程核对主会话收据、候选HEAD/干净状态、两个解释器路径，再执行只读
-`nvidia-smi --query-compute-apps`；存在任何计算进程就拒绝，不按名称结束它们。
-worker获准导入模型前再次核对收据、源码固定提交/干净状态与GPU空闲。
-这些检查不自动授予独占，仍须主会话在整个窗口禁止AG/日用等启动GPU工作。
+父进程核对主会话v2收据、候选HEAD/干净状态、两个解释器路径，再通过下文WDDM
+身份门拒绝未批准/未知背景及其他模型进程；不按名称结束进程。worker导入模型前
+再次核对，每个用例前后记录检查点；这些采样不证明物理GPU独占或没有背景计算，
+仍须主会话在整个项目模型窗口禁止AG/日用等启动模型工作。
 
 worker在收到管道许可前不加载模型。父进程先将其加入专属Windows Job，之后才
 发送收据和执行参数；模型、随机端口HTTP和CPU客户端均在该任务树内。到时或
@@ -274,3 +276,92 @@ AI指出 `llm_first_output_ms` 可能由工具输出触发，本入口明确不�
 语法解析，`git diff --check`通过。不改写第一阶段254项的范围。
 
 公共清单由AI接力增加本阶段两个新脚本及专属测试source关联；AD未越界编辑清单。
+
+## WDDM预检修复：项目模型窗口与经审查的共享桌面基线
+
+主会话真实预检发现旧 `ensure_gpu_idle()` 把compute-apps CSV非空一律拒绝，
+在当前WDDM桌面无法执行。AD只读取证复现，未停止服务、未发收据、未加载模型。
+本节取代上节原v1收据与“无任何计算进程/物理独占”的过强表述；原GPU测量仍未执行。
+
+[NVIDIA SMI定义](https://docs.nvidia.com/deploy/nvidia-smi/index.html)中 C+G 指同时有
+计算与图形上下文，不能视为纯图形；WDDM的进程显存N/A也不能作为未计算证据。
+本机CSV还列出权限不可见项，因此改用 `nvidia-smi -q -x -i 0` 的上下文类型，
+再合并同UUID的compute CSV中额外PID，缺失XML类型保持unknown，不自动放行。
+检测到本机SMI XML声明UTF-8、实际部分路径为ACP936字节，严格UTF-8失败时按系统
+ACP解码，拒绝替换乱码后比较路径。没有下载NVML Python包或修改终端/全局编码。
+
+只读快照由新增 `gpu_window.py` 采集：Win32
+[GetProcessTimes](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-getprocesstimes)
+与 QueryFullProcessImageName 用 PROCESS_QUERY_LIMITED_INFORMATION 取得精确创建
+FILETIME/映像路径，辅以本地CIM名称、创建UTC、父进程与session，不读取命令行。
+路径比较用Windows大小写/分隔符规范，创建标识保留整数字符串，避免PID复用或浮点截断。
+
+### 实际只读证据
+
+`data/test-tmp/ad-wddm-preflight-20261021/snapshot-1.json`（不提交Git）SHA256：
+`621452a960921f7a7da77f0b94ccb7052d95febb91d53174be58470f7facf81d`。
+本轮快照是driver610.88/WDDM，共38进程：37个C+G、1个C；36个有映像路径和创建
+标识，2个为受保护OS逻辑身份（PID4 System与PID23088 DWM）。唯一纯C仍是
+PID7196日用Cosy Python，创建FILETIME标识 `134369947639349953`。
+本记录不代表主会话已核准停止它；主会话仍须再次核对实际服务owner/启动时间。
+
+先前CSV只显示权限不足的另一个程序，通过有限查询权限已得到实际完整映像与创建
+标识，没有按 `Main.exe` 等名称猜测用途。没有关闭或操作它。System/DWM的图像查询
+返回AccessDenied，CIM仅提供OS角色和父/会话身份，不能据此宣称二进制映像已验证。
+它们的 `identity_state=protected_os_logical` 与普通verified_image明确分开。
+GPU Engine性能计数器本次报告无效样本，因此没有用“利用率为零”作为放行条件。
+
+### v2收据和主会话接力
+
+收据改成 `schema_version=2` / `scope=ad-cosy-project-model-window`，并要求：
+`project_model_window=true`、`production_stopped=true`、
+`other_gpu_model_workers_stopped=true`、`physical_gpu_exclusive=false`。
+旧v1/`exclusive_gpu=true`收据不能复用。原checkout/HEAD、到期、480秒和自有Job门保持。
+
+`shared_desktop_baseline` 由主会话审查快照后填写；采集程序不生成已批准基线：
+
+| 字段 | 含义 |
+|---|---|
+| `gpu_uuid` | 本次快照的目标GPU UUID；不接受另一GPU |
+| `reviewed_by` / `reviewed_at_utc` | `main_session` / 主会话真实审查UTC |
+| `processes[]` | 主会话逐项核验的背景身份；不是按exe名称或目录批量白名单 |
+| 普通进程条目 | 快照的pid、creation_token、executable_path、context_type，另加 `approval_kind=image_identity`、`background_only=true` |
+| 受保护OS条目 | 需单独 `approval_kind=protected_os_identity`、background_only=true、非空review_note，并原样固定pid/name/creation_token/parent_pid/session_id/parent_identity/context_type |
+
+受保护OS候选只标识System内核角色或与同session的winlogon父进程对应的DWM；
+这**不是自动批准**。主会话若不接受现有逻辑身份取证，应保留阻塞并补证；不能
+自动给其他权限不可见程序套用该例外，更不能为获得通过而关闭系统桌面。
+任何未解析的非OS owner保持拒绝，即使被错误复制进baseline也不会通过。
+
+新增安全只读命令（从实际候选树运行，输出文件必须全新）：
+
+```powershell
+& "$productionRoot/.venv/Scripts/python.exe" -B -X utf8 "$benchRoot/scripts/development/cosyvoice/benchmark_ad_continuity.py" --gpu-preflight --output "$benchRoot/data/test-tmp/ad-wddm-<唯一标识>/snapshot.json"
+```
+
+主会话随后逐项审查这些背景角色、单独停止已核实owned日用模型，再按v2收据运行
+原 `--run` 命令。AD没有创建真实授权收据或批准本机任何背景进程。采集输出本身
+不等于GPU窗口通过，`approval_performed=false`；日用仍在时PID7196的纯C必然阻塞，
+即使误将它列入desktop baseline也不能绕过。
+
+### 检查与结果含义
+
+父进程、worker导入模型前、每个case前后核对实时快照。只有与主会话批准的精确
+背景身份一致、仍为G/C+G的条目可作为shared desktop context；C+G标签原样保留。
+新增PID、创建时间/路径变化、上下文改变、未知类型、重复基线PID和未解析owner均拒绝。
+基准模型启动后仅允许worker自己通过Win32取得的精确映像/创建身份成为owned模型，
+不允许收据用“允许PID”方式保留其他C进程。出现阻塞只退出/清理自有基准Job，
+不操作触发阻塞的外部进程。快照前后检查记录在 `gpu-window-checks.jsonl`。
+
+报告固定 `project_model_window_shared_windows_desktop`、physical_gpu_exclusive=false、
+background_noise_present=true。检查点采样不能证明相同背景进程内部没有新计算，
+也不能证明两次采样之间完全无人使用GPU；这些限制在报告与成对结果解释中保留。
+本窗口只确保主会话协调的本项目模型任务隔离，不宣称物理显卡独占或纯净性能基线。
+默认/选中声线、合成数据不写个人库、无下载/无日用控制的边界不变。
+
+最终WDDM/收据/取消/真实HTTP-Opus组合 **75项通过（10.63s）**；两个本轮源文件
+通过Python3.10语法解析，`git diff --check`通过。对上述真实快照使用未批准基线
+执行分类，allowed=false，PID7196明确为compute_or_unknown_context_not_background；
+未把快照或“没有停外部进程”写成独占通过。实际预检没有创建批准基线、收据或GPU
+模型实例。修复提交交AI独立审查，主会话继续拥有停/恢复与窗口签发。
+公共文档清单需AI增加gpu_window.py与专属测试source关联，AD不修改共享清单。

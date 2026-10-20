@@ -22,15 +22,20 @@ CLIENT_SPEC.loader.exec_module(client)
 
 
 def receipt(now):
-    return {"schema_version": 1, "scope": "ad-cosy-continuity", "window_id": "cpu-fixture-not-gpu-authorization",
-            "exclusive_gpu": True, "production_stopped": True, "other_gpu_workers_stopped": True,
+    return {"schema_version": 2, "scope": "ad-cosy-project-model-window", "window_id": "cpu-fixture-not-gpu-authorization",
+            "project_model_window": True, "physical_gpu_exclusive": False,
+            "production_stopped": True, "other_gpu_model_workers_stopped": True,
+            "shared_desktop_baseline": {"gpu_uuid": "synthetic-gpu", "reviewed_by": "main_session",
+                                        "reviewed_at_utc": now.isoformat(), "processes": []},
             "checkout": str(ROOT), "production_root": str(ROOT / "synthetic-production"),
             "candidate_commit": "a" * 40, "max_seconds": 480,
             "expires_at_utc": (now + timedelta(minutes=10)).isoformat()}
 
 
-@pytest.mark.parametrize("change", [{"exclusive_gpu": False}, {"production_stopped": False},
-    {"other_gpu_workers_stopped": False}, {"candidate_commit": "b" * 40},
+@pytest.mark.parametrize("change", [{"project_model_window": False}, {"physical_gpu_exclusive": True},
+    {"exclusive_gpu": True},
+    {"schema_version": 1}, {"production_stopped": False},
+    {"other_gpu_model_workers_stopped": False}, {"candidate_commit": "b" * 40},
     {"window_id": ""}, {"scope": "engine-compilation"}, {"max_seconds": 900},
     {"checkout": "D:/not-this-checkout"}, {"expires_at_utc": "invalid"},
     {"expires_at_utc": "2020-01-01T00:00:00+00:00"}, {"expires_at_utc": "2030-01-01T00:00:00"}])
@@ -47,15 +52,14 @@ def test_valid_fixture_receipt_is_only_validation_and_does_not_create_lease():
         production=ROOT / "synthetic-production", seconds=480, now=now) is None
 
 
-def test_live_gpu_occupancy_is_rejected_without_terminating_any_process():
-    calls = []
-    def query(command, **_kwargs):
-        calls.append(command)
-        return SimpleNamespace(stdout="1234, owner-daily-python.exe\n")
-    with pytest.raises(RuntimeError, match="existing_gpu_compute"):
-        bench.ensure_gpu_idle(query)
-    assert len(calls) == 1 and calls[0][0] == "nvidia-smi"
-    bench.ensure_gpu_idle(lambda *_args, **_kwargs: SimpleNamespace(stdout=""))
+def test_gpu_window_wrapper_requires_explicit_receipt_and_retains_shared_scope(monkeypatch):
+    seen = []
+    def ensure(received, **kwargs):
+        seen.append((received, kwargs))
+        return {"physical_gpu_exclusive": False}
+    monkeypatch.setattr(bench, "_gpu_window_module", lambda: SimpleNamespace(ensure_window=ensure))
+    assert bench.ensure_gpu_idle({"fixture": True})["physical_gpu_exclusive"] is False
+    assert seen == [({"fixture": True}, {"own_identity": None})]
 
 
 def test_plan_is_no_download_alternating_paired_matrix_with_three_real_cancel_boundaries():
@@ -101,7 +105,7 @@ def test_worker_without_receipt_rejects_before_any_service_or_model_import(monke
             pytest.fail("model import before main-session receipt")
         return original(name, *args, **kwargs)
     monkeypatch.setattr(builtins, "__import__", checked)
-    with pytest.raises(ValueError, match="exclusive_receipt"):
+    with pytest.raises(ValueError, match="project_model_receipt"):
         bench.worker({"production": str(tmp_path), "output": str(tmp_path / "output"), "max_seconds": 480})
 
 
@@ -145,7 +149,7 @@ def test_owned_worker_never_gets_permission_before_job_and_is_cleaned_on_failure
         def exec_module(self, module):
             module.Job = Job
     monkeypatch.setattr(bench, "ROOT", checkout)
-    monkeypatch.setattr(bench, "ensure_gpu_idle", lambda: None)
+    monkeypatch.setattr(bench, "ensure_gpu_idle", lambda *_args, **_kwargs: {})
     monkeypatch.setattr(bench.subprocess, "check_output", lambda command, **_kwargs:
         b"" if "status" in command else b"a" * 40)
     monkeypatch.setattr(bench.subprocess, "Popen", lambda *_args, **_kwargs: Process())

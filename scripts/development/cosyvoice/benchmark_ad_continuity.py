@@ -1,4 +1,4 @@
-"""AD连续性最小GPU矩阵：--plan不加载模型；--run须主会话真实独占收据。"""
+"""AD连续性最小GPU矩阵：--run须主会话项目模型窗口收据，Windows桌面仍共享。"""
 
 import argparse
 from datetime import datetime, timezone
@@ -39,6 +39,8 @@ def plan():
             "cache": False, "sample_rate": 24000, "rows": rows,
             "normal_calls": 12, "cancel_then_new_round_pairs": 3,
             "max_seconds": 480, "production_stop_or_restore_performed": False,
+            "gpu_window_scope": "project_model_window_shared_windows_desktop", "physical_gpu_exclusive": False,
+            "required_receipt_schema_version": 2,
             "physical_playback_verified": False, "full_asr_memory_llm_chain_measured": False,
             "full_chain_text_metric": "model_first_text_ms; llm_first_output_ms includes tool output"}
 
@@ -46,17 +48,20 @@ def plan():
 def validate_receipt(receipt, *, checkout, commit, production, seconds, now=None):
     """收据是外部调度证据，不会由此函数自动生成或授予GPU租约。"""
     now = now or datetime.now(timezone.utc)
-    required = (type(receipt.get("schema_version")) is int and receipt.get("schema_version") == 1
-        and receipt.get("scope") == "ad-cosy-continuity"
+    required = (type(receipt.get("schema_version")) is int and receipt.get("schema_version") == 2
+        and receipt.get("scope") == "ad-cosy-project-model-window"
         and isinstance(receipt.get("window_id"), str) and bool(receipt["window_id"].strip())
         and all(receipt.get(key) is True for key in
-                ("exclusive_gpu", "production_stopped", "other_gpu_workers_stopped"))
+                ("project_model_window", "production_stopped", "other_gpu_model_workers_stopped"))
+        and receipt.get("physical_gpu_exclusive") is False
+        and "exclusive_gpu" not in receipt
+        and isinstance(receipt.get("shared_desktop_baseline"), dict)
         and receipt.get("candidate_commit") == commit
         and Path(receipt.get("checkout", "")).resolve() == checkout.resolve()
         and Path(receipt.get("production_root", "")).resolve() == production.resolve()
         and type(receipt.get("max_seconds")) is int and 60 <= seconds <= receipt["max_seconds"] <= 480)
     if not required:
-        raise ValueError("matching_main_session_exclusive_receipt_required")
+        raise ValueError("matching_main_session_project_model_receipt_required")
     try:
         expires = datetime.fromisoformat(receipt["expires_at_utc"].replace("Z", "+00:00"))
     except (KeyError, TypeError, ValueError):
@@ -65,11 +70,16 @@ def validate_receipt(receipt, *, checkout, commit, production, seconds, now=None
         raise ValueError("receipt_has_insufficient_remaining_window")
 
 
-def ensure_gpu_idle(run=subprocess.run):
-    result = run(["nvidia-smi", "--query-compute-apps=pid,process_name", "--format=csv,noheader,nounits"],
-                 capture_output=True, text=True, timeout=10, check=True)
-    if result.stdout.strip():
-        raise RuntimeError("existing_gpu_compute_processes_present_main_session_must_coordinate")
+def _gpu_window_module():
+    spec = importlib.util.spec_from_file_location("ad_wddm_project_window", Path(__file__).with_name("gpu_window.py"))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def ensure_gpu_idle(receipt, *, own_identity=None):
+    """兼容旧内部函数名；实际只验证项目模型窗口，绝不宣称物理GPU空闲/独占。"""
+    return _gpu_window_module().ensure_window(receipt, own_identity=own_identity)
 
 
 def summarize(rows):
@@ -103,7 +113,22 @@ def worker(payload):
     dirty = subprocess.check_output(["git", "status", "--porcelain"], cwd=ROOT).decode().strip()
     if dirty:
         raise ValueError("committed_clean_candidate_checkout_required")
-    ensure_gpu_idle()
+    initial_gpu = ensure_gpu_idle(payload["receipt"])
+    (output / "gpu-preflight-worker.json").write_text(json.dumps(initial_gpu, ensure_ascii=False, indent=2), encoding="utf-8")
+    own_identity = _gpu_window_module().image_identity(os.getpid())
+    def check_gpu(phase):
+        error = None
+        try:
+            report = ensure_gpu_idle(payload["receipt"], own_identity=own_identity)
+        except RuntimeError as caught:
+            report = getattr(caught, "report", None)
+            error = caught
+        if report is not None:
+            with (output / "gpu-window-checks.jsonl").open("a", encoding="utf-8") as file:
+                file.write(json.dumps({"phase": phase, **report}, ensure_ascii=False) + "\n")
+        if error is not None:
+            raise error
+        return report
     os.environ.update(HF_HUB_OFFLINE="1", TRANSFORMERS_OFFLINE="1", HF_DATASETS_OFFLINE="1")
     connect, resolve = socket.socket.connect, socket.getaddrinfo
     allowed = set()
@@ -166,6 +191,7 @@ def worker(payload):
     synth._wave_bytes, synth.stream_chunks = wave_bytes, stream
     try:
         for index, case in enumerate(plan()["rows"]):
+            check_gpu(f"before_case_{index}")
             if synth._profiles.model_context()[2] != selected_identity:
                 raise RuntimeError("selected_voice_changed_during_window")
             requests.clear()
@@ -194,6 +220,7 @@ def worker(payload):
                 raise RuntimeError("request_state_not_clean_after_client")
             if synth._profiles.model_context()[2] != selected_identity:
                 raise RuntimeError("selected_voice_changed_during_window")
+            check_gpu(f"after_case_{index}")
             audio_ms = sum(item["audio_ms"] for item in requests)
             generation_ms = sum(item["last_generated_ms"] or 0 for item in requests)
             row = {**case, **json.loads(result.stdout), "server_requests": list(requests),
@@ -215,6 +242,9 @@ def worker(payload):
                       "default_reference_warmup_in_constructor": True,
                       "selected_voice_quality_verified": False},
                   "runtime": synth.runtime_info, "gpu": synth._torch.cuda.get_device_name(0),
+                  "gpu_window": {"scope": "project_model_window_shared_windows_desktop",
+                      "physical_gpu_exclusive": False, "background_noise_present": True,
+                      "baseline_reviewed_by": payload["receipt"]["shared_desktop_baseline"]["reviewed_by"]},
                   "per_case": summarize(rows), "automatic_candidate_approved": False,
                   "owner_audio_review_required": True,
                   "duration_seconds": time.perf_counter() - started}
@@ -239,7 +269,7 @@ def execute(args):
         raise ValueError("committed_clean_candidate_checkout_required")
     receipt = json.loads(args.receipt.read_text(encoding="utf-8"))
     validate_receipt(receipt, checkout=ROOT, commit=commit, production=production, seconds=args.max_seconds)
-    ensure_gpu_idle()
+    initial_gpu = ensure_gpu_idle(receipt)
     spec = importlib.util.spec_from_file_location("ad_owned_winjob", ROOT / "scripts/development/launcher/winjob.py")
     winjob = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(winjob)
@@ -249,6 +279,7 @@ def execute(args):
     stdout = stderr = None
     try:
         output.mkdir(parents=True)
+        (output / "gpu-preflight-parent.json").write_text(json.dumps(initial_gpu, ensure_ascii=False, indent=2), encoding="utf-8")
         payload = {"production": str(production), "output": str(output),
                    "window_id": receipt["window_id"], "candidate_commit": commit,
                    "receipt": receipt, "max_seconds": args.max_seconds}
@@ -287,6 +318,7 @@ def execute(args):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--plan", action="store_true")
+    parser.add_argument("--gpu-preflight", action="store_true", help="只读取证；不批准背景进程，不加载模型")
     parser.add_argument("--run", action="store_true")
     parser.add_argument("--worker", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--receipt", type=Path)
@@ -295,7 +327,20 @@ def main():
     parser.add_argument("--output", type=Path)
     parser.add_argument("--max-seconds", type=int, default=480)
     args = parser.parse_args()
-    if args.worker:
+    if args.gpu_preflight and not args.run and not args.worker:
+        snapshot = _gpu_window_module().collect_snapshot()
+        if args.output:
+            path = args.output.resolve()
+            if not path.is_relative_to(ROOT / "data/test-tmp"):
+                raise ValueError("owned_preflight_output_required")
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with path.open("x", encoding="utf-8") as file:
+                json.dump(snapshot, file, ensure_ascii=False, indent=2)
+            print(json.dumps({"snapshot": str(path), "processes": len(snapshot["processes"]),
+                              "physical_gpu_exclusive": False, "approval_performed": False}))
+        else:
+            print(json.dumps(snapshot, ensure_ascii=False, indent=2))
+    elif args.worker:
         worker(json.loads(sys.stdin.buffer.read()))
     elif args.plan and not args.run:
         print(json.dumps(plan(), ensure_ascii=False, indent=2))
