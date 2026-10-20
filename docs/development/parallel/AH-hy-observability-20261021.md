@@ -161,3 +161,23 @@ node ../../data/test-tmp/ah-release-70cad5b-20261021/verify-release.cjs
 当前产物45文件、1,838,948字节；规范tree SHA-256=`c5b2779d2b63980b9183561467ac423e30012dbf3a38d57216d0c28b86bb9ac5`；manifest SHA-256=`8760f1c25b01a876394af413b58734d479b021b4404fa7771b0ede6bfa3201eb`。全相对清单、逐文件SHA-256、原始日志、264处通过的本地资源引用、0发现的固定隐私/凭据/fixture扫描、源码/工具/锁文件/截图绑定均在新目录中，文件名沿用前述`artifacts.files.json/artifacts.sha256/asset-references.json/release-binding.json/delivery-receipt.json`。新回执同时列出70cad5b与66e76b2f两个旧候选已失效，不能按旧SHA发布。
 
 新产物与本次L0/L7增量浏览器已测`build-provenance-l0-l7/`逐文件相同，关联原4项通过及8张当前截图，无需无理由重复组件/浏览器。当前目录不含生产dist或私有数据；AH只提交本记录，不部署/推送/合main。AB最后L0/L7来源输出提交与本同四字段视图仍待主会话转AI做真实配对确认，未用合成截图代替SDK或所有者验收。
+
+## 前端 CI 五项失败的测试前提修正
+
+主会话冻结并已部署的组合提交为 `28dc78ff5c592057ccb3ff40644cd494f0331d79`，前端 Git tree 与 AH 起点相同，均为 `85c8bf6945a3fea0b6f2bdb3da3546b0873a09ec`。Quality `39503121912` 的前端 job `118905292628` 在 `pnpm test --maxWorkers=2` 下出现五项失败：每日回顾纠正确认、质量扫描合并恢复，以及圆屏的预览保存、默认编辑边界和重连状态。相关两个生产组件及测试在 `a93258e9… → 28dc78ff…` 间没有差异，不能将失败直接归因于本轮来源标签代码。主会话提供的公开合成 CI 原始日志只读保留，未修改。
+
+AH 用既有实体依赖、Node24.19.0 和 Vitest5.0.0，直接执行本地 `vitest.mjs run --maxWorkers=2`；它对应 package.json 的 test 脚本，没有调用本机版本不同的 pnpm、安装或联网。修复前完整运行实际为 63 文件、348/348 通过，因此**没有完整复现远程五项失败**。定向查询计时查到可操作的原因：全页 `getByRole` 对保留挂载面板反复进行可访问性计算；质量测试的单次“重新保留 A，合并 B”查询耗时 7157ms，“恢复被合并项”4942ms，每日“直接纠正”2037ms。上述是合成测试同步查询计时，不是产品性能基准，也不证明远程五项全部具有同一原因。
+
+本次仅修改两个 `.test.tsx`：
+
+- MemoryApp 将任务入口、每日条目、质量候选条目、合并历史和确认窗查询限制到其实际区域；恢复后重新取得当前候选条目，保持扫描、误报、来源详情、合并、账本、恢复及按钮状态的原有业务断言。
+- RoundDisplayApp 等待皮肤查询 `status=success`；`fetchStatus=idle` 也可能表示尚未启用，不能证明数据到达。按钮就绪检查只轮询已取得控件的 disabled 状态；编辑保存后检查当前 DOM 控件。控件查询限制到当前面板/编辑器。
+- 圆屏模拟响应按接口分配，替代会被后台轮询抢走的 `mockResolvedValueOnce`。回读缓存和模拟设备响应同步切换，测试结束恢复 spy，保持草稿、预览、等待重连、协议检测和观察记录相互独立的断言。
+
+没有生产代码、依赖、锁文件、测试超时、重试或跳过项变更。定向最终普通运行 `ci-target-after-v3.json` 为 19/19 通过；另一次加入 scoped 查询计时的运行 `ci-query-profile-after.json` 同样为 19/19。计时显示质量测试的最长角色查询降低至 2715ms，但 DOM 可访问性计算仍有成本；不承诺远程机器固定耗时。
+
+本阶段原始证据均位于 ignored `data/test-tmp/ah-observability-20261021/`：`ci-full-before.json/log`、`ci-target-after-v3.json/log`、`ci-query-profile-*.json` 和计时 setup/config。最初计时 setup 的路径错误、修复迭代中额外弹窗关闭假设导致的两项失败均保留，没有把失败记录改写成通过；最终没有保留这些额外假设。未生成 CPU profile 的尝试不作为根因证据。
+
+最终双 worker 全量、类型检查、精确提交构建和产物字节比对结果在本节后续交付记录中追加。本地通过与远程 Quality 重跑分别记录，AH 不运行真实 SDK 的 219 项证明、不改日用资源，也不合 main 或推送。
+
+最终普通配置 `ci-full-after.json/log`：`--maxWorkers=2`，63 文件、348/348 通过，0失败/跳过；`ci-typecheck-final.log` 类型检查退出0。五项在本次全量分别耗时约3192/13252/2320/2100/3004ms，修复前为3196/17730/2736/2287/3007ms；仅用于描述本机两次运行，不能宣称每日回顾已显著加速或远程稳定性已验收。`git diff --check` 通过。专属报告的文档严格检查提示 `unlisted-document/unknown-selection`，因为AH报告尚未登记在公共清单；按当前文件归属不越界修改共享 manifest，留主会话统一登记。此项不是文档语义检查通过。
