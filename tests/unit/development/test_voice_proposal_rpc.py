@@ -287,12 +287,14 @@ def frozen_real_host(tmp_path):
 
 
 @pytest.mark.parametrize("action", ["real_host_complete", "real_host_headers_cancel", "real_host_body_cancel",
-                                  "real_host_fresh_miss"])
+                                  "real_host_fresh_miss", "real_host_source_miss", "real_host_revised_cleanup",
+                                  "real_host_new_turn_cleanup"])
 def test_actual_frozen_af_host_over_rpc_keeps_all_six_memory_items_and_owned_ack(frozen_real_host, action):
     output, stats = run_two_processes(action, frozen_real_host)
     assert output["active"] == stats["active"] == stats["candidate_handles"] == 0
     assert stats["memory_items"] == stats["context_items_sent"] == 6
     assert stats["attempt_count"] == 1 and stats["host_closed"]
     assert stats["claimed"] == int(action == "real_host_complete")
-    assert stats["unknown"] == int(action in {"real_host_headers_cancel", "real_host_body_cancel"})
+    assert stats["unknown"] == int(action in {"real_host_headers_cancel", "real_host_body_cancel",
+                                             "real_host_revised_cleanup", "real_host_new_turn_cleanup"})
     assert stats["provider_compute_stopped"] is False

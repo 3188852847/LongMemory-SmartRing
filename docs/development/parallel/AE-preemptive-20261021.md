@@ -218,3 +218,35 @@ ack = await client.cancel(scope=scope)
 已实际复现冻结 bf317915 的已知阻塞：六项请求在 snapshot 被总限5拒绝，旧 unavailable.memory_context 为空字符串；严格客户端报告 `proposal_rpc_snapshot_invalid`。独立子进程证据为 snapshot 1 次、上游 attempt_count=0、unknown=0、正常清理，没有发出 start 或偷偷截断。该用例本轮 **1 failed**（按已知缺陷取证，不是通过）；AF 的 null/分通道修复由主会话转接，尚未将其脏树当修复提交使用。
 
 真实宿主用例显式设置 `LONGMEMORY_TEST_VOICE_HOST_REF=<40位冻结提交>` 后执行；没有该值四例 skip，不把 skip 当集成通过。仅 native client/协议替身和本地清理回归目前 **35 passed / 4 skipped**；实际修复宿主与真实 Hy/正式 Runtime 最终整链仍须继续接力。
+
+## 第六阶段：修复宿主的实际跨进程闭环
+
+第五阶段提交 `4df4d1aa300cba930e5474b8fcefb6559d25b3c0` 已交主会话。随后只读核对并采用 AF 修复提交 **`0ea551a90c7ef04863dc887c8295627059edfe1d`**（在 bf317915 后），未导入其工作树：该提交严格返回 null，并按 normal/profile/schema/proactive 独立限制、保留所有正式投影项，不再按总数5拒绝六项库。上节 bf317915 的失败记录保留，不能改写为当时已通过。
+
+本阶段只追加 AE 真实宿主测试/证据，不编辑 AF/AI 业务文件。冻结 AF src/夹具与 AE HEAD 控制器由本地 Git 对象装配进本轮 AE 唯一临时目录。实际执行为 **Python3.10.20 native RPC client → 随机回环 HTTP 测试薄封装 → Python3.12.13 真正 VoiceProposalHost → 实际 AE controller → 实际 AF Gateway/FreeCampusCalls SQLite账本/持久HTTP传输 → 随机回环合成供应商**。
+
+Runtime 仍是合成替身，不是实际 Hy/正式 MemoryRuntime。其画像1＋normal fact4＋proactive intent1 共六项均含来源与证据标识；候选回执与 formal 投影按完整条目/内容/来源/顺序比较。每个场景进一步从真实供应商收到的 JSON 断言全部六项内容进入实际 system 上下文，不能删条目、换空库或只比较数量/版本。
+
+| 实际双进程场景 | 采用 | 上游请求 | unknown | 清理 |
+|---|---:|---:|---:|---|
+| 六项完整采用 | 1 | 1 | 0 | owned句柄0，host关闭 |
+| 响应头前取消 | 0 | 1 | 1 | owned句柄0，host关闭 |
+| 流中取消 | 0 | 1 | 1 | owned句柄0，host关闭 |
+| formal fresh不符 | 0 | 1 | 0 | null miss，host关闭 |
+| 正文不变，仅来源变更 | 0 | 1 | 0 | null miss，host关闭 |
+| 同轮revision/epoch推进后aclose | 0 | 1 | 1 | 采用最新scope成功清理 |
+| 新轮次推进后aclose | 0 | 1 | 1 | 采用最新scope成功清理 |
+
+七例全部真实执行通过，provider_compute_stopped 均 false；不把 owned 请求退出当作外部供应商计算已停止。客户端仍不 import 宿主包或持有学校 key，正文/token 未进入两端 stdout/stderr。仅合成未知账本记录存在于本轮测试临时目录，不涉及个人库或旧 unknown。
+
+最终六文件回归 **202 passed in 11.02s，0 skipped**，其中 RPC 专属42项含15个协议替身＋7个实际宿主双进程用例。执行环境为：
+
+```powershell
+$env:LONGMEMORY_TEST_PY310 = 'D:/01-开发环境/01-Python/versions/cpython-3.10.20-windows-x86_64-none/python.exe'
+$env:LONGMEMORY_TEST_VOICE_HOST_REF = '0ea551a90c7ef04863dc887c8295627059edfe1d'
+& 'D:/03-项目/01-正式项目/智慧圆屏/.venv/Scripts/python.exe' -X utf8 -B -m pytest tests/unit/development/test_voice_proposal_rpc.py tests/unit/development/test_voice_preemptive_connection.py tests/unit/development/test_voice_preemptive.py tests/unit/development/test_voice_preemptive_stream.py tests/unit/development/test_voice_prediction.py tests/unit/methods/test_hy_answer_content.py -q
+```
+
+未设置冻结引用时当前七例跳过，不能冒充 CI 或宿主集成已通过。一次总回归输出超过首轮工具窗口而截断，未计为通过；上列结果来自重新取得完整退出码0的最终回归。
+
+接力边界仍明确：AI 负责实际 Runtime/SDK、正式内部HTTP路由/loop/启动关闭和原 ASR 预取/唯一正式prepare/fresh与最终派发门；本测试HTTP薄封装不作为生产实现。实际 Hy 非空库、日用真实延迟、连续性、误抢话、打断残音及设备体验仍未由 AE 验收。真实学校调用0、无GPU/个人数据/日用服务/设备操作，无依赖下载需求。

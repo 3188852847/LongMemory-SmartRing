@@ -88,9 +88,12 @@ async def run(action):
         else:
             raise AssertionError("text returned on miss")
         await client.cancel(scope=scope)
-    elif action == "real_host_fresh_miss":
+    elif action in {"real_host_fresh_miss", "real_host_source_miss"}:
         value = await confirm()
         assert value["state"] == "miss" and value["text"] is None
+    elif action in {"real_host_revised_cleanup", "real_host_new_turn_cleanup"}:
+        latest = TurnStamp(0, 2, 1) if action == "real_host_revised_cleanup" else TurnStamp(1, 0, 1)
+        await client.snapshot(scope=latest, query="续说合成问题", session_id="c" * 32)
     else:
         value = await confirm()
         expected = "合成回答" if action == "real_host_complete" else "合成有效回答"

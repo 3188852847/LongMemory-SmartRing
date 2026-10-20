@@ -62,7 +62,7 @@ class MultiChannelRuntime(fixtures.Runtime):
 async def main():
     raw = fixtures.complete_wire()
     plan = {"body": raw}
-    if scenario == "real_host_headers_cancel":
+    if scenario in {"real_host_headers_cancel", "real_host_revised_cleanup", "real_host_new_turn_cleanup"}:
         plan["mode"] = "wait_headers"
     elif scenario == "real_host_body_cancel":
         plan["split"] = raw.index(b"\n\n") + 2
@@ -110,6 +110,12 @@ async def main():
                     if operation == "cancel" and scenario in {"real_host_headers_cancel", "real_host_body_cancel"}:
                         if not first.wait(1):
                             raise RuntimeError
+                    if (operation == "snapshot" and body["cancel_epoch"] == 1
+                            and scenario in {"real_host_revised_cleanup", "real_host_new_turn_cleanup"}):
+                        if not first.wait(1):
+                            raise RuntimeError
+                    if operation == "confirm" and scenario == "real_host_source_miss":
+                        runtime.items[0]["source_event_ids"] = ["synthetic-changed-source"]
                     result = asyncio.run_coroutine_threadsafe(getattr(host, operation)(body), loop).result(timeout=3)
                 except ValueError:
                     self.send({"error": "voice_proposal_request_invalid"}, 400)
