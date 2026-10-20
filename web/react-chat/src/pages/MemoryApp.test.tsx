@@ -399,3 +399,21 @@ describe('L1 质量候选',()=>{
     }]);
   });
 });
+
+
+test('显式旧库未初始化仍可只读管理，不猜方法或懒建Runtime',async()=>{
+  vi.spyOn(ChatApi.prototype,'bootstrap').mockResolvedValue(undefined);
+  const request=vi.spyOn(ChatApi.prototype,'request').mockImplementation(async path=>{
+    if(path==='/api/memory-config')return {configured:true,database:'synthetic.db',allow_delete:false,allow_correction:false} as never;
+    if(path.startsWith('/api/memories?'))return {items:[],total:0,offset:0,limit:25} as never;
+    if(path.startsWith('/api/source-messages?'))return {items:[],total:0,offset:0,limit:25} as never;
+    throw new Error('not available in standalone management');
+  });
+  const identity={schema_version:1 as const,configured:true,method:null,representation:'atomic_fact' as const,legacy_sqlite:true,state:'not_initialized' as const};
+  render(<QueryClientProvider client={new QueryClient({defaultOptions:{queries:{retry:false}}})}><MemoryRouter><KnownMemoryEngine kind="uninitialized" value={{identity}}><MemoryApp/></KnownMemoryEngine></MemoryRouter></QueryClientProvider>);
+  await screen.findByRole('heading',{name:'原话与事实',exact:true});
+  await waitFor(()=>expect(request.mock.calls.some(([path])=>path.startsWith('/api/memories?'))).toBe(true));
+  expect(request.mock.calls.some(([path])=>path==='/api/memory-mode'||path.startsWith('/api/memory-engine/hy/'))).toBe(false);
+  expect(screen.queryByRole('link',{name:'原话与事实',exact:true})).toBeNull();
+  expect(identity.method).toBeNull();
+});
