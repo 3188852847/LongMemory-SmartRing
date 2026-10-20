@@ -17,6 +17,7 @@ from .sdk_bridge import SDK_VERSION
 from .settings import HySettings
 from .source_evidence import enrich_profile,enrich_search
 from .management_rpc import ManagementRPC, profile_scope_proof
+from .layer_data import LayerDataRPC
 from .sdk_bridge import SOURCE_NAMESPACE
 from .observation import Observation, span
 
@@ -33,6 +34,8 @@ class RequestBudget:
         self._lock = Lock()
 
     def check_management_request(self, url):
+        if getattr(self, "operation", None) in LayerDataRPC.OPERATIONS:
+            raise RuntimeError("hy_layer_data_model_denied")
         if getattr(self,"operation",None) not in {"update","delete"}:
             return
         with self._lock:
@@ -239,6 +242,9 @@ class ProtocolService:
         if operation in ManagementRPC.OPERATIONS:
             self.budget.operation = operation
             return self.management.execute(operation,arguments)
+        if operation in LayerDataRPC.OPERATIONS:
+            self.budget.operation = operation
+            return LayerDataRPC(self.client, self.settings, self.budget).execute(operation, arguments)
         if operation not in {"add", "search", "get_user_profile", "get", "list_memories"}:
             raise ValueError("hy_worker_operation_not_allowed")
         arguments = dict(arguments)

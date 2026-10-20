@@ -165,9 +165,29 @@ class HyAdministration:
             return {"items": [dict(row) for row in rows], "total": total, "limit": limit, "offset": offset}
 
     def extension(self, operation, **arguments):
-        if not self.method._lock.acquire(blocking=operation != "mechanisms"):
+        layer_read = operation in {"layer_page", "layer_detail"}
+        if not self.method._lock.acquire(blocking=operation != "mechanisms" and not layer_read):
+            if layer_read:
+                from .layer_data import HyLayerDataBusy
+                raise HyLayerDataBusy("hy_layer_data_busy")
             raise RuntimeError("hy_mechanisms_busy")
         try:
+            if layer_read:
+                from .layer_data import validate_page, identifier, validate_result
+                if self.method._closed or self.method._client is None:
+                    raise HyResponseError("hy_layer_data_unavailable")
+                if operation == "layer_page":
+                    validate_page(**arguments)
+                else:
+                    validate_page(arguments["layer"])
+                    identifier(arguments["item_id"])
+                function = getattr(self.method._client, operation, None)
+                if not callable(function):
+                    raise UnsupportedCapabilityError("hy_layer_data_rpc_unavailable")
+                result = function(**arguments)
+                if result is None and operation == "layer_detail":
+                    raise LookupError("hy_layer_item_not_found")
+                return validate_result(result, operation, arguments["layer"], limit=arguments.get("limit", 20))
             if operation == "mechanisms":
                 if arguments:
                     raise ValueError("hy_mechanisms_arguments_invalid")

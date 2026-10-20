@@ -767,13 +767,17 @@ class MemoryRuntime:
     def administer_extension(self, namespace, operation, **arguments):
         """专属管理也经过统一串行和来源守卫，不能从HTTP任意调用方法。"""
         from longmemory.methods.contracts import UnsupportedCapabilityError
-        allowed = {"workspace", "profile", "history", "operations", "correct", "delete", "mechanisms"}
+        allowed = {"workspace", "profile", "history", "operations", "correct", "delete", "mechanisms", "layer_page", "layer_detail"}
+        layer_read = operation in {"layer_page", "layer_detail"}
         # 仪表盘读取不能排在长模型/写入操作之后；未取得一致快照就明确busy。
-        if not self._lock.acquire(blocking=operation != "mechanisms"):
+        if not self._lock.acquire(blocking=operation != "mechanisms" and not layer_read):
+            if layer_read:
+                from longmemory.methods.hy_memory.layer_data import HyLayerDataBusy
+                raise HyLayerDataBusy("hy_layer_data_busy")
             raise RuntimeError("hy_mechanisms_busy")
         try:
             self._ensure_open()
-            if operation == "mechanisms" and self._closing:
+            if (operation == "mechanisms" or layer_read) and self._closing:
                 raise RuntimeError("hy_mechanisms_unavailable")
             assembly = self.backend_assembly
             admin = assembly.management if assembly else None

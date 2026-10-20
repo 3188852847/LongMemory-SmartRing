@@ -84,10 +84,13 @@ class HyProcessClient:
                 stream.close()
 
     @measured('sdk_roundtrip_ms')
-    def _rpc(self, operation, **arguments):
+    def _rpc(self, operation, *, _read_only=False, **arguments):
         observation=CURRENT.get()
         lock_started=perf_counter() if observation is not None else None
-        with self._lock:
+        if not self._lock.acquire(blocking=not _read_only):
+            from .layer_data import HyLayerDataBusy
+            raise HyLayerDataBusy("hy_layer_data_busy")
+        try:
             if observation is not None:
                 observation.add('sdk_rpc_lock_ms',max(0,perf_counter()-lock_started)*1000)
             if self._closed:
@@ -102,7 +105,7 @@ class HyProcessClient:
             try:
                 self._process.stdin.write(payload + "\n")
                 self._process.stdin.flush()
-                line = self._responses.get(timeout=self.timeout)
+                line = self._responses.get(timeout=5 if _read_only else self.timeout)
                 if not line or len(line) > MAX_LINE:
                     raise ValueError("response")
                 response = json.loads(line)
@@ -121,6 +124,8 @@ class HyProcessClient:
                     kind = "unknown"
                 raise HyResponseError("hy_worker_operation_failed_" + kind + "_state_unknown")
             return response["result"]
+        finally:
+            self._lock.release()
 
     def add(self, data, **kwargs):
         value = kwargs.get("memory_at")
@@ -142,6 +147,12 @@ class HyProcessClient:
 
     def diagnostics(self):
         return self._rpc("diagnostics")
+
+    def layer_page(self, *, layer, limit=20, offset=0, state="all"):
+        return self._rpc("layer_page", _read_only=True, layer=layer, limit=limit, offset=offset, state=state)
+
+    def layer_detail(self, *, layer, item_id):
+        return self._rpc("layer_detail", _read_only=True, layer=layer, item_id=item_id)
 
     def management_capabilities(self):
         return self._rpc("management_capabilities")

@@ -220,3 +220,6 @@ def register_memory_engine_routes(app, runtime, *, allow_delete=False, allow_cor
     app.router.add_get("/api/memory-engine/hy/items/{item_id}/history", hy_history, allow_head=False)
     app.router.add_post("/api/memory-engine/hy/items/{item_id}/corrections", hy_correction)
     app.router.add_post("/api/memory-engine/hy/items/{item_id}/deletion", hy_deletion)
+    from .hy_layer_data import register_hy_layer_data_routes
+    register_hy_layer_data_routes(app,
+        snapshot_runtime if snapshot_runtime is not None else lambda: runtime if not callable(runtime) else None)
