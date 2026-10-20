@@ -56,9 +56,10 @@ def connection(monkeypatch,tmp_path):
     return c,now
 
 
-def test_custom_voice_model_and_web_never_fall_back_to_default(monkeypatch,tmp_path):
+@pytest.mark.parametrize('default',[False,True])
+def test_both_voice_modes_require_current_phrase_cache(monkeypatch,tmp_path,default):
     monkeypatch.setattr(w,'CACHE_ROOT',tmp_path/'cache')
-    monkeypatch.setattr(w,'_voice_context',lambda:{'identity':'a'*64,'default':False})
+    monkeypatch.setattr(w,'_voice_context',lambda:{'identity':'a'*64,'default':default})
     assert w.load_packets('model',16000)==w.load_packets('web',24000)==()
     assert not w.CACHE_ROOT.exists()  # 问话路径不写缓存，不调用任何合成。
     w.publish_cache(w.CACHE_ROOT,'a'*64,blobs())
@@ -67,13 +68,15 @@ def test_custom_voice_model_and_web_never_fall_back_to_default(monkeypatch,tmp_p
     assert w.load_packets('model',16000)==w.load_packets('web',24000)==()
 
 
-@pytest.mark.parametrize('damage',['digest','voice','phrase','partial','json'])
+@pytest.mark.parametrize('damage',['digest','voice','phrase','engine','codec','partial','json'])
 def test_invalid_cache_is_quiet_and_not_repaired(tmp_path,damage):
     identity='a'*64;w.publish_cache(tmp_path,identity,blobs())
     path=tmp_path/identity[:16]/'manifest.json';m=json.loads(path.read_text())
     if damage=='digest':m['items']['model-16000']['sha256']='b'*64
     elif damage=='voice':m['voice_identity']='b'*64
     elif damage=='phrase':m['items']['model-16000']['phrase_sha256']='b'*64
+    elif damage=='engine':m['engine']='cosyvoice3/Fun-CosyVoice3-0.5B-2512/opus60-v1'
+    elif damage=='codec':m['codec']='opus-mono-20ms'
     elif damage=='partial':del m['items']['web-24000']
     else:m=[]
     path.write_text(json.dumps(m));before=path.read_bytes()
@@ -106,13 +109,78 @@ def test_wrong_workspace_without_selected_profile_cannot_prepare_default_voice(t
 
 
 def test_prepare_snapshot_identity_publish_and_cache_hit(tmp_path):
-    calls=[];store=NS(model_context=lambda:({'style':'synthetic-style'},None,'a'*64))
+    calls=[];encodes=[];store=NS(model_context=lambda:({'style':'synthetic-style'},None,'a'*64))
     synth=lambda text,profile:(calls.append((text,dict(profile))) or b'synthetic-wav')
-    result=prepare.prepare_cache(store,synth,lambda data,rate:blob(),root=tmp_path)
-    assert result['status']=='ready' and len(calls)==2
+    encode=lambda data,rate:(encodes.append((data,rate)) or blob(str(rate).encode()))
+    result=prepare.prepare_cache(store,synth,encode,root=tmp_path)
+    assert result['status']=='ready' and result['items']==4
+    assert calls==[('稍等。',{'style':'synthetic-style'})]
+    assert encodes==[(b'synthetic-wav',16000),(b'synthetic-wav',24000)]
     assert all(profile['style']=='synthetic-style' for _,profile in calls)
+    for rate in (16000,24000):
+        assert w.cached_packets(tmp_path,result['voice_identity'],'model',rate)==w.cached_packets(
+            tmp_path,result['voice_identity'],'web',rate)==(str(rate).encode(),)
     def forbidden(*args):raise AssertionError('cache hit must not call TTS')
     assert prepare.prepare_cache(store,forbidden,forbidden,root=tmp_path)['status']=='already_ready'
+
+
+def test_recipe_change_keeps_old_cache_and_changes_identity(tmp_path,monkeypatch):
+    current=profiles.WAITING_ENGINE
+    monkeypatch.setattr(profiles,'WAITING_ENGINE','cosyvoice3/Fun-CosyVoice3-0.5B-2512/opus60-v1')
+    old=profiles.waiting_identity('a'*64)
+    monkeypatch.setitem(w.PHRASES,'model','我想一下。')
+    monkeypatch.setitem(w.PHRASES,'web','我查一下。')
+    w.publish_cache(tmp_path,old,blobs(b'old'))
+    before={p:p.read_bytes() for p in tmp_path.rglob('*') if p.is_file()}
+    monkeypatch.setattr(profiles,'WAITING_ENGINE',current)
+    monkeypatch.setitem(w.PHRASES,'model','稍等。')
+    monkeypatch.setitem(w.PHRASES,'web','稍等。')
+    new=profiles.waiting_identity('a'*64)
+    assert new!=old
+    assert w.cached_packets(tmp_path,old,'model',16000)==()
+    result=prepare.prepare_cache(NS(model_context=lambda:({},None,'a'*64)),
+        lambda *args:b'new',lambda *args:blob(b'new'),root=tmp_path)
+    assert result['voice_identity']==new
+    assert all(p.read_bytes()==data for p,data in before.items())
+
+
+def test_complete_waveform_guard_never_trims_silence_or_words():
+    import numpy as np
+    audio=np.zeros(33600,dtype=np.float32)  # 完整2.1秒，含首尾低电平。
+    audio[8000:16000]=0.2
+    before=audio.copy()
+    prepare.validate_waveform(audio,16000)
+    assert np.array_equal(audio,before)
+    for values in (np.pad(audio,(0,1)),np.pad(audio,(10400,10400))):
+        before=values.copy()
+        with pytest.raises(ValueError,match='phrase_too_long'):
+            prepare.validate_waveform(values,16000)
+        assert np.array_equal(values,before)
+    for values in (np.array([]),np.array([float('nan')]),np.array([float('inf')])):
+        with pytest.raises(ValueError,match='samples_invalid'):
+            prepare.validate_waveform(values,16000)
+    with pytest.raises(ValueError,match='format_invalid'):
+        prepare.validate_waveform(np.zeros((5,2)),16000)
+
+
+@pytest.mark.parametrize('failure',['overlong','damaged','waveform_too_long'])
+def test_failed_preparation_preserves_previous_cache_without_retry(tmp_path,failure):
+    import numpy as np
+    store=NS(model_context=lambda:({},None,'a'*64));identity=profiles.waiting_identity('a'*64)
+    # 旧清单的文案不匹配使本次需要准备，失败后也不得覆盖它。
+    w.publish_cache(tmp_path,identity,blobs(b'old'))
+    path=tmp_path/identity[:16]/'manifest.json';manifest=json.loads(path.read_text())
+    manifest['items']['web-24000']['phrase_sha256']='b'*64
+    path.write_text(json.dumps(manifest))
+    before={p:p.read_bytes() for p in tmp_path.rglob('*') if p.is_file()};calls=[]
+    def encode(*args):
+        if failure=='waveform_too_long':
+            prepare.validate_waveform(np.zeros(54400),16000)  # 3.4秒静音也拒绝。
+        return blob()*36 if failure=='damaged' else b'LMWAIT01'+blob()[8:]*36
+    with pytest.raises(ValueError,match='encoded_audio_invalid|phrase_too_long'):
+        prepare.prepare_cache(store,lambda *args:(calls.append(1) or b'full-wav'),encode,root=tmp_path)
+    assert calls==[1]
+    assert {p:p.read_bytes() for p in tmp_path.rglob('*') if p.is_file()}==before
 
 
 def test_prepare_voice_drift_does_not_publish_partial_cache(tmp_path):
