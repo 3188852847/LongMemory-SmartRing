@@ -266,6 +266,30 @@ def test_v2_payload_counts_actual_user_in_original_budget_and_does_not_classify_
         r._input_payload([["system", "x"]], "y" * 16001)
 
 
+def test_changed_current_user_cannot_be_reverted_to_claim_old_candidate():
+    async def run():
+        client = r.VoiceProposalRPC.from_environment(connection_id="a" * 32, environ=environment())
+        calls = []
+        async def post(operation, body, **kwargs):
+            calls.append(operation)
+            if operation == "start":
+                return {"version": 1, "state": "preparing", "reason_code": None}
+            return {"version": 1, "state": "closed", "owned_upstream_exited": True,
+                    "provider_compute_stopped": False}
+        client._post = post
+        scope = p.TurnStamp(1, 1, 0)
+        await client.start(scope=scope, snapshot_id="e" * 32, messages=[["system", "合成角色"]],
+                           model_user_message="完整旧当前消息")
+        async def confirm(raw):
+            return await client.confirm(scope=scope, snapshot_id="e" * 32, query="合成正文",
+                messages=[["system", "合成角色"]], model_user_message=raw,
+                formal_turn_id="11111111-1111-4111-8111-111111111111", client_round_id="d" * 32, session_id="c" * 32)
+        assert (await confirm("完整新当前消息"))["reason_code"] == "model_user_changed"
+        assert (await confirm("完整旧当前消息"))["reason_code"] == "no_candidate"
+        assert calls == ["start"] and await client.aclose()
+    asyncio.run(run())
+
+
 @pytest.mark.parametrize("action", ["v2_json", "v2_effective", "v2_metadata_changed", "v2_speaker_changed",
                                   "v2_missing_current", "v2_context_changed", "v2_tools_present", "v2_effective_tools"])
 def test_real_python310_v2_keeps_asr_payload_and_effective_boundary_gates(action):

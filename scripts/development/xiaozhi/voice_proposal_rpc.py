@@ -272,6 +272,7 @@ class VoiceProposalRPC:
             return {"version": 1, "state": "miss", "text": None, "reason_code": "no_candidate"}
         inputs = _input_payload(messages, model_user_message)
         if record.model_user_message != model_user_message:
+            record.confirm_attempted = True  # 观察到真实当前输入变化后，不能再用旧字符串领取。
             return {"version": 1, "state": "miss", "text": None, "reason_code": "model_user_changed"}
         if (not _hex(snapshot_id) or snapshot_id != record.snapshot_id or type(tools_required) is not bool
                 or not isinstance(query, str) or not query.strip() or len(query) > 16000
