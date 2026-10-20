@@ -4,7 +4,7 @@
 未确认的任务不重放，L6 不注入。L7 永远不是执行授权或已经发生的事实。
 """
 
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from datetime import UTC, datetime
 import hashlib
 import json
@@ -54,8 +54,9 @@ class SemanticCoordinator:
 
     OPERATIONS = {"semantic_status", "semantic_enqueue", "semantic_task", "semantic_cancel", "semantic_pause"}
 
-    def __init__(self, client, settings, workspace, *, start=True):
+    def __init__(self, client, settings, workspace, *, start=True, background=None):
         self.client, self.settings = client, settings
+        self.background = background
         self.path = workspace / "semantic.sqlite3"
         if self.path.is_symlink() or self.path.is_junction():
             raise ValueError("hy_semantic_ledger_link_denied")
@@ -181,6 +182,13 @@ class SemanticCoordinator:
                 if row is None:
                     self._condition.wait(timeout=0.5)
                     continue
+            # 建议不是lease：先查，忙时保持pending且不拿_work，不占running任务。
+            # 放行后到原生HTTP之间仍可能有新前台到达，由网关实际队列决定优先级。
+            if row[1] == "evolve" and self.background is not None and not self.background.eligible():
+                with self._condition:
+                    if not self._stopping:
+                        self._condition.wait(timeout=0.5)
+                continue
             with self._work:
                 with self._condition, self._db() as db:
                     if self._stopping:
@@ -200,8 +208,9 @@ class SemanticCoordinator:
                 state, reason = "uncertain", "sdk_outcome_unknown"
                 try:
                     if row[1] == "evolve":
-                        response = self.client.evolve(user_id=self.settings.user_id, agent_id=self.settings.agent_id,
-                            max_batches=json.loads(row[2])["max_batches"])
+                        with self.background.operation() if self.background is not None else nullcontext():
+                            response = self.client.evolve(user_id=self.settings.user_id, agent_id=self.settings.agent_id,
+                                max_batches=json.loads(row[2])["max_batches"])
                         if not isinstance(response, dict) or response.get("success") is not True:
                             raise RuntimeError("hy_semantic_evolve_failed")
                         state = "partial" if (response.get("should_continue") or response.get("cycle_status") == "partial"

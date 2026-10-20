@@ -44,6 +44,7 @@ class HySettings:
     management_writes_enabled: bool = False
     management_exclusive_profile: bool = False
     semantic_layers_enabled: bool = False
+    background_priority_enabled: bool = False
 
     def __post_init__(self):
         if self.sdk_version != SDK_VERSION or not self.user_id.strip() or not self.agent_id.strip():
@@ -52,13 +53,16 @@ class HySettings:
             raise ValueError("hy_dimensions_invalid")
         if any(type(value) is not bool for value in (self.network_authorized, self.include_profile,
                 self.managed_gateway, self.management_writes_enabled, self.management_exclusive_profile,
-                self.semantic_layers_enabled)):
+                self.semantic_layers_enabled, self.background_priority_enabled)):
             raise ValueError("hy_flag_invalid")
         if self.model_mode not in {"disabled", "synthetic_transport"} or (self.network_authorized and self.model_mode == "synthetic_transport"):
             raise ValueError("hy_model_mode_invalid")
         if self.managed_gateway and (len(self.provider_identity)!=64 or any(c not in "0123456789abcdef" for c in self.provider_identity)
                 or not all(endpoint.allow_loopback_http and urlsplit(endpoint.base_url).scheme=="http" for endpoint in (self.llm,self.embedding))):
             raise ValueError("hy_managed_gateway_identity_invalid")
+        if self.background_priority_enabled and (not self.semantic_layers_enabled or not self.managed_gateway
+                or not self.network_authorized or urlsplit(self.llm.base_url).path.rstrip("/") != "/hy/v1"):
+            raise ValueError("hy_background_requires_owned_hy_gateway")
         for value, maximum in ((self.max_external_requests, 100000), (self.timeout_seconds, 600), (self.max_output_tokens, 16000)):
             if type(value) is not int or not 0 <= value <= maximum:
                 raise ValueError("hy_budget_invalid")
@@ -91,6 +95,7 @@ class HySettings:
         public.pop("management_exclusive_profile")
         # 接入是当前进程能力，不改变已有模型/维度/来源身份；scope stamp 仍需实证。
         public.pop("semantic_layers_enabled")
+        public.pop("background_priority_enabled")
         for name in ("llm","embedding"):
             public[name].pop("allow_loopback_http",None)
         if self.managed_gateway:

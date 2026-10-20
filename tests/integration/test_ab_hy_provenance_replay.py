@@ -31,8 +31,20 @@ def open_runtime(tmp_path,*,legacy=False,create=True):
     source=CAPTURE/"source-5a4c1ec/src" if legacy else ROOT/"src"
     script="import sys;sys.path.insert(0,"+repr(str(source))+");sys.path.insert(0,"+repr(str(ROOT/"tests/fixtures"))+");from ab_hy_provenance_replay import run;run("+repr(str(CAPTURE))+")"
     def factory(workspace,*,create):
-        return HyProcessClient(python=SDK,workspace=workspace,settings=replace(settings,management_writes_enabled=True,
-            management_exclusive_profile=True),create=create,command=[str(SDK),"-I","-X","utf8","-B","-c",script])
+        configured=replace(settings,management_writes_enabled=True,management_exclusive_profile=True)
+        if legacy:
+            # 原始归档没有后来新增的运行时布尔项；只省略其默认false，不改旧源码。
+            class LegacyWire:
+                timeout_seconds=configured.timeout_seconds
+                def wire(self):
+                    data=configured.wire()
+                    assert data.pop("background_priority_enabled") is False
+                    return data
+            configured_wire=LegacyWire()
+        else:
+            configured_wire=configured
+        return HyProcessClient(python=SDK,workspace=workspace,settings=configured_wire,create=create,
+            command=[str(SDK),"-I","-X","utf8","-B","-c",script])
     proof={"protocol":2,"sdk_version":"2.0.3","rpc_source_sha256":management_primitives_identity(),"real_sdk_rpc_verified":True,
         "semantic_background_writes":"managed_v1","derivation_invalidation_verified":True,"read_only_intention_verified":True}
     assembly=assemble_hy_backend(settings=settings,state_directory=tmp_path/"engine",source_path=tmp_path/"sources.db",create=create,

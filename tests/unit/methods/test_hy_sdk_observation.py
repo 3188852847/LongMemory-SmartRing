@@ -81,7 +81,7 @@ def test_management_proof_binds_transitive_worker_wrappers(tmp_path, monkeypatch
     from longmemory.methods.hy_memory import assembly
     names = ('worker.py', 'process_client.py', 'management_rpc.py', 'sdk_bridge.py',
              'short_embedding_input.py', 'sdk_observation.py', 'observation.py', 'layer_data.py', 'semantic.py', 'candidate_snapshot.py',
-             'method.py', 'assembly.py', 'provenance.py')
+             'method.py', 'assembly.py', 'provenance.py', 'settings.py', 'background.py')
     for name in names:
         (tmp_path / name).write_bytes(b'synthetic\r\n')
     monkeypatch.setattr(assembly, '__file__', str(tmp_path / 'assembly.py'))

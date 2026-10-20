@@ -62,6 +62,16 @@ L6 分页只读已有图库，参数下推范围，稳定 ID 排序与 limit+1�
 
 ## 验证与限制
 
+### 前台优先的后台接线（AF 3308a825接口）
+
+可信装配新增 `HySettings.background_priority_enabled`，默认false；开启要求semantic=true、managed_gateway=true、network_authorized=true，以及原前台LLM路径精确为 `/hy/v1`。该运行策略不进入持久模型/来源身份。AI继续传前台Hy endpoint，显式开启此布尔项；不把全Hy的endpoint换成背景地址。
+
+worker从原LLM地址推导同origin固定 `/hy-background/v1` 别名，不接收可任意填写的新URL。归纳线程在获取任务工作锁、标记running和调用原生evolve前，以同一local bearer查询GET `/hy-background/v1/admission`。它只接受AF协议 `{version:1,eligible:bool,reason_code:null|closed|requests_waiting|model_busy}`，不申请lease或模型预算预留。忙、失败或结构异常时保持pending，等待0.5秒再检查；管理工作锁仍可取得。查询计数单独进入diagnostics.background_lane，不算作模型reserve。
+
+只有已经受控认领的原生evolve调用上下文携带后台标记；SDK异步HTTP传输发送前把LLM chat URL改到同源后台别名，嵌入和前台必要Hy调用不变。ContextVar跨SDK loop传递而不改变并行前台上下文。SDK RequestBudget对新增别名只放行精确chat路径，包含端口/路径/查询的其它变体拒绝，socket层仍仅允许原两个可信gateway地址。settings/background源码加入管理证明摘要。
+
+建议不代表预留：建议返回后若有新前台到达，实际排序仍由AF网关单槽队列决定；已经在飞的背景不强杀。本AB接线没有修改AF网关/候选取消ACK或AI公共bootstrap、Runtime。原生SDK与本地HTTP替身已验证实际URL、pending和工作锁；最终AF+AI合并代码上的队列/预算组合证明仍由AI完成，未新增学校请求。
+
 真实 SDK、Chroma、Kuzu 与新合成库验证了原生归纳、L7 System1 提取、来源、过期、任务重复/重开、后台召回并行和管理派生隔离。模型使用禁网替身；真实模型质量、真实学校调用、日用库向前启用、完整 HTTP/前端组合及圆屏声音/打断均没有由本分支验收。具体命令、数量和接力事项以 AB 记录为准。
 
 后续补充：2026-10-21主会话另行批准的单次真实校园原生验证已执行，结果见 [AB校园记录](../development/parallel/AB-campus-l6-l7-20261021.md)。4次学校LLM、15次总HTTP、16.407秒，实际产出L6/L7各1条；同时发现新增L2概括继承既有上下文但仅标当前输入来源的语义限制。该补充不改写上面禁网阶段的证据，也不代表长期质量、最终AI组合、生产部署或设备验收通过；无需为后续指纹变化重复真实请求。

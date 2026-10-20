@@ -24,6 +24,7 @@ from .sdk_bridge import SOURCE_NAMESPACE
 from .observation import Observation, span
 from .semantic import SemanticCoordinator, read_intentions, graph_evidence, read_profile, SearchSourceReader, invalidate_inactive_semantics
 from .candidate_snapshot import CandidateSnapshots
+from .background import BackgroundLane
 
 
 class RequestBudget:
@@ -37,6 +38,7 @@ class RequestBudget:
         self.management_llm_attempts_blocked = 0
         self._lock = Lock()
         self._operation = ContextVar("hy_budget_operation", default=None)
+        self.background = BackgroundLane(settings)
 
     @property
     def operation(self):
@@ -62,7 +64,8 @@ class RequestBudget:
     def claim(self, url):
         endpoints = (self.settings.llm.base_url.rstrip("/") + "/", self.settings.embedding.base_url.rstrip("/") + "/")
         with self._lock:
-            if not self.settings.network_authorized or not any(str(url).startswith(base) for base in endpoints):
+            owned_alias = self.background.enabled and str(url) == self.background.chat_url
+            if not self.settings.network_authorized or not (owned_alias or any(str(url).startswith(base) for base in endpoints)):
                 raise RuntimeError("hy_network_denied")
             if self.attempts >= self.settings.max_external_requests:
                 raise RuntimeError("hy_request_budget_exhausted")
@@ -81,6 +84,7 @@ class RequestBudget:
                 "management_embedding_attempts":self.management_embedding_attempts,
                 "management_llm_attempts_blocked":self.management_llm_attempts_blocked,
                 "semantic_local_prepared_ms":getattr(self,"semantic_local_prepared_ms",None),
+                "background_lane":self.background.snapshot(),
                 "hard_limit": {"external_requests": self.settings.max_external_requests},
                 "token_and_currency_limits_enforced": False}
 
@@ -171,6 +175,7 @@ def create_sdk(settings, workspace, *, create, short_embedding_fast_path=True, p
 
         async def handle_async_request(self, request):
             budget.check_management_request(request.url)
+            budget.background.route(request)
             budget.claim(request.url)
             if request.url.path.endswith("/embeddings"):
                 # search RPC 的查询用 BGE 查询前缀；add 内部 reconcile 的查询无法
@@ -242,7 +247,7 @@ def create_sdk(settings, workspace, *, create, short_embedding_fast_path=True, p
             if (not budget.management_profile_scope_proven or not owner_lease_held(workspace)
                     or not getattr(client._graph_store, "_available", False)):
                 raise ValueError("hy_semantic_scope_or_graph_unproven")
-            budget.semantic = SemanticCoordinator(client, settings, workspace)
+            budget.semantic = SemanticCoordinator(client, settings, workspace, background=budget.background)
     except BaseException:
         client.close()
         raise
