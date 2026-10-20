@@ -140,6 +140,13 @@ def test_voice_context_reuses_checked_reference_until_identity_files_change(tmp_
     profiles.waiting_context();assert len(calls)==3
 
 
+def test_missing_selected_profile_never_turns_into_default_waiting_voice(tmp_path,monkeypatch):
+    def forbidden():raise AssertionError('missing profile must not resolve default context')
+    monkeypatch.setattr(profiles,'profile_store',lambda:NS(root=tmp_path,
+        profile_path=tmp_path/'missing.json',model_context=forbidden))
+    assert profiles.waiting_context() is None
+
+
 def test_short_path_collision_and_corrupt_blob_fail_closed(tmp_path):
     identity='a'*64;w.publish_cache(tmp_path,identity,blobs())
     with pytest.raises(ValueError,match='existing_identity'):

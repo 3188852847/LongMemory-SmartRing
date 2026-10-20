@@ -45,6 +45,8 @@ def waiting_context():
     global _waiting_cached
     try:
         store = profile_store()
+        if not store.profile_path.is_file():
+            return None  # 不能把丢失的自定义档案解释成允许播放默认提示。
         with _waiting_lock:
             stamp = (str(store.root), _stamp(store.profile_path))
             old = _waiting_cached
