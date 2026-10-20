@@ -39,7 +39,8 @@ class LauncherEvents:
         if phase in {'stopped', 'starting', 'ready', 'stopping', 'failed'}:
             body['phase'] = phase
         if code in {'operation_failed', 'configuration_rejected', 'readiness_timeout',
-                    'child_exited', 'health_check_failed', 'stop_unconfirmed'}:
+                    'child_exited', 'health_check_failed', 'stop_unconfirmed',
+                    'lan_address_unavailable', 'port_in_use', 'bind_denied', 'bind_failed'}:
             body['code'] = code
         if isinstance(duration_ms, int) and duration_ms >= 0:
             body['duration_ms'] = duration_ms

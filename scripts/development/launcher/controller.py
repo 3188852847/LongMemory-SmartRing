@@ -17,7 +17,7 @@ from preferences import (
     load_preferences, save_preferences, load_model_profile, save_model_profile,
     load_memory_backend, save_memory_backend, load_tts_backend, save_tts_backend,
 )
-from runtime import Manager, Options, console_url
+from runtime import AddressBindingError, Manager, Options, console_url
 from view_model import (
     stopped_services, starting_services, ready_services, failed_services,
     readiness_timeout,
@@ -264,6 +264,8 @@ class LauncherController:
                     self._phase_event()
                 if action == 'shutdown':
                     self.shutdown_requested.set()
+        except AddressBindingError as error:
+            self._fail(str(error), error.code)
         except ValueError:
             self._fail('受管服务配置检查未通过，请核对启动设置与恢复指南。', 'configuration_rejected')
         except Exception:

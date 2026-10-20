@@ -667,6 +667,27 @@ def test_singleton_and_occupied_port_are_non_destructive():
     runtime.require_free("127.0.0.1", port)
 
 
+@pytest.mark.parametrize(('error_code', 'expected'), [
+    (10049, 'lan_address_unavailable'), (10048, 'port_in_use'),
+    (10013, 'bind_denied'), (runtime.errno.EADDRNOTAVAIL, 'lan_address_unavailable'),
+    (runtime.errno.EADDRINUSE, 'port_in_use'), (runtime.errno.EACCES, 'bind_denied'),
+    (99999, 'bind_failed'),
+])
+def test_binding_failure_classification_excludes_os_exception(monkeypatch, error_code, expected):
+    class FailedSocket:
+        def __enter__(self): return self
+        def __exit__(self, *_args): pass
+        def setsockopt(self, *_args): pass
+        def bind(self, _address):
+            raise OSError(error_code, 'synthetic-api-key /private/config and conversation')
+
+    monkeypatch.setattr(runtime.socket, 'socket', FailedSocket)
+    with pytest.raises(runtime.AddressBindingError) as caught:
+        runtime.require_free('192.168.1.22', 8000)
+    assert caught.value.code == expected
+    assert 'synthetic-api-key' not in str(caught.value) and '/private/' not in str(caught.value)
+
+
 def test_voxcpm_listener_check_rejects_listener_but_not_closed_port():
     listener = socket.socket(); listener.bind(("127.0.0.1", 0)); listener.listen(1)
     port = listener.getsockname()[1]

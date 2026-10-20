@@ -2,7 +2,9 @@
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
+import errno
 import http.client
+import ipaddress
 import json
 import os
 from pathlib import Path
@@ -92,6 +94,29 @@ class Options:
     ffmpeg_dir: Path | None = None
 
 
+class AddressBindingError(ValueError):
+    """只公开受控的绑定原因；不把系统异常、路径或配置正文送到页面。"""
+
+    def __init__(self, host, port, error_code):
+        address = str(ipaddress.ip_address(host))
+        port = int(port)
+        if not 1 <= port <= 65535:
+            raise ValueError('端口范围无效。')
+        if error_code in {10049, errno.EADDRNOTAVAIL}:
+            self.code = 'lan_address_unavailable'
+            reason = '此 IP 已不属于本机，请在启动设置更新电脑局域网 IP，并核对圆屏保存的 OTA/服务器地址。'
+        elif error_code in {10048, errno.EADDRINUSE}:
+            self.code = 'port_in_use'
+            reason = '端口已被其他服务占用，请先核对进程归属，再决定如何处理该服务。'
+        elif error_code in {10013, errno.EACCES}:
+            self.code = 'bind_denied'
+            reason = '系统拒绝绑定，可能是独占占用或端口保留；请核对占用和保留范围，不要关闭防火墙。'
+        else:
+            self.code = 'bind_failed'
+            reason = '绑定检查失败，请核对本机地址与端口。'
+        super().__init__(f'地址 {address}:{port} 不可绑定：{reason} 未关闭其他程序。')
+
+
 def require_free(host, port):
     """仅预检；真正启动仍可能遇到竞争，不把检查通过当作服务就绪。"""
     with socket.socket() as sock:
@@ -101,10 +126,7 @@ def require_free(host, port):
             sock.bind((host, port))
         except OSError as error:
             code = getattr(error, 'winerror', None) or error.errno
-            reason = {10049: '此 IP 不属于本机，请刷新局域网地址并同步小智配置。',
-                      10048: '端口已被占用，请停止原终端中的旧服务后重试。',
-                      10013: '系统拒绝绑定，可能是独占占用或端口保留；不要关闭防火墙。'}.get(code, f'系统错误 {code}，请检查地址和端口。')
-            raise ValueError(f"地址 {host}:{port} 不可绑定：{reason} 未关闭其他程序。") from None
+            raise AddressBindingError(host, port, code) from None
 
 
 def require_no_listener(host, port):
@@ -112,7 +134,7 @@ def require_no_listener(host, port):
     with socket.socket() as sock:
         sock.settimeout(0.25)
         if sock.connect_ex((host, port)) == 0:
-            raise ValueError(f"地址 {host}:{port} 已有服务监听；未关闭该程序。")
+            raise AddressBindingError(host, port, errno.EADDRINUSE)
 
 
 def build_commands(options, uv=None):
@@ -208,7 +230,6 @@ def build_commands(options, uv=None):
     # 实验启动默认关闭；L1 删除只能由面板显式勾选，不能隐式开启。
     commands = [("console", console, root)]
     if options.voice:
-        import ipaddress
         try:
             ip = ipaddress.IPv4Address(options.lan_ip)
         except ValueError:
