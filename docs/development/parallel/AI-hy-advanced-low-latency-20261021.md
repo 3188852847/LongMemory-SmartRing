@@ -274,3 +274,5 @@ AH离线发布候选已由AI只读逐文件重算：45文件、1,835,506字节�
 AG `flow_trtexec.py` 静态审查及CPU契约/source绑定组 **18 passed / 0.83秒**，未导入GPU模型。固定资源/参数/10组数值计划、逐阶段Job 6GiB/2CPU与墙钟限制存在；但execute仅窗口ID非空，尚未核验AD v2 WDDM项目模型窗口和精确桌面基线，不能阻止未知owner混入；当前不接受执行准入。另需将全流程22分钟/唯一自有外层Job、固定解释器/依赖与源码摘要绑定到窗口接力。工作区大小是采样限制、GPU显存是观察阈值，均不冒充硬物理独占。没有自动停服务、下载、混装、重试或删除外部结果；此实验不阻塞其他已验方向。
 
 本检查点另实际运行：旧pro→semantic→pro及旧semantic source别名重开 **2 passed / 35.44秒**；公共Runtime/实际SDK/五路由/宿主/3.10 RPC/启动/文档机制组 **158 passed、7 skipped / 33.78秒**（7项缺显式冻结宿主ref，未当通过）。补入确切AF `0ea551a90c7ef04863dc887c8295627059edfe1d` 后，3.10 RPC全组和新增管理uncertain撤销测试 **69 passed / 10.77秒、无skip**；这两组有交集，不相加。补充Runtime管理尝试在来源归档前递增候选版本，因此SDK正文未变但平台可能running/uncertain时仍会撤销旧候选，不让原生digest遗漏来源管理隔离。
+
+随后冻结AI代码提交 `2eea38e2b2f12cd3f610eb0fbf9963dbbe2b2c35`，工作树clean，并将 `LONGMEMORY_TEST_VOICE_HOST_REF` 指向该精确提交重新归档宿主源码；同一公共组合组 **166 passed / 41.91秒、无skip**。SDK解释器只读使用V工作树的所有者已安装环境，3.10子进程只读使用原小智环境，导入实现/脚本来自AI工作树，不下载、不复制环境/依赖、不触及日用端口。另方法层全组 **467 passed / 50 skipped / 10.47秒**：50项是旧探针/截断对照仅认本树`local/runtime/hy-memory`路径、本树未装SDK源码所致，不算通过；不为抹掉skip建立联接或复制SDK。该全组与166组有交集，均不是尚待AB/AF新修复的最终release证明。
