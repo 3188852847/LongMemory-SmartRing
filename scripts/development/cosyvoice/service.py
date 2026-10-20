@@ -80,6 +80,11 @@ class SpeechSynthesizer(Protocol):
     def stream_chunks(self, text: str): ...
 
 
+class SynthesizerRequiresRestart(RuntimeError):
+    def __init__(self):
+        super().__init__('cosyvoice_requires_restart')
+
+
 class CosyVoiceSynthesizer:
     """只加载一个模型实例，并串行处理 GPU 推理。"""
 
@@ -112,6 +117,8 @@ class CosyVoiceSynthesizer:
         self._cache_entries = cache_entries
         self._cache: OrderedDict[str, bytes] = OrderedDict()
         self._stream_cache: OrderedDict[str, tuple[bytes, ...]] = OrderedDict()
+        self.requires_restart = False
+        self.restart_reason = None
         self._profiles = VoiceProfileStore(profile_root or Path(__file__).resolve().parents[3])
         self._speaker_cache = OrderedDict()
         # 圆屏已经按自然标点收齐片段后播放。完整生成该片段可省去内部流式
@@ -189,6 +196,7 @@ class CosyVoiceSynthesizer:
         只使用固定合成句，不缓存任意用户回答。修改声线后健康摘要显示未暖机，
         不在health读取或第一问中暗中重跑此维护动作。
         """
+        self._ensure_reusable()
         _, _, identity = self._profiles.model_context()
         started = perf_counter()
         for _ in self.stream_chunks(WARMUP_TEXT, use_cache=False,
@@ -239,6 +247,7 @@ class CosyVoiceSynthesizer:
                 getattr(self, '_sample_rate', 24000), 'WAV-PCM16-v1', mode)
 
     def _inference(self, text, context, *, model_streaming=None):
+        self._ensure_reusable()
         streaming = self.model_streaming if model_streaming is None else model_streaming
         if context is None:
             return self._model.inference_zero_shot(text, PROMPT_TEXT, self._prompt_wav,
@@ -247,10 +256,54 @@ class CosyVoiceSynthesizer:
         return method(text, context['prompt'], context['wav'],
                       zero_shot_spk_id=context['speaker'], stream=streaming)
 
+    def _ensure_reusable(self):
+        if getattr(self, 'requires_restart', False):
+            raise SynthesizerRequiresRestart()
+
+    def _cleanup_confirmed(self, adapted):
+        # 只读核对已通过固定AST的finally适配。未知版本不猜字典结构，更不清空它们。
+        if not adapted:
+            return False
+        try:
+            guard = self.stream_runtime
+            snapshot = getattr(guard, 'snapshot', None)
+            if not callable(snapshot) or snapshot().get('active_requests') != 0:
+                return False
+            model = self._model.model
+            return all(isinstance(getattr(model, name, None), dict) and not getattr(model, name)
+                for name in ('tts_speech_token_dict', 'llm_end_dict', 'hift_cache_dict'))
+        except Exception:
+            return False
+
+    def _model_outputs(self, text, context, *, adapted, model_streaming=None):
+        self._ensure_reusable()
+        try:
+            yield from self._inference(text, context, model_streaming=model_streaming)
+        except BaseException:
+            if not self._cleanup_confirmed(adapted):
+                # 上游自身失败后迭代器可能已终止，不能把再次耗尽当作清理成功。
+                # 保留原状态供诊断，所有入口在新实例构造前均拒绝复用。
+                self.requires_restart = True
+                self.restart_reason = 'model_cleanup_unconfirmed'
+            raise
+
+    def _close_model_outputs(self, iterator, *, adapted):
+        try:
+            if not adapted:
+                for _ in iterator:
+                    pass
+        finally:
+            close = getattr(iterator, 'close', None)
+            if callable(close):
+                close()
+
     def _generate(self, text: str, context=None) -> bytes:
+        self._ensure_reusable()
         self._prepare_stream()
         chunks = []
-        iterator = self._inference(text, context)
+        adapted = getattr(getattr(self, 'stream_runtime', None), 'applied', False) is True
+        iterator = self._model_outputs(text, context, adapted=adapted,
+            model_streaming=None if adapted else False)
         try:
             for item in iterator:
                 speech = item.get("tts_speech")
@@ -258,9 +311,7 @@ class CosyVoiceSynthesizer:
                     raise RuntimeError("empty audio chunk")
                 chunks.append(speech.detach().cpu())
         finally:
-            close = getattr(iterator, 'close', None)
-            if callable(close):
-                close()
+            self._close_model_outputs(iterator, adapted=adapted)
         if not chunks:
             raise RuntimeError("empty audio")
         waveform = self._torch.cat(chunks, dim=1).squeeze(0)
@@ -299,6 +350,7 @@ class CosyVoiceSynthesizer:
                       model_streaming=None, cancel_event=None):
         """逐块交付音频；完全相同的近期回复可复用本次进程内结果。"""
         with self._lock:
+            self._ensure_reusable()
             def check_cancelled():
                 if cancel_event is not None and cancel_event.is_set():
                     raise _stream_runtime.StreamCancelled()
@@ -324,7 +376,7 @@ class CosyVoiceSynthesizer:
             generated = []
             if adapted:
                 guard.external_cancel = cancel_event
-            iterator = self._inference(text, context, model_streaming=streaming)
+            iterator = self._model_outputs(text, context, adapted=adapted, model_streaming=streaming)
             try:
                 for item in iterator:
                     check_cancelled()
@@ -342,17 +394,9 @@ class CosyVoiceSynthesizer:
                         yield chunk
             finally:
                 try:
-                    try:
-                        if not adapted:
-                            # 固定上游在最后yield后才清理三个请求字典。取消/消费端
-                            # close/封装失败都不能直接关闭它；保持锁并安全耗尽，
-                            # 不发布剩余音频，也不把applied=False当作协作取消支持。
-                            for _ in iterator:
-                                pass
-                    finally:
-                        close = getattr(iterator, 'close', None)
-                        if callable(close):
-                            close()
+                    # 未适配正常取消仍耗尽清理；若上游自身失败，_model_outputs
+                    # 会标记不可复用，不能把这个已结束的生成器误判为清理成功。
+                    self._close_model_outputs(iterator, adapted=adapted)
                 finally:
                     if adapted:
                         guard.external_cancel = None
@@ -363,6 +407,7 @@ class CosyVoiceSynthesizer:
 
     def synthesize(self, text: str, *, use_cache: bool = True, voice_profile=None) -> bytes:
         with self._lock:
+            self._ensure_reusable()
             context = self._voice_context(voice_profile)
             key = self._audio_key(text, context, 'complete-wav')
             if use_cache:
@@ -443,7 +488,10 @@ class CosyVoiceHandler(BaseHTTPRequestHandler):
         if self.path != "/health":
             self._json(404, {"error": "not_found"})
             return
-        body = {"ready": True, "provider": "cosyvoice3", "capabilities": CAPABILITIES,
+        requires_restart = bool(getattr(self.server.synthesizer, 'requires_restart', False))
+        body = {"ready": not requires_restart, "requires_restart": requires_restart,
+                "restart_reason": getattr(self.server.synthesizer, 'restart_reason', None),
+                "provider": "cosyvoice3", "capabilities": CAPABILITIES,
                 "voice_profile_contract_version": 1}
         body['generation_in_flight'] = self.server.generation_gate.locked()
         store = getattr(self.server.synthesizer, '_profiles', None)
@@ -554,6 +602,10 @@ class CosyVoiceHandler(BaseHTTPRequestHandler):
             self._json(400, {"error": "invalid_request"})
             return
         version2 = 'delivery_mode' in body
+        if getattr(self.server.synthesizer, 'requires_restart', False):
+            self._speech_stage('synthesis_failed')
+            self._json(503, {'error': 'requires_restart'})
+            return
         if version2 and (not streaming or (body['delivery_mode'] == 'incremental'
                 and not getattr(getattr(self.server.synthesizer, 'stream_runtime', None), 'applied', False))):
             self._json(409, {'error': 'incremental_stream_unavailable'})
@@ -563,6 +615,10 @@ class CosyVoiceHandler(BaseHTTPRequestHandler):
             self._json(503, {"error": "busy"})
             return
         try:
+            if getattr(self.server.synthesizer, 'requires_restart', False):
+                self._speech_stage('synthesis_failed')
+                self._json(503, {'error': 'requires_restart'})
+                return
             self._speech_stage("synthesis_entered")
             kwargs = {'use_cache': body.get('cache', True)}
             if 'voice_profile' in body:
@@ -628,7 +684,9 @@ class CosyVoiceHandler(BaseHTTPRequestHandler):
         except Exception:
             self._speech_stage("synthesis_failed")
             if not streaming:
-                self._json(500, {"error": "synthesis_failed"})
+                requires_restart = getattr(self.server.synthesizer, 'requires_restart', False)
+                self._json(503 if requires_restart else 500,
+                    {"error": "requires_restart" if requires_restart else "synthesis_failed"})
             return
         finally:
             self.server.generation_gate.release()

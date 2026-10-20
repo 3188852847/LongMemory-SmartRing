@@ -42,7 +42,7 @@
         "取消",
         "候选"
       ],
-      "review": "verified 2026-10-20: X候选/第二窗口46调用及321.2秒恢复、45组音频和46条曲线；Z审查P2未适配取消泄漏已用固定原始控制流修复，137项CPU通过；保持buffered，待Z复审；未部署/未验扬声器或整链路2秒"
+      "review": "verified 2026-10-20: X候选/第二窗口46调用及恢复和离线曲线；正常取消P2修复保留，后续模型自身失败分支增加实例不可复用/所有入口保护与健康状态，146项CPU通过；保持buffered，待Z复验；未部署/未验扬声器或整链路2秒"
     },
     {
       "id": "hy-low-latency-and-request-observation",
@@ -1127,7 +1127,7 @@
       "review": {
         "state": "verified",
         "date": "2026-10-20",
-        "scope": "候选/默认门、46调用GPU及离线回放和恢复保护；Z P2未适配取消清理修复及137项CPU，待Z复审/部署/扬声器验收",
+        "scope": "候选/默认门、46调用GPU及离线回放和恢复；正常取消P2与后续模型失败实例保护分别记录，146项CPU，待Z复验/部署/扬声器验收",
         "evidence": [
           "scripts/development/cosyvoice/stream_runtime.py",
           "scripts/development/xiaozhi/cosyvoice_streaming.py",

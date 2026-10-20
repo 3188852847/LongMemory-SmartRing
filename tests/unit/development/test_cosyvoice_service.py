@@ -246,11 +246,18 @@ def test_speech_ids_are_server_generated_and_stream_failure_does_not_mean_comple
 def test_only_signed_round_headers_emit_service_events(local_service, monkeypatch):
     observer = service._voice_observation
     events = []
+    written = threading.Event()
+    def emit(event):
+        events.append(event)
+        if event['event'] == 'tts_service_written':
+            written.set()
     monkeypatch.setenv("LONGMEMORY_RUNTIME_TOKEN", "a" * 64)
-    monkeypatch.setattr(observer, "emit", events.append)
+    monkeypatch.setattr(observer, "emit", emit)
     headers = observer.VoiceRound().headers()
     port, _ = local_service
     request(port, "POST", "/v1/audio/speech", {"input": "private text"}, headers)
+    # Content-Length读取完成并不保证服务线程已执行紧随write之后的观测事件。
+    assert written.wait(1)
     assert {event["event"] for event in events} == {
         "tts_service_entered", "tts_service_returned", "tts_service_written"}
     assert all(event["round_id"] == headers["X-Voice-Round-Id"] and event["source"] == "cosyvoice" for event in events)

@@ -11,7 +11,7 @@ import uuid
 import numpy as np
 import pytest
 
-from test_cosyvoice_service import service
+from test_cosyvoice_service import service, request
 from test_cosyvoice_stream_runtime import Tensor, runtime
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -50,6 +50,8 @@ def unadapted_case(*, kind='unsupported', phase='normal', force=False, parts=1, 
                 finished.set()
 
         def token2wav(self, **kwargs):
+            if phase == 'model_error':
+                raise RuntimeError('synthetic_model_error')
             if phase == 'before_upstream_yield':
                 cancel.set()
             return Tensor(shape=(1, 100))
@@ -59,6 +61,7 @@ def unadapted_case(*, kind='unsupported', phase='normal', force=False, parts=1, 
     synth = object.__new__(service.CosyVoiceSynthesizer)
     synth._lock = threading.Lock()
     synth._stream_cache = service.OrderedDict()
+    synth._cache = service.OrderedDict()
     synth._cache_entries = 4
     synth._model = NS(model=model)
     synth.stream_token_hop_len = 25
@@ -71,7 +74,9 @@ def unadapted_case(*, kind='unsupported', phase='normal', force=False, parts=1, 
     elif kind == 'no_applied':
         synth.stream_runtime = NS(external_cancel='untouched')
 
-    def inference(_text, _context, *, model_streaming):
+    def inference(_text, _context, *, model_streaming=None):
+        if model_streaming is None:
+            model_streaming = synth.model_streaming
         for _ in range(parts):
             modes.append(model_streaming)
             yield from model.tts(stream=model_streaming)
@@ -100,7 +105,8 @@ def assert_clean(case):
     case.synth._lock.release()
     guard = getattr(case.synth, 'stream_runtime', None)
     if guard is not None:
-        assert guard.external_cancel == 'untouched'
+        assert guard.external_cancel == (None if getattr(guard, 'applied', False) is True else 'untouched')
+    assert not getattr(case.synth, 'requires_restart', False)
 
 
 @pytest.mark.parametrize('kind', ['missing', 'no_applied', 'unsupported'])
@@ -148,6 +154,135 @@ def test_unadapted_wave_packaging_error_also_exhausts_original_cleanup():
         list(case.synth.stream_chunks('合成检查'))
     assert case.modes == [False, False]
     assert_clean(case)
+
+
+@pytest.mark.parametrize('entry', ['stream', 'complete_wav'])
+def test_unadapted_model_failure_requires_restart_and_blocks_all_cached_and_fresh_entries(entry):
+    case = unadapted_case(phase='model_error')
+    synth = case.synth
+    stream_key = synth._audio_key('缓存检查', None, 'buffered')
+    full_key = synth._audio_key('缓存检查', None, 'complete-wav')
+    synth._stream_cache[stream_key] = (b'cached-stream',)
+    synth._cache[full_key] = b'cached-complete'
+    with pytest.raises(RuntimeError, match='synthetic_model_error'):
+        if entry == 'stream':
+            list(synth.stream_chunks('失败请求', use_cache=False))
+        else:
+            synth.synthesize('失败请求', use_cache=False)
+    assert synth.requires_restart is True and synth.restart_reason == 'model_cleanup_unconfirmed'
+    assert [len(case.model.tts_speech_token_dict), len(case.model.llm_end_dict),
+        len(case.model.hift_cache_dict)] == [1, 1, 1]  # 保留，不能盲清未知版本。
+    calls = len(case.workers)
+    operations = [lambda: list(synth.stream_chunks('缓存检查')),
+        lambda: list(synth.stream_chunks('新轮次', use_cache=False)),
+        lambda: synth.synthesize('缓存检查'), lambda: synth.synthesize('新轮次', use_cache=False),
+        lambda: synth._generate('直接完整路径'), lambda: synth.prepare_selected_voice()]
+    for operation in operations:
+        with pytest.raises(service.SynthesizerRequiresRestart, match='cosyvoice_requires_restart'):
+            operation()
+    assert len(case.workers) == calls and all(not worker.is_alive() for worker in case.workers)
+    assert synth._stream_cache[stream_key] == (b'cached-stream',) and synth._cache[full_key] == b'cached-complete'
+    assert synth._lock.acquire(blocking=False)
+    synth._lock.release()
+    fresh = unadapted_case()
+    assert list(fresh.synth.stream_chunks('新实例恢复')) == [b'RIFF-synthetic']
+    assert_clean(fresh)
+
+
+@pytest.mark.parametrize('streaming', [False, True, None])
+def test_adapted_model_error_with_confirmed_finally_cleanup_does_not_poison_instance(streaming):
+    case = unadapted_case(phase='model_error')
+    guard = runtime.StreamRuntime()
+    guard.applied = True
+    case.model.tts = MethodType(runtime._adapt_tts(case.model.tts, guard), case.model)
+    case.synth.stream_runtime = guard
+    with pytest.raises(RuntimeError, match='synthetic_model_error'):
+        if streaming is None:
+            case.synth.synthesize('完整路径失败请求', use_cache=False)
+        else:
+            list(case.synth.stream_chunks('失败请求', model_streaming=streaming))
+    assert_clean(case)
+    assert guard.snapshot()['active_requests'] == 0
+    case.model.token2wav = lambda **kwargs: Tensor(shape=(1, 100))
+    assert list(case.synth.stream_chunks('新轮次', model_streaming=False)) == [b'RIFF-synthetic']
+    assert_clean(case)
+
+
+def test_adapted_cancel_with_confirmed_cleanup_remains_reusable():
+    case = unadapted_case(phase='before_upstream_yield')
+    guard = runtime.StreamRuntime()
+    guard.applied = True
+    case.model.tts = MethodType(runtime._adapt_tts(case.model.tts, guard), case.model)
+    case.synth.stream_runtime = guard
+    with pytest.raises(runtime.StreamCancelled):
+        list(case.synth.stream_chunks('取消请求', cancel_event=case.cancel))
+    assert_clean(case)
+    case.cancel.clear()
+    assert list(case.synth.stream_chunks('下一轮', model_streaming=False)) == [b'RIFF-synthetic']
+    assert_clean(case)
+
+
+def test_adapted_close_after_audio_confirms_cleanup_and_remains_reusable():
+    case = unadapted_case()
+    guard = runtime.StreamRuntime()
+    guard.applied = True
+    case.model.tts = MethodType(runtime._adapt_tts(case.model.tts, guard), case.model)
+    case.synth.stream_runtime = guard
+    stream = case.synth.stream_chunks('关闭请求', model_streaming=True, use_cache=False)
+    assert next(stream) == b'RIFF-synthetic'
+    stream.close()
+    assert_clean(case)
+    assert list(case.synth.stream_chunks('下一轮', model_streaming=False)) == [b'RIFF-synthetic']
+    assert_clean(case)
+
+
+def test_unadapted_model_error_while_draining_cancel_also_requires_restart():
+    case = unadapted_case(parts=2)
+    calls = []
+    def token2wav(**kwargs):
+        calls.append(True)
+        if len(calls) == 2:
+            raise RuntimeError('synthetic_drain_model_error')
+        case.cancel.set()
+        return Tensor(shape=(1, 100))
+    case.model.token2wav = token2wav
+    with pytest.raises(RuntimeError, match='synthetic_drain_model_error'):
+        list(case.synth.stream_chunks('取消请求', cancel_event=case.cancel))
+    assert case.synth.requires_restart is True
+    assert [len(case.model.tts_speech_token_dict), len(case.model.llm_end_dict),
+        len(case.model.hift_cache_dict)] == [1, 1, 1]
+    assert all(not worker.is_alive() for worker in case.workers)
+    with pytest.raises(service.SynthesizerRequiresRestart):
+        list(case.synth.stream_chunks('下一轮'))
+
+
+def test_restart_required_health_and_all_http_audio_routes_reject_without_retry():
+    case = unadapted_case(phase='model_error')
+    server = service.CosyVoiceHTTPServer(('127.0.0.1', 0), case.synth)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    import json
+    port = server.server_address[1]
+    try:
+        status, _, body = request(port, 'POST', '/v1/audio/speech', {'input': '失败请求'})
+        assert status == 503 and json.loads(body) == {'error': 'requires_restart'}
+        status, _, body = request(port, 'GET', '/health')
+        health = json.loads(body)
+        assert status == 200 and health['ready'] is False and health['requires_restart'] is True
+        assert health['restart_reason'] == 'model_cleanup_unconfirmed' and not health['generation_in_flight']
+        calls = len(case.workers)
+        for body in ({'input': '新轮次', 'stream': True},
+                {'input': '新轮次', 'stream': True, 'delivery_mode': 'buffered'},
+                {'input': '新轮次', 'stream': True, 'delivery_mode': 'incremental'}):
+            status, _, response = request(port, 'POST', '/v1/audio/stream', body)
+            assert status == 503 and json.loads(response) == {'error': 'requires_restart'}
+        status, _, response = request(port, 'POST', '/v1/audio/speech', {'input': '缓存检查', 'cache': True})
+        assert status == 503 and json.loads(response) == {'error': 'requires_restart'}
+        assert len(case.workers) == calls
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
 
 
 @pytest.mark.parametrize('version2', [False, True])
