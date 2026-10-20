@@ -45,7 +45,7 @@
     },
     {
       "id": "hy-low-latency-and-request-observation",
-      "scope": "V固定SDK等价短输入、本地初始化前移、请求内来源批读、自有校园上游会话复用及匿名数值观测候选",
+      "scope": "V固定SDK等价短输入、本地初始化前移、请求内来源批读、自有校园上游会话复用、匿名数值观测及独立校园对照工具",
       "authority": "docs/development/parallel/V-memory-low-latency-20261020.md",
       "sources": [
         "src/longmemory/methods/hy_memory/**",
@@ -55,6 +55,12 @@
         "scripts/development/xiaozhi/longmemory_provider.py",
         "tests/fixtures/hy_short_input_benchmark.py",
         "tests/fixtures/hy_recall_stage_probe.py",
+        "tests/fixtures/hy_campus_latency_probe.py",
+        "tests/fixtures/hy_campus_probe_support.py",
+        "tests/fixtures/hy_management_receipt.py",
+        "tests/unit/development/test_hy_campus_latency_probe.py",
+        "tests/unit/development/test_hy_campus_probe_gate.py",
+        "tests/unit/development/test_hy_management_receipt.py",
         "tests/unit/methods/test_short_embedding_input.py",
         "tests/unit/methods/test_hy_observation.py",
         "tests/unit/methods/test_hy_overlay_batch.py",
@@ -74,7 +80,7 @@
         "计时",
         "连接复用"
       ],
-      "review": "verified 2026-10-20: 固定源码三组交替合成测量，最终376项/前轮391项及1个真实BGE跳过；391后独立审查坏观测大整数已修，最终源码摘要不变核对。仅候选实现/隔离验收，校园TLS/真实模型/BGE/声音/端到端未验；旧管理证明须按最终代码重签"
+      "review": "verified 2026-10-20: 业务冻结ae53f72，保留376项/391项及1个真实BGE跳过的隔离证据；补充双臂共享最多8次调用探针、管理测试回执工具及针对性本地合成测试、X/Z命令。真实校园/TLS/BGE/声音/端到端及最终整合管理验收未执行，旧管理证明不能复用"
     },
     {
       "id": "profile-matched-voice-waiting",
@@ -1185,12 +1191,18 @@
       "review": {
         "state": "verified",
         "date": "2026-10-20",
-        "scope": "本轮候选代码、隔离结果、来源/预算/证明与未部署边界，不外推校园和设备",
+        "scope": "冻结业务候选与隔离证据；补充共享8次校园探针、管理回执工具及X/Z命令，仅本地合成验证，真实校园与最终整合待验",
         "evidence": [
           "docs/development/parallel/V-memory-low-latency-20261020.md",
           "tests/integration/test_hy_roundscreen_sdk.py",
           "tests/unit/methods/test_hy_provider_transport.py",
-          "tests/fixtures/hy_short_input_benchmark.py"
+          "tests/fixtures/hy_short_input_benchmark.py",
+          "tests/fixtures/hy_campus_latency_probe.py",
+          "tests/fixtures/hy_campus_probe_support.py",
+          "tests/fixtures/hy_management_receipt.py",
+          "tests/unit/development/test_hy_campus_latency_probe.py",
+          "tests/unit/development/test_hy_campus_probe_gate.py",
+          "tests/unit/development/test_hy_management_receipt.py"
         ]
       },
       "tags": [
