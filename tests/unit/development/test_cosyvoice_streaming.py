@@ -97,7 +97,8 @@ def test_preset_audio_bypasses_http_and_reuses_opus_pipeline(tmp_path, monkeypat
     assert packets == [b"preset-opus"]
 
 
-def test_stream_keeps_partial_pcm_across_model_chunks_and_flushes_once(monkeypatch):
+@pytest.mark.parametrize('requested_mode', [None, 'buffered', 'incremental'])
+def test_default_is_buffered_and_only_explicit_incremental_delivers_before_second_chunk(monkeypatch, requested_mode):
     dto = types.ModuleType("core.providers.tts.dto.dto")
     dto.SentenceType = SimpleNamespace(FIRST="first")
     cleaner = types.ModuleType("core.utils.tts")
@@ -114,9 +115,9 @@ def test_stream_keeps_partial_pcm_across_model_chunks_and_flushes_once(monkeypat
     def decode(wav, _rate):
         nonlocal decode_count
         decode_count += 1
-        # 首个可播放帧必须在读取第二个模型块之前交付，不再收齐片段。
+        # 默认/显式buffered必须收齐片段；只有明确opt-in才提早交付。
         if decode_count == 2:
-            assert packets == [b"aaaaaa"]
+            assert packets == ([b"aaaaaa"] if requested_mode == 'incremental' else [])
         return wav
 
     monkeypatch.setattr(streaming, "_wav_chunk_to_pcm", decode)
@@ -132,7 +133,11 @@ def test_stream_keeps_partial_pcm_across_model_chunks_and_flushes_once(monkeypat
         def __exit__(self, *_args): return False
         def raise_for_status(self): return None
 
-    monkeypatch.setattr(streaming, "_open_stream", lambda *_args, **_kwargs: Response())
+    requests = []
+    def open_stream(*_args, **kwargs):
+        requests.append(kwargs['json'])
+        return Response()
+    monkeypatch.setattr(streaming, "_open_stream", open_stream)
 
     class Encoder:
         def __init__(self):
@@ -159,11 +164,14 @@ def test_stream_keeps_partial_pcm_across_model_chunks_and_flushes_once(monkeypat
         opus_encoder=Encoder(), tts_timeout=90, tts_stop_request=False,
     )
     connection = SimpleNamespace(sample_rate=24000, client_abort=False)
+    if requested_mode is not None:
+        connection._longmemory_cosy_delivery_mode = requested_mode
     streaming.install_cosyvoice_streaming(tts, connection)
     tts.to_tts_stream("连续分块", opus_handler=packets.append)
 
     assert queued == [("first", None, "连续分块", "turn-2")]
     assert packets == [b"aaaaaa", b"bbbb\x00\x00"]
+    assert requests[0]['delivery_mode'] == (requested_mode or 'buffered')
 
 
 @pytest.fixture
@@ -208,7 +216,8 @@ def cancellable_stream(monkeypatch):
         def reset_state(self): state.resets += 1
 
     monkeypatch.setattr(streaming, "_open_stream", post)
-    state.connection = SimpleNamespace(sample_rate=24000, client_abort=False, sentence_id="old")
+    state.connection = SimpleNamespace(sample_rate=24000, client_abort=False, sentence_id="old",
+        _longmemory_cosy_delivery_mode='incremental')
     state.tts = SimpleNamespace(
         to_tts_stream=lambda *args, **kwargs: state.fallback(*args, **kwargs),
         tts_audio_queue=SimpleNamespace(put=state.queued.append),

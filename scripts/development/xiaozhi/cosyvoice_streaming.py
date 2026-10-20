@@ -222,8 +222,10 @@ def install_cosyvoice_streaming(tts, connection):
         preset_name = fast_asset_for_text(cleaned) if default_voice_active() else None
         preset = PRESET_ROOT / preset_name if preset_name else None
         delivered = False
-        # 回退开关只改变交付策略；不会换声线、语速、权重或60ms帧。
-        mode = getattr(connection, "_longmemory_cosy_delivery_mode", "incremental")
+        # 实测未分段长文存在欠载，自然段也有非零最大缺口，不能按字数推定安全。
+        # 日用保持完整片段；只有隔离验收显式设置连接属性才启用增量候选。
+        # 此开关不改变声线、语速、权重或60ms帧，也不由标点/字符数暗中打开。
+        mode = getattr(connection, "_longmemory_cosy_delivery_mode", "buffered")
         if mode not in {"incremental", "buffered"}:
             raise ValueError("cosyvoice_delivery_mode_invalid")
         pcm_parts = []
