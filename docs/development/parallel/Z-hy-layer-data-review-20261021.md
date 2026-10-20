@@ -1,6 +1,6 @@
 # Z：Hy逐层实际内容与页内滚动独立审查
 
-2026-10-21，Asia/Shanghai。**阶段：AA精确后端已完成独立窄审与隔离真实SDK复验；Y最终内容界面/组合/同HEAD发布证据待交，尚无发布结论。** 用户本轮明确要看L0–L7实际保存内容，并反馈运行路径点选跳顶；46项机制目录不代替数据浏览。根已确认上一轮未满足这项内容展示意图，本轮单独验收，不改写旧报告的软件/发布证据或结论。下文准备阶段的未运行说明保留其当时范围，实际新增执行见后端审查补充。
+2026-10-21，Asia/Shanghai。**阶段：后端及前端软件组合独立验收通过；本报告随源码冻结，最终同HEAD离线证明/构建绑定以配套ignored交接收据为准，尚未部署。** 用户本轮明确要看L0–L7实际保存内容，并反馈运行路径点选跳顶；46项机制目录不代替数据浏览。根已确认上一轮未满足这项内容展示意图，本轮单独验收，不改写旧报告的软件/发布证据或结论。下文准备阶段的未运行说明保留其当时范围，实际新增执行见后端审查及最终组合补充。
 
 ## 起点与分工
 
@@ -103,3 +103,34 @@ X准备核查确认，现行四字段proof不含测试清单，`tests/fixtures/h
 最终Y交接后还须核分页offset10000上限、has_more仍true时的边界提示、不发必400下一页；未知total、非首页空页及L6/L7 partial不误报全层0。Y仍独占前端树，Z当前不进入执行或更改其内容。
 
 本阶段登记AA三文档和X工具报告后，窄选ADR/契约/AA/Z/X工具共5份执行check_docs --strict通过，无finding；git diff --check通过。没有修改文档检查机制或旧报告。
+
+## Y最终串行接管与软件组合
+
+根明确交还Y实体树后，独立核Y原分支clean、PID19816/54104均已退出，路径匹配无Y遗留Node/Python/Edge任务（不把本次只读核查shell算作遗留）；node_modules为实体目录。Y最终 `78186f2f1eccb9c6304f2a729bd8d8c369c8aae1` 接为 `5f40a23`，含先前已接52c5c79；Y前端tree `e9cbbd7f472c558d30d5dde0ad5baf9f39dfe9af`匹配。Y树新建唯一分支 `codex/z-hy-layer-data-ui-combined-20261021` 从Z组合5f40a23起步，不强制checkout或复用他人分支；原Y分支、实体依赖、原dist/test-results及Y本轮证据保留，不安装/联接/升级。
+
+Z独立验证第一次全套前端为305通过/4失败，numTotalTests=309。失败为未改动Experiment/Memory/RoundDisplay页面的等待/时限及状态断言；日志中有单用例耗时超过5秒默认限值。保持源码、默认时限及断言不变，将worker数限制为2后，同309项全部通过，无跳过。没有把首轮失败删掉或称为已排除所有波动原因；证据为frontend-all-v1/v2.json，说明是本机并发运行条件差异，不擅自修改测试/依赖/全局配置。
+
+实际create_app组合另复现冷开详情链接缺陷：列表和详情同时调用新只读API，详情收到503 hy_layer_data_busy，列表200；实际浏览器抽屉显示繁忙，v1/v2失败截图/响应保留。这是同一页面竞争owner读锁，不是SDK缺数据。Z在HyLayerBrowser让详情等本页fetch结束后读取，保留后端非阻塞/不重试守卫；补受控延迟列表的顺序请求回归。同时补offset=10000且has_more仍true的说明，保持禁用下一页且不请求10020，不伪称全层结束。
+
+修复和[Hy指南](../../guides/Hy记忆管理.md)窄同步提交 `5fd3346dcde999b29ce8c4ab492de0a9d94ea1a8`，Y树提交后Z树fast-forward接入，无main操作。修后前端tree `93e4f93ed639581250e85f6b930a0a7961b533d9`；类型检查及受影响4文件28项组件回归通过。新增共2项有意义回归，未把修前309全套宣称为修后310项重跑。新build-v2保留既有大chunk提示，不覆盖dist或清理原文件。
+
+| Z组合验证 | 结果与实际范围 |
+|---|---|
+| 实体依赖全套前端 | 309/0/0，maxWorkers=2；首轮4失败保留，未放宽时限/断言 |
+| 修后影响回归 | 28/0/0，含冷开详情顺序、offset上限、RouteWorkspace/草稿及分层契约；与全套有重叠，不相加 |
+| Edge完整合成UI | 修前build-v1 25 passed（1.0分钟）；修后build-v2 **25 passed（1.1分钟）**，retries=0，1920/1366/390大字、八层正文/分页/详情/来源/版本/RAW、部分/空/忙/拒绝、键盘/历史/刷新/草稿和旧引擎 |
+| 实际create_app＋真实SDK＋build-v2 | API无mock；新合成空间、实际owner/RPC/Chroma、写入和回答使用暂停仍可读；八层200 present，实际L0完整合并、L1 RAW、同层详情及单条平台来源。读取前后所有可读合成状态文件摘要不变；模型/外部/网关请求均0 |
+
+Z前端新输出独占Y树ignored `data/test-tmp/z-hy-layer-data-combined-20261021/`。真实组合actual-api-v3/browser-result.json保存两屏各3次刷新实测：1366节点120→120px，持久大字号刷新746→746px三次；390节点585→585px，刷新1256→1256px三次，均为真实Provider偏好、20px根字号，非临时DOM大字。每次检查实际最终可滚动高度及坐标差<5px，未用0→0或只一次通过掩盖v1/v2故障；页面无脚本错误/外网请求/横向溢出。人工检查实际桌面长正文及390px来源截图，可滚动、换行和状态可读。API实际结果只保留状态/计数/摘要与纯合成截图，不触个人库。
+
+Y旧1468文件在接管后核全部摘要未变；进一步新建preserved-before.json覆盖2318个原文件（含Y本轮全部产物及package/lock），最终再次核对。自身新构建/浏览器/失败证据均排他目录。Python与Node/Edge只打开合成端口、同树源码和只读既有SDK，不操作日用8767/8000/8003、私有配置、设备或真实模型；Windows Job收拢真实组合的pytest/worker/浏览器后代。
+
+## 最终冻结与交接门
+
+本报告、指南与manifest完成后提交冻结候选；两个树保持相同前端tree，最终绑定明确实际源码提交及原始构建文件。冻结后只在ignored生成证据，不再新增tracked提交；发布收尾由根另做docs-only提交。最终交接JSON固定为Z树 `data/test-tmp/z-hy-layer-data-20261021/final-release-v1/handoff.json`，源码/head/tree、两组原始receipt/JUnit、全部case、后台语义写diff、新primitive/proof、完整构建及前端tree均须匹配才可交根/X。此路径在本报告冻结时是约定输出位置，不能把文件名或本段条件当作已经生成成功。
+
+旧组继续用原hy_management_receipt.py，固定两文件5项；新组使用Z ignored补充runner固定新分层文件7项及精确预期case，原始JUnit零failure/error/skipped，严格核同HEAD/SDK/primitive前后不变。它沿用旧receipt核心schema，不自定义签章；最终四字段proof仅取原runner实际产物，必须合并两组证明后方可作为本轮证据，不手改旧proof或生产配置。X接口约束摘要已核，背景审查覆盖本轮全部8个Python变更；不以旧5项单独放行新RAW/分层功能。
+
+任何最终证明或构建绑定失败均保留证据并报告，不能改HEAD字段冒充重跑。正式发布/个人内容/真实提取质量、旧图内容、设备视觉和声音仍未验；根/X按独立冻结计划和阶段授权处理生产生命周期。Z不merge main、不推送、不向其他会话发消息、不启停正式服务，也不以本报告代替root/X发布批准。
+
+冻结前窄选指南、ADR、契约及AA/Y/Z/X两报告共8份check_docs --strict通过，零finding；git diff --check通过。文档检查机制未改变，未做全仓历史语义审计。

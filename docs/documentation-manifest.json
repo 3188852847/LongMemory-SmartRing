@@ -227,6 +227,15 @@
       "review": "reference 2026-10-19: V原条件17题由Z独立逐题/来源/封存摘要复核，未重采保留集；Z另1条开发组合探针单列，原池累计196请求/0.496332元上界"
     },
     {
+      "id": "hy-layer-stored-content",
+      "scope": "Hy固定2.0.3逐层已保存内容的有界页/详情与只读存储边界；软件组合通过，正式发布另验",
+      "authority": "docs/development/hy-layer-data-contract.md",
+      "sources": ["src/longmemory/methods/hy_memory/layer_data.py", "src/longmemory/entrypoints/api/routes/hy_layer_data.py", "web/react-chat/src/api/hyLayerData.ts", "web/react-chat/src/features/memory/HyLayerBrowser*", "web/react-chat/src/features/memory/hy-layer-data.css", "web/react-chat/e2e/hy-layer-data.spec.ts", "web/react-chat/e2e/hy-test-appearance.ts", "tests/unit/methods/test_hy_layer_data.py", "tests/integration/test_hy_layer_data_sdk.py", "tests/fixtures/hy_layer_data_worker.py"],
+      "related": ["docs/adr/0194-hy-layer-read-only-browsing.md", "docs/guides/Hy记忆管理.md", "docs/development/parallel/AA-hy-layer-data-20261021.md", "docs/development/parallel/Y-hy-layer-data-ui-20261021.md", "docs/development/parallel/Z-hy-layer-data-review-20261021.md"],
+      "tags": ["Hy-Memory", "逐层内容", "RAW", "只读"],
+      "review": "2026-10-21: Z源码/HTTP/真实SDK/Edge及实际create_app组合独立验收；最终同HEAD证据与生产切换单列"
+    },
+    {
       "id": "hy-memory-management-candidate",
       "scope": "Hy专属受控管理、可信开启、稳定修订与可见历史隔离；软件验收完成，日用体验待验",
       "authority": "docs/guides/Hy记忆管理.md",
@@ -1463,15 +1472,17 @@
       "path": "docs/guides/Hy记忆管理.md",
       "title": "Hy 记忆管理",
       "status": "current",
-      "basis": "当前管理边界及全站机制入口；09d1ba1正式恢复和只读浏览器通过，主观UI/语音及全层数据另列",
+      "basis": "原管理与机制入口保留；5fd3346补逐层实际内容候选指南和滚动/范围说明，本轮正式切换另验",
       "review": {
         "state": "verified",
         "date": "2026-10-21",
-        "scope": "原管理边界保留；Z窄同步导航/8层46目录及证据缺口，发布/health/新GET/资源及正式只读浏览器依据根交接，不替代owner体验",
+        "scope": "Z窄同步实际分层入口、L0/RAW/状态/未知/有界页详情及滚动，实际create_app+SDK合成组合通过；不改原管理写权限或宣称本轮已发布",
         "evidence": [
           "docs/development/parallel/Z-hy-release-integration-20261019.md",
           "69d3ab671c0b22cd7357e2d7e8637ed21ea1bba3",
-          "tests/integration/test_hy_release_management.py"
+          "tests/integration/test_hy_release_management.py",
+          "docs/development/hy-layer-data-contract.md",
+          "docs/development/parallel/Z-hy-layer-data-review-20261021.md"
         ]
       },
       "tags": [
@@ -6299,12 +6310,12 @@
     {
       "path": "docs/development/parallel/Z-hy-layer-data-review-20261021.md",
       "title": "Z：Hy逐层实际内容与页内滚动独立审查",
-      "status": "draft",
-      "basis": "34b2111起点；AA 6d2df85/5126862后端独立审查与真实SDK复验，Y ced8ba5滚动预审，X准备/工具报告登记；最终UI组合/发布待验",
+      "status": "reference",
+      "basis": "AA/Y精确交付与Z5fd3346修复后软件组合通过；冻结后最终SDK/构建收据另核，生产未操作",
       "review": {
-        "state": "pending",
+        "state": "verified",
         "date": "2026-10-21",
-        "scope": "AA精确后端源码/ADR/契约，Z186项相关回归及12项真实SDK集成零跳过；Y早期滚动解析/作者证据分列，最终同HEAD证明与UI组合待验",
+        "scope": "Z186项后端、12项真实SDK预审、309项前端及修后28项/25项Edge分列；真实create_app+SDK+新UI、两屏六次持久大字刷新及只读不变通过；生产未验",
         "evidence": [
           "src/longmemory/methods/hy_memory/administration.py",
           "src/longmemory/methods/hy_memory/worker.py",
@@ -6319,18 +6330,18 @@
         "Hy-Memory",
         "逐层内容",
         "滚动",
-        "审查准备"
+        "组合审查"
       ]
     },
     {
       "path": "docs/development/parallel/Y-hy-layer-data-ui-20261021.md",
       "title": "Y：Hy分层实际内容与页内滚动",
-      "status": "draft",
-      "basis": "Y ced8ba5滚动里程碑，Z接为a7c287d；真实分层内容界面仍在实现，非最终组合验收",
+      "status": "reference",
+      "basis": "Y78186f2冻结交回实体树；Z串行接管并以5fd3346修冷开详情读冲突及分页提示，作者产物保留不冒用",
       "review": {
-        "state": "pending",
+        "state": "verified",
         "date": "2026-10-21",
-        "scope": "Z静态核页内导航和刷新恢复，独立7类纯解析输入；只读核作者26项组件/2屏真实浏览器证据，最终内容与分页详情待交",
+        "scope": "Y源码/原产物绑定核对；Z新构建独立25项Edge及实际API组合，页内滚动/分页详情/原生与平台来源、持久大字六次刷新通过，生产未验",
         "evidence": [
           "web/react-chat/src/app/RouteWorkspace.tsx",
           "web/react-chat/src/features/memory/HyMechanismsWorkspace.tsx",
@@ -6362,11 +6373,11 @@
       "path": "docs/adr/0194-hy-layer-read-only-browsing.md",
       "title": "ADR-0194：Hy逐层真实内容的有界只读边界",
       "status": "draft",
-      "basis": "AA 6d2df85新增候选决定；Z窄审与固定SDK合成验证通过，尚待UI组合/发布",
+      "basis": "AA 6d2df85新增候选决定；Z固定SDK及实际API/UI组合通过，正式发布另验",
       "review": {
         "state": "verified",
         "date": "2026-10-21",
-        "scope": "固定2.0.3私有读取/范围/RAW/L0聚合/图不初始化/有界页/新指纹边界核源码，生产与最终前端未验",
+        "scope": "固定2.0.3私有读取/范围/RAW/L0聚合/图不初始化/有界页/新指纹源码及真实组合核对，生产未验",
         "evidence": ["src/longmemory/methods/hy_memory/layer_data.py", "tests/integration/test_hy_layer_data_sdk.py", "docs/development/parallel/Z-hy-layer-data-review-20261021.md"]
       },
       "tags": ["ADR", "Hy-Memory", "逐层内容", "只读"]
@@ -6375,7 +6386,7 @@
       "path": "docs/development/hy-layer-data-contract.md",
       "title": "Hy逐层真实内容只读契约",
       "status": "draft",
-      "basis": "AA 6d2df85精确后端契约，经Z源码/HTTP/真实SDK窄验证；待最终前端接线与发布",
+      "basis": "AA 6d2df85精确契约，经Z源码/HTTP/真实SDK及前端实际API组合验证；正式发布另验",
       "review": {
         "state": "verified",
         "date": "2026-10-21",
