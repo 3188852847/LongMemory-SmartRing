@@ -371,3 +371,71 @@ def test_two_port_pairs_coexist_and_manager_only_preflights_selected_pair(tmp_pa
     finally:
         for listener in listeners:
             listener.close()
+
+
+@pytest.fixture
+def managed_copy(tmp_path_factory):
+    from config_paths import config_path, render_runtime_config
+    root = tmp_path_factory.mktemp('nc')
+    server = root / 'local/runtime/xiaozhi-esp32-server/main/xiaozhi-server'
+    server.mkdir(parents=True)
+    source = config_path(server)
+    source.parent.mkdir(parents=True)
+    original = ('server:\n  ip: 192.168.1.2\n  port: 8000\n  http_port: 8003\n'
+                '  websocket: ws://192.168.1.2:8000/xiaozhi/v1/\n'
+                '  vision_explain: http://192.168.1.2:8003/mcp/vision/explain\n'
+                'selected_module:\n  LLM: CampusLLM\nLLM:\n  CampusLLM:\n    type: openai\n'
+                '    base_url: https://example.invalid/v1\n    api_key: synthetic-original\n'
+                '    model_name: synthetic-base\nprompt: synthetic role\n')
+    source.write_text(original, encoding='utf-8')
+    render_runtime_config(server, model_override={'version': 1, 'base_url': 'http://127.0.0.1:45678/voice/v1',
+        'api_key': 'x' * 40, 'model_name': 'synthetic-campus', 'max_tokens': 512, 'timeout': 30, 'max_retries': 0})
+    target = server / 'data/.config.yaml'
+    return root, server, source, target, target.with_name('.config.source.json')
+
+
+def test_stopped_network_copy_preserves_hy_projection_and_is_idempotent(managed_copy):
+    import yaml
+    from sync_network import run_sync
+    root, server, source, target, marker = managed_copy
+    before = yaml.safe_load(target.read_bytes())
+    checked = run_sync(server, '192.168.1.4', False, 18000, 18003, refresh_consumer=True)
+    run_sync(server, '192.168.1.4', True, 18000, 18003, checked['digest'], refresh_consumer=True)
+    after = yaml.safe_load(target.read_bytes())
+    assert before['LLM'] == after['LLM'] and before['prompt'] == after['prompt']
+    assert after['LLM']['CampusLLM']['model_name'] == 'synthetic-campus'
+    assert after['server']['port'] == 18000 and after['server']['http_port'] == 18003
+    assert yaml.safe_load(source.read_bytes())['LLM']['CampusLLM']['model_name'] == 'synthetic-base'
+    from hashlib import sha256
+    receipt = json.loads(marker.read_bytes())
+    assert receipt['model_projection'] == 'owned_hy_gateway'
+    assert receipt['canonical_sha256'] == sha256(source.read_bytes()).hexdigest()
+    assert receipt['sha256'] == sha256(target.read_bytes()).hexdigest()
+    stable = (source.read_bytes(), target.read_bytes(), marker.read_bytes())
+    backup_count = len(list((root / 'local/archive').rglob('*.*')))
+    run_sync(server, '192.168.1.4', True, 18000, 18003, refresh_consumer=True)
+    assert (source.read_bytes(), target.read_bytes(), marker.read_bytes()) == stable
+    assert len(list((root / 'local/archive').rglob('*.*'))) == backup_count
+
+
+def test_changed_consumer_is_rejected_before_canonical_write(managed_copy):
+    from sync_network import run_sync
+    root, server, source, target, marker = managed_copy
+    original_source = source.read_bytes()
+    target.write_bytes(target.read_bytes().replace(b'synthetic-campus', b'changed-by-owner'))
+    changed = target.read_bytes()
+    with pytest.raises(ValueError, match='network_copy_changed'):
+        run_sync(server, '192.168.1.4', True, 18000, 18003, refresh_consumer=True)
+    assert source.read_bytes() == original_source and target.read_bytes() == changed
+    assert not (root / 'local/archive').exists()
+
+
+def test_changed_canonical_is_not_misrepresented_as_only_hy_projection(managed_copy):
+    from sync_network import run_sync
+    root, server, source, target, marker = managed_copy
+    source.write_bytes(source.read_bytes().replace(b'synthetic role', b'owner changed role'))
+    original = (source.read_bytes(), target.read_bytes(), marker.read_bytes())
+    with pytest.raises(ValueError, match='canonical_changed'):
+        run_sync(server, '192.168.1.4', True, 18000, 18003, refresh_consumer=True)
+    assert (source.read_bytes(), target.read_bytes(), marker.read_bytes()) == original
+    assert not (root / 'local/archive').exists()

@@ -34,7 +34,7 @@ def local_addresses():
     return sorted(set(found))
 
 
-def config_action(server, address, apply=False, *, ws_port=8000, http_port=8003, expected_digest=None):
+def config_action(server, address, apply=False, *, ws_port=8000, http_port=8003, expected_digest=None, refresh_consumer=False):
     private_ipv4(address)
     validate_voice_ports(ws_port, http_port)
     if address not in local_addresses():
@@ -42,7 +42,8 @@ def config_action(server, address, apply=False, *, ws_port=8000, http_port=8003,
     try:
         result = subprocess.run([str(server / '.venv/Scripts/python.exe'),
                              str(Path(__file__).with_name('sync_network.py')),
-                             str(server), address, 'apply' if apply else 'check', str(ws_port), str(http_port), expected_digest or ''],
+                             str(server), address, 'apply' if apply else 'check', str(ws_port), str(http_port),
+                             expected_digest or '', 'refresh-network-copy' if refresh_consumer else ''],
                                 capture_output=True, timeout=15, creationflags=subprocess.CREATE_NO_WINDOW)
     except subprocess.TimeoutExpired:
         raise ValueError('同步检查超时，请核对配置后重试；不要假定配置未写入。') from None

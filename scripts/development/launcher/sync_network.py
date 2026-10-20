@@ -65,10 +65,33 @@ def sync(path, address, apply=False, ws_port=8000, http_port=8003, expected_dige
             'new_digest': hashlib.sha256(result.encode('utf-8')).hexdigest()}
 
 
+def run_sync(server, address, apply=False, ws_port=8000, http_port=8003, expected_digest=None, refresh_consumer=False):
+    path = config_path(server)
+    checked = sync(path, address, False, ws_port, http_port, expected_digest)
+    plan = None
+    if refresh_consumer:
+        from network_copy import plan_copy, backup_copy
+        original = path.read_bytes()
+        if hashlib.sha256(original).hexdigest() != checked['digest']:
+            raise ValueError('Configuration changed during network planning')
+        after = updated_text(original.decode('utf-8'), address, ws_port, http_port)[0].encode('utf-8')
+        plan = plan_copy(server, original, after, updated_text)
+        if apply:
+            backup_copy(plan)
+    if not apply:
+        return checked
+    result = sync(path, address, True, ws_port, http_port, checked['digest'])
+    if refresh_consumer:
+        from network_copy import write_copy
+        write_copy(plan)
+    return result
+
+
 if __name__ == '__main__':
     try:
         ports = [int(value) for value in sys.argv[4:6]] or [8000, 8003]
         expected = sys.argv[6] if len(sys.argv) > 6 and sys.argv[6] else None
-        print(json.dumps(sync(config_path(Path(sys.argv[1])), sys.argv[2], sys.argv[3] == 'apply', *ports, expected)))
+        refresh = len(sys.argv) > 7 and sys.argv[7] == 'refresh-network-copy'
+        print(json.dumps(run_sync(Path(sys.argv[1]), sys.argv[2], sys.argv[3] == 'apply', *ports, expected, refresh)))
     except Exception:
         raise SystemExit(3)

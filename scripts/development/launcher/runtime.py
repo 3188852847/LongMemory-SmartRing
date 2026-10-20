@@ -624,16 +624,10 @@ class Manager:
                            ('127.0.0.1', 8766)]:
             require_free(host, port)
         from network import config_action
-        ports = dict(ws_port=options.voice_ws_port, http_port=options.voice_http_port)
+        ports = dict(ws_port=options.voice_ws_port, http_port=options.voice_http_port, refresh_consumer=True)
         checked = config_action(options.voice_root, options.lan_ip, **ports)
         config_action(options.voice_root, options.lan_ip, apply=True, expected_digest=checked['digest'], **ports)
-        # 无运行服务领取该副本；正式启动再生成当次专属Hy网关投影，不复用旧网关。
-        result = subprocess.run([str(options.voice_root / '.venv/Scripts/python.exe'),
-                                 str(Path(__file__).parents[1] / 'xiaozhi/config_paths.py'),
-                                 '--server-dir', str(options.voice_root), '--render'],
-                                capture_output=True, timeout=15, creationflags=subprocess.CREATE_NO_WINDOW)
-        if result.returncode:
-            raise ValueError('网络消费副本未确认更新；保留备份，请核对配置。')
+        # 停止态只投影网络字段；正式启动才领取当次Hy网关，不生成普通模型回退。
 
     def release_network_restart(self):
         self._maintenance(voice=False, draining=False)
