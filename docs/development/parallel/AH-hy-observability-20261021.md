@@ -123,3 +123,15 @@ node ../../data/test-tmp/ah-release-70cad5b-20261021/verify-release.cjs
 构建资源引用无缺失；产物仅包含预期HTML/JS/CSS及manifest，无source map或额外文件。全部产物文本的固定凭据、私有机器路径及合成fixture标记扫描0发现；前端无`.env`文件、生产源码未引用测试fixture，未读私有配置或个人数据。扫描结果表示所列检查范围，不替代组合运行与所有者实机验收。
 
 此交付只作为AI按相同前端tree审查的可部署候选。主会话另负责备份、正式dist切换/服务恢复与生产保护核验；AH没有修改生产dist、服务、config、管理proof、个人库或固件，也没有推送/合入main。
+
+## L2/L3/L4来源可信标签接力
+
+主会话要求消费AB提交`92d40492658d0f972435bc73d218e1f683bba649`的新增来源标签。已只读核对其`layer_data.py`及`provenance.py.describe`：可选`provenance`对象精确包含`status/semantic_source_complete/dependency_basis/injection_allowed`。当前只接已冻结的L2/L3/L4，不猜AB后续L0/L7字段。
+
+`HyStoredRecord`新增该可选类型和校验：对象缺省时保留未知；存在时校验四字段、枚举、布尔及AB的来源完整性关系，不用层名、active状态、来源ID数量或注入许可推断来源完整。`injection_allowed`与来源完整性独立：未证实概括仍可能被当前策略允许注入，界面照实分别呈现，不能把允许注入显示成已证实来源。
+
+新增只读`HyRecordProvenance`，在列表正文后显示“用户原话/用户明确纠正/未证实模型推断/来源可信类型未知”，同时显示“当前允许注入/当前禁止注入/注入许可未知”；详情显示完整性与依赖依据。`scope_context_envelope`明确解释为潜在上下文依赖范围，不是模型真实引用或逐句归因；`legacy_unobserved`不解释成没有依赖；用户明确纠正只说明该条来源，不冒充模型推断已确认或未来意图已执行。没有新API、管理按钮、自动读取或依赖。
+
+实际验证：`components-provenance-v1.json`相关3个文件33项通过；TypeScript与独占`build-provenance-ui-v1/`通过；`browser-provenance-v1.log`逐层14项通过，包含新增1366/390大字号的来源类型/未知/注入许可、冷详情链接、非零滚动、刷新恢复、浏览器前后退及原分页/状态/图覆盖/单任务/只读GET。新增桌面与窄屏详情截图已视觉核查，依赖说明可读且无横向溢出。全部数据为合成响应，不是个人库或AB真实SDK验收。
+
+核心展示先独立提交供AI接入。**此前`70cad5b`/tree`43ecb035…`的45文件发布候选从本次前端变更起失效，只保留历史证据，不能用于本轮发布；新的dist、manifest、tree摘要与资源引用校验将在精确新提交/tree上重新生成，不沿用旧SHA。** 依赖锁、生产dist、日用服务/config、个人库及proof均未修改，无联网/安装。

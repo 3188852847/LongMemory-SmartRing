@@ -1,6 +1,6 @@
 import {expect,test} from 'vitest';
 import {parseHyLayerDetail,parseHyLayerPage} from './hyLayerData';
-import {graphPage,layerDetail,layerPage,semanticRecord} from '../tests/fixtures/hyLayerData';
+import {graphPage,layerDetail,layerPage,semanticRecord,storedRecord} from '../tests/fixtures/hyLayerData';
 
 test('AB原生图页和图计数范围；旧VDB共存时只保留部分覆盖及未知总数',()=>{
   expect(parseHyLayerPage(graphPage(),'l6_schema',0,'all').coverage).toBe('graph_complete');
@@ -24,4 +24,13 @@ test('L7到期是原生意图状态，不接受L6派生状态或执行授权',()
   const item=semanticRecord('l7_intention',{derivation_state:'expired',valid_until:'2026-10-20T04:00:00Z'});
   expect(parseHyLayerDetail(layerDetail('l7_intention',item),'l7_intention',item.item_id).item?.derivation_state).toBe('expired');
   expect(()=>parseHyLayerDetail(layerDetail('l7_intention',{...item,derivation_state:'ready'}),'l7_intention',item.item_id)).toThrow();
+});
+
+test.each(['l2_fact','l3_summary','l4_identity'] as const)('%s来源四字段独立校验，旧响应缺标签不补完整',layer=>{
+  const record=storedRecord(layer);
+  const p={status:'model_inference_unverified' as const,semantic_source_complete:false,dependency_basis:'scope_context_envelope' as const,injection_allowed:true};
+  expect(parseHyLayerPage(layerPage(layer,{items:[{...record,provenance:p}]}),layer,0,'all').items[0].provenance?.injection_allowed).toBe(true);
+  expect(parseHyLayerPage(layerPage(layer),layer,0,'all').items[0].provenance).toBeUndefined();
+  for(const bad of [{...p,semantic_source_complete:true},{...p,injection_allowed:'true'},{...p,status:'confirmed'},{status:p.status},{...p,private_field:'hidden'}])
+    expect(()=>parseHyLayerDetail(layerDetail(layer,{...record,provenance:bad} as never),layer,record.item_id)).toThrow();
 });

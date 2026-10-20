@@ -3,6 +3,11 @@ export const HY_LAYERS=['l0_basic_info','l1_raw','l2_fact','l3_summary','l4_iden
 export type HyLayerId=typeof HY_LAYERS[number];
 export const HY_LAYER_STATES=['all','active','superseded','negated','conflicted','shadow','archived'] as const;
 export type HyLayerState=typeof HY_LAYER_STATES[number];
+export interface HyRecordProvenance {
+  status:'verbatim_user'|'explicit_correction'|'model_inference_unverified';semantic_source_complete:boolean;
+  dependency_basis:'explicit_correction'|'scope_context_envelope'|'legacy_unobserved'|'verbatim_current_input'|'raw_exact_match';
+  injection_allowed:boolean;
+}
 export interface HyStoredRecord {
   item_id:string; native_id:string; kind:'stored_record'|'aggregate_profile'; layer:HyLayerId;
   content:string; content_chars:number; content_truncated:boolean; status:string|null; is_latest:boolean|null;
@@ -14,6 +19,7 @@ export interface HyStoredRecord {
   stored_version_count?:number;
   semantic_kind?:'model_inference'|'future_intention';execution_authorized?:false;
   derivation_state?:'ready'|'isolated'|'stored'|'expired';evidence_memory_ids?:string[]|null;updated_at?:string|null;
+  provenance?:HyRecordProvenance;
 }
 export interface HyLayerRead {
   schema_version:1;layer:HyLayerId;sdk_support:'implemented'|'historical'|'reserved';
@@ -42,13 +48,24 @@ function semanticRecord(v:Record<string,unknown>,layer:HyLayerId):boolean {
     (layer==='l6_schema'?v.semantic_kind==='model_inference'&&oneOf(v.derivation_state,['ready','isolated']):
       layer==='l7_intention'&&v.semantic_kind==='future_intention'&&oneOf(v.derivation_state,['stored','expired']));
 }
+/** 旧响应可以缺整组来源标签；收到对象时按AB冻结四字段协议校验，不猜完整性或注入许可。 */
+function provenanceRecord(v:Record<string,unknown>,layer:HyLayerId):boolean {
+  if(!Object.hasOwn(v,'provenance'))return true;
+  const p=v.provenance;
+  return ['l2_fact','l3_summary','l4_identity'].includes(layer)&&object(p)&&Object.keys(p).length===4&&
+    ['status','semantic_source_complete','dependency_basis','injection_allowed'].every(key=>Object.hasOwn(p,key))&&
+    oneOf(p.status,['verbatim_user','explicit_correction','model_inference_unverified'])&&
+    oneOf(p.dependency_basis,['explicit_correction','scope_context_envelope','legacy_unobserved','verbatim_current_input','raw_exact_match'])&&
+    typeof p.semantic_source_complete==='boolean'&&typeof p.injection_allowed==='boolean'&&
+    p.semantic_source_complete===(p.status!=='model_inference_unverified');
+}
 function record(v:unknown,layer:HyLayerId):boolean {
   if(!object(v)||!hyLayerIdentifier(v.item_id)||!hyLayerIdentifier(v.native_id)||v.layer!==layer||
     !oneOf(v.kind,['stored_record','aggregate_profile'])||typeof v.content!=='string'||!integer(v.content_chars)||
     typeof v.content_truncated!=='boolean'||!(v.status===null||typeof v.status==='string')||
     !(v.is_latest===null||typeof v.is_latest==='boolean')||!['recorded_at','memory_at','valid_from','valid_until'].every(k=>time(v[k]))||
     !ids(v.supersedes)||!ids(v.superseded_by)||typeof v.version_links_limited!=='boolean'||
-    !(v.source_event_ids===null||ids(v.source_event_ids))||!(v.source_raw_memory_id===null||hyLayerIdentifier(v.source_raw_memory_id))||!semanticRecord(v,layer))return false;
+    !(v.source_event_ids===null||ids(v.source_event_ids))||!(v.source_raw_memory_id===null||hyLayerIdentifier(v.source_raw_memory_id))||!semanticRecord(v,layer)||!provenanceRecord(v,layer))return false;
   if(v.kind==='aggregate_profile')return layer==='l0_basic_info'&&v.item_id==='profile'&&integer(v.stored_version_count,1,128)&&
     object(v.basic_info)&&Object.values(v.basic_info).every(x=>x===null||['string','number','boolean'].includes(typeof x))&&
     object(v.field_sources)&&Object.values(v.field_sources).every(x=>object(x)&&(x.native_id===null||hyLayerIdentifier(x.native_id))&&(x.source_event_ids===null||ids(x.source_event_ids)));

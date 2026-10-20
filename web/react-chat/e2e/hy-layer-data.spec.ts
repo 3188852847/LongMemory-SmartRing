@@ -56,6 +56,36 @@ async function synthetic(page:Page,initialMode:Mode='normal'){
 async function noOverflow(page:Page){expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(await page.evaluate(()=>innerWidth+1));}
 async function openLayer(page:Page,layer:HyLayerId){await page.goto(`/memories?view=mechanisms&mechanism_tab=layers&layer=${layer}`);await expect(page.getByRole('heading',{name:/已保存内容/})).toBeVisible();}
 
+for(const width of [1366,390])test(`L2来源可信与注入许可冷链接滚动 ${width}`,async({page},info)=>{
+  await page.setViewportSize({width,height:844});const state=await synthetic(page);
+  const rows=[
+    storedRecord('l2_fact',0,{content:'合成来源样例：用户原话。',provenance:{status:'verbatim_user',semantic_source_complete:true,dependency_basis:'verbatim_current_input',injection_allowed:true}}),
+    storedRecord('l2_fact',1,{content:'合成来源样例：用户明确纠正。',provenance:{status:'explicit_correction',semantic_source_complete:true,dependency_basis:'explicit_correction',injection_allowed:false}}),
+    storedRecord('l2_fact',2,{content:'合成来源样例：模型概括。',provenance:{status:'model_inference_unverified',semantic_source_complete:false,dependency_basis:'scope_context_envelope',injection_allowed:false}}),
+    storedRecord('l2_fact',3,{content:'合成来源样例：来源未知。'}),
+  ];
+  await page.route('**/api/memory-engine/hy/layers/l2_fact**',route=>{
+    const req=route.request(),url=new URL(req.url());state.calls.push({path:url.pathname+url.search,method:req.method()});
+    const id=url.pathname.includes('/items/')?decodeURIComponent(url.pathname.split('/').at(-1)!):null;
+    return route.fulfill({json:id?layerDetail('l2_fact',rows.find(item=>item.item_id===id)!):layerPage('l2_fact',{items:rows,total:4})});
+  });
+  await page.goto('/memories?view=mechanisms&mechanism_tab=layers&layer=l2_fact&layer_item='+rows[2].item_id);
+  if(width===390)await largerReading(page);
+  const drawer=page.getByRole('dialog');await expect(drawer.getByText('未证实模型推断',{exact:true})).toBeVisible();
+  await expect(drawer.getByText('当前禁止注入',{exact:true})).toBeVisible();await expect(drawer.getByText('尚未证实完整',{exact:true})).toBeVisible();
+  await expect(drawer.getByText(/不是模型真实引用或逐句归因/)).toBeVisible();await noOverflow(page);
+  await page.screenshot({path:info.outputPath(`provenance-detail-${width}.png`),animations:'disabled'});
+  await page.keyboard.press('Escape');await expect(drawer).toBeHidden();
+  const records=page.locator('.hy-layer-records');await expect(records.getByText('用户原话',{exact:true})).toBeVisible();await expect(records.getByText('用户明确纠正',{exact:true})).toBeVisible();
+  await expect(records.getByText('来源可信类型未知',{exact:true})).toBeVisible();await expect(records.getByText('注入许可未知',{exact:true})).toBeVisible();
+  await records.getByText(rows[1].content,{exact:true}).evaluate(el=>el.scrollIntoView({block:'center'}));const before=await page.evaluate(()=>scrollY);expect(before).toBeGreaterThan(100);
+  await page.screenshot({path:info.outputPath(`provenance-list-${width}.png`),animations:'disabled'});
+  await page.reload();await expect(records.getByText(rows[1].content,{exact:true})).toBeVisible();await expect.poll(()=>page.evaluate(()=>scrollY)).toBeGreaterThan(100);
+  await page.goBack();await expect(drawer).toBeVisible();await expect(drawer.getByText('未证实模型推断',{exact:true})).toBeVisible();
+  await page.goForward();await expect(drawer).toBeHidden();await noOverflow(page);
+  expect(state.calls.every(call=>call.method==='GET')).toBe(true);expect(state.errors).toEqual([]);
+});
+
 async function semanticSynthetic(page:Page,options:{legacy?:boolean;isolated?:boolean}={}){
   const state=await synthetic(page);let busy=false;
   await page.route('**/api/memory-engine/hy/semantic/**',route=>{

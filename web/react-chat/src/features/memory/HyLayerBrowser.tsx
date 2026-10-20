@@ -9,6 +9,7 @@ import {useMemoryEngine} from '../../app/MemoryEngineProvider';
 import {memoryTime} from './HyMemoryWorkspace';
 import {HyLayerStatus} from './HyLayerStatus';
 import {HySemanticRecord} from './HySemanticRecord';
+import {HyRecordProvenance} from './HyRecordProvenance';
 import {HySemanticContractError,hySemanticTaskPathIdentifier} from '../../api/hySemantic';
 import type {HyCapabilityView,HyRuntimeGateSnapshot} from './hyCapabilityView';
 import './hy-layer-data.css';
@@ -110,6 +111,7 @@ export function HyLayerBrowser({layer,title,revealRequest=0,capabilities,runtime
         {record.kind==='aggregate_profile'?<><ProfileFields item={record} onVersion={showVersion}/><p>已完整读取 {record.stored_version_count} 个原生版本用于聚合。</p></>:<p className="hy-layer-record-content">{record.content||'（已保存正文为空）'}</p>}
         {record.content_truncated&&<p className="hy-layer-caption">列表正文已截断；原文共 {record.content_chars} 字符，详情最多显示 32768 字符。</p>}
         <HySemanticRecord item={record}/>
+        <HyRecordProvenance item={record}/>
         <RecordTimes item={record}/><Button onClick={()=>showVersion(record.item_id)}>{record.kind==='aggregate_profile'?'核对聚合来源与原生版本':'查看全文与来源'}</Button>
       </li>)}</ol>:<Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={data.data_state==='empty'&&data.coverage==='vdb_complete'?(state==='all'?'本层尚无已保存内容':'当前状态下没有记录'):'当前页没有返回记录，整层是否为空尚不能确认'}><p>{data.coverage==='vdb_only_graph_unopened'?'本次只覆盖向量存储；图库未读，不能当作整层为空。':data.coverage==='graph_only_legacy_vdb_present'?'本页未包含旧向量存储 L6；未返回图记录不能判定整层为空。':data.coverage==='graph_complete'?'本次图页未返回记录；派生隔离、其他状态和分页范围须分别核对。':offset>0?'可返回上一页；空末页不能反推整层没有数据。':'生成关闭或保留层状态本身不证明没有历史数据。'}</p></Empty>}
       <div className="hy-layer-pager" aria-label="本层服务端分页"><span>第 {offset/20+1} 页{data.items.length?` · 当前显示 ${offset+1}–${offset+data.items.length}`:''} · {count}</span><Button disabled={offset===0} onClick={()=>choose({layer_offset:String(Math.max(0,offset-20)),layer_item:undefined})}>上一页</Button><Button disabled={data.has_more!==true||offset>=10000} onClick={()=>choose({layer_offset:String(offset+20),layer_item:undefined})}>下一页</Button></div>
@@ -133,6 +135,7 @@ export function HyLayerBrowser({layer,title,revealRequest=0,capabilities,runtime
         {item.kind==='aggregate_profile'?<><ProfileFields item={item} onVersion={showVersion}/><p>聚合使用 {item.stored_version_count} 个原生版本；不以链头字段冒充完整画像。</p></>:<p className="hy-layer-record-content">{item.content||'（已保存正文为空）'}</p>}
         {item.content_truncated&&<Alert type="info" title={`详情正文已截断，原文共 ${item.content_chars} 字符`} description="这里只提供有界正文，不能把当前显示当作完整导出。"/>}
         <HySemanticRecord item={item} detail/>
+        <HyRecordProvenance item={item} detail/>
         <p>状态：{item.status===null?'未提供':states[item.status]??item.status}；{item.is_latest===null?'版本位置未提供':item.is_latest?'当前版本':'历史版本'}。</p><RecordTimes item={item}/>
         <h3>可得平台来源</h3>{item.source_event_ids===null?<p>来源关联未提供，不能按零来源解释。</p>:item.source_event_ids.length?<label>选择一条平台来源<select aria-label="分层详情平台来源" value={sourceId} onChange={event=>setSourceId(event.target.value)}><option value="">选择后按单条读取</option>{item.source_event_ids.map(id=><option key={id} value={id}>{id}</option>)}</select></label>:<p>该记录没有返回平台来源关联。</p>}
         {sourceId&&<section className="hy-layer-source" aria-label="分层来源正文">{source.isFetching?<Skeleton active/>:source.isError?<Alert type="error" title="单条来源读取失败" description={failure(source.error)}/>:source.data&&<><p>{source.data.role==='user'?'用户原话':source.data.role==='assistant'?'助手回复':source.data.role} · {memoryTime(source.data.occurred_at)}</p><p className="hy-layer-record-content">{source.data.content}</p><p>平台处理状态：{source.data.state??'未提供'}；不等于 SDK 分层记录。</p></>}</section>}

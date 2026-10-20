@@ -195,3 +195,12 @@ test.each(['add:'+'a'.repeat(64)+':expiry','management:synthetic-operation'])('�
   expect(request.mock.calls.map(([url])=>url)).toEqual(['/api/memory-engine/hy/layers/l6_schema?limit=20&offset=0&state=all','/api/memory-engine/hy/semantic/status',taskPath]);
   expect(request.mock.calls.every(([,method])=>!method||method==='GET')).toBe(true);
 });
+
+test('L2冷详情呈现未证实推断、来源完整性与注入许可，不增加任何来源/管理请求',async()=>{
+  const item=storedRecord('l2_fact',0,{provenance:{status:'model_inference_unverified',semantic_source_complete:false,dependency_basis:'scope_context_envelope',injection_allowed:false}});
+  const request=setup('l2_fact','&layer_item='+item.item_id,url=>url.includes('/items/')?layerDetail('l2_fact',item):layerPage('l2_fact',{items:[item]}));
+  const drawer=await screen.findByRole('dialog');await within(drawer).findByText('当前禁止注入');
+  expect(within(drawer).getByText('未证实模型推断')).toBeTruthy();expect(within(drawer).getByText('尚未证实完整')).toBeTruthy();
+  expect(within(drawer).getByText(/不是模型真实引用或逐句归因/)).toBeTruthy();
+  expect(request.mock.calls.map(([url])=>url)).toEqual(['/api/memory-engine/hy/layers/l2_fact?limit=20&offset=0&state=all','/api/memory-engine/hy/layers/l2_fact/items/'+item.item_id]);
+});
