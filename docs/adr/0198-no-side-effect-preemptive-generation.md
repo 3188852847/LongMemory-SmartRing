@@ -22,6 +22,8 @@ AC v1 提供逐连接 `turn_id/audio_revision/cancel_epoch`，其 `transcript_re
 
 AF 句柄须提供 request_id、cancel/aclose/wait_closed。AE 严格核对请求 ID、owned_upstream_exited 与账本状态；客户端关闭不等于自有上游退出。关闭回执失败时即使任务已结束也保留计算占位，aclose 返回 False；后续可信回执才能释放。这个确认只覆盖自有上游 HTTP/任务，不能证明外部供应商 GPU 已停止；unknown 仍由原账本保留。
 
+SmartTurn enabled 尚未达到真实中文误切标准，不能把它作为候选准备的唯一入口。独立来源 `candidate_source="baseline_asr"` 使用原 SenseVoice 预取正文与其 generation/voice_stamp/language/PCM 前缀证明准备候选，仅原端点后的完整 ASR 与 fresh 上下文可确认。SmartTurn shadow 事件不驱动此来源，也不改变原端点。AI 拥有预取结果/失效/reset/close 钩子与进程间接线；不能只打开开关而漏接取消。来源的音频标识来自原 ASR 代次，不与 SmartTurn 的 turn_id 混用；文本版本仍独立产生。
+
 ## 验证与回退
 
 合成测试覆盖确认/领取、续说与 ASR（语音识别）修订、版本变化、迟到/乱序事件、取消不服从及关闭等待、超时、重启、预算、工具/推理边界和正式合成 SQLite 账本。测试证明模块的候选边界，不证明实际 SDK 快照无写入，也不证明学校连接池、真实费用、端到端声音延迟或设备体验。

@@ -119,3 +119,45 @@ AB 已转接的候选边界（精确提交 `5a4c1ecb9abf5d2434f8a6eff2e5b3565d8e
 - 新增源码无依赖安装、GPU、个人库、生产端口或真实学校调用。AB 快照/校验与 AI 可信跨进程链路、正式 prepare 后 fresh 验证和最终播放/字幕/归档门仍须继续接力；本阶段不会将“默认关闭/安全降级”写成总目标完成。真实上游取消只证明 owned HTTP/请求任务退出，不证明外部计算停止。
 
 本阶段限制：主会话随后转接真实 SmartTurn 小合成中文误切未改善，enabled 尚不合格。当前 AC 事件路径只有 enabled 可准备候选，不能因此宣称日用候选已接通；AE 接续实现独立 baseline ASR 预取/原端点来源，仍保持 SmartTurn shadow 不发模型请求，AI 负责原预取钩子与宿主 RPC 的实际接线。
+
+## 第三阶段：原 ASR 预取与原端点的独立候选来源
+
+第二阶段提交 `07773e8ebec434bd4eecc15e7bcbf077b7272fbc` 已交主会话。为避免候选只能依赖尚未合格的 SmartTurn enabled，新增显式 `candidate_source="baseline_asr"`；原 `smart_turn` 来源保留，两个来源不能混用代次或确认权。Limits.enabled 仍是候选独立开关，默认关闭；SmartTurn shadow 本身继续不发模型请求。来源字段在 bridge.snapshot 中可见。
+
+AI 的原 ASR 预取钩子契约如下（不用改 AC 的 shadow 事件语义）：
+
+```python
+from voice_preemptive_connection import ASRPrefetchProof, AudioStamp
+
+bridge = PreemptiveConnections(
+    rpc_preparation_model, shared_budget, limits=limits, candidate_source="baseline_asr",
+)
+# 原预取的ticket仍valid、status=ready且lang_tag_filter返回非空content后才调用。
+proof = ASRPrefetchProof(
+    ticket.generation, ticket.voice_stamp, ticket.size, ticket.prefix_digest, ticket.language,
+)
+binding = bridge.baseline_asr_provisional(
+    connection,
+    audio=AudioStamp(ticket.generation, baseline_audio_revision, baseline_cancel_epoch),
+    text=ticket.result["content"], context=host_frozen_context, proof=proof,
+)
+# 原端点之后、完整正式ASR/正式prepare/fresh门之后调用；不是预取完成回调。
+lease = await bridge.baseline_confirmed(
+    connection, binding=binding, final_text=full_asr_content, context=host_fresh_context,
+    final_pcm=artifacts.pcm_bytes, generation=current_prefetch_generation,
+    voice_stamp=current_vad_voice_stamp, language=provider.language,
+)
+```
+
+`AudioStamp.turn_id` 在此来源取原预取 generation，audio_revision/cancel_epoch 由 AI 逐连接失效钩子维护；不能拿 AC shadow 的代次替代。`ASRPrefetchProof` 只保留前缀大小与摘要，不保存 PCM。确认允许正式 PCM 追加静音尾，但前缀字节、generation、voice_stamp、language、最终全文和 fresh 上下文必须一致。核验完在等待模型/RPC之前释放额外音频引用。文本/证明修订立即作废旧候选，一代次仍最多一次请求。
+
+续说必须在原预取 invalidate 入口同步通知 `bridge.baseline_continued(connection, audio=new_stamp)`；任何其他预取失效可用 `bridge.context_changed(connection)`，reset/close 走已交付生命周期钩子。来源为 baseline 时 reset 不读取 AC 的异名 turn_id；原端点复位后旧 generation 不能再绑定，新 generation 的首帧发声不会消耗该轮准备机会。领取前续说仍撤销凭据，最终播放/字幕/归档继续使用 AI 正式取消门。
+
+语音侧 RPC 模型代理也必须在实际开始请求前设置 `request.close_confirmation.required=True`，只有匹配本 RPC owner/connection/epoch 与 AF request_id 的可信关闭回执，且关闭/账本完成后才设 confirmed=True；不能只在客户端 finally 中无条件确认。异常或缺回执仍保持 False，由核心保留额外计算槽；ACK 本身不授权领取、提交或清理 unknown。
+
+本阶段实际检查：
+
+- 专属测试验证无 SmartTurn enabled、非空合成记忆/来源上下文可命中；原端点前无领取权；SmartTurn shadow 的任意不同 turn/audio/epoch 不会驱动 baseline 或污染其命名空间；generation/voice/language/前缀/正文/上下文变化、跨连接和确认后续说均不可领取。
+- 与 AF 精确提交 `85b1d715...` 的真实 Gateway/预算/持久传输/关闭 ACK 组合：独立 baseline 来源＋非空合成记忆证据＋精确 `DeepSeek-V4-Flash` 模型，一请求一次命中，账本 attempt_count=1、unknown_or_inflight=0、锁释放；不发任何 SmartTurn enabled 事件。使用随机回环合成供应商，不是学校真实请求，也不是 AB 实际库或跨进程已验。
+- AI 仍需把原预取结果、全部失效、原端点完整 ASR、AB token/内容/来源校验与宿主 RPC 接入这些方法，再验非空合成 Hy 库整链真实命中、记忆一致性及设备首声。AE 不把仅上下文的模拟命中或稳定 fallback 当作总目标完成。
+- 本阶段相关五文件回归最终 **160 passed in 0.89s**；下述接口交付不修改 `launch_with_memory.py`、原 `voice_asr_prefetch.py` 或其他会话文件。

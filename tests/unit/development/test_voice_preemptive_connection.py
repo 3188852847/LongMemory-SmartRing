@@ -1,6 +1,7 @@
 import asyncio
 from contextlib import asynccontextmanager
 import importlib.util
+import hashlib
 from pathlib import Path
 import sys
 import threading
@@ -294,5 +295,134 @@ def test_reset_without_prior_binding_uses_explicit_audio_floor():
         assert bind(manager, conn, audio=b.AudioStamp(9, 0, 0)) is None
         manager.on_event(conn, event("provisional", turn=10))
         assert bind(manager, conn, audio=b.AudioStamp(10, 0, 0)) is not None
+        assert await manager.aclose()
+    asyncio.run(run())
+
+
+BASE_PCM = b"\x17\x00" * 960 * 40
+
+
+def baseline(model=None, *, enabled=True):
+    return b.PreemptiveConnections(model or FakeModel(), p.RequestBudget(),
+                                  limits=p.Limits(enabled=enabled), candidate_source="baseline_asr")
+
+
+def baseline_input(manager, conn, *, text="合成当前问题", ctx=None, pcm=BASE_PCM):
+    proof = b.ASRPrefetchProof(3, 1000.0, len(pcm), hashlib.sha256(pcm).digest(), "zh")
+    binding = manager.baseline_asr_provisional(
+        conn, audio=b.AudioStamp(3, 17, 0), text=text, context=ctx or context(), proof=proof)
+    return binding, proof
+
+
+def test_baseline_prefetch_can_hit_with_nonempty_memory_without_smart_turn_enabled():
+    async def run():
+        manager, conn = baseline(), SimpleNamespace()
+        ctx = p.ContextSnapshot(p.SnapshotVersion("synthetic-L2-source-1", "c", "no-tools", "school-role"),
+                                (("system", "合成角色。记忆证据：用户偏好无糖茶；来源synthetic-source-1。"),))
+        binding, proof = baseline_input(manager, conn, ctx=ctx)
+        await drain()
+        assert manager.snapshot(conn)["candidate"]["ready"] == 1
+        assert manager.snapshot(conn)["candidate"]["hits"] == 0
+        assert binding.turn.transcript_revision == 1 and binding.audio.audio_revision == 17
+        # AC shadow 的无权威事件不能启动或确认baseline，也不能混用它的音频命名空间。
+        manager.on_event(conn, event("provisional", turn=99, audio=99, epoch=99, mode="shadow"))
+        manager.on_event(conn, event("confirmed", turn=99, audio=99, epoch=99, mode="shadow"))
+        assert await manager.confirmed(conn, binding=binding, final_text="合成当前问题", context=ctx) is None
+        lease = await manager.baseline_confirmed(
+            conn, binding=binding, final_text="合成当前问题", context=ctx,
+            final_pcm=BASE_PCM + b"\0" * 1920, generation=proof.generation,
+            voice_stamp=proof.voice_stamp, language=proof.language)
+        assert lease.claim(conn, binding=binding, context=ctx) == "合成回答。"
+        assert manager.snapshot(conn)["candidate"]["hits"] == 1 and manager.model.started == 1
+        assert "无糖茶" not in repr(manager.snapshot(conn))
+        assert await manager.aclose()
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("change", ["generation", "voice", "language", "prefix", "short", "text", "context"])
+def test_baseline_original_endpoint_requires_full_matching_pcm_text_and_context(change):
+    async def run():
+        manager, conn, ctx = baseline(), SimpleNamespace(), context()
+        binding, proof = baseline_input(manager, conn, ctx=ctx)
+        kwargs = dict(final_text="合成当前问题", context=ctx, final_pcm=BASE_PCM,
+                      generation=proof.generation, voice_stamp=proof.voice_stamp, language=proof.language)
+        if change == "generation": kwargs["generation"] += 1
+        elif change == "voice": kwargs["voice_stamp"] += 1
+        elif change == "language": kwargs["language"] = "en"
+        elif change == "prefix": kwargs["final_pcm"] = b"\0" * len(BASE_PCM)
+        elif change == "short": kwargs["final_pcm"] = BASE_PCM[:-1920]
+        elif change == "text": kwargs["final_text"] += "续句"
+        else: kwargs["context"] = context(memory_revision="changed")
+        assert await manager.baseline_confirmed(conn, binding=binding, **kwargs) is None
+        assert manager.snapshot(conn)["candidate"]["hits"] == 0
+        assert await manager.aclose()
+    asyncio.run(run())
+
+
+def test_baseline_continuation_cancels_old_result_without_retry_but_next_generation_can_prepare():
+    async def run():
+        manager, conn, ctx = baseline(), SimpleNamespace(), context()
+        first, proof = baseline_input(manager, conn, ctx=ctx)
+        await drain()
+        manager.baseline_continued(conn, audio=b.AudioStamp(3, 18, 1))
+        assert await manager.baseline_confirmed(
+            conn, binding=first, final_text="合成当前问题", context=ctx, final_pcm=BASE_PCM,
+            generation=3, voice_stamp=1000.0, language="zh") is None
+        newer = b.ASRPrefetchProof(3, 2000.0, len(BASE_PCM), hashlib.sha256(BASE_PCM).digest(), "zh")
+        manager.baseline_asr_provisional(conn, audio=b.AudioStamp(3, 18, 1), text="合成续句", context=ctx, proof=newer)
+        assert manager.model.started == 1
+        manager.reset(conn, last_turn_id=3)
+        # 新轮首个发声事件不应消耗这轮唯一准备机会。
+        manager.baseline_continued(conn, audio=b.AudioStamp(4, 0, 1))
+        next_proof = b.ASRPrefetchProof(4, 3000.0, len(BASE_PCM), hashlib.sha256(BASE_PCM).digest(), "zh")
+        next_binding = manager.baseline_asr_provisional(
+            conn, audio=b.AudioStamp(4, 0, 1), text="新轮合成问题", context=ctx, proof=next_proof)
+        lease = await manager.baseline_confirmed(
+            conn, binding=next_binding, final_text="新轮合成问题", context=ctx, final_pcm=BASE_PCM,
+            generation=4, voice_stamp=3000.0, language="zh")
+        assert lease.claim(conn, binding=next_binding, context=ctx)
+        assert manager.model.started == 2
+        assert await manager.aclose()
+    asyncio.run(run())
+
+
+def test_baseline_candidate_switch_off_and_missing_proof_do_not_request_model():
+    async def run():
+        manager, conn = baseline(enabled=False), SimpleNamespace()
+        baseline_input(manager, conn)
+        await drain()
+        assert manager.model.started == 0
+        with pytest.raises(ValueError, match="baseline_proof_required"):
+            manager.bind_transcript(conn, audio=b.AudioStamp(3, 17, 0), text="合成问题", context=context())
+        with pytest.raises(ValueError, match="prefetch_proof_invalid"):
+            manager.baseline_asr_provisional(conn, audio=b.AudioStamp(3, 17, 0), text="合成问题",
+                                             context=context(), proof=True)
+        assert await manager.aclose()
+    asyncio.run(run())
+
+
+def test_baseline_two_connections_cannot_use_each_others_final_audio_or_binding():
+    async def run():
+        manager, a, c = baseline(), SimpleNamespace(), SimpleNamespace()
+        binding, proof = baseline_input(manager, a)
+        assert await manager.baseline_confirmed(
+            c, binding=binding, final_text="合成当前问题", context=context(), final_pcm=BASE_PCM,
+            generation=3, voice_stamp=1000.0, language="zh") is None
+        assert manager.snapshot(c)["counts"]["foreign_binding"] == 1
+        assert await manager.aclose()
+    asyncio.run(run())
+
+
+def test_baseline_continuation_after_final_asr_before_claim_revokes_lease():
+    async def run():
+        manager, conn, ctx = baseline(), SimpleNamespace(), context()
+        binding, proof = baseline_input(manager, conn, ctx=ctx)
+        lease = await manager.baseline_confirmed(
+            conn, binding=binding, final_text="合成当前问题", context=ctx, final_pcm=BASE_PCM,
+            generation=3, voice_stamp=1000.0, language="zh")
+        assert lease is not None
+        manager.baseline_continued(conn, audio=b.AudioStamp(3, 18, 1))
+        assert lease.claim(conn, binding=binding, context=ctx) is None
+        assert manager.snapshot(conn)["candidate"]["hits"] == 0
         assert await manager.aclose()
     asyncio.run(run())

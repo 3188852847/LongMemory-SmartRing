@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass, field
+import hashlib
+import math
 import secrets
 import threading
 import weakref
@@ -31,6 +33,27 @@ class AudioStamp:
         if any(type(x) is not int or not 0 <= x < 2**63 for x in (
                 self.turn_id, self.audio_revision, self.cancel_epoch)):
             raise ValueError("preemptive_audio_stamp_invalid")
+
+
+@dataclass(frozen=True)
+class ASRPrefetchProof:
+    """原 SenseVoice 预取已有的证明；不保存PCM或把音频版本充当文本版本。"""
+
+    generation: int
+    voice_stamp: float = field(repr=False)
+    prefix_size: int
+    prefix_digest: bytes = field(repr=False)
+    language: str = field(repr=False)
+
+    def __post_init__(self):
+        if (type(self.generation) is not int or self.generation < 0
+                or type(self.voice_stamp) not in {int, float}
+                or not math.isfinite(self.voice_stamp) or self.voice_stamp <= 0
+                or type(self.prefix_size) is not int or not 32000 <= self.prefix_size <= 256000
+                or self.prefix_size % 1920 != 0 or not isinstance(self.prefix_digest, bytes)
+                or len(self.prefix_digest) != 32 or not isinstance(self.language, str)
+                or not 1 <= len(self.language) <= 64):
+            raise ValueError("preemptive_asr_prefetch_proof_invalid")
 
 
 @dataclass(frozen=True)
@@ -69,6 +92,7 @@ class TranscriptBinding:
     _generation: int = field(repr=False)
     _text: str = field(repr=False)
     _context: ContextSnapshot = field(repr=False)
+    _baseline_proof: ASRPrefetchProof | None = field(default=None, repr=False)
 
 
 class _Connection:
@@ -77,6 +101,7 @@ class _Connection:
         self.connection_id = secrets.token_hex(16)
         self.controller = VoicePreemptive(owner.model, owner.budget, limits=owner.limits)
         self.audio = self.provisional = self.confirmed = self.binding = None
+        self.baseline_verified = None
         self.mode = None
         self.floor_turn = -1
         self.generation = self.text_revision = 0
@@ -119,8 +144,11 @@ class ConnectionCandidate:
 class PreemptiveConnections:
     """实例状态挂在 connection 自身，仅计算预算及无状态模型传输可共享。"""
 
-    def __init__(self, model, budget, *, limits=None):
+    def __init__(self, model, budget, *, limits=None, candidate_source="smart_turn"):
+        if candidate_source not in {"smart_turn", "baseline_asr"}:
+            raise ValueError("preemptive_candidate_source_invalid")
         self.model, self.budget, self.limits = model, budget, limits or Limits()
+        self.candidate_source = candidate_source
         self.owner_id = secrets.token_hex(16)
         self._loop = None
         self._states = weakref.WeakSet()
@@ -202,6 +230,7 @@ class PreemptiveConnections:
         state.audio = audio
         state.generation += 1
         state.binding = state.provisional = state.confirmed = None
+        state.baseline_verified = None
         return True
 
     def on_event(self, connection, event):
@@ -218,6 +247,13 @@ class PreemptiveConnections:
 
     def _event(self, state, event):
         state.counts["events"] += 1
+        if self.candidate_source == "baseline_asr":
+            # 两种来源的turn_id没有共同命名空间；shadow不能驱动baseline准备或确认。
+            if event.mode == "shadow":
+                state.counts["shadow"] += 1
+            if event.kind == "cancel" and event.reason == "closed":
+                self._close(state)
+            return False
         if not self._adopt(state, event.audio):
             return False
         if state.mode is not None and state.mode != event.mode:
@@ -246,6 +282,11 @@ class PreemptiveConnections:
 
     def bind_transcript(self, connection, *, audio, text, context):
         """AI 传实际 ASR content 及已核验快照；晚到旧音频文本直接拒绝。"""
+        if self.candidate_source != "smart_turn":
+            raise ValueError("preemptive_baseline_proof_required")
+        return self._bind(connection, audio=audio, text=text, context=context)
+
+    def _bind(self, connection, *, audio, text, context, proof=None):
         if type(audio) is not AudioStamp or type(context) is not ContextSnapshot:
             raise ValueError("preemptive_binding_invalid")
         if not isinstance(text, str) or not text.strip() or len(text) > self.limits.max_input_chars:
@@ -256,7 +297,7 @@ class PreemptiveConnections:
         previous = state.binding
         if (previous is not None and previous.audio == audio and previous._text == text
                 and previous._context.version == context.version
-                and previous._context.digest == context.digest):
+                and previous._context.digest == context.digest and previous._baseline_proof == proof):
             return previous
         text_changed = previous is None or previous._text != text
         state.generation += 1
@@ -265,10 +306,11 @@ class PreemptiveConnections:
         turn = TurnStamp(audio.turn_id, state.text_revision, audio.cancel_epoch)
         if previous is not None:
             state.controller.revised(turn=turn)
-            if previous._context != context:
+            if previous._context != context or previous._baseline_proof != proof:
                 state.controller.context_changed()
-        binding = TranscriptBinding(audio, turn, state, state.generation, text, context)
+        binding = TranscriptBinding(audio, turn, state, state.generation, text, context, proof)
         state.binding = binding
+        state.baseline_verified = None
         state.counts["bound"] += 1
         self._prepare(state, binding)
         return binding
@@ -281,7 +323,8 @@ class PreemptiveConnections:
                 and state.audio == binding.audio)
 
     def _prepare(self, state, binding):
-        if (not self._valid(state, binding) or state.mode != "enabled"
+        expected_mode = "baseline_asr" if self.candidate_source == "baseline_asr" else "enabled"
+        if (not self._valid(state, binding) or state.mode != expected_mode
                 or state.provisional != binding.audio or state.confirmed is not None):
             return False
         admitted = state.controller.provisional(turn=binding.turn, transcript=binding._text,
@@ -297,7 +340,9 @@ class PreemptiveConnections:
         if not self._valid(state, binding):
             state.counts["foreign_binding"] += 1
             return None
-        if state.mode != "enabled" or state.confirmed != binding.audio:
+        expected_mode = "baseline_asr" if self.candidate_source == "baseline_asr" else "enabled"
+        if (state.mode != expected_mode or state.confirmed != binding.audio
+                or (self.candidate_source == "baseline_asr" and state.baseline_verified is not binding)):
             state.counts["not_confirmed"] += 1
             return None
         if (final_text != binding._text or type(context) is not ContextSnapshot
@@ -314,6 +359,7 @@ class PreemptiveConnections:
     def _invalidate(state):
         state.generation += 1
         state.binding = state.provisional = state.confirmed = None
+        state.baseline_verified = None
         state.controller.context_changed()
 
     def context_changed(self, connection):
@@ -363,8 +409,10 @@ class PreemptiveConnections:
     def snapshot(self, connection):
         state = self._lookup(connection)
         if state is None:
-            return {"version": 1, "attached": False, "dropped_events": self._dropped}
+            return {"version": 1, "attached": False, "candidate_source": self.candidate_source,
+                    "dropped_events": self._dropped}
         return {"version": 1, "attached": True, "closed": state.closed,
+                "candidate_source": self.candidate_source,
                 "quarantined": state.quarantined.is_set(), "counts": dict(state.counts),
                 "candidate": state.controller.snapshot(), "dropped_events": self._dropped}
 
@@ -372,6 +420,51 @@ class PreemptiveConnections:
         """只供AI进程间控制协议使用；正式鉴权仍由宿主入口验证。"""
         state = self._state(connection)
         return self.owner_id, state.connection_id
+
+    def baseline_asr_provisional(self, connection, *, audio, text, context, proof):
+        """仅独立候选开关启用后，由原ASR预取有效结果钩子调用，不借用shadow。"""
+        if self.candidate_source != "baseline_asr":
+            raise ValueError("preemptive_baseline_source_not_selected")
+        if type(proof) is not ASRPrefetchProof or type(audio) is not AudioStamp or proof.generation != audio.turn_id:
+            raise ValueError("preemptive_asr_prefetch_proof_invalid")
+        state = self._state(connection)
+        if state.quarantined.is_set() or not self._adopt(state, audio):
+            return None
+        state.mode, state.provisional = "baseline_asr", audio
+        return self._bind(connection, audio=audio, text=text, context=context, proof=proof)
+
+    def baseline_continued(self, connection, *, audio):
+        if self.candidate_source != "baseline_asr" or type(audio) is not AudioStamp:
+            raise ValueError("preemptive_baseline_source_not_selected")
+
+        def continued(state):
+            if self._adopt(state, audio):
+                self._invalidate(state)
+
+        return self._dispatch(connection, continued)
+
+    async def baseline_confirmed(self, connection, *, binding, final_text, context,
+                                 final_pcm, generation, voice_stamp, language):
+        """仅原端点+完整正式ASR之后调用；原始音频只用于有界前缀核验，不保留。"""
+        if self.candidate_source != "baseline_asr":
+            raise ValueError("preemptive_baseline_source_not_selected")
+        state = self._state(connection)
+        if not self._valid(state, binding):
+            state.counts["foreign_binding"] += 1
+            return None
+        proof = binding._baseline_proof
+        matches = (proof is not None and type(generation) is int and generation == proof.generation
+                   and type(voice_stamp) in {float, int} and voice_stamp == proof.voice_stamp
+                   and language == proof.language and isinstance(final_pcm, bytes)
+                   and len(final_pcm) >= proof.prefix_size
+                   and hashlib.sha256(final_pcm[:proof.prefix_size]).digest() == proof.prefix_digest)
+        del final_pcm  # 等待模型或RPC时不额外持有原音频引用。
+        if not matches:
+            state.counts["final_mismatch"] += 1
+            self._invalidate(state)
+            return None
+        state.confirmed, state.baseline_verified = binding.audio, binding
+        return await self.confirmed(connection, binding=binding, final_text=final_text, context=context)
 
 
 def install_preemptive_connection_lifecycle(connection_class, bridge):
@@ -383,7 +476,7 @@ def install_preemptive_connection_lifecycle(connection_class, bridge):
     def reset_audio_states(connection, *args, **kwargs):
         snapshot = getattr(connection, "_longmemory_voice_turn_end_snapshot", None)
         last_turn_id = None
-        if callable(snapshot):
+        if bridge.candidate_source == "smart_turn" and callable(snapshot):
             try:
                 candidate = snapshot().get("turn_id")
                 if type(candidate) is int and candidate >= 0:
