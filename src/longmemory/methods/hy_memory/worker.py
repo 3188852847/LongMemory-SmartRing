@@ -22,7 +22,7 @@ from .management_rpc import ManagementRPC, profile_scope_proof
 from .layer_data import LayerDataRPC
 from .sdk_bridge import SOURCE_NAMESPACE
 from .observation import Observation, span
-from .semantic import SemanticCoordinator, read_intentions, graph_evidence, read_profile, SearchSourceReader
+from .semantic import SemanticCoordinator, read_intentions, graph_evidence, read_profile, SearchSourceReader, invalidate_inactive_semantics
 from .candidate_snapshot import CandidateSnapshots
 
 
@@ -334,6 +334,8 @@ class ProtocolService:
             if semantic.gate()["paused"]:
                 raise ValueError("hy_semantic_write_paused")
             semantic.dirty()
+        elif operation == "add":
+            invalidate_inactive_semantics(getattr(self.budget,"management_workspace",None))
         if operation == "search" and semantic is not None:
             # 普通读只使用原生普通通道；共享一次查询向量给无副作用 L7 读取。
             # L6 后台运行/失效期间不读图；不在问答路径触发归纳或到期写入。

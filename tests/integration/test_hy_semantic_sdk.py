@@ -5,6 +5,8 @@ from datetime import UTC, datetime
 import hashlib
 import json
 import os
+import sqlite3
+from contextlib import closing
 from time import monotonic, perf_counter, sleep
 from uuid import uuid4
 
@@ -276,3 +278,108 @@ def test_real_nonempty_profile_candidate_matches_formal_prepare_content_and_sour
         runtime.cancel_round_screen(turn.event.event_id,reason="cancelled",client_round_id="e"*32)
     finally:
         runtime.close()
+
+
+def _source_binding(root):
+    with closing(sqlite3.connect((root/"sources.db").as_uri()+"?mode=ro",uri=True)) as db:
+        return db.execute("SELECT engine_name FROM source_journal_identity").fetchone()[0]
+
+
+def _task_rows(root):
+    with closing(sqlite3.connect((root/"engine/semantic.sqlite3").as_uri()+"?mode=ro",uri=True)) as db:
+        return db.execute("SELECT id,kind,payload,state,created,finished,elapsed_ms,reason FROM tasks ORDER BY id").fetchall()
+
+
+def test_real_pro_source_enable_semantic_reopen_rollback_preserves_source_graph_and_tasks(tmp_path):
+    old = MemoryEvent("ab-old-pro-source","user","合成旧pro来源",datetime(2026,10,19,tzinfo=UTC),"ab-old-pro")
+    new = MemoryEvent("ab-new-semantic-source","user","合成语义计划来源",datetime(2026,10,20,tzinfo=UTC),"ab-new-semantic")
+    rollback = MemoryEvent("ab-pro-after-rollback","user","合成回退pro后的新增来源",datetime(2026,10,21,tzinfo=UTC),"ab-rollback")
+    assembly = open_backend(tmp_path,scenario="projection",semantic=False)
+    try:
+        assert assembly.method.implementation_version == "sdk-2.0.3-adapter-1"
+        assert assembly.method.observe(old).processing_status == "completed"
+        binding = _source_binding(tmp_path)
+        assert json.loads(binding)["version"] == "sdk-2.0.3-adapter-1"
+    finally:
+        assembly.method.close()
+    original_bytes = (tmp_path/"sources.db").read_bytes()
+    from dataclasses import replace
+    with pytest.raises(ValueError,match="verification"):
+        assemble_hy_backend(settings=replace(SETTINGS,semantic_layers_enabled=True),state_directory=tmp_path/"engine",
+            source_path=tmp_path/"sources.db",create=False,client_factory=lambda *a,**kw:pytest.fail("old proof must not start SDK"),
+            management_verification={"sdk_version":"2.0.3","rpc_source_sha256":management_primitives_identity(),
+                "real_sdk_rpc_verified":True,"semantic_background_writes_disabled":True})
+    assert (tmp_path/"sources.db").read_bytes()==original_bytes
+    assembly = open_backend(tmp_path,create=False,scenario="projection",semantic=True)
+    try:
+        assert assembly.method.implementation_version == "sdk-2.0.3-semantic-adapter-2"
+        assert assembly.method.engine.source_storage_version == "sdk-2.0.3-adapter-1"
+        assert _source_binding(tmp_path)==binding
+        assert assembly.method.source_detail(old.event_id)["content"]==old.content
+        before = assembly.method.engine.sdk_call("diagnostics")["simulated_model_requests"]
+        assert assembly.method.observe(old).processing_status == "completed"
+        assert assembly.method.engine.sdk_call("diagnostics")["simulated_model_requests"]==before
+        assert assembly.method.observe(new).processing_status == "completed"
+        task_id="add:"+hashlib.sha256(new.event_id.encode()).hexdigest()
+        assert wait_task(assembly.method.engine,task_id)["state"]=="completed"
+        graph_ids={row["item_id"] for row in layer(assembly.method.engine,"l6_schema")["items"]}
+        assert graph_ids
+        task_rows = _task_rows(tmp_path)
+    finally:
+        assembly.method.close()
+    assembly = open_backend(tmp_path,create=False,scenario="projection",semantic=True)
+    try:
+        assert _source_binding(tmp_path)==binding and _task_rows(tmp_path)==task_rows
+        assert {row["item_id"] for row in layer(assembly.method.engine,"l6_schema")["items"]}==graph_ids
+        assert assembly.method.source_detail(new.event_id)["content"]==new.content
+    finally:
+        assembly.method.close()
+    graph_digest=hashlib.sha256((tmp_path/"engine/sdk/graph").read_bytes()).hexdigest()
+    assembly = open_backend(tmp_path,create=False,scenario="projection",semantic=False)
+    try:
+        assert _source_binding(tmp_path)==binding
+        assert _task_rows(tmp_path)==task_rows
+        assert assembly.method.source_detail(new.event_id)["state"]=="completed"
+        assert assembly.method.observe(rollback).processing_status=="completed"
+        assert _task_rows(tmp_path)==task_rows
+    finally:
+        assembly.method.close()
+    assert hashlib.sha256((tmp_path/"engine/sdk/graph").read_bytes()).hexdigest()==graph_digest
+    assembly = open_backend(tmp_path,create=False,scenario="projection",semantic=True)
+    try:
+        assert _source_binding(tmp_path)==binding
+        assert _task_rows(tmp_path)==task_rows
+        assert assembly.method.engine.sdk_call("semantic_status")["schema_state"]=="isolated"
+        assert {row["item_id"] for row in layer(assembly.method.engine,"l6_schema")["items"]}==graph_ids
+        assert "模型归纳" not in assembly.method.engine.recall("检查资料").context
+        for event in (old,new,rollback):
+            assert assembly.method.source_detail(event.event_id)["content"]==event.content
+            assert assembly.method.source_detail(event.event_id)["state"]=="completed"
+    finally:
+        assembly.method.close()
+
+
+def test_real_pre_fix_semantic_source_alias_reopens_without_identity_rewrite(tmp_path,monkeypatch):
+    from longmemory.methods.hy_memory import assembly as module
+    from longmemory.bootstrap import assemble_backend
+    # 使用原公共装配真实创建旧semantic-adapter-2绑定，不通过SQL改写模拟旧库。
+    def original_assembly(engine,resources,source,*,management,create):
+        return assemble_backend(method=engine,resources=resources,source_path=source,management=management,create_sources=create)
+    with monkeypatch.context() as patch:
+        patch.setattr(module,"_assemble_hy_sources",original_assembly)
+        old = open_backend(tmp_path,scenario="projection",semantic=True)
+        try:
+            event=MemoryEvent("ab-pre-fix-semantic-source","assistant","合成旧语义来源",datetime.now(UTC),"ab-alias")
+            old.method.archive(event)
+            binding=_source_binding(tmp_path)
+            assert json.loads(binding)["version"]=="sdk-2.0.3-semantic-adapter-2"
+        finally:
+            old.method.close()
+    for semantic in (True,False):
+        current=open_backend(tmp_path,create=False,scenario="projection",semantic=semantic)
+        try:
+            assert _source_binding(tmp_path)==binding
+            assert current.method.source_detail(event.event_id)["content"]==event.content
+            assert current.method.engine.source_storage_version=="sdk-2.0.3-adapter-1"
+        finally:
+            current.method.close()

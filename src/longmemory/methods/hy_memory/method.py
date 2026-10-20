@@ -6,7 +6,7 @@ from uuid import uuid4
 from longmemory.methods.contracts import (
     MemorySupport, MethodCapabilities, ObservationResult, RetrievedTrace, UnsupportedCapabilityError,
 )
-from .sdk_bridge import HySdkBridge, SDK_VERSION, project_answer_content
+from .sdk_bridge import HySdkBridge, SDK_VERSION, SOURCE_NAMESPACE, project_answer_content
 from .administration import HyAdministration  # 保留既有公开导入路径。
 from .observation import measured
 
@@ -16,6 +16,21 @@ class HyMemoryMethod:
     implementation_version = "sdk-" + SDK_VERSION + "-adapter-1"
     retrieval_name = "hy_chat_default_legacy"
     capabilities = MethodCapabilities(session_metadata=True)
+
+    @property
+    def source_storage_version(self):
+        """只有这两个已验证SDK2.0.3运行实现共享来源存储；非宽泛忽略版本。"""
+        compatible = {"sdk-2.0.3-adapter-1", "sdk-2.0.3-semantic-adapter-2"}
+        if (self.settings.sdk_version != "2.0.3" or SOURCE_NAMESPACE != "smartring_synthetic" or self.name != "hy_memory_pro_chat"
+                or self.implementation_version not in compatible):
+            raise ValueError("hy_source_runtime_storage_version_unproven")
+        return "sdk-2.0.3-adapter-1"
+
+    @property
+    def source_compatible_versions(self):
+        # semantic-adapter-2是5a4c1ec阶段新合成库已写入的旧绑定别名；
+        # 保留其原文不回写，也不能据此接纳未来任意adapter/SDK版本。
+        return (self.source_storage_version, "sdk-2.0.3-semantic-adapter-2")
 
     def __init__(self, *, settings, client_factory):
         self.settings = settings

@@ -168,6 +168,9 @@ class ManagementRPC:
         guarded = semantic is not None and operation in {"update", "delete"}
         if guarded:
             semantic.begin_management(self.client.get(memory_id))
+        elif operation in {"update","delete"}:
+            from .semantic import invalidate_inactive_semantics
+            invalidate_inactive_semantics(getattr(self.budget,"management_workspace",None))
         try:
             result = getattr(self.client, operation)(**arguments)
         finally:

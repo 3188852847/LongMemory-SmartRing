@@ -19,6 +19,29 @@ class SemanticBusy(RuntimeError):
     pass
 
 
+def invalidate_inactive_semantics(workspace):
+    """pro回退写入也使保留图失效；不打开图/模型、不创建任务或空账本。"""
+    if workspace is None:
+        return
+    path = workspace/"semantic.sqlite3"
+    if not path.is_file():
+        return
+    from .management_rpc import owner_lease_held
+    if path.is_symlink() or path.is_junction() or not owner_lease_held(workspace):
+        raise ValueError("hy_inactive_semantic_owner_unproven")
+    db = sqlite3.connect(path.as_uri()+"?mode=rw",uri=True,timeout=2)
+    try:
+        with db:
+            db.execute("BEGIN IMMEDIATE")
+            keys = dict(db.execute("SELECT key,value FROM control"))
+            if any(type(keys.get(key)) is not int for key in ("epoch","ready_epoch","revision")):
+                raise ValueError("hy_inactive_semantic_control_unproven")
+            db.execute("UPDATE control SET value=value+1 WHERE key IN ('epoch','revision')")
+            db.execute("UPDATE control SET value=-1 WHERE key='ready_epoch'")
+    finally:
+        db.close()
+
+
 def task_id(value):
     if (not isinstance(value, str) or not value.strip() or len(value) > 256
             or any(ord(c) < 32 for c in value)):

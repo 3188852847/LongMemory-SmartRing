@@ -24,6 +24,16 @@ L7 召回复用原生 VDB 搜索、现存向量和纯函数复本分组，不调
 
 Runtime 的写开关需通过内部 `configure_background_writes(write_enabled=…)` 同步；暂停阻止新 add/新任务与未认领任务，已经认领任务不伪称回滚。使用开关仍由平台控制是否调用 recall。HTTP 新任务操作须主会话/AI 接入统一写门后开放，本分支未扩展公共路由白名单。
 
+## 来源存储身份与运行版本（AI部署审查补充）
+
+原公共装配把 `implementation_version` 放进来源账本的不可变JSON绑定；语义模式如实报告 `sdk-2.0.3-semantic-adapter-2`，会与既有pro的 `sdk-2.0.3-adapter-1` 不匹配。仅保持HySettings.identity不变不足以兼容，不能通过重建来源库、修改身份表或忽略所有version解决。
+
+Hy方法现显式区分 `implementation_version`（真实运行实现）与 `source_storage_version`（稳定来源格式绑定）。仅允许SDK 2.0.3、原方法名/命名空间、已知两个运行版本；canonical来源版本沿用 `sdk-2.0.3-adapter-1` 以保持原库字节身份。Hy专属装配直接组合既有SQLiteSourceJournal/ManagedMemoryMethod/BackendAssembly，不改公共assemble_backend或其它后端契约；ManagedMemory继续报告真实运行版本。所有方法名、资源名、精确绝对路径、资源类型及完整JSON都必须匹配，未知SDK/运行版本/既有来源版本/额外字段均拒绝。
+
+既有pro绑定原样重用；5a4c1ec阶段新语义合成库已经使用的 `sdk-2.0.3-semantic-adapter-2` 是唯一额外旧别名。选择已有别名时只读不可变身份元数据，取得原来源owner锁后由SQLiteSourceJournal再次严格比较，绝不更新身份行。新来源库写canonical绑定；pro→semantic→pro及再次开启都不需要来源表迁移或重索引。语义开关/Runtime权限与管理proof完全独立，旧图关闭proof仍不能开启语义后台；method/assembly两份源码追加进入精确指纹。
+
+回退pro仍保留图与语义任务库。若pro发生add/update/delete尝试，仅在原engine owner持锁且既有任务控制表可证时把保留图的epoch/revision推进并置ready_epoch=-1；不打开图、不产生任务/模型请求、不新建空账本。之后重新开启保留旧图内容但隔离注入，避免把回退期间的新写入遗漏掉；任务历史不被重置。个人库、生产开关/回执没有在本分支切换。
+
 候选预测使用独立只读快照：调用方提供已有查询向量，只读原生 VDB/图库/画像，不调用 add、公开 search、模型、embedding 或正式 prepare。快照不展开历史版本，管理来源叠加和 uncertain 排除仍保留。返回 HMAC（带密钥的消息认证码）令牌绑定当前 owner、revision/epoch、原生记忆摘要与最多 30 秒有效期；意图到期可进一步缩短有效期。任何前台写尝试或后台任务开始/结束均使 revision 前进，后台写运行时不能取得候选快照，重启换密钥，旧令牌拒绝。校验只在调用时点成立，不创建跨 Runtime 事务或执行授权；AI/AE 在正式采用的同一临界区校验，并与正式话轮实际记忆内容/来源比较。历史或召回策略产生不同支持时丢弃候选，不以 revision 相同替代内容一致。
 
 ## 本机问题与代价
