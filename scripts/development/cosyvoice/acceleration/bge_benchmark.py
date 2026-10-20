@@ -227,7 +227,9 @@ def worker(model: Path, output: Path, window_id: str, start_gate: Path):
 
 class WindowsResourceJob:
     """Job Object硬性限单进程提交内存与两CPU；关闭时只结束本Job所属进程。"""
-    def __init__(self):
+    def __init__(self, *, memory_limit_mib=2048, logical_cpus=2):
+        if not 1024 <= memory_limit_mib <= 8192 or logical_cpus not in (1, 2):
+            raise ValueError("resource_job_budget_invalid")
         class Basic(ctypes.Structure):
             _fields_ = [("PerProcessUserTimeLimit", ctypes.c_longlong), ("PerJobUserTimeLimit", ctypes.c_longlong),
                         ("LimitFlags", wintypes.DWORD), ("MinimumWorkingSetSize", ctypes.c_size_t),
@@ -254,15 +256,15 @@ class WindowsResourceJob:
         bits = [1 << index for index in range(ctypes.sizeof(ctypes.c_size_t)*8) if process_mask.value & (1 << index)]
         if not bits:
             raise OSError("empty_owned_affinity_mask")
-        self.affinity = sum(bits[:2])
+        self.affinity = sum(bits[:logical_cpus])
         self.handle = kernel.CreateJobObjectW(None, None)
         if not self.handle:
             raise OSError("cannot_create_owned_resource_job")
         limits = Extended()
         limits.BasicLimitInformation.LimitFlags = 0x100 | 0x200 | 0x2000 | 0x10
         limits.BasicLimitInformation.Affinity = self.affinity
-        limits.ProcessMemoryLimit = 2048 * 2**20
-        limits.JobMemoryLimit = 2048 * 2**20
+        limits.ProcessMemoryLimit = memory_limit_mib * 2**20
+        limits.JobMemoryLimit = memory_limit_mib * 2**20
         if not kernel.SetInformationJobObject(self.handle, 9, ctypes.byref(limits), ctypes.sizeof(limits)):
             self.close()
             raise OSError("cannot_set_owned_resource_job_limits")

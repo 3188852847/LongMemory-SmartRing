@@ -16,6 +16,8 @@ BGE CPU 动态 INT8 只生成独立 Bert Linear 权重候选，保留原模型�
 
 量化改变 embedding recipe（向量生成配方）及 provider identity（编码器身份）；候选输出独立元数据/指纹，不能沿用现有FP32身份。19+19次真实CPU前向的12候选/4查询实验只验合成旧索引查询及合成新索引配对，不授权日用切换、个人索引重建或身份迁移。第二阶段收窄为已有资源优先：AD同模型自适应缓冲/AC CPU话轮优先，BGE只交局部测量；不先下载Linux绑定wheel。现有Windows TensorRT11.2.1.2具有独立兼容候选条件，但固定转换器的EXPLICIT_BATCH/FP16构建API与SDK不兼容；导出/构建/推理/精度仍需独占GPU验证，不能用SDK历史测试替代。
 
+第三阶段选择已有官方trtexec作为独立C++ builder/runner，避开向Cosy日用环境安装绑定或混用CUDA13/torch cu121指针。只提取固定flow checkpoint中的DiT估计器，固定FP32/buffered掩码、batch2及16..512帧profile，通过torch→ORT→TRT三者同输入数值比较后仍只形成离线flow候选。原生进程先等待Job资源限制配置，才放行构建/运行；没有GPU窗口不执行。显存采样守卫、workspace与PyTorch分配器上限分别标记，不能把workspace当总显存硬限。取消先仅支持终止自有实验Job，不承诺TTS请求粒度取消；生产接入继续待验。
+
 ## 验收和回退
 
 GPU 操作需主会话独占窗口；显存空闲检查不替代调度许可。基准的 runner 接收 case_id、seed、取消事件，返回 CPU PCM（脉冲编码音频）块。分别记录首次 PCM、首个能量达标 PCM、总耗时、RTF（生成耗时/音频时长）、供给间隙和取消关闭时间；它们不等于用户说完到圆屏首个有效回答声音。

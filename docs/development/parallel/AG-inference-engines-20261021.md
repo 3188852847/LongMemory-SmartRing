@@ -135,4 +135,52 @@ evaluation_contract为AD/AI提供两层接口：producer有buffered/incremental�
 
 ## 提交与接力
 
+### 第三阶段：既有trtexec的有界真实执行入口
+
+新增 [flow_trtexec.py](../../../scripts/development/cosyvoice/acceleration/flow_trtexec.py) 与 [契约测试](../../../tests/unit/development/test_flow_trtexec.py)，默认只生成只读资源/命令计划。没有执行trtexec、torch模型加载、ONNX导出或任何GPU工作，等待主会话先完成AD当前播放基准再发新窗口。本轮没有把TensorRT/vLLM标作原任务已全部完成。
+
+现有官方trtexec.exe为947312字节、CP310 wheel为890696字节；源码/权重/工具资源的静态核对已通过，无需下载和安装。关键SHA256如下，代码还核对DiT模块、mask.py、yaml和SM89构建资源DLL：
+
+| 已有资源 | SHA256 |
+|---|---|
+| flow.pt（1329116148字节） | a6fab32a7825e5b0bc855ddd948f8db9370b0a786fbc249caa4595e95b608e4b |
+| trtexec.exe | 0b7f547a086b191d95424ac2739f8fe9a61a6b39a0ca4cb0d3dfbbf643796913 |
+| nvinfer_11.dll | 19a836028d37b9dfe3171b88678c7c3b5abdba94ac79bee81c3be963569c5cd3 |
+| nvonnxparser_11.dll | 9d15046ade1740a0f53d2d707e632de6b44525a6a5e02d1e78c5b39bb7b1000c |
+| SDK自带CP310 wheel | f7f5174f416075c8101352e9afe04b991c50a87ce024fb26af41dd95ffb0c097 |
+| CUDA13.3 bin/x64/cudart64_13.dll | b00ca6f53699120da815bf3e06e2e4285fae2f201235b883dcbb50eec51e2a2a |
+
+仅解析flow.pt ZIP中的46353字节data.pkl opcode元数据（pickletools，不反序列化、不读张量payload），确认323个decoder.estimator.*键。后续window中才用现装torch2.3.1+cu121、numpy1.26.4、onnx1.16.0、ORT1.18.0、transformers4.51.3、x-transformers2.11.24：直接按已指纹核对的DiT配置实例化，只读mmap checkpoint、strict/assign加载估计器前缀，避免AutoModel的LLM/HiFT/前端和YAML构造副作用。缺前缀/版本/形状即停，不自行下载或补权重。
+
+本轮静态resource_plan返回resources_match=true；本机trtexec二进制中九个所需flag字符串均存在，与官方release11.2参数源码相符，尚未执行工具确认解析。plan同时保存执行脚本/Job脚本摘要，真正窗口中另记GPU/驱动/显存元数据，防止只沿历史设备结论。第三阶段组合84 passed（5.10秒）、8模块实际Cosy3.10解释器AST语法通过；包含无GPU轻量broker后代继承Job/真实Windows限额查询与合成数值拒绝路径，未执行模型/GPU。公共文档清单仍由主会话接力。
+
+候选流水线：
+
+1. 独立Cosy Python进程导出FP32/buffered wrapper，数学SDPA、禁TF32，opset18，六输入x/mask/mu/t/spks/cond，输出estimator_out；固定batch2是CFG有条件/无条件双路，不是两个用户并发，只有序列轴动态。ORT明确CPU provider，无静默GPU回退。核对全部I/O名称、float类型、静态维和seq_len，再测N=16/127/128/257/512各全有效与尾1/4填零mask，共10组同输入torch/ORT allclose，rtol1e-2/atol1e-4。只落实验ONNX/合成FP32原始输入和reference。
+2. 独立官方trtexec C++进程构建同GPU FP32 engine：profile min16/opt128/max512、noTF32、builderOptimizationLevel0、maxTactics8、workspace512MiB、skipInference。CUDA13 DLL只加该原生子进程PATH，不装Python TRT、不更改全局环境，不与torch cu121交换GPU指针。
+3. 每组加载保存的同一个engine、实际原始输入及shape，单次运行并导出JSON结果。SDK11默认CUDA Graph开启、传输关闭，故显式noCudaGraph/noSpinWait/includeDataTransfers、warmUp0/duration0/iterations1。检查输出名称/维度/有限值并与同一torch reference逐值allclose。单次时延只供诊断，不作稳定速度或端到端声称。
+
+profile外（少于16或多于512）、内部streaming、fp16/bf16/量化、CUDA Graph均不在此次候选支持内；现阶段保持eager，不补零截断或自动扩profile。streaming=False/True Python控制流固定在图中，不能把它当动态mask模式开关。后续若接声音服务还需fp32 eager控制组、日用fp16基线、声质/自然边界、续说/误抢话/取消残音与设备验收；当前C++ runner只支持中断自有离线Job，未提供请求级native abort。
+
+有界窗口提案（均为预算/估算，未经GPU实测）：导出≤240秒，构建≤600秒，10组运行各≤45秒，全轮≤1320秒；宿主进程与全部后代Job提交内存合计硬限6144MiB、两逻辑CPU。估计宿主3–6GiB、GPU2–6GiB、磁盘产物3–6GiB，导出/构建约1–4/2–10分钟；实际可能触限失败，失败保留证据停止，不自动扩大或重试。先要求D盘空闲≥8GiB、GPU空闲≥8192MiB，产物目录采样限6GiB；PyTorch分配器限6144MiB、原生builder workspace512MiB，nvidia-smi采样设备总used>12288MiB即终止本Job。后两者不是GPU总内存硬限，不以空闲显存代替主会话租约。Python与原生程序均由start gate等候Job配置后执行；KILL_ON_JOB_CLOSE覆盖入口包装器、实际Python和C++后代。临时目录/CUDA cache/engine/日志全在新实验目录。
+
+从AG树运行下列命令默认只读计划，--execute还要求显式固定Cosy解释器及新GPU窗口收据；目前没有该收据，不能执行第二条：
+
+```powershell
+$flowArgs = @('-B','-m','scripts.development.cosyvoice.acceleration.flow_trtexec',
+  '--source','D:/03-项目/01-正式项目/智慧圆屏/local/runtime/CosyVoice',
+  '--model','D:/03-项目/01-正式项目/智慧圆屏/local/runtime/CosyVoice/pretrained_models/Fun-CosyVoice3-0.5B',
+  '--sdk','D:/01-开发环境/08-CUDA/TensorRT/TensorRT-11.2.1.2',
+  '--toolkit','D:/01-开发环境/08-CUDA/Toolkit/v13.3',
+  '--python','D:/03-项目/01-正式项目/智慧圆屏/local/runtime/CosyVoice/.venv/Scripts/python.exe',
+  '--output',('D:/03-项目/01-正式项目/智慧圆屏/local/worktrees/ag-inference-engines-20261021/experiments/runs/ag-flow-'+[guid]::NewGuid().ToString('N')))
+& 'D:/03-项目/01-正式项目/智慧圆屏/.venv/Scripts/python.exe' @flowArgs
+# 仅主会话实际发放新窗口后：
+# & 'D:/03-项目/01-正式项目/智慧圆屏/.venv/Scripts/python.exe' @flowArgs --execute --gpu-window-id $issuedGpuWindow
+```
+
+一手选项依据：[固定release11.2 sampleOptions.cpp](https://github.com/NVIDIA/TensorRT/blob/release/11.2/samples/common/sampleOptions.cpp)、[输出JSON格式](https://github.com/NVIDIA/TensorRT/blob/release/11.2/samples/common/sampleReporting.cpp)、[固定Cosy导出器](https://github.com/FunAudioLLM/CosyVoice/blob/074ca6dc9e80a2f424f1f74b48bdd7d3fea531cc/cosyvoice/bin/export_onnx.py)、[torch2.3导出限制](https://docs.pytorch.org/docs/2.3/onnx.html)。当前只证明入口/资源/契约，不能证明模型成功导出、可构建或已加速。
+
+vLLM/Linux继续保留待办：官方0.11.0 Docker tag可作为来源线索，但此次Docker Hub tag元数据页面不可访问，未核实manifest digest/体积；且纯vLLM镜像不等于固定CV3的完整依赖锁。尚无可运行完整锁+镜像+模型转换方案，故不提供半套owner获取脚本、不执行拉取/解析联网依赖、不声明完成；先执行无需新资源的本地SDK路径，再决定是否值得独立准备Linux完整环境。
+
 本分支仅提交上述自有文件，不merge main、不push。主会话接力：审查精确提交，将ADR/本记录加入公共清单；把能力字段交AD，不默认启用候选；如继续真实加速，先协调独占GPU与完整离线资源，再做同输入/声线/种子的冷/热及并发对照和owner听验。现有buffered、角色/声音与学校免费模型保持原设置。
