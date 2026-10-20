@@ -140,6 +140,7 @@ def test_restore_does_not_clobber_later_adapter(trt_setup):
     assert not result.restore()
 
 
+@pytest.mark.skipif(importlib.util.find_spec('torch') is None, reason='explicit existing CPU torch runtime required')
 def test_real_cpu_module_replacement_preserves_registered_original():
     import torch
     owner = torch.nn.Module()
@@ -198,6 +199,7 @@ def test_vllm_factory_receives_cv3_options_without_trt(tmp_path, monkeypatch):
     assert adapters.create_native_vllm(**args).reason == "existing_vllm_export_requires_separate_identity_review"
 
 
+@pytest.mark.skipif(importlib.util.find_spec('torch') is None, reason='explicit existing CPU torch runtime required')
 def test_real_cpu_quantization_keeps_baseline_and_checks_ranking():
     import torch
     class TinyBert(torch.nn.Module):

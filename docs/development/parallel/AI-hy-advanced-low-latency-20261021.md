@@ -441,3 +441,13 @@ GitHub Quality `39503121912` 在28dc后端收集失败，四项分别缺requests
 同时修正架构门的两个真实违规，未加白名单：Runtime不导入HyLayerDataBusy，使用中立方法契约MemoryReadBusyError，由Hy HTTP入口兼容两类异常并维持busy/503；应用候选宿主自行持有其异步清理语义，不导入具体Hy provider_transport，不编辑该方法传输模块。SDK十五项管理原语摘要仍为`562630a13eeda478674e85454df245de4a38554af52ecaa43f374fa16147720c`，现有proof的实际原语匹配不变；业务源码已变，不能声称原219已覆盖新修复。
 
 新反馈SDK两项、候选宿主清理/正式HTTP/Hy层读取组 **120 passed / 14.77秒**；另公共架构、原平台反馈、请求外层计时与修正前提后的独立启动器组 **47 passed / 2.70秒**，不相加作为新完整覆盖数。生产文件热修与CI/dev/夹具修复独立提交，主会话可先审查部署已知坏路径；后续冻结提交上的实际HTTP/3.10输入回归另补，不修改旧proof文件或旧receipt.source.head。
+
+公共热修已独立提交`89001d49110845ff7dd7f97ba5eb96075db3a07b`。随后按该精确提交归档宿主，实际SDK反馈、正式HTTP/候选RPC、原生记忆匹配和3.10完整消息组 **17 passed / 122.43秒、零skip**；JUnit=`data/test-tmp/hotfix-wire-01.xml`，SHA-256=`d61dffbd171b2c43322ebf8f40a1faec77902ac105dca85954066147eb9c0454`。未发现该热修新增阻断；原219仍只属于f590，不重签或改写其来源。主会话已独立审查并安排owned停机检查点部署，AI未触生产。
+
+## CI夹具前提修正（与公共热修分开）
+
+只改测试前提，不改业务断言或生产模块：启动器偏好现行版本7，旧测试仍断言6；validate_config已增加ws/http端口关键字，旧lambda不接受；setup明确核验已安装提供器，合成服务必须准备当前公共provider字节。脚本按真实同级目录独立加载，并保持各自control模块优先，不再依赖全套收集偶然留下的sys.path。计时夹具通过object.__new__跳过init，须显式补齐新增内存formal票据和现行prepared/feedback/receipt形状；原先锁顺序、耗时及正文不泄露断言保持。
+
+父进程取消/超时/来源变化三项在child_process边界注入失败，不执行SDK，preflight仅需可指纹化的自有合成文件，不能借用本机SDK使CI意外依赖安装。它们改用两份独立当前HEAD源码快照，适应checkout默认浅检出；真正SDK双版本对照仍固定87a25e2/ae53f729、保留专属资源要求，不为CI另取历史或降为同版性能对照。加速模块的真实CPU torch对象替换/量化两项精确标识已有CPU torch要求，其余合成/Job测试照常执行，不引入torch dev依赖。
+
+以上前提修正参与第二次完整受控CI运行 **3550 passed / 181 skipped / 229.82秒，零failure/error**，并通过实际backend_quality报告护栏；未ignore/deselect，requests/NumPy/YAML合成测试已执行。之后额外核出的仅当前HEAD快照变化再做真实无历史仓库的定向验证，不为它复跑全部3550或把前一次数字伪称新冻结全面证明。本机受控环境不是干净安装，更不是远端通过；远端仍需主会话合入push后的Quality结果。

@@ -33,9 +33,20 @@ def git(root, *arguments):
 
 @pytest.fixture(scope='module')
 def sources(tmp_path_factory):
-    root = tmp_path_factory.mktemp('campus-source-snapshots')
+    return source_snapshots(tmp_path_factory.mktemp('campus-source-snapshots'),
+        (('baseline', '87a25e2'), ('candidate', 'ae53f729')))
+
+
+@pytest.fixture(scope='module')
+def current_sources(tmp_path_factory):
+    # 父进程故障测试不比较模型/历史版本；浅检出仅承诺当前HEAD可归档。
+    return source_snapshots(tmp_path_factory.mktemp('campus-current-snapshots'),
+        (('baseline', 'HEAD'), ('candidate', 'HEAD')))
+
+
+def source_snapshots(root, revisions):
     result = {}
-    for name, revision in (('baseline', '87a25e2'), ('candidate', 'ae53f729')):
+    for name, revision in revisions:
         target = root / name
         target.mkdir()
         archived = git(ROOT, 'archive', '--format=zip', revision, 'src', 'scripts/development/xiaozhi')
@@ -233,9 +244,12 @@ def test_bad_second_proof_refused_before_any_request_and_output_creation(tmp_pat
 @pytest.mark.parametrize('failure,reason', [(KeyboardInterrupt(), 'cancelled'),
     (subprocess.TimeoutExpired('synthetic-worker', 1), 'timeout'),
     (probe.ProbeFailure('probe_source_changed'), 'validation_failed')])
-def test_parent_cancellation_timeout_or_source_change_halts_run_without_more_calls(tmp_path, sources, monkeypatch, failure, reason):
+def test_parent_cancellation_timeout_or_source_change_halts_run_without_more_calls(tmp_path, current_sources, monkeypatch, failure, reason):
     with upstream() as (port, calls):
-        args = arguments_at(tmp_path, sources, port, monkeypatch)
+        args = arguments_at(tmp_path, current_sources, port, monkeypatch)
+        # 此项在child边界注入故障，不执行SDK；preflight只需可指纹化的自有文件。
+        args.sdk_python = tmp_path / 'synthetic-unused-python.exe'
+        args.sdk_python.write_bytes(b'synthetic executable never launched')
         def stopped(*args, **kwargs): raise failure
         monkeypatch.setattr(probe, 'child_process', stopped)
         result = probe.run(args)

@@ -159,9 +159,11 @@ def test_roundscreen_outer_lock_is_counted_without_changing_prepare_or_order(mon
         records.append(json.loads(payload))
     monkeypatch.setattr(runtime_module._LOGGER, 'info', log)
     rt = object.__new__(runtime_module.MemoryRuntime)
-    rt._lock = Lock(); rt._deferred_events = {}
+    rt._lock = Lock(); rt._deferred_events = {}; rt._proposal_formal = {}
     rt._ensure_open = lambda: order.append('open')
-    prepared = NS(event=NS(event_id='original-event'), timings=object())
+    prepared = NS(event=NS(event_id='original-event'), timings=object(),
+                  support=NS(context='synthetic'), memory_command=None, follow_up_suggestion=None)
+    original_feedback = {'recorded': False}
     original_timings = prepared.timings
     error = RuntimeError('private sdk exception')
     def step(name, seconds, result=None):
@@ -177,8 +179,8 @@ def test_roundscreen_outer_lock_is_counted_without_changing_prepare_or_order(mon
     rt._round_screen_store = NS(expire=lambda: step('expire', .01, ()),
         reserve=lambda **kwargs: step('reserve', .02, 'original-event'),
         prepared=lambda *args: step('prepared', .03), failed=lambda *args: step('failed', .03),
-        feedback=lambda *args: step('feedback', .04, 'original-feedback'))
-    monkeypatch.setattr(runtime_module, 'memory_receipt', lambda value: 'original-receipt')
+        feedback=lambda *args: step('feedback', .04, original_feedback))
+    monkeypatch.setattr(runtime_module, 'memory_receipt', lambda value: {'evidence': []})
     if fail:
         with pytest.raises(RuntimeError) as caught:
             rt.prepare_round_screen('private text', client_round_id='a'*32, session_id='b'*32)
@@ -186,7 +188,7 @@ def test_roundscreen_outer_lock_is_counted_without_changing_prepare_or_order(mon
         assert order == ['open','expire','reserve','prepare','failed']
     else:
         result = rt.prepare_round_screen('private text', client_round_id='a'*32, session_id='b'*32)
-        assert result == (prepared,'original-feedback') and prepared.timings is original_timings
+        assert result == (prepared,original_feedback) and prepared.timings is original_timings
         assert order == ['open','expire','reserve','prepare','prepared','feedback']
     assert records == [{'version':1,'round_id':'a'*32,'status':'failed' if fail else 'completed',
                         'timings_ms':{'outer_lock_wait_ms':800.0,'total_ms':881.0 if fail else 921.0}}]

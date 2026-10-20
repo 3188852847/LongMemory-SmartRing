@@ -20,6 +20,10 @@ class SyntheticConnection:
 
 
 def load_module(monkeypatch, path):
+    # 脚本按其真实同级导入环境加载，不借其他测试收集时留下的sys.path。
+    monkeypatch.syspath_prepend(str(XIAOZHI))
+    monkeypatch.syspath_prepend(str(DIRECTORY))
+    monkeypatch.syspath_prepend(str(path.parent))
     spec = importlib.util.spec_from_file_location("latency_launcher_test_" + path.stem, path)
     module = importlib.util.module_from_spec(spec)
     monkeypatch.setitem(sys.modules, spec.name, module)
@@ -57,7 +61,7 @@ def test_choice_roundtrip_and_legacy_default(tmp_path, modules, mode):
     assert modules.preferences.load_preferences(path)["voice_latency_mode"] == "realtime"
     modules.preferences.save_preferences(path, {"voice_latency_mode": mode})
     assert modules.preferences.load_preferences(path)["voice_latency_mode"] == mode
-    assert json.loads(path.read_text(encoding="utf-8"))["version"] == 6
+    assert json.loads(path.read_text(encoding="utf-8"))["version"] == 7
     with pytest.raises(ValueError, match="voice_latency_mode"):
         modules.preferences.save_preferences(path, {"voice_latency_mode": "unknown"})
     assert modules.preferences.load_preferences(path)["voice_latency_mode"] == mode
@@ -89,7 +93,7 @@ def test_voice_wrapper_passes_mode_to_setup(options, monkeypatch, mode):
     monkeypatch.setattr(module, "tts_matches", lambda *args: True)
     monkeypatch.setitem(sys.modules, "yaml", SimpleNamespace(safe_load=lambda _: {}))
     monkeypatch.setitem(sys.modules, "setup", SimpleNamespace(
-        validate_config=lambda *args: None,
+        validate_config=lambda *args, **kwargs: None,
         install_memory_provider=lambda *args, **kwargs: None,
         main=lambda: captured.append(list(sys.argv)) or 0,
     ))
@@ -113,7 +117,10 @@ def test_setup_passes_mode_to_adapter_only(tmp_path, monkeypatch, mode):
     python = server / ".venv/Scripts/python.exe"
     config = {"server": {"ip": "127.0.0.1"}, "selected_module": {"Memory": "LongMemory"}}
     monkeypatch.setitem(sys.modules, "yaml", SimpleNamespace(safe_load=lambda _: config))
-    monkeypatch.setattr(module, "validate_config", lambda *args: {"base_url": "https://example.invalid/v1"})
+    monkeypatch.setattr(module, "validate_config", lambda *args, **kwargs: {"base_url": "https://example.invalid/v1"})
+    provider = server / 'core/providers/memory/longmemory/longmemory.py'
+    provider.parent.mkdir(parents=True)
+    provider.write_bytes((XIAOZHI / 'longmemory_provider.py').read_bytes())
     monkeypatch.setattr(module, "prepare_environment", lambda *args: {"SYNTHETIC": "1"})
     monkeypatch.setattr(sys, "executable", str(python))
     monkeypatch.setattr(sys, "argv", ["setup.py", "start", "--server-dir", str(server),
