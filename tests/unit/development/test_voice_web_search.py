@@ -123,7 +123,10 @@ def test_tools_one_search_no_memory_exfiltration_and_original_dialogue_intact(mo
     assert [c[0] for c in p.calls] == ["decision", "answer"]
     assert len(p.calls[0][2]["functions"]) == 1
     assert p.closed and conn._longmemory_waiting.status == "query_ready"
-    assert p.calls[1][1][-2]["role"] == "tool"
+    answer_messages = p.calls[1][1]
+    assert answer_messages[-1]["role"] == "tool"
+    assert answer_messages[-2]["tool_calls"][0]["id"] == answer_messages[-1]["tool_call_id"]
+    assert [message["role"] for message in p.calls[0][1]] == ["system", "user"]
 
 
 def test_normal_question_streams_without_search_or_second_model_call(monkeypatch):
@@ -132,6 +135,112 @@ def test_normal_question_streams_without_search_or_second_model_call(monkeypatch
     p = Provider([("你好", None), ("呀", None)])
     assert list(web.web_response(connection(), p, "s", [])) == ["你好", "呀"]
     assert len(p.calls) == 1
+
+
+@pytest.mark.parametrize('configured', [False, True])
+@pytest.mark.parametrize('has_functions', [False, True])
+def test_hello_keeps_user_last_preserves_date_policy_history_and_input(monkeypatch, configured, has_functions):
+    monkeypatch.setattr(web, 'load_config', lambda: config.SearchConfig('tavily', 'synthetic-key') if configured else config.SearchConfig())
+    # 固定时钟只测本模块原日期和规则逐字保留，不读取机器或个人历史。
+    monkeypatch.setattr(web, 'datetime', NS(now=lambda: NS(astimezone=lambda: NS(isoformat=lambda: '2026-10-20T23:28:00+08:00'))))
+    monkeypatch.setattr(web, 'search_web', lambda *args, **kwargs: pytest.fail('hello must not search'))
+    p = Provider([('合成问候', None)])
+    if not has_functions:
+        p = NS(calls=p.calls, response=p.response)
+    original = [{'role': 'system', 'content': '合成角色与记忆证据', 'name': 'original'},
+        {'role': 'user', 'content': '合成上一问'}, {'role': 'assistant', 'content': '合成上一答'},
+        {'role': 'user', 'content': '你好。'}]
+    before = json.dumps(original, ensure_ascii=False)
+    instruction = web._instruction(configured)
+    assert list(web.web_response(connection(), p, 'synthetic', original))
+    assert len(p.calls) == 1
+    kind, messages, kwargs = p.calls[0]
+    assert kind == ('decision' if configured and has_functions else 'answer')
+    assert [message['role'] for message in messages] == ['system', 'user', 'assistant', 'user']
+    assert messages[0] == {**original[0], 'content': original[0]['content'] + '\n\n' + instruction}
+    assert messages[1:] == original[1:] and messages[-1]['content'] == '你好。'
+    assert json.dumps(original, ensure_ascii=False) == before
+    assert ('functions' in kwargs) == (configured and has_functions)
+    if configured:
+        assert '2026-10-20T23:28:00+08:00' in messages[0]['content']
+        assert '检索时间不等于发表时间' in messages[0]['content']
+        assert '绝不上传个人记忆、密钥或无关对话' in messages[0]['content']
+
+
+def test_without_initial_system_prepends_only_owned_instruction_and_does_not_accumulate(monkeypatch):
+    monkeypatch.setattr(web, 'load_config', lambda: config.SearchConfig('tavily', 'synthetic-key'))
+    monkeypatch.setattr(web, '_instruction', lambda configured: '固定运行时约束')
+    original = [{'role': 'user', 'content': '你好。'}]
+    p = Provider([('合成问候', None)])
+    for _ in range(2):
+        assert list(web.web_response(connection(), p, 'synthetic', original)) == ['合成问候']
+    assert original == [{'role': 'user', 'content': '你好。'}]
+    for _, messages, _ in p.calls:
+        assert messages == [{'role': 'system', 'content': '固定运行时约束'}, *original]
+
+
+def test_existing_middle_system_and_tool_history_are_not_moved_or_rewritten():
+    original = [{'role': 'system', 'content': '首角色'},
+        {'role': 'user', 'content': '旧问'}, {'role': 'system', 'content': '合法的中途策略'},
+        {'role': 'assistant', 'content': None, 'tool_calls': [{'id': 'old-id', 'type': 'function',
+            'function': {'name': 'old', 'arguments': '{"value":"原参数"}'}}]},
+        {'role': 'tool', 'tool_call_id': 'old-id', 'content': '{"value":"原结果"}'},
+        {'role': 'assistant', 'content': '旧答'}, {'role': 'user', 'content': '当前问题'}]
+    before = json.dumps(original, ensure_ascii=False)
+    messages = web._with_system_instruction(original, '本模块动态约束')
+    assert [m['role'] for m in messages] == [m['role'] for m in original]
+    assert messages[1:] == original[1:]
+    assert messages[2]['content'] == '合法的中途策略'
+    assert messages[3]['tool_calls'][0]['id'] == messages[4]['tool_call_id'] == 'old-id'
+    assert json.dumps(original, ensure_ascii=False) == before
+
+
+def test_structured_system_content_is_not_coerced_and_empty_input_does_not_gain_fake_user():
+    original = [{'role': 'system', 'content': [{'type': 'text', 'text': '原结构化约束'}]},
+        {'role': 'user', 'content': '你好。'}]
+    messages = web._with_system_instruction(original, '运行时约束')
+    assert messages == [{'role': 'system', 'content': '运行时约束'}, *original]
+    assert original[0]['content'] == [{'type': 'text', 'text': '原结构化约束'}]
+    assert web._with_system_instruction([], '运行时约束') == [{'role': 'system', 'content': '运行时约束'}]
+
+
+@pytest.mark.parametrize('result', [{'status': 'ok', 'results': [{'title': '合成来源', 'url': 'https://example.org',
+    'excerpt': '合成摘要', 'published_at': '2026-10-20'}]}, {'status': 'empty', 'results': []}])
+def test_search_answer_keeps_tool_pair_and_moves_only_owned_completion_rule(monkeypatch, result):
+    monkeypatch.setattr(web, 'load_config', lambda: config.SearchConfig('tavily', 'synthetic-key'))
+    monkeypatch.setattr(web, '_instruction', lambda configured: '固定日期及搜索隐私规则')
+    searches = []
+    monkeypatch.setattr(web, 'search_web', lambda cfg, args, **kwargs: searches.append(args.copy()) or result)
+    original = [{'role': 'system', 'content': '合成角色'}, {'role': 'user', 'content': '查询合成公开资料'}]
+    p = Provider([(None, [delta('{"query":"忽略模型关键词","time_range":"day"}')])])
+    assert list(web.web_response(connection(), p, 'synthetic', original)) == ['来自可靠来源的回答。']
+    assert searches == [{'query': original[-1]['content'], 'time_range': 'day'}]
+    assert len(p.calls) == 2
+    decision, answer = p.calls[0][1], p.calls[1][1]
+    assert [m['role'] for m in decision] == ['system', 'user']
+    assert [m['role'] for m in answer] == ['system', 'user', 'assistant', 'tool']
+    assert decision[0]['content'] == '合成角色\n\n固定日期及搜索隐私规则'
+    assert '本轮搜索结束，不再调用工具' in answer[0]['content']
+    assert decision[0]['content'] in answer[0]['content']
+    assert '本轮搜索结束' not in decision[0]['content']
+    assert answer[-2]['tool_calls'][0]['id'] == answer[-1]['tool_call_id'] == 'call-one'
+    assert json.loads(answer[-2]['tool_calls'][0]['function']['arguments']) == searches[0]
+    assert json.loads(answer[-1]['content']) == result
+    assert original == [{'role': 'system', 'content': '合成角色'}, {'role': 'user', 'content': '查询合成公开资料'}]
+
+
+def test_synthetic_generation_suffix_exposes_trailing_system_risk_without_school_claim():
+    # 合成编码器只建模已查V4的末尾user/developer→Assistant转移；不是学校tokenizer。
+    def encode(messages):
+        result = ''.join('[' + message['role'] + ']' + (message['content'] or '') for message in messages)
+        if messages and messages[-1]['role'] in {'user', 'developer'}:
+            result += '[ASSISTANT_GENERATION]'
+        return result
+    dialogue = [{'role': 'system', 'content': '合成角色'}, {'role': 'user', 'content': '你好。'}]
+    old_shape = [*dialogue, {'role': 'system', 'content': '日期和检索规则'}]
+    fixed_shape = web._with_system_instruction(dialogue, '日期和检索规则')
+    assert encode(old_shape).endswith('[system]日期和检索规则')
+    assert encode(fixed_shape).endswith('[user]你好。[ASSISTANT_GENERATION]')
 
 
 def test_capability_question_uses_runtime_tool_fact_without_model_guessing(
@@ -166,8 +275,11 @@ def test_capability_question_reports_unavailable_without_configuration(
 def test_unconfigured_never_claims_to_search(monkeypatch):
     monkeypatch.setattr(web, "load_config", lambda: config.SearchConfig())
     p = Provider([])
-    list(web.web_response(connection(), p, "s", []))
-    assert p.calls[0][0] == "answer" and "未配置联网" in p.calls[0][1][-1]["content"]
+    original = [{"role": "user", "content": "你好。"}]
+    list(web.web_response(connection(), p, "s", original))
+    assert p.calls[0][0] == "answer" and "未配置联网" in p.calls[0][1][0]["content"]
+    assert p.calls[0][1][-1] == original[-1]
+    assert original == [{"role": "user", "content": "你好。"}]
 
 
 def test_search_failure_is_evidence_not_fabricated_success(monkeypatch):
@@ -179,7 +291,7 @@ def test_search_failure_is_evidence_not_fabricated_success(monkeypatch):
     list(web.web_response(c, p, "s", [{"role": "user", "content": "查个公开事实"}]))
     assert c._longmemory_waiting.status == "query_failed"
     assert "sensitive" not in json.dumps(p.calls)
-    assert "unavailable" in p.calls[1][1][-2]["content"]
+    assert "unavailable" in p.calls[1][1][-1]["content"]
 
 
 def test_cancel_during_search_does_not_request_answer(monkeypatch):

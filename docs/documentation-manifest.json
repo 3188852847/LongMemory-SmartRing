@@ -13,6 +13,15 @@
   },
   "topics": [
     {
+      "id": "owned-voice-system-instruction-placement",
+      "scope": "V仅修本项目两处联网动态system追加位置，保留消息/工具/日期/隐私契约；学校模板与实机待验",
+      "authority": "docs/development/parallel/V-system-message-order-20261020.md",
+      "sources": ["scripts/development/xiaozhi/voice_web_search.py", "scripts/development/xiaozhi/voice_latency.py", "tests/unit/development/test_voice_web_search.py"],
+      "related": ["docs/adr/0193-owned-voice-system-instruction-placement.md"],
+      "tags": ["圆屏", "system", "消息顺序", "联网搜索"],
+      "review": "verified 2026-10-20: main34原函数与候选十组合成对照、角色/日期/原列表/工具配对已核；未读个人历史或新真实请求，不宣称学校模板根因或实机通过"
+    },
+    {
       "id": "owned-final-answer-boundary",
       "scope": "V网关答案与显式推理边界修复候选；现场上游格式未知，普通无标签content不猜测剥离",
       "authority": "docs/development/parallel/V-reasoning-boundary-20261020.md",
@@ -1158,6 +1167,22 @@
     }
   ],
   "documents": [
+    {
+      "path": "docs/development/parallel/V-system-message-order-20261020.md",
+      "title": "V：圆屏公共system约束顺序修复候选",
+      "status": "reference",
+      "basis": "main34后由根授权的公共追加点候选修复；真实语义与EOS待受控验证",
+      "review": {"state": "verified", "date": "2026-10-20", "scope": "两个自有追加点、十组合成消息对照、日期/隐私/工具/输入不变性；学校后端未验证", "evidence": ["scripts/development/xiaozhi/voice_web_search.py", "tests/unit/development/test_voice_web_search.py", "docs/adr/0193-owned-voice-system-instruction-placement.md"]},
+      "tags": ["V", "system", "消息顺序"]
+    },
+    {
+      "path": "docs/adr/0193-owned-voice-system-instruction-placement.md",
+      "title": "ADR-0193：圆屏公共动态约束放在前导system",
+      "status": "reference",
+      "basis": "仅移动本模块自有动态约束的候选决定，不全局规范化合法system历史",
+      "review": {"state": "verified", "date": "2026-10-20", "scope": "自有约束合并规则、工具序列与未知学校模板边界", "evidence": ["docs/development/parallel/V-system-message-order-20261020.md", "scripts/development/xiaozhi/voice_web_search.py", "tests/unit/development/test_voice_web_search.py"]},
+      "tags": ["ADR", "system", "圆屏"]
+    },
     {
       "path": "docs/development/parallel/V-reasoning-boundary-20261020.md",
       "title": "V：答案与显式推理边界修复",

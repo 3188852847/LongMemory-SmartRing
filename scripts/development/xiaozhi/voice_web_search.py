@@ -130,6 +130,18 @@ def _instruction(configured):
     )
 
 
+def _with_system_instruction(dialogue, instruction):
+    """只放置本模块拥有的约束；不搬动调用者已有的中途system或工具消息。"""
+    messages = [dict(message) for message in dialogue]
+    if (messages and messages[0].get("role") == "system"
+            and isinstance(messages[0].get("content"), str)):
+        messages[0]["content"] += "\n\n" + instruction
+    else:
+        # 无可合并的首system时新增前导约束，不转换结构化content或伪造用户消息。
+        messages.insert(0, {"role": "system", "content": instruction})
+    return messages
+
+
 def web_response(connection, provider, session_id, dialogue, **kwargs):
     """让同一回答模型决定是否联网；不另付一次分类请求，不把工具结果写入记忆。"""
     state = connection._longmemory_waiting
@@ -152,7 +164,7 @@ def web_response(connection, provider, session_id, dialogue, **kwargs):
         else:
             yield "当前没有可用的联网搜索配置，所以这次不能联网查询。"
         return
-    messages = [*[dict(message) for message in dialogue], {"role": "system", "content": _instruction(configured)}]
+    messages = _with_system_instruction(dialogue, _instruction(configured))
     if not tool_available:
         yield from current_output(state, provider.response(session_id, messages, **kwargs))
         return
@@ -226,13 +238,14 @@ def web_response(connection, provider, session_id, dialogue, **kwargs):
         state.query_ms = round((time.perf_counter() - started) * 1000) if 'started' in locals() else 0
     if not state.current():
         return
-    messages.extend([
+    # 完成约束同样归首system，保留assistant调用→tool结果的相邻关系及原问句。
+    # 新建列表避免改写第一阶段已交给提供器的消息快照。
+    answer_messages = _with_system_instruction([*messages,
         {"role": "assistant", "content": None, "tool_calls": [
             {"id": item["id"], "type": "function", "function": {"name": item["name"], "arguments": item["arguments"]}}]},
         {"role": "tool", "tool_call_id": item["id"], "content": json.dumps(result, ensure_ascii=False)},
-        {"role": "system", "content": "本轮搜索结束，不再调用工具。根据已有来源简短回答；失败/空结果就明确说未取得可靠结果。不要再说等待提示。"},
-    ])
-    yield from current_output(state, provider.response(session_id, messages, **kwargs))
+    ], "本轮搜索结束，不再调用工具。根据已有来源简短回答；失败/空结果就明确说未取得可靠结果。不要再说等待提示。")
+    yield from current_output(state, provider.response(session_id, answer_messages, **kwargs))
 
 
 def current_output(state, stream):
