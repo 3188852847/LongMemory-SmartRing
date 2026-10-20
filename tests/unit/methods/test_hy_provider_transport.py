@@ -2,6 +2,7 @@
 
 from collections import deque
 import asyncio
+import json
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -320,3 +321,53 @@ def test_distinct_instances_never_share_session_connection_or_credentials():
             assert requests[0]['authorization'] != requests[1]['authorization']
         finally:
             second.close()
+
+
+def test_gateway_answer_projection_over_real_persistent_json_and_fragmented_sse(tmp_path):
+    from io import BytesIO
+    from longmemory.infrastructure.config.campus_calls import FreeCampusCalls
+    from longmemory.infrastructure.config.settings import ModelSettings
+    from longmemory.methods.hy_memory.model_gateway import ModelGateway
+    usage = {'prompt_tokens': 2, 'completion_tokens': 3, 'total_tokens': 5}
+    plain = {'choices': [{'message': {'role': 'assistant', 'reasoning_content': 'synthetic-hidden',
+        'content': '<think>合成推理</think>最终答案'}}], 'usage': usage}
+    packets = [{'choices': [{'index': 0, 'delta': {'role': 'assistant', 'content': '<thi'}}]},
+        {'choices': [{'index': 0, 'delta': {'content': 'nk>合成推理</th', 'reasoning_content': 'synthetic-hidden'}}]},
+        {'choices': [{'index': 0, 'delta': {'content': 'ink>最终答案'}, 'finish_reason': 'stop'}]},
+        {'choices': [], 'usage': usage}]
+    body = b''.join(b'data: ' + json.dumps(value, ensure_ascii=False).encode() + b'\r\n\r\n' for value in packets)
+    body += b'data: [DONE]\r\n\r\n'
+    split = body.index('合成推理'.encode()) + 1  # 实际HTTP读取在UTF-8多字节中间截断。
+    with supplier([{'body': json.dumps(plain).encode()}, {'body': body, 'split': split}]) as (transport, requests, first, release):
+        settings = ModelSettings(provider='openai_compatible', model='synthetic-campus',
+            base_url=transport._url.removesuffix('/chat/completions'), api_key='synthetic-private-credential',
+            allow_http=True, timeout_seconds=2)
+        budget = FreeCampusCalls(tmp_path / 'synthetic-free.sqlite3', proof={'request_model': settings.model}, create=True)
+        gateway = ModelGateway(settings=settings, budget=budget, encoder=SimpleNamespace(identity='f' * 64), free_policy_verified=True)
+        class Handler:
+            def __init__(self): self.wfile = BytesIO()
+            def send_response(self, status): assert status == 200
+            def send_header(self, *args): pass
+            def end_headers(self): pass
+        handler = Handler()
+        try:
+            request = {'model': settings.model, 'max_tokens': 512, 'messages': [], 'stream': False}
+            status, result = gateway.complete('answer', request)
+            assert status == 200 and result['choices'][0]['message'] == {'role': 'assistant', 'content': '最终答案'}
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(gateway.stream, {**request, 'stream': True}, handler)
+                assert first.wait(1) and not future.done()
+                assert b'synthetic-hidden' not in handler.wfile.getvalue()
+                release.set()
+                future.result(timeout=2)
+            received = [json.loads(line[5:]) for line in handler.wfile.getvalue().splitlines()
+                if line.startswith(b'data:') and line[5:].strip() != b'[DONE]']
+            text = ''.join(choice['delta'].get('content') or '' for value in received for choice in value.get('choices', []))
+            assert text == '最终答案' and received[-1]['usage'] == usage
+            assert b'synthetic-hidden' not in handler.wfile.getvalue() and handler.wfile.getvalue().endswith(b'[DONE]\n\n')
+            assert len(requests) == 2 and requests[0]['connection'] is requests[1]['connection']
+            assert budget.status()['attempt_count'] == 2 and budget.status()['unknown_or_inflight'] == 0
+        finally:
+            release.set()
+            gateway.close()
+        assert not gateway._provider_transport._thread.is_alive()

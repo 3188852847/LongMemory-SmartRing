@@ -13,6 +13,22 @@
   },
   "topics": [
     {
+      "id": "owned-final-answer-boundary",
+      "scope": "V网关答案与显式推理边界修复候选；现场上游格式未知，普通无标签content不猜测剥离",
+      "authority": "docs/development/parallel/V-reasoning-boundary-20261020.md",
+      "sources": [
+        "src/longmemory/methods/hy_memory/answer_content.py",
+        "src/longmemory/methods/hy_memory/model_gateway.py",
+        "src/longmemory/methods/hy_memory/provider_transport.py",
+        "tests/unit/methods/test_hy_answer_content.py",
+        "tests/unit/methods/test_hy_daily_stream.py",
+        "tests/unit/methods/test_hy_provider_transport.py"
+      ],
+      "related": ["docs/adr/0192-owned-answer-content-boundary.md"],
+      "tags": ["推理", "最终答案", "SSE", "圆屏"],
+      "review": "verified 2026-10-20: 对照765ef5a与固定消费类合成重现独立字段/同块/跨块/无标签四类，候选仅修可识别边界；临时HTTP和定向测试通过，现场格式与实机待验"
+    },
+    {
       "id": "cosyvoice-continuous-audio-candidate",
       "scope": "X连续音频显式候选、buffered默认门、固定上游取消适配、46调用GPU对照及离线缓冲分析；日用仍为87a25e2",
       "authority": "docs/development/parallel/X-cosy-streaming-20261020.md",
@@ -1121,6 +1137,22 @@
     }
   ],
   "documents": [
+    {
+      "path": "docs/development/parallel/V-reasoning-boundary-20261020.md",
+      "title": "V：答案与显式推理边界修复",
+      "status": "reference",
+      "basis": "765ef5a后所有者异常反馈的隔离修复候选，不是现场根因或实机通过记录",
+      "review": {"state": "verified", "date": "2026-10-20", "scope": "网关投影、固定消费类合成对照、预算与取消边界；现场格式和真实设备待验", "evidence": ["src/longmemory/methods/hy_memory/answer_content.py", "src/longmemory/methods/hy_memory/model_gateway.py", "tests/unit/methods/test_hy_answer_content.py", "tests/unit/methods/test_hy_provider_transport.py"]},
+      "tags": ["V", "推理", "答案边界"]
+    },
+    {
+      "path": "docs/adr/0192-owned-answer-content-boundary.md",
+      "title": "ADR-0192：自有网关区分最终答案与显式推理",
+      "status": "reference",
+      "basis": "集中在自有答案边界的候选协议决定；保留普通正文与供应商未知边界",
+      "review": {"state": "verified", "date": "2026-10-20", "scope": "前导显式标签有界解析与独立推理字段策略，不认定现场格式", "evidence": ["docs/development/parallel/V-reasoning-boundary-20261020.md", "src/longmemory/methods/hy_memory/answer_content.py", "tests/unit/methods/test_hy_answer_content.py"]},
+      "tags": ["ADR", "推理", "协议"]
+    },
     {
       "path": "docs/development/parallel/X-cosy-streaming-20261020.md",
       "title": "X：CosyVoice 低延迟连续音频交付",

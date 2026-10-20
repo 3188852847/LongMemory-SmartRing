@@ -15,6 +15,7 @@ from urllib.parse import urlsplit
 from longmemory.infrastructure.config.model_profiles import ModelProfileStore
 from .budget import BudgetStopped
 from .provider_transport import PersistentProviderTransport
+from .answer_content import FinalStream, final_response
 
 
 MAX_BODY = 2_000_000
@@ -234,6 +235,8 @@ class ModelGateway(AbstractContextManager):
                 status,data=self._remote(payload)
                 parsed=json.loads(data)
                 usage=parsed.get("usage") if isinstance(parsed,dict) else None
+                if status == 200 and phase in {"answer", "probe"}:
+                    parsed = final_response(parsed)
                 self.budget.finish(aid,usage,successful=status==200)
                 self.responses.append({"attempt_id":aid,"phase":phase,"http_status":status,
                     "response_model":parsed.get("model") if isinstance(parsed,dict) else None,
@@ -279,7 +282,7 @@ class ModelGateway(AbstractContextManager):
                 self._streams.discard(marker)
 
     def stream(self, body, handler):
-        """边收边转发真实SSE；最终usage和DONE均成功转发才释放最坏预留。
+        """按SSE事件投影最终答案；最终usage和DONE均成功转发才释放最坏预留。
 
         取消、缺usage、断流或本地写失败保留unknown；不缓存整回答再伪分块。
         供应商密钥、原始错误和消息正文不进入预算/诊断。
@@ -297,7 +300,8 @@ class ModelGateway(AbstractContextManager):
             if self._closed:
                 raise BudgetStopped("gateway_closed")
             aid = self.budget.reserve("answer")
-            usage, done, total, event_lines = None, False, 0, []
+            usage, done, total, event_lines, event_size = None, False, 0, [], 0
+            final_content = FinalStream()
             status, failure, writing, forwarded = None, None, False, False
             try:
                 with self._remote_stream(payload) as (status, lines):
@@ -318,15 +322,20 @@ class ModelGateway(AbstractContextManager):
                             if total > 32 * MAX_BODY:
                                 raise ValueError("provider_stream_too_large")
                             event_lines.append(line)
-                            writing = True
-                            handler.wfile.write(line)
-                            handler.wfile.flush()
-                            writing, forwarded = False, True
+                            event_size += len(line)
+                            if event_size > MAX_BODY:
+                                raise ValueError("provider_stream_event_too_large")
                             if line.strip():
                                 continue
                             data = b"\n".join(row[5:].strip() for row in event_lines if row.startswith(b"data:"))
                             event_lines.clear()
+                            event_size = 0
                             if data == b"[DONE]":
+                                final_content.finish()
+                                writing = True
+                                handler.wfile.write(b"data: [DONE]\n\n")
+                                handler.wfile.flush()
+                                writing, forwarded = False, True
                                 done = True
                                 break
                             if data:
@@ -335,6 +344,11 @@ class ModelGateway(AbstractContextManager):
                                     raise ValueError("provider_stream_invalid")
                                 if packet.get("usage") is not None:
                                     usage = packet["usage"]
+                                packet = final_content.packet(packet)
+                                writing = True
+                                handler.wfile.write(b"data: " + json.dumps(packet, ensure_ascii=False).encode() + b"\n\n")
+                                handler.wfile.flush()
+                                writing, forwarded = False, True
                 if self._closed:
                     failure = "gateway_closed"
                 elif status == 200 and not done:
