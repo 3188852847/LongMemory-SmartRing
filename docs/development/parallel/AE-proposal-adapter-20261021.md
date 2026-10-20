@@ -51,3 +51,5 @@ $env:LONGMEMORY_TEST_XIAOZHI_ROOT = 'D:/03-项目/01-正式项目/智慧圆屏/l
 ```
 
 缺显式原生仓库位置时原方法用例skip，不能按安装验收通过；不会下载补齐。尚待本段真实3.10 RPC/SDK/正式Runtime组合、AI最终两点融合与公开清单登记。日用真实模型、声音/打断、延迟和设备体验仍未验收。
+
+核心提交 `576906ff5267c731bb95068f85d59597bf8648a7` 后，真实MemoryProvider装配初验定位预览遗漏：正常记忆返回不只是Runtime原context，还含“仅为记忆证据”说明、HTML转义与re.sub所需反斜杠保护。新增纯 `project_voice_memory_context` 复现固定正常非管理分支的投影，再交固定Dialogue；不调用query、不创建pending、不改MemoryProvider源码。实际provider输入仍精确比较，后续组合测试负责防止复制规则漂移。初验另修正夹具使用完整原生Message构造器和正式ChatBackend完成路由，未把简化对象异常归咎业务，也未修改生产依赖或真实模型。

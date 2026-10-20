@@ -324,7 +324,8 @@ def test_pure_native_preview_preserves_speaker_projection_and_real_style_without
     effective = plan.with_memory("实际六项合成记忆")
     actual_user = "检查资料" if introduced else raw
     dialogue.put(NS(role="user", content=actual_user, is_temporary=False, tool_calls=None, tool_call_id=None))
-    actual = dialogue.get_llm_dialogue_with_memory("实际六项合成记忆", conn.config["voiceprint"], None if introduced else "合成说话人")
+    actual = dialogue.get_llm_dialogue_with_memory(proposal.project_voice_memory_context("实际六项合成记忆"),
+                                                   conn.config["voiceprint"], None if introduced else "合成说话人")
     actual = web._with_system_instruction(prepare_voice_dialogue(actual, style="realtime"), web._instruction(False))
     assert effective.model_user_message == actual_user
     assert effective.matches(proposal.capture_effective_voice_input("检查资料", actual, tools_required=False))
