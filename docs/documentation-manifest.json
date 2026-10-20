@@ -1466,8 +1466,8 @@
       "basis": "Z组合软件验收后的当前管理/部署契约；正式切换与设备体验仍待X/所有者",
       "review": {
         "state": "verified",
-        "date": "2026-10-19",
-        "scope": "本轮可信开启/拒绝/历史隔离与交接段落对照真实组合证据；不把软件验收当切换或实机",
+        "date": "2026-10-21",
+        "scope": "本轮可信开启/拒绝/历史隔离与交接段落对照真实组合证据；不把软件验收当切换或实机；2026-10-21 Z窄核对全站身份/机制入口、8层46目录及证据缺口，发布待根/X",
         "evidence": [
           "docs/development/parallel/Z-hy-release-integration-20261019.md",
           "69d3ab671c0b22cd7357e2d7e8637ed21ea1bba3",
@@ -6201,12 +6201,12 @@
     {
       "path": "docs/development/parallel/Z-hy-mechanisms-review-20261021.md",
       "title": "Z：Hy机制与全站引擎状态独立审查",
-      "status": "draft",
-      "basis": "eaa65b5基点准备及AA b016c2d后端独立62项审查；Y与完整组合未交付，不表示发布验收",
+      "status": "reference",
+      "basis": "AA/Y精确组合及Z旧库兼容修复；62后端/38组件/最终16浏览器和实际API两路径通过，待根发布",
       "review": {
-        "state": "pending",
+        "state": "verified",
         "date": "2026-10-21",
-        "scope": "基点缺口/固定版边界与AA精确后端、46ID覆盖/路径、62项独立合成检查；前端类型/交互/截图和发布待验",
+        "scope": "固定目录/身份与源码边界、组合类型/真实server响应UI、旧库独立管理、最终构建/宽窄截图/敏感检查；尚未生产发布或真实SDK/设备验收",
         "evidence": [
           "web/react-chat/src/components/AppShell.tsx",
           "web/react-chat/src/pages/OverviewApp.tsx",
@@ -6270,6 +6270,30 @@
         "Hy-Memory",
         "机制",
         "只读后端"
+      ]
+    },
+    {
+      "path": "docs/development/parallel/Y-hy-mechanisms-ui-20261021.md",
+      "title": "Y：全局Hy身份与机制探索界面",
+      "status": "reference",
+      "basis": "Y042a9f5冻结前端与合成证据；Z接力组合另修旧库独立管理并新构建，原产物不冒用",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-21",
+        "scope": "Y源码/原构建绑定核对；Z组合代码、针对回归、实际create_app+UI及最终新构建浏览器通过，不表示日用已发布",
+        "evidence": [
+          "web/react-chat/src/app/MemoryEngineProvider.tsx",
+          "web/react-chat/src/features/memory/HyMechanismsWorkspace.tsx",
+          "web/react-chat/src/api/hyMechanisms.ts",
+          "web/react-chat/e2e/hy-mechanisms.spec.ts",
+          "docs/development/parallel/Z-hy-mechanisms-review-20261021.md"
+        ]
+      },
+      "tags": [
+        "Y",
+        "Hy-Memory",
+        "全站身份",
+        "机制界面"
       ]
     }
   ],

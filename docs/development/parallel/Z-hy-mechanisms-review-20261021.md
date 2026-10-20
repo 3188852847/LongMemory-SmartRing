@@ -1,6 +1,6 @@
 # Z：Hy机制与全站引擎状态独立审查
 
-2026-10-21，Asia/Shanghai。**初始阶段：只读准备；后端接力结果见文末，前端/完整组合尚未验收。** 本轮独立于上一轮语音修复，不更新其历史验收。主会话已确认main基点 `eaa65b5b2979add8fd513bba07e19e64d5afa36b`；Z核对自有树clean后建立 `codex/z-hy-mechanisms-review-20261021`，旧分支、SDK、工作树和全部证据保留。
+2026-10-21，Asia/Shanghai。**当前阶段：AA/Y组合软件审查通过，已产出新Z构建，待主会话发布窗口；尚未上线本轮。** 本轮独立于上一轮语音修复，不更新其历史验收。主会话已确认main基点 `eaa65b5b2979add8fd513bba07e19e64d5afa36b`；Z核对自有树clean后建立 `codex/z-hy-mechanisms-review-20261021`，旧分支、SDK、工作树和全部证据保留。
 
 ## 范围与交接
 
@@ -63,3 +63,30 @@ Z补充正式create_app的标准/自定义Hy目录成功路径两项检查，连
 worker/process_client/management_rpc/sdk_bridge/short_embedding_input/sdk_observation/observation七文件相对eaa65b5差异为空；实际原语函数重算仍为 `e358debcfa870e09c6072645758d70ac4fa6792bcfb1dd5d589f3c1490657e04`。没有改写或重签原证明、管理RPC或持久身份。新增中立identity不返回数据库/资源路径、用户/助手命名空间、模型或凭据；异常只返稳定代码。暂停写入/use不阻止只读机制展示。
 
 **后端当前未发现阻断项；前端及完整组合仍待精确提交与串行交接，不能发布放行。** 后续特别核对Y对available/not_initialized/unconfigured、503与旧缓存的解释，不把known legacy未初始化等同装配健康；机制深链/质量替代入口、真实响应TypeScript契约、宽窄大字/键盘/截图仍待验。本段仅更新Z记录与统一清单，AA/Y原文件范围不越界，上一轮历史结论不变。
+
+
+## Y串行移交与完整组合审查
+
+根确认Y树clean且无本树任务后，正式串行交还前端树。Y范围为eaa65b5之后 `60b9d6df902020dfb9515191e2d23b282cd557ba` → `4b18f6afe77a684cbe20ea6d245001c94e3cee02` → `042a9f58d6ace4b1b77842188f6caf34ada5c392`；Z顺序接为 `e2d289f`、`d11345b`、`885c9bb`，无冲突。另在已移交前端树建立唯一 `codex/z-hy-mechanisms-ui-combined-20261021`，与主Z审查分支不同名；Y分支、实体依赖与ignored产物保留，未安装/下载/联接依赖。Y的[交付报告](Y-hy-mechanisms-ui-20261021.md)记295项前端与16项浏览器是作者结果，不混写为Z重跑。
+
+独立审阅全局Provider、导航、总览、聊天证据、管理页和机制页：identity未知/加载/失败不落旧导航，503保留上次确认而不密集重试；Hy概览/聊天只读轻量身份，不为数量请求旧L1或SDK列表。管理配置与身份不符不挂旧页，SDK history先核声明、关闭/未知不请求历史。机制动态列出全部响应项，8层/3模式、未知计数、装配声明/健康/执行证据和缺口分开；URL选择/旧书签/草稿护栏和键盘均有验证。原质量聚合为旧后端契约，Hy保留机制证据与已有聊天轮次标记入口，不冒充已有Hy全量质量统计。
+
+### Z发现并修复的兼容回归
+
+新MemoryApp只在identity.available后读管理配置，挡住“显式旧库＋无聊天Runtime”的既有独立管理模式。Z仅让显式进入管理页或旧书签时，依据已确认的configured、legacy_sqlite、atomic_fact声明浏览旧库；全局kind仍是uninitialized，method保持null，总览不补旧统计。该分支不读memory-mode，不懒建聊天Runtime；未知/Hy/冲突身份不获得此例外。另把无运行开关数据时误显示的“召回已关闭”改为聊天未初始化/状态未提供。
+
+前端树提交 `1edb5e4`、`85f66d6`、`dedb064` 对应主Z树 `c52d728`、`54b7b5b`、`51ad5cd`。中间类型检查发现新增Testing Library角色断言的exact属性不受类型支持，已改完整名称正则；保留失败事实，无产品运行异常。相关MemoryApp/Provider/DataPages **38项通过**，最终状态文案新增断言对同一回归另跑1项通过，其余被选择过滤而非重复计算。修改构建输入后不再冒用Y产物通过记录，重新类型检查与独占构建。
+
+### 实际API、浏览器与产物
+
+初始先核Y前端tree `683825d1af44f8d51acb94d3faf9cdbcd4442f5e`、188份源码字节及45份build-v5/manifest，并独立核v4/v5逐文件一致。随后Z修改前端，最终以新产物替代，不向生产dist复制。最终前端tree为 **`5c26a1ca45d6d284743f0f19eb0379cb48b5e55d`**；构建在前端树 `data/test-tmp/z-mechanisms-build-20261021-v2/`，45文件，manifest摘要 **`d66cb33a09190bafc5458cdaae40d7304f8650bc49b0f8b648a71a5f2a1da59b`**，整树清单摘要 `e2cb41d3f8b34709d485f3b340bc1e24a0199a69b50e980582ffc7b92e2f471d`。依旧有原shared-visual大包提示，未为此扩大拆包/依赖变更。
+
+最终新构建Edge合成API浏览器 **16/16通过，43.3秒**，覆盖全站冷开、未知/忙/未初始化/旧引擎、无旧统计/目录计数、全部机制/8层/URL刷新、来源、关闭history、宽窄大字/键盘/草稿和未知结果。另以真实create_app和同一新build驱动Edge，不替换API响应：标准Hy返回的46项/8层/3模式通过前端严格解析、目录选择与键盘；1920桌面、390大字号无水平溢出，已逐图查看。请求仅session/identity/mechanisms，禁止SQLite连接/status/SDK工厂仍通过，SDK未初始化，无模型调用。
+
+独立旧库组合使用新合成SQLite及真实create_app(database=..., chat_backend=None)，浏览器能打开原话与事实，identity仍not_initialized/method=null，未请求memory-mode或Hy机制，数据库前后字节相同。合成库创建仅在测试准备阶段，不冒充GET完全未建测试文件；不是个人库迁移。最终实际组合证据在前端树 `data/test-tmp/z-mechanisms-combined-20261021-v4/`，浏览器全套日志为v3目录的browser-final.log及 `z-mechanisms-browser-20261021-v2/`。首轮辅助脚本在React提交前过早数按钮失败，改等待后通过，原日志和初始新构建/截图全部保留；未把辅助脚本时序错误写成产品故障。
+
+原dist/test-results 174份摘要最终重算全同，package/lock未变；Node/Edge及服务helper均由各自finally清理，未触日用端口。完整组合新增风险以上述62项后端、38项针对组件、最终16项浏览器和实际API两路径核对，没有为文档收尾重复运行业务或真实SDK。测试替身不证明真实Hy数据/日用worker健康、模型效果或设备体验；没有新时延采样，更不宣布整链路2秒。
+
+## 本轮交付状态
+
+当前无未处理的组合阻断项，软件组合可交根安排发布评估。AA/Y契约、报告、新指南与本记录统一登记；管理七文件及指纹仍按上节不变，未重签证明。最终匿名review receipt在干净文档提交后绑定精确HEAD、前端tree/源码字节、构建manifest/逐文件清单、实际API和浏览器证据，供X部署核对；不含个人正文、凭据、生产路径原件或个人库。Z不merge main/push/操作生产，正式是否上线及用户体验由主会话/X后续记录，不能提前登记。
