@@ -69,7 +69,7 @@ export function HyMechanismsWorkspace() {
   const layers=useMemo(()=>[...(data?.layers??[])].sort((a,b)=>a.number-b.number),[data?.layers]);
   const layer=layers.find(item=>item.id===params.get('layer'))??layers[0];
   const grouped=useMemo(()=>{const map=new Map<string,HyMechanism[]>();for(const item of mechanisms)map.set(item.group,[...(map.get(item.group)??[]),item]);return Array.from(map);},[mechanisms]);
-  function choose(values:Record<string,string>) {setParams(previous=>{const next=new URLSearchParams(previous);next.set('view','mechanisms');for(const [key,value] of Object.entries(values))next.set(key,value);return next;});}
+  function choose(values:Record<string,string>) {setParams(previous=>{const next=new URLSearchParams(previous);next.set('view','mechanisms');for(const [key,value] of Object.entries(values))next.set(key,value);return next;},{preventScrollReset:true});}
   const current=data&&!query.isError&&engine.phase==='ready';
   const selectedMissing=Boolean(params.get('mechanism'))&&!mechanisms.some(item=>item.id===params.get('mechanism'));
 

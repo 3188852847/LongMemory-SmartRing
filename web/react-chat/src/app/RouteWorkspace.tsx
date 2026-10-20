@@ -3,12 +3,22 @@ import {Outlet, ScrollRestoration, useLocation, useNavigationType} from 'react-r
 import {UnsavedChangesProvider} from './UnsavedChanges';
 import {MemoryEngineProvider} from './MemoryEngineProvider';
 
+// 与 ScrollRestoration 共用其显式存储键，只读坐标，不增加正文或持久个人数据。
+const SCROLL_STORAGE_KEY='react-router-scroll-positions';
+function savedPositions() {
+  try {
+    const saved:unknown=JSON.parse(sessionStorage.getItem(SCROLL_STORAGE_KEY)??'{}');
+    if(!saved||typeof saved!=='object'||Array.isArray(saved))return new Map<string,number>();
+    return new Map(Object.entries(saved).filter((entry):entry is [string,number]=>typeof entry[1]==='number'&&Number.isFinite(entry[1])&&entry[1]>=0).slice(-200));
+  }catch{return new Map<string,number>();}
+}
+
 /** 普通新页面回到入口；历史返回恢复文档滚动，消息/数据面板仍由各自组件管理。 */
 export function RouteWorkspace() {
   const location = useLocation();
   const navigation = useNavigationType();
   const previousPath = useRef(location.pathname);
-  const positions = useRef(new Map<string, number>());
+  const positions = useRef(savedPositions());
   const activeKey = useRef(location.key);
   const lastY = useRef(window.scrollY);
   useEffect(() => {
@@ -17,7 +27,7 @@ export function RouteWorkspace() {
     return () => window.removeEventListener('scroll', observe);
   }, []);
   useLayoutEffect(() => {
-    positions.current.set(activeKey.current, lastY.current);
+    if(activeKey.current!==location.key)positions.current.set(activeKey.current, lastY.current);
     while (positions.current.size > 200) positions.current.delete(positions.current.keys().next().value!);
     const target = positions.current.get(location.key);
     activeKey.current = location.key;
@@ -57,5 +67,5 @@ export function RouteWorkspace() {
     return () => observer.disconnect();
   }, [location.pathname, navigation]);
   const nonce = document.querySelector<HTMLMetaElement>('meta[name="style-nonce"]')?.content;
-  return <MemoryEngineProvider><UnsavedChangesProvider><Outlet/><ScrollRestoration nonce={nonce}/></UnsavedChangesProvider></MemoryEngineProvider>;
+  return <MemoryEngineProvider><UnsavedChangesProvider><Outlet/><ScrollRestoration nonce={nonce} storageKey={SCROLL_STORAGE_KEY}/></UnsavedChangesProvider></MemoryEngineProvider>;
 }

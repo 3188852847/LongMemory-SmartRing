@@ -121,3 +121,34 @@ test('机制加载、空目录、协议错误和首次繁忙保持各自语义',
     expect(state.errors).toEqual([]);await page.close();
   }
 });
+
+for(const viewport of [{width:1366,height:768},{width:390,height:844}])test(`非零滚动选择机制不会跳顶 ${viewport.width}`,async({page},info)=>{
+  await page.setViewportSize(viewport);await page.emulateMedia({reducedMotion:'reduce'});const state=await synthetic(page);
+  await page.goto('/memories?view=mechanisms');await expect(page.getByText('本次装配声明')).toBeVisible();
+  if(viewport.width===390)await page.evaluate(()=>document.documentElement.dataset.reading='larger');
+  const stage=page.locator('.mechanism-path button').nth(3);
+  await stage.evaluate(el=>el.scrollIntoView({block:'center'}));
+  const before=await page.evaluate(()=>scrollY);expect(before).toBeGreaterThan(100);
+  await stage.click();await expect(stage).toHaveAttribute('aria-pressed','true');
+  await expect.poll(()=>page.evaluate(()=>scrollY)).toBeGreaterThan(100);
+  expect(Math.abs(await page.evaluate(()=>scrollY)-before)).toBeLessThan(5);
+  await info.attach('stage-scroll-metrics',{body:JSON.stringify({viewport:viewport.width,before,after:await page.evaluate(()=>scrollY)}),contentType:'application/json'});
+  await page.screenshot({path:info.outputPath('selected-stage-scroll.png'),animations:'disabled'});
+  if(viewport.width>760){
+    const target=page.getByRole('navigation',{name:'完整机制目录'}).getByRole('button').last();await target.evaluate(el=>el.scrollIntoView({block:'center'}));
+    const directoryY=await page.evaluate(()=>scrollY);expect(directoryY).toBeGreaterThan(100);await target.click();await expect(target).toHaveAttribute('aria-pressed','true');
+    expect(Math.abs(await page.evaluate(()=>scrollY)-directoryY)).toBeLessThan(5);
+  }else{
+    const selector=page.getByLabel('选择全部机制');await selector.evaluate(el=>el.scrollIntoView({block:'center'}));const directoryY=await page.evaluate(()=>scrollY);
+    await selector.selectOption('coding_route');await expect(selector).toHaveValue('coding_route');expect(await page.evaluate(()=>scrollY)).toBeGreaterThan(100);
+    expect(Math.abs(await page.evaluate(()=>scrollY)-directoryY)).toBeLessThan(viewport.height/2);
+  }
+  await page.goBack();await expect(stage).toHaveAttribute('aria-pressed','true');await expect.poll(()=>page.evaluate(()=>scrollY)).toBeGreaterThan(100);
+  const tabs=page.getByRole('button',{name:'L0–L7 分层',exact:true});await tabs.evaluate(el=>el.scrollIntoView({block:'center'}));const tabsY=await page.evaluate(()=>scrollY);
+  await tabs.click();await expect(page.getByRole('region',{name:'Hy 原生记忆分层'})).toBeVisible();expect(Math.abs(await page.evaluate(()=>scrollY)-tabsY)).toBeLessThan(5);
+  const layer=page.getByRole('button',{name:/Hy L3/});await layer.evaluate(el=>el.scrollIntoView({block:'center'}));const layerY=await page.evaluate(()=>scrollY);expect(layerY).toBeGreaterThan(100);
+  await layer.click();await expect(layer).toHaveAttribute('aria-pressed','true');expect(Math.abs(await page.evaluate(()=>scrollY)-layerY)).toBeLessThan(5);
+  await page.reload();await expect(page.getByRole('heading',{name:/Hy L3/})).toBeVisible();await expect.poll(()=>page.evaluate(()=>scrollY)).toBeGreaterThan(100);
+  if(viewport.width>760){await page.getByRole('link',{name:'系统总览',exact:true}).click();await expect(page.getByRole('heading',{name:'系统总览',exact:true})).toBeVisible();await expect.poll(()=>page.evaluate(()=>scrollY)).toBe(0);await expect(page.locator('#main-content')).toBeFocused();}
+  expect(state.errors).toEqual([]);
+});
