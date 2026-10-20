@@ -185,7 +185,9 @@ async def run():
             assert len([row for row in h.connection.dialogue.dialogue if row.role == "assistant"]) == 1
             state = "adopted"
         elif scenario == "reset_worker":
-            assert h.stored == ["合成回答"] and not requests and stats["adopted"] == 1
+            if not (h.stored == ["合成回答"] and not requests and stats["adopted"] == 1):
+                raise RuntimeError(json.dumps([{"adapter_counts": stats, "fallback_count": len(requests),
+                    "candidate_text_matched": h.stored == ["合成回答"]}]))
             state = "adopted"
         else:
             assert h.stored == ["原正式回答"] and len(requests) == 1
