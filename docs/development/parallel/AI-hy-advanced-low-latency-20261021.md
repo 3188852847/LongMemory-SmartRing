@@ -288,3 +288,7 @@ AI也只读核对原校园 `raw-models/model-{3,6,10,14}-{request,response}.json
 `local_settings('hy',work_class='background')` 和 `complete('hy',body,work_class='background')` 已可用；Bearer保护的`GET /hy-background/v1/admission`只给空闲建议，不持lease、不reserve，不授权运行SDK。AB须在任务标running/进入原子evolve之前先查建议，忙仍pending；实际内部LLM请求仍须走background路由并由SDKBudget可信同authority白名单认领，不能全局改/hy类别。路由属当前进程策略，不改变持久模型/来源身份。该SDK侧接力尚未交付，AI没有擅改AB worker/semantic文件或生产proof。
 
 AI在组合树实跑准入、原候选、流式回答与宿主 **99 passed / 6.56秒**，包括AF真实随机回环HTTP竞争/延迟ACK/错ACK隔离/关停唤醒场景。AI原共享锁反例现按显式background重跑，保留在飞后台160ms受控屏障，实际顺序hy→answer→hy；本样本正式请求到provider168.450ms、独立model_queue166.600ms、拿槽后过滤首文本0.110ms。排队候选取消0.077ms且无预留；总实际3次原预算请求、unknown0。固定sleep改为等answer真正入队后使用perf_counter保持屏障，避免将sleep参数当Windows实际时长。此处供应商为受控函数替身；真实HTTP顺序另由AF专属测试覆盖，不声称已完成实际SDK后台组合、学校性能或用户停说→答声提速。
+
+冻结AI `c2a6b501` 后，以该精确HEAD归档AF宿主，重跑公共Runtime、真实SDK、多通道正式HTTP/3.10 RPC、候选/准入/启动与文档机制组合：**179 passed / 43.25秒、无skip**。本次覆盖实际投影匹配可采用、历史/策略变化回退和各级取消/关闭，尚未覆盖AB待交付的背景任务原子操作前建议查询/内部路由，不用准入12项代替SDK真实标记已接线。
+
+实际语音桥的下一项仍为独立冻结记忆query和ASR JSON模型当前消息；它应位于语音表达/联网编排的最终模型输入边界。搜索配置走函数工具接口时，当前不执行工具的候选必须miss；动态时间与声纹不能冻结/省略来制造命中。需分别验可采用的无工具/上下文稳定场景与正确回退场景，不能据标准RPC成功宣称当前日用搜索配置下已有候选命中。只读检查launcher/setup均沿os.environ.copy继承本次进程参数，仍需新启动器生命周期才能变更已运行服务环境；本次未操作该生命周期。
