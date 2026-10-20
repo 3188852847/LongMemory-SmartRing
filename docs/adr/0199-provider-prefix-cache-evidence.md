@@ -43,3 +43,15 @@ TTFT（模型首个有效文本时间）起点位于预算预留后、调用传�
 `cancel_candidate(request_id)` 只查候选句柄表，与正式调用ID隔离。取消在首响应头前也直接取消自有传输pump，不依赖下游HTTP断开通知。`wait_closed()` 的ack含 `owned_upstream_exited=true`、`provider_compute_stopped=false`、`ledger_finalized` 和 `usage_settled`。它在pump任务实际done、响应释放和账本审计之后返回；重复取消不会中断关闭或提前退锁。ack只证明自有请求任务退出，不能证明供应商GPU停止或释放外部未知费用。生命周期方法限定同一宿主asyncio循环。
 
 该接口当前只证明Python3.12宿主内部闭环。真实小智Python3.10是另一个进程，跨进程能力、调用者/connection/epoch作用域和取消ack的可信传递由主会话/AI协调；本阶段没有新增HTTP/RPC端点，也未宣称语音实际已接线。AE基线只接受小写别名，AF返回实际学校精确大写模型名；协调AE兼容，不静默替换模型。隔离组合与未验证项见AF记录。
+
+## 第三阶段补充：宿主受限候选编排
+
+主会话进一步分配 `application/voice_proposals.py` 给AF，实现 `VoiceProposalHost(runtime_provider, enabled=False)`。宿主取得的是现有Runtime的同步非阻塞getter，不执行bootstrap或懒创建；默认关闭时连Runtime、AE和工作线程都不初始化。鉴权、HTTP大小/来源守卫与关闭钩子归AI；语音进程只能访问该内部RPC，不能取得供应商密钥或引擎快照令牌。对外DTO由AI冻结，详见AF第三阶段记录。
+
+只读快照经Runtime现有CPU嵌入和Hy无写候选路径，随机snapshot ID绑定本host实例、连接、轮次、ASR修订、取消代次、问题、session与Runtime实例，令牌仅留宿主。AE控制器使用实际已核验的原gateway绑定，复用一个全宿主预算：并发1、累计20次、160000输入字符、5120输出tokens；单候选沿AE默认2秒生成、3秒ready、256输出tokens。宿主另限16连接、200个非清理操作、每连接1份10秒快照和2个Runtime物理线程。线程超时后名额保持到实际退出，不堆积新的隐形任务。
+
+start传入唯一首system的 `[role,text]` 冻结上下文，服务追加已冻结query，不重复本轮user，不调用prepare、归档、工具或TTS。confirm要求完整实际消息、问题及同一session；先取得AE候选凭据，再在worker中调用Runtime的 `claim_candidate_memory`。该方法在同一Runtime临界区内比对真实正式prepare的正文/来源，fresh校验令牌，并经同步回调领取。回调通过有撤销门的有界线程→loop桥，在原loop同步调用AE领取，绝不从worker直接操作控制器，也不先放Runtime锁再await领取。
+
+同步等待超时与外层取消先撤销同一原子门；已进入loop领取时worker须等它结束才放锁，尚未进入时迟到回调不得领取。取消、新轮、修订、Runtime替换或host关闭同样撤销门；结果回到loop后再检查代次才返回text。每轮只调度一次模型，prepare与confirm不自动重试。关闭确认沿AF句柄和AE实际request ID核验，未确认返回closing并保留计算槽；ACK不等于远端GPU停算。此阶段无持久模型/库迁移，只在内存保留有界候选与临时来源证明。
+
+隔离测试已组合实际AF gateway/transport/SQLite、AE `44c3538` 控制器以及AI候选Runtime方法的只读源码快照，包含一次成功与正文/来源/token/fresh负例。它证明宿主接口能执行；AI的真实跨进程HTTP及AE语音桥仍须在其组合树连接验证，不以同进程测试或本地替身冒充日用上线/实机通过。第三阶段学校真实调用为0。

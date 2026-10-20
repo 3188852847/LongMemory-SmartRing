@@ -101,3 +101,43 @@ AE `baedad5` 只接受小写模型名，因此该生命周期组合测试用绑�
 真实启动边界已核对 [bootstrap_hy_daily.py](../../../src/longmemory/bootstrap_hy_daily.py) 的 `OwnedHyModels.gateway` 属于宿主，`voice_configuration()` 给小智的是回环模型配置，非可共享的Python对象。**宿主内部接口不等于跨进程接线完成**：本阶段未新增RPC/HTTP候选入口、未复制供应商密钥到小智、未导入主环境类到3.10进程。AI需协调受限宿主RPC及AE逐连接桥，把owner/connection/epoch与候选request_id绑定，取消ack由宿主实际退出后传递；普通客户端断开不能代替这个ack。真实无写快照仍须在宿主Hy边界取得。以上接力不由AF越界修改公共启动器或AB SDK。
 
 第二阶段最终定向回归 **168 passed、3 skipped（7.85秒）**，3个跳过仍为未提供隔离小智/Hy SDK 的原集成项；AE源码快照的3个组合项实际执行通过。两份文档用临时公共清单严格检查通过，未改共享清单。原六请求账本/摘要保持原字节，未新增真实样本、联网获取、依赖安装、GPU或日用服务操作。
+
+## 第三阶段：VoiceProposalHost宿主实现
+
+第二阶段提交 `85b1d715a102c82576cea0a56d246e793a7c3d93` 保留。主会话正式划分 [voice_proposals.py](../../../src/longmemory/application/voice_proposals.py) 和 [test_voice_proposals.py](../../../tests/unit/application/test_voice_proposals.py) 给AF；实际实现并组合测试完成，没有修改AI的Runtime/HTTP/启动器、AE语音桥或AB SDK。AF只提供内部HTTP调用目标，不另开端口或创建新令牌。架构边界补入ADR-0199。此阶段真实模型调用仍为0。
+
+### 精确宿主接口与DTO
+
+构造 `VoiceProposalHost(runtime_provider, enabled=False)`；provider须是取得已有Runtime的同步非阻塞getter，不能在getter里创建Runtime/取Runtime业务锁。所有方法绑定同一宿主asyncio循环；`snapshot/start/confirm/cancel/close` 均 `await method(body)`，`aclose()` 为宿主整体关闭钩子。默认关闭不读取Runtime、不加载AE、不建线程；缺少实际AE源码或候选Runtime能力返回不可用，不用假实现顶替。
+
+请求共同字段精确为 `version=1`、`connection_id`（32位小写hex）、`turn_id/transcript_revision/cancel_epoch`（非bool整数，`0<=x<2**63`）。JSON字段无额外键；HTTP层192KiB body限制及原Bearer/回环Host/来源守卫由AI拥有。
+
+| 操作 | 额外必需字段 | 返回JSON（固定顶层） |
+|---|---|---|
+| snapshot | query、session_id | `{version:1,state:"ready"或"unavailable",snapshot_id:字符串或null,memory_context:字符串,reason_code:字符串或null}` |
+| start | snapshot_id、messages、tools_required | `{version:1,state:"preparing"或"miss",reason_code:字符串或null}`，无正文 |
+| confirm | snapshot_id、query、messages、tools_required、formal_turn_id、client_round_id、session_id | `{version:1,state:"adopted"或"miss",text:字符串,reason_code:字符串或null}`，仅adopted允许非空text |
+| cancel | 无 | `{version:1,state:"cancelled"或"closing",owned_upstream_exited:布尔,provider_compute_stopped:false}` |
+| close | 无 | `{version:1,state:"closed"或"closing",owned_upstream_exited:布尔,provider_compute_stopped:false}` |
+
+snapshot/session ID均32位小写hex；client_round_id保留24–32位小写hex，formal_turn_id规范UUID，query非空且<=16000字符。messages最多128项 `[role,text]`，唯一首system、后续user/assistant，总长<=32000；它是**不含本轮user**的实际冻结上下文，服务仅追加一次快照query。tools_required为bool，true即miss，不执行工具。确认正文采用 `query`，响应正文采用 `text`，不提供transcript/final_text别名。请求非法统一 `ValueError("voice_proposal_request_invalid")`；旧轮/旧代次取消拒绝为 `RuntimeError("voice_proposal_rejected")`，由AI映射400/409。不可用以冻结DTO报告，HTTP鉴权和503映射归AI。
+
+外部无需增加request_id/owner字段；host随机owner仅在内存绑定实际AE `RequestScope`，随机snapshot ID也不充当鉴权。每份快照绑定connection/turn/revision/epoch/query/session/Runtime引用；引擎令牌、来源ID和政策摘要不进外部DTO。跨连接snapshot ID拒绝、旧轮取消拒绝；未见过连接的cancel先封同轮，close先建关闭墓碑，防止迟到snapshot重新启动。关闭墓碑计入连接上限，不凭ID回收或重开。
+
+### fresh临界区与取消
+
+start从现有 `Runtime.candidate_model_binding()` 取政策版本及AF已验证免费绑定，用实际AE `GatewayPreparationModel/VoicePreemptive` 生成；字段不能由客户端宣称免费。上下文、时间、历史和记忆字节在confirm要求完全一致。AE默认预算由host各连接共享：并发1、累计20请求、累计160000输入字符/5120输出tokens；同轮即便修订或取消也不补第二次模型调用。每候选默认2秒生成、3秒ready、256输出tokens/2048输出字符；host额外16连接、200个非清理操作、每连接1份10秒快照，清理不受调用额度阻挡。
+
+Runtime读取/策略/claim使用2个物理worker；操作等待1秒超时，但worker名额直到实际返回才释放，拒绝无限后台堆积。confirm先取得AE一次性凭据，再在worker调用AI真实签名 `claim_candidate_memory(receipt,query=...,formal_turn_id=...,client_round_id=...,session_id=...,claim=同步函数)`。Runtime在同一RLock中验证正式query、context、来源摘要和fresh令牌；同步函数在同一锁内核对政策，再经 `_ClaimGate` 用 `call_soon_threadsafe` 调回原loop。只有loop同步领取；绝不从worker操作AE，也不先放Runtime锁再await。
+
+同步等待上限0.25秒，撤销门和领取共用同一线程锁：等待超时先撤销未执行回调；若领取已经同步执行，worker等它结束再放Runtime锁。外层取消、Runtime替换、新轮或上下文变化也撤销门。结果返回时再检查host/connection/epoch/Runtime身份，miss后的凭据不可迟到领取。正式prepare本身不由此模块触发、重试、归档或重写；Runtime的正式记录核验仍是采用前必要条件。
+
+取消/关闭最多等待0.5秒确认，未完成返回 `closing`+false，控制器和物理计算名额保留；重复关闭可继续等确认。实际AE适配器核对AF handle的同一request_id及ledger/owned退出ACK，错误ID不得释放。ACK只指owned HTTP/pump退出，不证明供应商GPU停算，也不修改或释放unknown。
+
+### 第三阶段实际验证
+
+专属39项全部执行通过。覆盖默认关闭、精确字段/类型/ID和消息界限、prepare不回正文、实际AF HTTP/连接池/免费账本与AE领取一次、上下文/问题/session/修订/政策变化拒绝、跨连接/旧轮/迟到控制消息、快照TTL/全局次数、两物理worker超时不退位、同步claim超时和取消后迟到loop回调不领取、延迟关闭期间host名额保持及错误request_id ACK隔离。
+
+组合使用AE提交 `44c3538acf9b3bbde8967f5af8627a66900104c6` 的本地Git源码快照；它已接受精确学校大写名并要求关闭确认。另只读提取AI当时 `memory_runtime.py` 源码（SHA-256 `05c54f087829928f4f907f11ec16a82e7adf336d2c4c6f3fcf9777319a62dbbe`），实际运行其 `candidate_memory_snapshot/candidate_model_binding/claim_candidate_memory/validate_candidate_memory` 方法，构造无数据库的合成方法/正式记录边界；成功采用以及context、source、token、runtime revision变化四种负例均通过，没有伪造fresh成功或削弱正文/来源核对。快照在忽略目录 `data/test-tmp/af-ae-host-source-44c3538/`；正式整合须使用AI当前树再跑，不能把该快照当生产SDK部署来源。
+
+AF已有测试与本阶段组合最终 **207 passed、3 skipped（10.35秒）**。3个跳过仍是原隔离小智/Hy SDK未指定项；新宿主39项、AE源码和AI实际Runtime方法均实际执行。仍未验证：AI内部HTTP路由/认证/关闭钩子与AE真实Python3.10客户端的跨进程组合、AB真实SDK快照与候选正式prepare配对、真实学校候选延迟及圆屏实机。AF不以此结果宣称日用接线完成，按顺序交AI整合三个提交。
