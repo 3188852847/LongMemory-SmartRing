@@ -11,6 +11,7 @@ from urllib.request import Request, build_opener, ProxyHandler
 
 from voice_waiting import CACHE_ROOT, PHRASES, cached_packets, publish_cache, decode_packets
 from cosyvoice_profiles import profile_store, waiting_identity
+from voice_budget import NoRedirect
 
 
 def prepare_cache(store, synthesize, encode, *, root=CACHE_ROOT):
@@ -62,7 +63,7 @@ def main(argv=None):
     os.environ["PATH"] = str(opus_dir) + os.pathsep + os.environ.get("PATH", "")
     dll_handle = os.add_dll_directory(str(opus_dir)) if os.name == "nt" else None
     from core.utils.opus_encoder_utils import OpusEncoderUtils
-    opener = build_opener(ProxyHandler({}))
+    opener = build_opener(ProxyHandler({}), NoRedirect())
     def synthesize(phrase, selected):
         request = Request("http://127.0.0.1:18770/v1/audio/speech",
                           data=json.dumps({"input": phrase, "cache": False,
