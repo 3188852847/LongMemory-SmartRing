@@ -299,7 +299,7 @@ def install_waiting_sender(send_module):
         if tagged:
             state = packet.state
             if not state.current() or discard(packet):
-                if waiting:
+                if waiting and state.first_feedback_ms is None:
                     state.cue_state = "skipped"
                 return
         # 真实答案优先：即使提示已开始，也废弃尚未发送的尾包，不挡住答案首包。

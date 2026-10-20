@@ -258,6 +258,7 @@ def test_real_sender_separates_cue_answer_and_rejects_late_packets():
     assert state.first_feedback_ms is not None and state.first_answer_ms is None
     waiting.mark_answer_ready(c)
     asyncio.run(module._do_send_audio(c, waiting.WaitingPacket(b"cue-tail", state), {}))
+    assert state.cue_state == 'sent'  # 尾包取消不能抹掉提示首包已发送这一事实。
     asyncio.run(module._do_send_audio(c, waiting.AnswerPacket(b"answer", state), {}))
     assert state.first_answer_ms is not None
     c.sentence_id = "next"
