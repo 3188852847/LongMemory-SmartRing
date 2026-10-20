@@ -8,6 +8,8 @@ import {HY_LAYER_STATES,HyLayerContractError,hyLayerIdentifier,type HyLayerId,ty
 import {useMemoryEngine} from '../../app/MemoryEngineProvider';
 import {memoryTime} from './HyMemoryWorkspace';
 import {HyLayerStatus} from './HyLayerStatus';
+import {HySemanticRecord} from './HySemanticRecord';
+import {HySemanticContractError,hySemanticTaskIdentifier} from '../../api/hySemantic';
 import type {HyCapabilityView,HyRuntimeGateSnapshot} from './hyCapabilityView';
 import './hy-layer-data.css';
 
@@ -21,6 +23,8 @@ const reasons:Record<string,string>={
   profile_head_unavailable:'未能确认画像版本链头，当前无法安全聚合。',
   storage_backend_unavailable:'当前存储装配尚不支持这项有界读取，没有回落到其他库。',
   graph_store_not_open:'图库没有打开。这里只显示当前向量存储范围，不能据此判定图中有无记录。',
+  legacy_vdb_schema_not_in_graph_page:'本页读取原生图库；旧向量存储中另有 L6 记录未包含在图页，覆盖不完整，总数保持未知。',
+  schema_injection_isolated:'当前图式派生已隔离，不获得回答注入资格；隔离不表示没有记录或关闭生成。',
 };
 function failure(error:unknown) {
   if(error instanceof HyLayerContractError)return error.message;
@@ -36,10 +40,11 @@ function ReadBoundary({data}:{data:HyLayerRead}) {
   return <div className="hy-layer-boundary">
     <div className="hy-layer-badges"><Tag>{generation[data.generation_state]}</Tag><span>{data.read_status==='readable'?'可读取':data.read_status==='partial'?'部分范围可读':'当前不可读取'}</span><span>读取于 {memoryTime(data.observed_at)}</span></div>
     {data.read_status!=='readable'&&<Alert type="warning" showIcon title={data.read_status==='partial'?'只覆盖部分存储范围':'当前无法读取本层内容'} description={<>{data.reason_code?(reasons[data.reason_code]??'当前读取范围受限，具体原因见返回代码。'):'接口没有提供可安全展示的内容。'}{data.reason_code&&<small className="hy-layer-reason">{data.reason_code}</small>}</>}/>}
+    {data.read_status==='readable'&&data.reason_code==='schema_injection_isolated'&&<Alert type="info" showIcon title="本层图式派生已隔离" description={reasons.schema_injection_isolated}/>}
   </div>;
 }
 function RecordTimes({item}:{item:HyStoredRecord}) {
-  return <dl className="hy-layer-times"><div><dt>存储时间</dt><dd>{memoryTime(item.recorded_at)}</dd></div><div><dt>记忆时间</dt><dd>{memoryTime(item.memory_at)}</dd></div><div><dt>生效</dt><dd>{memoryTime(item.valid_from)}</dd></div><div><dt>失效</dt><dd>{memoryTime(item.valid_until)}</dd></div></dl>;
+  return <dl className="hy-layer-times"><div><dt>存储时间</dt><dd>{memoryTime(item.recorded_at)}</dd></div>{item.semantic_kind&&<div><dt>原生更新时间</dt><dd>{memoryTime(item.updated_at)}</dd></div>}<div><dt>记忆时间</dt><dd>{memoryTime(item.memory_at)}</dd></div><div><dt>生效</dt><dd>{memoryTime(item.valid_from)}</dd></div><div><dt>失效</dt><dd>{memoryTime(item.valid_until)}</dd></div></dl>;
 }
 function ProfileFields({item,onVersion}:{item:HyStoredRecord;onVersion:(id:string)=>void}) {
   return <dl className="hy-profile-fields">{Object.entries(item.basic_info??{}).map(([key,value])=>{
@@ -76,6 +81,14 @@ export function HyLayerBrowser({layer,title,revealRequest=0,capabilities,runtime
   const sourceId=sourceSelection.coordinate===coordinate?sourceSelection.id:'';
   function setSourceId(id:string){setSourceSelection({coordinate,id});}
   const source=useQuery({queryKey:['hy-layer-source',layer,selected,sourceId],queryFn:()=>api.source(sourceId),enabled:enabled&&Boolean(sourceId),retry:false,refetchOnWindowFocus:false,staleTime:15000});
+  const semanticLayer=layer==='l6_schema'||layer==='l7_intention';
+  const [semanticRequested,setSemanticRequested]=useState(false);
+  const taskId=params.get('semantic_task')??'';
+  const taskValid=hySemanticTaskIdentifier(taskId);
+  const storageReading=page.isFetching||detail.isFetching||source.isFetching;
+  // 实例与任务只在显式请求/冷任务链接后读取，并与本页存储请求串行，避免抢owner锁。
+  const semantic=useQuery({queryKey:['hy-semantic-status'],queryFn:()=>api.semanticStatus(),enabled:enabled&&semanticLayer&&(semanticRequested||taskValid)&&!storageReading,retry:false,refetchOnWindowFocus:false,staleTime:15000});
+  const task=useQuery({queryKey:['hy-semantic-task',taskId],queryFn:()=>api.semanticTask(taskId),enabled:enabled&&semanticLayer&&taskValid&&!storageReading&&!semantic.isFetching,retry:false,refetchOnWindowFocus:false,staleTime:15000});
   function choose(patch:Record<string,string|undefined>){setParams(previous=>{const next=new URLSearchParams(previous);for(const [key,value] of Object.entries(patch)){if(value===undefined)next.delete(key);else next.set(key,value);}return next;},{preventScrollReset:true});}
   const data=enabled?page.data:undefined;
   const item=enabled?detail.data?.item:undefined;
@@ -96,15 +109,20 @@ export function HyLayerBrowser({layer,title,revealRequest=0,capabilities,runtime
         <div className="hy-layer-record-meta"><Tag>{record.kind==='aggregate_profile'?'聚合画像':layer}</Tag><span>{record.status===null?'状态未提供':states[record.status]??record.status}</span><span>{record.is_latest===null?'版本位置未提供':record.is_latest?'当前版本':'历史版本'}</span></div>
         {record.kind==='aggregate_profile'?<><ProfileFields item={record} onVersion={showVersion}/><p>已完整读取 {record.stored_version_count} 个原生版本用于聚合。</p></>:<p className="hy-layer-record-content">{record.content||'（已保存正文为空）'}</p>}
         {record.content_truncated&&<p className="hy-layer-caption">列表正文已截断；原文共 {record.content_chars} 字符，详情最多显示 32768 字符。</p>}
+        <HySemanticRecord item={record}/>
         <RecordTimes item={record}/><Button onClick={()=>showVersion(record.item_id)}>{record.kind==='aggregate_profile'?'核对聚合来源与原生版本':'查看全文与来源'}</Button>
-      </li>)}</ol>:<Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={data.data_state==='empty'&&data.coverage==='vdb_complete'?(state==='all'?'本层尚无已保存内容':'当前状态下没有记录'):'当前页没有返回记录，整层是否为空尚不能确认'}><p>{data.coverage==='vdb_only_graph_unopened'?'本次只覆盖向量存储；图库未读，不能当作整层为空。':offset>0?'可返回上一页；空末页不能反推整层没有数据。':'生成关闭或保留层状态本身不证明没有历史数据。'}</p></Empty>}
+      </li>)}</ol>:<Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={data.data_state==='empty'&&data.coverage==='vdb_complete'?(state==='all'?'本层尚无已保存内容':'当前状态下没有记录'):'当前页没有返回记录，整层是否为空尚不能确认'}><p>{data.coverage==='vdb_only_graph_unopened'?'本次只覆盖向量存储；图库未读，不能当作整层为空。':data.coverage==='graph_only_legacy_vdb_present'?'本页未包含旧向量存储 L6；未返回图记录不能判定整层为空。':data.coverage==='graph_complete'?'本次图页未返回记录；派生隔离、其他状态和分页范围须分别核对。':offset>0?'可返回上一页；空末页不能反推整层没有数据。':'生成关闭或保留层状态本身不证明没有历史数据。'}</p></Empty>}
       <div className="hy-layer-pager" aria-label="本层服务端分页"><span>第 {offset/20+1} 页{data.items.length?` · 当前显示 ${offset+1}–${offset+data.items.length}`:''} · {count}</span><Button disabled={offset===0} onClick={()=>choose({layer_offset:String(Math.max(0,offset-20)),layer_item:undefined})}>上一页</Button><Button disabled={data.has_more!==true||offset>=10000} onClick={()=>choose({layer_offset:String(offset+20),layer_item:undefined})}>下一页</Button></div>
       {data.has_more===null&&<p className="hy-layer-caption">是否还有下一页未知，未猜测分页边界。</p>}
       {offset>=10000&&data.has_more===true&&<p className="hy-layer-caption">已到本次浏览上限，后续记录尚未读取，不代表全层结束。可返回前页或刷新本层。</p>}
-      <details className="hy-layer-scope"><summary>读取范围与分页说明</summary><p>{data.count_scope==='aggregate_profile'?'计数单位是当前聚合画像，不是 L0 原生存储行数。':'计数范围限当前拥有者、助手、来源、本层、所选状态和向量存储；未知总数保持未知。'}</p><p>按原生存储顺序有界分页，不是全库时间排序；跨页不冻结快照，期间写入或刷新可能改变后续页。本页没有全库扫描、启用机制或写入操作。</p></details>
+      <details className="hy-layer-scope"><summary>读取范围与分页说明</summary><p>{data.count_scope==='aggregate_profile'?'计数单位是当前聚合画像，不是 L0 原生存储行数。':data.count_scope==='owner_agent_source_layer_state_graph'?'计数范围限当前拥有者、助手、来源、本层、所选状态和原生图库；旧向量记录不包含在内，未知总数保持未知。':'计数范围限当前拥有者、助手、来源、本层、所选状态和向量存储；未知总数保持未知。'}</p><p>按原生存储顺序有界分页，不是全库时间排序；跨页不冻结快照，期间写入或刷新可能改变后续页。本页没有全库扫描、启用机制或写入操作。</p></details>
     </>}
     </div>
-    {data&&!hiddenOld&&<HyLayerStatus page={data} capabilities={capabilities} runtimeSnapshot={runtimeSnapshot}/>}
+    {data&&!hiddenOld&&<HyLayerStatus page={data} capabilities={capabilities} runtimeSnapshot={runtimeSnapshot}
+      semanticSnapshot={enabled?semantic.data:undefined} loading={semantic.isFetching} error={semantic.error}
+      readDisabled={!enabled||storageReading||task.isFetching} onRead={()=>{if(semanticRequested||semantic.data)void semantic.refetch();else setSemanticRequested(true);}}
+      taskId={taskId} task={enabled?task.data:undefined} taskLoading={task.isFetching} taskError={taskId&&!taskValid?new HySemanticContractError('任务链接格式无效，未发起读取。'):task.error}
+      onTaskRead={id=>{if(id===taskId)void task.refetch();else choose({semantic_task:id});}}/>}
     <Drawer title={`${title}内容详情`} open={selected!==null} onClose={()=>choose({layer_item:undefined})} size="large" className="hy-layer-detail">
       {!enabled&&<Alert type="info" title="当前引擎身份尚未确认，未读取或展示分层详情"/>}
       {!validId&&<Alert type="error" title="记录链接格式无效"/>}
@@ -114,6 +132,7 @@ export function HyLayerBrowser({layer,title,revealRequest=0,capabilities,runtime
         <p className="hy-layer-native-id">{item.kind==='aggregate_profile'?'聚合句柄：profile；实际链头':'原生记录 ID'} <code>{item.native_id}</code></p>
         {item.kind==='aggregate_profile'?<><ProfileFields item={item} onVersion={showVersion}/><p>聚合使用 {item.stored_version_count} 个原生版本；不以链头字段冒充完整画像。</p></>:<p className="hy-layer-record-content">{item.content||'（已保存正文为空）'}</p>}
         {item.content_truncated&&<Alert type="info" title={`详情正文已截断，原文共 ${item.content_chars} 字符`} description="这里只提供有界正文，不能把当前显示当作完整导出。"/>}
+        <HySemanticRecord item={item} detail/>
         <p>状态：{item.status===null?'未提供':states[item.status]??item.status}；{item.is_latest===null?'版本位置未提供':item.is_latest?'当前版本':'历史版本'}。</p><RecordTimes item={item}/>
         <h3>可得平台来源</h3>{item.source_event_ids===null?<p>来源关联未提供，不能按零来源解释。</p>:item.source_event_ids.length?<label>选择一条平台来源<select aria-label="分层详情平台来源" value={sourceId} onChange={event=>setSourceId(event.target.value)}><option value="">选择后按单条读取</option>{item.source_event_ids.map(id=><option key={id} value={id}>{id}</option>)}</select></label>:<p>该记录没有返回平台来源关联。</p>}
         {sourceId&&<section className="hy-layer-source" aria-label="分层来源正文">{source.isFetching?<Skeleton active/>:source.isError?<Alert type="error" title="单条来源读取失败" description={failure(source.error)}/>:source.data&&<><p>{source.data.role==='user'?'用户原话':source.data.role==='assistant'?'助手回复':source.data.role} · {memoryTime(source.data.occurred_at)}</p><p className="hy-layer-record-content">{source.data.content}</p><p>平台处理状态：{source.data.state??'未提供'}；不等于 SDK 分层记录。</p></>}</section>}

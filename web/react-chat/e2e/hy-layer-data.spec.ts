@@ -1,7 +1,8 @@
 import {test,expect,type Page} from '@playwright/test';
 import {HY_LAYERS,type HyLayerId} from '../src/api/hyLayerData';
 import {mechanismFixture} from '../src/tests/fixtures/hyMechanisms';
-import {layerDetail,layerPage,profileRecord,profileVersions,storedRecord} from '../src/tests/fixtures/hyLayerData';
+import {graphPage,layerDetail,layerPage,profileRecord,profileVersions,semanticRecord,storedRecord} from '../src/tests/fixtures/hyLayerData';
+import {semanticStatusFixture,semanticTaskFixture} from '../src/tests/fixtures/hySemantic';
 import {largerReading} from './hy-test-appearance';
 
 type Mode='normal'|'empty'|'busy'|'error'|'scope'|'delay'|'mismatch';
@@ -55,6 +56,50 @@ async function synthetic(page:Page,initialMode:Mode='normal'){
 async function noOverflow(page:Page){expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(await page.evaluate(()=>innerWidth+1));}
 async function openLayer(page:Page,layer:HyLayerId){await page.goto(`/memories?view=mechanisms&mechanism_tab=layers&layer=${layer}`);await expect(page.getByRole('heading',{name:/已保存内容/})).toBeVisible();}
 
+async function semanticSynthetic(page:Page,options:{legacy?:boolean;isolated?:boolean}={}){
+  const state=await synthetic(page);let busy=false;
+  await page.route('**/api/memory-engine/hy/semantic/**',route=>{
+    const req=route.request(),url=new URL(req.url());state.calls.push({path:url.pathname,method:req.method()});
+    if(url.pathname.endsWith('/status'))return route.fulfill({status:busy?503:200,json:busy?{error:'hy_semantic_busy'}:semanticStatusFixture({schema_state:options.isolated?'isolated':'ready',task_counts:{running:1},management_available:false})});
+    return route.fulfill({json:semanticTaskFixture({task_id:decodeURIComponent(url.pathname.split('/').at(-1)!),state:'uncertain',finished_at:null,elapsed_ms:null,reason_code:'worker_timeout'})});
+  });
+  for(const layer of ['l6_schema','l7_intention'] as const)await page.route(`**/api/memory-engine/hy/layers/${layer}**`,route=>{
+    const req=route.request(),url=new URL(req.url());state.calls.push({path:url.pathname+url.search,method:req.method()});
+    const item=semanticRecord(layer,{content:layer==='l6_schema'?'合成图式：周末通过散步恢复精力。':'合成未来意图：曾计划周末散步。',derivation_state:layer==='l6_schema'?(options.isolated?'isolated':'ready'):'expired',
+      evidence_memory_ids:layer==='l6_schema'?['synthetic-fact-evidence','synthetic-summary-evidence']:null,updated_at:layer==='l6_schema'?'2026-10-20T01:02:03Z':null,valid_until:layer==='l7_intention'?'2026-10-20T04:00:00Z':null});
+    const read={generation_state:'configured' as const,...(layer==='l6_schema'?options.legacy?{coverage:'graph_only_legacy_vdb_present' as const,read_status:'partial' as const,reason_code:'legacy_vdb_schema_not_in_graph_page'}:{coverage:'graph_complete' as const,read_status:'readable' as const,reason_code:null}:{})};
+    return route.fulfill({json:url.pathname.includes('/items/')?layerDetail(layer,item,read):layer==='l6_schema'?graphPage({...read,items:[item],total:options.legacy?null:1}):layerPage(layer,{generation_state:'configured',items:[item]})});
+  });
+  return {...state,setStatusBusy:()=>{busy=true;}};
+}
+
+for(const width of [1366,390])test(`真实契约图式、意图与只读任务快照 ${width}`,async({page},info)=>{
+  await page.setViewportSize({width,height:844});const state=await semanticSynthetic(page,{legacy:true,isolated:true});
+  await openLayer(page,'l6_schema');if(width===390)await largerReading(page);
+  await expect(page.getByText('合成图式：周末通过散步恢复精力。',{exact:true})).toBeVisible();
+  await expect(page.getByText(/本页读取原生图库；旧向量存储中另有 L6/)).toBeVisible();
+  expect(state.calls.some(call=>call.path.includes('/semantic/'))).toBe(false);
+  await page.getByRole('button',{name:'查看全文与来源'}).click();const drawer=page.getByRole('dialog');
+  await expect(drawer.getByText('synthetic-fact-evidence',{exact:true})).toBeVisible();await expect(drawer.getByText(/当前派生已隔离/)).toBeVisible();
+  await expect(drawer.getByText('原生更新时间',{exact:true})).toBeVisible();await page.screenshot({path:info.outputPath(`semantic-graph-${width}.png`),animations:'disabled'});
+  await page.keyboard.press('Escape');await page.getByLabel('分层接入与运行证据').locator('summary').click();
+  await page.getByRole('button',{name:'读取实例状态'}).click();await expect(page.getByText(/图式派生状态：已隔离/)).toBeVisible();
+  await expect(page.getByText('已认领，运行中',{exact:true})).toBeVisible();await expect(page.getByText(/执行与主动联系均未授权/)).toBeVisible();
+  await page.getByRole('textbox',{name:'语义任务 ID'}).fill('synthetic-evolve-task');await page.getByRole('button',{name:'读取任务'}).click();
+  await expect(page).toHaveURL(/semantic_task=synthetic-evolve-task/);await expect(page.getByText('结果不确定',{exact:true})).toBeVisible();
+  await expect(page.getByText(/本状态不会自动重试/)).toBeVisible();await noOverflow(page);
+  await page.screenshot({path:info.outputPath(`semantic-status-task-${width}.png`),animations:'disabled',fullPage:true});
+  state.setStatusBusy();await page.getByRole('button',{name:'刷新实例状态'}).click();await expect(page.getByText('未取得新实例状态，以下保留上次快照')).toBeVisible();
+  const reads=state.calls.filter(call=>call.path.endsWith('/semantic/status')).length;await page.waitForTimeout(100);expect(state.calls.filter(call=>call.path.endsWith('/semantic/status'))).toHaveLength(reads);
+  await page.getByRole('button',{name:/Hy L7 /}).click();await expect(page.getByText('意图已过期',{exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'查看全文与来源'}).click();await expect(drawer.getByText('依据关联未知，不能解释为没有来源。')).toBeVisible();
+  await expect(drawer.getByText(/有效期已过，不表示意图已经执行或完成/)).toBeVisible();await page.keyboard.press('Escape');
+  await page.goBack();await expect(drawer).toBeVisible();
+  await page.goBack();await expect(drawer).toBeHidden();
+  await page.goBack();await expect(page).toHaveURL(/layer=l6_schema/);await expect(page.getByText('合成图式：周末通过散步恢复精力。',{exact:true})).toBeVisible();
+  expect(state.calls.every(call=>call.method==='GET')).toBe(true);expect(state.errors).toEqual([]);
+});
+
 for(const width of [1366,390])test(`L6/L7五轴证据与旧协议未知状态 ${width}`,async({page},info)=>{
   await page.setViewportSize({width,height:844});const state=await synthetic(page);
   await openLayer(page,'l6_schema');if(width===390)await largerReading(page);
@@ -66,7 +111,8 @@ for(const width of [1366,390])test(`L6/L7五轴证据与旧协议未知状态 ${
   await expect(panel.getByText(/本次运行开关快照/)).toBeVisible();
   await expect(panel.getByText(/原生最后更新时间尚未提供/)).toBeVisible();
   await expect(panel.getByText('已启用',{exact:true})).toHaveCount(0);
-  await expect(panel.getByRole('button')).toHaveCount(0);
+  await expect(panel.getByRole('button',{name:'读取实例状态'})).toBeVisible();
+  await expect(panel.getByRole('button',{name:'读取任务'})).toBeDisabled();
   await panel.evaluate(el=>el.scrollIntoView({block:'start'}));
   await noOverflow(page);await page.screenshot({path:info.outputPath(`layer-capability-${width}.png`),animations:'disabled'});
   await panel.locator('summary').click();

@@ -5,7 +5,8 @@ import {QueryClient,QueryClientProvider} from '@tanstack/react-query';
 import {ApiError,ChatApi} from '../../api';
 import {parseHyLayerDetail,parseHyLayerPage,type HyLayerId} from '../../api/hyLayerData';
 import {KnownMemoryEngine} from '../../tests/memoryEngine';
-import {layerDetail,layerPage,profileRecord,profileVersions,storedRecord} from '../../tests/fixtures/hyLayerData';
+import {graphPage,layerDetail,layerPage,profileRecord,profileVersions,semanticRecord,storedRecord} from '../../tests/fixtures/hyLayerData';
+import {semanticStatusFixture,semanticTaskFixture} from '../../tests/fixtures/hySemantic';
 import {HyLayerBrowser} from './HyLayerBrowser';
 
 afterEach(()=>vi.restoreAllMocks());
@@ -132,4 +133,53 @@ test('协议校验拒绝错层、错ID与将部分范围伪装为准确总数',(
   expect(()=>parseHyLayerPage(layerPage('l6_schema',{coverage:'vdb_only_graph_unopened',total:0}),'l6_schema',0,'all')).toThrow();
   expect(()=>parseHyLayerDetail(layerDetail('l2_fact'),'l2_fact','other')).toThrow();
   expect(parseHyLayerPage(layerPage('l2_fact',{total:null}),'l2_fact',0,'all').total).toBeNull();
+});
+
+test('L6原生图更新时间、隔离和依据，来源未知不补造；无执行按钮',async()=>{
+  const record=semanticRecord('l6_schema',{derivation_state:'isolated',evidence_memory_ids:null,updated_at:null});
+  const request=setup('l6_schema','&layer_item='+record.item_id,url=>url.includes('/items/')?layerDetail('l6_schema',record,{coverage:'graph_complete'}):graphPage({items:[record]}));
+  const drawer=await screen.findByRole('dialog');await within(drawer).findByText('依据关联未知，不能解释为没有来源。');
+  expect(within(drawer).getByText(/当前派生已隔离/)).toBeTruthy();expect(within(drawer).getByText('原生更新时间')).toBeTruthy();
+  expect(request.mock.calls.every(([,method])=>!method||method==='GET')).toBe(true);
+  expect(request.mock.calls.some(([url])=>url.includes('/semantic/'))).toBe(false);
+});
+
+test('L7到期意图不说已完成，真实更新时间与派生依据分别展示',async()=>{
+  const record=semanticRecord('l7_intention',{derivation_state:'expired',evidence_memory_ids:['synthetic-source-memory'],valid_until:'2026-10-20T01:00:00Z'});
+  setup('l7_intention','&layer_item='+record.item_id,url=>url.includes('/items/')?layerDetail('l7_intention',record):layerPage('l7_intention',{generation_state:'configured',items:[record]}));
+  const drawer=await screen.findByRole('dialog');await within(drawer).findByText('synthetic-source-memory');
+  expect(within(drawer).getByText('意图已过期')).toBeTruthy();expect(within(drawer).getByText(/有效期已过，不表示意图已经执行或完成/)).toBeTruthy();
+});
+
+test('实例按需手动读取，busy保留旧快照且不重试；冷任务链接按页后状态后任务串行读取',async()=>{
+  let busy=false;
+  const request=setup('l6_schema','&semantic_task=synthetic-evolve-task',url=>{
+    if(url.endsWith('/semantic/status'))return busy?Promise.reject(new ApiError('hy_semantic_busy',503)):semanticStatusFixture({schema_state:'isolated'});
+    if(url.endsWith('/semantic/tasks/synthetic-evolve-task'))return semanticTaskFixture({state:'uncertain',finished_at:null,elapsed_ms:null,reason_code:'worker_timeout'});
+    if(url.includes('/layers/'))return graphPage();
+  });
+  await screen.findByText('任务耗时');expect(await screen.findByText('结果不确定')).toBeTruthy();
+  expect(request.mock.calls.map(([url])=>url)).toEqual(['/api/memory-engine/hy/layers/l6_schema?limit=20&offset=0&state=all','/api/memory-engine/hy/semantic/status','/api/memory-engine/hy/semantic/tasks/synthetic-evolve-task']);
+  fireEvent.click(screen.getByLabelText('分层接入与运行证据').querySelector('summary')!);
+  const refresh=await screen.findByRole('button',{name:'刷新实例状态'});
+  busy=true;fireEvent.click(refresh);
+  await screen.findByText('未取得新实例状态，以下保留上次快照');expect(request.mock.calls.length).toBe(4);
+  expect(screen.getByText(/上次运行开关快照/)).toBeTruthy();expect(request.mock.calls.every(([,method])=>!method||method==='GET')).toBe(true);
+});
+
+test('语义状态501仍保留未知实例；任务404不当作零任务或已完成',async()=>{
+  const request=setup('l6_schema','&semantic_task=synthetic-missing-task',url=>{
+    if(url.endsWith('/semantic/status'))return Promise.reject(new ApiError('memory_backend_capability_unsupported',501));
+    if(url.endsWith('/semantic/tasks/synthetic-missing-task'))return Promise.reject(new ApiError('not_found',404));
+    if(url.includes('/layers/'))return graphPage();
+  });
+  await screen.findByText('该任务不存在或不在可读范围，没有从其他范围补读。');
+  expect(screen.getByText('实例能力尚未确认')).toBeTruthy();expect(screen.queryByText('任务已完成',{exact:true})).toBeNull();
+  expect(request.mock.calls.map(([url])=>url).filter(url=>url.includes('/semantic/'))).toHaveLength(2);
+});
+
+test('冻结AB图页隔离原因在空页也直接显示，不等实例读取或伪装空层',async()=>{
+  setup('l6_schema','',()=>graphPage({items:[],total:0,data_state:'empty',reason_code:'schema_injection_isolated'}));
+  await screen.findByText('本层图式派生已隔离');expect(screen.queryByText('本层尚无已保存内容')).toBeNull();
+  expect(screen.getByText('派生已隔离',{exact:true})).toBeTruthy();
 });

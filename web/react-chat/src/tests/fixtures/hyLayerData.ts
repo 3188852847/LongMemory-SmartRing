@@ -27,3 +27,12 @@ export function layerPage(layer:HyLayerId,patch:Partial<HyLayerPage>={}):HyLayer
 export function layerDetail(layer:HyLayerId,item:HyStoredRecord=storedRecord(layer),patch:Partial<HyLayerDetail>={}):HyLayerDetail {
   return {...layerRead(layer),item,versions:item.kind==='aggregate_profile'?profileVersions:null,...patch};
 }
+
+/** AB稳定候选字段的合成原生记录；不是实际用户图谱。 */
+export function semanticRecord(layer:'l6_schema'|'l7_intention',patch:Partial<HyStoredRecord>={}):HyStoredRecord {
+  return storedRecord(layer,0,{semantic_kind:layer==='l6_schema'?'model_inference':'future_intention',execution_authorized:false,
+    derivation_state:layer==='l6_schema'?'ready':'stored',evidence_memory_ids:['synthetic-evidence-memory'],updated_at:'2026-10-21T04:20:00Z',...patch});
+}
+export function graphPage(patch:Partial<HyLayerPage>={}):HyLayerPage {
+  return layerPage('l6_schema',{generation_state:'configured',coverage:'graph_complete',count_scope:'owner_agent_source_layer_state_graph',items:[semanticRecord('l6_schema')],...patch});
+}

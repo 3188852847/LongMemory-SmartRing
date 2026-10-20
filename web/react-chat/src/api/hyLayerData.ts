@@ -12,16 +12,18 @@ export interface HyStoredRecord {
   basic_info?:Record<string,string|number|boolean|null>;
   field_sources?:Record<string,{native_id:string|null;source_event_ids:string[]|null}>;
   stored_version_count?:number;
+  semantic_kind?:'model_inference'|'future_intention';execution_authorized?:false;
+  derivation_state?:'ready'|'isolated'|'stored'|'expired';evidence_memory_ids?:string[]|null;updated_at?:string|null;
 }
 export interface HyLayerRead {
   schema_version:1;layer:HyLayerId;sdk_support:'implemented'|'historical'|'reserved';
   generation_state:'configured'|'disabled'|'historical'|'reserved'|'unknown';
   read_status:'readable'|'partial'|'unavailable';data_state:'present'|'empty'|'unknown';
-  coverage:'vdb_complete'|'vdb_only_graph_unopened'|'unavailable';reason_code:string|null;observed_at:string;
+  coverage:'vdb_complete'|'vdb_only_graph_unopened'|'graph_complete'|'graph_only_legacy_vdb_present'|'unavailable';reason_code:string|null;observed_at:string;
 }
 export interface HyLayerPage extends HyLayerRead {
   items:HyStoredRecord[];limit:number;offset:number;state:HyLayerState;
-  has_more:boolean|null;total:number|null;count_scope:'aggregate_profile'|'owner_agent_source_layer_state_vdb';
+  has_more:boolean|null;total:number|null;count_scope:'aggregate_profile'|'owner_agent_source_layer_state_vdb'|'owner_agent_source_layer_state_graph';
 }
 export interface HyLayerDetail extends HyLayerRead {item:HyStoredRecord|null;versions:HyStoredRecord[]|null}
 export class HyLayerContractError extends Error {}
@@ -31,13 +33,22 @@ const integer=(v:unknown,min=0,max=Number.MAX_SAFE_INTEGER):v is number=>Number.
 export const hyLayerIdentifier=(v:unknown):v is string=>typeof v==='string'&&Boolean(v.trim())&&v.length<=256&&!/[\u0000-\u001f\u007f/\\]/.test(v)&&v!=='.'&&v!=='..';
 const ids=(v:unknown):v is string[]=>Array.isArray(v)&&v.length<=128&&v.every(hyLayerIdentifier);
 const time=(v:unknown)=>v===null||(typeof v==='string'&&!Number.isNaN(Date.parse(v)));
+/** 旧端点可缺整组语义字段；新字段出现后必须完整且与层匹配，不能升格为执行授权。 */
+function semanticRecord(v:Record<string,unknown>,layer:HyLayerId):boolean {
+  const fields=['semantic_kind','execution_authorized','derivation_state','evidence_memory_ids','updated_at'];
+  if(!fields.some(key=>key in v))return true;
+  return v.execution_authorized===false&&time(v.updated_at)&&
+    (v.evidence_memory_ids===null||ids(v.evidence_memory_ids)&&v.evidence_memory_ids.length<=16)&&
+    (layer==='l6_schema'?v.semantic_kind==='model_inference'&&oneOf(v.derivation_state,['ready','isolated']):
+      layer==='l7_intention'&&v.semantic_kind==='future_intention'&&oneOf(v.derivation_state,['stored','expired']));
+}
 function record(v:unknown,layer:HyLayerId):boolean {
   if(!object(v)||!hyLayerIdentifier(v.item_id)||!hyLayerIdentifier(v.native_id)||v.layer!==layer||
     !oneOf(v.kind,['stored_record','aggregate_profile'])||typeof v.content!=='string'||!integer(v.content_chars)||
     typeof v.content_truncated!=='boolean'||!(v.status===null||typeof v.status==='string')||
     !(v.is_latest===null||typeof v.is_latest==='boolean')||!['recorded_at','memory_at','valid_from','valid_until'].every(k=>time(v[k]))||
     !ids(v.supersedes)||!ids(v.superseded_by)||typeof v.version_links_limited!=='boolean'||
-    !(v.source_event_ids===null||ids(v.source_event_ids))||!(v.source_raw_memory_id===null||hyLayerIdentifier(v.source_raw_memory_id)))return false;
+    !(v.source_event_ids===null||ids(v.source_event_ids))||!(v.source_raw_memory_id===null||hyLayerIdentifier(v.source_raw_memory_id))||!semanticRecord(v,layer))return false;
   if(v.kind==='aggregate_profile')return layer==='l0_basic_info'&&v.item_id==='profile'&&integer(v.stored_version_count,1,128)&&
     object(v.basic_info)&&Object.values(v.basic_info).every(x=>x===null||['string','number','boolean'].includes(typeof x))&&
     object(v.field_sources)&&Object.values(v.field_sources).every(x=>object(x)&&(x.native_id===null||hyLayerIdentifier(x.native_id))&&(x.source_event_ids===null||ids(x.source_event_ids)));
@@ -46,17 +57,21 @@ function record(v:unknown,layer:HyLayerId):boolean {
 function base(v:unknown,layer:HyLayerId):v is Record<string,unknown> {
   return object(v)&&v.schema_version===1&&v.layer===layer&&oneOf(v.sdk_support,['implemented','historical','reserved'])&&
     oneOf(v.generation_state,['configured','disabled','historical','reserved','unknown'])&&oneOf(v.read_status,['readable','partial','unavailable'])&&
-    oneOf(v.data_state,['present','empty','unknown'])&&oneOf(v.coverage,['vdb_complete','vdb_only_graph_unopened','unavailable'])&&
+    oneOf(v.data_state,['present','empty','unknown'])&&oneOf(v.coverage,['vdb_complete','vdb_only_graph_unopened','graph_complete','graph_only_legacy_vdb_present','unavailable'])&&
+    (!['graph_complete','graph_only_legacy_vdb_present'].includes(String(v.coverage))||layer==='l6_schema')&&
+    (v.coverage!=='graph_only_legacy_vdb_present'||v.read_status==='partial'&&v.reason_code==='legacy_vdb_schema_not_in_graph_page')&&
     (v.reason_code===null||typeof v.reason_code==='string')&&typeof v.observed_at==='string'&&time(v.observed_at);
 }
 const invalid=()=>new HyLayerContractError('分层响应与请求范围或协议不一致，已停止展示，未按空层解释。');
 export function parseHyLayerPage(v:unknown,layer:HyLayerId,offset:number,state:HyLayerState):HyLayerPage {
   if(!base(v,layer)||!Array.isArray(v.items)||!v.items.every(x=>record(x,layer))||!integer(v.limit,1,50)||!integer(v.offset,0,10000)||v.offset!==offset||v.state!==state||
     !(v.total===null||integer(v.total))||!(v.has_more===null||typeof v.has_more==='boolean')||v.items.length>v.limit||
-    !oneOf(v.count_scope,['aggregate_profile','owner_agent_source_layer_state_vdb'])||
-    (layer==='l0_basic_info'?(state!=='all'||v.count_scope!=='aggregate_profile'):v.count_scope!=='owner_agent_source_layer_state_vdb')||
+    !oneOf(v.count_scope,['aggregate_profile','owner_agent_source_layer_state_vdb','owner_agent_source_layer_state_graph'])||
+    (layer==='l0_basic_info'?(state!=='all'||v.count_scope!=='aggregate_profile'):
+      v.count_scope!==(['graph_complete','graph_only_legacy_vdb_present'].includes(String(v.coverage))?'owner_agent_source_layer_state_graph':'owner_agent_source_layer_state_vdb'))||
     (v.read_status==='unavailable'&&(v.items.length>0||v.total!==null||v.has_more!==null))||
-    (v.coverage!=='vdb_complete'&&v.total!==null)||
+    (!['vdb_complete','graph_complete'].includes(String(v.coverage))&&v.total!==null)||
+    (v.coverage==='graph_only_legacy_vdb_present'&&(v.read_status!=='partial'||v.reason_code!=='legacy_vdb_schema_not_in_graph_page'))||
     new Set(v.items.map(x=>x.item_id)).size!==v.items.length)throw invalid();
   return v as unknown as HyLayerPage;
 }

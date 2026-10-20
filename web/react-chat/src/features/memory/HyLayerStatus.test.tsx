@@ -1,6 +1,7 @@
 import {expect,test} from 'vitest';
 import {render,screen,within} from '@testing-library/react';
-import {layerPage} from '../../tests/fixtures/hyLayerData';
+import {graphPage,layerPage,semanticRecord} from '../../tests/fixtures/hyLayerData';
+import {semanticStatusFixture,disabledSemanticStatus} from '../../tests/fixtures/hySemantic';
 import {capabilityFixture} from '../../tests/fixtures/hyCapabilityView';
 import {hyCapabilityView} from './hyCapabilityView';
 import {HyLayerStatus} from './HyLayerStatus';
@@ -45,4 +46,27 @@ test('过期运行开关和能力失败不能当作新鲜成功；不支持与�
 
 test('普通层不增加L6/L7能力界面',()=>{
   render(<HyLayerStatus page={layerPage('l2_fact')}/>);expect(screen.queryByLabelText('分层接入与运行证据')).toBeNull();
+});
+
+test('实际实例与期望配置分开，隔离空图不投影成无条目或关闭',()=>{
+  const page=graphPage({items:[],data_state:'empty',total:0});
+  const status=semanticStatusFixture({schema_state:'isolated',epoch:2,ready_epoch:1,management_available:false,task_counts:{running:1},paused:true});
+  const view=hyCapabilityView(page,status);
+  expect(view.instance.state).toBe('enabled');expect(view.coverage.state).toBe('isolated');expect(view.background.state).toBe('running');expect(view.management.state).toBe('blocked');
+  render(<HyLayerStatus page={page} semanticSnapshot={status}/>);
+  expect(screen.getByText('派生已隔离',{exact:true})).toBeTruthy();expect(screen.queryByText('无条目',{exact:true})).toBeNull();
+  expect(screen.getByText(/未认领任务暂停/)).toBeTruthy();expect(screen.getByText(/执行与主动联系均未授权/)).toBeTruthy();
+});
+
+test('disabled实际结构保留未知任务计数，已保存语义更新时间不被读取时间取代',()=>{
+  render(<HyLayerStatus page={graphPage({items:[semanticRecord('l6_schema')]})} semanticSnapshot={disabledSemanticStatus()}/>);
+  expect(screen.getByText(/未返回的任务状态计数保持未知，不补零/)).toBeTruthy();
+  expect(screen.getByText(/逐条原生更新时间见记录/)).toBeTruthy();
+  expect(screen.getByLabelText('延迟测量证据状态').textContent).toContain('尚无统一阶段测量证据');
+});
+
+test('只有pending不能标为运行，缺运行计数也不猜空闲',()=>{
+  expect(hyCapabilityView(graphPage(),semanticStatusFixture({task_counts:{pending:1}})).background.state).toBe('pending');
+  expect(hyCapabilityView(graphPage(),semanticStatusFixture({task_counts:{completed:1}})).background.state).toBe('unknown');
+  expect(hyCapabilityView(graphPage(),semanticStatusFixture({task_counts:{pending:1},paused:true})).background.state).toBe('paused');
 });
