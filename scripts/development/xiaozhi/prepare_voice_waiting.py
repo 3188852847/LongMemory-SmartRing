@@ -1,4 +1,4 @@
-"""显式准备两条固定同声线提示；只调用本机 CosyVoice，不接收任意文本。"""
+"""显式准备固定同声线短提示供两个场景复用；只调用本机 CosyVoice。"""
 
 import argparse
 from io import BytesIO
@@ -20,20 +20,37 @@ def prepare_cache(store, synthesize, encode, *, root=CACHE_ROOT):
     identity = waiting_identity(digest)
     if all(cached_packets(root, identity, kind, rate) for kind in PHRASES for rate in (16000, 24000)):
         return {'status': 'already_ready', 'voice_identity': identity}
-    blobs = {}
+    blobs, encoded = {}, {}
     for kind, phrase in PHRASES.items():
-        audio = synthesize(phrase, selected)
+        if phrase not in encoded:
+            audio = synthesize(phrase, selected)
+            if waiting_identity(store.model_context()[2]) != identity:
+                raise ValueError('waiting_voice_changed_during_preparation')
+            encoded[phrase] = {}
+            for rate in (16000, 24000):
+                blob = encode(audio, rate)
+                if not decode_packets(blob):
+                    raise ValueError('waiting_encoded_audio_invalid')
+                encoded[phrase][rate] = blob
         if waiting_identity(store.model_context()[2]) != identity:
             raise ValueError('waiting_voice_changed_during_preparation')
         for rate in (16000, 24000):
-            blob = encode(audio, rate)
-            if not decode_packets(blob):
-                raise ValueError('waiting_encoded_audio_invalid')
-            blobs[f'{kind}-{rate}'] = blob
+            blobs[f'{kind}-{rate}'] = encoded[phrase][rate]
     if waiting_identity(store.model_context()[2]) != identity:
         raise ValueError('waiting_voice_changed_during_preparation')
     publish_cache(root, identity, blobs)
     return {'status': 'ready', 'voice_identity': identity, 'items': len(blobs)}
+
+
+def validate_waveform(audio, sample_rate):
+    """整段音频含首尾静音一并计长；拒绝超限，不裁词或自动裁静音。"""
+    import numpy as np
+    if type(sample_rate) is not int or sample_rate <= 0 or audio.ndim != 1:
+        raise ValueError('waiting_audio_format_invalid')
+    if not len(audio) or not np.isfinite(audio).all():
+        raise ValueError('waiting_audio_samples_invalid')
+    if len(audio) * 1000 > sample_rate * 35 * 60:
+        raise ValueError('waiting_phrase_too_long')
 
 
 def main(argv=None):
@@ -77,8 +94,10 @@ def main(argv=None):
 
     def encode(data, rate):
         audio, sample_rate = sf.read(BytesIO(data), dtype="float32")
-        if audio.ndim != 1:
-            raise ValueError("waiting_audio_not_mono")
+        print(json.dumps({'waiting_audio': {'sample_rate': sample_rate,
+              'samples': len(audio), 'duration_ms': round(len(audio) * 1000 / sample_rate, 3),
+              'target_rate': rate}}, ensure_ascii=False), flush=True)
+        validate_waveform(audio, sample_rate)
         divisor = gcd(rate, sample_rate)
         values = resample_poly(audio, rate // divisor, sample_rate // divisor)
         pcm = (np.clip(values, -1, 1) * 32767).astype("<i2").tobytes()

@@ -7,7 +7,7 @@ import json
 import threading
 
 ROOT = Path(__file__).resolve().parents[3]
-WAITING_ENGINE = 'cosyvoice3/Fun-CosyVoice3-0.5B-2512/opus60-v1'
+WAITING_ENGINE = 'cosyvoice3/Fun-CosyVoice3-0.5B-2512/opus60-neutral-wait-v2'
 _waiting_lock = threading.Lock()
 _waiting_cached = None
 

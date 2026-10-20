@@ -239,11 +239,12 @@ def test_abort_rejects_all_remaining_cue_packets_and_new_turn_cannot_reuse():
     asyncio.run(module._do_send_audio(c, waiting.WaitingPacket(b"old", state), {}))
 
 
-def test_actual_waiting_assets_are_bounded_and_identical_frame_durations(monkeypatch):
-    monkeypatch.setattr(waiting, '_voice_context', lambda: {'identity':'f'*64, 'default':True})
+def test_legacy_waiting_assets_remain_bounded_but_are_not_current_phrase_cache():
     for kind in ("model", "web"):
-        assert len(waiting.load_packets(kind, 16000)) == len(waiting.load_packets(kind, 24000))
-        assert 1 <= len(waiting.load_packets(kind, 16000)) <= 35
+        packets=[waiting.decode_packets((waiting.ASSET_ROOT/f'{kind}-{rate}.opusframes').read_bytes())
+                 for rate in (16000,24000)]
+        assert len(packets[0]) == len(packets[1])
+        assert 1 <= len(packets[0]) <= 35
     assert waiting.load_packets("model", 44100) == ()
 
 

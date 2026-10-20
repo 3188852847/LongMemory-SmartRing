@@ -10,7 +10,7 @@ import os
 from uuid import uuid4
 
 ASSET_ROOT = Path(__file__).resolve().parents[3] / "assets/audio/voice-waiting/cosyvoice3"
-PHRASES = {"model": "我想一下。", "web": "我查一下。"}
+PHRASES = {"model": "稍等。", "web": "稍等。"}
 CACHE_ROOT = Path(__file__).resolve().parents[3] / "local/runtime/voice-waiting/cosyvoice3"
 
 
@@ -144,22 +144,13 @@ class AnswerPacket(WaitingPacket):
 
 
 def load_packets(kind, sample_rate):
-    """模型和 web 共用声线校验；自定义声线缺缓存绝不混用原声线。"""
+    """两场景共用当前文案/声线缓存；旧内置素材无文案清单，不能回退。"""
     if kind not in PHRASES or sample_rate not in (16000, 24000):
         return ()
     context = _voice_context()
     if context is None:
         return ()
-    packets = cached_packets(CACHE_ROOT, context['identity'], kind, sample_rate)
-    if packets or not context['default']:
-        return packets
-    path = ASSET_ROOT / f"{kind}-{sample_rate}.opusframes"
-    try:
-        if not path.is_file() or path.stat().st_size > 128 * 1024:
-            return ()
-        return decode_packets(path.read_bytes())
-    except OSError:
-        return ()
+    return cached_packets(CACHE_ROOT, context['identity'], kind, sample_rate)
 
 
 class WaitingTurn:
