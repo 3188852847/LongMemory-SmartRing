@@ -1,0 +1,78 @@
+{
+  "schema": "synthetic-voice-combination-v1",
+  "scenarios": [
+    {
+      "id": "buffered_baseline", "condition": "cold", "clock_id": "replay", "expected_violations": [],
+      "events": [
+        {"event":"turn_started","at_ms":0,"turn":"a","transcript_revision":1,"memory_revision":1,"audio_epoch":1},
+        {"event":"user_end","at_ms":100,"turn":"a","transcript_revision":1,"memory_revision":1,"audio_epoch":1},
+        {"event":"asr_final","at_ms":160,"turn":"a","transcript_revision":1,"memory_revision":1,"audio_epoch":1},
+        {"event":"eou_confirmed","at_ms":180,"turn":"a","transcript_revision":1,"memory_revision":1,"audio_epoch":1},
+        {"event":"memory_snapshot","at_ms":200,"turn":"a","transcript_revision":1,"memory_revision":1,"audio_epoch":1},
+        {"event":"user_committed","at_ms":210,"turn":"a","transcript_revision":1,"memory_revision":1,"audio_epoch":1,"actor":"formal"},
+        {"event":"audio_sent","at_ms":230,"turn":"a","transcript_revision":1,"memory_revision":1,"audio_epoch":1,"kind":"waiting"},
+        {"event":"llm_first_text","at_ms":250,"turn":"a","transcript_revision":1,"memory_revision":1,"audio_epoch":1,"kind":"reasoning"},
+        {"event":"llm_first_text","at_ms":300,"turn":"a","transcript_revision":1,"memory_revision":1,"audio_epoch":1,"kind":"answer"},
+        {"event":"tts_first_packet","at_ms":400,"turn":"a","transcript_revision":1,"memory_revision":1,"audio_epoch":1,"kind":"answer"},
+        {"event":"audio_sent","at_ms":420,"turn":"a","transcript_revision":1,"memory_revision":1,"audio_epoch":1,"kind":"answer"},
+        {"event":"answer_committed","at_ms":450,"turn":"a","transcript_revision":1,"memory_revision":1,"audio_epoch":1,"actor":"formal"},
+        {"event":"usage","at_ms":460,"turn":"a","transcript_revision":1,"memory_revision":1,"audio_epoch":1,"prompt_tokens":100,"output_tokens":20}
+      ]
+    },
+    {
+      "id": "preemptive_adoption", "condition": "hot", "clock_id": "replay", "expected_violations": [],
+      "events": [
+        {"event":"turn_started","at_ms":0,"turn":"a","transcript_revision":1,"memory_revision":1,"audio_epoch":1},
+        {"event":"memory_snapshot","at_ms":40,"turn":"a","transcript_revision":1,"memory_revision":1,"audio_epoch":1},
+        {"event":"candidate_started","at_ms":50,"turn":"a","transcript_revision":1,"memory_revision":1,"audio_epoch":1,"candidate":"c1"},
+        {"event":"user_end","at_ms":100,"turn":"a","transcript_revision":1,"memory_revision":1,"audio_epoch":1},
+        {"event":"candidate_ready","at_ms":120,"turn":"a","transcript_revision":1,"memory_revision":1,"audio_epoch":1,"candidate":"c1","duration_ms":70,"output_tokens":8},
+        {"event":"asr_final","at_ms":130,"turn":"a","transcript_revision":1,"memory_revision":1,"audio_epoch":1},
+        {"event":"eou_confirmed","at_ms":140,"turn":"a","transcript_revision":1,"memory_revision":1,"audio_epoch":1},
+        {"event":"candidate_adopted","at_ms":150,"turn":"a","transcript_revision":1,"memory_revision":1,"audio_epoch":1,"candidate":"c1"},
+        {"event":"llm_first_text","at_ms":160,"turn":"a","transcript_revision":1,"memory_revision":1,"audio_epoch":1,"kind":"answer"},
+        {"event":"tts_first_packet","at_ms":230,"turn":"a","transcript_revision":1,"memory_revision":1,"audio_epoch":1,"kind":"answer","candidate":"c1"},
+        {"event":"audio_sent","at_ms":240,"turn":"a","transcript_revision":1,"memory_revision":1,"audio_epoch":1,"kind":"answer","candidate":"c1"},
+        {"event":"playback_observed","at_ms":280,"turn":"a","transcript_revision":1,"memory_revision":1,"audio_epoch":1,"kind":"answer","evidence":"synthetic_device_ack"},
+        {"event":"usage","at_ms":290,"turn":"a","transcript_revision":1,"memory_revision":1,"audio_epoch":1,"prompt_tokens":100,"cache_hit_tokens":80,"cache_miss_tokens":20,"output_tokens":8}
+      ]
+    },
+    {
+      "id": "chinese_pause_resume", "condition": "synthetic", "clock_id": "replay", "expected_violations": ["candidate_adoption_invalid"],
+      "events": [
+        {"event":"turn_started","at_ms":0,"turn":"a","transcript_revision":1,"memory_revision":1,"audio_epoch":1},
+        {"event":"memory_snapshot","at_ms":20,"turn":"a","transcript_revision":1,"memory_revision":1,"audio_epoch":1},
+        {"event":"candidate_started","at_ms":30,"turn":"a","transcript_revision":1,"memory_revision":1,"audio_epoch":1,"candidate":"c1"},
+        {"event":"candidate_ready","at_ms":80,"turn":"a","transcript_revision":1,"memory_revision":1,"audio_epoch":1,"candidate":"c1","duration_ms":50,"output_tokens":5},
+        {"event":"resumed","at_ms":90,"turn":"a","transcript_revision":2,"memory_revision":1,"audio_epoch":2},
+        {"event":"user_end","at_ms":130,"turn":"a","transcript_revision":2,"memory_revision":1,"audio_epoch":2},
+        {"event":"asr_final","at_ms":160,"turn":"a","transcript_revision":2,"memory_revision":1,"audio_epoch":2},
+        {"event":"eou_confirmed","at_ms":170,"turn":"a","transcript_revision":2,"memory_revision":1,"audio_epoch":2},
+        {"event":"memory_snapshot","at_ms":180,"turn":"a","transcript_revision":2,"memory_revision":1,"audio_epoch":2},
+        {"event":"candidate_adopted","at_ms":190,"turn":"a","transcript_revision":2,"memory_revision":1,"audio_epoch":2,"candidate":"c1"}
+      ]
+    },
+    {
+      "id": "management_invalidates_snapshot", "condition": "synthetic", "clock_id": "replay", "expected_violations": ["stale_identity","candidate_adoption_invalid"],
+      "events": [
+        {"event":"turn_started","at_ms":0,"turn":"a","transcript_revision":1,"memory_revision":1,"audio_epoch":1},
+        {"event":"memory_snapshot","at_ms":20,"turn":"a","transcript_revision":1,"memory_revision":1,"audio_epoch":1},
+        {"event":"candidate_started","at_ms":30,"turn":"a","transcript_revision":1,"memory_revision":1,"audio_epoch":1,"candidate":"c1"},
+        {"event":"candidate_ready","at_ms":70,"turn":"a","transcript_revision":1,"memory_revision":1,"audio_epoch":1,"candidate":"c1"},
+        {"event":"memory_changed","at_ms":80,"turn":"a","transcript_revision":1,"memory_revision":2,"audio_epoch":2},
+        {"event":"audio_sent","at_ms":90,"turn":"a","transcript_revision":1,"memory_revision":1,"audio_epoch":1,"kind":"answer"},
+        {"event":"candidate_adopted","at_ms":100,"turn":"a","transcript_revision":1,"memory_revision":2,"audio_epoch":2,"candidate":"c1"}
+      ]
+    },
+    {
+      "id": "interrupt_rejects_tail", "condition": "synthetic", "clock_id": "replay", "expected_violations": ["after_cancel","turn_superseded"],
+      "events": [
+        {"event":"turn_started","at_ms":0,"turn":"a","transcript_revision":1,"memory_revision":1,"audio_epoch":1},
+        {"event":"cancelled","at_ms":50,"turn":"a","transcript_revision":1,"memory_revision":1,"audio_epoch":2},
+        {"event":"audio_sent","at_ms":60,"turn":"a","transcript_revision":1,"memory_revision":1,"audio_epoch":1,"kind":"answer"},
+        {"event":"turn_started","at_ms":70,"turn":"b","transcript_revision":1,"memory_revision":1,"audio_epoch":3},
+        {"event":"audio_sent","at_ms":80,"turn":"a","transcript_revision":1,"memory_revision":1,"audio_epoch":1,"kind":"waiting"}
+      ]
+    }
+  ]
+}
