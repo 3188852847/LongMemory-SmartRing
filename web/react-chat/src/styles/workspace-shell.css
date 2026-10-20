@@ -63,3 +63,7 @@
   .shell.workspace-shell.overview-shell .overview-actions { grid-template-columns: 1fr 1fr; }
   .shell.workspace-shell.overview-shell .overview-actions a { padding: 10px; }
 }
+
+/* 全站身份读取失败时入口保持中立；不依赖记忆页样式先加载。 */
+.memory-engine-notice{margin:12px 8px;font-size:.76rem;line-height:1.65;color:var(--muted)}
+.memory-engine-notice button{min-height:44px;cursor:pointer;background:transparent;border:1px solid var(--border-strong);border-radius:7px;color:var(--text);padding:8px}

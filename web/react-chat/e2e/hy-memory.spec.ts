@@ -1,3 +1,4 @@
+import {mechanismFixture} from '../src/tests/fixtures/hyMechanisms';
 import {test,expect,type Page} from '@playwright/test';
 
 const item={item_id:'synthetic-1',content:'周末会去河边散步，通常带着相机。希望智慧圆屏记住这些小习惯，在合适的时候自然聊起。',kind:'l2_fact',revision:'a'.repeat(64),source_event_ids:['synthetic-source-one','synthetic-source-two'],recorded_at:'2026-10-19T09:30:00Z',valid_from:null,valid_to:null,state:'ACTIVE'};
@@ -11,6 +12,8 @@ async function synthetic(page:Page,options:{empty?:boolean;error?:boolean;unsupp
     if(url.hostname!=='127.0.0.1'){external.push(url.origin);await route.abort();return;}
     if(!url.pathname.startsWith('/api/')){await route.continue();return;}
     const ok=(data:unknown,status=200)=>route.fulfill({status,json:data});
+    if(url.pathname==='/api/memory-engine/identity')return ok({schema_version:1,configured:true,method:'hy_memory_pro_chat',representation:'method_defined',legacy_sqlite:false,state:'available'});
+    if(url.pathname==='/api/memory-engine/hy/mechanisms')return ok(mechanismFixture);
     if(url.pathname==='/api/session')return ok({csrf:'synthetic-csrf'});
     if(url.pathname==='/api/memory-config')return ok({configured:true,representation:'method_defined',method:'hy_memory_pro_chat',database:null,management_capabilities:{listing:true,detail:true}});
     if(url.pathname==='/api/memory-engine')return ok(status);
@@ -44,8 +47,8 @@ for(const viewport of [{width:1920,height:1080},{width:1366,height:768},{width:3
   const select=drawer.getByRole('combobox',{name:'选择一条来源回看'});await select.selectOption('synthetic-source-one');
   await expect(drawer.getByText('我周末一般去河边，带着相机随便走走。')).toBeVisible();
   await page.screenshot({animations:'disabled',path:testInfo.outputPath(`hy-source-${viewport.width}.png`)});
-  await drawer.getByRole('button',{name:'读取这条变化记录'}).click();await expect(drawer.getByText('此前：周末喜欢在公园散步。')).toBeVisible();
-  await expect(drawer.getByRole('button',{name:'刷新这条变化记录'})).toBeFocused();
+  await drawer.getByRole('button',{name:'核对并读取 SDK 历史'}).click();await expect(drawer.getByText('SDK 历史记录当前已关闭；平台管理操作审计仍可单独核对。')).toBeVisible();
+  await expect(drawer.getByRole('button',{name:'核对并读取 SDK 历史'})).toBeFocused();
   await page.keyboard.press('Escape');await expect(drawer).not.toBeVisible();
   await expect(page.getByRole('button',{name:'查看详情'}).first()).toBeFocused();
   await page.getByRole('button',{name:'下一页'}).click();await expect(page.getByText('最后一条合成记忆。')).toBeVisible();

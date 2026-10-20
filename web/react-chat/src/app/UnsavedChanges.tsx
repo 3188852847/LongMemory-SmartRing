@@ -16,8 +16,11 @@ export function UnsavedChangesProvider({children}: {children: ReactNode}) {
   const dirty = Object.keys(drafts).length > 0;
   // 分类切换保留原组件，允许继续；跨页面包括浏览器前进/返回都经过路由护栏。
   const shouldBlock = useCallback(({currentLocation, nextLocation}: {
-    currentLocation: {pathname: string}; nextLocation: {pathname: string};
-  }) => dirty && currentLocation.pathname !== nextLocation.pathname, [dirty]);
+    currentLocation: {pathname: string;search:string}; nextLocation: {pathname: string;search:string};
+  }) => {
+    const mechanisms=(location:{pathname:string;search:string})=>location.pathname==='/memories'&&new URLSearchParams(location.search).get('view')==='mechanisms';
+    return dirty&&(currentLocation.pathname!==nextLocation.pathname||mechanisms(currentLocation)!==mechanisms(nextLocation));
+  }, [dirty]);
   const blocker = useBlocker(shouldBlock);
   useEffect(() => {
     if (blocker.state !== 'blocked') return;

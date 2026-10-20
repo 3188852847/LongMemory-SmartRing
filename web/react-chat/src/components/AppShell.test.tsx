@@ -1,3 +1,4 @@
+import {KnownMemoryEngine} from '../tests/memoryEngine';
 import {describe, expect, test} from 'vitest';
 import {fireEvent, render, screen} from '@testing-library/react';
 import {MemoryRouter} from 'react-router-dom';
@@ -5,9 +6,9 @@ import {AppShell, ConsoleNav} from './AppShell';
 
 describe('控制台共享导航', () => {
   test('React 页面使用内部路由，旧页面仍保留回退入口', () => {
-    render(<MemoryRouter><AppShell subtitle="测试" sidebar={<ConsoleNav active="chat" legacyPath="/chat"/>}>
+    render(<MemoryRouter><KnownMemoryEngine kind="legacy"><AppShell subtitle="测试" sidebar={<ConsoleNav active="chat" legacyPath="/chat"/>}>
       <h1>页面内容</h1>
-    </AppShell></MemoryRouter>);
+    </AppShell></KnownMemoryEngine></MemoryRouter>);
 
     expect(screen.getByRole('link', {name: '智慧圆屏'}).getAttribute('href')).toBe('/overview');
     expect(screen.getByRole('link', {name: '系统总览'}).getAttribute('href')).toBe('/overview');

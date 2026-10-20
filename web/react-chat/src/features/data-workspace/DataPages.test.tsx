@@ -11,6 +11,7 @@ import {PersonaApp} from '../../pages/PersonaApp';
 import {DeviceApp} from '../../pages/DeviceApp';
 import {ExperimentApp} from '../../pages/ExperimentApp';
 import {syntheticResponse} from './syntheticFixtures';
+import {KnownMemoryEngine} from '../../tests/memoryEngine';
 
 afterEach(()=>vi.restoreAllMocks());
 const pages=[
@@ -30,7 +31,7 @@ describe.each(pages)('$name页面合成状态',({App,path,normal,empty,failure})
       return syntheticResponse(url,mode==='normal') as never;
     });
     const client=createConsoleQueryClient();
-    const view=render(<QueryClientProvider client={client}><MemoryRouter initialEntries={[path]}><App/></MemoryRouter></QueryClientProvider>);
+    const view=render(<QueryClientProvider client={client}><MemoryRouter initialEntries={[path]}><KnownMemoryEngine kind="legacy"><App/></KnownMemoryEngine></MemoryRouter></QueryClientProvider>);
     if(path==='/device') {
       const apply=await screen.findByRole('button',{name:normal});
       await waitFor(()=>expect(apply.hasAttribute('disabled')).toBe(mode!=='normal'));

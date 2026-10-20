@@ -1,6 +1,6 @@
 import {DataWorkspace, useWorkspaceParam} from '../features/data-workspace/DataWorkspace';
 import {useUnsavedChanges} from '../app/UnsavedChanges';
-import {useEffect, useId, useRef, useState} from 'react';
+import {lazy, Suspense, useEffect, useId, useRef, useState} from 'react';
 import {Alert, Button, Card, Checkbox, Descriptions, Drawer, Empty, Input, List, Modal, Select, Space, Switch, Tabs, Tag} from 'antd';
 import {Link, useSearchParams} from 'react-router-dom';
 import {ApiError, ChatApi, type DailyMemoryFeedback, type MemoryFeedbackKind} from '../api';
@@ -9,6 +9,7 @@ import {PageHeader} from '../components/PageHeader';
 import {ManualMemoryAdd} from '../features/memory/ManualMemoryAdd';
 import {memoryFailure, type MemoryFailurePhase} from '../features/memory/memoryFailure';
 import {ConsolidationOverview} from '../features/memory/ConsolidationStatusCard';
+import {useMemoryEngine} from '../app/MemoryEngineProvider';
 import {HyMemoryWorkspace} from '../features/memory/HyMemoryWorkspace';
 
 type MemoryConfig = {
@@ -54,6 +55,7 @@ type TemporalHistoryItem = L1Summary & {valid_from:string|null;valid_to:string|n
 type TemporalHistory = {selected_memory_id:string;has_explicit_change:boolean;items:TemporalHistoryItem[]};
 
 const api = new ChatApi();
+const HyMechanismsWorkspace=lazy(()=>import('../features/memory/HyMechanismsWorkspace').then(module=>({default:module.HyMechanismsWorkspace})));
 const displayTime = (value?: string | null) => value ? new Date(value).toLocaleString('zh-CN') : '未记录';
 const sourceName = (value: string) => value === 'user_stated' ? '用户陈述' : value === 'user_corrected' ? '用户纠正' : value;
 const localDateText = (date=new Date()) => `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
@@ -88,8 +90,10 @@ function DailyFeedbackReview({feedback}:{feedback:DailyMemoryFeedback}) {
 export function MemoryApp() {
   const sourceHeading = useId();
   const [searchParams, setSearchParams] = useSearchParams();
+  const mechanismsView=searchParams.get('view')==='mechanisms';
   const [workspace,setWorkspace] = useWorkspaceParam('view','browse',['browse','daily','consolidation','quality','runtime']);
-  const [config, setConfig] = useState<MemoryConfig>();
+  const engine=useMemoryEngine();
+  const [config,setConfig]=useState<MemoryConfig>();
   const [mode, setMode] = useState<RuntimeMode>();
   const [modeDraft, setModeDraft] = useState({write_enabled: true, use_enabled: true, scenario_use_enabled: false, persona_use_enabled: false});
   const [tab,setTab] = useWorkspaceParam('layer','l1',['l1','l0']);
@@ -183,10 +187,16 @@ export function MemoryApp() {
     finally {setBusy(false);}
   }
   useEffect(() => {
+    if(engine.phase!=='ready'||engine.identity?.state!=='available'||mechanismsView)return;
+    let cancelled=false;
+    setConfig(undefined);setInitialized(false);setBusy(true);
     void (async () => {
       try {
         await api.bootstrap();
-        const current = await api.request<MemoryConfig>('/api/memory-config');
+        const current=await api.request<MemoryConfig>('/api/memory-config');
+        if(cancelled)return;
+        const agrees=engine.kind==='legacy'?current.representation!=='method_defined'&&(!current.method||current.method===engine.identity?.method):current.representation==='method_defined'&&current.method===engine.identity?.method;
+        if(!agrees){setNotice('管理能力与当前引擎身份不一致，请重新核对后再浏览。');return;}
         setConfig(current);
         if (current.representation === 'method_defined') return;
         if (!current.configured) {setNotice('启动时没有指定记忆库；页面不会自动创建数据库。'); return;}
@@ -206,20 +216,21 @@ export function MemoryApp() {
         if (tab === 'l1') loadedCoordinate.current = browseCoordinate;
         setInitialized(true);
         setNotice('记忆已加载；可核对来源或切换任务。');
-      } catch (error) {setNotice(memoryFailure(error, 'read'));}
-      finally {setBusy(false);}
+      } catch (error) {if(!cancelled)setNotice(memoryFailure(error, 'read'));}
+      finally {if(!cancelled)setBusy(false);}
     })();
-  }, []);
+    return ()=>{cancelled=true;};
+  }, [engine.identity,engine.phase,mechanismsView]);
 
 
   const browseCoordinate = `${tab}:${appliedQuery}:${l1State}:${role}:${linkState}:${l0Date}:${browseOffset}`;
   useEffect(()=>{
-    if(!initialized || loadedCoordinate.current===browseCoordinate)return;
+    if(!initialized || engine.phase!=='ready'||engine.kind!=='legacy'||loadedCoordinate.current===browseCoordinate)return;
     loadedCoordinate.current=browseCoordinate;
     void refresh(browseOffset,appliedQuery);
-  },[initialized,browseCoordinate]);
+  },[initialized,browseCoordinate,engine.phase,engine.kind]);
   useEffect(()=>{
-    if(!initialized)return;
+    if(!initialized||engine.phase!=='ready'||engine.kind!=='legacy')return;
     const memoryId=searchParams.get('memory_id');
     const sourceId=searchParams.get('l0_message_id');
     if(!memoryId && !sourceId){setSelectedL1(undefined);setSelectedL0(undefined);return;}
@@ -512,7 +523,9 @@ export function MemoryApp() {
   }
 
   const page = tab === 'l1' ? l1 : l0;
-  if (!config) return <AppShell subtitle="核对当前记忆引擎" className="memory-shell" sidebar={<ConsoleNav active="memories" legacyPath="/memories-legacy"/>}><PageHeader eyebrow="长期记忆" title="我的记忆" description="正在确认当前引擎与管理能力。"/><Alert type={busy?'info':'error'} showIcon title={notice} action={!busy?<Button onClick={()=>window.location.reload()}>重新连接</Button>:undefined}/></AppShell>;
+  const configMatches=Boolean(config&&(engine.kind==='legacy'?config.representation!=='method_defined'&&(!config.method||config.method===engine.identity?.method):config.representation==='method_defined'&&config.method===engine.identity?.method));
+  if (mechanismsView) return <Suspense fallback={<p className="page-loading" role="status">正在加载机制视图…</p>}><HyMechanismsWorkspace/></Suspense>;
+  if (engine.phase!=='ready'||!config||!configMatches) return <AppShell subtitle="核对当前记忆引擎" className="memory-shell" sidebar={<ConsoleNav active="memories" legacyPath="/memories-legacy"/>}><PageHeader eyebrow="长期记忆" title="我的记忆" description={engine.phase==='ready'?'此页面不会为浏览而初始化引擎或打开未指定的库。':'正在确认当前引擎与管理能力。'}/><Alert type={busy?'info':'error'} showIcon title={engine.phase==='error'?'无法核对当前记忆引擎':engine.kind==='uninitialized'?'记忆已配置，尚未初始化':engine.kind==='unconfigured'?'尚未配置记忆引擎':notice} action={engine.phase==='error'?<Button onClick={engine.refresh} loading={engine.refreshing}>重新核对引擎</Button>:undefined}/></AppShell>;
   if (config.representation === 'method_defined') return <HyMemoryWorkspace api={api} method={config.method} capabilities={config.management_capabilities}/>;
   const sidebar = <>
       <ConsoleNav active="memories" legacyPath="/memories-legacy"/>

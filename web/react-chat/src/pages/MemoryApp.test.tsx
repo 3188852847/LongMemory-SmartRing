@@ -1,3 +1,4 @@
+import {KnownMemoryEngine} from '../tests/memoryEngine';
 import {afterEach,describe,expect,test,vi} from 'vitest';
 import {fireEvent,render,screen,waitFor,within} from '@testing-library/react';
 import {MemoryRouter} from 'react-router-dom';
@@ -6,6 +7,16 @@ import {ApiError,ChatApi} from '../api';
 import {MemoryApp} from './MemoryApp';
 
 afterEach(()=>vi.restoreAllMocks());
+
+test('管理配置与全局Hy身份冲突时不挂载旧界面或读取旧库',async()=>{
+  vi.spyOn(ChatApi.prototype,'bootstrap').mockResolvedValue(undefined);
+  const request=vi.spyOn(ChatApi.prototype,'request').mockResolvedValue({configured:true,representation:'atomic_fact',method:'longmemory_daily_llm_v2'});
+  const client=new QueryClient({defaultOptions:{queries:{retry:false}}});
+  render(<QueryClientProvider client={client}><MemoryRouter><KnownMemoryEngine kind="hy"><MemoryApp/></KnownMemoryEngine></MemoryRouter></QueryClientProvider>);
+  expect(await screen.findByText('管理能力与当前引擎身份不一致，请重新核对后再浏览。')).toBeTruthy();
+  expect(screen.queryByRole('link',{name:'原话与事实'})).toBeNull();
+  expect(request.mock.calls.map(([path])=>path)).toEqual(['/api/memory-config']);
+});
 
 test('独立引擎只展示中立条目和实际能力，不读取旧派生端点',async()=>{
   vi.spyOn(ChatApi.prototype,'bootstrap').mockResolvedValue(undefined);
@@ -16,7 +27,7 @@ test('独立引擎只展示中立条目和实际能力，不读取旧派生端�
     throw new Error(`unexpected legacy path: ${path}`);
   });
   const client=new QueryClient({defaultOptions:{queries:{retry:false}}});
-  render(<QueryClientProvider client={client}><MemoryRouter><MemoryApp/></MemoryRouter></QueryClientProvider>);
+  render(<QueryClientProvider client={client}><MemoryRouter><KnownMemoryEngine kind="other"><MemoryApp/></KnownMemoryEngine></MemoryRouter></QueryClientProvider>);
   expect(await screen.findByText('合成图节点')).toBeTruthy();
   expect(screen.getByText('1–1 / 26')).toBeTruthy();
   expect(screen.getByText('当前有效条目，按记录时间从新到旧。共 26 条。')).toBeTruthy();
@@ -39,7 +50,7 @@ describe('每日记忆回顾',()=>{
       throw new Error(`unexpected test path: ${path}`);
     });
     const client=new QueryClient({defaultOptions:{queries:{retry:false}}});
-    render(<QueryClientProvider client={client}><MemoryRouter><MemoryApp/></MemoryRouter></QueryClientProvider>);
+    render(<QueryClientProvider client={client}><MemoryRouter><KnownMemoryEngine kind="legacy"><MemoryApp/></KnownMemoryEngine></MemoryRouter></QueryClientProvider>);
     expect(screen.queryByText('对话原话（L0） · 0')).toBeNull();
     expect(await screen.findByText('对话原话（L0） · 35')).toBeTruthy();
     expect(screen.queryByText('对话原话（L0） · 0')).toBeNull();
@@ -58,7 +69,7 @@ describe('每日记忆回顾',()=>{
       throw new Error(`unexpected test path: ${path}`);
     });
     const client=new QueryClient({defaultOptions:{queries:{retry:false}}});
-    render(<QueryClientProvider client={client}><MemoryRouter initialEntries={['/memories?l0_message_id=l0-user']}><MemoryApp/></MemoryRouter></QueryClientProvider>);
+    render(<QueryClientProvider client={client}><MemoryRouter initialEntries={['/memories?l0_message_id=l0-user']}><KnownMemoryEngine kind="legacy"><MemoryApp/></KnownMemoryEngine></MemoryRouter></QueryClientProvider>);
     expect(await screen.findByText('合成圆屏问题')).toBeTruthy();
     expect(screen.getByText(/已从圆屏质量反馈打开对应用户 L0/)).toBeTruthy();
   });
@@ -80,7 +91,7 @@ describe('每日记忆回顾',()=>{
     });
 
     const client=new QueryClient({defaultOptions:{queries:{retry:false}}});
-    render(<QueryClientProvider client={client}><MemoryRouter><MemoryApp/></MemoryRouter></QueryClientProvider>);
+    render(<QueryClientProvider client={client}><MemoryRouter><KnownMemoryEngine kind="legacy"><MemoryApp/></KnownMemoryEngine></MemoryRouter></QueryClientProvider>);
     fireEvent.click(await screen.findByRole('button',{name:'每日回顾'}));
     expect(await screen.findByText(/每日记忆回顾/)).toBeTruthy();
     expect((await screen.findAllByText('用户喜欢乌龙茶。')).length).toBeGreaterThanOrEqual(2);
@@ -143,7 +154,7 @@ describe('每日记忆回顾',()=>{
     });
 
     const client = new QueryClient({defaultOptions: {queries: {retry: false}}});
-    render(<QueryClientProvider client={client}><MemoryRouter><MemoryApp/></MemoryRouter></QueryClientProvider>);
+    render(<QueryClientProvider client={client}><MemoryRouter><KnownMemoryEngine kind="legacy"><MemoryApp/></KnownMemoryEngine></MemoryRouter></QueryClientProvider>);
     await screen.findByText(/记忆已加载/);
     fireEvent.click(screen.getByText(/对话原话（L0）/));
     fireEvent.click(await screen.findByText(source.content));
@@ -181,7 +192,7 @@ describe('事实变化时间线',()=>{
       throw new Error(`unexpected test path: ${path}`);
     });
     const client=new QueryClient({defaultOptions:{queries:{retry:false}}});
-    render(<QueryClientProvider client={client}><MemoryRouter><MemoryApp/></MemoryRouter></QueryClientProvider>);
+    render(<QueryClientProvider client={client}><MemoryRouter><KnownMemoryEngine kind="legacy"><MemoryApp/></KnownMemoryEngine></MemoryRouter></QueryClientProvider>);
     fireEvent.click(await screen.findByText('用户住在合肥。'));
     const timeline=await screen.findByRole('button',{name:'事实时间线'});
     expect(calls).not.toContain('/api/memories/new-place/temporal-history');
@@ -211,7 +222,7 @@ describe('开发期记忆重置',()=>{
       throw new Error(`unexpected test path: ${path}`);
     });
     const client=new QueryClient({defaultOptions:{queries:{retry:false}}});
-    render(<QueryClientProvider client={client}><MemoryRouter><MemoryApp/></MemoryRouter></QueryClientProvider>);
+    render(<QueryClientProvider client={client}><MemoryRouter><KnownMemoryEngine kind="legacy"><MemoryApp/></KnownMemoryEngine></MemoryRouter></QueryClientProvider>);
     const clearButton=await screen.findByRole('button',{name:'重置长期记忆'});
     await waitFor(()=>expect(clearButton.hasAttribute('disabled')).toBe(false));
     fireEvent.click(clearButton);
@@ -246,7 +257,7 @@ describe('开发期记忆重置',()=>{
       throw new Error(`unexpected test path: ${path}`);
     });
     const client=new QueryClient({defaultOptions:{queries:{retry:false}}});
-    render(<QueryClientProvider client={client}><MemoryRouter><MemoryApp/></MemoryRouter></QueryClientProvider>);
+    render(<QueryClientProvider client={client}><MemoryRouter><KnownMemoryEngine kind="legacy"><MemoryApp/></KnownMemoryEngine></MemoryRouter></QueryClientProvider>);
     const button=await screen.findByRole('button',{name:'清除 L0–L3'});
     await waitFor(()=>expect(button.hasAttribute('disabled')).toBe(false));
     fireEvent.click(button);
@@ -280,7 +291,7 @@ describe('开发期记忆重置',()=>{
       throw new Error(`unexpected test path: ${path}`);
     });
     const client=new QueryClient({defaultOptions:{queries:{retry:false}}});
-    render(<QueryClientProvider client={client}><MemoryRouter><MemoryApp/></MemoryRouter></QueryClientProvider>);
+    render(<QueryClientProvider client={client}><MemoryRouter><KnownMemoryEngine kind="legacy"><MemoryApp/></KnownMemoryEngine></MemoryRouter></QueryClientProvider>);
     const button=await screen.findByRole('button',{name:'清除 L0–L3'});
     await waitFor(()=>expect(button.hasAttribute('disabled')).toBe(false));
     fireEvent.click(button);
@@ -328,7 +339,7 @@ describe('L1 质量候选',()=>{
       throw new Error(`unexpected test path: ${path}`);
     });
     const client=new QueryClient({defaultOptions:{queries:{retry:false}}});
-    render(<QueryClientProvider client={client}><MemoryRouter><MemoryApp/></MemoryRouter></QueryClientProvider>);
+    render(<QueryClientProvider client={client}><MemoryRouter><KnownMemoryEngine kind="legacy"><MemoryApp/></KnownMemoryEngine></MemoryRouter></QueryClientProvider>);
     fireEvent.click(await screen.findByRole('button',{name:'重复与关系复核'}));
     const scan=await screen.findByRole('button',{name:'扫描当前 L1'});
     await waitFor(()=>expect(scan.hasAttribute('disabled')).toBe(false));
@@ -374,7 +385,7 @@ describe('L1 质量候选',()=>{
       throw new Error(`unexpected test path: ${path}`);
     });
     const client=new QueryClient({defaultOptions:{queries:{retry:false}}});
-    render(<QueryClientProvider client={client}><MemoryRouter><MemoryApp/></MemoryRouter></QueryClientProvider>);
+    render(<QueryClientProvider client={client}><MemoryRouter><KnownMemoryEngine kind="legacy"><MemoryApp/></KnownMemoryEngine></MemoryRouter></QueryClientProvider>);
     fireEvent.click(await screen.findByRole('button',{name:'重复与关系复核'}));
     const button=await screen.findByRole('button',{name:'运行一次预览'});
     expect(calls.some(call=>call.path.includes('semantic-relations'))).toBe(false);

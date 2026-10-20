@@ -1,3 +1,5 @@
+import {mechanismFixture} from '../../tests/fixtures/hyMechanisms';
+import {KnownMemoryEngine} from '../../tests/memoryEngine';
 import {afterEach,expect,test,vi} from 'vitest';
 import {fireEvent,render,screen,waitFor,within} from '@testing-library/react';
 import {MemoryRouter,Route,Routes} from 'react-router-dom';
@@ -12,6 +14,7 @@ const workspace={protocol:1,profile:false,history:true,operations:true,correctio
 function setup(route='/memories',override?:(path:string,method:string,body:unknown)=>unknown|Promise<unknown>) {
   const request=vi.spyOn(ChatApi.prototype,'request').mockImplementation(async(path,method='GET',body)=>{
     const custom=await override?.(path,method,body);if(custom!==undefined)return custom as never;
+    if(path==='/api/memory-engine/hy/mechanisms')return mechanismFixture as never;
     if(path==='/api/memory-engine')return status as never;
     if(path==='/api/memory-engine/hy/workspace')return workspace as never;
     if(path.startsWith('/api/memory-engine/items?'))return {items:[item],total:26,limit:25,offset:Number(new URLSearchParams(path.split('?')[1]).get('offset'))} as never;
@@ -20,7 +23,7 @@ function setup(route='/memories',override?:(path:string,method:string,body:unkno
     if(path==='/api/memory-engine/hy/items/synthetic-1/history')return {items:[],limited:false,recording_complete:false} as never;
     throw new Error(`unexpected synthetic path ${path}`);
   });
-  render(<MemoryRouter initialEntries={[route]}><HyMemoryWorkspace api={new ChatApi()} method="hy_memory_pro_chat" capabilities={{listing:true,detail:true}}/></MemoryRouter>);
+  render(<MemoryRouter initialEntries={[route]}><KnownMemoryEngine kind="hy"><HyMemoryWorkspace api={new ChatApi()} method="hy_memory_pro_chat" capabilities={{listing:true,detail:true}}/></KnownMemoryEngine></MemoryRouter>);
   return request;
 }
 
@@ -60,13 +63,13 @@ test('详情只在选择后读取单条原话，单来源失败保留其他来�
   expect(request.mock.calls.filter(([path])=>path.includes('/sources/')).length).toBe(2);
 });
 
-test('来源未知与历史空结果均不推断成无来源/从未变化',async()=>{
+test('来源未知与SDK历史关闭均不推断成无来源/从未变化',async()=>{
   setup('/memories?item=synthetic-1',(path)=>path==='/api/memory-engine/items/synthetic-1'?{...item,source_event_ids:null}:undefined);
   const dialog=await screen.findByRole('dialog',{name:'记忆详情'});
   expect(await within(dialog).findByText(/引擎没有提供来源关联/)).toBeTruthy();
   expect(within(dialog).queryByRole('combobox')).toBeNull();
-  fireEvent.click(await within(dialog).findByRole('button',{name:'读取这条变化记录'}));
-  expect(await within(dialog).findByText('未读到变化记录。可能尚无变化，也可能引擎未开启历史记录。')).toBeTruthy();
+  fireEvent.click(await within(dialog).findByRole('button',{name:'核对并读取 SDK 历史'}));
+  expect(await within(dialog).findByText('SDK 历史记录当前已关闭；平台管理操作审计仍可单独核对。')).toBeTruthy();
 });
 
 test('扩展未接通仍可浏览，画像不跨越范围能力',async()=>{
@@ -153,6 +156,6 @@ test('旧记忆书签先确认引擎再跳到新任务，不挂载旧页',async(
   vi.spyOn(ChatApi.prototype,'request').mockResolvedValue({representation:'method_defined'});
   const legacy=vi.fn(()=> <p>不应挂载</p>);
   const Legacy=legacy;
-  render(<MemoryRouter initialEntries={['/personas']}><Routes><Route path="/personas" element={<MemoryDomainRoute legacy={<Legacy/>} view="profile"/>}/><Route path="/memories" element={<p>新记忆任务</p>}/></Routes></MemoryRouter>);
+  render(<MemoryRouter initialEntries={['/personas']}><KnownMemoryEngine kind="hy"><Routes><Route path="/personas" element={<MemoryDomainRoute legacy={<Legacy/>} view="profile"/>}/><Route path="/memories" element={<p>新记忆任务</p>}/></Routes></KnownMemoryEngine></MemoryRouter>);
   expect(await screen.findByText('新记忆任务')).toBeTruthy();expect(legacy).not.toHaveBeenCalled();
 });

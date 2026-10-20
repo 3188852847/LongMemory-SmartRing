@@ -4,6 +4,7 @@ import {MemoryRouter} from 'react-router-dom';
 import {QueryClient, QueryClientProvider} from '@tanstack/react-query';
 import {ChatApi, type Snapshot, type Turn} from '../api';
 import {ChatApp} from './ChatApp';
+import {KnownMemoryEngine} from '../tests/memoryEngine';
 
 const turn = (index: number): Turn => ({request_id:`synthetic-${index}`, input:`合成输入 ${index}`,
   answer:`合成回答 ${index}`, status:'completed', writes:[], user_saved:true, duration_ms:1,
@@ -23,7 +24,7 @@ function mount(snapshot: Snapshot, override?: (path: string, method: string, bod
     throw new Error(`unexpected synthetic request: ${method} ${path}`);
   });
   render(<QueryClientProvider client={new QueryClient({defaultOptions:{queries:{retry:false}}})}>
-    <MemoryRouter><ChatApp/></MemoryRouter></QueryClientProvider>);
+    <MemoryRouter><KnownMemoryEngine kind="legacy"><ChatApp/></KnownMemoryEngine></MemoryRouter></QueryClientProvider>);
   return request;
 }
 

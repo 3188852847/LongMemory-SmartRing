@@ -1,3 +1,4 @@
+import {KnownMemoryEngine} from '../tests/memoryEngine';
 import {describe, expect, test, vi} from 'vitest';
 import {fireEvent, render, screen} from '@testing-library/react';
 import {MemoryRouter} from 'react-router-dom';
@@ -16,7 +17,7 @@ describe('系统总览', () => {
       throw new Error(`unexpected path: ${path}`);
     });
     const query = new QueryClient({defaultOptions:{queries:{retry:false}}});
-    render(<QueryClientProvider client={query}><MemoryRouter><OverviewApp/></MemoryRouter></QueryClientProvider>);
+    render(<QueryClientProvider client={query}><MemoryRouter><KnownMemoryEngine kind="legacy"><OverviewApp/></KnownMemoryEngine></MemoryRouter></QueryClientProvider>);
 
     expect((await screen.findAllByText('SyntheticModel')).length).toBe(2);
     expect(await screen.findByText('12 条')).toBeTruthy();

@@ -1,9 +1,10 @@
+import {useMemoryEngine, useMemorySummary, memoryEngineLabel, retrievalLabel} from '../app/MemoryEngineProvider';
 import {useEffect, useRef, useState} from 'react';
 import {Alert, Button, Input, Modal, Select} from 'antd';
 import {useQuery, useQueryClient} from '@tanstack/react-query';
-import {useSearchParams} from 'react-router-dom';
+import {Link, useSearchParams} from 'react-router-dom';
 import {useUnsavedChanges} from '../app/UnsavedChanges';
-import {ApiError, ChatApi, type Config, type DeviceStatus, type MemoryFeedbackKind, type MemoryPageSummary, type Snapshot, type Summary, type Turn} from '../api';
+import {ApiError, ChatApi, type Config, type DeviceStatus, type MemoryFeedbackKind, type Snapshot, type Summary, type Turn} from '../api';
 import {turnSummary} from '../../../assets/chat-view.mjs';
 import {AppShell, ConsoleNav} from '../components/AppShell';
 import {PageHeader} from '../components/PageHeader';
@@ -56,8 +57,8 @@ export function ChatApp() {
   const panelHeading = useRef<HTMLHeadingElement>(null);
   const deviceStatus = useQuery({queryKey:['device-status'], enabled:Boolean(config?.enabled), retry:false,
     queryFn:() => api.request<DeviceStatus>('/api/device'), refetchInterval:5000});
-  const memoryCount = useQuery({queryKey:['chat-active-memory-count'], enabled:Boolean(config?.enabled), retry:false,
-    queryFn:() => api.request<MemoryPageSummary>('/api/memories?q=&state=active&offset=0&limit=1'), staleTime:30000});
+  const memoryEngine=useMemoryEngine();
+  const memoryCount=useMemorySummary(panel==='runtime');
   const focusedRequestId = searchParams.get('request_id');
   const followLatest = useRef(true);
   const previousChat = useRef<string | undefined>(undefined);
@@ -224,8 +225,8 @@ export function ChatApp() {
         {panel && <aside id="chat-aux-panel" className="chat-aux-panel" aria-label={panel === 'sessions' ? '会话管理' : panel === 'evidence' ? '记忆证据面板' : '运行状态面板'} onKeyDown={event => {if (event.key === 'Escape') {event.stopPropagation(); closePanel();}}}>
           <div className="chat-panel-heading"><h2 ref={panelHeading} tabIndex={-1}>{panel === 'sessions' ? '会话管理' : panel === 'evidence' ? evidenceIndex === undefined ? '本轮记忆证据' : `第 ${evidenceIndex + 1} 轮记忆证据` : '运行状态'}</h2><Button onClick={closePanel}>收起面板</Button></div>
           <div className="chat-panel-content">{panel === 'sessions' ? sessions : panel === 'evidence' ? <TurnMemoryEvidence turn={evidenceTurn}/> : <>
-            <ConsoleStatusRail config={config} device={deviceStatus.data} deviceFailed={deviceStatus.isError} activeMemoryCount={memoryCount.data?.total}/>
-            {modelCheck}<section className="chat-runtime-info"><h3>运行配置与记忆说明</h3><p>{config?.enabled ? `${config.model} · ${config.role} · ${config.provider}` : '聊天未启用'}</p>{config?.provider === 'fake' && <p>Fake 是离线工程替身，不具备角色和多轮理解能力。</p>}<p>提取：{config?.method === 'longmemory_daily_llm_v2' ? '模型辅助 P3.2（失败保留 L0）' : '规则基线'}；检索：{config?.retrieval === 'keyword_dense_rrf_v1' ? '关键词＋本地 BGE 融合 P3.2' : '关键词基线'}。网页不自动驱动圆屏播放。</p>{config?.enabled && <p>记忆库：{config.database}</p>}<p>发送会先保存原始输入，再按当前提取策略生成长期记忆。</p></section>
+            <ConsoleStatusRail config={config} device={deviceStatus.data} deviceFailed={deviceStatus.isError} activeMemoryCount={memoryEngine.phase==='ready'?memoryCount.data?.total:undefined} memoryCountState={memoryCount.isError?'error':memoryCount.isFetching?'loading':memoryCount.isSuccess?'ready':'unavailable'}/>
+            {modelCheck}<section className="chat-runtime-info"><h3>运行配置与记忆说明</h3><p>{config?.enabled ? `${config.model} · ${config.role} · ${config.provider}` : '聊天未启用'}</p>{config?.provider === 'fake' && <p>Fake 是离线工程替身，不具备角色和多轮理解能力。</p>}<p>引擎：{memoryEngineLabel(memoryEngine)}；检索：{retrievalLabel(config?.retrieval)}。{memoryEngine.kind==='legacy'?`提取：${config?.method==='longmemory_daily_llm_v2'?'模型辅助（失败保留原话）':'原引擎策略'}。`:memoryEngine.kind==='hy'?'Hy 提取与冲突协调的逐项决策尚不可观测。':''}网页不自动驱动圆屏播放。</p>{memoryEngine.kind==='hy'&&<Link to="/memories?view=mechanisms">核对记忆机制与证据边界</Link>}{config?.enabled && <p>记忆库：{config.database}</p>}<p>发送会先保存原始输入，再按当前提取策略生成长期记忆。</p></section>
           </>}</div>
         </aside>}
       </div>

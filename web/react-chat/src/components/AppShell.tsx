@@ -2,8 +2,9 @@ import {useEffect, useId, useState, type ReactNode} from 'react';
 import {Link, useLocation} from 'react-router-dom';
 import {OrbitMark, StatusIndicator} from './SciFiSurface';
 import {AmbientMotionToggle} from './DigitalAtmosphere';
+import {useMemoryEngine, memoryEngineLabel} from '../app/MemoryEngineProvider';
 
-type Page = 'overview' | 'device' | 'display' | 'chat' | 'memories' | 'quality' | 'scenarios' | 'personas' | 'settings' | 'experiments';
+type Page = 'overview' | 'device' | 'display' | 'chat' | 'memories' | 'mechanisms' | 'quality' | 'scenarios' | 'personas' | 'settings' | 'experiments';
 
 const NAV_GROUPS: Array<{label: string; items: Array<{
   page: Page; icon: string; label: string; description: string; to: string;
@@ -67,20 +68,29 @@ export function AppShell({subtitle, className = '', layout = 'page', sidebar, ch
 }
 
 /** React 内部页面使用客户端路由；原版入口只保留为迁移期回退。 */
-export function ConsoleNav({active, legacyPath, memoryEngine}: {active: Page; legacyPath: string; memoryEngine?:'hy'}) {
-  const groups=memoryEngine==='hy'?NAV_GROUPS.map(group=>group.label==='长期记忆'?{...group,items:[
+export function ConsoleNav({active, legacyPath}: {active: Page; legacyPath: string}) {
+  const engine=useMemoryEngine();
+  const location=useLocation();
+  const selected=location.pathname==='/memories'&&new URLSearchParams(location.search).get('view')==='mechanisms'?'mechanisms':active;
+  const memoryItems=engine.kind==='hy'?[
     {page:'memories' as Page,icon:'记',label:'我的记忆',description:'内容、来源与明确纠正',to:'/memories'},
-  ]}:group):NAV_GROUPS;
+    {page:'mechanisms' as Page,icon:'理',label:'记忆机制',description:'分层、运行路径与证据',to:'/memories?view=mechanisms'},
+  ]:engine.kind==='legacy'?NAV_GROUPS[1].items:[
+    {page:'memories' as Page,icon:'记',label:'记忆管理',description:memoryEngineLabel(engine),to:'/memories'},
+    {page:'mechanisms' as Page,icon:'理',label:'记忆机制',description:'身份确认后读取机制声明',to:'/memories?view=mechanisms'},
+  ];
+  const groups=NAV_GROUPS.map(group=>group.label==='长期记忆'?{...group,items:memoryItems}:group);
   return <>
     <nav className="console-nav" aria-label="控制台导航">
       {groups.map(group => <section className="nav-group" key={group.label}>
         <h2>{group.label}</h2>
-        {group.items.map(item => <NavItem key={item.page} item={item} active={active === item.page}/>)}
+        {group.items.map(item => <NavItem key={item.page} item={item} active={selected === item.page}/>)}
       </section>)}
     </nav>
-    {memoryEngine==='hy'?<details className="legacy-entry memory-term-map"><summary>关于这份记忆</summary><p>Hy 从独立新库积累。条目、基本画像与平台来源分别核对；旧库保留。</p><p>保留层与尚未启用的图谱、意图、深层认知加工不会显示成已可用功能。</p></details>:<details className="legacy-entry memory-term-map"><summary>记忆名称与研究编号</summary><p>原话（L0）：保存的对话来源。事实（L1）：从原话提取的记忆。场景（L2）：相关事实组成的经历。画像（L3）：有来源的长期认识。</p><p>深层工具保留这些研究编号，可沿来源核对；模型推断仍需复核。</p></details>}
-    <details className="legacy-entry"><summary>兼容入口</summary>
+    {engine.phase!=='ready'&&<div className="memory-engine-notice" role="status"><p>{engine.phase==='error'?(engine.issue==='busy'?'引擎暂忙，未取得新身份；保留未知或上次确认的入口。':engine.identity?'记忆身份核对失败；保留上次确认的入口。':'未能确认当前引擎，入口保持中立。'):'正在确认引擎，其他功能可继续使用。'}</p>{engine.phase==='error'&&<button type="button" disabled={engine.refreshing} onClick={engine.refresh}>重新核对引擎</button>}</div>}
+    {engine.kind==='hy'?<details className="legacy-entry memory-term-map"><summary>关于这份记忆</summary><p>Hy 从独立新库积累。Hy L0 是基本信息；平台原话是独立来源账本，不是 Hy L0。</p><p>机制页区分 SDK 支持、当前接入和实际证据。旧库保留。</p></details>:engine.kind==='legacy'?<details className="legacy-entry memory-term-map"><summary>记忆名称与研究编号</summary><p>原话（L0）：保存的对话来源。事实（L1）：从原话提取的记忆。场景（L2）：相关事实组成的经历。画像（L3）：有来源的长期认识。</p></details>:null}
+    {engine.kind==='legacy'&&<details className="legacy-entry"><summary>兼容入口</summary>
       <a href={legacyPath}>打开原版页面</a><p>仅用于迁移期排障，日常操作请使用上方新版页面。</p>
-    </details>
+    </details>}
   </>;
 }

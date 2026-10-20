@@ -1,3 +1,4 @@
+import {KnownMemoryEngine} from '../../tests/memoryEngine';
 import {fireEvent, render, screen} from '@testing-library/react';
 import {describe, expect, it} from 'vitest';
 import {MemoryRouter} from 'react-router-dom';
@@ -8,26 +9,32 @@ const config:Config = {enabled:true,database:'synthetic.db',model:'Synthetic-Mod
 
 describe('ConsoleStatusRail', () => {
   it('只按真实探测值呈现状态和有效记忆数', () => {
-    render(<MemoryRouter><ConsoleStatusRail config={config} device={{connection_count:1,ready:true,read_volume_supported:true,set_volume_supported:true,read_status_supported:true,set_brightness_supported:true,set_theme_supported:true}} deviceFailed={false} activeMemoryCount={128}/></MemoryRouter>);
+    render(<MemoryRouter><KnownMemoryEngine kind="legacy"><ConsoleStatusRail config={config} device={{connection_count:1,ready:true,read_volume_supported:true,set_volume_supported:true,read_status_supported:true,set_brightness_supported:true,set_theme_supported:true}} deviceFailed={false} activeMemoryCount={128}/></KnownMemoryEngine></MemoryRouter>);
     expect(screen.getByText('已连接')).toBeTruthy();
     expect(screen.getByText('128 条有效 L1')).toBeTruthy();
     expect(screen.getByText('Synthetic-Model')).toBeTruthy();
-    expect(screen.getByText('关键词＋向量')).toBeTruthy();
+    expect(screen.getByText('关键词＋本地向量')).toBeTruthy();
     expect(screen.getByRole('link',{name:'查看圆屏诊断'}).getAttribute('href')).toBe('/device');
     expect(screen.getByRole('link',{name:'查看模型诊断'}).getAttribute('href')).toBe('/settings?tab=model');
   });
 
   it('探测失败时不把旧状态冒充在线', () => {
-    render(<MemoryRouter><ConsoleStatusRail config={config} device={undefined} deviceFailed activeMemoryCount={undefined}/></MemoryRouter>);
+    render(<MemoryRouter><KnownMemoryEngine kind="legacy"><ConsoleStatusRail config={config} device={undefined} deviceFailed activeMemoryCount={undefined}/></KnownMemoryEngine></MemoryRouter>);
     expect(screen.getByText('状态未知')).toBeTruthy();
-    expect(screen.getByText('L1 数量未知')).toBeTruthy();
+    expect(screen.getByText('条目数量尚未提供')).toBeTruthy();
   });
 });
 
 describe('TurnMemoryEvidence', () => {
+  it('Hy缺少召回字段时保持未知，空列表只描述平台已存字段',()=>{
+    const turn:Turn={input:'合成问题',answer:'合成回答',status:'completed',user_saved:true,duration_ms:1,writes:[]};
+    expect(memoryTraceSummary(turn,'neutral').code).toBe('TRACE UNKNOWN');
+    expect(memoryTraceSummary({...turn,retrieved:[]},'neutral').text).toContain('保存的召回列表为空');
+    expect(memoryTraceSummary({...turn,writes:[{operation:'noop',item_id:'synthetic'}]},'neutral').text).toContain('未见已记录');
+  });
   it('分层呈现实际召回与写入', () => {
     const turn:Turn = {input:'我的猫叫什么',answer:'豆包',status:'completed',user_saved:true,duration_ms:12,writes:[{operation:'noop',item_id:'l1-a'}],retrieved:[{item_id:'l1-a',content:'用户养了一只叫豆包的猫。',source_event_ids:['l0-a']}],scenario_retrieved:[{scenario_id:'l2-a',title:'养猫',summary:'用户与豆包一起生活。',source_memory_ids:['l1-a'],source_message_ids:['l0-a']}],persona_retrieved:[{persona_id:'l3-a',label:'宠物偏好',statement:'用户喜欢猫。'}]};
-    render(<MemoryRouter><TurnMemoryEvidence turn={turn}/></MemoryRouter>);
+    render(<MemoryRouter><KnownMemoryEngine kind="legacy"><TurnMemoryEvidence turn={turn}/></KnownMemoryEngine></MemoryRouter>);
     expect(screen.getByText('[ MEM HIT ]')).toBeTruthy();
     expect(screen.getByText('本轮召回 L1 1 · L2 1 · L3 1')).toBeTruthy();
     expect(screen.getByText('用户养了一只叫豆包的猫。')).toBeTruthy();
@@ -40,7 +47,7 @@ describe('TurnMemoryEvidence', () => {
   it('无召回只陈述本轮事实，不声称用户从未说过', () => {
     const turn:Turn = {input:'问题',answer:'不知道',status:'completed',user_saved:true,duration_ms:2,writes:[],retrieved:[]};
     expect(memoryTraceSummary(turn).code).toBe('NO RECALL');
-    render(<MemoryRouter><TurnMemoryEvidence turn={turn}/></MemoryRouter>);
+    render(<MemoryRouter><KnownMemoryEngine kind="legacy"><TurnMemoryEvidence turn={turn}/></KnownMemoryEngine></MemoryRouter>);
     expect(screen.getByText('本轮没有召回长期记忆；不等于用户从未说过')).toBeTruthy();
   });
 
@@ -49,7 +56,7 @@ describe('TurnMemoryEvidence', () => {
       {item_id:'current',content:'用户住在合肥。',source_event_ids:['source-current']},
       {item_id:'old',content:'用户住在南京。',source_event_ids:['source-old'],temporal_role:'historical',valid_from:null,valid_to:'2026-05-01T00:00:00+00:00'},
     ]};
-    render(<MemoryRouter><TurnMemoryEvidence turn={turn}/></MemoryRouter>);
+    render(<MemoryRouter><KnownMemoryEngine kind="legacy"><TurnMemoryEvidence turn={turn}/></KnownMemoryEngine></MemoryRouter>);
     expect(screen.getByText('历史事实')).toBeTruthy();
     expect(screen.getByText(/结束.*2026/)).toBeTruthy();
     expect(screen.getByText('用户住在南京。')).toBeTruthy();

@@ -1,6 +1,7 @@
 import {useEffect, useLayoutEffect, useRef} from 'react';
 import {Outlet, ScrollRestoration, useLocation, useNavigationType} from 'react-router-dom';
 import {UnsavedChangesProvider} from './UnsavedChanges';
+import {MemoryEngineProvider} from './MemoryEngineProvider';
 
 /** 普通新页面回到入口；历史返回恢复文档滚动，消息/数据面板仍由各自组件管理。 */
 export function RouteWorkspace() {
@@ -56,5 +57,5 @@ export function RouteWorkspace() {
     return () => observer.disconnect();
   }, [location.pathname, navigation]);
   const nonce = document.querySelector<HTMLMetaElement>('meta[name="style-nonce"]')?.content;
-  return <UnsavedChangesProvider><Outlet/><ScrollRestoration nonce={nonce}/></UnsavedChangesProvider>;
+  return <MemoryEngineProvider><UnsavedChangesProvider><Outlet/><ScrollRestoration nonce={nonce}/></UnsavedChangesProvider></MemoryEngineProvider>;
 }

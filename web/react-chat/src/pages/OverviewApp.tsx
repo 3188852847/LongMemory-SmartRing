@@ -1,9 +1,10 @@
 import {useQuery} from '@tanstack/react-query';
 import {Alert, Card, Tag} from 'antd';
 import {Link} from 'react-router-dom';
-import {ChatApi, type Config, type DeviceStatus, type MemoryPageSummary, type RuntimeStatus} from '../api';
+import {ChatApi, type Config, type DeviceStatus, type RuntimeStatus} from '../api';
 import {AppShell, ConsoleNav} from '../components/AppShell';
 import {ConsoleStatusRail} from '../features/chat/ChatObservability';
+import {useMemoryEngine, useMemorySummary, memoryEngineLabel, retrievalLabel} from '../app/MemoryEngineProvider';
 import {PageHeader} from '../components/PageHeader';
 import {diagnoseSystem, SystemDiagnostics} from '../features/diagnostics/SystemDiagnostics';
 
@@ -45,11 +46,8 @@ export function OverviewApp() {
     queryKey: ['device-status'], queryFn: () => api.request<DeviceStatus>('/api/device'),
     enabled: session.isSuccess, retry: false, refetchInterval: 5000,
   });
-  const memories = useQuery({
-    queryKey: ['overview-active-memory-count'],
-    queryFn: () => api.request<MemoryPageSummary>('/api/memories?q=&state=active&offset=0&limit=1'),
-    enabled: session.isSuccess && config.data?.enabled === true, retry: false, staleTime: 30000,
-  });
+  const engine=useMemoryEngine();
+  const memories=useMemorySummary(session.isSuccess);
   const runtime = useQuery({
     queryKey: ['runtime-status'], queryFn: () => api.request<RuntimeStatus>('/api/runtime-status'),
     enabled: session.isSuccess, retry: false, refetchInterval: 2000,
@@ -64,12 +62,12 @@ export function OverviewApp() {
     <PageHeader eyebrow="日常使用" title="系统总览" description="查看当前状态，直接进入聊天、记忆或设备。本页只读取状态。"
       action={<span className="overview-refresh-note">圆屏每 5 秒核对一次</span>}/>
     {session.isError && <Alert type="error" showIcon title="控制台会话不可用" description="网页后端可能已经停止。请回到启动面板查看受管服务状态；本页没有自动重启任何进程。"/>}
-    <ConsoleStatusRail config={config.data} device={device.data} deviceFailed={device.isError} activeMemoryCount={memories.data?.total}/>
+    <ConsoleStatusRail config={config.data} device={device.data} deviceFailed={device.isError} activeMemoryCount={engine.phase==='ready'?memories.data?.total:undefined} memoryCountState={memories.isError?'error':memories.isFetching?'loading':memories.isSuccess?'ready':'unavailable'}/>
       <Card className="overview-start" title="开始使用" extra={<Tag color={consoleReady ? 'green' : session.isError || config.isError ? 'red' : 'gold'}>{consoleReady ? config.data?.provider === 'fake' ? '文字链路可测试（Fake）' : config.data?.enabled ? '网页控制台可用' : '聊天未启用' : session.isError || config.isError ? '读取失败' : '正在核对'}</Tag>}>
         <div className="overview-actions">
           <Link to="/chat-react"><strong>文字聊天</strong><span>输入、回答和本轮记忆证据</span></Link>
           <Link to="/device"><strong>设备与状态</strong><span>圆屏连接、音量、亮度和快照</span></Link>
-          <Link to="/memories"><strong>记忆管理</strong><span>L0 原话、L1 事实、纠正与删除</span></Link>
+          <Link to="/memories"><strong>记忆管理</strong><span>{engine.kind==='legacy'?'L0 原话、L1 事实、纠正与删除':engine.kind==='hy'?'真实条目、来源、画像与机制':'确认当前引擎后查看内容与来源'}</span></Link>
           <Link to="/display-preview"><strong>圆屏外观</strong><span>状态视觉、皮肤与动态壁纸</span></Link>
         </div>
       </Card>
@@ -97,9 +95,9 @@ export function OverviewApp() {
       <Card title="当前回答链路" extra={<Tag color={model.tone}>{model.label}</Tag>}>
         <dl className="overview-facts">
           <div><dt>模型</dt><dd>{config.data?.model ?? '未知'}</dd></div>
-          <div><dt>记忆方法</dt><dd>{config.data?.method ?? '未装配'}</dd></div>
-          <div><dt>召回策略</dt><dd>{config.data?.retrieval === 'keyword_dense_rrf_v1' ? '关键词＋本地向量' : config.data?.retrieval ? '关键词基线' : '未装配'}</dd></div>
-          <div><dt>有效 L1</dt><dd>{memories.data ? `${memories.data.total} 条` : config.data?.enabled ? '读取中或不可用' : '聊天未启用'}</dd></div>
+          <div><dt>记忆方法</dt><dd>{memoryEngineLabel(engine)}</dd></div>
+          <div><dt>召回策略</dt><dd>{retrievalLabel(config.data?.retrieval)}</dd></div>
+          <div><dt>{engine.kind==='legacy'?'有效 L1':'活动记忆条目'}</dt><dd>{engine.phase!=='ready'?'引擎尚未确认':memories.isError?'读取失败':memories.data?`${memories.data.total} 条`:memories.isFetching?'正在读取':engine.kind==='hy'?'未扫描，进入我的记忆查看':'当前未提供数量'}</dd></div>
         </dl>
         <p className="subtle">{model.detail}</p>
         <Link className="overview-detail-link" to="/settings?tab=model">打开模型与服务诊断</Link>
@@ -117,7 +115,7 @@ export function OverviewApp() {
       <Card title="配置与研究入口">
         <div className="overview-actions compact">
           <Link to="/settings"><strong>设置中心</strong><span>模型、记忆后端、角色、声音、外观与主动交流</span></Link>
-          <Link to="/memory-quality"><strong>记忆质量</strong><span>漏记、错记和召回问题样本</span></Link>
+          {engine.kind==='legacy'?<Link to="/memory-quality"><strong>记忆质量</strong><span>漏记、错记和召回问题样本</span></Link>:<Link to={engine.kind==='hy'?'/memories?view=mechanisms':'/memories'}><strong>{engine.kind==='hy'?'记忆机制':'记忆管理'}</strong><span>当前引擎、可得证据与观测边界</span></Link>}
           <Link to="/experiments-react"><strong>实验中心</strong><span>冻结对照、运行预算和逐题复核</span></Link>
         </div>
       </Card>

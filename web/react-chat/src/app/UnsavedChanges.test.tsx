@@ -48,3 +48,21 @@ test('拒绝浏览器后退保持路由与草稿；刷新事件被保护；清�
   expect(await screen.findByText('另一页')).toBeTruthy();
   expect(confirm).toHaveBeenCalledTimes(1);
 });
+
+test('记忆内分类切换保留草稿，转到机制页前保护即将卸载的编辑', async () => {
+  const confirm=vi.spyOn(window,'confirm').mockReturnValue(false);
+  const router=createMemoryRouter([{element:<UnsavedChangesProvider><Outlet/></UnsavedChangesProvider>,children:[
+    {path:'/memories',element:<Draft/>},
+  ]}],{initialEntries:['/memories?view=items']});
+  render(<RouterProvider router={router}/>);
+  fireEvent.change(screen.getByRole('textbox',{name:'草稿'}),{target:{value:'合成编辑'}});
+  await act(async()=>{await router.navigate('/memories?view=profile');});
+  expect(confirm).not.toHaveBeenCalled();
+  await act(async()=>{await router.navigate('/memories?view=mechanisms');});
+  expect(confirm).toHaveBeenCalledTimes(1);
+  expect(router.state.location.search).toBe('?view=profile');
+  expect((screen.getByRole('textbox',{name:'草稿'}) as HTMLInputElement).value).toBe('合成编辑');
+  confirm.mockReturnValue(true);
+  await act(async()=>{await router.navigate('/memories?view=mechanisms');});
+  expect(router.state.location.search).toBe('?view=mechanisms');
+});
