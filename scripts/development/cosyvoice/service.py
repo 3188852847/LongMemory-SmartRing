@@ -74,6 +74,38 @@ CAPABILITIES = {
 }
 
 
+def backend_capabilities(synthesizer):
+    """区分传输合同与实例状态，供引擎适配器决策；健康读取不触发暖机。"""
+    reusable = not bool(getattr(synthesizer, "requires_restart", False))
+    adapted = getattr(getattr(synthesizer, "stream_runtime", None), "applied", False) is True
+    forced = bool(getattr(synthesizer, "force_buffered_audio", False))
+    identity = {"state": "unavailable", "config_digest": None, "context_digest": None,
+                "selected_voice_warm": False}
+    store = getattr(synthesizer, "_profiles", None)
+    if store is not None:
+        try:
+            identity.update(state="valid", config_digest=store.profile()[1],
+                            context_digest=store.model_context()[2])
+            identity["selected_voice_warm"] = identity["context_digest"] == getattr(
+                synthesizer, "selected_warmup_identity", None)
+        except (OSError, ValueError):
+            identity["state"] = "invalid"
+    usable = reusable and identity["state"] != "invalid"
+    return {**CAPABILITIES, "audio_stream": {
+        "protocol": {"supported": True, "version": 2,
+                     "path": "/v1/audio/stream", "framing": "uint32be-length-wav-zero-eos",
+                     "mime_type": "application/vnd.longmemory.wav-chunks",
+                     "sample_rate_hz": 24000, "channels": 1, "sample_format": "pcm_s16le"},
+        "instance_usable": usable,
+        "incremental_usable": usable and adapted and not forced,
+        "default_delivery_mode": "buffered",
+        "request_delivery_modes": ["buffered", "incremental"],
+        "force_buffered": forced,
+        "cancellation": "token-boundary-and-join" if adapted else "drain-before-reuse",
+        "profile_identity": identity,
+    }}
+
+
 class SpeechSynthesizer(Protocol):
     def synthesize(self, text: str, *, use_cache: bool = True) -> bytes: ...
 
@@ -483,7 +515,7 @@ class CosyVoiceHandler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         if self.path == "/v1/capabilities":
-            self._json(200, CAPABILITIES)
+            self._json(200, backend_capabilities(self.server.synthesizer))
             return
         if self.path != "/health":
             self._json(404, {"error": "not_found"})
@@ -491,7 +523,7 @@ class CosyVoiceHandler(BaseHTTPRequestHandler):
         requires_restart = bool(getattr(self.server.synthesizer, 'requires_restart', False))
         body = {"ready": not requires_restart, "requires_restart": requires_restart,
                 "restart_reason": getattr(self.server.synthesizer, 'restart_reason', None),
-                "provider": "cosyvoice3", "capabilities": CAPABILITIES,
+                "provider": "cosyvoice3", "capabilities": backend_capabilities(self.server.synthesizer),
                 "voice_profile_contract_version": 1}
         body['generation_in_flight'] = self.server.generation_gate.locked()
         store = getattr(self.server.synthesizer, '_profiles', None)

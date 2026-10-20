@@ -136,6 +136,7 @@ class VoiceLatencyTracker:
                 # 每个元素只记录顺序与时间，不保存本段文本或音频。短句模型具有
                 # 固定启动开销时，这能区分“首段慢”和“每段都慢”。
                 "tts_segments": [],
+                "continuity": [],
                 "stages": {field: None for field in STAGE_FIELDS},
             }
             return self.sequence
@@ -157,6 +158,29 @@ class VoiceLatencyTracker:
     def stage_snapshot(self):
         with self.lock:
             return None if self.current is None else {'version': 1, 'timings_ms': dict(self.current['stages'])}
+
+    def record_continuity(self, report, *, sentence_id):
+        """独立于v6设备协议保存候选供给曲线摘要，既无正文也无假扬声器首声。"""
+        allowed = {
+            "first_effective_packet_ms", "playable_ms", "estimated_end_ms", "max_underflow_ms",
+            "total_underflow_ms", "underflow_count", "initial_buffer_target_ms", "rebuffer_target_ms",
+            "peak_buffer_ms", "rebuffer_count", "received_audio_ms", "producer_wall_ms",
+            "discarded_local_buffer_ms", "reader_join_ms",
+            "client_receive_rtf", "reader_stopped", "outcome", "measurement",
+        }
+        with self.lock:
+            if (self.current is None or sentence_id is None
+                    or sentence_id != self.current["sentence_id"]):
+                return
+            self.current["continuity"].append({key: value for key, value in report.items() if key in allowed})
+            del self.current["continuity"][:-32]
+
+    def continuity_snapshot(self):
+        with self.lock:
+            return None if self.current is None else {
+                "version": 1, "measurement": "estimated_opus_supply",
+                "segments": [dict(item) for item in self.current["continuity"]],
+            }
 
     def set_response_path(self, value):
         """标记封闭的回答路径，不保存输入、回答或命中规则。"""
@@ -569,9 +593,14 @@ def _observe_components(connection):
         tts.to_tts_stream = measured_stream
     if callable(original_opus):
         def measured_opus(*args, **kwargs):
+            packet = args[0] if args else None
+            stale = getattr(packet, "_longmemory_cosy_cancelled", None)
+            if callable(stale) and stale():
+                return None
             tracker = connection._longmemory_voice_latency
             tracker.bind_sentence()
-            sentence_id = getattr(tts, "current_sentence_id", None)
+            sentence_id = getattr(packet, "_longmemory_cosy_sentence_id",
+                                  getattr(tts, "current_sentence_id", None))
             trace = for_sentence(connection, sentence_id)
             if trace is not None:
                 trace.event("tts_audio_ready")
@@ -654,6 +683,18 @@ def observed_audio_sender(original):
     """在现有发送协程真正返回后标记首包；空的 FIRST/LAST 控制帧不计。"""
     async def send(connection, sentence_type, audios, text, sentence_id=None):
         first_packet = audios[0] if isinstance(audios, (list, tuple)) and audios else audios
+        # 没启用等待提示时也要保留Cosy自己的身份；上游队列的全局句子编号可能已变化。
+        # 列表逐项过滤，不因一个旧包吞掉同一批中的有效新轮包。
+        def current_packet(packet):
+            stale = getattr(packet, "_longmemory_cosy_cancelled", None)
+            return not callable(stale) or not stale()
+        if isinstance(audios, (list, tuple)) and audios:
+            audios = [packet for packet in audios if current_packet(packet)]
+            if not audios:
+                return None
+            first_packet = audios[0]
+        elif not current_packet(first_packet):
+            return None
         if isinstance(first_packet, WaitingPacket):
             state = first_packet.state
             if not state.current():
@@ -678,10 +719,22 @@ def observed_audio_sender(original):
     return send
 
 
+def observed_cosy_packet_sender(original):
+    """流控队列可能在取消后才出队；最终发送边界也核对包自己的身份。"""
+    async def send(connection, packet, flow_control):
+        stale = getattr(packet, "_longmemory_cosy_cancelled", None)
+        if callable(stale) and stale():
+            return None
+        return await original(connection, packet, flow_control)
+    return send
+
+
 def install_audio_send_observer():
     """包裹 TTS 基类已经导入的发送引用，不改写上游文件。"""
     from core.providers.tts import base
+    from core.handle import sendAudioHandle
     if getattr(base, "_longmemory_audio_send_observed", False):
         return
     base.sendAudioMessage = observed_audio_sender(base.sendAudioMessage)
+    sendAudioHandle._do_send_audio = observed_cosy_packet_sender(sendAudioHandle._do_send_audio)
     base._longmemory_audio_send_observed = True

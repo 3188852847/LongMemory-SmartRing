@@ -311,3 +311,59 @@ def test_new_turn_during_full_wav_fallback_discards_audio_without_retry(cancella
     assert fallback_calls == ["旧片段"]
     assert state.packets == []
     assert state.resets == 2
+
+
+def test_adaptive_old_cleanup_cannot_reset_concurrently_started_new_turn(cancellable_stream):
+    import threading
+    state = cancellable_stream
+    state.connection._longmemory_cosy_delivery_mode = "adaptive"
+    actions, old_packets, new_packets = [], [], []
+    threads = []
+    started = threading.Event()
+
+    class Encoder:
+        def encode_pcm_to_opus_stream(self, pcm, *, end_of_stream, callback):
+            if not pcm:
+                return
+            identity = state.tts.current_sentence_id
+            actions.append(("encode", identity))
+            callback((identity + "-first").encode())
+            callback((identity + "-second").encode())
+
+        def reset_state(self):
+            actions.append(("reset", None))
+
+    state.tts.opus_encoder = Encoder()
+    def new_turn():
+        started.set()
+        state.tts.to_tts_stream("新片段", opus_handler=new_packets.append)
+    def old_packet(packet):
+        old_packets.append(packet)
+        state.tts.current_sentence_id = state.connection.sentence_id = "new"
+        thread = threading.Thread(target=new_turn)
+        threads.append(thread)
+        thread.start()
+        assert started.wait(1)
+    state.tts.to_tts_stream("旧片段", opus_handler=old_packet)
+    for thread in threads:
+        thread.join(1)
+        assert not thread.is_alive()
+    assert old_packets == [b"old-first"]
+    assert new_packets == [b"new-first", b"new-second"]
+    assert actions == [("encode", "old"), ("reset", None), ("encode", "new")]
+    assert state.requests == 2
+
+
+def test_adaptive_truncation_before_start_discards_buffer_then_uses_existing_fallback(cancellable_stream, monkeypatch):
+    state = cancellable_stream
+    state.connection._longmemory_cosy_delivery_mode = "adaptive"
+    state.connection.logger = SimpleNamespace(bind=lambda **_: SimpleNamespace(warning=lambda _: None))
+    def chunks(*_args, **_kwargs):
+        yield b"abcdef"
+        raise EOFError("missing EOS")
+    monkeypatch.setattr(streaming, "iter_wav_chunks", chunks)
+    state.fallback = lambda text, opus_handler: opus_handler(b"full-wav")
+    state.tts.to_tts_stream("完整回退", opus_handler=state.packets.append)
+    assert state.packets == [b"full-wav"]
+    assert state.queued == []
+    assert state.closed and state.resets == 1

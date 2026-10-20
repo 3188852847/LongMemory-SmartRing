@@ -214,6 +214,32 @@ def test_health_capabilities_and_synthesis_contract(local_service):
     assert synth.calls[-1] == ("分块测试", "stream", False)
 
 
+@pytest.mark.parametrize("adapted,forced,restart,usable", [
+    (False, False, False, False), (True, False, False, True),
+    (True, True, False, False), (True, False, True, False),
+])
+def test_capability_distinguishes_protocol_instance_and_incremental(local_service, adapted, forced, restart, usable):
+    port, synth = local_service
+    synth.stream_runtime = SimpleNamespace(applied=adapted)
+    synth.force_buffered_audio = forced
+    synth.requires_restart = restart
+    synth.selected_warmup_identity = "context-only-digest"
+    synth._profiles = SimpleNamespace(profile=lambda: ({}, "config-only-digest"),
+        model_context=lambda: (None, None, "context-only-digest"))
+    status, _, body = request(port, "GET", "/v1/capabilities")
+    caps = json.loads(body)
+    assert status == 200 and not synth.calls
+    stream = caps["audio_stream"]
+    assert stream["protocol"]["supported"] and stream["protocol"]["version"] == 2
+    assert stream["protocol"]["sample_rate_hz"] == 24000
+    assert stream["instance_usable"] is (not restart)
+    assert stream["incremental_usable"] is usable
+    assert stream["default_delivery_mode"] == "buffered"
+    assert stream["profile_identity"]["selected_voice_warm"]
+    assert stream["profile_identity"]["config_digest"] != stream["profile_identity"]["context_digest"]
+    assert stream["cancellation"] == ("token-boundary-and-join" if adapted else "drain-before-reuse")
+
+
 def test_speech_ids_are_server_generated_and_stream_failure_does_not_mean_completed(local_service):
     port, synth = local_service
     connection = http.client.HTTPConnection("127.0.0.1", port, timeout=3)

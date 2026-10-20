@@ -9,6 +9,8 @@ import struct
 import http.client
 import socket
 import threading
+import time
+from collections import deque
 import wave
 from contextlib import contextmanager
 from math import gcd
@@ -30,6 +32,20 @@ PRESET_ROOT = Path(__file__).resolve().parents[3] / "assets/audio/voice-fastpath
 
 class _SpeechCancelled(Exception):
     """内部控制信号：过期片段不能被当成网络故障而重新完整合成。"""
+
+
+class _ReaderCleanupTimeout(RuntimeError):
+    """自有读流尚未结束，不能同时启动完整WAV回退请求。"""
+
+
+class CosyVoicePacket(bytes):
+    """保留编码时的轮次归属，不能在稍后回调中重新读取可变的current_sentence_id。"""
+
+    def __new__(cls, value, sentence_id, cancelled):
+        packet = super().__new__(cls, value)
+        packet._longmemory_cosy_sentence_id = sentence_id
+        packet._longmemory_cosy_cancelled = cancelled
+        return packet
 
 
 def _read_exact(raw, size):
@@ -184,6 +200,178 @@ def _reset_opus_encoder(opus_encoder) -> None:
         reset()
 
 
+class PlaybackTimeline:
+    """60ms帧的供给时间线；估算欠载，不能当作设备实际扬声器测量。"""
+
+    def __init__(self, *, clock=time.perf_counter):
+        self.clock = clock
+        self.started = clock()
+        self.until = None
+        self.first_ms = None
+        self.packets = 0
+        self.gaps = []
+
+    def packet(self):
+        now = self.clock()
+        if self.first_ms is None:
+            self.first_ms = (now - self.started) * 1000
+        if self.until is not None and now > self.until:
+            self.gaps.append((now - self.until) * 1000)
+        self.until = max(now, self.until or now) + .06
+        self.packets += 1
+
+    def ahead_ms(self):
+        return max(0, ((self.until or self.clock()) - self.clock()) * 1000)
+
+    def snapshot(self):
+        return {
+            "measurement": "estimated_opus_supply",
+            "first_effective_packet_ms": self.first_ms,
+            "playable_ms": self.packets * 60,
+            "estimated_end_ms": None if self.until is None else (self.until - self.started) * 1000,
+            "max_underflow_ms": max(self.gaps, default=0),
+            "total_underflow_ms": sum(self.gaps),
+            "underflow_count": len(self.gaps),
+        }
+
+
+class AdaptivePCMBuffer:
+    """独立读流、有界PCM预取及欠载恢复；共享Opus编码器始终留在消费线程。
+
+    只在显式adaptive候选使用。producer的取消必须关闭其自有socket；退出前join，
+    因而迟到读流线程永远不能重置下一轮的编码器。正常EOF才允许释放不足缓冲的尾段。
+    """
+
+    def __init__(self, source, sample_rate, cancelled, timeline, *, initial_ms=360,
+                 maximum_ms=3000, clock=time.perf_counter):
+        if (type(initial_ms) is not int or not 60 <= initial_ms <= 900
+                or type(maximum_ms) is not int or maximum_ms < 960
+                or maximum_ms > 6000 or sample_rate not in (16000, 24000)):
+            raise ValueError("cosyvoice_buffer_policy_invalid")
+        self.source, self.sample_rate = source, sample_rate
+        self.cancelled, self.timeline, self.clock = cancelled, timeline, clock
+        self.initial_ms, self.target_ms, self.maximum_ms = initial_ms, initial_ms, maximum_ms
+        self.frame_bytes = sample_rate * 60 // 1000 * 2
+        self.capacity = maximum_ms // 60
+        self.condition = threading.Condition()
+        self.stop = threading.Event()
+        self.queue = deque()
+        self.done, self.error = False, None
+        self.peak_frames = self.rebuffers = self.samples = 0
+        self.started = clock()
+        self.producer_ms = None
+        self.discarded_ms = self.reader_join_ms = 0
+        self.thread = None
+
+    def is_cancelled(self):
+        return self.stop.is_set() or self.cancelled()
+
+    def _check(self):
+        if self.is_cancelled():
+            raise _SpeechCancelled()
+
+    def _put(self, pcm):
+        with self.condition:
+            while len(self.queue) >= self.capacity:
+                self._check()
+                self.condition.wait(.02)
+            self._check()
+            self.queue.append(pcm)
+            self.samples += len(pcm) // 2
+            self.peak_frames = max(self.peak_frames, len(self.queue))
+            self.condition.notify_all()
+
+    def _produce(self):
+        iterator = None
+        try:
+            iterator = iter(self.source(self.is_cancelled))
+            pending = bytearray()
+            for pcm in iterator:
+                self._check()
+                if len(pcm) % 2:
+                    raise ValueError("cosyvoice_pcm_unaligned")
+                # 每个槽最多60ms。巨大原生块不把队列容量变成无效的“块数”限制。
+                for offset in range(0, len(pcm), self.frame_bytes):
+                    pending.extend(pcm[offset:offset + self.frame_bytes])
+                    if len(pending) >= self.frame_bytes:
+                        self._put(bytes(pending[:self.frame_bytes]))
+                        del pending[:self.frame_bytes]
+            self._check()
+            if pending:
+                self._put(bytes(pending))
+        except BaseException as error:
+            with self.condition:
+                self.error = error
+        finally:
+            try:
+                if iterator is not None:
+                    close = getattr(iterator, "close", None)
+                    if callable(close):
+                        close()
+            except BaseException as error:
+                with self.condition:
+                    self.error = self.error or error
+            with self.condition:
+                self.producer_ms = (self.clock() - self.started) * 1000
+                self.done = True
+                self.condition.notify_all()
+
+    def __iter__(self):
+        if self.thread is not None:
+            raise RuntimeError("cosyvoice_buffer_already_consumed")
+        self.thread = threading.Thread(target=self._produce, name="cosyvoice-pcm-reader", daemon=True)
+        self.thread.start()
+        buffering = True
+        while True:
+            with self.condition:
+                self._check()
+                # 错误前尚未交付的积压一律丢弃；不能将截断当正常EOF冲刷。
+                if self.error is not None:
+                    raise self.error
+                if self.done and not self.queue:
+                    return
+                ahead = self.timeline.ahead_ms()
+                queued_ms = sum(len(pcm) for pcm in self.queue) / (self.sample_rate * 2) * 1000
+                if not buffering and not self.queue and ahead <= 0 and not self.done:
+                    buffering = True
+                    self.rebuffers += 1
+                    self.target_ms = min(900, self.target_ms + 180)
+                if (self.queue and ahead + 60 <= self.maximum_ms
+                        and (not buffering or self.done or queued_ms + ahead >= self.target_ms)):
+                    buffering = False
+                    value = self.queue.popleft()
+                    self.condition.notify_all()
+                else:
+                    self.condition.wait(.02)
+                    continue
+            yield value
+
+    def close(self):
+        started = self.clock()
+        self.stop.set()
+        with self.condition:
+            self.discarded_ms += sum(len(pcm) for pcm in self.queue) / (self.sample_rate * 2) * 1000
+            self.queue.clear()
+            self.condition.notify_all()
+        if self.thread is not None:
+            # 本机HTTP连接上限3s；读socket由20ms观察线程shutdown。
+            self.thread.join(timeout=3.5)
+            if self.thread.is_alive():
+                raise _ReaderCleanupTimeout("cosyvoice_reader_cleanup_timeout")
+        self.reader_join_ms = (self.clock() - started) * 1000
+
+    def snapshot(self):
+        duration = self.samples / self.sample_rate * 1000
+        return {"initial_buffer_target_ms": self.initial_ms, "rebuffer_target_ms": self.target_ms,
+                "peak_buffer_ms": self.peak_frames * 60, "rebuffer_count": self.rebuffers,
+                "received_audio_ms": duration, "producer_wall_ms": self.producer_ms,
+                "discarded_local_buffer_ms": self.discarded_ms, "reader_join_ms": self.reader_join_ms,
+                # 含HTTP/重采样/背压等待；不是模型纯推理RTF。
+                "client_receive_rtf": None if not duration or self.producer_ms is None
+                    else self.producer_ms / duration,
+                "reader_stopped": self.thread is None or not self.thread.is_alive()}
+
+
 def install_cosyvoice_streaming(tts, connection):
     """仅改写当前连接的 CosyVoice 实例，其他 TTS 和第三方源码保持不变。"""
     if getattr(tts, "_longmemory_cosy_streaming_installed", False):
@@ -196,9 +384,10 @@ def install_cosyvoice_streaming(tts, connection):
     from core.utils.tts import MarkdownCleaner
     from core.utils.util import audio_bytes_to_data_stream
 
-    def stream(text, opus_handler=None):
+    encoder_lock = threading.Lock()
+
+    def stream(text, opus_handler, sentence_id):
         original_text = text
-        sentence_id = getattr(tts, "current_sentence_id", None)
         trace = for_sentence(connection, sentence_id)
 
         def cancelled():
@@ -209,6 +398,8 @@ def install_cosyvoice_streaming(tts, connection):
                 or (getattr(connection, 'stop_event', None) is not None
                     and connection.stop_event.is_set())
                 or (sentence_id is not None and current != sentence_id)
+                or (sentence_id is not None
+                    and getattr(tts, "current_sentence_id", sentence_id) != sentence_id)
             )
 
         def check_current():
@@ -226,9 +417,18 @@ def install_cosyvoice_streaming(tts, connection):
         # 日用保持完整片段；只有隔离验收显式设置连接属性才启用增量候选。
         # 此开关不改变声线、语速、权重或60ms帧，也不由标点/字符数暗中打开。
         mode = getattr(connection, "_longmemory_cosy_delivery_mode", "buffered")
-        if mode not in {"incremental", "buffered"}:
+        if mode not in {"incremental", "buffered", "adaptive"}:
             raise ValueError("cosyvoice_delivery_mode_invalid")
         pcm_parts = []
+        buffer = None
+        timeline = None
+        if mode == "adaptive":
+            previous = getattr(tts, "_longmemory_cosy_playout", None)
+            if previous is None or previous[0] != sentence_id:
+                previous = (sentence_id, PlaybackTimeline())
+                tts._longmemory_cosy_playout = previous
+            timeline = previous[1]
+        outcome = "failed"
 
         def deliver_opus(packet):
             """直到拿到完整 Opus 帧才宣布开始，避免空模型块造成假首包。"""
@@ -241,8 +441,42 @@ def install_cosyvoice_streaming(tts, connection):
                     original_text,
                     sentence_id,
                 ))
-            opus_handler(packet)
+            opus_handler(CosyVoicePacket(packet, sentence_id, cancelled))
             delivered = True
+            if timeline is not None:
+                timeline.packet()
+
+        def source(is_cancelled):
+            with _open_stream(
+                STREAM_URL,
+                json={"input": cleaned, "response_format": "wav", "stream": True,
+                      "cache": getattr(connection, '_longmemory_cosy_reply_cache', True),
+                      "delivery_mode": "incremental" if mode == "adaptive" else mode},
+                timeout=(3, tts.tts_timeout), stream=True,
+                headers=trace.headers() if trace is not None else {}, cancelled=is_cancelled,
+            ) as response:
+                if trace is not None:
+                    trace.event("tts_response", request_id=response.headers.get("X-Request-Id"))
+                response.raise_for_status()
+                if response.headers.get("Content-Type") != "application/vnd.longmemory.wav-chunks":
+                    raise ValueError("cosyvoice_stream_content_type_invalid")
+                if response.headers.get("X-LongMemory-Audio-Stream") != "2":
+                    raise ValueError("cosyvoice_incremental_contract_missing")
+                decoder = ContinuousPCM(connection.sample_rate)
+                for wav in iter_wav_chunks(response.raw, require_end=True):
+                    if is_cancelled():
+                        raise _SpeechCancelled()
+                    pcm = decoder.feed(wav)
+                    if is_cancelled():
+                        raise _SpeechCancelled()
+                    if pcm:
+                        yield pcm
+                if is_cancelled():
+                    raise _SpeechCancelled()
+                # 仅正常结束冲刷FIR尾；取消或截断永远不制造完整段尾。
+                tail = decoder.finish()
+                if tail:
+                    yield tail
 
         try:
             check_current()
@@ -253,46 +487,41 @@ def install_cosyvoice_streaming(tts, connection):
                     opus_encoder=tts.opus_encoder,
                 )
                 return None
-            with _open_stream(
-                STREAM_URL,
-                json={"input": cleaned, "response_format": "wav", "stream": True,
-                      "cache": getattr(connection, '_longmemory_cosy_reply_cache', True),
-                      "delivery_mode": mode},
-                timeout=(3, tts.tts_timeout),
-                stream=True,
-                headers=trace.headers() if trace is not None else {},
-                cancelled=cancelled,
-            ) as response:
-                if trace is not None:
-                    trace.event("tts_response", request_id=response.headers.get("X-Request-Id"))
-                response.raise_for_status()
-                expected = "application/vnd.longmemory.wav-chunks"
-                if response.headers.get("Content-Type") != expected:
-                    raise ValueError("cosyvoice_stream_content_type_invalid")
-                if response.headers.get("X-LongMemory-Audio-Stream") != "2":
-                    raise ValueError("cosyvoice_incremental_contract_missing")
-                decoder = ContinuousPCM(connection.sample_rate)
-                for wav in iter_wav_chunks(response.raw, require_end=True):
-                    check_current()
-                    pcm = decoder.feed(wav)
+            if mode == "adaptive":
+                buffer = AdaptivePCMBuffer(source, connection.sample_rate, cancelled, timeline)
+                pieces = iter(buffer)
+            else:
+                pieces = source(cancelled)
+            try:
+                for pcm in pieces:
                     check_current()
                     if mode == "buffered":
                         pcm_parts.append(pcm)
-                    elif pcm:
+                    else:
                         tts.opus_encoder.encode_pcm_to_opus_stream(
                             pcm, end_of_stream=False, callback=deliver_opus)
                 check_current()
-                tail = decoder.finish()
-                # 仅协议正常结束才补FIR尾与最后不足60ms帧。截断/取消不补假尾音。
                 tts.opus_encoder.encode_pcm_to_opus_stream(
-                    b"".join(pcm_parts) + tail, end_of_stream=True, callback=deliver_opus
+                    b"".join(pcm_parts), end_of_stream=True, callback=deliver_opus
                 )
                 if not delivered:
                     raise ValueError("cosyvoice_stream_empty")
+                outcome = "completed"
+            finally:
+                try:
+                    pieces.close()
+                finally:
+                    if buffer is not None:
+                        buffer.close()
         except _SpeechCancelled:
+            outcome = "cancelled"
             if trace is not None:
                 trace.event("tts_cancelled")
             _reset_opus_encoder(tts.opus_encoder)
+            return None
+        except _ReaderCleanupTimeout:
+            _reset_opus_encoder(tts.opus_encoder)
+            connection.logger.bind(tag="cosyvoice-stream").warning("读流清理超时，本段停止且不并发回退")
             return None
         except Exception as error:
             if trace is not None:
@@ -300,6 +529,7 @@ def install_cosyvoice_streaming(tts, connection):
             # 解码、协议或发送失败时清除残留 PCM，避免污染回退或下一句话。
             _reset_opus_encoder(tts.opus_encoder)
             if cancelled():
+                outcome = "cancelled"
                 return None
             if not delivered:
                 if trace is not None:
@@ -311,9 +541,10 @@ def install_cosyvoice_streaming(tts, connection):
                     # 完整 WAV 请求期间也可能开始新话轮。这里丢弃而不抛取消信号，
                     # 否则上游兼容方法可能把正常打断当成合成失败并重试多次。
                     if not cancelled():
-                        opus_handler(packet)
+                        opus_handler(CosyVoicePacket(packet, sentence_id, cancelled))
 
                 try:
+                    outcome = "fallback"
                     return original(text, opus_handler=fallback_packet)
                 finally:
                     if cancelled():
@@ -321,7 +552,29 @@ def install_cosyvoice_streaming(tts, connection):
             connection.logger.bind(tag="cosyvoice-stream").warning(
                 f"分块通道在播放后中止：{type(error).__name__}"
             )
+        finally:
+            if buffer is not None:
+                report = {**buffer.snapshot(), **timeline.snapshot(), "outcome": outcome}
+                tracker = getattr(connection, "_longmemory_voice_latency", None)
+                record = getattr(tracker, "record_continuity", None)
+                if callable(record):
+                    record(report, sentence_id=sentence_id)
         return None
 
-    tts.to_tts_stream = stream
+    def serialized_stream(text, opus_handler=None):
+        # 捕获排队前身份；旧调用的finally/reset不得清空新轮编码器或吞掉新轮音频。
+        sentence_id = getattr(tts, "current_sentence_id", None)
+        while not encoder_lock.acquire(timeout=.02):
+            if (sentence_id != getattr(tts, "current_sentence_id", None)
+                    or sentence_id != getattr(connection, "sentence_id", sentence_id)
+                    or connection.client_abort or tts.tts_stop_request):
+                return None
+        try:
+            if sentence_id != getattr(tts, "current_sentence_id", None):
+                return None
+            return stream(text, opus_handler, sentence_id)
+        finally:
+            encoder_lock.release()
+
+    tts.to_tts_stream = serialized_stream
     tts._longmemory_cosy_streaming_installed = True
