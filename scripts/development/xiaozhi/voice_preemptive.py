@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 import hashlib
 import json
 import math
+import re
 import time
 from typing import AsyncContextManager, AsyncIterator, Protocol
 
@@ -93,15 +94,47 @@ class Limits:
             raise ValueError("preemptive_limits_invalid")
 
 
+@dataclass
+class CloseConfirmation:
+    """传输明确要求关闭回执时，异常退出不能伪装成上游已关闭。"""
+
+    required: bool = False
+    confirmed: bool = False
+
+
+@dataclass(frozen=True)
+class RequestScope:
+    """语音RPC携带的临时归属；不是鉴权凭据，也不是个人/设备标识。"""
+
+    owner_id: str = field(repr=False)
+    connection_id: str = field(repr=False)
+    turn: TurnStamp
+    audio_revision: int
+
+    def __post_init__(self):
+        if (any(not isinstance(value, str) or re.fullmatch(r"[0-9a-f]{32}", value) is None
+                for value in (self.owner_id, self.connection_id))
+                or type(self.turn) is not TurnStamp
+                or type(self.audio_revision) is not int or self.audio_revision < 0):
+            raise ValueError("preemptive_request_scope_invalid")
+
+
 @dataclass(frozen=True)
 class ModelRequest:
     messages: tuple[tuple[str, str], ...] = field(repr=False)
     max_output_tokens: int
+    close_confirmation: CloseConfirmation = field(default_factory=CloseConfirmation,
+                                                   repr=False, compare=False)
+    scope: RequestScope | None = field(default=None, repr=False)
 
     def __post_init__(self):
         if (not _valid_messages(self.messages) or self.messages[-1][0] != "user"
                 or type(self.max_output_tokens) is not int or not 1 <= self.max_output_tokens <= 1024):
             raise ValueError("preemptive_request_invalid")
+        if self.scope is not None and type(self.scope) is not RequestScope:
+            raise ValueError("preemptive_request_scope_invalid")
+        if type(self.close_confirmation) is not CloseConfirmation:
+            raise ValueError("preemptive_close_confirmation_invalid")
 
 
 class TextStream(Protocol):
@@ -217,6 +250,7 @@ class VoicePreemptive:
         self._attempted = self._closed = False
         self._candidate = None
         self._tasks = set()
+        self._unclosed = set()
         self._last_status = "idle"
         self._counts = dict.fromkeys((
             "admitted", "started", "ready", "confirmed", "hits", "misses",
@@ -224,6 +258,7 @@ class VoicePreemptive:
             "skipped_budget", "skipped_disabled", "skipped_policy", "skipped_size",
             "discarded_reserved_output_tokens", "observed_output_chars",
             "observed_input_tokens", "observed_output_tokens", "discarded_elapsed_ms",
+            "cleanup_unconfirmed",
         ), 0)
 
     def _check_loop(self):
@@ -231,6 +266,13 @@ class VoicePreemptive:
         if self._loop is not None and self._loop is not loop:
             raise RuntimeError("preemptive_event_loop_mismatch")
         self._loop = loop
+        self._reap_closed()
+
+    def _reap_closed(self):
+        for candidate in tuple(self._unclosed):
+            if candidate.request.close_confirmation.confirmed:
+                self.budget.release()
+                self._unclosed.remove(candidate)
 
     def _invalidate(self, reason):
         if reason not in _REASONS:
@@ -265,10 +307,13 @@ class VoicePreemptive:
             self._epoch = turn.cancel_epoch
         return True
 
-    def provisional(self, *, turn: TurnStamp, transcript: str, context: ContextSnapshot):
+    def provisional(self, *, turn: TurnStamp, transcript: str, context: ContextSnapshot,
+                    scope: RequestScope | None = None):
         """只调度，不阻塞音频循环。重复/修订不为同轮重新发请求。"""
         if type(context) is not ContextSnapshot:
             raise ValueError("preemptive_frozen_snapshot_required")
+        if scope is not None and (type(scope) is not RequestScope or scope.turn != turn):
+            raise ValueError("preemptive_request_scope_invalid")
         if not self._advance(turn):
             return False
         candidate = self._candidate
@@ -295,7 +340,8 @@ class VoicePreemptive:
             self._counts["skipped_" + status] += 1
             self._last_status = status
             return False
-        request = ModelRequest(context.messages + (("user", transcript),), self.limits.max_output_tokens)
+        request = ModelRequest(context.messages + (("user", transcript),), self.limits.max_output_tokens,
+                               scope=scope)
         candidate = _Candidate(turn, context, transcript, request, time.monotonic())
         self._candidate = candidate
         self._counts["admitted"] += 1
@@ -372,7 +418,12 @@ class VoicePreemptive:
 
     def _finished(self, candidate, task):
         self._tasks.discard(task)
-        self.budget.release()
+        confirmation = candidate.request.close_confirmation
+        if confirmation.required and not confirmation.confirmed:
+            self._unclosed.add(candidate)
+            self._counts["cleanup_unconfirmed"] += 1
+        else:
+            self.budget.release()
         if candidate.started and candidate.usage is None:
             self._counts["unknown_usage"] += 1
         elif candidate.usage is not None:
@@ -478,14 +529,16 @@ class VoicePreemptive:
         self.close()
         if self._tasks:
             _, pending = await asyncio.wait(self._tasks, timeout=timeout_seconds)
-            return not pending
-        return True
+            self._reap_closed()
+            return not pending and not self._unclosed
+        return not self._unclosed
 
     def snapshot(self):
         """只输出有限状态、成本计数与命中率，不输出正文/ID/摘要/异常。"""
         admitted = self._counts["admitted"]
         return {"version": 1, "enabled": self.limits.enabled, "closed": self._closed,
                 "state": self._last_status, **self._counts,
+                "unconfirmed_closes": len(self._unclosed),
                 "hit_rate": self._counts["hits"] / admitted if admitted else None,
                 "budget": self.budget.snapshot()}
 

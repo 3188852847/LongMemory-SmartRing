@@ -1,12 +1,14 @@
 """为提前生成消费学校网关SSE（服务器发送事件），只在内存保留最终文本。
 
-网络/凭据/免费证明/unknown费用账本仍归装配层和现有网关。open_response 是
-异步上下文管理器工厂；其 __aexit__ 必须关闭响应，即使请求被取消。
+网络/凭据/免费证明/unknown费用账本仍归装配层和现有网关。open_response 返回
+具有 request_id/cancel/aclose/wait_closed 的异步句柄，关闭回执只指自有上游
+HTTP/任务已退出，不表示供应商 GPU 已停。不能以客户端断开替代回执。
 本模块无 URL 默认值、自动重试、工具执行或正式输出回调。
 """
 
 from contextlib import asynccontextmanager
 import json
+import re
 
 from longmemory.methods.hy_memory.answer_content import FinalContent
 
@@ -15,7 +17,7 @@ class GatewayPreparationModel:
     automatic_retries = False
 
     def __init__(self, open_response, *, model, campus_free_verified=False):
-        if model not in {"deepseek-v4-flash", "deepseek-flash"}:
+        if model not in {"DeepSeek-V4-Flash", "deepseek-v4-flash", "deepseek-flash"}:
             raise ValueError("preemptive_model_not_allowed")
         self._open_response = open_response
         self._model = model
@@ -31,16 +33,51 @@ class GatewayPreparationModel:
                    "max_tokens": request.max_output_tokens, "stream": True,
                    "stream_options": {"include_usage": True}, "n": 1,
                    "tool_choice": "none", "thinking": {"type": "disabled"}}
-        async with self._open_response(payload) as response:
-            if response.status != 200:
-                raise ValueError("preemptive_provider_failed")
-            yield _SSEText(response)
+        handle = self._open_response(payload)
+        if (not isinstance(getattr(handle, "request_id", None), str)
+                or re.fullmatch(r"[0-9a-f]{32}", handle.request_id) is None
+                or any(not callable(getattr(handle, name, None))
+                       for name in ("cancel", "aclose", "wait_closed"))):
+            raise ValueError("preemptive_upstream_cancel_handle_required")
+        request.close_confirmation.required = True
+        complete = False
+        try:
+            async with handle as response:
+                if response.status != 200:
+                    raise ValueError("preemptive_provider_failed")
+                stream = _SSEText(response)
+                yield stream
+                complete = stream.done
+        finally:
+            # 建立响应头期间的取消也覆盖；AF句柄负责原请求、原预算及原连接池。
+            # 三项方法必须幂等；不能因 cancel/aclose 异常而跳过 wait_closed。
+            cancel_ok, close_ok = complete, False
+            try:
+                if not complete:
+                    await handle.cancel()
+                    cancel_ok = True
+            finally:
+                try:
+                    await handle.aclose()
+                    close_ok = True
+                finally:
+                    result = await handle.wait_closed()
+                    if (not isinstance(result, dict) or result.get("request_id") != handle.request_id
+                            or result.get("owned_upstream_exited") is not True
+                            or type(result.get("ledger_finalized")) is not bool
+                            or type(result.get("usage_settled")) is not bool):
+                        raise RuntimeError("preemptive_upstream_close_unconfirmed")
+                    if not result["ledger_finalized"]:
+                        raise RuntimeError("preemptive_ledger_close_unconfirmed")
+                    if cancel_ok and close_ok:
+                        request.close_confirmation.confirmed = True
 
 
 class _SSEText:
     def __init__(self, response):
         self.response, self.usage = response, None
         self._consumed = False
+        self.done = False
 
     async def __aiter__(self):
         if self._consumed:
@@ -67,6 +104,7 @@ class _SSEText:
                 parser.finish()
                 if not finished:
                     raise ValueError("preemptive_finish_missing")
+                self.done = True
                 return
             packet = json.loads(data)
             if not isinstance(packet, dict) or packet.get("error") is not None:

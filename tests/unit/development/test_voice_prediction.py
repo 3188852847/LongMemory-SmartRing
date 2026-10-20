@@ -47,3 +47,23 @@ def test_installed_shadow_observes_adjacent_top_level_turns():
     connection.chat("开始")
     connection.chat("好的")
     assert connection._longmemory_voice_prediction_shadow.snapshot()["hits"] == 1
+
+
+def test_installed_shadow_is_per_connection_and_ignores_inherited_state():
+    class Connection:
+        _longmemory_voice_prediction_shadow = prediction.VoicePredictionShadow()
+        def __init__(self):
+            self.dialogue = SimpleNamespace(dialogue=[])
+        def chat(self, query, depth=0):
+            answer = "要不要继续聊？" if query == "开始" else "普通合成回答。"
+            self.dialogue.dialogue.append(SimpleNamespace(role="assistant", content=answer))
+
+    prediction.install_voice_prediction_shadow(Connection)
+    a, b = Connection(), Connection()
+    a.chat("开始")
+    b.chat("好的")
+    assert b._longmemory_voice_prediction_shadow.snapshot()["evaluated"] == 0
+    assert a._longmemory_voice_prediction_shadow is not b._longmemory_voice_prediction_shadow
+    a.chat("好的")
+    assert a._longmemory_voice_prediction_shadow.snapshot()["hits"] == 1
+    assert Connection._longmemory_voice_prediction_shadow.snapshot()["opportunities"] == 0

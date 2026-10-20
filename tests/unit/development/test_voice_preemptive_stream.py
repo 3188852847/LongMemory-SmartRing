@@ -33,28 +33,67 @@ def lines(*packets, done=True):
 
 
 class Response:
-    def __init__(self, rows, *, status=200, gate=None):
+    def __init__(self, rows, *, status=200, gate=None, header_gate=None, ack_gate=None, ack_error=False,
+                 ack_override=None, close_error=False):
         self.rows, self.status, self.gate = rows, status, gate
+        self.header_gate, self.ack_gate, self.ack_error = header_gate, ack_gate, ack_error
+        self.ack_override = ack_override
+        self.close_error = close_error
         self.content = self
         self.opened = self.closed = 0
+        self.cancelled = 0
+        self.upstream_closed = False
         self.payload = None
         self.entered = asyncio.Event()
+        self.local_closed = asyncio.Event()
 
-    @asynccontextmanager
-    async def open(self, payload):
+    def open(self, payload):
         self.payload = payload
-        self.opened += 1
-        self.entered.set()
-        try:
-            yield self
-        finally:
-            self.closed += 1
+        return Handle(self)
 
     async def __aiter__(self):
         if self.gate:
             await self.gate.wait()
         for line in self.rows:
             yield line
+
+
+class Handle:
+    request_id = "a" * 32
+
+    def __init__(self, response):
+        self.response = response
+
+    async def __aenter__(self):
+        self.response.opened += 1
+        self.response.entered.set()
+        if self.response.header_gate:
+            await self.response.header_gate.wait()
+        return self.response
+
+    async def __aexit__(self, *args):
+        await self.aclose()
+
+    async def cancel(self):
+        self.response.cancelled += 1
+
+    async def aclose(self):
+        if not self.response.closed:
+            self.response.closed += 1
+            self.response.local_closed.set()
+        if self.response.close_error:
+            raise OSError("模拟关闭异常")
+
+    async def wait_closed(self):
+        if self.response.ack_gate:
+            await self.response.ack_gate.wait()
+        if self.response.ack_error:
+            raise OSError("模拟上游关闭确认丢失")
+        if self.response.ack_override is not None:
+            return self.response.ack_override
+        self.response.upstream_closed = True
+        return {"request_id": self.request_id, "owned_upstream_exited": True,
+                "provider_compute_stopped": False, "ledger_finalized": True, "usage_settled": True}
 
 
 def model(response, verified=True):
@@ -137,5 +176,96 @@ def test_cancel_during_sse_read_closes_response_and_releases_slot():
         c.continued(turn_id=1, cancel_epoch=1)
         assert await c.aclose()
         assert response.opened == response.closed == 1
+        assert response.upstream_closed
         assert c.budget.active == 0 and c.snapshot()["unknown_usage"] == 1
+    asyncio.run(run())
+
+
+def test_ready_and_budget_release_wait_for_upstream_ack_after_local_close():
+    async def run():
+        response, ctx = Response(lines(packet("完整合成回答"), packet(finish="stop")),
+                                 ack_gate=asyncio.Event()), context()
+        c = controller(model(response))
+        c.provisional(turn=stamp(), transcript="合成问题", context=ctx)
+        await response.local_closed.wait()
+        assert response.closed == 1 and not response.upstream_closed
+        assert c.budget.active == 1 and c.snapshot()["ready"] == 0
+        response.ack_gate.set()
+        lease = await c.confirmed(turn=stamp(), transcript="合成问题", context=ctx)
+        assert lease.claim(turn=stamp(), context=ctx) == "完整合成回答"
+        assert c.budget.active == 0 and response.upstream_closed
+        assert await c.aclose()
+    asyncio.run(run())
+
+
+def test_cancel_before_headers_waits_for_owned_task_ack_and_holds_budget():
+    async def run():
+        response, ctx = Response([], header_gate=asyncio.Event(), ack_gate=asyncio.Event()), context()
+        c = controller(model(response))
+        c.provisional(turn=stamp(), transcript="合成问题", context=ctx)
+        await response.entered.wait()
+        c.continued(turn_id=1, cancel_epoch=1)
+        await response.local_closed.wait()
+        assert response.cancelled == 1 and response.closed == 1
+        assert not response.upstream_closed and c.budget.active == 1
+        assert not await c.aclose(timeout_seconds=0.01)
+        response.ack_gate.set()
+        assert await c.aclose()
+        assert response.upstream_closed and c.budget.active == 0
+    asyncio.run(run())
+
+
+def test_failed_upstream_ack_keeps_budget_occupied_even_after_worker_exits():
+    async def run():
+        response, ctx = Response(lines(packet("合成回答"), packet(finish="stop")), ack_error=True), context()
+        c = controller(model(response))
+        c.provisional(turn=stamp(), transcript="合成问题", context=ctx)
+        assert await c.confirmed(turn=stamp(), transcript="合成问题", context=ctx) is None
+        assert response.closed == 1 and not response.upstream_closed
+        assert c.budget.active == 1
+        assert c.snapshot()["cleanup_unconfirmed"] == 1
+        assert c.snapshot()["unconfirmed_closes"] == 1
+        assert not await c.aclose(timeout_seconds=0.01)
+    asyncio.run(run())
+
+
+def test_tool_first_output_never_counts_as_valid_answer_content():
+    async def run():
+        response, ctx = Response(lines(packet(delta={"content": "等一下", "tool_calls": [{"id": "tool"}]}),
+                                       packet(finish="stop"))), context()
+        c = controller(model(response))
+        c.provisional(turn=stamp(), transcript="合成问题", context=ctx)
+        assert await c.confirmed(turn=stamp(), transcript="合成问题", context=ctx) is None
+        assert c.snapshot()["observed_output_chars"] == 0 and c.snapshot()["hits"] == 0
+        assert await c.aclose()
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("receipt", [
+    {"request_id": "b" * 32, "owned_upstream_exited": True,
+     "ledger_finalized": True, "usage_settled": True},
+    {"request_id": "a" * 32, "owned_upstream_exited": False,
+     "ledger_finalized": True, "usage_settled": True},
+    {"request_id": "a" * 32, "owned_upstream_exited": True,
+     "ledger_finalized": False, "usage_settled": False},
+])
+def test_wrong_or_unconfirmed_request_ack_cannot_release_compute_slot(receipt):
+    async def run():
+        response = Response(lines(packet("合成回答"), packet(finish="stop")), ack_override=receipt)
+        c = controller(model(response))
+        c.provisional(turn=stamp(), transcript="合成问题", context=context())
+        assert await c.confirmed(turn=stamp(), transcript="合成问题", context=context()) is None
+        assert c.budget.active == 1 and c.snapshot()["unconfirmed_closes"] == 1
+        assert not await c.aclose()
+    asyncio.run(run())
+
+
+def test_close_exception_holds_slot_even_if_later_ack_object_reports_exit():
+    async def run():
+        response = Response(lines(packet("合成回答"), packet(finish="stop")), close_error=True)
+        c = controller(model(response))
+        c.provisional(turn=stamp(), transcript="合成问题", context=context())
+        assert await c.confirmed(turn=stamp(), transcript="合成问题", context=context()) is None
+        assert c.budget.active == 1 and c.snapshot()["unconfirmed_closes"] == 1
+        assert not await c.aclose()
     asyncio.run(run())

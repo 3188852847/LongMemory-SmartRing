@@ -19,7 +19,7 @@ AF/AI 需提供经免费学校策略审查的异步上下文管理器：负责�
 
 官方参考：[LiveKit 提前生成](https://docs.livekit.io/agents/multimodality/audio/#preemptive-speech-generation)（2026-10-21 阅读）：模型准备与确认分开，上下文/工具变化废弃；本项目不引入 LiveKit 依赖，候选期不运行 TTS。
 
-## 已实现接口与接力
+## 第一阶段核心接口与接力
 
 `voice_preemptive.py` 只有标准库依赖。每连接一个 `VoicePreemptive`；AI 在同一事件循环内跨连接共享一个 `RequestBudget`。音频线程须通过事件循环的线程安全投递入口转发，不能从线程直接调用控制器。
 
@@ -39,7 +39,7 @@ AF/AI 需提供经免费学校策略审查的异步上下文管理器：负责�
 
 重要组合顺序：最终端点才可运行正式 prepare/管理/归档；AI 必须比较正式结果所需的**当前**上下文和版本，不可把旧快照当新快照传回以制造命中。正式流程产生管理回复、工具需要、记忆变化或不同上下文时丢弃候选；日用 buffered 链路继续正常回答。严格版本比较可能降低命中率，应先修快照/提交契约，不能省略一致性门来换延迟。
 
-`voice_preemptive_stream.GatewayPreparationModel(open_response, model="deepseek-v4-flash", campus_free_verified=True)` 的 `True` 必须来自实际网关策略核验，不是 AE 提供的免费证明。模型也支持现有 `deepseek-flash` 别名。注入 `open_response(payload)` 为异步上下文管理器，返回具有整数 `status` 和按行异步迭代的 `content` 的响应；退出必须关闭响应，取消发生在建立响应途中也须清理。该窄接口交 AI/AF 适配现有已授权网关/连接池，不在 AE 新开真实连接池或绕过调用门。
+`voice_preemptive_stream.GatewayPreparationModel(open_response, model="deepseek-v4-flash", campus_free_verified=True)` 的 `True` 必须来自实际网关策略核验，不是 AE 提供的免费证明。第一阶段普通异步响应接口现已由下文第二阶段的 AF 明确取消/关闭 ACK 句柄替代，不能继续把客户端关闭当成上游关闭证明。AE 不新开真实连接池或绕过调用门。
 
 发出的 JSON 只有原消息+当前 user、所选模型、`max_tokens=256`、`stream=True`、usage、`n=1`、`tool_choice=none`、`thinking=disabled`。无 tools 定义、无自动重试。响应复用既有 `FinalContent`，独立 reasoning 字段丢弃，显式前导 think 按原解析器处理；工具请求、非 stop 结束、不完整事件/DONE、超大流均使候选失败，不能交付部分答案。
 
@@ -57,3 +57,65 @@ AF/AI 需提供经免费学校策略审查的异步上下文管理器：负责�
 尚未验证：AB 真正无写入快照/版本、AC 真实事件桥、AI 正式提交与派发门、学校真实取消/连接池/usage 账本、用户说完到首个有效声音的收益、续说误抢话/连续性/打断残音和圆屏体验。候选模块默认关闭，不改日用服务、角色/声音或 buffered 默认，不接个人库、不读写设备。
 
 无需所有者下载依赖或模型。真实学校最小验收建议由主会话调度：共享原调用门及未重置账本，仅一个合成候选、最多 256 输出 token、单请求 2 秒、无工具/重试；一次取消用例需另计一个候选，不以此建议自动发请求。GPU/模型加载在本任务没有必要。
+
+## 第二阶段：实际逐连接桥与上游关闭确认
+
+第一阶段提交 `baedad5e5ce1f4da18bb3aefabeaeeecad954c78` 是候选核心交付，不表示用户要求的全部延迟方向或本方向的日用接入完成。主会话继续授权后，AE 新增 `scripts/development/xiaozhi/voice_preemptive_connection.py` 及专属测试，并修复 `voice_prediction` 安装器的跨连接共享实例。原影子返回结构兼容，pending 与统计改为只从 `vars(connection)` 取得实例状态，类级旧值不能继承为候选容器。
+
+### 与 AC 的真实事件契约
+
+AC 精确提交 `67ec9165641f6a9004e13837c7726c5586eea524` 的 `voice_turn_end.py` 字节 SHA-256：`1d26c641c577b9119df720c19e893932e8826a7b62712d4cfd1a33c5787b78f0`。真实 v1 事件是 `on_event(connection, event)`，含 `provisional/eou`、`cancel/cancel`、`continued/continued_speech`、`confirmed/confirmed_turn`；`turn_id` 初始 0、reset/close 递增，`audio_revision` 续说递增，`cancel_epoch` 取消递增，`transcript_revision` 总为 null。AE 的 `AudioStamp` 独立保留这些音频字段，文本版本只按实际 ASR 正文变更产生。
+
+AI 语音侧接线入口：
+
+```python
+from voice_preemptive_connection import (
+    AudioStamp, PreemptiveConnections, install_preemptive_connection_lifecycle,
+)
+
+bridge = PreemptiveConnections(rpc_preparation_model, shared_budget, limits=limits)
+# AC on_event 直接传 bridge.on_event；先前安装顺序仍由 AI 保持。
+install_preemptive_connection_lifecycle(ConnectionHandler, bridge)
+
+# 只有已经取得实际 ASR content 和可信的无写入快照才绑定；不传 enhanced JSON。
+binding = bridge.bind_transcript(
+    connection, audio=AudioStamp(turn_id, audio_revision, cancel_epoch),
+    text=asr_content, context=frozen_context,
+)
+# 最终完整 ASR/正式 prepare/fresh 检查后调用，不可凭 AC confirmed 直接派发。
+lease = await bridge.confirmed(
+    connection, binding=binding, final_text=final_asr_content, context=fresh_context,
+)
+answer = None if lease is None else lease.claim(
+    connection, binding=binding, context=fresh_context,
+)
+# 领取与原有正式话轮取消门检查/入队之间不能插入 await。
+```
+
+这里只展示接口顺序，`rpc_preparation_model`、真实快照与最终派发门由 AI 实现；不是可跳过鉴权/版本检验的生产启动代码。绑定可先于 provisional，provisional 也可先到；两者齐备才调度。enabled provisional 虽然无提交权，仍可准备；shadow 完全不启动模型。enabled confirmed 只记录音频许可；实际文本及快照未匹配前不会调用核心 confirmed。最终 ASR 与候选不同即撤销；不把空文本/音频版本当成完整 ASR。
+
+续说取消的旧版 cancel 和新版 continued 即使同 epoch，也会撤销旧绑定；晚到旧音频/文本/事件被拒绝。reset 在原调用前撤销并记录 AC 当前话轮下界，close 即使原方法异常仍关闭候选；不修改原 PCM、ASR 或 AC 文件。线程事件先标记 quarantine（禁止领取），再投递主循环，避免取消消息尚在队列时旧结果先被领取。两个连接即使拥有相同音频代次，也不能交叉确认、领取或取消对方候选。
+
+### AF 窄句柄与计算占位
+
+第二阶段 `GatewayPreparationModel` 不再接受只有下游客户端关闭语义的普通 response context manager。它要求 `open_response(payload)` 返回带 `request_id`、`await cancel()`、`await aclose()`、`await wait_closed()` 的异步句柄；退出包含响应头建立期间的取消与最终关闭确认。AF 精确提交 `85b1d715a102c82576cea0a56d246e793a7c3d93` 的 `gateway.candidate_response_binding()` 已提供此接口和经原政策/账本核验的标记。AE 保留精确模型名 `DeepSeek-V4-Flash`，并兼容既有小写模型名，不静默改写请求身份。真实回执如下：
+
+```json
+{"request_id":"<本句柄ID>","owned_upstream_exited":true,"provider_compute_stopped":false,"ledger_finalized":true,"usage_settled":false}
+```
+
+AE 核对 32 位十六进制 ID 和 `owned_upstream_exited`，拒绝别的请求、未退出或缺账本状态的回执。只有完整关闭流程成功、owned 退出且 ledger 完成才可释放额外计算槽；关闭异常或账本未完成均拒绝候选并继续占位。`ModelRequest.close_confirmation` 明确记录是否要求上游证明，证明缺失时工作任务结束也不释放名额；`cleanup_unconfirmed/unconfirmed_closes` 可见，aclose 返回 False，不把任务退出当作真实请求结束。后续可信回执到达可清理占位，但不会重新采用失败回答，也不自行清理原 unknown/付费冻结账本。
+
+本机真实语音和宿主分属 Python 3.10/3.12 两个进程。`GatewayPreparationModel` 是宿主侧 AF 句柄适配；语音侧仅使用标准库逐连接桥与 AI RPC 模型代理。`ModelRequest.scope` 提供 32 位随机 owner/connection ID、准确 TurnStamp 和 audio_revision，供 AI 宿主校验 RPC 的 request/owner/connection/epoch 归属；这些 ID 不进入观测输出，不是鉴权凭据。RPC 必须沿用可信控制入口，不复制供应商凭据到小智、不另开绕审计的学校连接。AF 同对象句柄的注入测试不能冒充这条跨进程链路已经完成。
+
+AB 已转接的候选边界（精确提交 `5a4c1ecb9abf5d2434f8a6eff2e5b3565d8e5d6a`）是 protocol 1 `candidate_snapshot(query_embedding=..., limit=...)` 与 `candidate_validate(...)`；token 最多 30 秒，后台 busy、写入、重启或过期均使候选失效。AI 应在宿主核对 token、memory_digest、实际内容和来源；还须核对完整消息、tools/policy/role/date/model。AE 没有调用 AB 脏树或把普通 search 用作快照，没有以四个字符串版本替代完整内容/来源证明。
+
+### 第二阶段验证与接力
+
+- AE 五文件回归 **148 passed in 0.91s**，覆盖真实事件形状、两种到达顺序、双连接同 ID 交错、跨连接领取拒绝、线程取消先封领取、reset/close、音频与文本版本独立、真实完整文本/fresh 上下文、关闭 ACK 等待/错误 ID/未退出/失联/关闭异常/账本未完成、工具 first_output 不作有效答案。包含原影子统计和原显式推理边界回归。
+- 独立从 AC 上述冻结 Git 对象加载实际状态类（未导入其脏树），人工 PCM/固定分数下四场景回放通过：enabled 正常 `provisional→confirmed` 可领取；enabled `provisional→cancel→continued` 不可领取；shadow `provisional→confirmed` 不发模型请求；closed `provisional→cancel` 不可领取。只验证实际代码控制契约，不是中文声学或设备验收。
+- AF 精确提交的真实句柄组合：从 Git 对象导出两份公共测试到 AE 自有临时目录，核对 AF src 与该提交无差异，显式使 AF src 和 AE scripts 各从各自来源导入。随机回环供应商/合成账本下正常完成、响应头前取消、流中取消 **3 passed, 31 deselected in 0.49s**；另外“AE 实际逐连接桥→AF 原预算/持久传输→合成供应商→关闭 ACK”且模型名为精确大写的完整用例 **1 passed**。不复制修改 AF 文件，不调用真实学校，不把同进程组合冒充 RPC 已完成。
+- 最终语音侧标准库模块由 Python **3.10.20** 实际运行：AC 事件、独立文本版本（audio_revision=7 而文本版本=1）、scope、准备/确认/一次领取/关闭通过；不 import 宿主 src、不联网。
+- 新增源码无依赖安装、GPU、个人库、生产端口或真实学校调用。AB 快照/校验与 AI 可信跨进程链路、正式 prepare 后 fresh 验证和最终播放/字幕/归档门仍须继续接力；本阶段不会将“默认关闭/安全降级”写成总目标完成。真实上游取消只证明 owned HTTP/请求任务退出，不证明外部计算停止。
+
+本阶段限制：主会话随后转接真实 SmartTurn 小合成中文误切未改善，enabled 尚不合格。当前 AC 事件路径只有 enabled 可准备候选，不能因此宣称日用候选已接通；AE 接续实现独立 baseline ASR 预取/原端点来源，仍保持 SmartTurn shadow 不发模型请求，AI 负责原预取钩子与宿主 RPC 的实际接线。

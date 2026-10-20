@@ -94,16 +94,19 @@ class VoicePredictionShadow:
 
 
 def install_voice_prediction_shadow(connection_class):
-    """包裹顶层聊天，在回答前核对旧候选、回答后建立新候选。"""
+    """逐连接观察相邻话轮，不能把另一连接的封闭问题当成本连接候选。"""
     if getattr(connection_class, "_longmemory_voice_prediction_installed", False):
         return
     original = connection_class.chat
-    shared = VoicePredictionShadow()
 
     def chat(connection, query, depth=0):
-        connection._longmemory_voice_prediction_shadow = shared
+        # 必须只读实例字典；类上的旧值不能作为逐连接状态容器。
+        state = vars(connection).get("_longmemory_voice_prediction_shadow")
+        if state is None:
+            state = VoicePredictionShadow()
+            connection._longmemory_voice_prediction_shadow = state
         if depth == 0:
-            shared.observe_user(query)
+            state.observe_user(query)
         before = len(connection.dialogue.dialogue)
         result = original(connection, query, depth)
         if depth == 0:
@@ -114,7 +117,7 @@ def install_voice_prediction_shadow(connection_class):
                 and item.content.strip()
             ]
             if answers:
-                shared.observe_assistant("\n".join(answers))
+                state.observe_assistant("\n".join(answers))
         return result
 
     connection_class.chat = chat

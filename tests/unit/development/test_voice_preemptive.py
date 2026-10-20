@@ -519,3 +519,26 @@ def test_context_manager_suppression_cannot_promote_partial_answer():
         assert c.snapshot()["ready"] == 0
         assert await c.aclose()
     asyncio.run(run())
+
+
+def test_late_verified_upstream_close_releases_held_slot_without_reusing_failed_answer():
+    class UnconfirmedModel(FakeModel):
+        @asynccontextmanager
+        async def open(self, request):
+            self.request = request
+            request.close_confirmation.required = True
+            try:
+                yield self
+            finally:
+                raise OSError("关闭尚未确认")
+
+    async def run():
+        model, ctx = UnconfirmedModel(), context()
+        c = controller(model)
+        c.provisional(turn=stamp(), transcript="合成问题", context=ctx)
+        assert await c.confirmed(turn=stamp(), transcript="合成问题", context=ctx) is None
+        assert not await c.aclose() and c.budget.active == 1
+        model.request.close_confirmation.confirmed = True  # 仅模拟后续可信上游回执。
+        assert await c.aclose() and c.budget.active == 0
+        assert c.snapshot()["hits"] == 0
+    asyncio.run(run())
