@@ -6120,11 +6120,11 @@
       "path": "docs/development/parallel/Z-low-latency-review-20261020.md",
       "title": "Z：Memory 与 Cosy 低延迟组合审查",
       "status": "reference",
-      "basis": "精确V/X低延迟与答案边界组合、管理回执及唯一校园6请求复核；正式恢复后所有者反馈失败，离线修复不替代现场重验",
+      "basis": "精确V/X组合、管理回执及唯一校园6请求复核；34f9022补丁已发布ready并补齐当前提示缓存，实机重验待回复",
       "review": {
         "state": "verified",
         "date": "2026-10-20",
-        "scope": "冻结源码与合成SDK/CPU/Opus/Windows证据，唯一校园对照与主会话正式恢复回执分来源记录；答案边界支持范围离线审查，现场格式未知、实机未通过",
+        "scope": "冻结源码与合成SDK/CPU/Opus/Windows证据；两次正式恢复、34f9022发布及当前提示缓存补齐依据主会话回执分来源记录；保留此前失败，实机重验待回复",
         "evidence": [
           "docs/development/parallel/V-memory-low-latency-20261020.md",
           "docs/development/parallel/X-cosy-streaming-20261020.md",
