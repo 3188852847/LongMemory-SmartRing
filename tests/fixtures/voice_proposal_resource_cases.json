@@ -1,0 +1,185 @@
+{
+  "purpose": "精确资源声明候选，交主会话统一CI整合；不是运行时跳过放行表",
+  "cases": [
+    {
+      "module": "tests.unit.development.test_voice_proposal_adapter",
+      "name": "test_actual_native_buffer_reset_before_or_after_worker_keeps_same_verified_turn[True]",
+      "reason": "explicit existing native repository required; never download"
+    },
+    {
+      "module": "tests.unit.development.test_voice_proposal_adapter",
+      "name": "test_actual_native_buffer_reset_before_or_after_worker_keeps_same_verified_turn[False]",
+      "reason": "explicit existing native repository required; never download"
+    },
+    {
+      "module": "tests.unit.development.test_voice_proposal_adapter",
+      "name": "test_explicit_cancel_after_handoff_before_worker_never_revives_old_turn[explicit_reset]",
+      "reason": "explicit existing native repository required; never download"
+    },
+    {
+      "module": "tests.unit.development.test_voice_proposal_adapter",
+      "name": "test_explicit_cancel_after_handoff_before_worker_never_revives_old_turn[abort]",
+      "reason": "explicit existing native repository required; never download"
+    },
+    {
+      "module": "tests.unit.development.test_voice_proposal_adapter",
+      "name": "test_explicit_cancel_after_handoff_before_worker_never_revives_old_turn[continued]",
+      "reason": "explicit existing native repository required; never download"
+    },
+    {
+      "module": "tests.unit.development.test_voice_proposal_adapter",
+      "name": "test_explicit_cancel_after_handoff_before_worker_never_revives_old_turn[close]",
+      "reason": "explicit existing native repository required; never download"
+    },
+    {
+      "module": "tests.unit.development.test_voice_proposal_adapter",
+      "name": "test_tools_preflight_skips_before_any_candidate_rpc",
+      "reason": "explicit existing native repository required; never download"
+    },
+    {
+      "module": "tests.unit.development.test_voice_proposal_adapter",
+      "name": "test_provider_preserves_all_methods_and_does_not_invent_functions",
+      "reason": "explicit existing native repository required; never download"
+    },
+    {
+      "module": "tests.unit.development.test_voice_proposal_adapter",
+      "name": "test_pcm_prefix_change_invalidates_before_formal_reuse",
+      "reason": "explicit existing native repository required; never download"
+    },
+    {
+      "module": "tests.unit.development.test_voice_proposal_adapter",
+      "name": "test_real_final_provider_changes_miss_and_do_not_repeat_formal_prepare[emotion]",
+      "reason": "explicit existing native repository required; never download"
+    },
+    {
+      "module": "tests.unit.development.test_voice_proposal_adapter",
+      "name": "test_real_final_provider_changes_miss_and_do_not_repeat_formal_prepare[speaker]",
+      "reason": "explicit existing native repository required; never download"
+    },
+    {
+      "module": "tests.unit.development.test_voice_proposal_adapter",
+      "name": "test_real_final_provider_changes_miss_and_do_not_repeat_formal_prepare[date]",
+      "reason": "explicit existing native repository required; never download"
+    },
+    {
+      "module": "tests.unit.development.test_voice_proposal_adapter",
+      "name": "test_real_final_provider_changes_miss_and_do_not_repeat_formal_prepare[role]",
+      "reason": "explicit existing native repository required; never download"
+    },
+    {
+      "module": "tests.unit.development.test_voice_proposal_adapter",
+      "name": "test_real_final_provider_changes_miss_and_do_not_repeat_formal_prepare[history]",
+      "reason": "explicit existing native repository required; never download"
+    },
+    {
+      "module": "tests.unit.development.test_voice_proposal_adapter",
+      "name": "test_cancel_between_candidate_yield_and_native_enqueue_blocks_queues_store_and_history",
+      "reason": "explicit existing native repository required; never download"
+    },
+    {
+      "module": "tests.unit.development.test_voice_proposal_adapter",
+      "name": "test_new_asr_turn_cannot_receive_previous_paused_answer",
+      "reason": "explicit existing native repository required; never download"
+    },
+    {
+      "module": "tests.unit.development.test_voice_proposal_adapter",
+      "name": "test_unconfirmed_owned_close_keeps_slot_and_blocks_next_ticket",
+      "reason": "explicit existing native repository required; never download"
+    },
+    {
+      "module": "tests.unit.development.test_voice_proposal_adapter",
+      "name": "test_snapshot_wait_does_not_reread_live_dialogue_after_worker_has_added_current_user",
+      "reason": "explicit existing native repository required; never download"
+    },
+    {
+      "module": "tests.unit.development.test_voice_proposal_adapter",
+      "name": "test_pure_native_preview_preserves_speaker_projection_and_real_style_without_mutating_sets[False]",
+      "reason": "explicit existing native repository required; never download"
+    },
+    {
+      "module": "tests.unit.development.test_voice_proposal_adapter",
+      "name": "test_pure_native_preview_preserves_speaker_projection_and_real_style_without_mutating_sets[True]",
+      "reason": "explicit existing native repository required; never download"
+    },
+    {
+      "module": "tests.unit.development.test_voice_proposal_adapter",
+      "name": "test_native_preview_with_tools_skips_without_reading_live_dialogue_or_config",
+      "reason": "explicit existing native repository required; never download"
+    },
+    {
+      "module": "tests.unit.development.test_voice_proposal_adapter",
+      "name": "test_new_audio_revokes_queued_output_and_background_put_before_sentence_id_changes",
+      "reason": "explicit existing native repository required; never download"
+    },
+    {
+      "module": "tests.unit.development.test_voice_proposal_adapter",
+      "name": "test_actual_fast_reply_retires_candidate_and_never_archives_revoked_text[False]",
+      "reason": "explicit existing native repository required; never download"
+    },
+    {
+      "module": "tests.unit.development.test_voice_proposal_adapter",
+      "name": "test_actual_fast_reply_retires_candidate_and_never_archives_revoked_text[True]",
+      "reason": "explicit existing native repository required; never download"
+    },
+    {
+      "module": "tests.unit.development.test_voice_proposal_adapter",
+      "name": "test_native_dto_and_final_packet_sender_drop_old_output_after_new_speech",
+      "reason": "explicit existing native repository required; never download"
+    },
+    {
+      "module": "tests.unit.development.test_voice_proposal_adapter_sdk",
+      "name": "test_actual_native_asr_adapter_and_python310_formal_sdk_rpc[reset_worker]",
+      "reason": "explicit frozen AI ref/SDK/voice3.10/native repository required"
+    },
+    {
+      "module": "tests.unit.development.test_voice_proposal_adapter_sdk",
+      "name": "test_actual_native_asr_adapter_and_python310_formal_sdk_rpc[metadata]",
+      "reason": "explicit frozen AI ref/SDK/voice3.10/native repository required"
+    },
+    {
+      "module": "tests.unit.development.test_voice_proposal_adapter_sdk",
+      "name": "test_actual_native_asr_adapter_and_python310_formal_sdk_rpc[speaker]",
+      "reason": "explicit frozen AI ref/SDK/voice3.10/native repository required"
+    },
+    {
+      "module": "tests.unit.development.test_voice_proposal_adapter_sdk",
+      "name": "test_actual_native_asr_adapter_and_python310_formal_sdk_rpc[date]",
+      "reason": "explicit frozen AI ref/SDK/voice3.10/native repository required"
+    },
+    {
+      "module": "tests.unit.development.test_voice_proposal_adapter_sdk",
+      "name": "test_actual_native_asr_adapter_and_python310_formal_sdk_rpc[role]",
+      "reason": "explicit frozen AI ref/SDK/voice3.10/native repository required"
+    },
+    {
+      "module": "tests.unit.development.test_voice_proposal_adapter_sdk",
+      "name": "test_actual_native_asr_adapter_and_python310_formal_sdk_rpc[history]",
+      "reason": "explicit frozen AI ref/SDK/voice3.10/native repository required"
+    },
+    {
+      "module": "tests.unit.development.test_voice_proposal_adapter_sdk",
+      "name": "test_actual_native_asr_adapter_and_python310_formal_sdk_rpc[pcm_changed]",
+      "reason": "explicit frozen AI ref/SDK/voice3.10/native repository required"
+    },
+    {
+      "module": "tests.unit.development.test_voice_proposal_adapter_sdk",
+      "name": "test_actual_native_asr_adapter_and_python310_formal_sdk_rpc[tools]",
+      "reason": "explicit frozen AI ref/SDK/voice3.10/native repository required"
+    },
+    {
+      "module": "tests.unit.development.test_voice_proposal_adapter_sdk",
+      "name": "test_actual_native_asr_adapter_and_python310_formal_sdk_rpc[yield_cancel]",
+      "reason": "explicit frozen AI ref/SDK/voice3.10/native repository required"
+    },
+    {
+      "module": "tests.unit.development.test_voice_proposal_adapter_sdk",
+      "name": "test_actual_native_asr_adapter_and_python310_formal_sdk_rpc[new_turn]",
+      "reason": "explicit frozen AI ref/SDK/voice3.10/native repository required"
+    },
+    {
+      "module": "tests.unit.development.test_voice_proposal_adapter_sdk",
+      "name": "test_actual_native_asr_adapter_and_python310_formal_sdk_rpc[queued_cancel]",
+      "reason": "explicit frozen AI ref/SDK/voice3.10/native repository required"
+    }
+  ]
+}
