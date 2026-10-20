@@ -67,7 +67,8 @@ export function HyLayerBrowser({layer,title,revealRequest=0}:{layer:HyLayerId;ti
   const validId=selected!==null&&hyLayerIdentifier(selected);
   const enabled=engine.kind==='hy'&&engine.phase==='ready';
   const page=useQuery({queryKey:['hy-layer-page',layer,offset,state],queryFn:()=>api.layerPage(layer,offset,state),enabled,retry:false,refetchOnWindowFocus:false,staleTime:15000});
-  const detail=useQuery({queryKey:['hy-layer-detail',layer,selected],queryFn:()=>api.layerDetail(layer,selected!),enabled:enabled&&validId,retry:false,refetchOnWindowFocus:false,staleTime:15000});
+  // 冷开详情链接先完成页读取，避免同一页面并发争抢非阻塞owner读锁。
+  const detail=useQuery({queryKey:['hy-layer-detail',layer,selected],queryFn:()=>api.layerDetail(layer,selected!),enabled:enabled&&validId&&!page.isFetching,retry:false,refetchOnWindowFocus:false,staleTime:15000});
   const coordinate=`${layer}:${selected??''}`;
   const [sourceSelection,setSourceSelection]=useState({coordinate:'',id:''});
   const sourceId=sourceSelection.coordinate===coordinate?sourceSelection.id:'';
@@ -97,6 +98,7 @@ export function HyLayerBrowser({layer,title,revealRequest=0}:{layer:HyLayerId;ti
       </li>)}</ol>:<Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={data.data_state==='empty'&&data.coverage==='vdb_complete'?(state==='all'?'本层尚无已保存内容':'当前状态下没有记录'):'当前页没有返回记录，整层是否为空尚不能确认'}><p>{data.coverage==='vdb_only_graph_unopened'?'本次只覆盖向量存储；图库未读，不能当作整层为空。':offset>0?'可返回上一页；空末页不能反推整层没有数据。':'生成关闭或保留层状态本身不证明没有历史数据。'}</p></Empty>}
       <div className="hy-layer-pager" aria-label="本层服务端分页"><span>第 {offset/20+1} 页{data.items.length?` · 当前显示 ${offset+1}–${offset+data.items.length}`:''} · {count}</span><Button disabled={offset===0} onClick={()=>choose({layer_offset:String(Math.max(0,offset-20)),layer_item:undefined})}>上一页</Button><Button disabled={data.has_more!==true||offset>=10000} onClick={()=>choose({layer_offset:String(offset+20),layer_item:undefined})}>下一页</Button></div>
       {data.has_more===null&&<p className="hy-layer-caption">是否还有下一页未知，未猜测分页边界。</p>}
+      {offset>=10000&&data.has_more===true&&<p className="hy-layer-caption">已到本次浏览上限，后续记录尚未读取，不代表全层结束。可返回前页或刷新本层。</p>}
       <details className="hy-layer-scope"><summary>读取范围与分页说明</summary><p>{data.count_scope==='aggregate_profile'?'计数单位是当前聚合画像，不是 L0 原生存储行数。':'计数范围限当前拥有者、助手、来源、本层、所选状态和向量存储；未知总数保持未知。'}</p><p>按原生存储顺序有界分页，不是全库时间排序；跨页不冻结快照，期间写入或刷新可能改变后续页。本页没有全库扫描、启用机制或写入操作。</p></details>
     </>}
     </div>

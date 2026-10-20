@@ -1,5 +1,5 @@
 import {afterEach,expect,test,vi} from 'vitest';
-import {fireEvent,render,screen,within} from '@testing-library/react';
+import {act,fireEvent,render,screen,within} from '@testing-library/react';
 import {MemoryRouter,useLocation} from 'react-router-dom';
 import {QueryClient,QueryClientProvider} from '@tanstack/react-query';
 import {ApiError,ChatApi} from '../../api';
@@ -38,6 +38,25 @@ test('服务端分页保留未知总数，末页总数与状态筛选来自响�
   expect(screen.getByRole('button',{name:'下一页'}).hasAttribute('disabled')).toBe(true);expect(screen.getByLabelText('当前坐标').textContent).toContain('layer_offset=20');
   fireEvent.change(screen.getByRole('combobox',{name:'本层记录状态'}),{target:{value:'superseded'}});await screen.findByText('历史版本');
   expect(request.mock.calls.some(([url])=>url.endsWith('offset=0&state=superseded'))).toBe(true);
+});
+
+test('冷开详情链接等待本页读取结束，避免同页面并发争抢owner读锁',async()=>{
+  let finish!:(value:unknown)=>void;const pending=new Promise(resolve=>{finish=resolve;});
+  const record=storedRecord('l2_fact');
+  const request=setup('l2_fact','&layer_item='+record.item_id,url=>url.includes('/items/')?layerDetail('l2_fact',record):pending);
+  await screen.findByRole('status',{name:'正在读取本层内容'});
+  expect(request.mock.calls.some(([url])=>url.includes('/items/'))).toBe(false);
+  await act(async()=>finish(layerPage('l2_fact')));
+  await within(screen.getByRole('dialog')).findByText(record.content);
+  expect(request.mock.calls.map(([url])=>url)).toEqual(['/api/memory-engine/hy/layers/l2_fact?limit=20&offset=0&state=all','/api/memory-engine/hy/layers/l2_fact/items/'+record.item_id]);
+});
+
+test('到达分页上限仍有后续记录时，说明边界且不请求越界下一页',async()=>{
+  const request=setup('l2_fact','&layer_offset=10000',url=>url.endsWith('offset=10000&state=all')?layerPage('l2_fact',{offset:10000,total:null,has_more:true}):undefined);
+  await screen.findByText('已到本次浏览上限，后续记录尚未读取，不代表全层结束。可返回前页或刷新本层。');
+  const next=screen.getByRole('button',{name:'下一页'});
+  expect(next.hasAttribute('disabled')).toBe(true);fireEvent.click(next);
+  expect(request.mock.calls.map(([url])=>url)).toEqual(['/api/memory-engine/hy/layers/l2_fact?limit=20&offset=10000&state=all']);
 });
 
 test('L0聚合字段、独立版本数与版本详情，不把链头差异当完整画像',async()=>{
