@@ -387,3 +387,43 @@ proof实际匹配SDK版本和管理原语内容摘要，不绑定工作树路径
 10. 若需回退，先按同一owned shutdown保全失败时当前全量检查点。优先保留新代码，用`semantic_layers_enabled=false`、buffered、候选off及**与当前代码匹配、由旧模式入口真实生成的四字段pro proof**重开；该证明不是本次七字段proof的手工删字段版本。可用同工具`--reviewed-semantic-background-writes-disabled`（不带managed-semantic）单独生成，固定原管理/正式HTTP组；仅在确实准备pro回退时运行，不为重复数字复跑本轮。原图/任务/provenance均保留。不能把旧a932写入器或写前数据备份直接覆盖新增对话来声称无损回退；不兼容须报告具体阻塞，数据恢复另按精确范围授权。
 
 主会话实际操作后补“AI任务→冻结提交/最终交付→AI验收→main合入/推送→停机检查点→实例健康→所有者体验→会话ID”追溯。本AI仅提交自己分支，不merge main、不推送、不执行生产配置/服务/个人库写入。
+
+## 最终核心冻结验收与实际协议2候选
+
+实测冻结HEAD=`f5906827d98ce4d2665d5e6b83b04ee1ebda58fa`，源码tree=`eba6d064fd90b39c3874107327b8d18c52f41dcb`，规范化Python业务源码摘要=`65260b66713243a2d3567901384ee5e19c2aee7e2f6dbf80dfda1dd877532a61`。完整固定入口 **219 passed / 429.82秒，failures=0/errors=0/skipped=0**，不与旧分组相加。旧管理/逐层读写、原生L6/只读L7、真实捕获对照及纠错/删除/升级后不复活、pro/semantic重开、实际后台准入及正式回答竞争、冷读取、来源批读、正式鉴权HTTP与3.10输入协议2均在同一运行覆盖；模型/网络均为隔离合成/既有捕获，无新学校调用、GPU、日用服务或个人库。不是远程CI结果。
+
+成功证据唯一目录：`D:/03-项目/01-正式项目/智慧圆屏/local/worktrees/ai-integration-review-20261021/data/test-tmp/ai-managed-proof-f5906827-20261021-01/`。`receipt.json.test_paths`保存精确25个入口（18文件＋七个生命周期节点），JUnit实际219个case零skip；不能仅看旧管理两文件五项或本文摘要代替。工具读取SDK元数据Python3.12.13/SDK2.0.3、语音3.10.20，执行前后完整源码/管理原语/两个解释器字节相同才签发；没有手工编辑生成JSON或生产配置。
+
+| 证据 | SHA-256 |
+|---|---|
+| management-verification.json（七字段协议2候选） | `83ef38351de8c6849a6e39d934cebc93932f95b9fb4f60a562329c835568d532` |
+| receipt.json（含精确测试清单/短临时目录/源码绑定） | `31e22cfb2d1089635147ad0bd79cd6d374f110ba11a752f5a36fcb4dcf6261c1` |
+| junit.xml | `bdb83b43055c9b6b4792143ba507669280723f71c9c91939bd81aac6040ab705` |
+| pytest.log | `9c706c089057718176164d7090cd9fdd1086cc1a45b53ba9326ffc2f679f7321` |
+| 当前15项管理原语（含文件名与规范化源码） | `562630a13eeda478674e85454df245de4a38554af52ecaa43f374fa16147720c` |
+| 白名单既有SDK Python3.12.13解释器 | `560b9ef7d856608ab8da02ded2dc8a1951ad1f424c382c0ec6a698874165a18e` |
+| 既有小智Python3.10.20解释器 | `8ce49d96ecba2dfd13b3cc99b5d8a18f6c0ad82bacf0df2f5d17a3df6a9cd203` |
+
+本候选可由主会话在已审融合代码快进到main、业务源码/管理原语/解释器及前端tree与上述证据一致后，按停机备份边界复制到正式`local/config/hy-memory/management-verification.json`；路径不参与proof匹配，不因工作树变生产根而重跑。文档收尾HEAD可以不同，但`receipt.source.head`必须保留实测f590；主会话复核`git diff f5906827..目标HEAD -- src scripts tests web`为空或逐项解释受影响变化。本轮收尾仅改本任务书、ADR与清单，不重新伪签原回执。若后续AE实际安装桥合入则属于新业务变化，另按影响验证，不能自动沿用本文“候选链已完成”的不存在结论。
+
+以下为工具复现入口，**当前成功候选已生成，不为重复数字再执行**；以后代码变化确需重验时指定新清洁已审HEAD和全新目录，不覆盖本次成功/失败证据：
+
+```powershell
+$releaseRoot = 'D:/03-项目/01-正式项目/智慧圆屏'
+$verifyRoot = Join-Path $releaseRoot 'local/worktrees/ai-integration-review-20261021'
+$verifyPython = Join-Path $releaseRoot '.venv/Scripts/python.exe'
+$verifyHead = (git -C $verifyRoot rev-parse HEAD).Trim()
+$verifyArguments = @(
+  '-I', '-B', '-X', 'utf8', (Join-Path $verifyRoot 'tests/fixtures/hy_management_receipt.py'),
+  '--source-root', $verifyRoot, '--expected-head', $verifyHead, '--managed-semantic',
+  '--sdk-python', (Join-Path $releaseRoot 'local/worktrees/v-hy-memory-20261019/local/runtime/hy-memory/.venv/Scripts/python.exe'),
+  '--voice-python', (Join-Path $releaseRoot 'local/runtime/xiaozhi-esp32-server/main/xiaozhi-server/.venv/Scripts/python.exe'),
+  '--capture', (Join-Path $releaseRoot 'local/worktrees/ab-hy-l6-l7-20261021/data/test-tmp/AB-CAMPUS-L6L7-20261021-01'),
+  '--output', (Join-Path $verifyRoot 'data/test-tmp/新建且不存在的验收目录')
+)
+& $verifyPython @verifyArguments
+```
+
+完整验收退出后才执行额外成本诊断，未与其并发争用SDK。新合成projection库、实际固定SDK/Kuzu/Chroma与Runtime、8维禁网模型替身、温进程，每种三次；记录`data/test-tmp/ai-final-prepare-cost-20261021-01/summary.json` SHA-256=`f1ff03ba40242e4832aa06832623ce6ae9a1a9bd021e1b213be013090dca6a37`，脚本SHA-256=`625d36d4414fce9ccc16751b763219041b5cb84a3062dfc83858562208adf313`，保存实测HEAD和每次分段原值：独立原生recall中位52.493ms；网页等价同步`Runtime.prepare_user`总102.002ms（observe50.405、recall52.631）；实际provenance begin_add2.641ms，已有节点11/13/15、ledger连接各1、audit0；圆屏`prepare_round_screen`延后路径55.744ms，断言准备阶段未触发新begin_add，随后只cancel不发助手完成。外部HTTP0。分段中位数不能直接相加；该诊断不含HTTP渲染/ASR/LLM/TTS，不是生产512维模型、before/after对照、P95或日用端到端收益，也不声称网页同步observe已异步化。
+
+可供主会话放行的是以上已验证的记忆/来源保护、管理/后台准入、界面与保守语音配置技术门；部署与所有者真实体验仍由主会话执行。AE真实ASR安装/最终采用继续独立接力，当前搜索必miss且候选关闭；SmartTurn仅off/shadow、adaptive需听感验收，AG无新GPU窗口/十样本验证，不默认启用。不把这些未完成方向归为全部完成，不提前归档仍有任务的AE。

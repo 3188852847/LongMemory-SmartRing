@@ -232,7 +232,7 @@
         "L7",
         "低延迟"
       ],
-      "review": "verified 2026-10-21: AI核已交付源码和接口并登记；六方向交叉331项与公共门28项通过，AB新SDK/AE完整模型链及GPU/设备另验"
+      "review": "verified 2026-10-21: 融合f5906827实际SDK/正式HTTP/3.10与管理来源后台219项零skip，工具生成协议2候选；AH最终45文件逐字节核验。生产ASR适配继续由AE实现，当前搜索必miss/候选off；生产部署、真实模型质量与设备/GPU另验"
     },
     {
       "id": "owned-voice-system-instruction-placement",
