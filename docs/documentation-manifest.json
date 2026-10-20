@@ -202,7 +202,8 @@
         "tests/integration/test_hy_semantic_platform_sdk.py",
         "tests/integration/test_voice_proposal_sdk_rpc.py",
         "tests/fixtures/voice_proposal_rpc_sdk_client.py",
-        "tests/integration/test_voice_gateway_background_contention.py"
+        "tests/integration/test_voice_gateway_background_contention.py",
+        "tests/unit/application/test_managed_memory_proposals.py"
       ],
       "related": [
         "docs/adr/0201-composed-runtime-write-gates-and-observation.md"
