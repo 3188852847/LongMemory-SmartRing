@@ -156,6 +156,8 @@ def test_cosyvoice_greeting_archives_l0_and_queues_preset_without_model(monkeypa
     connection.logger = SimpleNamespace(bind=lambda **_kw: SimpleNamespace(
         info=logs.append, warning=logs.append,
     ))
+    connection.current_speaker = 'upstream-speaker'
+    connection.system_introduced_speakers = {'existing-speaker'}
 
     monkeypatch.setattr(fast, 'default_voice_active', lambda: True)
     assert connection.chat(query) is True
@@ -163,5 +165,15 @@ def test_cosyvoice_greeting_archives_l0_and_queues_preset_without_model(monkeypa
     assert archived == [query]
     assert paths == ["preset"]
     assert [item.role for item in messages] == ["user", "assistant"]
+    expected_text = json.loads(query)['content'] if query.startswith('{') else query
+    assert messages[0].content == expected_text
+    assert connection.current_speaker == 'upstream-speaker'
+    assert connection.system_introduced_speakers == {'existing-speaker'}
     assert [item.sentence_type for item in queued] == ["first", "middle", "last"]
     assert queued[1].content_detail == "你好呀，我在呢。"
+    second = json.dumps({'content': '谢谢。', 'speaker': 'different-payload-speaker', 'emotion': 'happy'})
+    assert connection.chat(second) is True
+    assert archived == [query, second]
+    assert [item.content for item in messages[2:]] == ['谢谢。', '不用客气。']
+    assert connection.current_speaker == 'upstream-speaker'
+    assert paths == ['preset', 'preset']

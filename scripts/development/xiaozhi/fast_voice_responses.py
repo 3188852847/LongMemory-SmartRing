@@ -5,7 +5,6 @@
 """
 
 import asyncio
-import json
 import re
 from uuid import uuid4
 from functools import lru_cache
@@ -23,6 +22,23 @@ def _voice_profile_helper():
 
 def default_voice_active():
     return _voice_profile_helper().default_voice_active()
+
+
+@lru_cache(maxsize=1)
+def _input_mapping():
+    # 只加载现有标准库叶文件；不在小智环境 import longmemory 包或主环境依赖。
+    source = Path(__file__).resolve().parents[3] / 'src/longmemory/entrypoints/xiaozhi/mapping.py'
+    spec = importlib.util.spec_from_file_location('fast_voice_input_mapping', source)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _user_text(query):
+    try:
+        return _input_mapping().extract_user_text(query)
+    except (ValueError, TypeError, RecursionError):
+        return None
 
 
 COSYVOICE_URL = "http://127.0.0.1:18770/v1/audio/speech"
@@ -53,21 +69,8 @@ _QUERY_RESPONSES = {
 def fast_response_for(query):
     """返回严格封闭意图的固定回复；不做包含匹配或语义猜测。"""
 
-    if not isinstance(query, str) or len(query) > 16000:
-        return None
-    text = query.strip()
-    if text.startswith("{"):
-        # FunASR 的正文封装与归档入口相同；只用 content 匹配，元数据不作意图。
-        # 原 query 继续交给 Memory/对话，不在快路改写来源或说话人信息。
-        try:
-            payload = json.loads(text)
-        except (ValueError, RecursionError):
-            return None
-        if (not isinstance(payload, dict) or payload.get("role", "user") != "user"
-                or not isinstance(payload.get("content"), str)):
-            return None
-        text = payload["content"].strip()
-    if not text or len(text) > 4000:
+    text = _user_text(query)
+    if text is None:
         return None
     normalized = re.sub(r"[\s，。！？!?、,.]+", "", text).casefold()
     return _QUERY_RESPONSES.get(normalized)
@@ -107,7 +110,10 @@ def install_fast_voice_responses(connection_class):
         tracker = getattr(connection, "_longmemory_voice_latency", None)
         if tracker is not None:
             tracker.set_response_path("preset")
-        connection.dialogue.put(Message(role="user", content=query))
+        # 归档仍接收原 ASR 封装；对话只记用户正文，不把情绪/语言当成用户发言。
+        # startToChat 已管理 current_speaker 等作用域，这里不从包内重设身份。
+        text = _user_text(query) if query.lstrip().startswith('{') else query
+        connection.dialogue.put(Message(role="user", content=text))
 
         # Memory 查询对简单寒暄会走 NOOP，但仍负责保存 L0 和提取审计。
         # 失败不能阻止已经确定安全的本地寒暄回答，也不能回退后重复写入。

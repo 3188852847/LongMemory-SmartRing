@@ -59,6 +59,6 @@ X 交付仅测试和记录，不 merge/push，不重启生产、不改配置或�
 
 根另授权窄查快路输入。固定小智 FunASR 返回 dict，ASR 基类把 content/language/emotion 及可选 speaker 编码为 JSON 交给 chat；首次说话人 JSON 仍可能由 startToChat 保留。项目归档路由先调用 extract_user_text 解包，故归档“你好。”不能证明外层 wrapper 收到了纯文本。原 fast_response_for 对整段 JSON 去标点后查封闭表，可确切复现“归档文本能命中、封装输入不能命中”的独立缺口；该轮原始 wrapper 入参形状未留存，不把这一缺口提前认定为本轮唯一根因。
 
-X 从 `34f902291ad319382732b00f35667cd63639628f` 新建 `codex/x-fast-asr-envelope-20261020`，只改 [快路匹配](../../../scripts/development/xiaozhi/fast_voice_responses.py) 与 [专项测试](../../../tests/unit/development/test_fast_voice_responses.py)。JSON 分支沿归档入口契约取有界 content、只认 user 来源；speaker/emotion/language 不作意图。原封装继续传给 Memory 和 Dialogue，depth=0、默认声线及 CustomTTS/url 严格相等条件保留，非法或非封闭意图仍走原链路。未改 V 的联网指令文件、生产、配置或数据。
+X 从 `34f902291ad319382732b00f35667cd63639628f` 新建 `codex/x-fast-asr-envelope-20261020`，只改 [快路匹配](../../../scripts/development/xiaozhi/fast_voice_responses.py) 与 [专项测试](../../../tests/unit/development/test_fast_voice_responses.py)。匹配直接复用归档入口的 extract_user_text 标准库叶文件，不导入 longmemory 包或主环境依赖；只认有界用户 content，speaker/emotion/language 不作意图。原封装继续传给 Memory，Dialogue 只记解包正文；startToChat 已设的 current_speaker 和 system_introduced_speakers 作用域保留，不从包内重设身份。depth=0、默认声线及 CustomTTS/url 严格相等条件保留，非法或非封闭意图仍走原链路。未改 V 的联网指令文件、生产、配置或数据。
 
-专项 19 项通过，覆盖纯文本/ASR 封装一致性、完整原 query 归档、无模型预置路径、角色/畸形/超长内容回退、递归 depth 和 URL 精确门；Python 3.10 解析通过。该修复仍待根/Z 审查合入，不替代 V 的通用回答修复或真实双臂/设备验收。
+专项 19 项通过（含每个匹配分支的连续两轮检查），覆盖纯文本/ASR 封装一致性、完整原 query 归档、无模型预置路径、角色/畸形/超长内容回退、递归 depth 和 URL 精确门；Python 3.10 解析通过。该修复仍待根/Z 审查合入，不替代 V 的通用回答修复或真实双臂/设备验收。
