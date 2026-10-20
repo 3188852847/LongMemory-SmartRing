@@ -106,7 +106,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.send({"version": 1, "state": "miss", "text": "不应返回的合成回答", "reason_code": "miss"})
                 return
             self.send({"version": 1, "state": "adopted" if matches else "miss",
-                       "text": "合成有效回答" if matches else "", "reason_code": None if matches else "changed"})
+                       "text": "合成有效回答" if matches else None, "reason_code": None if matches else "changed"})
         elif operation in {"cancel", "close"}:
             closed = scenario != "closing"
             if closed:

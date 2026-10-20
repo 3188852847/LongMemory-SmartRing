@@ -220,11 +220,11 @@ class VoiceProposalRPC:
                 or not isinstance(result["memory_context"], str) or len(result["memory_context"]) > 32000)):
             raise ProposalRPCError("proposal_rpc_snapshot_invalid")
         if (result["state"] == "unavailable" and (result["snapshot_id"] is not None
-                or (result["memory_context"] is not None and result["memory_context"] != ""))):
+                or result["memory_context"] is not None)):
             raise ProposalRPCError("proposal_rpc_snapshot_invalid")
         if self._latest != scope:
             return {"version": 1, "state": "unavailable", "snapshot_id": None,
-                    "memory_context": "", "reason_code": "stale"}
+                    "memory_context": None, "reason_code": "stale"}
         return result
 
     async def start(self, *, scope, snapshot_id, messages, tools_required=False, close_confirmation=None):
@@ -254,7 +254,7 @@ class VoiceProposalRPC:
         self._advance(scope)
         record = self._active
         if record is None or record.scope != scope or record.confirm_attempted:
-            return {"version": 1, "state": "miss", "text": "", "reason_code": "no_candidate"}
+            return {"version": 1, "state": "miss", "text": None, "reason_code": "no_candidate"}
         if (not _hex(snapshot_id) or snapshot_id != record.snapshot_id or type(tools_required) is not bool
                 or not isinstance(query, str) or not query.strip() or len(query) > 16000
                 or not isinstance(formal_turn_id, str) or not 1 <= len(formal_turn_id) <= 64
@@ -275,13 +275,13 @@ class VoiceProposalRPC:
             record.confirming = None
         if self._active is not record or self._latest != scope:
             self._counts["stale"] += 1
-            return {"version": 1, "state": "miss", "text": "", "reason_code": "stale"}
+            return {"version": 1, "state": "miss", "text": None, "reason_code": "stale"}
         self._dto(result, {"version", "state", "text", "reason_code"}, {"adopted", "miss"})
         if result["state"] == "adopted":
             answer = result["text"]
             if not isinstance(answer, str) or not answer.strip() or len(answer) > 8192:
                 raise ProposalRPCError("proposal_rpc_answer_invalid")
-        elif result["text"] is not None and result["text"] != "":
+        elif result["text"] is not None:
             raise ProposalRPCError("proposal_rpc_answer_on_miss")
         return result
 
@@ -327,7 +327,7 @@ class VoiceProposalRPC:
     async def close(self, *, scope):
         self._check_loop()
         record = self._active
-        if record is not None and not self._cleanup_scope(scope, record):
+        if record is not None and not self._cleanup_scope(scope, record, closing=True):
             raise ProposalRPCError("proposal_rpc_close_scope_invalid")
         if record is not None:
             self._cancel_reads(record)
@@ -345,10 +345,12 @@ class VoiceProposalRPC:
             if task is not None and task is not asyncio.current_task() and not task.done():
                 task.cancel()
 
-    def _cleanup_scope(self, scope, record):
+    def _cleanup_scope(self, scope, record, *, closing=False):
         self._body(scope)
-        if (scope.turn_id != record.scope.turn_id or scope.cancel_epoch < record.scope.cancel_epoch
-                or scope.transcript_revision < record.scope.transcript_revision):
+        if ((scope.turn_id < record.scope.turn_id if closing else scope.turn_id != record.scope.turn_id)
+                or scope.cancel_epoch < record.scope.cancel_epoch
+                or (scope.turn_id == record.scope.turn_id
+                    and scope.transcript_revision < record.scope.transcript_revision)):
             return False
         if (self._latest is None or (scope.turn_id == self._latest.turn_id
                 and scope.cancel_epoch >= self._latest.cancel_epoch
@@ -359,7 +361,7 @@ class VoiceProposalRPC:
     async def aclose(self):
         self._check_loop()
         try:
-            scope = self._active.scope if self._active is not None else self._latest
+            scope = self._latest if self._latest is not None else (self._active.scope if self._active else None)
             if not self._closed and scope is not None:
                 await self.close(scope=scope)
             elif scope is None:

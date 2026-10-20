@@ -20,7 +20,8 @@ async def run(action):
     try:
         snapshot = await client.snapshot(scope=scope, query="完整合成问题", session_id="c" * 32)
     except ProposalRPCError:
-        assert action in {"redirect", "bad_json", "chunked", "wrong_auth"}
+        if action not in {"redirect", "bad_json", "chunked", "wrong_auth"}:
+            raise
         if action == "wrong_auth":
             assert not await client.aclose()
         else:
@@ -60,10 +61,12 @@ async def run(action):
         return await client.confirm(scope=scope, snapshot_id=snapshot["snapshot_id"], query="完整合成问题", messages=messages,
             formal_turn_id="11111111-1111-4111-8111-111111111111",
             client_round_id="d" * 32, session_id="c" * 32)
-    if action == "slow_confirm":
+    if action in {"real_host_headers_cancel", "real_host_body_cancel"}:
+        await client.cancel(scope=scope)
+    elif action == "slow_confirm":
         task = asyncio.create_task(confirm())
         await asyncio.sleep(.05)
-        await client.cancel(scope=scope)
+        await client.cancel(scope=TurnStamp(0, 2, 1))
         try:
             await task
         except asyncio.CancelledError:
@@ -75,8 +78,8 @@ async def run(action):
         await asyncio.sleep(.05)
         await client.snapshot(scope=TurnStamp(0, 2, 1), query="续说合成问题", session_id="c" * 32)
         value = await task
-        assert value["state"] == "miss" and value["text"] == ""
-        await client.cancel(scope=scope)
+        assert value["state"] == "miss" and value["text"] is None
+        await client.cancel(scope=TurnStamp(0, 2, 1))
     elif action == "bad_confirm":
         try:
             await confirm()
@@ -85,9 +88,13 @@ async def run(action):
         else:
             raise AssertionError("text returned on miss")
         await client.cancel(scope=scope)
+    elif action == "real_host_fresh_miss":
+        value = await confirm()
+        assert value["state"] == "miss" and value["text"] is None
     else:
         value = await confirm()
-        assert value["state"] == "adopted" and value["text"] == "合成有效回答"
+        expected = "合成回答" if action == "real_host_complete" else "合成有效回答"
+        assert value["state"] == "adopted" and value["text"] == expected
         assert not confirmation.confirmed  # 返回最终文本不冒充关闭ACK。
     assert await client.aclose() and confirmation.confirmed
     assert client.snapshot_status()["local_sockets"] == 0

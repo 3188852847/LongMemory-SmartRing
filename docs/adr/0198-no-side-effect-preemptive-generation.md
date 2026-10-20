@@ -30,6 +30,8 @@ SmartTurn enabled 尚未达到真实中文误切标准，不能把它作为候�
 
 客户端逐连接固定 connection_id，维护不可回退的话轮/文本/取消版本；start 至多一次，旧轮取消不能影响新轮，取消允许提高同轮 cancel_epoch。迟到或取消中的确认文本不交付，start 响应不允许带正文。返回 adopted 文本也不自动释放计算槽，仍需 scoped cancel/close 的明确关闭确认；closing/false、断流或鉴权错误均不能假释。外部 DTO 不扩展 AF request_id/账本字段：宿主负责核对完整内部 ACK，客户端把可信固定路由的一次响应绑定到对应 scope。
 
+后续协议收紧为 unavailable.memory_context=null、miss.text=null，客户端不接受空字符串别名。整个客户端关闭使用最新 scope，允许封闭同连接更早的待清理候选；单轮 cancel 仍不能跨到新轮，以免把清理旧请求变成取消新请求。跨进程实际宿主测试至少提供画像1/fact4/intent1六项，逐项核对内容/来源并断言全部进入真实网关消息；小库通过不能替代分通道上限及真实 Hy/正式 Runtime 验收。
+
 真实 Python 3.10 客户端与独立 Python 3.12 HTTP 宿主替身验证的是跨进程协议、取消和资源边界，不是 AF/AB 实际宿主或设备链路已接通。实际 Runtime 路由、预取钩子和统一派发门仍由 AI 接入与验证。
 
 ## 验证与回退

@@ -204,3 +204,17 @@ ack = await client.cancel(scope=scope)
 - 双进程覆盖非空合成记忆上下文完整往返、30000 字记忆 JSON 不受 8 KiB 头缓冲误限、start 超时/断流/提前正文不重试、confirm 中取消/迟到epoch/拒绝miss正文、closing/错误ACK不退名额、重定向/重复JSON键/chunked响应拒绝、需要工具不准备模型、错误鉴权不开始候选。普通 prepare 路由调用次数为 0。stdout/stderr 另断言无 synthetic token、记忆/回答正文。
 - 复跑需要显式提供本机已有 Python3.10 路径，不安装环境：设置当前测试进程 `LONGMEMORY_TEST_PY310`，运行 `tests/unit/development/test_voice_proposal_rpc.py`；未提供则跨解释器用例 skip，不能把 skip 当通过。
 - 这是真实跨进程 HTTP 与协议替身检查，未声称 AF `VoiceProposalHost`、AB 真正快照、AI Runtime 路由或日用已组合验收。AI 可先合入客户端，随后用精确宿主提交验普通非空 Hy 库真实命中、取消/记忆一致性与最终派发。没有真实学校调用、个人数据、GPU、设备或服务操作，无依赖下载需求。
+
+## 第五阶段：冻结宿主核对、strict null 与真实宿主进程装配
+
+第四阶段提交 `d4cee7009b3e5006b03f38d98e325fbfa954b624` 已交主会话。AF 交付冻结宿主 `bf317915f6df2ba96e77be65288acc113e710906` 后，AE 只读核对五操作请求/DTO/同 loop 生命周期，与已实现客户端字段相符；未编辑 AF 或 AI 文件。
+
+主会话进一步冻结 `unavailable.memory_context=null`、`miss.text=null`。客户端改为严格 null，拒绝空字符串、列表、对象别名；本地 no_candidate/stale 也返回 null。没有在 HTTP 薄封装中为旧宿主转换字段。核查还修复 aclose 的精确边界：同连接推进 revision/epoch 或新 turn 后，用最新 scope 结束整个连接，释放其早先待清理候选；不再拿旧 scope 向宿主发回退关闭。单轮 cancel 仍只作用于原轮，跨新轮取消在本地拒绝。
+
+新增 `tests/fixtures/voice_proposal_rpc_real_host.py` 是测试 HTTP 薄封装，**不是 AI 正式路由**。父测试从指定本地 Git 对象 archive 公共 AF src/测试夹具到 AE 的唯一临时目录，逐目标核对路径在临时目录以内；AE 控制器取本树 HEAD 原字节并核对一致。Python3.12 宿主子进程运行真实 VoiceProposalHost、真实 Gateway/预算/持久传输及合成 Runtime；Python3.10 语音客户端仍只导入 AE 标准库模块。没有导入脏树、供应商真实地址或个人库。
+
+合成 Runtime 最少固定画像1＋normal fact4＋proactive intent1共六项，内容、source_event_ids、顺序与候选回执一并比较；网关实际请求的 system 内容需包含全部六项，不能因总数5限制截断或只用一项小库。预备四场景：实际采用一次、响应头前取消、流中取消、formal fresh 不符时 miss；取消需保留真实原账本 unknown，owned 句柄和两进程正常关闭。
+
+已实际复现冻结 bf317915 的已知阻塞：六项请求在 snapshot 被总限5拒绝，旧 unavailable.memory_context 为空字符串；严格客户端报告 `proposal_rpc_snapshot_invalid`。独立子进程证据为 snapshot 1 次、上游 attempt_count=0、unknown=0、正常清理，没有发出 start 或偷偷截断。该用例本轮 **1 failed**（按已知缺陷取证，不是通过）；AF 的 null/分通道修复由主会话转接，尚未将其脏树当修复提交使用。
+
+真实宿主用例显式设置 `LONGMEMORY_TEST_VOICE_HOST_REF=<40位冻结提交>` 后执行；没有该值四例 skip，不把 skip 当集成通过。仅 native client/协议替身和本地清理回归目前 **35 passed / 4 skipped**；实际修复宿主与真实 Hy/正式 Runtime 最终整链仍须继续接力。

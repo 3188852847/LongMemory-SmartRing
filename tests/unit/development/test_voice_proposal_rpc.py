@@ -1,5 +1,6 @@
 import asyncio
 import importlib.util
+import io
 import json
 import os
 from pathlib import Path
@@ -7,6 +8,7 @@ import queue
 import subprocess
 import sys
 import threading
+import tarfile
 
 import pytest
 
@@ -89,6 +91,52 @@ def test_older_turn_cannot_cancel_new_turn_and_higher_epoch_cancel_is_allowed():
     asyncio.run(run())
 
 
+@pytest.mark.parametrize("next_scope", [p.TurnStamp(2, 2, 2), p.TurnStamp(3, 0, 2)])
+def test_whole_client_close_uses_latest_scope_after_revision_or_new_turn(next_scope):
+    async def run():
+        client = r.VoiceProposalRPC.from_environment(connection_id="a" * 32, environ=environment())
+        calls = []
+        async def post(operation, body, **kwargs):
+            calls.append((operation, body))
+            if operation == "start":
+                return {"version": 1, "state": "preparing", "reason_code": None}
+            if operation == "snapshot":
+                return {"version": 1, "state": "ready", "snapshot_id": "e" * 32,
+                        "memory_context": "合成记忆", "reason_code": None}
+            return {"version": 1, "state": "closed", "owned_upstream_exited": True,
+                    "provider_compute_stopped": False}
+        client._post = post
+        confirmation = p.CloseConfirmation()
+        await client.start(scope=p.TurnStamp(2, 1, 1), snapshot_id="e" * 32,
+                           messages=[["system", "合成角色"]], close_confirmation=confirmation)
+        await client.snapshot(scope=next_scope, query="新合成问题", session_id="c" * 32)
+        assert await client.aclose() and confirmation.confirmed
+        assert calls[-1] == ("close", client._body(next_scope))
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("value", ["", [], {}])
+def test_unavailable_and_miss_require_null_not_empty_aliases(value):
+    async def run():
+        client = r.VoiceProposalRPC.from_environment(connection_id="a" * 32, environ=environment())
+        async def post(operation, body, **kwargs):
+            if operation == "snapshot":
+                return {"version": 1, "state": "unavailable", "snapshot_id": None,
+                        "memory_context": value, "reason_code": "unavailable"}
+            if operation == "start":
+                return {"version": 1, "state": "preparing", "reason_code": None}
+            return {"version": 1, "state": "miss", "text": value, "reason_code": "miss"}
+        client._post = post
+        scope = p.TurnStamp(0, 1, 0)
+        with pytest.raises(r.ProposalRPCError):
+            await client.snapshot(scope=scope, query="合成问题", session_id="c" * 32)
+        await client.start(scope=scope, snapshot_id="e" * 32, messages=[["system", "合成角色"]])
+        with pytest.raises(r.ProposalRPCError):
+            await client.confirm(scope=scope, snapshot_id="e" * 32, query="合成问题", messages=[["system", "合成角色"]],
+                formal_turn_id="11111111-1111-4111-8111-111111111111", client_round_id="d" * 32, session_id="c" * 32)
+    asyncio.run(run())
+
+
 def test_local_bad_messages_and_versions_never_send_network():
     async def run():
         client = r.VoiceProposalRPC.from_environment(connection_id="a" * 32, environ=environment())
@@ -106,14 +154,17 @@ def test_local_bad_messages_and_versions_never_send_network():
     asyncio.run(run())
 
 
-def run_two_processes(action):
+def run_two_processes(action, real_stage=None):
     python310 = os.environ.get("LONGMEMORY_TEST_PY310")
     if not python310:
         pytest.skip("explicit installed Python3.10 required for two-process contract test")
     assert Path(python310).is_file()
-    server_script = ROOT / "tests/fixtures/voice_proposal_rpc_host.py"
+    server_script = ROOT / ("tests/fixtures/voice_proposal_rpc_real_host.py" if real_stage else
+                            "tests/fixtures/voice_proposal_rpc_host.py")
     client_script = ROOT / "tests/fixtures/voice_proposal_rpc_client.py"
     env = dict(os.environ, RPC_TEST_TOKEN=TOKEN)
+    if real_stage is not None:
+        env["RPC_REAL_HOST_ROOT"] = str(real_stage)
     creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
     server = subprocess.Popen([sys.executable, "-X", "utf8", "-B", str(server_script), action],
         cwd=ROOT, env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
@@ -131,12 +182,12 @@ def run_two_processes(action):
         client = subprocess.run([python310, "-X", "utf8", "-B", str(client_script), action],
             cwd=ROOT, env=client_env, text=True, encoding="utf-8", capture_output=True, timeout=8,
             creationflags=creationflags)
-        assert client.returncode == 0, (client.stdout, client.stderr)
-        output = json.loads(client.stdout.strip())
-        assert output["ok"]
         tail, error = server.communicate("stop\n", timeout=4)
         assert server.returncode == 0
         stats = json.loads(tail.strip())
+        assert client.returncode == 0, (client.stdout, client.stderr, stats)
+        output = json.loads(client.stdout.strip())
+        assert output["ok"]
         for text in (client.stdout, client.stderr, tail, error):
             assert TOKEN not in text
             assert "合成有效回答" not in text and "不应提前送出" not in text and "无糖茶" not in text
@@ -201,3 +252,47 @@ def test_large_nonempty_memory_json_body_is_not_limited_by_header_buffer():
     output, stats = run_two_processes("large_context")
     assert output["active"] == 0
     assert stats["counts"]["snapshot"] == stats["counts"]["start"] == stats["counts"]["confirm"] == 1
+
+
+@pytest.fixture
+def frozen_real_host(tmp_path):
+    ref = os.environ.get("LONGMEMORY_TEST_VOICE_HOST_REF")
+    if ref is None:
+        pytest.skip("explicit frozen AF host commit required; no dirty worktree imports")
+    assert len(ref) == 40 and all(char in "0123456789abcdef" for char in ref)
+    paths = ["src/longmemory", "tests/unit/application/test_voice_proposals.py",
+             "tests/unit/methods/test_hy_candidate_response.py", "tests/unit/methods/test_hy_provider_transport.py"]
+    data = subprocess.run(["git", "archive", "--format=tar", ref, *paths], cwd=ROOT,
+                           check=True, capture_output=True).stdout
+    stage = tmp_path / "frozen-host"
+    stage.mkdir()
+    with tarfile.open(fileobj=io.BytesIO(data), mode="r:") as archive:
+        for item in archive.getmembers():
+            target = (stage / item.name).resolve()
+            assert target.is_relative_to(stage.resolve())
+            if item.isdir():
+                target.mkdir(parents=True, exist_ok=True)
+            else:
+                assert item.isfile() and not item.linkname
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(archive.extractfile(item).read())
+    scripts = stage / "scripts/development/xiaozhi"
+    scripts.mkdir(parents=True)
+    for name in ("voice_preemptive.py", "voice_preemptive_stream.py"):
+        content = subprocess.run(["git", "show", "HEAD:scripts/development/xiaozhi/" + name],
+            cwd=ROOT, check=True, capture_output=True).stdout
+        assert content == (ROOT / "scripts/development/xiaozhi" / name).read_bytes()
+        (scripts / name).write_bytes(content)
+    return stage
+
+
+@pytest.mark.parametrize("action", ["real_host_complete", "real_host_headers_cancel", "real_host_body_cancel",
+                                  "real_host_fresh_miss"])
+def test_actual_frozen_af_host_over_rpc_keeps_all_six_memory_items_and_owned_ack(frozen_real_host, action):
+    output, stats = run_two_processes(action, frozen_real_host)
+    assert output["active"] == stats["active"] == stats["candidate_handles"] == 0
+    assert stats["memory_items"] == stats["context_items_sent"] == 6
+    assert stats["attempt_count"] == 1 and stats["host_closed"]
+    assert stats["claimed"] == int(action == "real_host_complete")
+    assert stats["unknown"] == int(action in {"real_host_headers_cancel", "real_host_body_cancel"})
+    assert stats["provider_compute_stopped"] is False
