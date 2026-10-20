@@ -6,7 +6,7 @@ from uuid import uuid4
 from longmemory.methods.contracts import (
     MemorySupport, MethodCapabilities, ObservationResult, RetrievedTrace, UnsupportedCapabilityError,
 )
-from .sdk_bridge import HySdkBridge, SDK_VERSION, SOURCE_NAMESPACE, project_answer_content
+from .sdk_bridge import HySdkBridge, HyResponseError, SDK_VERSION, SOURCE_NAMESPACE, project_answer_content
 from .administration import HyAdministration  # 保留既有公开导入路径。
 from .observation import measured
 
@@ -99,12 +99,20 @@ class HyMemoryMethod:
                 tuple(items), self.retrieval_name, "hy_management_uncertain_items_excluded" if excluded else "hy_recall_may_mutate_state")
 
     def sdk_call(self, operation, **kwargs):
-        with self._lock:
+        read_only = operation in {"semantic_status", "semantic_task"}
+        if not self._lock.acquire(blocking=not read_only):
+            from .semantic import SemanticBusy
+            raise SemanticBusy("hy_semantic_status_busy")
+        try:
+            if read_only and (self._closed or self._client is None):
+                raise HyResponseError("hy_semantic_unavailable")
             self.wait_until_ready()
             if operation not in {"get", "list_memories", "diagnostics", "get_user_profile", "history", "update", "delete",
                     "semantic_status", "semantic_task", "semantic_enqueue", "semantic_cancel", "semantic_pause"}:
                 raise UnsupportedCapabilityError("hy_sdk_operation_unsupported")
             return getattr(self._client, operation)(**kwargs)
+        finally:
+            self._lock.release()
 
     def configure_background_writes(self, *, write_enabled):
         """由Runtime.configure同步同一写开关；只阻止未认领任务，不伪造回滚。"""

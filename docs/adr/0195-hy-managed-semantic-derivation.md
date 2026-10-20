@@ -72,6 +72,10 @@ worker从原LLM地址推导同origin固定 `/hy-background/v1` 别名，不接�
 
 建议不代表预留：建议返回后若有新前台到达，实际排序仍由AF网关单槽队列决定；已经在飞的背景不强杀。本AB接线没有修改AF网关/候选取消ACK或AI公共bootstrap、Runtime。原生SDK与本地HTTP替身已验证实际URL、pending和工作锁；最终AF+AI合并代码上的队列/预算组合证明仍由AI完成，未新增学校请求。
 
+### 冷语义只读边界补充
+
+不以公共HTTP/provider层禁初始化替代底层约束。`HyMemoryMethod.sdk_call` 对semantic_status/semantic_task采用非阻塞锁；锁忙抛SemanticBusy `hy_semantic_status_busy`，真实未初始化或已关闭对象抛HyResponseError `hy_semantic_unavailable`，在wait_until_ready之前拒绝。HyAdministration同样经此边界，不会为读状态启动factory/SDK/worker。语义写操作的既有显式初始化行为保持原样。主会话/AI应把这两个稳定原因码映射为busy/unavailable，不补启动引擎。
+
 真实 SDK、Chroma、Kuzu 与新合成库验证了原生归纳、L7 System1 提取、来源、过期、任务重复/重开、后台召回并行和管理派生隔离。模型使用禁网替身；真实模型质量、真实学校调用、日用库向前启用、完整 HTTP/前端组合及圆屏声音/打断均没有由本分支验收。具体命令、数量和接力事项以 AB 记录为准。
 
 后续补充：2026-10-21主会话另行批准的单次真实校园原生验证已执行，结果见 [AB校园记录](../development/parallel/AB-campus-l6-l7-20261021.md)。4次学校LLM、15次总HTTP、16.407秒，实际产出L6/L7各1条；同时发现新增L2概括继承既有上下文但仅标当前输入来源的语义限制。该补充不改写上面禁网阶段的证据，也不代表长期质量、最终AI组合、生产部署或设备验收通过；无需为后续指纹变化重复真实请求。
