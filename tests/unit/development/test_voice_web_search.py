@@ -262,7 +262,8 @@ def test_real_sender_separates_cue_answer_and_rejects_late_packets():
     c.sentence_id = "next"
     asyncio.run(module._do_send_audio(c, waiting.WaitingPacket(b"late", state), {}))
     asyncio.run(module._do_send_audio(c, waiting.AnswerPacket(b"old-answer", state), {}))
-    assert sent == [b"cue", b"cue-tail", b"answer"]
+    # 真答案就绪后提示尾包立即作废；提示已开头也不能继续挡住有用回答。
+    assert sent == [b"cue", b"answer"]
 
 
 def test_answer_ready_before_cue_suppresses_cue():
