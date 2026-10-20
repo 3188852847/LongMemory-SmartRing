@@ -36,7 +36,7 @@
         "等待",
         "延迟"
       ],
-      "review": "verified 2026-10-20: 精确组合源码/合成测试与 Python3.10 缓存验证；真实准备/首答收益未验收"
+      "review": "verified 2026-10-20: 精确组合源码/合成测试与 Python3.10 缓存验证；真实准备/首答收益未验收；c1f1537 后两场景统一完整短句、默认回退停用、双守卫不放宽；Z129项/3.10假HTTP与原Opus通过，正式缓存未验收"
     },
     {
       "id": "roundscreen-network-coexistence",
@@ -5776,12 +5776,13 @@
       "review": {
         "state": "verified",
         "date": "2026-10-20",
-        "scope": "291d566/5fd9f2d 合于 d5f873a 的源码与合成检查；含首次失败和隔离复核，不含部署/真实声线/设备或秒数提升验收",
+        "scope": "291d566/5fd9f2d 合于 d5f873a 的源码与合成检查；含首次失败和隔离复核，不含部署/真实声线/设备或秒数提升验收；后续 c1f1537 中性短句配方/旧缓存失效/完整音频与35帧双守卫经 Z 129项及3.10合成准备入口验证，真实新缓存仍待X",
         "evidence": [
           "docs/development/parallel/Z-vx-integration-20261020.md",
           "docs/development/parallel/V-voice-latency-20261020.md",
           "tests/unit/development/test_voice_waiting_cache.py",
-          "tests/unit/development/test_vx_voice_close_integration.py"
+          "tests/unit/development/test_vx_voice_close_integration.py",
+          "c1f15374031b3ea888359bb364c0407b35a6b2f7"
         ]
       },
       "tags": [
@@ -5798,12 +5799,13 @@
       "review": {
         "state": "verified",
         "date": "2026-10-20",
-        "scope": "291d566/5fd9f2d 合于 d5f873a 的源码与合成检查；含首次失败和隔离复核，不含部署/真实声线/设备或秒数提升验收",
+        "scope": "291d566/5fd9f2d 合于 d5f873a 的源码与合成检查；含首次失败和隔离复核，不含部署/真实声线/设备或秒数提升验收；后续 c1f1537 中性短句配方/旧缓存失效/完整音频与35帧双守卫经 Z 129项及3.10合成准备入口验证，真实新缓存仍待X",
         "evidence": [
           "docs/development/parallel/Z-vx-integration-20261020.md",
           "docs/development/parallel/V-voice-latency-20261020.md",
           "tests/unit/development/test_voice_waiting_cache.py",
-          "tests/unit/development/test_vx_voice_close_integration.py"
+          "tests/unit/development/test_vx_voice_close_integration.py",
+          "c1f15374031b3ea888359bb364c0407b35a6b2f7"
         ]
       },
       "tags": [
@@ -5820,12 +5822,13 @@
       "review": {
         "state": "verified",
         "date": "2026-10-20",
-        "scope": "291d566/5fd9f2d 合于 d5f873a 的源码与合成检查；含首次失败和隔离复核，不含部署/真实声线/设备或秒数提升验收",
+        "scope": "291d566/5fd9f2d 合于 d5f873a 的源码与合成检查；含首次失败和隔离复核，不含部署/真实声线/设备或秒数提升验收；后续 c1f1537 中性短句配方/旧缓存失效/完整音频与35帧双守卫经 Z 129项及3.10合成准备入口验证，真实新缓存仍待X",
         "evidence": [
           "docs/development/parallel/Z-vx-integration-20261020.md",
           "docs/development/parallel/V-voice-latency-20261020.md",
           "tests/unit/development/test_voice_waiting_cache.py",
-          "tests/unit/development/test_vx_voice_close_integration.py"
+          "tests/unit/development/test_vx_voice_close_integration.py",
+          "c1f15374031b3ea888359bb364c0407b35a6b2f7"
         ]
       },
       "tags": [
@@ -5842,12 +5845,13 @@
       "review": {
         "state": "verified",
         "date": "2026-10-20",
-        "scope": "291d566/5fd9f2d 合于 d5f873a 的源码与合成检查；含首次失败和隔离复核，不含部署/真实声线/设备或秒数提升验收",
+        "scope": "291d566/5fd9f2d 合于 d5f873a 的源码与合成检查；含首次失败和隔离复核，不含部署/真实声线/设备或秒数提升验收；后续 c1f1537 中性短句配方/旧缓存失效/完整音频与35帧双守卫经 Z 129项及3.10合成准备入口验证，真实新缓存仍待X",
         "evidence": [
           "docs/development/parallel/Z-vx-integration-20261020.md",
           "docs/development/parallel/V-voice-latency-20261020.md",
           "tests/unit/development/test_voice_waiting_cache.py",
-          "tests/unit/development/test_vx_voice_close_integration.py"
+          "tests/unit/development/test_vx_voice_close_integration.py",
+          "c1f15374031b3ea888359bb364c0407b35a6b2f7"
         ]
       },
       "tags": [
