@@ -6300,11 +6300,11 @@
       "path": "docs/development/parallel/Z-hy-layer-data-review-20261021.md",
       "title": "Z：Hy逐层实际内容与页内滚动独立审查",
       "status": "draft",
-      "basis": "34b2111起点；AA草案契约、Y ced8ba5滚动小提交及X 8393eab准备报告预审，最终数据实现/组合待交；不表示发布通过",
+      "basis": "34b2111起点；AA 6d2df85/5126862后端独立审查与真实SDK复验，Y ced8ba5滚动预审，X准备/工具报告登记；最终UI组合/发布待验",
       "review": {
         "state": "pending",
         "date": "2026-10-21",
-        "scope": "固定2.0.3读取边界及L0纯合并/head静态核对；Y滚动补丁与独立7类坐标解析检查，作者26项组件/2屏浏览器证据另列；新SDK证明门槛与最终组合待验",
+        "scope": "AA精确后端源码/ADR/契约，Z186项相关回归及12项真实SDK集成零跳过；Y早期滚动解析/作者证据分列，最终同HEAD证明与UI组合待验",
         "evidence": [
           "src/longmemory/methods/hy_memory/administration.py",
           "src/longmemory/methods/hy_memory/worker.py",
@@ -6357,6 +6357,58 @@
         ]
       },
       "tags": ["X", "Hy-Memory", "逐层内容", "发布准备", "证明"]
+    },
+    {
+      "path": "docs/adr/0194-hy-layer-read-only-browsing.md",
+      "title": "ADR-0194：Hy逐层真实内容的有界只读边界",
+      "status": "draft",
+      "basis": "AA 6d2df85新增候选决定；Z窄审与固定SDK合成验证通过，尚待UI组合/发布",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-21",
+        "scope": "固定2.0.3私有读取/范围/RAW/L0聚合/图不初始化/有界页/新指纹边界核源码，生产与最终前端未验",
+        "evidence": ["src/longmemory/methods/hy_memory/layer_data.py", "tests/integration/test_hy_layer_data_sdk.py", "docs/development/parallel/Z-hy-layer-data-review-20261021.md"]
+      },
+      "tags": ["ADR", "Hy-Memory", "逐层内容", "只读"]
+    },
+    {
+      "path": "docs/development/hy-layer-data-contract.md",
+      "title": "Hy逐层真实内容只读契约",
+      "status": "draft",
+      "basis": "AA 6d2df85精确后端契约，经Z源码/HTTP/真实SDK窄验证；待最终前端接线与发布",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-21",
+        "scope": "八层/状态/参数/范围/有界计数/L0版本/RAW/partial及超时语义，Z186项相关回归和12项真实SDK集成；不表示个人内容部署通过",
+        "evidence": ["src/longmemory/entrypoints/api/routes/hy_layer_data.py", "src/longmemory/methods/hy_memory/layer_data.py", "tests/unit/methods/test_hy_layer_data.py", "tests/integration/test_hy_layer_data_sdk.py"]
+      },
+      "tags": ["Hy-Memory", "逐层内容", "契约", "只读"]
+    },
+    {
+      "path": "docs/development/parallel/AA-hy-layer-data-20261021.md",
+      "title": "AA：Hy逐层真实内容浏览",
+      "status": "reference",
+      "basis": "AA核心6d2df85与报告5126862冻结交付；作者256unit/32组合分组记录，Z186unit/12integration另行独立验证",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-21",
+        "scope": "AA源码/契约/ADR与作者分组口径核对，Z真实SDK八层合成读取及旧管理兼容通过；最终UI/正式发布未验",
+        "evidence": ["docs/development/hy-layer-data-contract.md", "docs/adr/0194-hy-layer-read-only-browsing.md", "tests/integration/test_hy_layer_data_sdk.py", "docs/development/parallel/Z-hy-layer-data-review-20261021.md"]
+      },
+      "tags": ["AA", "Hy-Memory", "逐层内容", "后端交付"]
+    },
+    {
+      "path": "docs/development/parallel/X-hy-layer-data-release-tools-20261021.md",
+      "title": "X：Hy逐层内容发布工具与证据接口",
+      "status": "draft",
+      "basis": "X 4b905af工具报告，Z接为9ce8d53；36项作者合成测试，helper/冻结计划待根独立审查及分阶段批准",
+      "review": {
+        "state": "pending",
+        "date": "2026-10-21",
+        "scope": "Z核证据接口原字节摘要与最终绑定要求并登记报告；作者工具结果不冒作Z独立复验，未执行生产生命周期",
+        "evidence": ["docs/development/parallel/X-hy-layer-data-release-20261021.md", "docs/development/parallel/Z-hy-layer-data-review-20261021.md"]
+      },
+      "tags": ["X", "Hy-Memory", "逐层内容", "发布工具", "证据接口"]
     }
   ],
   "integration_sources": {

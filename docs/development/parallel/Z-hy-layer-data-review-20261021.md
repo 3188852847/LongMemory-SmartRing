@@ -1,6 +1,6 @@
 # Z：Hy逐层实际内容与页内滚动独立审查
 
-2026-10-21，Asia/Shanghai。**阶段：AA逐层契约与Y精确滚动小提交预审；数据实现及最终组合待交，未初始化SDK或执行库读取，尚无发布结论。** 用户本轮明确要看L0–L7实际保存内容，并反馈运行路径点选跳顶；46项机制目录不代替数据浏览。根已确认上一轮未满足这项内容展示意图，本轮单独验收，不改写旧报告的软件/发布证据或结论。
+2026-10-21，Asia/Shanghai。**阶段：AA精确后端已完成独立窄审与隔离真实SDK复验；Y最终内容界面/组合/同HEAD发布证据待交，尚无发布结论。** 用户本轮明确要看L0–L7实际保存内容，并反馈运行路径点选跳顶；46项机制目录不代替数据浏览。根已确认上一轮未满足这项内容展示意图，本轮单独验收，不改写旧报告的软件/发布证据或结论。下文准备阶段的未运行说明保留其当时范围，实际新增执行见后端审查补充。
 
 ## 起点与分工
 
@@ -79,3 +79,27 @@ X准备核查确认，现行四字段proof不含测试清单，`tests/fixtures/h
 最终必须在精确干净候选上同时验证AA新增真实SDK逐层集成集、原管理集成与后台语义写关闭：多user/agent/source、全部原生层/状态、L0合并与上限、RAW真实内容、跨层/ID拒绝、空offset/末页计数、图不初始化、无search/LLM/BGE和前后状态不变等关键反例；真实SDK解释器/版本/固定来源、导入源码路径与原语包括新模块都须绑定。新测试具体文件与case集合等AA精确交付后冻结，不由调用者任意删减。
 
 验收签发工具需把上述固定套件作为门，而非只收一份未审任意JUnit；零failure/error/skipped且预期case均存在。伴随匿名回执记录精确HEAD/源码摘要、测试文件路径与摘要、case/JUnit摘要、SDK身份及背景写审核事实，并绑定其实际产出的四字段proof摘要；四字段生产schema本身不随意扩展。任一新测试缺失、被skip、源码变更或未知背景写均不得产出可用证明。原证明不改写，新证据独占目录、失败原样保留；生产proof配置和部署仍由根/X审后执行，Z不改私有来源。当前只设计此门槛，未运行SDK、签发或模型调用。
+
+## AA精确后端独立审查
+
+根交核心 `6d2df85249db5eaca3ecc3c12f9473ea7a9f528d` 接为 `b9b6f33`，报告补充 `5126862d3831f8f3cac15858c6c93ca8150e0e12` 接为 `70e7947`；X仅工具报告 `4b905afae23033f2d04e4e9e71edad234f905107` 接为 `9ce8d53`，均无冲突。AA此后冻结，无新功能。实际阅读[契约](../hy-layer-data-contract.md)、[ADR-0194](../../adr/0194-hy-layer-read-only-browsing.md)、新增HTTP/owner读取模块与Runtime/Hy/RPC路径，已解决准备阶段ADR未交的缺口。
+
+独立代码核查：普通集合查询同时下推user/agent/source/layer/state及详情ID，回包再校验实际node ID、层、身份与namespace；原生limit+1/offset不走公开混合ACTIVE列表或RAW屏蔽。缺租约不读，图库只在固定路径核存在性，不初始化；存在旧图时保留partial、total=null。非首页空页total=null/data_state=unknown，非空末页才推断总数；L0的total是0/1聚合而非版本数。L0复用固定SDK纯函数，按同一_node_timestamp稳定顺序重建来源，保留null/空字段并验证128版本/64字段上限；缺stamp或范围异常不生成伪聚合。HTTP鉴权/白名单/body限制、错误脱敏和404同义保留，Runtime/Hy/RPC非阻塞锁、5秒响应等待及超时关闭/不重试沿用既有边界。未发现这份精确后端候选的阻断项，结论不代替最终前端组合或正式内容验收。
+
+指纹独立复核为 `674fd264bb84d3f6ed7c39e0764fdfdc1be44254cfddbcab0d9de123fa3c1433`，新增layer_data.py进入原七文件同序规范化循环；旧proof拒绝测试保留。背景语义写窄审覆盖本轮8个源码变更：runtime、两份route、administration、assembly、layer_data、process_client、worker。新增层操作只metadata get/纯投影，不调用search/profile API/状态写；worker对读操作拒绝模型transport，现有关闭graph/intention/recall/history记录/系统队列设置未放宽。最终source_diff摘要/完整路径数组按X接口在最终同HEAD证据中绑定，这里不提前签发布尔证明。
+
+| Z独立执行 | 实际结果与证据 |
+|---|---|
+| 新分层HTTP/锁/参数及SDK观测指纹 | 26 passed，0失败/跳过，0.78秒；aa-backend-review-v1/unit.xml |
+| 相关13份后端回归 | 186 passed，0失败/跳过，3.23秒；aa-backend-review-v1/related-unit.xml。包含前述26项，不能相加当212个独立用例 |
+| 原两管理集成＋新分层集成 | **12 passed，0 failures/errors/skipped，73.44秒**；sdk-review-v1/junit.xml，原5项＋新7项；不是32项真实SDK独立用例 |
+
+上述目录均在Z的ignored `data/test-tmp/z-hy-layer-data-20261021/`，不复制库正文进报告。真实SDK预审运行源HEAD为 `9ce8d531742d62974bf93f9d1a21ce232c0fd409`、tree `c475531fcdff55a26126761aff6a86d0da372306`、Python源码摘要 `19be167369c3efbfa885a44b1198505a027cd370a6a16dcc3d741162a4d1eba2`，SDK解释器字节摘要 `560b9ef7d856608ab8da02ded2dc8a1951ad1f424c382c0ec6a698874165a18e`，metadata为Python3.12.13/SDK2.0.3。JUnit摘要 `a89b79540ecd70a860e906f6193cc33acaf4a201114e2600a25d917de12fbadc`，case数组/前后身份一致性保存review-result.json。由Windows owned Job持有整个pytest/worker后代，240秒超时、有界日志、隔离HOME/TEMP、离线环境和新显式basetemp，导入已核Z/src；无SDK安装、模型/网关实调、生产库或日用端口访问。没有产出四字段发布proof。
+
+新7项分别证明真实Chroma内人工八层/历史/详情/分页/重启不变，独立新空间中真实pipeline＋MockTransport产生RAW/FACT且读取不再增模型计数，L0状态/分支/null/空字段来源、异范围/超限拒绝、旧图marker部分覆盖与无可信stamp。人工存量不是生产提取；旧图marker不是真实Kuzu内容可读验收。AA的32项组合含20项unit＋12项integration，最终报告已分组解释，与Z这里12项统计一致；AA另256项作者回归不冒用Z独立结果。
+
+根给X证据接口SHA-256 `6da33723b728f0a412df6a197eeacf5c9b0d5d5030e0d111e54b4c0df2142cb5` 已只读核对。最终采用原runner旧管理receipt＋同源HEAD新层supplement，预期全case、原JUnit摘要、背景diff及前端完整资源树共同绑定；先完成源码/报告冻结提交，再生成最终ignored证据，当前预审收据不能改HEAD冒充最终。X工具报告仅登记，helper/冻结计划仍由根独立审查，未执行任何生产阶段。
+
+最终Y交接后还须核分页offset10000上限、has_more仍true时的边界提示、不发必400下一页；未知total、非首页空页及L6/L7 partial不误报全层0。Y仍独占前端树，Z当前不进入执行或更改其内容。
+
+本阶段登记AA三文档和X工具报告后，窄选ADR/契约/AA/Z/X工具共5份执行check_docs --strict通过，无finding；git diff --check通过。没有修改文档检查机制或旧报告。
