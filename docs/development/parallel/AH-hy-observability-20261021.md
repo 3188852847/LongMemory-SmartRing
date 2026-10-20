@@ -51,7 +51,7 @@ AH 文件范围：
 早先 AH 提议 wrapper，主会话已冻结使用 AI 实际扁平响应，以下形状为本阶段唯一接线依据：
 
 - `GET /api/memory-engine/hy/semantic/status`，无参数：AB `protocol:2` 全部状态字段在顶层，追加 HTTP `observed_at` 与 Runtime `runtime:{write_enabled,use_enabled}`，没有 `status/data` wrapper。
-- `GET /api/memory-engine/hy/semantic/tasks/{task_id}`，无查询：AB `task_id/kind/state/created_at/finished_at/elapsed_ms/reason_code` 在顶层，追加 HTTP `observed_at`。任务 ID 与 AI 已提交白名单一致：1–96位字母、数字、下划线或短横线。
+- `GET /api/memory-engine/hy/semantic/tasks/{task_id}`，无查询：AB `task_id/kind/state/created_at/finished_at/elapsed_ms/reason_code` 在顶层，追加 HTTP `observed_at`。本阶段初版沿当时 AI 的1–96位白名单；随后发现其拒绝AB自动任务ID，当前规则由下方“自动任务ID接口修正”取代。
 - 错误：503 `hy_semantic_busy/hy_semantic_unavailable`、501不支持、404单任务不存在。客户端只实现这两个GET，没有 enqueue/cancel/启用管理入口，没有自动轮询或失败重试。
 
 状态读取仅在用户点击“读取实例状态”或打开已有任务冷链接后发生；任务用已知ID单条读取。冷链接按层页→实例状态→任务顺序，避免初始争抢owner锁；Runtime未确认或存储请求进行中禁止启动该按需读取。页/详情/来源与新请求均沿原会话认证，没有扫描全任务或新资源。URL `semantic_task`保留前后退/刷新，选项仍使用`preventScrollReset`；busy保留上次快照并标旧，不把上次能力伪装为本次事实。
@@ -77,3 +77,15 @@ AH 文件范围：
 - 1366桌面与390大字号的图式隔离/原生时间/有界依据ID截图已视觉检查；状态/任务区域无横向溢出。初期组件失败来自`unknown && JSX`类型及antd加载图标进入按钮名称；前者改为显式布尔，后者补稳定aria-label。先前失败JSON保留，没有削弱验证。
 
 当前限制：这是对冻结代码/契约的前端合成验收，没有在AH运行真实SDK或真实组合HTTP。主会话将本阶段独立提交转AI后，AI负责AB+公共Runtime/HTTP+AH的配对审查与组合验证，再由主会话安排日用切换；旧proof仍不能用于语义能力，AH没有重签、开启或部署。真实个人图谱、学校模型、GPU、圆屏声音/打断与端到端测量均未在AH验收，无所有者下载需求。本阶段可独立合入，不堵在尚无导出字段的延迟模块。
+
+## 自动任务ID接口修正（当前契约）
+
+第二阶段主体提交 `ca1e488439a79b970dbc5dc884e87c0c1c9149ea` 后，主会话转交AI组合审查发现：AB自动任务使用`add:<sha256>`、`add:<sha256>:expiry`及`management:`命名，AI初版HTTP和AH初版前端白名单都错误拒绝冒号。主会话授权各自修正所拥有层，不改任务权限。
+
+AH重新核对AB冻结的`semantic.task_id`：非空/strip后非空、最多256个Unicode码点、拒绝C0控制字符。`hySemanticTaskIdentifier`现按该原生规则检查，含Python的空白集合和按码点计长，不截断或trim原ID；`hySemanticTaskPathIdentifier`另在HTTP单路径段边界拒绝`/`、反斜杠、纯`.`/`..`和不可URL编码字符串。这项路径限制落实主会话“无斜杠/路径穿越”要求，不冒称AB原生验证本身已拒绝斜杠。冒号、中文、百分号、问号和井号作为不透明ID，经`encodeURIComponent`编码，回执必须与原ID精确相同。
+
+输入可容纳最多512个UTF-16代码单元，以支持256个非BMP码点；是否有效仍由256码点原生规则判断。冷链接、单任务GET和读取表单统一使用HTTP路径边界检查；没有新增提交、取消、启用、自动重试或跨范围读取。
+
+`components-task-id-fix.json`的28项针对性测试通过，覆盖原生自动ID冷链接、编码GET、精确回执、256码点、Python空白/C0控制、路径拒绝和原有只读状态；TypeScript及`build-task-id-fix/`独占构建通过。`browser-task-id-fix.log`的5项全部通过：新增自动add/management冷链接/返回及原4项桌面/390px只读语义路径，输出与截图保留在同名独占目录。既有第二阶段44项/29项历史验证不改写为本修正后全量重跑。
+
+AI同时负责公共HTTP白名单及RPC缺失/忙碌错误映射修正，AH未编辑其文件；新前端提交须与AI该修正配对验证。AH仍未运行真实SDK/组合HTTP、未更改日用或后台写入，整个分支不推送、不合main。

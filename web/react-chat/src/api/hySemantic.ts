@@ -15,8 +15,14 @@ export interface HySemanticTask {
   created_at:string;finished_at:string|null;elapsed_ms:number|null;reason_code:string|null;observed_at:string;
 }
 export class HySemanticContractError extends Error {}
-/** 与AI application/semantic_tasks.py的已提交白名单一致。 */
-export const hySemanticTaskIdentifier=(value:unknown):value is string=>typeof value==='string'&&/^[A-Za-z0-9_-]{1,96}$/.test(value);
+/** AB semantic.task_id：Python按Unicode码点计长，strip空白与C0控制字符分别处理。 */
+const pythonWhitespace=/^[\u0009-\u000d\u001c-\u0020\u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]*$/;
+export const hySemanticTaskIdentifier=(value:unknown):value is string=>typeof value==='string'&&[...value].length<=256&&!pythonWhitespace.test(value)&&!/[\u0000-\u001f]/.test(value);
+/** HTTP单路径段额外拒绝路径分隔、点段与不可编码字符串；冒号/百分号等按原ID编码。 */
+export function hySemanticTaskPathIdentifier(value:unknown):value is string {
+  if(!hySemanticTaskIdentifier(value)||value==='.'||value==='..'||/[\/\\]/.test(value))return false;
+  try{encodeURIComponent(value);return true;}catch{return false;}
+}
 const object=(v:unknown):v is Record<string,unknown>=>Boolean(v)&&typeof v==='object'&&!Array.isArray(v);
 const utc=(v:unknown):v is string=>typeof v==='string'&&/(Z|\+00:00)$/.test(v)&&!Number.isNaN(Date.parse(v));
 const nullableUtc=(v:unknown)=>v===null||utc(v);

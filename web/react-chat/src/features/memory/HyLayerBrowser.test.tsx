@@ -183,3 +183,15 @@ test('冻结AB图页隔离原因在空页也直接显示，不等实例读取或
   await screen.findByText('本层图式派生已隔离');expect(screen.queryByText('本层尚无已保存内容')).toBeNull();
   expect(screen.getByText('派生已隔离',{exact:true})).toBeTruthy();
 });
+
+test.each(['add:'+'a'.repeat(64)+':expiry','management:synthetic-operation'])('自动任务ID冷链接串行读取并保留原ID：%s',async id=>{
+  const taskPath='/api/memory-engine/hy/semantic/tasks/'+encodeURIComponent(id);
+  const request=setup('l6_schema','&semantic_task='+encodeURIComponent(id),url=>{
+    if(url.endsWith('/semantic/status'))return semanticStatusFixture();
+    if(url===taskPath)return semanticTaskFixture({task_id:id});
+    if(url.includes('/layers/'))return graphPage();
+  });
+  await screen.findByText(id,{exact:true});expect(screen.getByRole('textbox',{name:'语义任务 ID',hidden:true}).getAttribute('value')).toBe(id);
+  expect(request.mock.calls.map(([url])=>url)).toEqual(['/api/memory-engine/hy/layers/l6_schema?limit=20&offset=0&state=all','/api/memory-engine/hy/semantic/status',taskPath]);
+  expect(request.mock.calls.every(([,method])=>!method||method==='GET')).toBe(true);
+});

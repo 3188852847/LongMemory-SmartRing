@@ -9,7 +9,7 @@ import {useMemoryEngine} from '../../app/MemoryEngineProvider';
 import {memoryTime} from './HyMemoryWorkspace';
 import {HyLayerStatus} from './HyLayerStatus';
 import {HySemanticRecord} from './HySemanticRecord';
-import {HySemanticContractError,hySemanticTaskIdentifier} from '../../api/hySemantic';
+import {HySemanticContractError,hySemanticTaskPathIdentifier} from '../../api/hySemantic';
 import type {HyCapabilityView,HyRuntimeGateSnapshot} from './hyCapabilityView';
 import './hy-layer-data.css';
 
@@ -84,7 +84,7 @@ export function HyLayerBrowser({layer,title,revealRequest=0,capabilities,runtime
   const semanticLayer=layer==='l6_schema'||layer==='l7_intention';
   const [semanticRequested,setSemanticRequested]=useState(false);
   const taskId=params.get('semantic_task')??'';
-  const taskValid=hySemanticTaskIdentifier(taskId);
+  const taskValid=hySemanticTaskPathIdentifier(taskId);
   const storageReading=page.isFetching||detail.isFetching||source.isFetching;
   // 实例与任务只在显式请求/冷任务链接后读取，并与本页存储请求串行，避免抢owner锁。
   const semantic=useQuery({queryKey:['hy-semantic-status'],queryFn:()=>api.semanticStatus(),enabled:enabled&&semanticLayer&&(semanticRequested||taskValid)&&!storageReading,retry:false,refetchOnWindowFocus:false,staleTime:15000});

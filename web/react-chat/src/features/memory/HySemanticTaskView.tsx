@@ -1,7 +1,7 @@
 import {useState} from 'react';
 import {Alert,Button} from 'antd';
 import {ApiError} from '../../api';
-import {hySemanticTaskIdentifier,HySemanticContractError,type HySemanticTask} from '../../api/hySemantic';
+import {hySemanticTaskPathIdentifier,HySemanticContractError,type HySemanticTask} from '../../api/hySemantic';
 import {memoryTime} from './HyMemoryWorkspace';
 
 export const semanticTaskStates={pending:'等待认领',running:'已认领，运行中',completed:'任务已完成',partial:'部分完成',uncertain:'结果不确定',cancelled:'已取消启动'};
@@ -20,9 +20,9 @@ export function semanticReadFailure(error:unknown){
 export function HySemanticTaskView({id,task,loading=false,error,disabled=false,onRead}:{id:string;task?:HySemanticTask;loading?:boolean;error?:unknown;disabled?:boolean;onRead:(id:string)=>void}) {
   const [draft,setDraft]=useState(id);
   return <section className="hy-semantic-task" aria-label="单任务只读回执">
-    <h3>核对已知任务</h3><form onSubmit={event=>{event.preventDefault();if(hySemanticTaskIdentifier(draft)&&!disabled&&!loading)onRead(draft);}}>
-      <label>任务 ID<input aria-label="语义任务 ID" value={draft} maxLength={96} onChange={event=>setDraft(event.target.value)}/></label>
-      <Button aria-label="读取任务" htmlType="submit" loading={loading} disabled={disabled||!hySemanticTaskIdentifier(draft)}>读取任务</Button>
+    <h3>核对已知任务</h3><form onSubmit={event=>{event.preventDefault();if(hySemanticTaskPathIdentifier(draft)&&!disabled&&!loading)onRead(draft);}}>
+      <label>任务 ID<input aria-label="语义任务 ID" value={draft} maxLength={512} onChange={event=>setDraft(event.target.value)}/></label>
+      <Button aria-label="读取任务" htmlType="submit" loading={loading} disabled={disabled||!hySemanticTaskPathIdentifier(draft)}>读取任务</Button>
     </form>
     {Boolean(error)&&<Alert type="warning" title={task?'未取得新任务回执，以下保留上次快照':'任务回执未读取'} description={semanticReadFailure(error)}/>}
     {task&&<><p>{loading||error?'上次':'本次'}任务快照：<code>{task.task_id}</code></p><dl>

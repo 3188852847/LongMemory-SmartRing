@@ -73,6 +73,20 @@ async function semanticSynthetic(page:Page,options:{legacy?:boolean;isolated?:bo
   return {...state,setStatusBusy:()=>{busy=true;}};
 }
 
+test('自动add/management任务ID冷链接、编码GET和浏览器返回',async({page},info)=>{
+  const state=await semanticSynthetic(page);
+  const automatic='add:'+'a'.repeat(64)+':expiry',management='management:synthetic-operation';
+  await page.goto(`/memories?view=mechanisms&mechanism_tab=layers&layer=l6_schema&semantic_task=${encodeURIComponent(automatic)}`);
+  const panel=page.getByLabel('分层接入与运行证据');await panel.locator('summary').click();
+  await expect(panel.getByText(automatic,{exact:true})).toBeVisible();await expect(panel.getByRole('textbox',{name:'语义任务 ID'})).toHaveValue(automatic);
+  expect(state.calls.some(call=>call.path.endsWith('/tasks/'+encodeURIComponent(automatic)))).toBe(true);
+  await panel.getByRole('textbox',{name:'语义任务 ID'}).fill(management);await panel.getByRole('button',{name:'读取任务'}).click();
+  await expect(panel.getByText(management,{exact:true})).toBeVisible();expect(state.calls.some(call=>call.path.endsWith('/tasks/'+encodeURIComponent(management)))).toBe(true);
+  await page.goBack();await expect(panel.getByText(automatic,{exact:true})).toBeVisible();
+  await page.screenshot({path:info.outputPath('automatic-task-id.png'),animations:'disabled'});
+  expect(state.calls.every(call=>call.method==='GET')).toBe(true);expect(state.errors).toEqual([]);
+});
+
 for(const width of [1366,390])test(`真实契约图式、意图与只读任务快照 ${width}`,async({page},info)=>{
   await page.setViewportSize({width,height:844});const state=await semanticSynthetic(page,{legacy:true,isolated:true});
   await openLayer(page,'l6_schema');if(width===390)await largerReading(page);
