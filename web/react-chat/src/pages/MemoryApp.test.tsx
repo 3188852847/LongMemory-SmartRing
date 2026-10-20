@@ -415,5 +415,6 @@ test('显式旧库未初始化仍可只读管理，不猜方法或懒建Runtime'
   await waitFor(()=>expect(request.mock.calls.some(([path])=>path.startsWith('/api/memories?'))).toBe(true));
   expect(request.mock.calls.some(([path])=>path==='/api/memory-mode'||path.startsWith('/api/memory-engine/hy/'))).toBe(false);
   expect(screen.queryByRole('link',{name:/^原话与事实$/})).toBeNull();
+  expect(screen.getByText('聊天未初始化')).toBeTruthy();
   expect(identity.method).toBeNull();
 });
