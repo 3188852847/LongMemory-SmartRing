@@ -153,6 +153,7 @@ for(const viewport of [{width:1366,height:768},{width:390,height:844}])test(`非
   const layer=page.getByRole('button',{name:/Hy L3/});await layer.evaluate(el=>el.scrollIntoView({block:'center'}));const layerY=await page.evaluate(()=>scrollY);expect(layerY).toBeGreaterThan(100);
   await layer.click();await expect(layer).toHaveAttribute('aria-pressed','true');expect(await page.evaluate(()=>scrollY)).toBeGreaterThan(100);
   const contentHeading=page.getByRole('heading',{name:/Hy L3/});await expect(contentHeading).toBeVisible();expect((await contentHeading.boundingBox())!.y).toBeLessThan(viewport.height-100);
+  await expect(page.locator('.hy-layer-record-content').first()).toBeInViewport();
   await page.reload();await expect(page.getByRole('heading',{name:/Hy L3/})).toBeVisible();await expect.poll(()=>page.evaluate(()=>scrollY)).toBeGreaterThan(100);
   if(viewport.width===390)await expect(page.locator('html')).toHaveAttribute('data-reading','larger');
   if(viewport.width>760){await page.getByRole('link',{name:'系统总览',exact:true}).click();await expect(page.getByRole('heading',{name:'系统总览',exact:true})).toBeVisible();await expect.poll(()=>page.evaluate(()=>scrollY)).toBe(0);await expect(page.locator('#main-content')).toBeFocused();}

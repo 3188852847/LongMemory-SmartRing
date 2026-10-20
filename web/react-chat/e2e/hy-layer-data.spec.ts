@@ -75,13 +75,14 @@ for(const viewport of [{width:1920,height:1080},{width:1366,height:768},{width:3
 
 test('八层分别读取实际内容：聚合、RAW、历史、保留与部分图范围',async({page},info)=>{
   const state=await synthetic(page);await openLayer(page,'l0_basic_info');await expect(page.getByText('茶',{exact:true})).toBeVisible();await expect(page.getByText('合成城市',{exact:true})).toBeVisible();await expect(page.getByText('已完整读取 2 个原生版本用于聚合。')).toBeVisible();
+  await page.getByRole('button',{name:/Hy L0 /}).click();await expect(page.getByText('茶',{exact:true})).toBeInViewport();
   await page.screenshot({path:info.outputPath('layer-zero-profile.png'),animations:'disabled',fullPage:true});
   await page.getByRole('button',{name:'核对聚合来源与原生版本'}).click();const drawer=page.getByRole('dialog',{name:/Hy L0.*内容详情/});await expect(drawer.getByRole('heading',{name:'L0 原生存储版本',exact:true})).toBeVisible();await page.screenshot({path:info.outputPath('layer-zero-versions.png'),animations:'disabled'});await drawer.getByRole('button',{name:'查看原生版本 synthetic-profile-old'}).click();await expect(drawer.getByText('喜欢的饮品：茶',{exact:true})).toBeVisible();await page.keyboard.press('Escape');
   for(const layer of HY_LAYERS.slice(1)){
     const number=HY_LAYERS.indexOf(layer),button=page.getByRole('button',{name:new RegExp(`Hy L${number} `)});await button.click();await expect(button).toHaveAttribute('aria-pressed','true');
-    if(layer==='l5_knowledge')await expect(page.getByText('本层尚无已保存内容')).toBeVisible();
-    else if(layer==='l7_intention')await expect(page.getByText('当前页没有返回记录，整层是否为空尚不能确认')).toBeVisible();
-    else await expect(page.locator('.hy-layer-records')).toContainText(layer==='l3_summary'?'合成的长正文':'合成 '+layer+' 保存正文');
+    if(layer==='l5_knowledge')await expect(page.getByText('本层尚无已保存内容')).toBeInViewport();
+    else if(layer==='l7_intention')await expect(page.getByText('当前页没有返回记录，整层是否为空尚不能确认')).toBeInViewport();
+    else {await expect(page.locator('.hy-layer-records')).toContainText(layer==='l3_summary'?'合成的长正文':'合成 '+layer+' 保存正文');await expect(page.locator('.hy-layer-record-content').first()).toBeInViewport();}
     if(layer==='l6_schema'||layer==='l7_intention'){await expect(page.getByText('当前生成已关闭',{exact:true})).toBeVisible();await expect(page.getByText('只覆盖部分存储范围')).toBeVisible();}
     await noOverflow(page);
   }
