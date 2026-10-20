@@ -120,7 +120,7 @@ class SyntheticRPC:
         return {"active": self.active}
 
 
-def harness(*, tools=False, rpc_factory=None):
+def harness(*, tools=False, rpc_factory=None, install_adapter=True):
     import voice_asr_prefetch as prefetch
     import voice_proposal_adapter as proposal
     from voice_preemptive_input import capture_effective_voice_input
@@ -206,11 +206,12 @@ def harness(*, tools=False, rpc_factory=None):
     metadata = {"formal_turn_id": "11111111-1111-4111-8111-111111111111", "client_round_id": "d" * 32, "session_id": "c" * 32}
     adapter = proposal.install_voice_proposal_adapter(Connection, fun, native.base, enabled=True,
         preview_effective_input=preview, formal_metadata=lambda conn: metadata,
-        rpc_factory=rpc_factory or (lambda **_kwargs: rpc), confirmation_timeout_seconds=2)
-    connection.llm = adapter.bind_provider(connection, LLM())
+        rpc_factory=rpc_factory or (lambda **_kwargs: rpc), confirmation_timeout_seconds=2) if install_adapter else None
+    connection.llm = adapter.bind_provider(connection, LLM()) if adapter is not None else LLM()
     connection.asr = Provider()
     return NS(connection=connection, provider=connection.asr, native=native, adapter=adapter, rpc=rpc,
-              executor=executor, stored=stored, requests=requests, prefetch=prefetch)
+              executor=executor, stored=stored, requests=requests, prefetch=prefetch, fun=fun,
+              preview=preview, metadata=metadata)
 
 
 async def begin(h):

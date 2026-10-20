@@ -38,7 +38,9 @@ def frozen_adapter_host(tmp_path_factory):
     extract(stage, ref, ["src/longmemory", "tests/fixtures", "tests/integration/test_hy_semantic_sdk.py",
         "tests/unit/methods/test_hy_candidate_response.py", "tests/unit/methods/test_hy_provider_transport.py"])
     extract(stage, "HEAD", ["scripts/development/xiaozhi"])
-    for name in ("voice_proposal_adapter.py", "voice_asr_prefetch.py", "voice_proposal_rpc.py"):
+    for name in ("voice_proposal_adapter.py", "voice_asr_prefetch.py", "voice_proposal_rpc.py",
+                 "launch_with_memory.py", "voice_latency.py", "voice_web_search.py",
+                 "voice_response_policy.py", "longmemory_provider.py"):
         assert (stage / "scripts/development/xiaozhi" / name).read_bytes() == (ROOT / "scripts/development/xiaozhi" / name).read_bytes()
     return stage
 

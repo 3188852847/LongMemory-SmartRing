@@ -129,6 +129,52 @@ def install_pipeline_latency_policy(connection_class, *, mode, enable_asr_prefet
         install_voice_asr_prefetch(connection_class, fun_local, enabled=True)
 
 
+def preview_voice_proposal_input(connection, raw_asr):
+    """按原生chat与网页编排的真实能力预检；不执行工具、不改历史或缓存时间。"""
+    from voice_latency import _ObservedLLM
+    from voice_proposal_adapter import preview_native_input
+    import voice_web_search as web
+
+    intent = getattr(connection, "intent_type", None)
+    if intent not in {"nointent", "function_call"}:
+        # intent_llm可能在chat前执行意图工具；未知路径不能推定为纯文本。
+        return None
+    provider = getattr(connection, "llm", None)
+    if isinstance(provider, _ObservedLLM):
+        provider = provider._provider
+    if not callable(getattr(provider, "response", None)):
+        return None
+    native_tools = intent == "function_call" and hasattr(connection, "func_handler")
+    if native_tools and not callable(getattr(connection.func_handler, "get_functions", None)):
+        return None
+    # 原生首层function_call还会追加direct_answer，空工具表也不能当无工具。
+    # 不调用get_functions：它会写工具描述缓存，预览只读能力而不执行编排。
+    try:
+        config = web.load_config()
+    except (ValueError, OSError):
+        config = None  # 与正式web_response的配置失败语义一致。
+    configured = config is not None and config.provider in web.ENDPOINTS
+    functions = callable(getattr(provider, "response_with_functions", None))
+    if configured and not functions and not native_tools:
+        # 正式路径仍会生成精确时间说明；不能复用旧时间制造命中或预发必弃请求。
+        return None
+    return preview_native_input(connection, raw_asr,
+        tools_required=native_tools or (configured and functions), web_configured=configured)
+
+
+def install_voice_proposal_policy(connection_class, *, enabled=False, fun_local=None, asr_base=None,
+                                  rpc_factory=None):
+    """显式连接原ASR预取与RPC；关闭时不导入适配器或修改类/提供器。"""
+    if type(enabled) is not bool:
+        raise ValueError("voice_proposal_enabled_invalid")
+    if not enabled:
+        return None
+    from voice_proposal_adapter import install_voice_proposal_adapter
+    return install_voice_proposal_adapter(connection_class, fun_local, asr_base, enabled=True,
+        preview_effective_input=preview_voice_proposal_input, formal_metadata=voice_proposal_formal_metadata,
+        rpc_factory=rpc_factory)
+
+
 def observe_memory_operations(connection):
     """为任意小智 Memory 提供器记录统一耗时，不读取或打印记忆正文。"""
     memory = connection.memory
@@ -261,6 +307,9 @@ def install_answer_completion(connection_class):
                     dialogue.put = capture_put
                     dialogue._longmemory_capture_installed = True
             capture_token = capture.set(record)
+        adapter = getattr(connection, "_longmemory_proposal_adapter", None)
+        if adapter is not None:
+            adapter.guard_history(connection)
         try:
             result = original(connection, query, depth)
         except BaseException:
@@ -353,6 +402,8 @@ def main():
     parser.add_argument("--device-control", action="store_true")
     parser.add_argument("--voice-mode", choices=["pipeline", "doubao_realtime"], default="pipeline")
     parser.add_argument("--voice-latency-mode", choices=["realtime", "original"], default="realtime")
+    parser.add_argument("--enable-voice-preemptive", action="store_true",
+                        default=os.environ.get("LONGMEMORY_VOICE_PREEMPTIVE_ENABLED") == "1")
     parser.add_argument("--voice-turn-end-mode", choices=["off", "shadow", "enabled"],
                         default=os.environ.get("LONGMEMORY_TURN_END_MODE", "off"))
     parser.add_argument("--voice-turn-end-model", type=Path,
@@ -364,6 +415,8 @@ def main():
     parser.add_argument("--doubao-env", "--doubao-env-file", type=Path,
                         default=Path(__file__).resolve().parents[3] / "local/config/.env.doubao.local")
     args = parser.parse_args()
+    if args.enable_voice_preemptive and (args.voice_mode != "pipeline" or args.voice_latency_mode != "realtime"):
+        parser.error("voice_preemptive_requires_realtime_pipeline")
     if args.voice_mode != "pipeline" and (args.voice_turn_end_mode != "off"
                                          or args.cosy_delivery_mode != "buffered"):
         parser.error("advanced_voice_policy_requires_pipeline")
@@ -426,6 +479,11 @@ def main():
         install_waiting_sender(sendAudioHandle)
         ConnectionHandler._longmemory_waiting_enabled = True
     install_answer_completion(ConnectionHandler)
+    # 生命周期须包住快捷回复和完成归档：这些分支可能不进入原生chat/LLM。
+    # provider在连接初始化时才绑定，因此此处仍先于任何实际provider创建。
+    if args.enable_voice_preemptive:
+        from core.providers.asr import fun_local
+        install_voice_proposal_policy(ConnectionHandler, enabled=True, fun_local=fun_local, asr_base=asr_base)
     # 第一版只做无正文、无播放的封闭分支影子统计，为是否值得预合成提供证据。
     install_voice_prediction_shadow(ConnectionHandler)
     install_internal_end_prompt_boundary(receive_audio_handle)

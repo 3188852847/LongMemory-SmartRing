@@ -330,6 +330,13 @@ class VoiceProposalAdapter:
             return provider
         return _Provider(self, connection, provider)
 
+    def guard_history(self, connection):
+        """完成捕获器安装后再套撤权门，覆盖无需经过provider的固定回复。"""
+        state = vars(connection).get(_STATE)
+        if state is not None and state.history_guard is not None:
+            with state.lock:
+                self._guard_history(connection, state)
+
     def invalidate(self, connection, reason="cancelled", *, closed=False):
         if not self.enabled:
             return
@@ -543,7 +550,10 @@ class VoiceProposalAdapter:
 def install_voice_proposal_adapter(connection_class, fun_local, asr_base, *, enabled=False,
                                    preview_effective_input=None, formal_metadata=None, rpc_factory=None,
                                    confirmation_timeout_seconds=.3):
-    """在输入计时/ASR预取/SmartTurn安装后调用；AI只另接bind_provider这一处。
+    """在输入计时/ASR预取/SmartTurn及快捷回复/完成归档安装后调用。
+
+须包住全部顶层chat分支，使无需LLM的快捷回复也会退出本轮候选。
+连接初始化时由私有ObservedLLM绑定provider，不修改共享provider。
 
 preview(connection, raw_asr) -> PreviewPlan|None；只在ready调用一次。
 Plan.input报告真实工具能力，Plan.with_memory只操作已隔离的副本。

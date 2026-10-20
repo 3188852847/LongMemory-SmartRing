@@ -459,7 +459,8 @@ class _ObservedLLM:
 
     def __init__(self, connection, provider):
         self._connection = connection
-        self._provider = provider
+        adapter = getattr(connection, "_longmemory_proposal_adapter", None)
+        self._provider = adapter.bind_provider(connection, provider) if adapter is not None else provider
 
     def __getattr__(self, name):
         return getattr(self._provider, name)

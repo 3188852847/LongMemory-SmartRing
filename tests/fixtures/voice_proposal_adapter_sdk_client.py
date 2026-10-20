@@ -3,7 +3,6 @@
 import asyncio
 import ast
 from datetime import datetime
-from functools import partial
 import importlib.util
 import json
 import os
@@ -30,7 +29,7 @@ async def run():
         LONGMEMORY_VOICE_RESPONSE_STYLE="realtime", NO_PROXY="127.0.0.1,localhost")
     assert "longmemory" not in sys.modules
     assert Path(proposal.__file__).resolve().is_relative_to(root)
-    h = boundary.harness(rpc_factory=VoiceProposalRPC.from_environment)
+    h = boundary.harness(rpc_factory=VoiceProposalRPC.from_environment, install_adapter=False)
     class SafeLog(driver.Log):
         def error(self, *_args, **_kwargs):
             kind, _value, trace = sys.exc_info()
@@ -59,7 +58,10 @@ async def run():
     h.connection.memory = memory
     import launch_with_memory as launch
     launch.install_answer_completion(type(h.connection))
-    h.adapter.formal_metadata = launch.voice_proposal_formal_metadata
+    h.adapter = launch.install_voice_proposal_policy(type(h.connection), enabled=True,
+        fun_local=h.fun, asr_base=h.native.base, rpc_factory=VoiceProposalRPC.from_environment)
+    assert h.adapter.preview is launch.preview_voice_proposal_input
+    assert h.adapter.formal_metadata is launch.voice_proposal_formal_metadata
 
     # 同固定上游完整Dialogue方法，不以手写标准消息替代最终装配。
     source = boundary.native_source("core/utils/dialogue.py")
@@ -77,12 +79,14 @@ async def run():
     h.connection.dialogue = Dialogue()
     h.connection.dialogue.put(Message(role="system", content="合成角色<memory>原内容</memory>"))
     tools = scenario == "tools"
-    h.adapter.preview = partial(proposal.preview_native_input, tools_required=tools, web_configured=tools, style="realtime")
     # 固定真实LLM方法使用可控SDK stream；仅候选模型实际走宿主Gateway回环SSE。
     original, streams, requests = driver.provider([driver.wire("原正式回答")], module=h.native.snapshot)
     original.model_name = "DeepSeek-V4-Flash"
     original.base_url = config["authority"] + "/voice/v1"
-    private = h.adapter.bind_provider(h.connection, original)
+    import voice_latency as latency
+    observed = latency._ObservedLLM(h.connection, original)
+    private = observed._provider
+    assert private.original is original
     if scenario in {"metadata", "date", "role", "history", "speaker"}:
         response = private.response
         def changed(session, dialogue, **kwargs):
@@ -97,7 +101,6 @@ async def run():
                 rows[0]["content"] += "实际" + scenario + "变化"
             return response(session, rows, **kwargs)
         private.response = changed
-    import voice_latency as latency
     import voice_web_search as web
     class Waiting:
         def __init__(self, connection):
@@ -117,7 +120,7 @@ async def run():
     web.search_web = forbidden_search
     h.connection._longmemory_voice_latency = NS(bind_sentence=lambda *_a, **_k: None, mark=lambda *_a, **_k: None,
         mark_stage=lambda *_a, **_k: None, fail=lambda *_a, **_k: None)
-    h.connection.llm = latency._ObservedLLM(h.connection, private)
+    h.connection.llm = observed
     entered, release = threading.Event(), threading.Event()
     if scenario in {"yield_cancel", "new_turn"}:
         observed_response, first = h.connection.llm.response, [True]

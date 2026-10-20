@@ -366,3 +366,91 @@ def test_new_audio_revokes_queued_output_and_background_put_before_sentence_id_c
         finally:
             await boundary.finish(h)
     asyncio.run(run())
+
+
+@pytest.mark.parametrize("cancel", [False, True])
+def test_actual_fast_reply_retires_candidate_and_never_archives_revoked_text(boundary, monkeypatch, cancel):
+    import launch_with_memory as launch
+    import fast_voice_responses as fast
+    import voice_proposal_adapter as proposal
+    dto = ModuleType("frozen_native_tts_dto")
+    exec(boundary.native_source("core/providers/tts/dto/dto.py"), vars(dto))
+    monkeypatch.setitem(sys.modules, "core.providers.tts.dto.dto", dto)
+    monkeypatch.setitem(sys.modules, "core.utils.dialogue", NS(Message=lambda **kwargs: NS(**kwargs)))
+    monkeypatch.setattr(fast, "fast_response_for", lambda _query: "合成快捷回复")
+    monkeypatch.setattr(fast, "_uses_cosyvoice3", lambda _conn: True)
+    monkeypatch.setattr(fast, "default_voice_active", lambda: True)
+    async def run():
+        h = boundary.harness(install_adapter=False)
+        receipts = []
+        memory = h.connection.memory
+        memory.begin_turn = lambda: ("synthetic-turn", None)
+        memory.end_turn = lambda _token: None
+        memory.cancel_turn = lambda *_args: None
+        memory.record_completed_turn = lambda text, **kwargs: receipts.append(text)
+        original_query = memory.query_memory
+        async def query(raw):
+            result = await original_query(raw)
+            if cancel:
+                h.adapter.invalidate(h.connection, "synthetic_cancel_during_fast_reply")
+            return result
+        memory.query_memory = query
+        fast.install_fast_voice_responses(type(h.connection))
+        launch.install_answer_completion(type(h.connection))
+        h.adapter = proposal.install_voice_proposal_adapter(type(h.connection), h.fun, h.native.base,
+            enabled=True, preview_effective_input=h.preview, formal_metadata=lambda _conn: h.metadata,
+            rpc_factory=lambda **_kwargs: h.rpc)
+        try:
+            await boundary.begin(h)
+            await boundary.endpoint(h)
+            for future in h.executor.futures:
+                await asyncio.wrap_future(future)
+            for _ in range(20):
+                if h.rpc.active == 0:
+                    break
+                await asyncio.sleep(.005)
+            assert h.rpc.active == 0 and h.rpc.calls.count("cancel") == 1
+            assert "confirm" not in h.rpc.calls and not h.requests
+            assert memory.prepares == 1
+            assert receipts == ([] if cancel else ["合成快捷回复"])
+            assert [row.content for row in h.connection.dialogue.dialogue if row.role == "assistant"] == receipts
+            assert h.connection.tts.tts_text_queue.qsize() == (0 if cancel else 3)
+        finally:
+            await boundary.finish(h)
+    asyncio.run(run())
+
+
+def test_native_dto_and_final_packet_sender_drop_old_output_after_new_speech(boundary):
+    from cosyvoice_streaming import CosyVoicePacket
+    from voice_latency import observed_audio_sender, observed_cosy_packet_sender
+    dto = ModuleType("frozen_native_tts_dto")
+    exec(boundary.native_source("core/providers/tts/dto/dto.py"), vars(dto))
+    async def run():
+        h = boundary.harness()
+        sent = []
+        async def send(_conn, _kind, audios, _text, _sentence):
+            sent.extend(audios)
+        async def socket(_conn, packet, _control):
+            sent.append(packet)
+        try:
+            await boundary.begin(h)
+            await boundary.endpoint(h)
+            for future in h.executor.futures:
+                await asyncio.wrap_future(future)
+            state = vars(h.connection)["_longmemory_proposal_adapter_state"]
+            old_sentence = h.connection.sentence_id
+            h.connection.tts.tts_text_queue.put(dto.TTSMessageDTO(sentence_id=old_sentence,
+                sentence_type=dto.SentenceType.MIDDLE, content_type=dto.ContentType.TEXT, content_detail="合成文字"))
+            packet = CosyVoicePacket(b"old", old_sentence, lambda: not state.output_current(old_sentence))
+            h.connection.client_have_voice = True
+            h.connection.vad_last_voice_time = boundary.time.time() * 1000
+            await h.provider.receive_audio(h.connection, boundary.PCM, True)
+            assert h.connection.sentence_id == old_sentence
+            with pytest.raises(boundary.queue.Empty):
+                h.connection.tts.tts_text_queue.get_nowait()
+            await observed_audio_sender(send)(h.connection, "middle", [packet, b"current"], None, old_sentence)
+            await observed_cosy_packet_sender(socket)(h.connection, packet, None)
+            assert sent == [b"current"]
+        finally:
+            await boundary.finish(h)
+    asyncio.run(run())
