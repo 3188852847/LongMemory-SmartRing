@@ -251,3 +251,67 @@ def test_job_creation_failure_never_starts_a_process(monkeypatch, tmp_path):
     monkeypatch.setattr(receipt.subprocess, 'Popen', lambda *args, **kwargs: pytest.fail('must not spawn'))
     with pytest.raises(receipt.ReceiptFailure, match='management_job_unavailable'):
         receipt.owned_run(['synthetic-python'], cwd=tmp_path, env={}, timeout=1)
+
+
+@pytest.fixture
+def semantic_arranged(arranged, monkeypatch):
+    arguments, state = arranged
+    arguments.managed_semantic = True
+    arguments.reviewed_semantic_background_writes_disabled = False
+    arguments.voice_python = arguments.sdk_python.parent / 'voice-python.exe'
+    arguments.voice_python.write_bytes(b'synthetic voice interpreter, never executed')
+    arguments.capture = arguments.sdk_python.parent / 'capture'
+    arguments.capture.mkdir()
+    for entry in receipt.SEMANTIC_TESTS:
+        target = arguments.source_root / entry.split('::')[0]
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text('# synthetic fixed suite', encoding='utf-8')
+    names = sorted(receipt.REQUIRED_SEMANTIC_CASES)
+    state.junit = '<testsuite tests="6">' + ''.join(f'<testcase name="{name}"/>' for name in names) + '</testsuite>'
+    def runner(command, **kwargs):
+        state.calls.append((command, kwargs))
+        if kwargs.get('capture'):
+            return 0, (b'"3.10.20"' if command[0] == arguments.voice_python else json.dumps(state.metadata).encode())
+        Path(kwargs['log_path']).write_bytes(b'synthetic test log')
+        Path(command[command.index('--junitxml') + 1]).write_text(state.junit, encoding='utf-8')
+        if state.after_tests:
+            state.after_tests()
+        return state.code, b''
+    monkeypatch.setattr(receipt, 'owned_run', runner)
+    return arguments, state
+
+
+def test_semantic_mode_requires_fixed_suite_and_generates_exact_v2_after_tests(semantic_arranged):
+    arguments, state = semantic_arranged
+    result = receipt.run(arguments)
+    assert result['status'] == 'completed' and result['management_protocol'] == 2
+    proof = json.loads((arguments.output / 'management-verification.json').read_text())
+    assert proof == {'protocol': 2, 'sdk_version': '2.0.3', 'rpc_source_sha256': RPC,
+        'real_sdk_rpc_verified': True, 'semantic_background_writes': 'managed_v1',
+        'derivation_invalidation_verified': True, 'read_only_intention_verified': True}
+    command, options = state.calls[-1]
+    assert all(entry in command for entry in receipt.SEMANTIC_TESTS)
+    assert result['test_paths'] == list(receipt.SEMANTIC_TESTS) and options['timeout'] == 900
+    assert options['env']['LONGMEMORY_TEST_VOICE_HOST_REF'] == HEAD
+    assert options['env']['LONGMEMORY_TEST_SDK_HOST_REF'] == HEAD
+    assert options['env']['LONGMEMORY_TEST_PY310'] == str(arguments.voice_python)
+    assert options['env']['LONGMEMORY_TEST_AB_CAPTURE'] == str(arguments.capture)
+    assert result['pytest_log_sha256'] == receipt.probe.digest(b'synthetic test log')
+
+
+@pytest.mark.parametrize('change,code', [
+    ('review', 'management_explicit_review_required'),
+    ('missing_voice', 'management_semantic_inputs_required'),
+    ('missing_capture', 'management_semantic_inputs_missing'),
+    ('missing_case', 'management_required_semantic_cases_missing'),
+    ('voice_changed', 'management_voice_changed')])
+def test_semantic_mode_never_issues_proof_on_incomplete_evidence(semantic_arranged, change, code):
+    arguments, state = semantic_arranged
+    if change == 'review': arguments.reviewed_semantic_background_writes_disabled = True
+    elif change == 'missing_voice': arguments.voice_python = None
+    elif change == 'missing_capture': arguments.capture = arguments.capture / 'missing'
+    elif change == 'missing_case': state.junit = PASSING
+    else: state.after_tests = lambda: arguments.voice_python.write_bytes(b'changed voice executable')
+    with pytest.raises(receipt.ReceiptFailure, match='^' + code + '$'):
+        receipt.run(arguments)
+    assert not (arguments.output / 'management-verification.json').exists()

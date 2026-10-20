@@ -335,3 +335,23 @@ AI公共bootstrap在owned网关启动后，仅随已验语义模式设置运行�
 主会话决定本轮保持网页同步observe行为，只修账本批读并量化实际prepare/recall新增成本。网页异步队列仅为有明确行为变化的后续候选，未实现，不在本轮为它改提取/取消/最终写入语义。
 
 生产交接精确路径已由主会话白名单提供，AI不读取其私有值：部署描述`local/config/hy-memory/deployment.json`中的python为`local/worktrees/v-hy-memory-20261019/local/runtime/hy-memory/.venv/Scripts/python.exe`；state_directory=`data/memory/hy-campus-daily-20261019`；source_path=`data/databases/hy-campus-sources-20261019.sqlite3`；调用审计=`data/databases/hy-campus-calls-20261019.sqlite3`。现行sdk_version=2.0.3、embedding_dimensions=512、include_profile=true、model_mode=disabled；托管真实模型由managed_gateway/network_authorized及现有模型档案装配，不能改成不存在的ultra模型枚举。开启字段是semantic_layers_enabled，运行期background标记由可信bootstrap提供。最终协议2 proof须由融合源码实际SDK回归产生，旧4字段background-disabled证明不能只改hash/字段冒充验收。完整引擎检查点须包括sdk目录、hy-state.json、engine.owner、scope/stamp、management.sqlite3、semantic.sqlite3、provenance.sqlite3及所有现存WAL/SHM/其他伴随文件；来源/调用审计与人工配置同时按停机边界保全。最终可执行命令及新前端产物将在剩余门通过后固定，不执行本节生产操作。
+
+## 最后来源、桥接、加速与前端接力
+
+精确接入AE `0ee9e0aa9c5e792dbf72a17c8e99041f80e3d128`→`a13ac040`、`5501aa22425804a6f66765fa89ad012537d20187`→`ac540d32`、`92eedb0bf18440273db450faa448743cb659757f`→`cd32baaf`；AH `66e76b2f`→`f16668f1`、`54ae8a40`→`70178ef5`、`86c159c9`→`f34c059c`；AB `118cc996238a238574bf12ccc0129c9b8e9a7b13`→`2b8e39ca`；AG `e4dc45cd70b377d93e20f6d20942609d4f5dac84`→`3e77ef50`，均无冲突。
+
+AE完整有效输入、连接状态与RPC模块组在冻结`70178ef5`上实际 **156 passed / 58.44秒、无skip**；包含七个真实SDK/正式HTTP/Python3.10组合场景。仅证明已有输入/RPC边界；生产`voice_asr_prefetch._Ticket`尚无候选proof输出/事件回调，`launch_with_memory.py`尚未安装候选RPC桥，`voice_latency._ObservedLLM._call`也尚无最终采用逻辑。这是待实现链路，不是仅缺实机测试。AI未编辑这些AE文件，已向主会话给出`baseline_asr_provisional/continued/confirmed`、`start_effective/confirm_effective`与最终输入捕获的接力边界；后续AE独立实现，不把默认关闭改写成方向已完成。
+
+AG新回执门CPU测试组 **90 passed / 2.16秒**：已修非空ID不足，要求主会话新签的限时AG窗口、同checkout/output/清洁commit/绑定摘要、WDDM精确进程上下文、单外层Job与子进程继承、每次容量/导出/引擎前后复核和仅回收自有Job。旧AD窗口已关闭且显式拒绝复用。没有加载模型、查询/运行GPU、停止日用；驱动资源、真实引擎和数值十样本仍待新窗口，不默认启用，也不阻塞本轮记忆/调度主链。
+
+AI在最终来源批读源码独立执行`ab_hy_provenance_cost.py`，新忽略目录`data/test-tmp/ai-final-provenance-cost-20261021-01/`。1000节点同规模三次中位数旧287.388ms→新6.655ms，10000节点旧2788.949ms→新48.935ms；SQLite连接3000/30000→1，逐组断言旧依赖集合全部保留且只增`legacy:unverified`屏障。范围仅合成Store的`begin_add`，不载SDK、模型或网络，不能宣称正式prepare/recall或用户整轮提速；真实SDK的额外分段成本由冻结组断言与diagnostics另验。
+
+AH最终发布只允许`ah-release-provenance-54ae8a40-20261021/dist/`。AI只读逐文件重新计算45文件、1,838,948字节、tree SHA-256=`c5b2779d2b63980b9183561467ac423e30012dbf3a38d57216d0c28b86bb9ac5`、manifest SHA-256=`8760f1c25b01a876394af413b58734d479b021b4404fa7771b0ede6bfa3201eb`；融合前端tree=`85c8bf6945a3fea0b6f2bdb3da3546b0873a09ec`与共享assets tree=`3cc3fce0066fb30dcea0ac15e383fbde1a491929`精确匹配。五项源码输入、八张当前截图、类型/构建日志摘要均一致；dist与本次L0/L7浏览器已测目录逐文件相同。旧`70cad5b`/`66e76b2f`发布候选已失效，不混用。264引用和固定隐私扫描0发现为AH原验收，本次不执行其脚本或重建依赖。此处不部署、不把截图当真实后端验收。
+
+## 协议2离线证明入口
+
+扩展既有`tests/fixtures/hy_management_receipt.py`，保留旧背景关闭模式不变；新`--managed-semantic`与旧`--reviewed-semantic-background-writes-disabled`互斥。要求显式既有SDK3.12.13/2.0.3、语音3.10.20、AB原捕获目录、完整HEAD、清洁源码、全新ignored证据目录。固定25个测试入口覆盖旧管理/逐层RPC、真实原生归纳与只读意图、捕获纠错/删除后不复活、pro重开/rollback、真实后台与正式模型竞争、正式HTTP/3.10有效输入、冷/锁/来源门；独立BGE性能测试不属于此proof范围，不借skip放行。
+
+进程沿原Windows Job先归属再放行，全部新数据/环境/临时文件隔离；无私有环境、代理、学校调用、GPU或日用端口。JUnit须零fail/error/skip且有case，并包含固定关键真实场景；前后HEAD/tree/源码、管理原语、SDK与语音解释器摘要一致才生成七字段协议2 `management-verification.json`及外围`receipt.json`、JUnit和原始pytest日志。新增入口门控与旧兼容组 **38 passed / 0.37秒**，这些模拟测试不替代真实冻结运行。
+
+proof实际匹配SDK版本和管理原语内容摘要，不绑定工作树路径或HEAD；外围receipt绑定完整源码身份。主会话仅当融合后的源码、管理原语和SDK解释器身份与此实跑回执一致，才可把同一候选proof复制到正式配置；同一提交快进到main且字节不变无需仅因路径变化再跑。若业务源码变化须重审受影响验证；不可手改旧proof字段/摘要。正式ASR安装桥后续接力不属于本次候选链完成证明。

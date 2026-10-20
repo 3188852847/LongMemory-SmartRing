@@ -217,7 +217,11 @@
         "src/longmemory/bootstrap_hy_daily.py",
         "src/longmemory/infrastructure/config/hy_deployment.py",
         "tests/unit/application/test_owned_background_bootstrap.py",
-        "tests/integration/test_hy_background_gateway_combination.py"
+        "tests/integration/test_hy_background_gateway_combination.py",
+        "tests/fixtures/hy_management_receipt.py",
+        "tests/unit/development/test_hy_management_receipt.py",
+        "tests/unit/development/test_voice_proposal_sdk_input.py",
+        "tests/fixtures/ab_hy_provenance_cost.py"
       ],
       "related": [
         "docs/adr/0201-composed-runtime-write-gates-and-observation.md"
