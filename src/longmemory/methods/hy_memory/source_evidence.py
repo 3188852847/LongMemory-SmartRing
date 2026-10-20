@@ -4,6 +4,7 @@ from copy import deepcopy
 import json
 
 from .sdk_bridge import _sources
+from .observation import measured
 
 
 def _complete_meta(row):
@@ -12,6 +13,7 @@ def _complete_meta(row):
     except (ValueError,RuntimeError):return None
 
 
+@measured('source_enrich_ms')
 def enrich_search(client,response,user_ids):
     result=deepcopy(response)
     channels=result.get("memories",{})
@@ -38,6 +40,7 @@ def enrich_search(client,response,user_ids):
     return result
 
 
+@measured('source_enrich_ms')
 def enrich_profile(client,response,user_id):
     result=deepcopy(response);profile=result.get("profile")
     if not isinstance(profile,dict) or not isinstance(profile.get("basic_info"),dict) or "meta" in profile:return result

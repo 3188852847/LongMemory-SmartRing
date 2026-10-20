@@ -1,8 +1,6 @@
 """自有回环模型网关：同一预算覆盖 Hy、旧提取、回答器；BGE 留在主环境。"""
 
 from contextlib import AbstractContextManager, contextmanager
-import asyncio
-from concurrent.futures import Future
 from dataclasses import replace
 import hashlib
 import hmac
@@ -11,12 +9,12 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import secrets
 import socket
-from queue import Queue
 from threading import Lock, Thread
 from urllib.parse import urlsplit
 
 from longmemory.infrastructure.config.model_profiles import ModelProfileStore
 from .budget import BudgetStopped
+from .provider_transport import PersistentProviderTransport
 
 
 MAX_BODY = 2_000_000
@@ -93,6 +91,7 @@ class ModelGateway(AbstractContextManager):
         self.settings, self.budget, self.encoder = settings, budget, encoder
         self.token = secrets.token_urlsafe(32)
         self._paid_lock, self._embedding_lock = Lock(), Lock()
+        self._provider_transport = PersistentProviderTransport(settings)
         self._remote = remote or self._send
         self._remote_stream = remote_stream or self._send_stream
         self._streams, self._connections_lock = set(), Lock()
@@ -167,13 +166,13 @@ class ModelGateway(AbstractContextManager):
             if self._closed:
                 return
             self._closed = True
-            streams, downstreams = tuple(self._streams), tuple(self._downstreams)
+            downstreams = tuple(self._downstreams)
         # 不持登记锁执行取消/shutdown或join：处理线程finally也需取此锁。
-        for loop, task in streams:
-            try:
-                loop.call_soon_threadsafe(task.cancel)
-            except RuntimeError:
-                pass
+        transport_failure = None
+        try:
+            self._provider_transport.close()
+        except RuntimeError as error:
+            transport_failure = error
         for connection in downstreams:
             try:
                 connection.shutdown(socket.SHUT_RDWR)
@@ -184,6 +183,8 @@ class ModelGateway(AbstractContextManager):
         self.server.server_close()
         if self.thread.is_alive():
             self.thread.join(timeout=5)
+        if transport_failure is not None:
+            raise transport_failure
 
     def local_settings(self, phase, *, max_tokens=1024):
         from longmemory.infrastructure.config.campus_calls import FreeCampusCalls
@@ -251,24 +252,8 @@ class ModelGateway(AbstractContextManager):
                 self._record_result(aid, status=status, failure=failure, done=status==200 and failure is None,
                     forwarded=False, usage_seen=usage is not None)
 
-    def _send(self,payload):
-        url=urlsplit(self.settings.base_url)
-        connection=self._provider_connection(url)
-        try:
-            connection.request("POST",url.path.rstrip("/")+"/chat/completions",body=payload,
-                headers={"Content-Type":"application/json","Authorization":"Bearer "+self.settings.api_key})
-            response=connection.getresponse()
-            data=response.read(MAX_BODY+1)
-            if len(data)>MAX_BODY:raise ValueError("provider_response_too_large")
-            return response.status,data
-        finally:connection.close()
-
-    def _provider_connection(self, url):
-        if url.scheme == "https":
-            return http.client.HTTPSConnection(url.hostname, url.port or 443, timeout=self.settings.timeout_seconds)
-        if url.scheme == "http" and self.settings.allow_http:
-            return http.client.HTTPConnection(url.hostname, url.port or 80, timeout=self.settings.timeout_seconds)
-        raise ValueError("provider_transport_not_authorized")
+    def _send(self, payload):
+        return self._provider_transport.send(payload)
 
     def _record_result(self, aid, **metadata):
         try:
@@ -279,72 +264,19 @@ class ModelGateway(AbstractContextManager):
 
     @contextmanager
     def _send_stream(self, payload):
-        import aiohttp
-        url = urlsplit(self.settings.base_url)
-        if url.scheme not in {"http", "https"} or (url.scheme == "http" and not self.settings.allow_http):
-            raise ValueError("provider_transport_not_authorized")
-        # 只替换上游流传输。异步取消不依赖另一个线程关闭正在readline的
-        # BufferedReader；不先缓存完整回答，不重试，也不跟随重定向。
-        loop, packets, headers, end = asyncio.new_event_loop(), Queue(), Future(), object()
-        async def pump():
-            timeout = aiohttp.ClientTimeout(total=None, sock_connect=self.settings.timeout_seconds,
-                sock_read=self.settings.timeout_seconds)
-            try:
-                async with aiohttp.ClientSession(timeout=timeout, cookie_jar=aiohttp.DummyCookieJar(),
-                        read_bufsize=131072) as session:
-                    async with session.post(self.settings.base_url.rstrip("/")+"/chat/completions",
-                            data=payload, allow_redirects=False,
-                            headers={"Content-Type":"application/json","Authorization":"Bearer "+self.settings.api_key}) as response:
-                        headers.set_result(response.status)
-                        total = 0
-                        async for line in response.content:
-                            total += len(line)
-                            if len(line) > 131072 or total > 32*MAX_BODY:
-                                raise ValueError("provider_stream_too_large")
-                            packets.put(line)
-            except BaseException as error:
-                safe = ValueError("provider_stream_invalid") if isinstance(error, ValueError) else OSError("provider_stream_interrupted")
-                if not headers.done():
-                    headers.set_exception(safe)
-                packets.put(safe)
-            finally:
-                packets.put(end)
-        task = loop.create_task(pump())
-        def run():
-            asyncio.set_event_loop(loop)
-            try:
-                loop.run_until_complete(task)
-                loop.run_until_complete(loop.shutdown_asyncgens())
-            finally:
-                loop.close()
-        thread = Thread(target=run, name="hy-provider-stream")
+        # 会话和连接池属于本次网关身份。只登记实际请求，既不预请求也不缓存答案。
+        # 保留活跃标记供生命周期/IP维护门判定；关闭由持久传输取消全部任务。
+        marker = object()
         with self._connections_lock:
             if self._closed:
-                task.cancel()
-                loop.run_until_complete(asyncio.gather(task, return_exceptions=True));loop.close()
-                raise ValueError("gateway_closed")
-            self._streams.add((loop, task))
-            thread.start()
+                raise ValueError('gateway_closed')
+            self._streams.add(marker)
         try:
-            def lines():
-                while True:
-                    line = packets.get()
-                    if line is end:
-                        break
-                    if isinstance(line, Exception):
-                        raise line
-                    yield line
-            yield headers.result(timeout=self.settings.timeout_seconds+1), lines()
+            with self._provider_transport.stream(payload) as response:
+                yield response
         finally:
-            try:
-                loop.call_soon_threadsafe(task.cancel)
-            except RuntimeError:
-                pass
-            thread.join(timeout=5)
             with self._connections_lock:
-                self._streams.discard((loop, task))
-            if thread.is_alive():
-                raise RuntimeError("provider_stream_close_unconfirmed")
+                self._streams.discard(marker)
 
     def stream(self, body, handler):
         """边收边转发真实SSE；最终usage和DONE均成功转发才释放最坏预留。

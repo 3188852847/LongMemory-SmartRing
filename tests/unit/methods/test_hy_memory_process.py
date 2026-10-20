@@ -85,3 +85,27 @@ def test_startup_malformed_response_also_reaps_worker(tmp_path, monkeypatch):
         HyProcessClient(python=Path(sys.executable), workspace=tmp_path,
             settings=SETTINGS, create=True, command=[sys.executable, "-I", "-c", script])
     assert len(children) == 1 and children[0].poll() is not None
+
+
+def test_successful_rpc_with_oversized_observation_number_keeps_business_result(tmp_path):
+    from longmemory.methods.hy_memory.observation import CURRENT, Observation
+    code = (
+        "assert request['operation']=='diagnostics'\n"
+        "assert request['observation_id']=='a'*32\n"
+        "print(json.dumps({'id':request['id'],'ok':True,'result':{'original':True},"
+        "'observation':{'version':1,'trace_id':request['observation_id'],"
+        "'stages':{'sdk_execute_ms':{'calls':1,'total_ms':10**400}}}}),flush=True)\n"
+        "request=json.loads(sys.stdin.readline())\n"
+        "print(json.dumps({'id':request['id'],'ok':True,'result':{'closed':True}}),flush=True)\n"
+    )
+    client = client_for(tmp_path, code)
+    observation = Observation('a' * 32)
+    try:
+        with observation.activate():
+            assert client.diagnostics() == {'original': True}
+        assert CURRENT.get() is None
+        assert 'sdk_execute_ms' not in observation.stages
+        assert observation.stages['sdk_roundtrip_ms']['calls'] == 1
+        assert not client._closed
+    finally:
+        client.close()

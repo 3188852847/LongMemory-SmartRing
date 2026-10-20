@@ -11,6 +11,7 @@ from longmemory.methods.backend_contracts import ManagementCapabilities, MemoryI
 from longmemory.methods.contracts import UnsupportedCapabilityError
 from .sdk_bridge import HyResponseError, SOURCE_NAMESPACE, _item
 from .management_rpc import ManagementRPC, HyManagementDenied, validate_management_write
+from .observation import measured
 
 
 class HyManagementConflict(ValueError):
@@ -38,12 +39,31 @@ class HyAdministration:
 
     def source_overlay(self, item_id):
         """SDK update 不接收新来源；用平台审计补足真实用户纠正，不改写 SDK meta。"""
+        return self.source_overlays((item_id,))[item_id]
+
+    @measured('management_overlay_ms')
+    def source_overlays(self, item_ids):
+        """一次召回用同一连接批读；不跨请求缓存，不跳过不确定写隔离。"""
+        unique = tuple(dict.fromkeys(item_ids))
+        result = {item_id: ((), False) for item_id in unique}
         state = getattr(self.method._client, "state", None)
-        if self._ledger_path is None and (state is None or not (state.root / "management.sqlite3").exists()):
-            return (), False
+        if not unique or (self._ledger_path is None and (state is None or not (state.root / "management.sqlite3").exists())):
+            return result
         with self._ledger() as db:
-            rows = db.execute("SELECT source_event_id,state,action FROM operations WHERE item_id=? ORDER BY occurred_at,request_id", (item_id,)).fetchall()
-            return tuple(dict.fromkeys(row[0] for row in rows if row[1] == "completed" and row[2] == "correct")), any(row[1] in {"running", "uncertain"} for row in rows)
+            # 参数分批避免SQLite变量上限；固定ID内仍按原时间/请求顺序组装。
+            for offset in range(0, len(unique), 350):
+                batch = unique[offset:offset + 350]
+                marks = ','.join('?' for _ in batch)
+                rows = db.execute('SELECT item_id,source_event_id,state,action FROM operations '
+                    f'WHERE item_id IN ({marks}) ORDER BY item_id,occurred_at,request_id', batch).fetchall()
+                grouped = {item_id: [] for item_id in batch}
+                for row in rows:
+                    grouped[row[0]].append(row[1:])
+                for item_id, values in grouped.items():
+                    result[item_id] = (tuple(dict.fromkeys(row[0] for row in values
+                        if row[1] == 'completed' and row[2] == 'correct')),
+                        any(row[1] in {'running', 'uncertain'} for row in values))
+        return result
 
     def _record(self, row):
         if not isinstance(row, dict):

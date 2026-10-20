@@ -15,7 +15,9 @@ def management_primitives_identity():
     from .sdk_bridge import SDK_VERSION
     directory = Path(__file__).parent
     digest = hashlib.sha256(SDK_VERSION.encode())
-    for name in ("worker.py", "process_client.py", "management_rpc.py", "sdk_bridge.py"):
+    # worker新增的内存包装也可影响管理RPC；证明不能只绑定import语句。
+    for name in ("worker.py", "process_client.py", "management_rpc.py", "sdk_bridge.py",
+                 "short_embedding_input.py", "sdk_observation.py", "observation.py"):
         digest.update(name.encode())
         digest.update((directory / name).read_bytes().replace(b"\r\n", b"\n"))
     return digest.hexdigest()

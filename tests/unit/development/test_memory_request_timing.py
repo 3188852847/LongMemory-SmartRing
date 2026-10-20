@@ -122,6 +122,8 @@ def test_runtime_request_times_original_single_http_call_without_changing_body(p
         def __exit__(self,*args):pass
     class Response:
         status=200
+        headers={'X-Memory-Observation':json.dumps({'version':1,'trace_id':'a'*32,
+            'stages':{'sdk_execute_ms':{'calls':1,'total_ms':10**400}}})}
         def __enter__(self):return self
         def __exit__(self,*args):pass
         def read(self,limit):
@@ -202,3 +204,27 @@ def test_invalid_round_metadata_is_never_copied_into_observation(monkeypatch):
     monkeypatch.setattr(runtime_module._LOGGER,'info',lambda *args:(_ for _ in ()).throw(OSError('log failed')))
     with pytest.raises(ValueError,match='metadata_invalid'):
         rt.prepare_round_screen('private text',client_round_id='private bad id',session_id='a'*32)
+
+
+def test_provider_observation_header_exact_schema_matches_server_and_discards_foreign_or_private_fields(provider_module):
+    from longmemory.methods.hy_memory.observation import Observation, STAGES, header
+    module, _ = provider_module
+    assert module._OBSERVATION_STAGES == STAGES
+    observation = Observation('a' * 32)
+    observation.add('sdk_search_ms', 12.5)
+    expected = observation.snapshot()
+    assert module._observation_header(header(observation), 'a' * 32) == expected
+    assert module._observation_header(header(observation), 'b' * 32) is None
+    assert module._observation_header(None, 'a' * 32) is None
+    assert module._observation_header('x' * 4097, 'a' * 32) is None
+    assert module._observation_header('invalid-json', 'a' * 32) is None
+    for unsafe in (
+        {**expected, 'body': 'private transcript'},
+        {**expected, 'version': True},
+        {**expected, 'stages': {'private query': {'calls': 1, 'total_ms': 1}}},
+        {**expected, 'stages': {'sdk_search_ms': {'calls': True, 'total_ms': 1}}},
+        {**expected, 'stages': {'sdk_search_ms': {'calls': 1, 'total_ms': float('nan')}}},
+        {**expected, 'stages': {'sdk_search_ms': {'calls': 1, 'total_ms': 10**400}}},
+        {**expected, 'stages': {'sdk_search_ms': {'calls': 1, 'total_ms': 1, 'key': 'private'}}},
+    ):
+        assert module._observation_header(json.dumps(unsafe), 'a' * 32) is None

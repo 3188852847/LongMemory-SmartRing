@@ -30,6 +30,32 @@ except ImportError:
 
 
 _REQUEST_TIMING = ContextVar('longmemory_request_timing', default=None)
+_OBSERVATION_STAGES = frozenset(('api_queue_ms','api_prepare_ms','runtime_outer_lock_ms','runtime_entry_ms',
+    'sdk_rpc_lock_ms','sdk_roundtrip_ms','sdk_execute_ms','sdk_search_ms','sdk_profile_ms','sdk_add_ms',
+    'source_enrich_ms','reader_get_ms','tokenize_ms','embedding_truncate_ms','embed_rpc_ms',
+    'vdb_query_ms','vdb_get_ms','vdb_list_ms','archive_ms','hy_observe_ms','hy_recall_ms',
+    'management_overlay_ms','prepare_lock_wait_ms','prepare_command_ms','prepare_observe_ms',
+    'prepare_recall_ms','prepare_scenario_ms','prepare_persona_ms','prepare_total_ms'))
+
+
+def _observation_header(value, identity):
+    if not isinstance(value,str) or len(value)>4096 or identity is None:
+        return None
+    try:
+        result=json.loads(value)
+        if (not isinstance(result,dict) or set(result)!={'version','trace_id','stages'}
+                or type(result['version']) is not int or result['version']!=1 or result['trace_id']!=identity
+                or not isinstance(result['stages'],dict) or set(result['stages'])-_OBSERVATION_STAGES):
+            return None
+        for item in result['stages'].values():
+            if (not isinstance(item,dict) or set(item)!={'calls','total_ms'}
+                    or type(item['calls']) is not int or not 1<=item['calls']<=100000
+                    or type(item['total_ms']) not in (int,float) or not 0<=item['total_ms']<=3600000
+                    or not math.isfinite(item['total_ms'])):
+                return None
+        return result
+    except (ValueError,TypeError):
+        return None
 
 
 def _emit_request_timing(record, stage, status, finished):
@@ -42,6 +68,8 @@ def _emit_request_timing(record, stage, status, finished):
             'handoff_total_ms': round(max(0, finished - record['queued']) * 1000, 3),
             'runtime_request_ms': record['runtime_request_ms'],
         }}
+    if record.get('observation') is not None:
+        payload['observation']=record['observation']
     try:
         logger.bind(tag='LongMemoryTiming').info('memory_request_timing={}', json.dumps(payload, sort_keys=True))
     except Exception:
@@ -117,6 +145,7 @@ class MemoryProvider(MemoryProviderBase):
             data=body,
             method="POST",
             headers={"Content-Type": "application/json", "Authorization": "Bearer " + token,
+                     **({'X-Memory-Observe':'1'} if key is not None else {}),
                      **(_diagnostics.headers() if _diagnostics else {})},
         )
         timing = _REQUEST_TIMING.get()
@@ -129,6 +158,9 @@ class MemoryProvider(MemoryProviderBase):
                 if len(response_body) > 65536:
                     raise RuntimeError("response too large")
                 response = json.loads(response_body)
+                if timing is not None:
+                    timing['observation']=_observation_header(
+                        getattr(result,'headers',{}).get('X-Memory-Observation'),timing['round_id'])
                 if _diagnostics:
                     _diagnostics.event("memory_response", request_id=getattr(result, "headers", {}).get("X-Request-Id"))
         except (OSError, urlerror.URLError, ValueError, TypeError, RuntimeError, json.JSONDecodeError) as error:

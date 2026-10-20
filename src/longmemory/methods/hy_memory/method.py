@@ -8,6 +8,7 @@ from longmemory.methods.contracts import (
 )
 from .sdk_bridge import HySdkBridge, SDK_VERSION
 from .administration import HyAdministration  # 保留既有公开导入路径。
+from .observation import measured
 
 
 class HyMemoryMethod:
@@ -31,6 +32,7 @@ class HyMemoryMethod:
                 self._client = self._factory()
                 self._bridge = HySdkBridge(self._client, user_id=self.settings.user_id, agent_id=self.settings.agent_id)
 
+    @measured('hy_observe_ms')
     def observe(self, event):
         with self._lock:
             if event.role != "user":
@@ -44,6 +46,7 @@ class HyMemoryMethod:
     def archive(self, event):
         raise UnsupportedCapabilityError("hy_archive_requires_platform_journal")
 
+    @measured('hy_recall_ms')
     def recall(self, query):
         with self._lock:
             self.wait_until_ready()
@@ -53,12 +56,17 @@ class HyMemoryMethod:
                 selected.insert(0, result.profile)
             items, excluded = [], False
             management = getattr(self, "_management", None)
+            overlays = None
+            if management and callable(getattr(management, 'source_overlays', None)):
+                overlays = management.source_overlays(memory_id for item in selected
+                    for memory_id in (item.visible_memory_ids or (item.memory_id,)))
             for item in selected:
                 sources, uncertain = (), False
                 # SDK把可见旧版本正文拼在链头内；必须同时检查每个可见版本的
                 # 管理来源和未确认状态，不能仅按新链头ID放行历史正文。
                 for memory_id in item.visible_memory_ids or (item.memory_id,):
-                    overlay, blocked = management.source_overlay(memory_id) if management else ((), False)
+                    overlay, blocked = (overlays[memory_id] if overlays is not None else
+                        management.source_overlay(memory_id) if management else ((), False))
                     sources += overlay
                     uncertain = uncertain or blocked
                 if uncertain:

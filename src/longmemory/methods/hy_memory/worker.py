@@ -1,6 +1,6 @@
 """仅供独立解释器启动的 SDK worker；stdout 只写协议，不回传 SDK 错误正文。"""
 
-from contextlib import redirect_stdout, redirect_stderr
+from contextlib import redirect_stdout, redirect_stderr, nullcontext
 from datetime import datetime
 from importlib import metadata
 import json
@@ -18,6 +18,7 @@ from .settings import HySettings
 from .source_evidence import enrich_profile,enrich_search
 from .management_rpc import ManagementRPC, profile_scope_proof
 from .sdk_bridge import SOURCE_NAMESPACE
+from .observation import Observation, span
 
 
 class RequestBudget:
@@ -52,6 +53,9 @@ class RequestBudget:
 
     def report(self):
         return {"external_http_attempts": self.attempts-self.local_gateway_requests, "local_gateway_requests":self.local_gateway_requests,"external_tokens": None, "cost": None,
+                "short_embedding_input": self.short_embedding_input.snapshot() if hasattr(self,'short_embedding_input') else None,
+                "sdk_observation_applied": bool(getattr(getattr(self,'sdk_observation',None),'applied',False)),
+                "local_initialization": getattr(self,'local_initialization',None),
                 "simulated_model_requests":self.simulated_requests, "model_mode":self.settings.model_mode,
                 "input_token_estimator":"sdk_character_fallback_no_bpe_download",
                 "actual_sdk_version":getattr(self,"actual_sdk_version",None),
@@ -93,7 +97,7 @@ def install_network_denial(allowed_addresses=()):
     socket.getaddrinfo = local_resolve
 
 
-def create_sdk(settings, workspace, *, create):
+def create_sdk(settings, workspace, *, create, short_embedding_fast_path=True, prepare_local_backends=True):
     if metadata.version("hy-memory") != SDK_VERSION:
         raise ValueError("hy_sdk_version_mismatch")
     # 默认在 socket 层拒绝网络，包含库初始化的遥测/意外网络路径。
@@ -115,6 +119,10 @@ def create_sdk(settings, workspace, *, create):
     from hy_memory.utils import token_count
     token_count._encoder = False
     budget = RequestBudget(settings)
+    from hy_memory.core import embed_service
+    from .short_embedding_input import ShortEmbeddingInput
+    budget.short_embedding_input = ShortEmbeddingInput(embed_service,
+        sdk_version=SDK_VERSION, enabled=short_embedding_fast_path)
     budget.management_workspace = workspace
     budget.actual_sdk_version = metadata.version("hy-memory")
     budget.sdk_python = platform.python_version()
@@ -178,6 +186,10 @@ def create_sdk(settings, workspace, *, create):
     })
     config.http_transport_factory = (lambda: httpx.MockTransport(synthetic_response)) if settings.model_mode == "synthetic_transport" else BoundedTransport
     client = HyMemoryClient(config=config, mode="pro")
+    from .sdk_observation import SDKObservation
+    budget.sdk_observation=SDKObservation(sdk_version=SDK_VERSION)
+    budget.local_initialization = (budget.sdk_observation.prepare_local_backends()
+        if prepare_local_backends else {'prepared': False, 'import_ms': 0.0, 'segmenter_ms': 0.0})
     # 只给已核实的 2.0.3 本地 Chroma 配置声明 update；其他 factory 默认不具备。
     budget.management_update_verified = (type(client._vector_store).__name__ == "ChromaVectorStore"
         and not client._graph_store and not config.enable_graph and not config.coding.enable
@@ -213,7 +225,15 @@ class ProtocolService:
         if operation == "diagnostics":
             return self.budget.report()
         if operation == "close":
-            self.client.close()
+            try:
+                self.client.close()
+            finally:
+                fast_path = getattr(self.budget, 'short_embedding_input', None)
+                if fast_path is not None:
+                    fast_path.close()
+                sdk_observation=getattr(self.budget,'sdk_observation',None)
+                if sdk_observation is not None:
+                    sdk_observation.close()
             self.client = None
             return {"closed":True}
         if operation in ManagementRPC.OPERATIONS:
@@ -250,17 +270,31 @@ def main(*, service=None):
                 break
             request_id = None
             operation = None
+            observation = None
             try:
                 request = json.loads(line)
                 request_id, operation = request["id"], request["operation"]
                 with redirect_stdout(sink), redirect_stderr(sink):
-                    result = service.execute(operation, request["arguments"])
+                    identity=request.get('observation_id')
+                    if isinstance(identity,str) and len(identity) in range(24,33) and all(c in '0123456789abcdef' for c in identity):
+                        observation=Observation(identity)
+                        with observation.activate(), span('sdk_execute_ms'):
+                            operation_stage={'get_user_profile':'sdk_profile_ms','search':'sdk_search_ms','add':'sdk_add_ms'}.get(operation)
+                            with span(operation_stage) if operation_stage else nullcontext():
+                                result=service.execute(operation,request['arguments'])
+                    else:
+                        result = service.execute(operation, request["arguments"])
                 response = {"id":request_id, "ok":True, "result":result}
+                if observation is not None:
+                    response['observation']=observation.snapshot()
                 encoded = json.dumps(response, ensure_ascii=False)
                 if len(encoded) > MAX_LINE:
                     raise ValueError("hy_response_too_large")
             except Exception as exc:
-                encoded = json.dumps({"id":request_id, "ok":False, "error":"hy_worker_failed", "error_type":type(exc).__name__})
+                response={"id":request_id,"ok":False,"error":"hy_worker_failed","error_type":type(exc).__name__}
+                if observation is not None:
+                    response['observation']=observation.snapshot()
+                encoded=json.dumps(response)
             output.write(encoded + "\n")
             output.flush()
             if operation == "close":

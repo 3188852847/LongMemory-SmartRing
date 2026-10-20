@@ -43,7 +43,7 @@ from longmemory.application.consolidation.scheduler import (
 _LOGGER = logging.getLogger(__name__)
 
 
-def _emit_round_screen_timing(round_id, started, acquired, status):
+def _emit_round_screen_timing(round_id, started, acquired, status, callback=None):
     """外层锁等待原来不在 prepare 时钟内；独立日志保留旧协议和时钟语义。"""
     payload = {'version': 1, 'round_id': round_id if isinstance(round_id, str)
         and re.fullmatch(r'[0-9a-f]{24,32}', round_id) else None, 'status': status,
@@ -53,6 +53,9 @@ def _emit_round_screen_timing(round_id, started, acquired, status):
         _LOGGER.info('round_screen_entry_timing=%s', json.dumps(payload, sort_keys=True))
     except Exception:
         pass  # 观测不能阻断来源持久化或把原异常替换为日志异常。
+    if callback is not None:
+        try: callback(payload)
+        except Exception: pass
 
 
 @dataclass(frozen=True, slots=True)
@@ -541,7 +544,8 @@ class MemoryRuntime:
             future.add_done_callback(self._deferred_done)
             return True
 
-    def prepare_round_screen(self, text, *, client_round_id, session_id, request_id=None, voice_round_id=None):
+    def prepare_round_screen(self, text, *, client_round_id, session_id, request_id=None, voice_round_id=None,
+                             timing_callback=None):
         started, acquired, status = perf_counter(), None, 'failed'
         try:
             with self._lock:
@@ -571,7 +575,7 @@ class MemoryRuntime:
                 status = 'completed'
                 return prepared, feedback
         finally:
-            _emit_round_screen_timing(client_round_id, started, acquired, status)
+            _emit_round_screen_timing(client_round_id, started, acquired, status, timing_callback)
 
     def complete_round_screen(self, *, turn_id, answer, receipt, client_round_id=None, request_id=None):
         with self._lock:

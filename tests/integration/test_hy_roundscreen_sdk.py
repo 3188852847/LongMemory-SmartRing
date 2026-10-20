@@ -19,6 +19,7 @@ from longmemory.entrypoints.api.chat_backend import ChatBackend
 from longmemory.entrypoints.api.server import create_app
 from longmemory.adapters.llm.fake import FakeAnswerGenerator
 from longmemory.application.round_screen_turns import memory_receipt
+from longmemory.methods.hy_memory.observation import CURRENT, Observation
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -36,6 +37,10 @@ def open_runtime(directory, *, create):
 def test_real_sdk_deferred_round_completion_recall_and_restart(tmp_path):
     runtime = open_runtime(tmp_path, create=True)
     try:
+        initial = runtime._method.engine.sdk_call('diagnostics')
+        assert initial['simulated_model_requests'] == initial['external_http_attempts'] == 0
+        assert initial['local_initialization']['prepared'] is True
+        assert runtime._method.journal.events() == ()
         turn, _ = runtime.prepare_round_screen("合成用户喜欢无糖乌龙茶", client_round_id="a" * 32, session_id="b" * 32)
         assert turn.support.retrieved == ()
         assert runtime.source_status(turn.event.event_id)["state"] == "pending"
@@ -72,6 +77,62 @@ def test_actual_runtime_version_mismatch_rejects_and_releases_both_owners(tmp_pa
         runtime.close()
 
 
+@pytest.mark.skipif(not SDK_PYTHON.is_file(), reason="explicit owner-installed Hy interpreter required")
+def test_optional_profile_add_and_search_observations_share_scope_without_extra_model_calls(tmp_path):
+    from datetime import datetime, timezone
+    from longmemory.methods.contracts import MemoryEvent
+    settings = HySettings(user_id='synthetic-observation-profile', model_mode='synthetic_transport', include_profile=True)
+    runtime = build_hy_memory_runtime(settings=settings, state_directory=tmp_path / 'engine',
+        source_path=tmp_path / 'source.db', create=True, python=SDK_PYTHON)
+    try:
+        event = MemoryEvent('synthetic-profile-event', 'user', '合成用户喜欢无糖乌龙茶',
+                            datetime(2026, 1, 1, tzinfo=timezone.utc), 'synthetic-session')
+        observation = Observation('a' * 32)
+        with observation.activate():
+            assert runtime._method.observe(event).processing_status == 'completed'
+            support = runtime._method.recall('合成用户喜欢什么茶')
+            # 显式管理读覆盖get阶段；不为生产观测追加get。
+            runtime._method.engine.sdk_call('get', memory_id=support.retrieved[0].item_id)
+        assert CURRENT.get() is None
+        assert any(event.event_id in (item.source_event_ids or ()) for item in support.retrieved)
+        stages = observation.snapshot()['stages']
+        assert {'sdk_add_ms', 'sdk_search_ms', 'sdk_profile_ms', 'source_enrich_ms', 'vdb_get_ms'} <= stages.keys()
+        assert stages['sdk_add_ms']['calls'] == stages['sdk_search_ms']['calls'] == stages['sdk_profile_ms']['calls'] == 1
+        diagnostics = runtime._method.engine.sdk_call('diagnostics')
+        assert diagnostics['external_http_attempts'] == 0 and diagnostics['sdk_observation_applied']
+        assert '合成' not in repr(observation.snapshot())
+    finally:
+        runtime.close()
+
+
+@pytest.mark.skipif(not SDK_PYTHON.is_file(), reason="explicit owner-installed Hy interpreter required")
+def test_real_sdk_context_reaches_synthetic_answer_and_assistant_archive_separately(tmp_path):
+    from datetime import datetime, timezone
+    from longmemory.methods.contracts import MemoryEvent
+    runtime = open_runtime(tmp_path, create=True)
+    inputs = []
+    class Answer:
+        def generate(self, *, query, memory_context):
+            inputs.append((query, memory_context))
+            assert '合成用户喜欢无糖乌龙茶' in memory_context
+            return '合成回答：无糖乌龙茶。'
+    backend = ChatBackend(runtime.database, Answer(), runtime=runtime)
+    try:
+        event = MemoryEvent('synthetic-answer-seed', 'user', '合成用户喜欢无糖乌龙茶',
+                            datetime(2026, 1, 1, tzinfo=timezone.utc), 'synthetic-seed-session')
+        assert runtime._method.observe(event).processing_status == 'completed'
+        result = backend.run('合成用户喜欢什么茶？', (), session_id='synthetic-answer-session')
+        assert result['status'] == 'completed' and result['answer'] == '合成回答：无糖乌龙茶。'
+        assert result['user_saved'] and result['assistant_saved'] and len(inputs) == 1
+        assert any(event.event_id in (item['source_event_ids'] or ()) for item in result['retrieved'])
+        assistants = [row for row in runtime._method.journal.events() if row.role == 'assistant']
+        assert len(assistants) == 1 and assistants[0].content == result['answer']
+        assert assistants[0].session_id == 'synthetic-answer-session'
+        assert runtime._method.engine.sdk_call('diagnostics')['external_http_attempts'] == 0
+    finally:
+        backend.close()
+
+
 @pytest.mark.skipif(not SDK_PYTHON.is_file() or not VOICE_PYTHON.is_file(), reason="explicit existing Hy and voice interpreters required")
 def test_python310_real_provider_to_http312_and_real_hy_sdk(tmp_path):
     driver = r'''
@@ -85,7 +146,10 @@ class Base:
     def __init__(self, config): self.config, self.role_id = config, None
     def init_memory(self, role_id, llm, **kwargs): self.role_id = role_id
 base.MemoryProviderBase = Base
-base.logger = types.SimpleNamespace(bind=lambda **kwargs: types.SimpleNamespace(info=lambda *args: None))
+def timing_info(template, *values):
+    if template == 'memory_request_timing={}':
+        print('safe-memory-timing=' + values[0])
+base.logger = types.SimpleNamespace(bind=lambda **kwargs: types.SimpleNamespace(info=timing_info))
 sys.modules[base.__name__] = base
 import longmemory_provider, launch_with_memory
 provider = longmemory_provider.MemoryProvider(config)
@@ -141,6 +205,19 @@ print('python310-neutral-completion-ok')
                 creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
             assert result.returncode == 0, result.stderr.decode("utf-8", errors="replace")[-2000:]
             assert b"python310-neutral-completion-ok" in result.stdout
+            records = [json.loads(line.split('=', 1)[1]) for line in result.stdout.decode('utf-8').splitlines()
+                       if line.startswith('safe-memory-timing=')]
+            assert len(records) == 1 and records[0]['stage'] == 'worker_returned'
+            observation = records[0]['observation']
+            assert observation['trace_id'] == records[0]['round_id']
+            expected = {'api_queue_ms', 'api_prepare_ms', 'runtime_outer_lock_ms', 'runtime_entry_ms',
+                    'prepare_recall_ms', 'sdk_rpc_lock_ms', 'sdk_roundtrip_ms', 'sdk_execute_ms',
+                    'sdk_search_ms', 'source_enrich_ms', 'reader_get_ms',
+                    'tokenize_ms', 'embedding_truncate_ms', 'embed_rpc_ms', 'vdb_query_ms',
+                    'vdb_list_ms', 'hy_recall_ms'}
+            assert expected <= observation['stages'].keys(), sorted(expected - observation['stages'].keys())
+            assert '合成' not in repr(records) and 'synthetic-device' not in repr(records)
+            assert runtime._method.engine.sdk_call('diagnostics')['sdk_observation_applied'] is True
             await asyncio.to_thread(runtime.wait_for_deferred_observations)
             events = runtime._method.journal.events()
             assert [event.role for event in events] == ["user", "assistant"]

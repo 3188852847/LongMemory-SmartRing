@@ -7,8 +7,10 @@ from pathlib import Path
 import queue
 import subprocess
 import threading
+from time import perf_counter
 
 from .sdk_bridge import HyResponseError
+from .observation import CURRENT, measured
 
 
 MAX_LINE = 2_000_000
@@ -81,12 +83,19 @@ class HyProcessClient:
             if stream:
                 stream.close()
 
+    @measured('sdk_roundtrip_ms')
     def _rpc(self, operation, **arguments):
+        observation=CURRENT.get()
+        lock_started=perf_counter() if observation is not None else None
         with self._lock:
+            if observation is not None:
+                observation.add('sdk_rpc_lock_ms',max(0,perf_counter()-lock_started)*1000)
             if self._closed:
                 raise HyResponseError("hy_worker_closed")
             self._counter += 1
             request = {"id": self._counter, "operation": operation, "arguments": arguments}
+            if observation is not None:
+                request['observation_id']=observation.trace_id
             payload = json.dumps(request, ensure_ascii=False)
             if len(payload) > MAX_LINE:
                 raise ValueError("hy_rpc_payload_too_large")
@@ -104,6 +113,8 @@ class HyProcessClient:
             except Exception:
                 self._stop()
                 raise HyResponseError("hy_worker_transport_failed_state_unknown") from None
+            if observation is not None:
+                observation.merge(response.get('observation'))
             if response.get("ok") is not True:
                 kind = response.get("error_type", "unknown")
                 if not isinstance(kind, str) or not kind.isidentifier() or len(kind) > 60:

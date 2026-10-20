@@ -6,12 +6,14 @@ from hashlib import sha256
 import sqlite3
 import re
 from uuid import UUID
+from time import perf_counter
 
 from aiohttp import web
 
 from longmemory.entrypoints.xiaozhi.mapping import extract_user_text
 from longmemory.entrypoints.api.observability import bind_voice_request
 from longmemory.application.round_screen_turns import memory_receipt
+from longmemory.methods.hy_memory.observation import Observation, span, header
 
 
 def _retrieval_evidence(prepared):
@@ -89,10 +91,26 @@ def register_memory_runtime_routes(app, backend):
                 raise ValueError
         except (ValueError, TypeError, UnicodeError):
             return web.json_response({"error": "invalid_memory_request", "version": 1}, status=400)
+        observation = (Observation(body['client_round_id']) if request.headers.get('X-Memory-Observe')=='1'
+                       and 'client_round_id' in body and neutral_runtime() else None)
         try:
-            prepared, feedback = await asyncio.to_thread(backend.prepare_round_screen_user, text, **metadata)
+            if observation is None:
+                prepared, feedback = await asyncio.to_thread(backend.prepare_round_screen_user, text, **metadata)
+            else:
+                queued=perf_counter()
+                def prepare_observed():
+                    observation.add('api_queue_ms',max(0,perf_counter()-queued)*1000)
+                    with span('api_prepare_ms'):
+                        result=backend.prepare_round_screen_user(text,
+                            timing_callback=observation.runtime_event,**metadata)
+                        for name,value in asdict(result[0].timings).items():
+                            observation.add('prepare_'+name,value)
+                        return result
+                with observation.activate():
+                    prepared, feedback = await asyncio.to_thread(prepare_observed)
         except ValueError:
-            return web.json_response({"error": "round_screen_prepare_conflict", "version": 1}, status=409)
+            headers={'X-Memory-Observation':header(observation)} if observation is not None else {}
+            return web.json_response({"error": "round_screen_prepare_conflict", "version": 1}, status=409,headers=headers)
         feedback_notice = None
         if feedback is not None and feedback.recorded:
             feedback_notice = {
@@ -187,7 +205,8 @@ def register_memory_runtime_routes(app, backend):
                 response.pop(key)
             response.update(memory_protocol=2, memory_receipt=memory_receipt(prepared))
             response["external_model_pause"] = prepared.observation.warning_code == "external_model_budget_paused"
-        return web.json_response(response)
+        headers={'X-Memory-Observation':header(observation)} if observation is not None else {}
+        return web.json_response(response,headers=headers)
 
     async def voice_model_configuration(_request):
         try:

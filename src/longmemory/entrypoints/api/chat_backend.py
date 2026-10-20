@@ -120,13 +120,15 @@ class ChatBackend:
         self.memory_runtime().complete_deferred_observation(turn_id)
         return result
 
-    def prepare_round_screen_user(self, text, *, client_round_id=None, session_id=None, request_id=None, voice_round_id=None):
+    def prepare_round_screen_user(self, text, *, client_round_id=None, session_id=None, request_id=None,
+                                  voice_round_id=None, timing_callback=None):
         """准备圆屏输入，并尝试记录对上一轮的严格显式质量反馈。"""
 
         if not self.memory_runtime().legacy_sqlite:
+            extra = {'timing_callback':timing_callback} if timing_callback is not None else {}
             prepared, feedback = self.memory_runtime().prepare_round_screen(text,
                 client_round_id=client_round_id, session_id=session_id, request_id=request_id,
-                voice_round_id=voice_round_id)
+                voice_round_id=voice_round_id, **extra)
             return prepared, (RoundScreenMemoryFeedbackResult(**feedback) if feedback else None)
         prepared = self.memory_runtime().prepare_user(
             text, defer_slow_observation=True,

@@ -13,6 +13,39 @@
   },
   "topics": [
     {
+      "id": "hy-low-latency-and-request-observation",
+      "scope": "V固定SDK等价短输入、本地初始化前移、请求内来源批读、自有校园上游会话复用及匿名数值观测候选",
+      "authority": "docs/development/parallel/V-memory-low-latency-20261020.md",
+      "sources": [
+        "src/longmemory/methods/hy_memory/**",
+        "src/longmemory/application/memory_runtime.py",
+        "src/longmemory/entrypoints/api/chat_backend.py",
+        "src/longmemory/entrypoints/api/routes/memory_runtime.py",
+        "scripts/development/xiaozhi/longmemory_provider.py",
+        "tests/fixtures/hy_short_input_benchmark.py",
+        "tests/fixtures/hy_recall_stage_probe.py",
+        "tests/unit/methods/test_short_embedding_input.py",
+        "tests/unit/methods/test_hy_observation.py",
+        "tests/unit/methods/test_hy_overlay_batch.py",
+        "tests/unit/methods/test_hy_provider_transport.py",
+        "tests/unit/development/test_memory_request_timing.py",
+        "tests/integration/test_hy_roundscreen_sdk.py",
+        "tests/unit/methods/test_hy_sdk_observation.py",
+        "tests/unit/methods/test_hy_memory_process.py"
+      ],
+      "related": [
+        "docs/adr/0191-hy-short-input-and-owned-provider-session.md",
+        "docs/development/parallel/V-voice-observation-20261020.md"
+      ],
+      "tags": [
+        "Hy-Memory",
+        "延迟",
+        "计时",
+        "连接复用"
+      ],
+      "review": "verified 2026-10-20: 固定源码三组交替合成测量，最终376项/前轮391项及1个真实BGE跳过；391后独立审查坏观测大整数已修，最终源码摘要不变核对。仅候选实现/隔离验收，校园TLS/真实模型/BGE/声音/端到端未验；旧管理证明须按最终代码重签"
+    },
+    {
       "id": "profile-matched-voice-waiting",
       "scope": "当前声线缓存/答案优先与阶段计时；正确OTA后已证Hy校园＋Cosy路由，旧快答归属撤回，当前等待/插话待验",
       "authority": "docs/guides/语音等待提示与首答时长-20261020.md",
@@ -1047,6 +1080,79 @@
     }
   ],
   "documents": [
+    {
+      "path": "docs/adr/0191-hy-short-input-and-owned-provider-session.md",
+      "title": "ADR-0191：Hy等价短输入、请求内批读与网关会话复用",
+      "status": "reference",
+      "basis": "本轮候选架构决定，保留预算/来源/管理证明边界",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-20",
+        "scope": "本轮候选代码、隔离结果、来源/预算/证明与未部署边界，不外推校园和设备",
+        "evidence": [
+          "docs/development/parallel/V-memory-low-latency-20261020.md",
+          "tests/integration/test_hy_roundscreen_sdk.py",
+          "tests/unit/methods/test_hy_provider_transport.py",
+          "tests/fixtures/hy_short_input_benchmark.py"
+        ]
+      },
+      "tags": [
+        "Hy-Memory",
+        "延迟",
+        "V"
+      ]
+    },
+    {
+      "path": "docs/development/parallel/V-memory-low-latency-20261020.md",
+      "title": "V：Memory低延迟候选与完整数值观测",
+      "status": "reference",
+      "basis": "本轮隔离候选交付记录，不替代真实设备或校园验收",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-20",
+        "scope": "本轮候选代码、隔离结果、来源/预算/证明与未部署边界，不外推校园和设备",
+        "evidence": [
+          "docs/development/parallel/V-memory-low-latency-20261020.md",
+          "tests/integration/test_hy_roundscreen_sdk.py",
+          "tests/unit/methods/test_hy_provider_transport.py",
+          "tests/fixtures/hy_short_input_benchmark.py"
+        ]
+      },
+      "tags": [
+        "Hy-Memory",
+        "延迟",
+        "V"
+      ]
+    },
+    {
+      "path": "docs/development/parallel/V-voice-observation-20261020.md",
+      "title": "V：圆屏记忆外层计时与隔离SDK探针",
+      "status": "reference",
+      "basis": "先前仅观测切片的阶段证据；后续实现接线见本轮V记录",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-20",
+        "scope": "旧阶段证据登记及部分替代，不复验旧现场数字",
+        "evidence": [
+          "docs/development/parallel/V-memory-low-latency-20261020.md",
+          "tests/integration/test_hy_roundscreen_sdk.py",
+          "tests/unit/methods/test_hy_provider_transport.py",
+          "tests/fixtures/hy_short_input_benchmark.py"
+        ]
+      },
+      "tags": [
+        "Hy-Memory",
+        "延迟",
+        "V"
+      ],
+      "superseded_by": [
+        {
+          "path": "docs/development/parallel/V-memory-low-latency-20261020.md",
+          "scope": "Runtime接收器与SDK scope未接线、reader首次初始化待测说法；原阶段数字/边界保留",
+          "evidence": "新V记录明确固定SDK初始化事实及本轮内部观测接线"
+        }
+      ]
+    },
     {
       "path": "docs/adr/0186-owner-confirmed-free-campus-and-forward-state.md",
       "title": "ADR-0186：所有者确认校园免费与前向独立空间",
