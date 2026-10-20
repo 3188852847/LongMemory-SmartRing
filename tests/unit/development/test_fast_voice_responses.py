@@ -1,7 +1,9 @@
 import importlib.util
+import json
 from pathlib import Path
 import sys
 import types
+import pytest
 from types import SimpleNamespace
 
 
@@ -28,6 +30,30 @@ def test_fast_response_assets_cover_every_reply():
     root = SCRIPT.parents[3] / "assets/audio/voice-fastpath/cosyvoice3"
     for name in fast.FAST_RESPONSE_ASSETS.values():
         assert (root / name).stat().st_size > 44
+
+
+@pytest.mark.parametrize('payload', [
+    {'content': '你好。', 'language': 'zh', 'emotion': 'neutral'},
+    {'content': '你好。', 'speaker': 'synthetic-speaker', 'role': 'user'},
+])
+def test_asr_envelope_matches_the_same_archived_user_text(payload):
+    spec = importlib.util.spec_from_file_location('asr_input_mapping_test',
+        SCRIPT.parents[3] / 'src/longmemory/entrypoints/xiaozhi/mapping.py')
+    mapping = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mapping)
+    query = json.dumps(payload, ensure_ascii=False)
+    assert mapping.extract_user_text(query) == '你好。'
+    assert fast.fast_response_for(query) == fast.fast_response_for(mapping.extract_user_text(query))
+
+
+@pytest.mark.parametrize('query', [
+    '{bad-json', '{"content":null}', '{"content":{"text":"你好"}}',
+    '{"speaker":"你好"}', '{"role":"assistant","content":"你好"}',
+    '{"content":"你好，帮我搜索今天新闻"}', json.dumps({'content': '你' * 4001}),
+    '{' * 16001,
+])
+def test_invalid_or_non_closed_asr_input_does_not_enter_fast_path(query):
+    assert fast.fast_response_for(query) is None
 
 
 def test_non_cosyvoice_backend_keeps_original_chat():
@@ -58,7 +84,27 @@ def test_custom_voice_does_not_use_official_greeting_assets(monkeypatch):
     assert calls == [('你好', 0)]
 
 
-def test_cosyvoice_greeting_archives_l0_and_queues_preset_without_model(monkeypatch):
+@pytest.mark.parametrize('depth,selected,url', [
+    (1, 'CustomTTS', fast.COSYVOICE_URL),
+    (0, 'OtherTTS', fast.COSYVOICE_URL),
+    (0, 'CustomTTS', fast.COSYVOICE_URL + '/'),
+])
+def test_asr_envelope_preserves_recursion_and_exact_backend_guards(monkeypatch, depth, selected, url):
+    monkeypatch.setattr(fast, 'default_voice_active', lambda: True)
+    calls = []
+    class Connection:
+        def chat(self, query, depth=0): calls.append((query, depth)); return 'original'
+    fast.install_fast_voice_responses(Connection)
+    connection = Connection()
+    connection.config = {'selected_module': {'TTS': selected}, 'TTS': {selected: {'url': url}}}
+    query = json.dumps({'content': '你好。', 'speaker': 'synthetic-speaker'})
+    assert connection.chat(query, depth) == 'original'
+    assert calls == [(query, depth)]
+
+
+@pytest.mark.parametrize('query', ['你好！', json.dumps(
+    {'content': '你好。', 'language': 'zh', 'emotion': 'neutral'}, ensure_ascii=False)])
+def test_cosyvoice_greeting_archives_l0_and_queues_preset_without_model(monkeypatch, query):
     class DTO:
         def __init__(self, **values): self.__dict__.update(values)
 
@@ -111,9 +157,10 @@ def test_cosyvoice_greeting_archives_l0_and_queues_preset_without_model(monkeypa
         info=logs.append, warning=logs.append,
     ))
 
-    assert connection.chat("你好！") is True
+    monkeypatch.setattr(fast, 'default_voice_active', lambda: True)
+    assert connection.chat(query) is True
     assert original == []
-    assert archived == ["你好！"]
+    assert archived == [query]
     assert paths == ["preset"]
     assert [item.role for item in messages] == ["user", "assistant"]
     assert [item.sentence_type for item in queued] == ["first", "middle", "last"]

@@ -5,6 +5,7 @@
 """
 
 import asyncio
+import json
 import re
 from uuid import uuid4
 from functools import lru_cache
@@ -52,9 +53,23 @@ _QUERY_RESPONSES = {
 def fast_response_for(query):
     """返回严格封闭意图的固定回复；不做包含匹配或语义猜测。"""
 
-    if not isinstance(query, str):
+    if not isinstance(query, str) or len(query) > 16000:
         return None
-    normalized = re.sub(r"[\s，。！？!?、,.]+", "", query).casefold()
+    text = query.strip()
+    if text.startswith("{"):
+        # FunASR 的正文封装与归档入口相同；只用 content 匹配，元数据不作意图。
+        # 原 query 继续交给 Memory/对话，不在快路改写来源或说话人信息。
+        try:
+            payload = json.loads(text)
+        except (ValueError, RecursionError):
+            return None
+        if (not isinstance(payload, dict) or payload.get("role", "user") != "user"
+                or not isinstance(payload.get("content"), str)):
+            return None
+        text = payload["content"].strip()
+    if not text or len(text) > 4000:
+        return None
+    normalized = re.sub(r"[\s，。！？!?、,.]+", "", text).casefold()
     return _QUERY_RESPONSES.get(normalized)
 
 

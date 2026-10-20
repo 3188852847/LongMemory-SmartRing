@@ -52,3 +52,13 @@
 主会话明确取消额外一次请求的准备与执行。本轮没有新增校园请求，原账本保持 6 次；没有为构造正式角色请求读取个人角色旁库或真实对话。现有合成 ROLE 不等同正式角色，真实格式仍不可判定；由根安排最小候选恢复后的同设备重试，再按新反馈决定是否进一步取证。
 
 X 交付仅测试和记录，不 merge/push，不重启生产、不改配置或安装守卫，不烧录。由主会话/Z 安排候选审查、整合及后续真实字幕、语音和打断验收；当前现场验收仍未通过。
+
+## 第二次实机失败与独立 ASR 封装快路修复
+
+`34f9022` 发布及当前等待音补齐后，所有者再次报告“你好”答成日期/检索说明并显示结束符。X 依本条新增授权只读锁定 23:28:42 唯一新测试轮：归档 ASR 为“你好。”，assistant 246 字，实际路径 model；同轮 2 次 answer 和 1 次 Hy 提取完成。末尾实际为 Unicode `<｜end▁of▁sentence｜>`，并非 ASCII 拼法，输出不含 think 块。原始 SSE 字段、工具调用和 wire 消息序列未持久化；web_response 两阶段及尾部 system 只能由代码和调用数推断，不能称为原始请求抓包。输出与公开联网指令最长连续匹配仅 11 字日期片段，未证明整段指令逐字回吐。脱敏证据位于主项目忽略目录 `local/archive/voice-incidents/20261020-232842-hello/anonymous-round-evidence.json`，SHA-256 为 `f1db570c8c8ad9302cee5c7b817b2ceb3803a756732909fb53711eb6abd62b3d`；没有另存完整输出、读其它历史、重启或新增调用。
+
+根另授权窄查快路输入。固定小智 FunASR 返回 dict，ASR 基类把 content/language/emotion 及可选 speaker 编码为 JSON 交给 chat；首次说话人 JSON 仍可能由 startToChat 保留。项目归档路由先调用 extract_user_text 解包，故归档“你好。”不能证明外层 wrapper 收到了纯文本。原 fast_response_for 对整段 JSON 去标点后查封闭表，可确切复现“归档文本能命中、封装输入不能命中”的独立缺口；该轮原始 wrapper 入参形状未留存，不把这一缺口提前认定为本轮唯一根因。
+
+X 从 `34f902291ad319382732b00f35667cd63639628f` 新建 `codex/x-fast-asr-envelope-20261020`，只改 [快路匹配](../../../scripts/development/xiaozhi/fast_voice_responses.py) 与 [专项测试](../../../tests/unit/development/test_fast_voice_responses.py)。JSON 分支沿归档入口契约取有界 content、只认 user 来源；speaker/emotion/language 不作意图。原封装继续传给 Memory 和 Dialogue，depth=0、默认声线及 CustomTTS/url 严格相等条件保留，非法或非封闭意图仍走原链路。未改 V 的联网指令文件、生产、配置或数据。
+
+专项 19 项通过，覆盖纯文本/ASR 封装一致性、完整原 query 归档、无模型预置路径、角色/畸形/超长内容回退、递归 depth 和 URL 精确门；Python 3.10 解析通过。该修复仍待根/Z 审查合入，不替代 V 的通用回答修复或真实双臂/设备验收。
