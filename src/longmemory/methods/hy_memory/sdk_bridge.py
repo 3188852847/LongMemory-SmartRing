@@ -12,6 +12,16 @@ SOURCE_COMMIT = "2a4c5e38e78a42ae0acae1fe6f12cfcd8ecb64ed"
 SOURCE_NAMESPACE = "smartring_synthetic"
 
 
+def project_answer_content(channel, content):
+    """正式召回与候选采用同一投影；兼容已标注的固定SDK画像，避免双前缀。"""
+    prefix = {
+        "profile": "[当前用户画像；不证明任意历史日期的状态]\n",
+        "schema": "[模型归纳；不是用户直接陈述，可被纠正]\n",
+        "proactive": "[未来意图／待办；不证明已发生，不代表执行或主动联系授权]\n",
+    }.get(channel, "")
+    return content if not prefix or content.startswith(prefix) else prefix+content
+
+
 class HyResponseError(RuntimeError):
     """响应失败或与锁定 SDK 结构不符；不携带外部原文/密钥。"""
 

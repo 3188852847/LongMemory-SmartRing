@@ -24,18 +24,23 @@ SETTINGS = HySettings(user_id="ab-semantic-synthetic", agent_id="ab-agent", mode
     include_profile=True)
 
 
-def open_backend(root, *, create=True, scenario="normal"):
+def open_backend(root, *, create=True, scenario="normal", semantic=True):
+    from dataclasses import replace
+    prototype = replace(SETTINGS,semantic_layers_enabled=semantic)
     script = ("import sys;sys.path.insert(0,"+repr(str(ROOT/"src"))+");sys.path.insert(0,"+repr(str(ROOT/"tests/fixtures"))+");"
         "from hy_semantic_worker import run;run("+repr(scenario)+")")
     def factory(workspace, *, create):
         from dataclasses import replace
-        settings = replace(SETTINGS, management_writes_enabled=True, management_exclusive_profile=True)
+        settings = replace(prototype, management_writes_enabled=True, management_exclusive_profile=True)
         return HyProcessClient(python=SDK, workspace=workspace, settings=settings, create=create,
             command=[str(SDK), "-I", "-X", "utf8", "-B", "-c", script])
-    return assemble_hy_backend(settings=SETTINGS, state_directory=root/"engine", source_path=root/"sources.db",
-        create=create, client_factory=factory, management_verification={"protocol":2,"sdk_version":"2.0.3",
-            "rpc_source_sha256":management_primitives_identity(), "real_sdk_rpc_verified":True,
-            "semantic_background_writes":"managed_v1", "derivation_invalidation_verified":True,"read_only_intention_verified":True})
+    proof = {"protocol":2,"sdk_version":"2.0.3",
+        "rpc_source_sha256":management_primitives_identity(), "real_sdk_rpc_verified":True,
+        "semantic_background_writes":"managed_v1", "derivation_invalidation_verified":True,"read_only_intention_verified":True} if semantic else {
+            "sdk_version":"2.0.3","rpc_source_sha256":management_primitives_identity(),
+            "real_sdk_rpc_verified":True,"semantic_background_writes_disabled":True}
+    return assemble_hy_backend(settings=prototype, state_directory=root/"engine", source_path=root/"sources.db",
+        create=create, client_factory=factory, management_verification=proof)
 
 
 def wait_task(engine, identifier, *, timeout=30):
@@ -246,3 +251,28 @@ def test_candidate_snapshot_is_native_readonly_and_invalidates_for_background_an
         assert not reopened.method.engine.candidate_validate(snapshot_token=fresh["snapshot_token"])["valid"]
     finally:
         reopened.method.close()
+
+
+@pytest.mark.parametrize("semantic",[False,True])
+def test_real_nonempty_profile_candidate_matches_formal_prepare_content_and_sources(tmp_path,semantic):
+    from longmemory.bootstrap import build_backend_runtime
+    assembly = open_backend(tmp_path,scenario="projection",semantic=semantic)
+    runtime = build_backend_runtime(assembly)
+    engine = assembly.method.engine
+    try:
+        snapshot = engine.candidate_snapshot(query_embedding=[1.0]+[0.0]*7)
+        assert snapshot["read_status"] == "readable"
+        profile = next(row for row in snapshot["items"] if row["channel"]=="profile")
+        assert "合成小明" in profile["content"] and profile["source_event_ids"] == ["ab-profile-source"]
+        native = engine._client.candidate_snapshot(query_embedding=[1.0]+[0.0]*7)
+        assert native["memory_digest"] == snapshot["memory_digest"]
+        turn,_ = runtime.prepare_round_screen("检查资料",client_round_id="e"*32,session_id="f"*32)
+        actual = [(row.item_id,row.content,list(row.source_event_ids) if row.source_event_ids else None)
+            for row in turn.support.retrieved]
+        expected = [(row["memory_id"],row["content"],row["source_event_ids"]) for row in snapshot["items"]]
+        assert actual == expected
+        assert turn.support.context == "\n".join(row["content"] for row in snapshot["items"])
+        assert engine.candidate_validate(snapshot_token=snapshot["snapshot_token"],memory_digest=snapshot["memory_digest"])["valid"]
+        runtime.cancel_round_screen(turn.event.event_id,reason="cancelled",client_round_id="e"*32)
+    finally:
+        runtime.close()

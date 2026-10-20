@@ -40,6 +40,7 @@ class CandidateSnapshots:
 
     async def _read(self, embedding, limit):
         from hy_memory.models.memory import MemoryLayer, MemoryStatus, MemoryNode
+        from hy_memory.pipelines._retrieval.memory_format import format_final_content
         hits = await self.client._vector_store.search(query_embedding=embedding,
             user_ids=[self.settings.user_id],agent_ids=[self.settings.agent_id],include_sources=[SOURCE_NAMESPACE],
             layers=[MemoryLayer.L2_FACT,MemoryLayer.L3_SUMMARY,MemoryLayer.L4_IDENTITY],
@@ -51,7 +52,8 @@ class CandidateSnapshots:
                     or node.source!=SOURCE_NAMESPACE):
                 raise ValueError("hy_candidate_scope_unproven")
             sources = _sources((node.custom or {}).get("meta"))
-            items.append({"memory_id":node.node_id,"content":node.content[:32768],"layer":node.layer.value,
+            content = format_final_content({**hit,"node":node,"content":node.content})
+            items.append({"memory_id":node.node_id,"content":content[:32768],"layer":node.layer.value,
                 "channel":"normal","source_event_ids":list(sources) if sources else None,"evidence_memory_ids":[node.node_id]})
         if self.settings.include_profile:
             profile = (await read_profile(self.client,self.settings,self.budget))["profile"]
@@ -73,7 +75,8 @@ class CandidateSnapshots:
                         raise ValueError("hy_candidate_graph_scope_unproven")
                     meta, evidence = await graph_evidence(self.client,self.settings,node)
                     if meta:
-                        items.append({"memory_id":node.node_id,"content":node.content[:32768],"layer":"l6_schema","channel":"schema",
+                        content = format_final_content({**hit,"node":node,"content":node.content})
+                        items.append({"memory_id":node.node_id,"content":content[:32768],"layer":"l6_schema","channel":"schema",
                             "source_event_ids":list(_sources(meta)),"evidence_memory_ids":[node.node_id,*evidence]})
             intentions = await read_intentions(self.client,self.settings,embedding)
             for row in intentions:

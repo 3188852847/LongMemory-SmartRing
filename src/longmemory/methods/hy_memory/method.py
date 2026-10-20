@@ -6,7 +6,7 @@ from uuid import uuid4
 from longmemory.methods.contracts import (
     MemorySupport, MethodCapabilities, ObservationResult, RetrievedTrace, UnsupportedCapabilityError,
 )
-from .sdk_bridge import HySdkBridge, SDK_VERSION
+from .sdk_bridge import HySdkBridge, SDK_VERSION, project_answer_content
 from .administration import HyAdministration  # 保留既有公开导入路径。
 from .observation import measured
 
@@ -78,11 +78,7 @@ class HyMemoryMethod:
                     excluded = True
                     continue
                 source_ids = tuple(dict.fromkeys((item.source_event_ids or ()) + sources)) if sources else item.source_event_ids
-                content = item.content
-                if item.channel == "schema":
-                    content = "[模型归纳；不是用户直接陈述，可被纠正]\n" + content
-                elif item.channel == "proactive":
-                    content = "[未来意图／待办；不证明已发生，不代表执行或主动联系授权]\n" + content
+                content = project_answer_content(item.channel,item.content)
                 items.append(RetrievedTrace(item.memory_id, content, source_ids))
             return MemorySupport(result.request_id or str(uuid4()), "\n".join(item.content for item in items),
                 tuple(items), self.retrieval_name, "hy_management_uncertain_items_excluded" if excluded else "hy_recall_may_mutate_state")
@@ -126,12 +122,7 @@ class HyMemoryMethod:
                 extra = tuple(source for sources,_ in values for source in sources)
                 if extra:
                     row["source_event_ids"] = list(dict.fromkeys((row["source_event_ids"] or [])+list(extra)))
-                if row["channel"]=="schema":
-                    row["content"] = "[模型归纳；不是用户直接陈述，可被纠正]\n"+row["content"]
-                elif row["channel"]=="proactive":
-                    row["content"] = "[未来意图／待办；不证明已发生，不代表执行或主动联系授权]\n"+row["content"]
-                elif row["channel"]=="profile":
-                    row["content"] = "[当前用户画像；不证明任意历史日期的状态]\n"+row["content"]
+                row["content"] = project_answer_content(row["channel"],row["content"])
                 selected.append(row)
             return {**result,"items":selected,"digest_scope":"native_items_before_platform_management_overlay"}
         finally:

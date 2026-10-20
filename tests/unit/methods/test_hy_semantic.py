@@ -161,3 +161,10 @@ def test_graph_partial_edges_cannot_claim_full_sources_or_skip_fact_overlays():
         return []
     client._graph_store._run = orphan
     assert asyncio.run(graph_evidence(client,SETTINGS,node)) == (None,None)
+
+
+@pytest.mark.parametrize("channel",["profile","schema","proactive","normal"])
+def test_answer_projection_is_shared_and_idempotent(channel):
+    from longmemory.methods.hy_memory.sdk_bridge import project_answer_content
+    content = project_answer_content(channel,"合成内容")
+    assert project_answer_content(channel,content) == content

@@ -75,11 +75,12 @@ def run(scenario="normal"):
                     agent_id="",source="default",layer=MemoryLayer.L0_BASIC_INFO,content="合成姓名",
                     embedding=[1.0]+[0.0]*(settings.embedding_dimensions-1),custom={"basic_info_kv":{"name":"合成小明"},
                         "meta":[{"namespace":SOURCE_NAMESPACE,"role":"user","source_event_ids":["ab-profile-source"]}]}))
-                await client._vector_store.upsert(MemoryNode(node_id="ab-old",user_id=settings.user_id,
-                    agent_id=settings.agent_id,source=SOURCE_NAMESPACE,layer=MemoryLayer.L2_FACT,content="合成历史规划事实",
-                    status=MemoryStatus.SUPERSEDED,is_latest=False,superseded_by=["ab-fact-0"],
-                    embedding=[1.0]+[0.0]*(settings.embedding_dimensions-1),custom={"meta":[{
-                        "namespace":SOURCE_NAMESPACE,"role":"user","source_event_ids":["ab-old-source"]}]}))
+                if scenario != "projection":
+                    await client._vector_store.upsert(MemoryNode(node_id="ab-old",user_id=settings.user_id,
+                        agent_id=settings.agent_id,source=SOURCE_NAMESPACE,layer=MemoryLayer.L2_FACT,content="合成历史规划事实",
+                        status=MemoryStatus.SUPERSEDED,is_latest=False,superseded_by=["ab-fact-0"],
+                        embedding=[1.0]+[0.0]*(settings.embedding_dimensions-1),custom={"meta":[{
+                            "namespace":SOURCE_NAMESPACE,"role":"user","source_event_ids":["ab-old-source"]}]}))
                 for i in range(4):
                     meta = {"meta": [{"namespace": SOURCE_NAMESPACE, "role": "user", "source_event_ids": ["ab-source-"+str(i)]}]}
                     await client._vector_store.upsert(MemoryNode(node_id="ab-raw-"+str(i), user_id=settings.user_id,
@@ -89,7 +90,7 @@ def run(scenario="normal"):
                     vector[i+1] = 0.6
                     await client._vector_store.upsert(MemoryNode(node_id="ab-fact-"+str(i), user_id=settings.user_id,
                         agent_id=settings.agent_id, source=SOURCE_NAMESPACE, layer=MemoryLayer.L2_FACT, owner="user",
-                        supersedes=["ab-old"] if i == 0 else None,
+                        supersedes=["ab-old"] if i == 0 and scenario != "projection" else None,
                         content="合成规划核查事实"+str(i), embedding=vector, memory_at=now,
                         custom={**meta,"source_raw_memory_ids":["ab-raw-"+str(i)]}))
                 for name, delta in (("live", 7), ("expired", -1)):
