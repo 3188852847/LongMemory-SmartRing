@@ -42,6 +42,77 @@ class FakeSynthesizer:
         yield b"RIFF-stream-two"
 
 
+def test_v2_stream_has_explicit_end_and_closes_generator(local_service):
+    port,synth=local_service;closed=[];seen=[]
+    synth.stream_runtime=SimpleNamespace(applied=True,snapshot=lambda:{'active_requests':0})
+    def chunks(text,**kwargs):
+        seen.append(kwargs)
+        try:yield b'first';yield b'second'
+        finally:closed.append(True)
+    synth.stream_chunks=chunks
+    status,content,body=request(port,'POST','/v1/audio/stream',
+        {'input':'合成协议检查','stream':True,'delivery_mode':'incremental','cache':False})
+    assert status==200 and body==struct.pack('!I',5)+b'first'+struct.pack('!I',6)+b'second'+b'\0'*4
+    assert seen[0]['model_streaming'] is True and seen[0]['use_cache'] is False and closed==[True]
+
+
+@pytest.mark.parametrize('mode',[[],{},False,'unrecognized'])
+def test_v2_delivery_mode_rejects_invalid_values(local_service,mode):
+    port,synth=local_service
+    status,_,_=request(port,'POST','/v1/audio/stream',{'input':'合成','stream':True,'delivery_mode':mode})
+    assert status==400 and not synth.calls
+
+
+def test_v2_client_cancel_breaks_read_and_releases_generation_gate(local_service):
+    import socket
+    cosy_directory=ROOT/'scripts/development/xiaozhi'
+    sys.path.insert(0,str(cosy_directory))
+    try:
+        spec=importlib.util.spec_from_file_location('cancel_http_stream',cosy_directory/'cosyvoice_streaming.py')
+        client=importlib.util.module_from_spec(spec);spec.loader.exec_module(client)
+    finally:sys.path.pop(0)
+    port,synth=local_service;closed=threading.Event()
+    synth.stream_runtime=SimpleNamespace(applied=True,snapshot=lambda:{'active_requests':0})
+    def chunks(_text,*,cancel_event,**kwargs):
+        try:
+            yield b'first'
+            assert cancel_event.wait(2),'server did not observe own peer close'
+            raise service._stream_runtime.StreamCancelled()
+        finally:closed.set()
+    synth.stream_chunks=chunks
+    cancel=threading.Event()
+    with client._open_stream(f'http://127.0.0.1:{port}/v1/audio/stream',
+            json={'input':'合成取消','stream':True,'delivery_mode':'incremental'},
+            timeout=(1,4),headers={},cancelled=cancel.is_set) as response:
+        iterator=client.iter_wav_chunks(response.raw,require_end=True)
+        assert next(iterator)==b'first'
+        cancel.set()
+        with pytest.raises((EOFError,OSError,http.client.HTTPException)):next(iterator)
+    assert closed.wait(2)
+    # 释放锁之后才允许下一个合成；没有残留HTTP观察线程。
+    assert not any(thread.name=='cosyvoice-http-cancel' and thread.is_alive() for thread in threading.enumerate())
+
+
+def test_selected_voice_warmup_uses_real_stream_and_never_populates_reply_cache():
+    synth=object.__new__(service.CosyVoiceSynthesizer);calls=[]
+    synth._profiles=SimpleNamespace(model_context=lambda:({},None,'selected-identity'))
+    synth.stream_runtime=SimpleNamespace(applied=True)
+    def stream(text,**kwargs):calls.append((text,kwargs));yield b'synthetic'
+    synth.stream_chunks=stream
+    assert synth.prepare_selected_voice()>=0
+    assert calls==[(service.WARMUP_TEXT,{'use_cache':False,'model_streaming':True})]
+    assert synth.selected_warmup_identity=='selected-identity'
+
+
+def test_selected_voice_change_during_explicit_warmup_is_not_declared_ready():
+    synth=object.__new__(service.CosyVoiceSynthesizer)
+    identities=iter(('old','new'))
+    synth._profiles=SimpleNamespace(model_context=lambda:({},None,next(identities)))
+    synth.stream_runtime=SimpleNamespace(applied=True)
+    synth.stream_chunks=lambda *a,**kw:iter((b'synthetic',))
+    with pytest.raises(RuntimeError,match='changed_during_warmup'):synth.prepare_selected_voice()
+
+
 @pytest.mark.parametrize("system_qos,applied", [(False, True), (False, False), (True, False)])
 def test_main_applies_qos_before_model_and_exposes_result(monkeypatch, system_qos, applied):
     events = []
@@ -354,7 +425,7 @@ def constructor_health(synth):
     """复用真实 health 处理器，只替换 HTTP 输出，避免重复启动监听线程。"""
     handler = object.__new__(service.CosyVoiceHandler)
     handler.path = "/health"
-    handler.server = SimpleNamespace(synthesizer=synth)
+    handler.server = SimpleNamespace(synthesizer=synth, generation_gate=threading.Lock())
     responses = []
     handler._json = lambda status, body: responses.append((status, body))
     handler.do_GET()

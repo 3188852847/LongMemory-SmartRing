@@ -63,7 +63,7 @@ def test_preset_audio_bypasses_http_and_reuses_opus_pipeline(tmp_path, monkeypat
     monkeypatch.setattr(streaming, "PRESET_ROOT", tmp_path)
     (tmp_path / filename).write_bytes(b"synthetic-wave")
     monkeypatch.setattr(
-        streaming.requests, "post",
+        streaming, "_open_stream",
         lambda *_args, **_kwargs: pytest.fail("preset must not call HTTP"),
     )
 
@@ -114,25 +114,25 @@ def test_stream_keeps_partial_pcm_across_model_chunks_and_flushes_once(monkeypat
     def decode(wav, _rate):
         nonlocal decode_count
         decode_count += 1
-        # 第一块解码完成时仍不得播放；必须等同一标点片段全部准备好。
+        # 首个可播放帧必须在读取第二个模型块之前交付，不再收齐片段。
         if decode_count == 2:
-            assert packets == []
+            assert packets == [b"aaaaaa"]
         return wav
 
     monkeypatch.setattr(streaming, "_wav_chunk_to_pcm", decode)
     monkeypatch.setattr(streaming, "fast_asset_for_text", lambda _text: None)
 
     class Response:
-        headers = {"Content-Type": "application/vnd.longmemory.wav-chunks"}
+        headers = {"Content-Type": "application/vnd.longmemory.wav-chunks", "X-LongMemory-Audio-Stream": "2"}
 
         def __init__(self):
-            self.raw = BytesIO(framed(b"aaaa", b"bbbb"))
+            self.raw = BytesIO(framed(b"aaaaaa", b"bbbb") + struct.pack("!I", 0))
 
         def __enter__(self): return self
         def __exit__(self, *_args): return False
         def raise_for_status(self): return None
 
-    monkeypatch.setattr(streaming.requests, "post", lambda *_args, **_kwargs: Response())
+    monkeypatch.setattr(streaming, "_open_stream", lambda *_args, **_kwargs: Response())
 
     class Encoder:
         def __init__(self):
@@ -158,12 +158,12 @@ def test_stream_keeps_partial_pcm_across_model_chunks_and_flushes_once(monkeypat
         current_sentence_id="turn-2", _correct_words_pattern=None,
         opus_encoder=Encoder(), tts_timeout=90, tts_stop_request=False,
     )
-    connection = SimpleNamespace(sample_rate=16000, client_abort=False)
+    connection = SimpleNamespace(sample_rate=24000, client_abort=False)
     streaming.install_cosyvoice_streaming(tts, connection)
     tts.to_tts_stream("连续分块", opus_handler=packets.append)
 
     assert queued == [("first", None, "连续分块", "turn-2")]
-    assert packets == [b"aaaabb", b"bb\x00\x00\x00\x00"]
+    assert packets == [b"aaaaaa", b"bbbb\x00\x00"]
 
 
 @pytest.fixture
@@ -186,10 +186,10 @@ def cancellable_stream(monkeypatch):
     state.fallback = lambda *_args, **_kwargs: pytest.fail("cancel must not resynthesize")
 
     class Response:
-        headers = {"Content-Type": "application/vnd.longmemory.wav-chunks"}
+        headers = {"Content-Type": "application/vnd.longmemory.wav-chunks", "X-LongMemory-Audio-Stream": "2"}
 
         def __init__(self):
-            self.raw = BytesIO(framed(b"abcdef"))
+            self.raw = BytesIO(framed(b"abcdef") + struct.pack("!I", 0))
 
         def __enter__(self): return self
         def __exit__(self, *_args): state.closed = True
@@ -201,13 +201,13 @@ def cancellable_stream(monkeypatch):
 
     class Encoder:
         def encode_pcm_to_opus_stream(self, _pcm, *, end_of_stream, callback):
-            assert end_of_stream is True
+            assert end_of_stream is False
             callback(b"first")
             callback(b"second")
 
         def reset_state(self): state.resets += 1
 
-    monkeypatch.setattr(streaming.requests, "post", post)
+    monkeypatch.setattr(streaming, "_open_stream", post)
     state.connection = SimpleNamespace(sample_rate=24000, client_abort=False, sentence_id="old")
     state.tts = SimpleNamespace(
         to_tts_stream=lambda *args, **kwargs: state.fallback(*args, **kwargs),
@@ -241,16 +241,17 @@ def test_abort_during_wav_decode_never_starts_playback(cancellable_stream, monke
     assert state.closed and state.resets == 1
 
 
-def test_new_turn_after_last_wav_is_not_encoded(cancellable_stream, monkeypatch):
+def test_new_turn_after_first_chunk_discards_tail_without_replay(cancellable_stream, monkeypatch):
     state = cancellable_stream
 
-    def chunks(_raw):
+    def chunks(_raw, **_kwargs):
         yield b"abcdef"
         state.connection.sentence_id = "new"
 
     monkeypatch.setattr(streaming, "iter_wav_chunks", chunks)
     state.tts.to_tts_stream("旧片段", opus_handler=state.packets.append)
-    assert state.packets == state.queued == []
+    assert state.packets == [b"first", b"second"]
+    assert len(state.queued) == 1
     assert state.closed and state.resets == 1
 
 
@@ -274,7 +275,7 @@ def test_network_failure_after_abort_does_not_trigger_full_wav_fallback(cancella
         state.connection.client_abort = True
         raise OSError("connection closed")
 
-    monkeypatch.setattr(streaming.requests, "post", post)
+    monkeypatch.setattr(streaming, "_open_stream", post)
     state.tts.to_tts_stream("旧片段", opus_handler=state.packets.append)
     assert state.packets == state.queued == []
     assert state.resets == 1
@@ -296,7 +297,7 @@ def test_new_turn_during_full_wav_fallback_discards_audio_without_retry(cancella
         opus_handler(b"also-late")
 
     state.fallback = fallback
-    monkeypatch.setattr(streaming.requests, "post", post)
+    monkeypatch.setattr(streaming, "_open_stream", post)
     state.tts.to_tts_stream("旧片段", opus_handler=state.packets.append)
     assert fallback_calls == ["旧片段"]
     assert state.packets == []

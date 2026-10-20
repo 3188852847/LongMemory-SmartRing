@@ -13,6 +13,37 @@
   },
   "topics": [
     {
+      "id": "cosyvoice-continuous-audio-candidate",
+      "scope": "X连续音频候选、固定上游取消适配、真实Opus合成基准和独占GPU窗口；不代表当前日用提速通过",
+      "authority": "docs/development/parallel/X-cosy-streaming-20261020.md",
+      "sources": [
+        "scripts/development/cosyvoice/service.py",
+        "scripts/development/cosyvoice/stream_runtime.py",
+        "scripts/development/cosyvoice/benchmark_streaming.py",
+        "scripts/development/cosyvoice/benchmark_stream_client.py",
+        "scripts/development/xiaozhi/cosyvoice_streaming.py",
+        "tests/unit/development/test_cosyvoice_service.py",
+        "tests/unit/development/test_cosyvoice_streaming.py",
+        "tests/unit/development/test_cosyvoice_stream_runtime.py",
+        "tests/unit/development/test_cosyvoice_continuous_pcm.py",
+        "tests/unit/development/test_cosyvoice_stream_benchmark.py",
+        "tests/fixtures/cosyvoice_tts_074ca6d.py"
+      ],
+      "related": [
+        "docs/adr/0190-cosyvoice-continuous-audio-delivery.md",
+        "docs/adr/0166-cosyvoice-measured-runtime-optimization.md",
+        "docs/guides/语音等待提示与首答时长-20261020.md"
+      ],
+      "tags": [
+        "CosyVoice",
+        "流式",
+        "首包",
+        "取消",
+        "候选"
+      ],
+      "review": "verified 2026-10-20: 仅X候选代码/CPU契约与首个失败窗口及59秒恢复记录；GPU性能、Z审查、日用部署与实机体验均待验"
+    },
+    {
       "id": "hy-low-latency-and-request-observation",
       "scope": "V固定SDK等价短输入、本地初始化前移、请求内来源批读、自有校园上游会话复用及匿名数值观测候选",
       "authority": "docs/development/parallel/V-memory-low-latency-20261020.md",
@@ -1080,6 +1111,50 @@
     }
   ],
   "documents": [
+    {
+      "path": "docs/development/parallel/X-cosy-streaming-20261020.md",
+      "title": "X：CosyVoice 低延迟连续音频交付",
+      "status": "reference",
+      "basis": "连续音频候选与首个失败窗口恢复事实；未作为日用性能通过证据",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-20",
+        "scope": "候选实现、CPU契约、维护窗口失败与恢复事实；GPU有效样本、Z审查、部署与实机待验",
+        "evidence": [
+          "scripts/development/cosyvoice/stream_runtime.py",
+          "scripts/development/xiaozhi/cosyvoice_streaming.py",
+          "tests/unit/development/test_cosyvoice_stream_benchmark.py",
+          "tests/unit/development/test_cosyvoice_continuous_pcm.py"
+        ]
+      },
+      "tags": [
+        "X",
+        "CosyVoice",
+        "流式",
+        "GPU窗口"
+      ]
+    },
+    {
+      "path": "docs/adr/0190-cosyvoice-continuous-audio-delivery.md",
+      "title": "ADR-0190：CosyVoice 连续音频交付与协作取消",
+      "status": "draft",
+      "basis": "拟在审查及GPU验收后局部替代ADR-0166的完整片段交付选择；当前仍为候选",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-20",
+        "scope": "已核对X候选实现及历史决定的适用范围，未宣告日用生效或GPU提速",
+        "evidence": [
+          "docs/development/parallel/X-cosy-streaming-20261020.md",
+          "docs/adr/0166-cosyvoice-measured-runtime-optimization.md"
+        ]
+      },
+      "tags": [
+        "adr",
+        "CosyVoice",
+        "流式",
+        "候选"
+      ]
+    },
     {
       "path": "docs/adr/0191-hy-short-input-and-owned-provider-session.md",
       "title": "ADR-0191：Hy等价短输入、请求内批读与网关会话复用",

@@ -21,8 +21,14 @@ import struct
 import sys
 from time import perf_counter
 import threading
+import select
 from typing import Protocol
 from voice_profiles import VoiceProfileStore
+
+_STREAM_SPEC = importlib.util.spec_from_file_location(
+    "longmemory_cosy_stream_runtime", Path(__file__).with_name("stream_runtime.py"))
+_stream_runtime = importlib.util.module_from_spec(_STREAM_SPEC)
+_STREAM_SPEC.loader.exec_module(_stream_runtime)
 
 try:
     _VOICE_SPEC = importlib.util.spec_from_file_location("cosyvoice_safe_observation",
@@ -61,8 +67,8 @@ CAPABILITIES = {
     "delivery_modes": ["buffered", "audio_stream"],
     "output_mime_types": ["audio/wav"],
     "controls": ["reference_voice", "style_prompt"],
-    # 客户端关闭 HTTP 响应后，服务端在下一个模型块写出时终止迭代。它不是逐采样
-    # 抢占，因此只声明协作式取消，不能冒充即时 GPU 中止。
+    # 固定增量路径在token/模型调用边界协作取消；兼容路径在下一块写出时观察关闭。
+    # 这不是逐采样抢占，不能冒充即时GPU中止。
     "cancellation": "cooperative",
     "max_text_chars": MAX_TEXT_CHARS,
 }
@@ -86,6 +92,8 @@ class CosyVoiceSynthesizer:
         hidden_only: bool = True,
         model_streaming: bool = False,
         profile_root: Path | None = None,
+        force_buffered_audio: bool = False,
+        warm_selected_voice: bool = True,
     ):
         paths = validate_local_files(source_root, model_dir)
         configure_runtime_cache()
@@ -110,10 +118,12 @@ class CosyVoiceSynthesizer:
         # Flow/HiFT 对累计前缀的重复计算；HTTP 仍沿用相同 WAV 长度前缀协议。
         # 保留显式恢复内部流式的开关，以便隔离对照与回退。
         self.model_streaming = model_streaming
+        self.force_buffered_audio = force_buffered_audio
         load_started = perf_counter()
         self._model = CosyVoice3(str(model_dir), fp16=True)
         self.load_seconds = perf_counter() - load_started
         self._sample_rate = int(self._model.sample_rate)
+        self.stream_runtime = _stream_runtime.install_stream_runtime(self._model.model)
         # 官方参考音频与提示词在服务生命周期内固定。CosyVoice 默认会在每次请求中
         # 重算提示词 token、语音特征、语音 token 和说话人向量；先注册为命名音色，
         # 后续推理即可复用预计算结果，同时仍保持原来的零样本音色。
@@ -147,7 +157,15 @@ class CosyVoiceSynthesizer:
             "interop_threads": torch.get_num_interop_threads(),
             "hidden_only": bool(self.runtime_optimization and self.runtime_optimization.applied),
             "optimization_reason": self.runtime_optimization.reason if self.runtime_optimization else "disabled",
+            "incremental_audio_supported": self.stream_runtime.applied,
+            "stream_runtime_reason": self.stream_runtime.reason,
+            "force_buffered_audio": self.force_buffered_audio,
         }
+        # 回复LRU只在这个已加载、不可热换权重的模型实例内存中存在。
+        # 把模型版本、实现、声线全文摘要、文本、采样/编码及交付模式纳入键；
+        # 不把个人回答持久化，已有缓存不能当作本轮流式推理的收益。
+        self.audio_cache_identity = ('Fun-CosyVoice3-0.5B-2512', str(model_dir.resolve()),
+                                     self.runtime_info['service_sha256'])
         stream_token_hop_len = getattr(runtime_model, "token_hop_len", None)
         if type(stream_token_hop_len) is not int or stream_token_hop_len <= 0:
             raise RuntimeError("stream token hop unavailable")
@@ -160,6 +178,27 @@ class CosyVoiceSynthesizer:
         warmup_started = perf_counter()
         self._generate(WARMUP_TEXT)
         self.warmup_seconds = perf_counter() - warmup_started
+        self.selected_warmup_seconds = None
+        self.selected_warmup_identity = None
+        if warm_selected_voice and self._profiles.profile_path.is_file():
+            self.prepare_selected_voice()
+
+    def prepare_selected_voice(self):
+        """明确准备当前选中声线和实际音频流，不把默认参考暖机冒充选中声线。
+
+        只使用固定合成句，不缓存任意用户回答。修改声线后健康摘要显示未暖机，
+        不在health读取或第一问中暗中重跑此维护动作。
+        """
+        _, _, identity = self._profiles.model_context()
+        started = perf_counter()
+        for _ in self.stream_chunks(WARMUP_TEXT, use_cache=False,
+                model_streaming=self.stream_runtime.applied):
+            pass
+        if self._profiles.model_context()[2] != identity:
+            raise RuntimeError('selected_voice_changed_during_warmup')
+        self.selected_warmup_seconds = perf_counter() - started
+        self.selected_warmup_identity = identity
+        return self.selected_warmup_seconds
 
     def _prepare_stream(self) -> None:
         runtime_model = getattr(self._model, "model", None)
@@ -194,22 +233,34 @@ class CosyVoiceSynthesizer:
         return {'digest': digest, 'prompt': prompt, 'wav': prompt_wav,
                 'speaker': speaker, 'instruct': bool(selected['style'])}
 
-    def _inference(self, text, context):
+    def _audio_key(self, text, context, mode):
+        return (getattr(self, 'audio_cache_identity', ('fixed-model-instance',)),
+                context['digest'] if context else 'official-reference-v1', text,
+                getattr(self, '_sample_rate', 24000), 'WAV-PCM16-v1', mode)
+
+    def _inference(self, text, context, *, model_streaming=None):
+        streaming = self.model_streaming if model_streaming is None else model_streaming
         if context is None:
             return self._model.inference_zero_shot(text, PROMPT_TEXT, self._prompt_wav,
-                zero_shot_spk_id=REFERENCE_SPEAKER_ID, stream=self.model_streaming)
+                zero_shot_spk_id=REFERENCE_SPEAKER_ID, stream=streaming)
         method = self._model.inference_instruct2 if context['instruct'] else self._model.inference_zero_shot
         return method(text, context['prompt'], context['wav'],
-                      zero_shot_spk_id=context['speaker'], stream=self.model_streaming)
+                      zero_shot_spk_id=context['speaker'], stream=streaming)
 
     def _generate(self, text: str, context=None) -> bytes:
         self._prepare_stream()
         chunks = []
-        for item in self._inference(text, context):
-            speech = item.get("tts_speech")
-            if speech is None or speech.numel() == 0:
-                raise RuntimeError("empty audio chunk")
-            chunks.append(speech.detach().cpu())
+        iterator = self._inference(text, context)
+        try:
+            for item in iterator:
+                speech = item.get("tts_speech")
+                if speech is None or speech.numel() == 0:
+                    raise RuntimeError("empty audio chunk")
+                chunks.append(speech.detach().cpu())
+        finally:
+            close = getattr(iterator, 'close', None)
+            if callable(close):
+                close()
         if not chunks:
             raise RuntimeError("empty audio")
         waveform = self._torch.cat(chunks, dim=1).squeeze(0)
@@ -244,11 +295,14 @@ class CosyVoiceSynthesizer:
         )
         return output.getvalue()
 
-    def stream_chunks(self, text: str, *, use_cache: bool = True, voice_profile=None):
+    def stream_chunks(self, text: str, *, use_cache: bool = True, voice_profile=None,
+                      model_streaming=None, cancel_event=None):
         """逐块交付音频；完全相同的近期回复可复用本次进程内结果。"""
         with self._lock:
             context = self._voice_context(voice_profile)
-            key = (context['digest'], text) if context else text
+            streaming = self.model_streaming if model_streaming is None else model_streaming
+            streaming = streaming and not getattr(self, 'force_buffered_audio', False)
+            key = self._audio_key(text, context, 'incremental' if streaming else 'buffered')
             if use_cache:
                 cached = self._stream_cache.pop(key, None)
                 if cached is not None:
@@ -257,18 +311,32 @@ class CosyVoiceSynthesizer:
                     return
             self._prepare_stream()
             generated = []
-            for item in self._inference(text, context):
-                speech = item.get("tts_speech")
-                if speech is None:
-                    raise RuntimeError("empty audio chunk")
-                chunk = self._wave_bytes(speech)
-                generated.append(chunk)
-                if self.model_streaming:
-                    yield chunk
-            if not self.model_streaming:
-                # 上游请求字典的清理位于生成器最后一次 yield 之后。完整片段模式
-                # 先耗尽模型迭代再写 HTTP，避免客户端此时断开跳过上游清理。
-                yield from generated
+            guard = getattr(self, 'stream_runtime', None)
+            if guard is not None:
+                guard.external_cancel = cancel_event
+            iterator = self._inference(text, context, model_streaming=streaming)
+            try:
+                for item in iterator:
+                    if cancel_event is not None and cancel_event.is_set():
+                        raise _stream_runtime.StreamCancelled()
+                    speech = item.get("tts_speech")
+                    if speech is None:
+                        raise RuntimeError("empty audio chunk")
+                    chunk = self._wave_bytes(speech)
+                    if use_cache or not streaming:
+                        generated.append(chunk)
+                    if streaming:
+                        yield chunk
+                if not streaming:
+                    yield from generated
+            finally:
+                try:
+                    close = getattr(iterator, 'close', None)
+                    if callable(close):
+                        close()
+                finally:
+                    if guard is not None:
+                        guard.external_cancel = None
             if use_cache and generated:
                 self._stream_cache[key] = tuple(generated)
                 while len(self._stream_cache) > self._cache_entries:
@@ -277,7 +345,7 @@ class CosyVoiceSynthesizer:
     def synthesize(self, text: str, *, use_cache: bool = True, voice_profile=None) -> bytes:
         with self._lock:
             context = self._voice_context(voice_profile)
-            key = (context['digest'], text) if context else text
+            key = self._audio_key(text, context, 'complete-wav')
             if use_cache:
                 cached = self._cache.pop(key, None)
                 if cached is not None:
@@ -358,6 +426,7 @@ class CosyVoiceHandler(BaseHTTPRequestHandler):
             return
         body = {"ready": True, "provider": "cosyvoice3", "capabilities": CAPABILITIES,
                 "voice_profile_contract_version": 1}
+        body['generation_in_flight'] = self.server.generation_gate.locked()
         store = getattr(self.server.synthesizer, '_profiles', None)
         if store is not None:
             try:
@@ -379,6 +448,18 @@ class CosyVoiceHandler(BaseHTTPRequestHandler):
         snapshot = getattr(diagnostics, "snapshot", None)
         if callable(snapshot):
             body["diagnostics"] = snapshot()
+        guard = getattr(self.server.synthesizer, 'stream_runtime', None)
+        if guard is not None:
+            body['stream_runtime'] = guard.snapshot()
+        body['selected_voice_warmup_seconds'] = getattr(self.server.synthesizer, 'selected_warmup_seconds', None)
+        warmed = getattr(self.server.synthesizer, 'selected_warmup_identity', None)
+        if warmed is not None and store is not None:
+            try:
+                body['selected_voice_warm'] = store.model_context()[2] == warmed
+            except (OSError, ValueError):
+                body['selected_voice_warm'] = False
+        else:
+            body['selected_voice_warm'] = False
         try:
             with self.server.speech_requests_lock:
                 body["speech_requests"] = [dict(row, stages=list(row["stages"]))
@@ -445,12 +526,18 @@ class CosyVoiceHandler(BaseHTTPRequestHandler):
             or body.get("response_format", "wav") != "wav"
             or type(body.get("stream", False)) is not bool
             or type(body.get("cache", True)) is not bool
+            or body.get('delivery_mode', 'buffered') not in ('incremental', 'buffered')
         ):
             self._json(400, {"error": "invalid_request"})
             return
         streaming = self.path == "/v1/audio/stream"
         if streaming != body.get("stream", False):
             self._json(400, {"error": "invalid_request"})
+            return
+        version2 = 'delivery_mode' in body
+        if version2 and (not streaming or (body['delivery_mode'] == 'incremental'
+                and not getattr(getattr(self.server.synthesizer, 'stream_runtime', None), 'applied', False))):
+            self._json(409, {'error': 'incremental_stream_unavailable'})
             return
         if not self.server.generation_gate.acquire(blocking=False):
             self._speech_stage("busy")
@@ -467,19 +554,54 @@ class CosyVoiceHandler(BaseHTTPRequestHandler):
                 self.send_header("Content-Type", "application/vnd.longmemory.wav-chunks")
                 self.send_header("Cache-Control", "no-store")
                 self.send_header('X-LongMemory-Voice-Profile', '1')
+                if version2:
+                    self.send_header('X-LongMemory-Audio-Stream', '2')
                 # HTTP/1.0 会以连接关闭标记响应结束。每个 WAV 前的无符号大端长度
                 # 让客户端不依赖 TCP 分包边界，最大块仍由客户端再次限制。
                 self.end_headers()
-                for chunk in self.server.synthesizer.stream_chunks(text.strip(), **kwargs):
-                    self.wfile.write(struct.pack("!I", len(chunk)))
-                    self.wfile.write(chunk)
-                    self.wfile.flush()
+                cancelled = threading.Event()
+                finished = threading.Event()
+                def watch_peer():
+                    while not finished.wait(.02):
+                        try:
+                            ready, _, _ = select.select([self.connection], [], [], 0)
+                            if ready and self.connection.recv(1, __import__('socket').MSG_PEEK) == b'':
+                                cancelled.set()
+                                return
+                        except OSError:
+                            cancelled.set()
+                            return
+                watcher = threading.Thread(target=watch_peer, name='cosyvoice-peer-close', daemon=True)
+                if version2:
+                    kwargs.update(model_streaming=body['delivery_mode'] == 'incremental', cancel_event=cancelled)
+                    watcher.start()
+                iterator = self.server.synthesizer.stream_chunks(text.strip(), **kwargs)
+                try:
+                    for chunk in iterator:
+                        if cancelled.is_set():
+                            raise _stream_runtime.StreamCancelled()
+                        self.wfile.write(struct.pack("!I", len(chunk)))
+                        self.wfile.write(chunk)
+                        self.wfile.flush()
+                    if version2:
+                        self.wfile.write(struct.pack('!I', 0))
+                        self.wfile.flush()
+                finally:
+                    cancelled.set()
+                    try:
+                        close = getattr(iterator, 'close', None)
+                        if callable(close):
+                            close()
+                    finally:
+                        finished.set()
+                        if version2:
+                            watcher.join(timeout=.2)
                 self._speech_stage("synthesis_returned")
                 self._speech_stage("response_written")
                 return
             audio = self.server.synthesizer.synthesize(text.strip(), **kwargs)
             self._speech_stage("synthesis_returned")
-        except (BrokenPipeError, ConnectionResetError):
+        except (BrokenPipeError, ConnectionResetError, _stream_runtime.StreamCancelled):
             self._speech_stage("client_disconnected")
             # 用户打断或 Xiaozhi 退出时，关闭生成器即可释放模型锁；无需把正常取消
             # 记录成合成故障，也不能在已经发送部分音频后回写 JSON。
@@ -519,6 +641,8 @@ def main() -> None:
     parser.add_argument("--model-dir", type=Path, default=DEFAULT_MODEL)
     parser.add_argument("--no-hidden-only", action="store_true", help="恢复上游 Qwen 完整文本输出路径")
     parser.add_argument("--model-streaming", action="store_true", help="恢复模型内部流式分块生成")
+    parser.add_argument('--force-buffered-audio', action='store_true', help='回退为完整片段生成；不改声线或音频精度')
+    parser.add_argument('--skip-selected-warmup', action='store_true', help='隔离对照：只预热默认参考，不预热选中声线')
     parser.add_argument("--system-qos", action="store_true", help="恢复 Windows 默认进程调度，不显式申请 HighQoS")
     args = parser.parse_args()
     if not 1024 <= args.port <= 65535:
@@ -534,6 +658,8 @@ def main() -> None:
     synthesizer = CosyVoiceSynthesizer(
         args.source_root, args.model_dir,
         hidden_only=not args.no_hidden_only, model_streaming=args.model_streaming,
+        force_buffered_audio=args.force_buffered_audio,
+        warm_selected_voice=not args.skip_selected_warmup,
     )
     synthesizer.runtime_info["windows_qos"] = windows_qos
     server = CosyVoiceHTTPServer((args.host, args.port), synthesizer)
