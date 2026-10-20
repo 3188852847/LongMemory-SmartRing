@@ -24,6 +24,14 @@ AF 句柄须提供 request_id、cancel/aclose/wait_closed。AE 严格核对请�
 
 SmartTurn enabled 尚未达到真实中文误切标准，不能把它作为候选准备的唯一入口。独立来源 `candidate_source="baseline_asr"` 使用原 SenseVoice 预取正文与其 generation/voice_stamp/language/PCM 前缀证明准备候选，仅原端点后的完整 ASR 与 fresh 上下文可确认。SmartTurn shadow 事件不驱动此来源，也不改变原端点。AI 拥有预取结果/失效/reset/close 钩子与进程间接线；不能只打开开关而漏接取消。来源的音频标识来自原 ASR 代次，不与 SmartTurn 的 turn_id 混用；文本版本仍独立产生。
 
+## 语音RPC客户端
+
+`voice_proposal_rpc.py` 使用 Python 3.10 标准库，只从现有 runtime prepare URL/TOKEN 派生同一 127.0.0.1 authority 的固定 `/api/internal/memory/proposals/{snapshot,start,confirm,cancel,close}`，没有普通 prepare/complete/工具路由、学校凭据或宿主对象。五项请求精确字段与 state/text DTO 由 AI 冻结；预处理 messages 不含本轮 user，宿主追加冻结 query。调用不重试、不跟随重定向、不读取代理；响应/请求有界，取消关闭本地 socket，但不冒充上游已退出。
+
+客户端逐连接固定 connection_id，维护不可回退的话轮/文本/取消版本；start 至多一次，旧轮取消不能影响新轮，取消允许提高同轮 cancel_epoch。迟到或取消中的确认文本不交付，start 响应不允许带正文。返回 adopted 文本也不自动释放计算槽，仍需 scoped cancel/close 的明确关闭确认；closing/false、断流或鉴权错误均不能假释。外部 DTO 不扩展 AF request_id/账本字段：宿主负责核对完整内部 ACK，客户端把可信固定路由的一次响应绑定到对应 scope。
+
+真实 Python 3.10 客户端与独立 Python 3.12 HTTP 宿主替身验证的是跨进程协议、取消和资源边界，不是 AF/AB 实际宿主或设备链路已接通。实际 Runtime 路由、预取钩子和统一派发门仍由 AI 接入与验证。
+
 ## 验证与回退
 
 合成测试覆盖确认/领取、续说与 ASR（语音识别）修订、版本变化、迟到/乱序事件、取消不服从及关闭等待、超时、重启、预算、工具/推理边界和正式合成 SQLite 账本。测试证明模块的候选边界，不证明实际 SDK 快照无写入，也不证明学校连接池、真实费用、端到端声音延迟或设备体验。

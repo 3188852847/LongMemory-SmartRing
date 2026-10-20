@@ -153,7 +153,7 @@ lease = await bridge.baseline_confirmed(
 
 续说必须在原预取 invalidate 入口同步通知 `bridge.baseline_continued(connection, audio=new_stamp)`；任何其他预取失效可用 `bridge.context_changed(connection)`，reset/close 走已交付生命周期钩子。来源为 baseline 时 reset 不读取 AC 的异名 turn_id；原端点复位后旧 generation 不能再绑定，新 generation 的首帧发声不会消耗该轮准备机会。领取前续说仍撤销凭据，最终播放/字幕/归档继续使用 AI 正式取消门。
 
-语音侧 RPC 模型代理也必须在实际开始请求前设置 `request.close_confirmation.required=True`，只有匹配本 RPC owner/connection/epoch 与 AF request_id 的可信关闭回执，且关闭/账本完成后才设 confirmed=True；不能只在客户端 finally 中无条件确认。异常或缺回执仍保持 False，由核心保留额外计算槽；ACK 本身不授权领取、提交或清理 unknown。
+语音侧 RPC 模型代理也必须在实际开始请求前设置 `request.close_confirmation.required=True`，由宿主内部匹配 AF request_id/账本并通过本连接 scope 的可信关闭 DTO 转告后才设 confirmed=True；不能只在客户端 finally 中无条件确认。异常或缺回执仍保持 False，由核心保留额外计算槽；ACK 本身不授权领取、提交或清理 unknown。后续冻结协议没有外部 owner/request_id 字段，既有 Runtime 鉴权负责 owner 归属，不擅增 header 或 JSON 键。
 
 本阶段实际检查：
 
@@ -161,3 +161,46 @@ lease = await bridge.baseline_confirmed(
 - 与 AF 精确提交 `85b1d715...` 的真实 Gateway/预算/持久传输/关闭 ACK 组合：独立 baseline 来源＋非空合成记忆证据＋精确 `DeepSeek-V4-Flash` 模型，一请求一次命中，账本 attempt_count=1、unknown_or_inflight=0、锁释放；不发任何 SmartTurn enabled 事件。使用随机回环合成供应商，不是学校真实请求，也不是 AB 实际库或跨进程已验。
 - AI 仍需把原预取结果、全部失效、原端点完整 ASR、AB token/内容/来源校验与宿主 RPC 接入这些方法，再验非空合成 Hy 库整链真实命中、记忆一致性及设备首声。AE 不把仅上下文的模拟命中或稳定 fallback 当作总目标完成。
 - 本阶段相关五文件回归最终 **160 passed in 0.89s**；下述接口交付不修改 `launch_with_memory.py`、原 `voice_asr_prefetch.py` 或其他会话文件。
+
+## 第四阶段：Python 3.10 真实语音RPC客户端
+
+第三阶段提交 `44c3538acf9b3bbde8967f5af8627a66900104c6` 已交主会话。AE 随后获配 `scripts/development/xiaozhi/voice_proposal_rpc.py`，AI 独占 Runtime/internalHTTP/launch，AF 独占 `application/voice_proposals.py` 宿主。实现未导入或共享宿主 ModelGateway，也没有读取、复制学校 key。
+
+最终协议沿主会话/AI 冻结版本：仅 POST `/api/internal/memory/proposals/{snapshot,start,confirm,cancel,close}`。从 `LONGMEMORY_RUNTIME_URL=http://127.0.0.1:<port>/api/internal/memory/prepare` 派生相同主机/端口，原 `LONGMEMORY_RUNTIME_TOKEN` Bearer 鉴权；没有外部 URL/path 参数，没有新增 key/owner header。固定表不可修改，没有正式 prepare、complete、工具或文件入口。测试仅使用随机回环端口，不触碰日用端口。
+
+```python
+from voice_preemptive import TurnStamp
+from voice_proposal_rpc import VoiceProposalRPC
+
+client = VoiceProposalRPC.from_environment(connection_id=connection_id)
+scope = TurnStamp(turn_id, transcript_revision, cancel_epoch)
+snapshot = await client.snapshot(scope=scope, query=full_or_prefetch_content, session_id=session_id)
+started = await client.start(
+    scope=scope, snapshot_id=snapshot["snapshot_id"], messages=frozen_messages,
+    tools_required=False, close_confirmation=request.close_confirmation,
+)
+# 最终原端点、完整ASR与唯一一次正式prepare取得真实fresh messages/formalturn后：
+result = await client.confirm(
+    scope=scope, snapshot_id=snapshot["snapshot_id"], query=full_asr_content,
+    messages=actual_fresh_messages, tools_required=False,
+    formal_turn_id=formal_turn_id, client_round_id=client_round_id, session_id=session_id,
+)
+# result.state=adopted才有非空text；同步核对本地epoch/原派发门后才能使用。
+# 每轮再用cancel确认该候选关闭；结束整个连接才close/aclose。
+ack = await client.cancel(scope=scope)
+```
+
+上述是客户端入口，未把它当作 AI 预取/正式派发已经接好的生产代码。`messages` 为最多 128 项 `[role,text]`，唯一首 system，后续 user/assistant、总长 32000，**不含本轮 user**，由宿主追加冻结 query。snapshot/session/connection ID 均 32 位小写 hex，client_round_id 沿原 24–32 位 hex，formal_turn_id 必须规范 UUID；公共整数真 int、0≤x<2^63。query≤16000 字。请求≤192 KiB；确认字段使用 snapshot_id/query/messages/tools_required，未使用 transcript/final_text 别名。
+
+响应只接受最终精确 DTO：snapshot ready/unavailable、start preparing/miss 无正文、confirm adopted/miss 的 text、cancel/close 的 cancelled/closed/closing 与 owned/provider 标记；无别名兼容或未知字段透传。start 即使响应丢失仍保留占位且不再请求，同轮最多一次；显式取消可提高 epoch，旧轮取消在本地拒绝。confirm 返回迟到时逐项核对当前 scope，陈旧文本清空为 miss，取消会中止对应本地读取任务。工具需要为 true 交宿主 miss，不执行工具。
+
+`CloseConfirmation.required=True` 在实际 start 前设置；只有本次固定鉴权 scope 的 cancelled/closed + owned_upstream_exited=true + provider_compute_stopped=false 才置 confirmed=True。closing/false、断流、错误/缺失 DTO 不确认，aclose 返回 False。adopted 文本本身不是关闭 ACK，普通本地 socket 关闭也不是；内部精确 AF request_id/账本确认由宿主核对，未向外部协议擅增字段或清理原 unknown。当前客户端的 cancel/close 只操作候选，不触碰已正式归档的用户/助手话轮。
+
+传输只有 asyncio/标准库：不使用环境代理、不跟随 3xx、不自动重试，错误只有固定代码。逐请求关闭 socket，Content-Length/JSON/头和正文大小有界，重复 JSON 键、异常响应、提前正文或 miss 带文本均拒绝。日志与状态只输出计数，不含 token、正文、身份、内容摘要或上游异常。
+
+实际验证：
+
+- 六文件回归 **190 passed in 4.38s**；RPC 专属 30 项，其中 **15 项真实双子进程**：Python 3.10.20 客户端 + Python 3.12.13 HTTP 宿主替身，均从 AE 源码/夹具执行。正式随机端口保护、两端子进程退出和本地 socket 释放均有断言。
+- 双进程覆盖非空合成记忆上下文完整往返、30000 字记忆 JSON 不受 8 KiB 头缓冲误限、start 超时/断流/提前正文不重试、confirm 中取消/迟到epoch/拒绝miss正文、closing/错误ACK不退名额、重定向/重复JSON键/chunked响应拒绝、需要工具不准备模型、错误鉴权不开始候选。普通 prepare 路由调用次数为 0。stdout/stderr 另断言无 synthetic token、记忆/回答正文。
+- 复跑需要显式提供本机已有 Python3.10 路径，不安装环境：设置当前测试进程 `LONGMEMORY_TEST_PY310`，运行 `tests/unit/development/test_voice_proposal_rpc.py`；未提供则跨解释器用例 skip，不能把 skip 当通过。
+- 这是真实跨进程 HTTP 与协议替身检查，未声称 AF `VoiceProposalHost`、AB 真正快照、AI Runtime 路由或日用已组合验收。AI 可先合入客户端，随后用精确宿主提交验普通非空 Hy 库真实命中、取消/记忆一致性与最终派发。没有真实学校调用、个人数据、GPU、设备或服务操作，无依赖下载需求。
