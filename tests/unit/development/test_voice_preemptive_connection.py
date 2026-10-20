@@ -2,6 +2,7 @@ import asyncio
 from contextlib import asynccontextmanager
 import importlib.util
 import hashlib
+import json
 from pathlib import Path
 import sys
 import threading
@@ -424,5 +425,41 @@ def test_baseline_continuation_after_final_asr_before_claim_revokes_lease():
         manager.baseline_continued(conn, audio=b.AudioStamp(3, 18, 1))
         assert lease.claim(conn, binding=binding, context=ctx) is None
         assert manager.snapshot(conn)["candidate"]["hits"] == 0
+        assert await manager.aclose()
+    asyncio.run(run())
+
+
+def test_baseline_json_payload_preserved_and_metadata_revision_is_not_audio_revision():
+    async def run():
+        manager, conn, ctx = baseline(), SimpleNamespace(), context()
+        proof = b.ASRPrefetchProof(3, 1000., len(BASE_PCM), hashlib.sha256(BASE_PCM).digest(), "zh")
+        raw = json.dumps({"content": "合成问题", "language": "zh", "emotion": "NEUTRAL", "speaker": "合成说话人"}, ensure_ascii=False)
+        binding = manager.baseline_asr_provisional(conn, audio=b.AudioStamp(3, 17, 0), text="合成问题",
+            context=ctx, proof=proof, model_user_message=raw)
+        lease = await manager.baseline_confirmed(conn, binding=binding, final_text="合成问题", context=ctx,
+            final_pcm=BASE_PCM, generation=3, voice_stamp=1000., language="zh", model_user_message=raw)
+        assert lease.claim(conn, binding=binding, context=ctx, model_user_message=raw) == "合成回答。"
+        assert manager.model.requests[0].messages[-1] == ("user", raw)
+        assert binding.turn.transcript_revision == 1 and binding.audio.audio_revision == 17
+        assert await manager.aclose()
+    asyncio.run(run())
+
+
+def test_baseline_metadata_change_cancels_old_candidate_without_reissuing_or_stripping_metadata():
+    async def run():
+        manager, conn, ctx = baseline(), SimpleNamespace(), context()
+        proof = b.ASRPrefetchProof(3, 1000., len(BASE_PCM), hashlib.sha256(BASE_PCM).digest(), "zh")
+        first = '{"content":"合成问题","emotion":"NEUTRAL"}'
+        second = '{"content":"合成问题","emotion":"HAPPY"}'
+        old = manager.baseline_asr_provisional(conn, audio=b.AudioStamp(3, 17, 0), text="合成问题",
+            context=ctx, proof=proof, model_user_message=first)
+        await drain()
+        current = manager.baseline_asr_provisional(conn, audio=b.AudioStamp(3, 17, 0), text="合成问题",
+            context=ctx, proof=proof, model_user_message=second)
+        assert current.turn.transcript_revision == old.turn.transcript_revision + 1
+        assert current.audio == old.audio
+        assert await manager.baseline_confirmed(conn, binding=current, final_text="合成问题", context=ctx,
+            final_pcm=BASE_PCM, generation=3, voice_stamp=1000., language="zh", model_user_message=second) is None
+        assert manager.model.started == 1 and manager.model.requests[0].messages[-1][1] == first
         assert await manager.aclose()
     asyncio.run(run())

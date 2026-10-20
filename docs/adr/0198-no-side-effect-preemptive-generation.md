@@ -38,6 +38,10 @@ SmartTurn enabled 尚未达到真实中文误切标准，不能把它作为候�
 
 ## 验证与回退
 
+协议双输入修订：记忆 `query` 是提取后的正文，实际模型 `model_user_message` 是最终 provider 对话中的完整当前 user 原字符串，两者不得互换。外层版本仍为1；start/confirm 显式成对发送 `input_protocol=2` 与 `model_user_message`，history messages 不含当前 user。旧v1只保留既有纯正文兼容，新语音入口不按JSON形状选择或降级协议。JSON里的language/emotion/speaker及未知字段、空白与顺序均保留；最终正文、原字符串或有效历史/system任一变化均miss。
+
+`capture_effective_voice_input` 只读取实际表达/联网/声纹装配完成后的文本对话并复制，不调用装配器、不读配置或时钟；结构化消息、额外消息字段与工具消息不能静默简化。工具状态来自实际输入，有工具时不采用候选；不为命中冻结日期或清空工具。当前user仍计入原32000字符总额且单项最多16000，HTTP仍192KiB。元数据修订独立推进文本版本，不冒用音频版本，也不为同轮补发候选。
+
 合成测试覆盖确认/领取、续说与 ASR（语音识别）修订、版本变化、迟到/乱序事件、取消不服从及关闭等待、超时、重启、预算、工具/推理边界和正式合成 SQLite 账本。测试证明模块的候选边界，不证明实际 SDK 快照无写入，也不证明学校连接池、真实费用、端到端声音延迟或设备体验。
 
 默认 `Limits.enabled=False`。未接候选或关闭开关即可回退原 buffered（日用缓冲）链路，不迁移数据库、不更换角色/声音、不动固件。接口及本轮实际结果见 [AE 记录](../development/parallel/AE-preemptive-20261021.md)。设计参考 [LiveKit 官方提前生成说明](https://docs.livekit.io/agents/multimodality/audio/#preemptive-speech-generation)，未引入 LiveKit 依赖。

@@ -207,6 +207,8 @@ class _Candidate:
     transcript: str = field(repr=False)
     request: ModelRequest = field(repr=False)
     started_at: float
+    model_user_message: str = field(repr=False)
+    separate_payload: bool
     valid: bool = True
     task: asyncio.Task | None = None
     timer: asyncio.TimerHandle | None = None
@@ -230,8 +232,8 @@ class ConfirmedCandidate:
     def __init__(self, owner, candidate):
         self._owner, self._candidate = owner, candidate
 
-    def claim(self, *, turn: TurnStamp, context: ContextSnapshot):
-        return self._owner._claim(self._candidate, turn, context)
+    def claim(self, *, turn: TurnStamp, context: ContextSnapshot, model_user_message=None):
+        return self._owner._claim(self._candidate, turn, context, model_user_message)
 
 
 _REASONS = frozenset({"continued", "cancelled", "context_changed", "revised",
@@ -308,16 +310,19 @@ class VoicePreemptive:
         return True
 
     def provisional(self, *, turn: TurnStamp, transcript: str, context: ContextSnapshot,
-                    scope: RequestScope | None = None):
+                    scope: RequestScope | None = None, model_user_message=None):
         """只调度，不阻塞音频循环。重复/修订不为同轮重新发请求。"""
         if type(context) is not ContextSnapshot:
             raise ValueError("preemptive_frozen_snapshot_required")
         if scope is not None and (type(scope) is not RequestScope or scope.turn != turn):
             raise ValueError("preemptive_request_scope_invalid")
+        if model_user_message is not None and (not isinstance(model_user_message, str)
+                                               or not model_user_message.strip()):
+            raise ValueError("preemptive_model_user_invalid")
         if not self._advance(turn):
             return False
         candidate = self._candidate
-        if candidate is not None and not self._matches(candidate, turn, transcript, context):
+        if candidate is not None and not self._matches(candidate, turn, transcript, context, model_user_message):
             self._invalidate("revised")
         if self._attempted:
             return False
@@ -330,19 +335,22 @@ class VoicePreemptive:
             self._counts["skipped_policy"] += 1
             return False
         size = sum(len(text) for _, text in context.messages)
-        if (not isinstance(transcript, str) or not transcript.strip()
-                or size + len(transcript) > self.limits.max_input_chars
+        actual_user = transcript if model_user_message is None else model_user_message
+        if (not isinstance(transcript, str) or not transcript.strip() or len(transcript) > 16000
+                or not isinstance(actual_user, str) or len(actual_user) > 16000
+                or size + len(actual_user) > self.limits.max_input_chars
                 or len(context.messages) >= 128):
             self._counts["skipped_size"] += 1
             return False
-        status = self.budget.reserve(size + len(transcript), self.limits.max_output_tokens)
+        status = self.budget.reserve(size + len(actual_user), self.limits.max_output_tokens)
         if status:
             self._counts["skipped_" + status] += 1
             self._last_status = status
             return False
-        request = ModelRequest(context.messages + (("user", transcript),), self.limits.max_output_tokens,
+        request = ModelRequest(context.messages + (("user", actual_user),), self.limits.max_output_tokens,
                                scope=scope)
-        candidate = _Candidate(turn, context, transcript, request, time.monotonic())
+        candidate = _Candidate(turn, context, transcript, request, time.monotonic(),
+                               actual_user, model_user_message is not None)
         self._candidate = candidate
         self._counts["admitted"] += 1
         self._last_status = "preparing"
@@ -353,8 +361,10 @@ class VoicePreemptive:
         return True
 
     @staticmethod
-    def _matches(candidate, turn, transcript, context):
+    def _matches(candidate, turn, transcript, context, model_user_message=None):
         return (candidate.valid and candidate.turn == turn and candidate.transcript == transcript
+                and candidate.separate_payload == (model_user_message is not None)
+                and candidate.model_user_message == (transcript if model_user_message is None else model_user_message)
                 and candidate.context.version == context.version
                 and candidate.context.digest == context.digest)
 
@@ -437,7 +447,7 @@ class VoicePreemptive:
         if self._current(candidate):
             self._invalidate("expired")
 
-    async def confirmed(self, *, turn: TurnStamp, transcript: str, context: ContextSnapshot):
+    async def confirmed(self, *, turn: TurnStamp, transcript: str, context: ContextSnapshot, model_user_message=None):
         """最终端点才能调用；等待已有请求，不发起第二次请求或正式 prepare。"""
         if type(context) is not ContextSnapshot:
             raise ValueError("preemptive_frozen_snapshot_required")
@@ -445,7 +455,7 @@ class VoicePreemptive:
             return None
         self._attempted = True  # 确认后迟到的 provisional 不能反向启动请求。
         candidate = self._candidate
-        if candidate is None or not self._matches(candidate, turn, transcript, context):
+        if candidate is None or not self._matches(candidate, turn, transcript, context, model_user_message):
             self._counts["misses"] += 1
             self._invalidate("mismatch")
             return None
@@ -468,13 +478,13 @@ class VoicePreemptive:
             candidate.confirmed = True
         return ConfirmedCandidate(self, candidate)
 
-    def _claim(self, candidate, turn, context):
+    def _claim(self, candidate, turn, context, model_user_message=None):
         self._check_loop()
         if type(context) is not ContextSnapshot or type(turn) is not TurnStamp:
             return None
         if not self._current(candidate) or not candidate.confirmed or candidate.claimed:
             return None
-        if not self._matches(candidate, turn, candidate.transcript, context):
+        if not self._matches(candidate, turn, candidate.transcript, context, model_user_message):
             self._invalidate("mismatch")
             return None
         if time.monotonic() - candidate.ready_at >= self.limits.ready_ttl_seconds:

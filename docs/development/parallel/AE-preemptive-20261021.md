@@ -250,3 +250,15 @@ $env:LONGMEMORY_TEST_VOICE_HOST_REF = '0ea551a90c7ef04863dc887c8295627059edfe1d'
 未设置冻结引用时当前七例跳过，不能冒充 CI 或宿主集成已通过。一次总回归输出超过首轮工具窗口而截断，未计为通过；上列结果来自重新取得完整退出码0的最终回归。
 
 接力边界仍明确：AI 负责实际 Runtime/SDK、正式内部HTTP路由/loop/启动关闭和原 ASR 预取/唯一正式prepare/fresh与最终派发门；本测试HTTP薄封装不作为生产实现。实际 Hy 非空库、日用真实延迟、连续性、误抢话、打断残音及设备体验仍未由 AE 验收。真实学校调用0、无GPU/个人数据/日用服务/设备操作，无依赖下载需求。
+
+## 第七阶段：记忆正文与实际模型当前消息分离
+
+主会话查明实际ASR当前user是含content/language/emotion/speaker等字段的JSON原字符串，而记忆入口提取content。AE按冻结契约分开这两份输入，不从记忆正文重建模型user。外层version=1，snapshot仍query正文；start/confirm成对显式发送input_protocol=2和model_user_message完整原字符串，messages只含历史。v1保留原纯正文兼容；新语音入口一律v2，不能根据JSON形状降级。
+
+新增 `voice_preemptive_input.py` 的 `capture_effective_voice_input(memory_query, dialogue, tools_required=实际值)`，读取实际provider装配边界的文本role/content对话。它不读时间、声纹/角色/联网配置，不调用装配器；复制当前user与此前完整消息，拒绝结构化或额外字段消息而非截断。`start_effective`/`confirm_effective`直接传递捕获结果，工具状态不默认为false。核心与连接桥保留可选原字符串，正文和原字符串均精确比较；仅元数据改变也撤销候选并推进文本revision，同轮不补发。最终领取v2凭据必须再给当前原字符串，省略不能退回旧正文。
+
+预算未扩张：完整当前user计入既有32000字符总额，自身与记忆正文各最多16000，HTTP192KiB。language/emotion/speaker、未知字段、JSON空白/顺序均不归一化；history、实际system日期、声纹说明改变均miss，有工具时保持原正式路径。只读检查实际 `_instruction` 证明未配置联网的分支返回固定说明，配置联网的分支才含实时时间；此前将两者都描述为带时间的判断已向主会话更正。测试用真实装配函数验证这一区别，没有人为冻结时间以提高命中。
+
+本阶段本地七文件加纯输入边界回归 **234 passed in 6.22s，7 deselected**；七个冻结实际AF宿主用例明确排除，须在提交核心后另以冻结双输入宿主复验。新增真实Python3.10协议替身进程覆盖完整ASR JSON、纯文本显式v2、有效输入捕获、元数据/说话人变化、遗漏当前user、上下文变化、有工具绕过；两端输出检查不含正文/身份/token。这里尚非真实SDK/Runtime/生产接线验收。
+
+主会话已授权只读复用现有V的Python3.10 SDK解释器用于后续隔离合成验收；不修改该工作树、环境或账本，不安装依赖、不调用外网。AF双输入宿主固定提交为 `06a332baae5416fcdbad2790dc71c162152e5da2`；正式Runtime/SDK组合将选定AI精确提交后从公共Git对象装配，不能导入AI脏树。后续实际结果另记，不能将计划当通过。

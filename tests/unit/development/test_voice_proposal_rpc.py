@@ -191,6 +191,7 @@ def run_two_processes(action, real_stage=None):
         for text in (client.stdout, client.stderr, tail, error):
             assert TOKEN not in text
             assert "合成有效回答" not in text and "不应提前送出" not in text and "无糖茶" not in text
+            assert "合成说话人" not in text and "NEUTRAL" not in text
         assert stats["counts"].get("forbidden_path", 0) == 0
         return output, stats
     finally:
@@ -252,6 +253,31 @@ def test_large_nonempty_memory_json_body_is_not_limited_by_header_buffer():
     output, stats = run_two_processes("large_context")
     assert output["active"] == 0
     assert stats["counts"]["snapshot"] == stats["counts"]["start"] == stats["counts"]["confirm"] == 1
+
+
+def test_v2_payload_counts_actual_user_in_original_budget_and_does_not_classify_json_for_version():
+    value = r._input_payload([["system", "role"]], "plain actual model user")
+    assert value == {"messages": [["system", "role"]], "input_protocol": 2,
+                     "model_user_message": "plain actual model user"}
+    assert r._input_payload([["system", "role"]], None) == {"messages": [["system", "role"]]}
+    with pytest.raises(r.ProposalRPCError):
+        r._input_payload([["system", "x" * 31900]], "y" * 101)
+    with pytest.raises(r.ProposalRPCError):
+        r._input_payload([["system", "x"]], "y" * 16001)
+
+
+@pytest.mark.parametrize("action", ["v2_json", "v2_effective", "v2_metadata_changed", "v2_speaker_changed",
+                                  "v2_missing_current", "v2_context_changed", "v2_tools_present", "v2_effective_tools"])
+def test_real_python310_v2_keeps_asr_payload_and_effective_boundary_gates(action):
+    output, stats = run_two_processes(action)
+    assert output["active"] == stats["active"] == 0
+    assert stats["counts"]["v2_start"] == 1
+    if action in {"v2_metadata_changed", "v2_speaker_changed", "v2_missing_current", "v2_tools_present", "v2_effective_tools"}:
+        assert stats["counts"].get("confirm", 0) == 0
+    else:
+        assert stats["counts"]["v2_confirm"] == 1
+    if action in {"v2_tools_present", "v2_effective_tools"}:
+        assert stats["counts"].get("preparing", 0) == 0
 
 
 @pytest.fixture

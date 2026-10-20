@@ -10,6 +10,7 @@ root = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(root / "scripts/development/xiaozhi"))
 from voice_preemptive import CloseConfirmation, TurnStamp
 from voice_proposal_rpc import ProposalRPCError, VoiceProposalRPC
+from voice_preemptive_input import capture_effective_voice_input
 
 
 async def run(action):
@@ -28,10 +29,23 @@ async def run(action):
             assert await client.aclose()
         return {"ok": True, "rejected": True, "active": 0}
     messages = [["system", "合成角色\n" + snapshot["memory_context"]]]
+    is_v2 = action.startswith("v2_")
+    asr_data = {"content": "完整合成问题", "language": "zh", "emotion": "NEUTRAL", "speaker": "合成说话人", "event": "SPEECH"}
+    raw_asr = json.dumps(asr_data, ensure_ascii=False)
+    def effective(rows, raw, *, tools=False):
+        return capture_effective_voice_input("完整合成问题",
+            [{"role": role, "content": text} for role, text in rows] + [{"role": "user", "content": raw}],
+            tools_required=tools)
     confirmation = CloseConfirmation()
     try:
-        result = await client.start(scope=scope, snapshot_id=snapshot["snapshot_id"], messages=messages,
-                                    close_confirmation=confirmation, tools_required=action == "tools_required")
+        if action in {"v2_effective", "v2_effective_tools"}:
+            result = await client.start_effective(scope=scope, snapshot_id=snapshot["snapshot_id"],
+                effective_input=effective(messages, raw_asr, tools=action == "v2_effective_tools"),
+                close_confirmation=confirmation)
+        else:
+            result = await client.start(scope=scope, snapshot_id=snapshot["snapshot_id"], messages=messages,
+                close_confirmation=confirmation, tools_required=action in {"tools_required", "v2_tools_present"},
+                model_user_message=raw_asr if is_v2 else None)
     except ProposalRPCError:
         assert action in {"slow_start", "disconnect_start", "leak_start"}
         assert confirmation.required and not confirmation.confirmed
@@ -45,7 +59,7 @@ async def run(action):
             raise AssertionError("same turn retried")
         assert await client.aclose()
         return {"ok": True, "rejected": True, "active": 0}
-    if action == "tools_required":
+    if action in {"tools_required", "v2_tools_present", "v2_effective_tools"}:
         assert result["state"] == "miss" and "text" not in result
         assert await client.aclose() and confirmation.confirmed
         return {"ok": True, "active": 0, "tools_executed": False}
@@ -58,9 +72,23 @@ async def run(action):
         assert not confirmation.confirmed and not await client.aclose()
         return {"ok": True, "active": 1, "closed_confirmed": False}
     async def confirm():
-        return await client.confirm(scope=scope, snapshot_id=snapshot["snapshot_id"], query="完整合成问题", messages=messages,
+        if action == "v2_effective":
+            return await client.confirm_effective(scope=scope, snapshot_id=snapshot["snapshot_id"],
+                effective_input=effective(messages, raw_asr), formal_turn_id="11111111-1111-4111-8111-111111111111",
+                client_round_id="d" * 32, session_id="c" * 32)
+        current_asr = raw_asr if is_v2 else None
+        current_messages = messages
+        if action in {"v2_metadata_changed", "v2_speaker_changed"}:
+            changed = dict(asr_data)
+            changed["emotion" if action == "v2_metadata_changed" else "speaker"] = "CHANGED"
+            current_asr = json.dumps(changed, ensure_ascii=False)
+        elif action == "v2_missing_current":
+            current_asr = None
+        elif action == "v2_context_changed":
+            current_messages = [["system", messages[0][1] + "实际日期/历史/声纹说明变化"]]
+        return await client.confirm(scope=scope, snapshot_id=snapshot["snapshot_id"], query="完整合成问题", messages=current_messages,
             formal_turn_id="11111111-1111-4111-8111-111111111111",
-            client_round_id="d" * 32, session_id="c" * 32)
+            client_round_id="d" * 32, session_id="c" * 32, model_user_message=current_asr)
     if action in {"real_host_headers_cancel", "real_host_body_cancel"}:
         await client.cancel(scope=scope)
     elif action == "slow_confirm":
@@ -88,7 +116,8 @@ async def run(action):
         else:
             raise AssertionError("text returned on miss")
         await client.cancel(scope=scope)
-    elif action in {"real_host_fresh_miss", "real_host_source_miss"}:
+    elif action in {"real_host_fresh_miss", "real_host_source_miss", "v2_metadata_changed", "v2_speaker_changed",
+                    "v2_missing_current", "v2_context_changed"}:
         value = await confirm()
         assert value["state"] == "miss" and value["text"] is None
     elif action in {"real_host_revised_cleanup", "real_host_new_turn_cleanup"}:

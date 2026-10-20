@@ -45,6 +45,18 @@ def _messages(value):
     return [list(row) for row in value]
 
 
+def _input_payload(messages, model_user_message):
+    rows = _messages(messages)
+    result = {"messages": rows}
+    if model_user_message is not None:
+        if (not isinstance(model_user_message, str) or not model_user_message.strip()
+                or len(model_user_message) > 16000
+                or sum(len(row[1]) for row in rows) + len(model_user_message) > 32000):
+            raise ProposalRPCError("proposal_rpc_model_user_invalid")
+        result.update(input_protocol=2, model_user_message=model_user_message)
+    return result
+
+
 def _unique(pairs):
     result = {}
     for key, value in pairs:
@@ -62,6 +74,7 @@ class _Started:
     task: asyncio.Task | None = field(default=None, repr=False)
     confirming: asyncio.Task | None = field(default=None, repr=False)
     confirm_attempted: bool = False
+    model_user_message: str | None = field(default=None, repr=False)
 
 
 class VoiceProposalRPC:
@@ -227,21 +240,23 @@ class VoiceProposalRPC:
                     "memory_context": None, "reason_code": "stale"}
         return result
 
-    async def start(self, *, scope, snapshot_id, messages, tools_required=False, close_confirmation=None):
+    async def start(self, *, scope, snapshot_id, messages, tools_required=False, close_confirmation=None,
+                    model_user_message=None):
         self._advance(scope)
         if (not _hex(snapshot_id) or type(tools_required) is not bool
                 or self._active is not None or self._attempted_turn == scope.turn_id):
             raise ProposalRPCError("proposal_rpc_start_not_admitted")
-        messages = _messages(messages)
+        inputs = _input_payload(messages, model_user_message)
         confirmation = close_confirmation or CloseConfirmation()
         if type(confirmation) is not CloseConfirmation:
             raise ProposalRPCError("proposal_rpc_close_confirmation_invalid")
         confirmation.required = True
-        record = _Started(scope, snapshot_id, confirmation, task=asyncio.current_task())
+        record = _Started(scope, snapshot_id, confirmation, task=asyncio.current_task(),
+                          model_user_message=model_user_message)
         self._active, self._attempted_turn = record, scope.turn_id
         try:
             result = await self._post("start", dict(self._body(scope), snapshot_id=snapshot_id,
-                                                    messages=messages, tools_required=tools_required))
+                                                    **inputs, tools_required=tools_required))
         finally:
             record.task = None
         self._dto(result, {"version", "state", "reason_code"}, {"preparing", "miss"})
@@ -250,11 +265,14 @@ class VoiceProposalRPC:
         return result
 
     async def confirm(self, *, scope, snapshot_id, query, messages, formal_turn_id,
-                      client_round_id, session_id, tools_required=False):
+                      client_round_id, session_id, tools_required=False, model_user_message=None):
         self._advance(scope)
         record = self._active
         if record is None or record.scope != scope or record.confirm_attempted:
             return {"version": 1, "state": "miss", "text": None, "reason_code": "no_candidate"}
+        inputs = _input_payload(messages, model_user_message)
+        if record.model_user_message != model_user_message:
+            return {"version": 1, "state": "miss", "text": None, "reason_code": "model_user_changed"}
         if (not _hex(snapshot_id) or snapshot_id != record.snapshot_id or type(tools_required) is not bool
                 or not isinstance(query, str) or not query.strip() or len(query) > 16000
                 or not isinstance(formal_turn_id, str) or not 1 <= len(formal_turn_id) <= 64
@@ -269,7 +287,7 @@ class VoiceProposalRPC:
         record.confirm_attempted = True
         try:
             result = await self._post("confirm", dict(self._body(scope), snapshot_id=snapshot_id, query=query,
-                messages=_messages(messages), tools_required=tools_required, formal_turn_id=formal_turn_id,
+                **inputs, tools_required=tools_required, formal_turn_id=formal_turn_id,
                 client_round_id=client_round_id, session_id=session_id))
         finally:
             record.confirming = None
@@ -284,6 +302,26 @@ class VoiceProposalRPC:
         elif result["text"] is not None:
             raise ProposalRPCError("proposal_rpc_answer_on_miss")
         return result
+
+    async def start_effective(self, *, scope, snapshot_id, effective_input, close_confirmation=None):
+        """AI在实际provider输入边界使用；工具状态直接来自捕获值，不另设false默认。"""
+        from voice_preemptive_input import EffectiveVoiceInput
+        if type(effective_input) is not EffectiveVoiceInput:
+            raise ProposalRPCError("proposal_rpc_effective_input_invalid")
+        return await self.start(scope=scope, snapshot_id=snapshot_id, messages=effective_input.messages,
+                                tools_required=effective_input.tools_required,
+                                model_user_message=effective_input.model_user_message,
+                                close_confirmation=close_confirmation)
+
+    async def confirm_effective(self, *, scope, snapshot_id, effective_input,
+                                formal_turn_id, client_round_id, session_id):
+        from voice_preemptive_input import EffectiveVoiceInput
+        if type(effective_input) is not EffectiveVoiceInput:
+            raise ProposalRPCError("proposal_rpc_effective_input_invalid")
+        return await self.confirm(scope=scope, snapshot_id=snapshot_id, query=effective_input.memory_query,
+            messages=effective_input.messages, tools_required=effective_input.tools_required,
+            model_user_message=effective_input.model_user_message, formal_turn_id=formal_turn_id,
+            client_round_id=client_round_id, session_id=session_id)
 
     @staticmethod
     def _dto(result, keys, states):

@@ -12,7 +12,7 @@ import time
 
 scenario = sys.argv[1]
 token = os.environ["RPC_TEST_TOKEN"]
-counts, jobs, lock = Counter(), {}, Lock()
+counts, jobs, queries, lock = Counter(), {}, {}, Lock()
 denied = {8766, 8767, 8768, 8000, 8003, 18000, 18003, 18767, 18768, 18769, 18770}
 prefix = "/api/internal/memory/proposals/"
 
@@ -57,6 +57,8 @@ class Handler(BaseHTTPRequestHandler):
                       "confirm": {"snapshot_id", "query", "messages", "tools_required",
                                   "formal_turn_id", "client_round_id", "session_id"},
                       "cancel": set(), "close": set()}
+            if operation in {"start", "confirm"} and body.get("input_protocol") == 2:
+                extras[operation] |= {"input_protocol", "model_user_message"}
             assert set(body) == common | extras[operation]
             assert all(type(value) is int and 0 <= value < 2**63 for value in scope)
         except Exception:
@@ -65,6 +67,7 @@ class Handler(BaseHTTPRequestHandler):
         with lock:
             counts[operation] += 1
         if operation == "snapshot":
+            queries[key] = body["query"]
             if scenario == "redirect":
                 self.send({}, 302, extra={"Location": "http://127.0.0.1:1/must-not-follow"})
                 return
@@ -80,11 +83,17 @@ class Handler(BaseHTTPRequestHandler):
         elif operation == "start":
             assert isinstance(body["messages"][0], list) and body["messages"][0][0] == "system"
             assert all(row[0] != "system" for row in body["messages"][1:])
+            protocol = body.get("input_protocol", 1)
+            current = body["model_user_message"] if protocol == 2 else queries[key]
+            if protocol == 2:
+                decoded = json.loads(current)
+                assert decoded["content"] == queries[key] and {"language", "emotion", "speaker"} <= set(decoded)
+                counts["v2_start"] += 1
             if body["tools_required"]:
                 self.send({"version": 1, "state": "miss", "reason_code": "tools_required"})
                 return
             with lock:
-                jobs[key] = (scope, body["messages"])
+                jobs[key] = (scope, body["messages"], protocol, current, queries[key])
                 counts["preparing"] += 1
             if scenario == "slow_start":
                 time.sleep(.4)
@@ -97,11 +106,15 @@ class Handler(BaseHTTPRequestHandler):
                 value["text"] = "不应提前送出的合成回答"
             self.send(value)
         elif operation == "confirm":
+            protocol = body.get("input_protocol", 1)
+            current_user = body["model_user_message"] if protocol == 2 else body["query"]
+            if protocol == 2:
+                counts["v2_confirm"] += 1
             if scenario in {"slow_confirm", "epoch_race"}:
                 time.sleep(.25)
             with lock:
                 current = jobs.get(key)
-            matches = current == (scope, body["messages"]) and body["query"] == "完整合成问题"
+            matches = current == (scope, body["messages"], protocol, current_user, body["query"])
             if scenario == "bad_confirm":
                 self.send({"version": 1, "state": "miss", "text": "不应返回的合成回答", "reason_code": "miss"})
                 return

@@ -4,6 +4,7 @@ import asyncio
 from contextlib import asynccontextmanager
 from dataclasses import replace
 import importlib.util
+import json
 from pathlib import Path
 import sqlite3
 import sys
@@ -541,4 +542,52 @@ def test_late_verified_upstream_close_releases_held_slot_without_reusing_failed_
         model.request.close_confirmation.confirmed = True  # 仅模拟后续可信上游回执。
         assert await c.aclose() and c.budget.active == 0
         assert c.snapshot()["hits"] == 0
+    asyncio.run(run())
+
+
+def test_separate_memory_query_and_actual_json_model_user_are_delivered_without_rewriting():
+    async def run():
+        model, ctx = FakeModel(), context()
+        raw = json.dumps({"content": "合成问题", "language": "zh", "emotion": "NEUTRAL", "speaker": "合成说话人"}, ensure_ascii=False)
+        c = controller(model)
+        assert c.provisional(turn=stamp(), transcript="合成问题", context=ctx, model_user_message=raw)
+        lease = await c.confirmed(turn=stamp(), transcript="合成问题", context=ctx, model_user_message=raw)
+        assert model.requests[0].messages[-1] == ("user", raw)
+        assert c.budget.input_chars == sum(len(text) for _, text in ctx.messages) + len(raw)
+        assert lease.claim(turn=stamp(), context=ctx, model_user_message=raw) == "合成回答。"
+        assert "NEUTRAL" not in repr(c.snapshot()) and "合成说话人" not in repr(c.snapshot())
+        assert await c.aclose()
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("change", ["query", "language", "emotion", "speaker", "format", "missing"])
+def test_v2_actual_current_payload_or_query_change_cannot_match(change):
+    async def run():
+        data = {"content": "合成问题", "language": "zh", "emotion": "NEUTRAL", "speaker": "合成说话人"}
+        raw = json.dumps(data, ensure_ascii=False)
+        c, ctx, query = controller(), context(), "合成问题"
+        c.provisional(turn=stamp(), transcript=query, context=ctx, model_user_message=raw)
+        await drain()
+        current = raw
+        if change == "query": query += "修订"
+        elif change == "format": current = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
+        elif change == "missing": current = None
+        else:
+            data[change] = "CHANGED"
+            current = json.dumps(data, ensure_ascii=False)
+        assert await c.confirmed(turn=stamp(), transcript=query, context=ctx, model_user_message=current) is None
+        assert c.snapshot()["hits"] == 0 and c.model.started == 1
+        assert await c.aclose()
+    asyncio.run(run())
+
+
+def test_v2_claim_requires_fresh_actual_user_and_never_defaults_back_to_memory_query():
+    async def run():
+        raw, ctx = '{"content":"合成问题","emotion":"NEUTRAL"}', context()
+        c = controller()
+        c.provisional(turn=stamp(), transcript="合成问题", context=ctx, model_user_message=raw)
+        lease = await c.confirmed(turn=stamp(), transcript="合成问题", context=ctx, model_user_message=raw)
+        assert lease.claim(turn=stamp(), context=ctx) is None
+        assert lease.claim(turn=stamp(), context=ctx, model_user_message=raw) is None
+        assert await c.aclose()
     asyncio.run(run())

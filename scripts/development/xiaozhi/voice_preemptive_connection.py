@@ -93,6 +93,7 @@ class TranscriptBinding:
     _text: str = field(repr=False)
     _context: ContextSnapshot = field(repr=False)
     _baseline_proof: ASRPrefetchProof | None = field(default=None, repr=False)
+    _model_user_message: str | None = field(default=None, repr=False)
 
 
 class _Connection:
@@ -130,7 +131,7 @@ class ConnectionCandidate:
         self._manager, self._state = manager, state
         self._binding, self._lease = binding, lease
 
-    def claim(self, connection, *, binding, context):
+    def claim(self, connection, *, binding, context, model_user_message=None):
         """AI 在正式派发门内同步领取；连接身份、音频、文本和快照仍须有效。"""
         self._manager._check_loop()
         if (self._manager._lookup(connection) is not self._state
@@ -138,7 +139,7 @@ class ConnectionCandidate:
                 or not self._manager._valid(self._state, binding)
                 or self._state.confirmed != binding.audio):
             return None
-        return self._lease.claim(turn=binding.turn, context=context)
+        return self._lease.claim(turn=binding.turn, context=context, model_user_message=model_user_message)
 
 
 class PreemptiveConnections:
@@ -280,26 +281,32 @@ class PreemptiveConnections:
                 state.confirmed = event.audio
         return True
 
-    def bind_transcript(self, connection, *, audio, text, context):
+    def bind_transcript(self, connection, *, audio, text, context, model_user_message=None):
         """AI 传实际 ASR content 及已核验快照；晚到旧音频文本直接拒绝。"""
         if self.candidate_source != "smart_turn":
             raise ValueError("preemptive_baseline_proof_required")
-        return self._bind(connection, audio=audio, text=text, context=context)
+        return self._bind(connection, audio=audio, text=text, context=context, model_user_message=model_user_message)
 
-    def _bind(self, connection, *, audio, text, context, proof=None):
+    def _bind(self, connection, *, audio, text, context, proof=None, model_user_message=None):
         if type(audio) is not AudioStamp or type(context) is not ContextSnapshot:
             raise ValueError("preemptive_binding_invalid")
         if not isinstance(text, str) or not text.strip() or len(text) > self.limits.max_input_chars:
             raise ValueError("preemptive_transcript_invalid")
+        if model_user_message is not None and (not isinstance(model_user_message, str)
+                or not model_user_message.strip()
+                or len(model_user_message) > 16000
+                or sum(len(value) for _, value in context.messages) + len(model_user_message) > 32000):
+            raise ValueError("preemptive_model_user_invalid")
         state = self._state(connection)
         if state.quarantined.is_set() or not self._adopt(state, audio):
             return None
         previous = state.binding
         if (previous is not None and previous.audio == audio and previous._text == text
                 and previous._context.version == context.version
-                and previous._context.digest == context.digest and previous._baseline_proof == proof):
+                and previous._context.digest == context.digest and previous._baseline_proof == proof
+                and previous._model_user_message == model_user_message):
             return previous
-        text_changed = previous is None or previous._text != text
+        text_changed = previous is None or previous._text != text or previous._model_user_message != model_user_message
         state.generation += 1
         if text_changed:
             state.text_revision += 1
@@ -308,7 +315,7 @@ class PreemptiveConnections:
             state.controller.revised(turn=turn)
             if previous._context != context or previous._baseline_proof != proof:
                 state.controller.context_changed()
-        binding = TranscriptBinding(audio, turn, state, state.generation, text, context, proof)
+        binding = TranscriptBinding(audio, turn, state, state.generation, text, context, proof, model_user_message)
         state.binding = binding
         state.baseline_verified = None
         state.counts["bound"] += 1
@@ -330,12 +337,13 @@ class PreemptiveConnections:
         admitted = state.controller.provisional(turn=binding.turn, transcript=binding._text,
                                                 context=binding._context,
                                                 scope=RequestScope(self.owner_id, state.connection_id,
-                                                                   binding.turn, binding.audio.audio_revision))
+                                                                   binding.turn, binding.audio.audio_revision),
+                                                model_user_message=binding._model_user_message)
         if admitted:
             state.counts["prepared"] += 1
         return admitted
 
-    async def confirmed(self, connection, *, binding, final_text, context):
+    async def confirmed(self, connection, *, binding, final_text, context, model_user_message=None):
         state = self._state(connection)
         if not self._valid(state, binding):
             state.counts["foreign_binding"] += 1
@@ -345,12 +353,14 @@ class PreemptiveConnections:
                 or (self.candidate_source == "baseline_asr" and state.baseline_verified is not binding)):
             state.counts["not_confirmed"] += 1
             return None
-        if (final_text != binding._text or type(context) is not ContextSnapshot
+        if (final_text != binding._text or model_user_message != binding._model_user_message
+                or type(context) is not ContextSnapshot
                 or context.version != binding._context.version or context.digest != binding._context.digest):
             state.counts["final_mismatch"] += 1
             self._invalidate(state)
             return None
-        lease = await state.controller.confirmed(turn=binding.turn, transcript=final_text, context=context)
+        lease = await state.controller.confirmed(turn=binding.turn, transcript=final_text, context=context,
+                                                 model_user_message=model_user_message)
         if lease is None or not self._valid(state, binding) or state.confirmed != binding.audio:
             return None
         return ConnectionCandidate(self, state, binding, lease)
@@ -421,7 +431,7 @@ class PreemptiveConnections:
         state = self._state(connection)
         return self.owner_id, state.connection_id
 
-    def baseline_asr_provisional(self, connection, *, audio, text, context, proof):
+    def baseline_asr_provisional(self, connection, *, audio, text, context, proof, model_user_message=None):
         """仅独立候选开关启用后，由原ASR预取有效结果钩子调用，不借用shadow。"""
         if self.candidate_source != "baseline_asr":
             raise ValueError("preemptive_baseline_source_not_selected")
@@ -431,7 +441,8 @@ class PreemptiveConnections:
         if state.quarantined.is_set() or not self._adopt(state, audio):
             return None
         state.mode, state.provisional = "baseline_asr", audio
-        return self._bind(connection, audio=audio, text=text, context=context, proof=proof)
+        return self._bind(connection, audio=audio, text=text, context=context, proof=proof,
+                          model_user_message=model_user_message)
 
     def baseline_continued(self, connection, *, audio):
         if self.candidate_source != "baseline_asr" or type(audio) is not AudioStamp:
@@ -444,7 +455,7 @@ class PreemptiveConnections:
         return self._dispatch(connection, continued)
 
     async def baseline_confirmed(self, connection, *, binding, final_text, context,
-                                 final_pcm, generation, voice_stamp, language):
+                                 final_pcm, generation, voice_stamp, language, model_user_message=None):
         """仅原端点+完整正式ASR之后调用；原始音频只用于有界前缀核验，不保留。"""
         if self.candidate_source != "baseline_asr":
             raise ValueError("preemptive_baseline_source_not_selected")
@@ -464,7 +475,8 @@ class PreemptiveConnections:
             self._invalidate(state)
             return None
         state.confirmed, state.baseline_verified = binding.audio, binding
-        return await self.confirmed(connection, binding=binding, final_text=final_text, context=context)
+        return await self.confirmed(connection, binding=binding, final_text=final_text, context=context,
+                                    model_user_message=model_user_message)
 
 
 def install_preemptive_connection_lifecycle(connection_class, bridge):
