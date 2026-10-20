@@ -18,6 +18,7 @@ from longmemory.methods.contracts import (
     MemoryEvent,
     MemoryMethod,
     MemorySupport,
+    MemoryReadBusyError,
     ObservationResult,
     RetrievedTrace,
     require_management,
@@ -592,7 +593,7 @@ class MemoryRuntime:
                     "context": self._proposal_digest(prepared.support.context),
                     "evidence": self._proposal_digest(memory_receipt(prepared)["evidence"]),
                     "eligible": (prepared.memory_command is None and prepared.follow_up_suggestion is None
-                                 and not (feedback is not None and feedback.recorded))}
+                                 and feedback is None)}
                 status = 'completed'
                 return prepared, feedback
         finally:
@@ -801,8 +802,7 @@ class MemoryRuntime:
             if semantic_read:
                 raise RuntimeError("hy_semantic_busy")
             if layer_read:
-                from longmemory.methods.hy_memory.layer_data import HyLayerDataBusy
-                raise HyLayerDataBusy("hy_layer_data_busy")
+                raise MemoryReadBusyError("hy_layer_data_busy")
             raise RuntimeError("hy_mechanisms_busy")
         try:
             self._ensure_open()

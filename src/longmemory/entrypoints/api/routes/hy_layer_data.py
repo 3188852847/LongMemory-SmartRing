@@ -4,7 +4,7 @@ import asyncio
 
 from aiohttp import web
 
-from longmemory.methods.contracts import UnsupportedCapabilityError
+from longmemory.methods.contracts import UnsupportedCapabilityError, MemoryReadBusyError
 from longmemory.methods.hy_memory.layer_data import validate_page, identifier, HyLayerDataBusy
 from longmemory.methods.hy_memory.sdk_bridge import HyResponseError
 from ..method_management import invoke_hy_management
@@ -19,7 +19,7 @@ def register_hy_layer_data_routes(app, runtime_provider):
             return invoke_hy_management(runtime, operation, **arguments)
         try:
             return web.json_response(await asyncio.to_thread(invoke))
-        except HyLayerDataBusy:
+        except (HyLayerDataBusy, MemoryReadBusyError):
             return web.json_response({"error": "hy_layer_data_busy"}, status=503)
         except UnsupportedCapabilityError:
             return web.json_response({"error": "memory_backend_capability_unsupported"}, status=501)

@@ -13,6 +13,10 @@ class UnsupportedCapabilityError(ValueError):
     """拒绝无法忠实执行的操作，而不是静默降级或丢弃元数据。"""
 
 
+class MemoryReadBusyError(RuntimeError):
+    """平台未取得一致只读快照；具体方法的异常类型留在适配层。"""
+
+
 @dataclass(frozen=True, slots=True)
 class MethodCapabilities:
     source_trace: bool = False

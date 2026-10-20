@@ -427,3 +427,17 @@ $verifyArguments = @(
 完整验收退出后才执行额外成本诊断，未与其并发争用SDK。新合成projection库、实际固定SDK/Kuzu/Chroma与Runtime、8维禁网模型替身、温进程，每种三次；记录`data/test-tmp/ai-final-prepare-cost-20261021-01/summary.json` SHA-256=`f1ff03ba40242e4832aa06832623ce6ae9a1a9bd021e1b213be013090dca6a37`，脚本SHA-256=`625d36d4414fce9ccc16751b763219041b5cb84a3062dfc83858562208adf313`，保存实测HEAD和每次分段原值：独立原生recall中位52.493ms；网页等价同步`Runtime.prepare_user`总102.002ms（observe50.405、recall52.631）；实际provenance begin_add2.641ms，已有节点11/13/15、ledger连接各1、audit0；圆屏`prepare_round_screen`延后路径55.744ms，断言准备阶段未触发新begin_add，随后只cancel不发助手完成。外部HTTP0。分段中位数不能直接相加；该诊断不含HTTP渲染/ASR/LLM/TTS，不是生产512维模型、before/after对照、P95或日用端到端收益，也不声称网页同步observe已异步化。
 
 可供主会话放行的是以上已验证的记忆/来源保护、管理/后台准入、界面与保守语音配置技术门；部署与所有者真实体验仍由主会话执行。AE真实ASR安装/最终采用继续独立接力，当前搜索必miss且候选关闭；SmartTurn仅off/shadow、adaptive需听感验收，AG无新GPU窗口/十样本验证，不默认启用。不把这些未完成方向归为全部完成，不提前归档仍有任务的AE。
+
+## 生产接力与CI追加发现：公共反馈热修
+
+主会话报告core已ff到main并推送`28dc78ff`，按所有权停止旧实例后取得90文件/14,606,958字节完整检查点`local/archive/hy-advanced-release/20261020T214505Z-2c76f0c5/`，清单SHA-256=`6cad195a19c923d0cccf7405fdced1feaf99b6b99fbdd14a299719d9190319c7`；已复制真实proof、AH最终45文件dist和固定ONNX，settings仅开启semantic_layers_enabled，原模型身份/声线档案保持。新launcher52056创建UTC `2026-10-20T21:48:37.285837Z`、正式入口及API/TTS ready，候选0/SmartTurn off/Cosy buffered。上述是主会话操作证据，AI没有访问个人库、停止服务或改配置。CLI先前ready=false已由主会话确认是启动时间差，随后true，不记录为同实例状态矛盾。
+
+初次语义status的epoch0/ready_epoch-1、task_counts空、graph_available=true/schema_state=isolated与代码默认一致：图存储可用，但本受控epoch尚无完整归纳回执；不证明没有任何旧图节点，也不据此推断迁移失败。唯有evolve完整完成且期间epoch未变才ready；隔离时L6不注入，L7仍只读过滤，不为健康外观自动enqueue/evolve个人库。主会话保留了该状态与原调用审计38 completed＋1 unknown，真实归纳/体验不据此验收。
+
+GitHub Quality `39503121912` 在28dc后端收集失败，四项分别缺requests/numpy/PyYAML；AI只读主会话提供的公开合成CI日志。在隔离树以原锁console/dev闭包屏蔽其它已安装依赖，并模拟工作树外专属资源不存在，完整入口首次 **3538 passed / 14 failed / 177 skipped / 217.45秒**。这是受控缺包/资源边界复现，未重建干净环境、未安装/联网、未触生产；原始log/XML在`data/test-tmp/ci-minimal-20261021-01/`保留。资源声明和测试前提修复分开提交，不把原四项collection修好就称CI通过。
+
+其中实际公共缺陷为`prepare_round_screen`把`feedback`字典当对象访问`.recorded`，候选宿主关闭也会在“你刚才记错了”等明确反馈路径报错。修复后仅当feedback为None才允许候选资格；跨session未记录和同session已记录的反馈均走原逻辑且不得采用已有候选。新增真实SDK/平台round/原反馈账本两场景先完成原轮、取得有效只读候选，再验证两种反馈结果及claim不调用候选；没有VoiceProposalHost/ASR安装，不发真实模型请求，不改个人库。
+
+同时修正架构门的两个真实违规，未加白名单：Runtime不导入HyLayerDataBusy，使用中立方法契约MemoryReadBusyError，由Hy HTTP入口兼容两类异常并维持busy/503；应用候选宿主自行持有其异步清理语义，不导入具体Hy provider_transport，不编辑该方法传输模块。SDK十五项管理原语摘要仍为`562630a13eeda478674e85454df245de4a38554af52ecaa43f374fa16147720c`，现有proof的实际原语匹配不变；业务源码已变，不能声称原219已覆盖新修复。
+
+新反馈SDK两项、候选宿主清理/正式HTTP/Hy层读取组 **120 passed / 14.77秒**；另公共架构、原平台反馈、请求外层计时与修正前提后的独立启动器组 **47 passed / 2.70秒**，不相加作为新完整覆盖数。生产文件热修与CI/dev/夹具修复独立提交，主会话可先审查部署已知坏路径；后续冻结提交上的实际HTTP/3.10输入回归另补，不修改旧proof文件或旧receipt.source.head。

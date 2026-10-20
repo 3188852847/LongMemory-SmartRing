@@ -171,12 +171,14 @@ def test_feedback_is_same_session_and_does_not_train_engine(tmp_path):
         first = prepare(runtime)
         complete(runtime, first)
         runtime.wait_for_deferred_observations()
-        _, foreign = runtime.prepare_round_screen("你刚才记错了", client_round_id=uuid4().hex,
+        foreign_turn, foreign = runtime.prepare_round_screen("你刚才记错了", client_round_id=uuid4().hex,
             session_id="f" * 32)
         assert foreign["recorded"] is False
-        _, own = runtime.prepare_round_screen("你刚才记错了", client_round_id=uuid4().hex,
+        assert runtime._proposal_formal[foreign_turn.event.event_id]["eligible"] is False
+        own_turn, own = runtime.prepare_round_screen("你刚才记错了", client_round_id=uuid4().hex,
             session_id="a" * 32)
         assert own["target_user_message_id"] == first.event.event_id
+        assert runtime._proposal_formal[own_turn.event.event_id]["eligible"] is False
         assert len(engine.calls) == 1
     finally:
         runtime.close()

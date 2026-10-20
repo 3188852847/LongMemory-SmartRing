@@ -16,7 +16,6 @@ from threading import Lock
 from time import monotonic
 from uuid import UUID
 
-from longmemory.methods.hy_memory.provider_transport import finish_before_cancel
 from longmemory.entrypoints.xiaozhi.mapping import extract_user_text
 
 
@@ -30,6 +29,23 @@ MAX_SNAPSHOT_BYTES = 192*1024
 MAX_CONTEXT_BYTES = 64*1024
 MAX_REQUEST_BYTES = 192*1024
 COMMON = {'version', 'connection_id', 'turn_id', 'transcript_revision', 'cancel_epoch'}
+
+
+async def finish_before_cancel(awaitable):
+    """宿主资源回收须完成；caller重复取消不能让本层遗留执行器或候选名额。"""
+    task = asyncio.ensure_future(awaitable)
+    cancelled = False
+    while True:
+        try:
+            result = await asyncio.shield(task)
+            break
+        except asyncio.CancelledError:
+            if task.cancelled():
+                raise
+            cancelled = True
+    if cancelled:
+        raise asyncio.CancelledError
+    return result
 
 
 @lru_cache(maxsize=1)

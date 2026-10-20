@@ -221,7 +221,10 @@
         "tests/fixtures/hy_management_receipt.py",
         "tests/unit/development/test_hy_management_receipt.py",
         "tests/unit/development/test_voice_proposal_sdk_input.py",
-        "tests/fixtures/ab_hy_provenance_cost.py"
+        "tests/fixtures/ab_hy_provenance_cost.py",
+        "tests/integration/test_voice_feedback_sdk.py",
+        "src/longmemory/methods/contracts.py",
+        "src/longmemory/entrypoints/api/routes/hy_layer_data.py"
       ],
       "related": [
         "docs/adr/0201-composed-runtime-write-gates-and-observation.md"
