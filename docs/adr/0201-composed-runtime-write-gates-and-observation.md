@@ -28,3 +28,13 @@ AB 的 L6/L7 使用持久后台任务，原 Runtime `write_enabled` 只控制同
 HTTP 的 400 表示请求不合规；401/403 沿既有会话、CSRF、启动权限与写门；404 任务不存在；409 冲突/操作拒绝；501 后端不支持；503 忙、不可用或结果不确定。只读状态不自动授权执行未来意图或主动联系。没有设备回执时发送完成不表示已播放。
 
 退回原行为可在下次启动选择话轮 off、声音 buffered；不在已安装包装器的运行进程中切换。正式发布由主会话安排，本文不包含停机、下载、GPU 或设备操作授权。独立验证及未完成项见 [AI 任务书](../development/parallel/AI-hy-advanced-low-latency-20261021.md)；不能把合成回放通过替代实际 SDK、中文模型、GPU 连续播放或圆屏体验。
+
+## 2026-10-21：AE正式启动融合（默认关闭）
+
+AE四个精确提交已接入AI分支，公开启动器新增 `--enable-voice-preemptive` / `LONGMEMORY_VOICE_PREEMPTIVE_ENABLED=1`；仅pipeline/realtime允许，错误组合在加载厂商或私有配置前拒绝。语音默认不安装候选适配器，宿主原 `LONGMEMORY_PREEMPTIVE_ENABLED` 默认关闭，两个开关分别控制两侧；本文不授权生产启用。
+
+安装顺序补齐为输入计时 → ASR预取 → SmartTurn → 快捷回复/计时/完成捕获 → adapter生命周期 → 创建连接。adapter必须包住会提前返回的快捷回复，才能收尾未采用候选；连接初始化时 `_ObservedLLM` 根据所属Connection类仅绑定私有provider代理，不修改共享provider。完成捕获器安装后调用可选 `guard_history`，在记录助手文本前重套撤权门；无需进入provider的固定回复也不能先记下撤销文本。
+
+正式能力回调沿实际intent和provider方法判断：function_call存在合法handler时，即使工具描述列表为空，上游仍会追加direct_answer，必须按有工具处理；不调用会写缓存的get_functions。配置搜索且provider支持functions时，在任何候选RPC前跳过；intent_llm/未知路径和无法证明可复用的精确时间路径保守跳过。保留正式搜索能力、工具编排及实时时间，不把预览时间写回正式消息。
+
+确认仍只有原0.3秒预算，超时走一次原正式回答并关闭候选，不重复prepare；增加仅计数的confirmation_deadline/confirmation_failed，避免将有界回退与输入miss混为一类。合成屏障另验证确认永不返回时的资源收尾。真实SDK/3.10/正式RPC组合使用提交冻结源码和真正公开启动回调/自动绑定，结果与首次失败证据见AI任务书；旧219项及协议2管理proof不改写为新桥的验收。

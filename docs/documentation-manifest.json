@@ -153,7 +153,10 @@
       "authority": "docs/development/parallel/AG-inference-engines-20261021.md",
       "sources": [
         "scripts/development/cosyvoice/acceleration/*.py",
-        "tests/unit/development/test_cosyvoice_acceleration.py"
+        "tests/unit/development/test_cosyvoice_acceleration.py",
+        "tests/unit/development/test_flow_failure_accounting.py",
+        "tests/unit/development/test_flow_window_admission.py",
+        "tests/unit/development/test_flow_trtexec.py"
       ],
       "related": [
         "docs/development/parallel/AI-hy-advanced-low-latency-20261021.md",
@@ -165,7 +168,7 @@
         "L7",
         "低延迟"
       ],
-      "review": "verified 2026-10-21: AI核已交付源码和接口并登记；六方向交叉331项与公共门28项通过，AB新SDK/AE完整模型链及GPU/设备另验"
+      "review": "verified 2026-10-21: AI接入AG失败取证76e8d28b→62d4fff8，CPU相关99项通过、11模块3.10语法核对；独立核4份原始摘要和4个CPU小图/16项数值结果。001已关闭，无新GPU/Flow导出或性能结论"
     },
     {
       "id": "hy-capability-ui",
@@ -226,10 +229,22 @@
         "tests/fixtures/ab_hy_provenance_cost.py",
         "tests/integration/test_voice_feedback_sdk.py",
         "src/longmemory/methods/contracts.py",
-        "src/longmemory/entrypoints/api/routes/hy_layer_data.py"
+        "src/longmemory/entrypoints/api/routes/hy_layer_data.py",
+        "scripts/development/xiaozhi/voice_proposal_adapter.py",
+        "scripts/development/xiaozhi/voice_asr_prefetch.py",
+        "scripts/development/xiaozhi/voice_latency.py",
+        "tests/unit/development/test_voice_proposal_bootstrap.py",
+        "tests/unit/development/test_voice_proposal_adapter.py",
+        "tests/unit/development/test_voice_proposal_adapter_sdk.py",
+        "tests/fixtures/voice_proposal_adapter_native.py",
+        "tests/fixtures/voice_proposal_adapter_sdk_client.py",
+        "tests/fixtures/voice_proposal_adapter_sdk_host.py",
+        "scripts/ci/backend_resources.py",
+        "tests/fixtures/voice_proposal_resource_cases.json"
       ],
       "related": [
-        "docs/adr/0201-composed-runtime-write-gates-and-observation.md"
+        "docs/adr/0201-composed-runtime-write-gates-and-observation.md",
+        "docs/development/parallel/AE-proposal-adapter-20261021.md"
       ],
       "tags": [
         "AI",
@@ -237,7 +252,7 @@
         "L7",
         "低延迟"
       ],
-      "review": "verified 2026-10-21: 融合f5906827实际SDK/正式HTTP/3.10与管理来源后台219项零skip，工具生成协议2候选；AH最终45文件逐字节核验。生产ASR适配继续由AE实现，当前搜索必miss/候选off；生产部署、真实模型质量与设备/GPU另验"
+      "review": "verified 2026-10-21: AI完成默认关闭AE公开启动/真实能力/私有provider融合，冻结d871437b真实SDK组合13项及合成回归464项通过；首轮SDK失败原因未定位，历史保留，0.3秒不放宽。37项backend精确资源登记已验；生产、GPU、声音/设备及完整远端另验"
     },
     {
       "id": "owned-voice-system-instruction-placement",
@@ -7216,6 +7231,28 @@
         "L6",
         "L7",
         "来源限制"
+      ]
+    },
+    {
+      "path": "docs/development/parallel/AE-proposal-adapter-20261021.md",
+      "title": "AE：ASR预取与真实语音候选适配",
+      "status": "draft",
+      "basis": "AE固定原生方法、真实SDK隔离组合及AI公开启动融合；默认关闭，生产未启用",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-21",
+        "scope": "公共接口与隔离验证；不表示真实模型、GPU、生产启用或设备体验通过",
+        "evidence": [
+          "docs/development/parallel/AI-hy-advanced-low-latency-20261021.md",
+          "tests/unit/development/test_voice_proposal_adapter.py",
+          "tests/unit/development/test_voice_proposal_adapter_sdk.py"
+        ]
+      },
+      "tags": [
+        "AE",
+        "Hy-Memory",
+        "ASR",
+        "低延迟"
       ]
     }
   ],

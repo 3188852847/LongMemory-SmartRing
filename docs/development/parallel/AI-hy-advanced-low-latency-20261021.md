@@ -475,3 +475,28 @@ AI没有在本树安装/复制node_modules、重跑全量组件/browser或改生
 新的前端Git tree=`64c17c8e6e3f950fed66360632b748fda677c1d4`，与融合tree精确匹配；旧85c8…不能写成新源码身份。新发布绑定SHA-256=`e30c7d507b9edfbc2432e35b9eaca3a340b994c60410c11bab101dfe750b3f4c`，外围delivery-receipt SHA-256=`f546c4cf74dfea3fc41a9843dab5f67b2e1614669a47ca4a3d733e335f20ce01`，位于AH树`data/test-tmp/ah-release-ci-0d5d33f4-20261021/`。AI逐项重算完整45文件、1,838,948字节、264处本地资源引用与manifest导入键、五项构建输入、八张既有截图及交付证据文件摘要，均一致；不是执行交付的verify脚本后照抄结果。
 
 新dist与此前AI核验的54ae8a40候选逐字节相同，规范运行产物tree仍=`c5b2779d2b63980b9183561467ac423e30012dbf3a38d57216d0c28b86bb9ac5`，manifest仍=`8760f1c25b01a876394af413b58734d479b021b4404fa7771b0ede6bfa3201eb`。主会话已报告生产部署该同摘要运行字节，因此本次测试修正不需替换生产UI；实际生产目录仍只由主会话操作，AI没有访问/变更它。Python业务/管理原语/proof均保持890热修边界，本次也没有接入AE或采用AG引擎；后续新远端Quality由主会话正常整合推送后验收。
+
+## AE公开启动融合、AG失败取证接入（2026-10-21）
+
+在主会话已合入并推送的 `49083dbd3eceedbf9f36f1fba91bc7b7703f0c89` 后，按明确授权审查AE四个提交并接入：576906ff→02f43719、f9f6d62c→443ea24e、e6450b55→d35f12d0、555c1858→f36f113d。融合实现6045fe0e，计数诊断3ed96bdc/d871437b；冻结实际业务源码 `d871437b9797c274b40a84171221a6af0027e10d`。本分支不merge/push、不操作日用服务、个人数据、GPU或设备。
+
+公开 `launch_with_memory.py` 新增 `--enable-voice-preemptive` / `LONGMEMORY_VOICE_PREEMPTIVE_ENABLED=1`，默认关闭；只有pipeline/realtime组合允许，错误组合在加载厂商/私有配置前拒绝。宿主原 `LONGMEMORY_PREEMPTIVE_ENABLED` 仍独立、默认关闭。`_ObservedLLM`在连接初始化时自动绑定所属adapter的私有provider，不改共享实例。公开预览回调使用实际intent、provider方法和正式网页配置读取语义，不执行get_functions/工具、写历史或缓存旧时间；function_call即使空工具描述仍有direct_answer，搜索配置加functions能力同样在候选RPC前跳过。当前日用有搜索工具时预期零候选，不以关搜索换命中。
+
+独立审查补上两处生命周期缺口：快捷寒暄可能不进入原生chat/LLM，因此adapter安装于快捷回复/计时/完成捕获外层，仍先于创建连接；完成捕获器安装后可选调用guard_history，撤权门必须先于助手捕获，覆盖无需provider的固定回复。原生TTS DTO、快捷寒暄及Cosy最终音频发送包装使用合成输出检查；新发声时即使sentence_id未换，旧排队/迟到帧仍丢弃，同批有效新包保留。保留原0.3秒确认界限；增加confirmation_deadline/confirmation_failed计数和显式阻塞确认测试，验证一次正式prepare、一次原provider回退及owned请求收尾。
+
+首轮6045fe0e组合实际 **1 failed / 12 passed / 102.87s**：reset_worker在候选采用断言失败；当时缺少计数明细，原因未定位。原报告保留 `data/test-tmp/ai-proposal-real-sdk-6045fe0e-01.xml`，SHA-256=`7da497ab67714d948192b420e6e259db3b7befa920dca02489caddb38d76ef63`。3ed96bdc只补失败时不含正文的计数诊断，后续六次独立同场景冷启动均通过；该事实不能证明首错由环境或0.3秒超时造成，也不宣称已定位修复。本轮未增加重试、放宽期限或删除原采用断言，失败历史不改写。
+
+最终冻结d871437b使用真正公开install helper/能力回调、自动私有绑定及正式completion，不再在SDK客户端手工注入preview/formal metadata或bind_provider。宿主与语音脚本均来自固定Git对象，voice关键8文件逐字节核对；3.10不导入longmemory。真实SDK2.0.3/正式Runtime/HTTP五路RPC/本地Gateway SSE共11场景，加热修反馈两场景，**13 passed / 87.55s / 0 skipped**。报告 `data/test-tmp/ai-proposal-real-sdk-d871437b-02.xml` SHA-256=`54a38dee28a03b35cde5e817071256d557edc30e61846ae67f7c232cefbce6db`。覆盖实际原ASR、端点reset、正式prepare恰好一次、六项完整记忆、输入变化miss、工具零RPC、打断/新轮/队列撤权；均无学校或外部HTTP请求，合成库和随机端口隔离。
+
+最终适配/预取/输入输出计时/SmartTurn/RPC/连接与快捷回复/启动器，加AG四组与文档机制合计 **464 passed / 20.72s / 0 skipped**，报告 `data/test-tmp/ai-proposal-ag-final-d871437b-01.xml` SHA-256=`bc1320cad4f3a25b7fe8559117f71358785a98593f3517fbd0ee0cf3659c9e30`。这组不包含上述13项SDK组合，不合并计算成一次执行；早期357项＋7子测试、AG独立99项与后来的464项有重叠，不能相加冒充覆盖量。
+
+按主会话最新明确授权，backend_resources.py新增 **37项精确name/parameter/reason**：26个显式固定上游源码场景、11个显式SDK/3.10场景；[逐项对照JSON](../../../tests/fixtures/voice_proposal_resource_cases.json)不参与运行时放行。缺资源实测16 passed/37 skipped，正式audit_report返回(16,37)，报告 `data/test-tmp/ai-proposal-resource-final-01.xml`；报告护栏7项通过。原有声明与普通requests/numpy/PyYAML缺失拒绝规则保持，未改workflow、Playwright、e2e或前端。此处不是完整远端CI通过证据。
+
+AG `76e8d28bf39c53d0f9eb1463a0237e3b8b22950f` 独立审查后接入为 `62d4fff8`。公开Job查询共享结构，不改内存/CPU/时限；异常路径在关闭自有句柄前保存前后计量、阶段日志摘要和子进程退出码，并同时保留并发准入拒绝。查询失败仍清理，关闭AG-FLOW-GPU-20261021-01防止复用旧许可；不豁免stale PID或新增外部上下文。AI实际四组 **99 passed / 3.06s**，含轻量真实CPU Job，报告 `data/test-tmp/ai-ag-accounting-review-62d4fff8-01.xml` SHA-256=`478a17e5914173d5e0d42cfb421c5b7c5bba82c3856cd6c854a1fcf040d1d2cf`；11模块在既有小智3.10解释器AST检查通过。
+
+AI独立核对AG已生成CPU小图report/probe/receipt/source-analysis四份原字节摘要均与其交付一致，并逐一重算四个ONNX字节与摘要、16项allclose、最大误差3.5762786865234375e-7、CPUExecutionProvider、未初始化CUDA/加载真实Flow标记。Job峰值525000704字节、退出0和清理0 active来自AG既有receipt，本轮没有重跑该小图，更没有GPU重试。小图不证明真实Flow可导出、6GiB根因或性能提升；001仍关闭、无真实ONNX/engine、buffered日用保持。旧219管理proof和SDK原语不变，src/longmemory相对890无差异，不用旧proof替新桥或GPU新目标背书。
+
+5份直接相关公开文档及清单窄范围audit为checked_documents=5/findings=[]。生产、真实识别/声质/打断/延迟/圆屏体验和新远端Quality均另验；首轮SDK失败仍是已披露未定位项，不以本轮后续通过抹除。主会话补报远端39513701635后端3552 passed/179专属资源skip/323.34s，组件/类型/构建success；浏览器143项为68 fail/72 pass/3 skip，AH继续定位。此为主会话报告，与AI此前受控最小依赖3550/181及本段本机结果分别记录。
+
+
+主会话后续决定先推候选分支并以workflow_dispatch验收Quality，待AH生产会话修复/完整浏览器交付经AI审查后冻结最终候选；main和当前ready服务先保持。完整远端通过后，主会话才安排owned检查点、ff/准确dist部署和main推送。此为发布顺序决定，不是上述动作已发生或全部技术已启用；AE/AG本段提交与后续AH接入分开。
