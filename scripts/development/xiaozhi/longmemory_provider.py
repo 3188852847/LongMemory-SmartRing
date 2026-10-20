@@ -15,6 +15,7 @@ import re
 import subprocess
 import threading
 from contextvars import ContextVar
+from time import perf_counter
 from uuid import uuid4
 from urllib import error as urlerror
 from urllib import request as urlrequest
@@ -26,6 +27,25 @@ try:
     import voice_diagnostics as _diagnostics
 except ImportError:
     _diagnostics = None  # 单独复制旧教学入口时，观测缺失不能阻断记忆业务。
+
+
+_REQUEST_TIMING = ContextVar('longmemory_request_timing', default=None)
+
+
+def _emit_request_timing(record, stage, status, finished):
+    """调用局部记录只含固定时长；取消后线程完成也保留原轮次，不写最新快照。"""
+    entered = record['entered']
+    payload = {'version': 1, 'round_id': record['round_id'], 'stage': stage, 'status': status,
+        'timings_ms': {
+            'thread_handoff_ms': None if entered is None else round(max(0, entered - record['queued']) * 1000, 3),
+            'request_total_ms': None if entered is None or stage != 'worker_returned' else round(max(0, finished - entered) * 1000, 3),
+            'handoff_total_ms': round(max(0, finished - record['queued']) * 1000, 3),
+            'runtime_request_ms': record['runtime_request_ms'],
+        }}
+    try:
+        logger.bind(tag='LongMemoryTiming').info('memory_request_timing={}', json.dumps(payload, sort_keys=True))
+    except Exception:
+        pass  # 旁路日志失败不能改变原查询返回、异常或取消。
 
 
 class MemoryProvider(MemoryProviderBase):
@@ -99,6 +119,8 @@ class MemoryProvider(MemoryProviderBase):
             headers={"Content-Type": "application/json", "Authorization": "Bearer " + token,
                      **(_diagnostics.headers() if _diagnostics else {})},
         )
+        timing = _REQUEST_TIMING.get()
+        started = perf_counter() if timing is not None else None
         try:
             with self._lock, urlrequest.urlopen(request, timeout=20) as result:
                 if result.status != 200:
@@ -114,6 +136,9 @@ class MemoryProvider(MemoryProviderBase):
                 _diagnostics.event("memory_timeout" if isinstance(error, TimeoutError)
                     or isinstance(getattr(error, "reason", None), TimeoutError) else "memory_failed")
             raise RuntimeError("LongMemory Runtime 调用失败") from None
+        finally:
+            if timing is not None:
+                timing['runtime_request_ms'] = round(max(0, perf_counter() - started) * 1000, 3)
         return response
 
     def _subprocess_request(self, query):
@@ -440,7 +465,26 @@ class MemoryProvider(MemoryProviderBase):
 
     async def query_memory(self, query: str) -> str:
         # SQLite/子进程不阻塞小智音频事件循环。
-        return await asyncio.to_thread(self._request, query)
+        key = self._turn_key.get()
+        record = {'round_id': key if isinstance(key, str) and re.fullmatch(r'[0-9a-f]{32}', key) else None,
+                  'queued': perf_counter(), 'entered': None, 'runtime_request_ms': None}
+        def request():
+            record['entered'] = perf_counter()
+            token = _REQUEST_TIMING.set(record)
+            status = 'failed'
+            try:
+                result = self._request(query)
+                status = 'completed'
+                return result
+            finally:
+                _REQUEST_TIMING.reset(token)
+                _emit_request_timing(record, 'worker_returned', status, perf_counter())
+        try:
+            return await asyncio.to_thread(request)
+        except asyncio.CancelledError:
+            # 取消等待不等于底层线程已停止；分别记消费者取消和实际线程返回。
+            _emit_request_timing(record, 'consumer_cancelled', 'cancelled', perf_counter())
+            raise
 
     async def save_memory(self, msgs, session_id=None):
         # 用户 ASR 文本已逐轮持久化；断线时不能再次全量提取历史，

@@ -8,6 +8,8 @@ from threading import RLock
 from time import perf_counter
 from uuid import uuid4
 import re
+import json
+import logging
 from longmemory.application.round_screen_turns import memory_receipt, validate_receipt, PlatformTurnCompletion
 from longmemory.application.round_screen_memory_feedback import classify_explicit_round_screen_feedback
 
@@ -36,6 +38,21 @@ from longmemory.application.temporary_interaction import (
 from longmemory.application.consolidation.scheduler import (
     LowFrequencyConsolidationScheduler,
 )
+
+
+_LOGGER = logging.getLogger(__name__)
+
+
+def _emit_round_screen_timing(round_id, started, acquired, status):
+    """外层锁等待原来不在 prepare 时钟内；独立日志保留旧协议和时钟语义。"""
+    payload = {'version': 1, 'round_id': round_id if isinstance(round_id, str)
+        and re.fullmatch(r'[0-9a-f]{24,32}', round_id) else None, 'status': status,
+        'timings_ms': {'outer_lock_wait_ms': None if acquired is None else round(max(0, acquired - started) * 1000, 3),
+                       'total_ms': round(max(0, perf_counter() - started) * 1000, 3)}}
+    try:
+        _LOGGER.info('round_screen_entry_timing=%s', json.dumps(payload, sort_keys=True))
+    except Exception:
+        pass  # 观测不能阻断来源持久化或把原异常替换为日志异常。
 
 
 @dataclass(frozen=True, slots=True)
@@ -525,30 +542,36 @@ class MemoryRuntime:
             return True
 
     def prepare_round_screen(self, text, *, client_round_id, session_id, request_id=None, voice_round_id=None):
-        with self._lock:
-            self._ensure_open()
-            if any(not isinstance(value, str) or re.fullmatch(r"[0-9a-f]{24,32}", value) is None
-                   for value in (client_round_id, session_id)):
-                raise ValueError("round_screen_metadata_invalid")
-            if any(value is not None and (not isinstance(value, str) or re.fullmatch(r"[0-9a-f]{24}", value) is None)
-                   for value in (request_id, voice_round_id)):
-                raise ValueError("round_screen_request_identity_invalid")
-            store = self._round_screen_store
-            if store is None:
-                raise ValueError("round_screen_platform_unavailable")
-            for expired in store.expire():
-                self._deferred_events.pop(expired, None)
-            event_id = store.reserve(client_round_id=client_round_id, session_id=session_id,
-                                     request_id=request_id, voice_round_id=voice_round_id)
-            try:
-                prepared = self.prepare_user(text, event_id=event_id, session_id=session_id,
-                                             defer_slow_observation=True)
-                store.prepared(event_id, memory_receipt(prepared))
-            except BaseException:
-                store.failed(event_id)
-                raise
-            feedback = store.feedback(prepared.event, classify_explicit_round_screen_feedback(text))
-            return prepared, feedback
+        started, acquired, status = perf_counter(), None, 'failed'
+        try:
+            with self._lock:
+                acquired = perf_counter()
+                self._ensure_open()
+                if any(not isinstance(value, str) or re.fullmatch(r"[0-9a-f]{24,32}", value) is None
+                       for value in (client_round_id, session_id)):
+                    raise ValueError("round_screen_metadata_invalid")
+                if any(value is not None and (not isinstance(value, str) or re.fullmatch(r"[0-9a-f]{24}", value) is None)
+                       for value in (request_id, voice_round_id)):
+                    raise ValueError("round_screen_request_identity_invalid")
+                store = self._round_screen_store
+                if store is None:
+                    raise ValueError("round_screen_platform_unavailable")
+                for expired in store.expire():
+                    self._deferred_events.pop(expired, None)
+                event_id = store.reserve(client_round_id=client_round_id, session_id=session_id,
+                                         request_id=request_id, voice_round_id=voice_round_id)
+                try:
+                    prepared = self.prepare_user(text, event_id=event_id, session_id=session_id,
+                                                 defer_slow_observation=True)
+                    store.prepared(event_id, memory_receipt(prepared))
+                except BaseException:
+                    store.failed(event_id)
+                    raise
+                feedback = store.feedback(prepared.event, classify_explicit_round_screen_feedback(text))
+                status = 'completed'
+                return prepared, feedback
+        finally:
+            _emit_round_screen_timing(client_round_id, started, acquired, status)
 
     def complete_round_screen(self, *, turn_id, answer, receipt, client_round_id=None, request_id=None):
         with self._lock:
