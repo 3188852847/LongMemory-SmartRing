@@ -1033,8 +1033,21 @@ class MemoryRuntime:
                 raise RuntimeError("candidate_memory_unavailable")
             if self.legacy_sqlite or not callable(snapshot) or gateway is None:
                 raise UnsupportedCapabilityError("candidate_memory_unsupported")
-            encoded = gateway.embed({"model": gateway.encoder.identity, "input": [query]}, "query")
-            vector = encoded["data"][0]["embedding"]
+            revision = self._candidate_runtime_revision()
+            encoder = gateway.encoder
+        finally:
+            self._lock.release()
+        # CPU编码可能等待共享向量器；不能带着Runtime锁阻挡正式prepare/管理。
+        # 仍复用原网关编码锁，不增加并发工位；迟到编码只可被重新验证或丢弃。
+        encoded = gateway.embed({"model": encoder.identity, "input": [query]}, "query")
+        vector = encoded["data"][0]["embedding"]
+        if not self._lock.acquire(blocking=False):
+            raise RuntimeError("candidate_memory_busy")
+        try:
+            self._ensure_open()
+            if (self._closing or not self._use_enabled or self._candidate_runtime_revision() != revision
+                    or getattr(self._model_service, "gateway", None) is not gateway or gateway.encoder is not encoder):
+                raise RuntimeError("candidate_memory_stale")
             result = snapshot(query_embedding=vector, limit=limit)
             if not isinstance(result, dict):
                 raise RuntimeError("candidate_memory_response_invalid")

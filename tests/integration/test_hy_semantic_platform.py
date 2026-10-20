@@ -190,6 +190,37 @@ def test_runtime_restart_and_disabled_use_invalidate_proposal_receipts(tmp_path)
         two.close()
 
 
+def test_candidate_embedding_never_holds_runtime_lock_and_setting_change_discards_late_vector(tmp_path):
+    runtime, method, _ = make_runtime(tmp_path)
+    entered, release = Event(), Event()
+    outcomes, reads = [], []
+    def embedding(_body, _role):
+        entered.set()
+        assert release.wait(2)
+        return {"data":[{"embedding":[1.0]}]}
+    method.candidate_snapshot = lambda **kwargs: reads.append(kwargs)
+    runtime._model_service = SimpleNamespace(gateway=SimpleNamespace(encoder=SimpleNamespace(identity="synthetic"),
+        embed=embedding),close=lambda:None,status=lambda:{"state":"available"})
+    def candidate():
+        try: runtime.candidate_memory_snapshot("合成问题")
+        except RuntimeError as error: outcomes.append(str(error))
+    thread = Thread(target=candidate)
+    try:
+        thread.start()
+        assert entered.wait(1)
+        assert runtime._lock.acquire(blocking=False), "candidate CPU work blocked formal Runtime lock"
+        try:
+            runtime.configure(write_enabled=False,use_enabled=True)
+        finally:
+            runtime._lock.release()
+    finally:
+        release.set()
+        thread.join(3)
+        runtime.close()
+    assert not thread.is_alive() and not reads
+    assert outcomes == ["candidate_memory_stale"]
+
+
 def prepared_proposal(tmp_path):
     runtime, method, _ = make_runtime(tmp_path)
     event_id = str(uuid4())
