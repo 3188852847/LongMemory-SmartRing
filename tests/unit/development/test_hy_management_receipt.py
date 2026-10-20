@@ -297,6 +297,11 @@ def test_semantic_mode_requires_fixed_suite_and_generates_exact_v2_after_tests(s
     assert options['env']['LONGMEMORY_TEST_PY310'] == str(arguments.voice_python)
     assert options['env']['LONGMEMORY_TEST_AB_CAPTURE'] == str(arguments.capture)
     assert result['pytest_log_sha256'] == receipt.probe.digest(b'synthetic test log')
+    scratch = Path(command[command.index('--basetemp') + 1])
+    assert scratch.parent == receipt.TOOL_ROOT / 'data/test-tmp'
+    assert scratch.name.startswith('mr-') and len(scratch.name) == 11
+    assert not scratch.is_relative_to(arguments.output)
+    assert result['pytest_basetemp'] == scratch.relative_to(receipt.TOOL_ROOT).as_posix()
 
 
 @pytest.mark.parametrize('change,code', [

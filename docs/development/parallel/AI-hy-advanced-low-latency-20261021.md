@@ -232,7 +232,7 @@ Runtime 候选读取使用宿主原网关的 CPU `embed(...,"query")` 及其已�
 
 结论为可进入受控 adaptive 上线候选，仍保持 buffered 默认。正式发布技术门通过后，由所有者使用原角色/声音，分别比较短答/多句长答连续性；在确实听到开口及中途改问，核对旧声残留、字幕与新轮完整性，再连续两三轮看连接/声音和记忆一致性。SmartTurn 正式 EOU 继续原策略（合成中文初筛4/5误切未改善），不把候选启用绑死于其 enabled。听感/残音/新轮异常则回 buffered；AI 不把电脑声音或出帧当圆屏验收。
 
-## 最终部署/回退操作计划（只交接，不在AI执行）
+## 部署/回退计划记录（由末尾执行清单补全，不在AI执行）
 
 本计划由主会话持有操作责任；需要先补齐最终 clean commit、公共后端/候选真实跨进程与旧 source 身份兼容、最终精确指纹的无网络 SDK/管理/HTTP 回归、前端同 tree 产物和新协议2证明。未满足则继续原日用，不提前改配置或重签 proof。AG TensorRT/vLLM/量化候选不阻塞其他已证实方向，也不混入本轮日用默认。
 
@@ -355,3 +355,35 @@ AH最终发布只允许`ah-release-provenance-54ae8a40-20261021/dist/`。AI只�
 进程沿原Windows Job先归属再放行，全部新数据/环境/临时文件隔离；无私有环境、代理、学校调用、GPU或日用端口。JUnit须零fail/error/skip且有case，并包含固定关键真实场景；前后HEAD/tree/源码、管理原语、SDK与语音解释器摘要一致才生成七字段协议2 `management-verification.json`及外围`receipt.json`、JUnit和原始pytest日志。新增入口门控与旧兼容组 **38 passed / 0.37秒**，这些模拟测试不替代真实冻结运行。
 
 proof实际匹配SDK版本和管理原语内容摘要，不绑定工作树路径或HEAD；外围receipt绑定完整源码身份。主会话仅当融合后的源码、管理原语和SDK解释器身份与此实跑回执一致，才可把同一候选proof复制到正式配置；同一提交快进到main且字节不变无需仅因路径变化再跑。若业务源码变化须重审受影响验证；不可手改旧proof字段/摘要。正式ASR安装桥后续接力不属于本次候选链完成证明。
+
+首次冻结`ee03aec75c2d6788fb67fd52043385712ef5b18f`运行 **210 passed / 9 failed / 373.16秒，无skip**，工具正确拒绝签发，失败回执与JUnit/log完整保留在`data/test-tmp/ai-managed-proof-ee03aec7-20261021-01/`。九项均在生命周期夹具创建SharedBudget深层SQLite路径失败，尚未进入目标业务断言；其基目录嵌套在较长回执名下，预算文件路径255字符，journal再加后缀。短路径同名SQLite创建复核成功。修复仅把受管模式的pytest目录设为本工作树`data/test-tmp/mr-<随机8hex>/`并写入receipt，仍排他、ignored、不联接、不清理他人目录；不改预算实现、夹具历史部署相对路径、用例或门槛。旧模式路径及兼容契约不变；失败证据不覆写。修复后重新冻结完整入口，不把210项和九项补测拼成伪造成功回执。
+
+短路径下工具38项＋原失败生命周期/可信bootstrap九项 **47 passed / 58.82秒，1 deselected**；仅未选入另需明确BGE资源的独立CPU性能测试。此处定向验证工具路径修复，不作为协议2成功回执。主会话已安排AE在另一隔离树基于ee03继续真实ASR适配实现，默认关闭且不改当前冻结源；本核心proof不混入其未验代码。
+
+## 由主会话执行的精确交接清单
+
+以下只是可审查操作说明，AI未在生产执行。所有步骤在主项目`D:/03-项目/01-正式项目/智慧圆屏`，由主会话先确认服务/端口/Job归属；不在隔离工作树启动日用。
+
+1. 登记当前main、目标融合提交、生产SDK解释器SHA-256、当前配置/角色/声音身份和运行开关。正式Python固定为`local/worktrees/v-hy-memory-20261019/local/runtime/hy-memory/.venv/Scripts/python.exe`、3.12.13、SDK2.0.3；不移动解释器，不安装依赖。
+2. 使用现有入口退出旧启动器：React按钮“停止服务并退出面板”→确认“停止并退出”，等`shutdown_complete=true`并复核owned子进程和端口释放。等价既有接口是从`data/control/launcher-web.json`读取`origin/token`，核对`control_token_digest`与当前`launcher-control.json`令牌摘要及所属实例后，对同origin的`POST /api/launcher/actions`发送`{"action":"shutdown"}`、Authorization Bearer；轮询`GET /api/launcher/status`的`shutdown_complete`。不在日志打印令牌。`control.py status/stop/start`只控制服务，**没有exit/shutdown命令**；单独stop不足以更新旧启动器环境，不能补造命令。
+3. 新建不存在的`local/archive/hy-advanced-release/<UTC时间-随机ID>/`。在同一已停止边界逐文件复制并核验大小/SHA-256：完整`data/memory/hy-campus-daily-20261019/`（含sdk/Chroma/Kuzu、hy-state.json、engine.owner、management-scope/stamp、management.sqlite3、semantic.sqlite3、provenance.sqlite3及所有实际侧文件）；`data/databases/hy-campus-sources-20261019.sqlite3`、`data/databases/hy-campus-calls-20261019.sqlite3`及各自所有现存WAL/SHM/其他伴随文件；`local/config/`完整人工配置/偏好/角色/声音/旧proof；`web/react-chat/dist/`当前前端和本轮实际启动使用的会话库/附属账本。平台round回执沿同source journal保存（`bootstrap.py`的SQLitePlatformRounds），不能另猜一个round文件名。若实际启动会话库不是公开默认`data/databases/xiaozhi-demo-v1.db`，由主会话从正式实例参数核精确路径后纳入，不在AI读取私有参数或漏备份。清单/摘要保存在私有检查点，不提交Git；任何文件仍变动先查owner，不声称一致。
+4. 审查、整合并推送目标源码后，复核业务源码/RPC/前端tree与冻结回执相同。生产前端目录为`web/react-chat/dist/`，从AH最终45文件dist暂存校验后替换；旧目录已完整归档。校验manifest/tree及逐文件清单后再启动，不把旧/新目录增量混拷，不使用两个失效候选。由主会话按文件清单执行；本AI不删除/移动生产目录。
+5. `local/config/hy-memory/settings.json`仅按本目标设置`semantic_layers_enabled=true`；`model_mode=disabled`、sdk_version=2.0.3、embedding_dimensions=512、include_profile=true、原managed_gateway/network_authorized与原选模型维持。`management_writes_enabled`、`management_exclusive_profile`、`background_priority_enabled`必须不存在或false，由已验装配动态授权；不能直接写true绕过proof/bootstrap。身份计算排除语义/运行期开关，`deployment.json.settings_identity`及hy-state/source身份无需重签或SQL改写，正式重开`create=False`，路径缺失须报错不能建空库。
+6. 主会话将冻结工具实际生成、七字段完整匹配的`management-verification.json`候选复制到`local/config/hy-memory/management-verification.json`，同时归档外围receipt/JUnit/log摘要与精确测试清单。当前管理原语摘要覆盖`worker.py/process_client.py/management_rpc.py/sdk_bridge.py/short_embedding_input.py/sdk_observation.py/observation.py/layer_data.py/semantic.py/candidate_snapshot.py/method.py/assembly.py/provenance.py/settings.py/background.py`，名称和规范化源码共同入hash；不能仅改旧proof摘要。外围receipt的实测HEAD不随后续纯文档提交改写。
+7. 新PowerShell进程中固定本轮开关，再运行唯一根入口。下面命令仅供主会话执行，AI未运行：
+
+   ```powershell
+   $releaseRoot = 'D:/03-项目/01-正式项目/智慧圆屏'
+   Set-Location -LiteralPath $releaseRoot
+   $env:LONGMEMORY_PREEMPTIVE_ENABLED = '0'
+   $env:LONGMEMORY_TURN_END_MODE = 'off'
+   $env:LONGMEMORY_COSY_DELIVERY_MODE = 'buffered'
+   & (Join-Path $releaseRoot '启动智慧圆屏.cmd')
+   ```
+
+   这里关闭的是已存在的3.12候选宿主；3.10生产候选桥尚未安装，**没有另一个已实现的环境开关可以冒称双端生效**，AE接续实现后再补其精确入口。本次禁止在宿主上另传`--enable-voice-preemptive`。实际搜索配置必miss，不发送无资格候选请求。
+8. 受控声音试听可在另一次完整shutdown/新入口后仅改`LONGMEMORY_COSY_DELIVERY_MODE=adaptive`；沿原角色/声线，听感、有效开口后插话、残音和后继新轮另验，异常回buffered。SmartTurn最多另选shadow：正式`LONGMEMORY_TURN_END_MODEL=$releaseRoot/local/runtime/models/smart-turn-v3.2/smart-turn-v3.2-cpu.onnx`、`LONGMEMORY_TURN_END_PYTHON=$releaseRoot/local/runtime/CosyVoice/.venv/Scripts/python.exe`，模型8679182字节/SHA-256=`2bb026316b14a660486a75b1733cd3fbab8c2fd0314dc9af7be49f8cca967e4f`。所有者已下载，只由主会话核验后复制现有文件；不运行下载入口、不沿用AC工作树为永久路径。shadow不改变正式EOU；没有新的中文校准批准不设enabled。AG引擎保持默认关闭，另需新窗口与真实十样本证据。
+9. 启动后先核owned ready/原设备路由、前端manifest、原模型/声音/角色、Hy protocol2/mode/graph/epoch与Runtime写用门、L0/L7来源标签及单任务回执；只读查看不代跑search、建任务或写合成个人记忆。真实两三轮文字/圆屏、保存重启后可检索、听感/打断由所有者进行。学校真实模型质量、长期L6归纳有效性不因本次禁网合成回归宣称通过。
+10. 若需回退，先按同一owned shutdown保全失败时当前全量检查点。优先保留新代码，用`semantic_layers_enabled=false`、buffered、候选off及**与当前代码匹配、由旧模式入口真实生成的四字段pro proof**重开；该证明不是本次七字段proof的手工删字段版本。可用同工具`--reviewed-semantic-background-writes-disabled`（不带managed-semantic）单独生成，固定原管理/正式HTTP组；仅在确实准备pro回退时运行，不为重复数字复跑本轮。原图/任务/provenance均保留。不能把旧a932写入器或写前数据备份直接覆盖新增对话来声称无损回退；不兼容须报告具体阻塞，数据恢复另按精确范围授权。
+
+主会话实际操作后补“AI任务→冻结提交/最终交付→AI验收→main合入/推送→停机检查点→实例健康→所有者体验→会话ID”追溯。本AI仅提交自己分支，不merge main、不推送、不执行生产配置/服务/个人库写入。

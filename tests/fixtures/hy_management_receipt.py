@@ -11,6 +11,7 @@ import json
 import os
 from pathlib import Path
 import re
+import secrets
 import subprocess
 import sys
 import xml.etree.ElementTree as ET
@@ -215,6 +216,12 @@ def run(arguments):
         require(code == 0 and data.strip() == b'"3.10.20"', 'management_voice_version_mismatch')
     # SDK元数据核验失败时不创建输出。真正验收一旦开始，失败证据一律保留。
     output.mkdir(parents=True, exist_ok=False)
+    # 生命周期夹具保留历史部署的深层相对路径。把pytest放在长回执目录内，
+    # Windows SQLite的journal路径可能越界；短且排他的目录仍只位于本工具树。
+    scratch = output / 'pytest'
+    if semantic:
+        scratch = probe.validate_output(TOOL_ROOT / 'data/test-tmp' / ('mr-' + secrets.token_hex(4)), TOOL_ROOT / 'data/test-tmp')
+        require_ignored(scratch)
     home = output / 'home'
     home.mkdir()
     env = clean_environment()
@@ -232,10 +239,11 @@ def run(arguments):
         'test_count': 0, 'junit_sha256': None, 'error': None}
     if semantic:
         receipt.update(management_protocol=2, semantic_background_writes='managed_v1',
-            voice_python_version='3.10.20', voice_python_sha256=voice_hash, test_paths=list(tests))
+            voice_python_version='3.10.20', voice_python_sha256=voice_hash, test_paths=list(tests),
+            pytest_basetemp=scratch.relative_to(TOOL_ROOT).as_posix())
     try:
         command = [sys.executable, '-B', '-X', 'utf8', '-m', 'pytest', *tests, '-q',
-                   '--basetemp', str(output / 'pytest'), '--junitxml', str(junit)]
+                   '--basetemp', str(scratch), '--junitxml', str(junit)]
         code, _ = owned_run(command, cwd=root, env=env, timeout=900 if semantic else 300,
             **({'log_path': output / 'pytest.log'} if semantic else {}))
         require(code == 0, 'management_pytest_failed')
