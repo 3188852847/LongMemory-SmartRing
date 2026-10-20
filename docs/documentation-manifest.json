@@ -6420,6 +6420,26 @@
         "evidence": ["docs/development/parallel/X-hy-layer-data-release-20261021.md", "docs/development/parallel/Z-hy-layer-data-review-20261021.md"]
       },
       "tags": ["X", "Hy-Memory", "逐层内容", "发布工具", "证据接口"]
+    },
+    {
+      "path": "docs/development/parallel/AA-hy-layer-data-release-closure-20261021.md",
+      "title": "AA：Hy逐层内容发布收尾",
+      "status": "reference",
+      "basis": "从精确发布main d7d4ff5追加保全/恢复/最终生产只读验收与四会话追溯；主会话复核并按本轮范围接受，保留原收据pending历史",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-21",
+        "scope": "仅本轮发布收尾：八份匿名回执摘要与既有软件证据核对、八层生产可读/列表详情UI摘要/非零位置导航/空层正常滚动/保护边界及四会话映射；不读个人正文、不改历史报告",
+        "evidence": [
+          "docs/development/parallel/AA-hy-layer-data-20261021.md",
+          "docs/development/parallel/Y-hy-layer-data-ui-20261021.md",
+          "docs/development/parallel/Z-hy-layer-data-review-20261021.md",
+          "docs/development/parallel/X-hy-layer-data-release-20261021.md",
+          "docs/development/parallel/X-hy-layer-data-release-tools-20261021.md",
+          "final-readonly-acceptance.json SHA-256 4360e19164851b9d0a0303e469c311c19ff1bd51a17da112643418a6cd8d95d5"
+        ]
+      },
+      "tags": ["AA", "Hy-Memory", "逐层内容", "发布收尾", "回执"]
     }
   ],
   "integration_sources": {
