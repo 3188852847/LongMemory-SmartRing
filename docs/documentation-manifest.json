@@ -6145,11 +6145,11 @@
       "path": "docs/development/parallel/Z-low-latency-review-20261020.md",
       "title": "Z：Memory 与 Cosy 低延迟组合审查",
       "status": "reference",
-      "basis": "精确V/X组合与两次发布证据；实机再次失败后消息顺序及ASR快路窄验证通过，真实双臂仍待审",
+      "basis": "精确V/X组合与两次发布/失败证据；消息顺序及ASR快路55项通过，唯一公开双臂候选通过有限规则，仍待上线及设备重验",
       "review": {
         "state": "verified",
-        "date": "2026-10-20",
-        "scope": "发布和两次失败按来源保留；V910消息构造/X33b6336+d8aed97快路组合55项及Python3.10叶文件检查，未执行真实对照或登记实机通过",
+        "date": "2026-10-21",
+        "scope": "发布/两次失败分别保留；V910+X33b6336/d8aed97组合55项及3.10检查，Z只读复核X唯一双臂回执/旧证明；基线未复现日期EOS，未登记实机通过",
         "evidence": [
           "docs/development/parallel/V-memory-low-latency-20261020.md",
           "docs/development/parallel/X-cosy-streaming-20261020.md",
