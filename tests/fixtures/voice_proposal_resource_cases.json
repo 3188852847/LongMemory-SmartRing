@@ -180,6 +180,11 @@
       "module": "tests.unit.development.test_voice_proposal_adapter_sdk",
       "name": "test_actual_native_asr_adapter_and_python310_formal_sdk_rpc[queued_cancel]",
       "reason": "explicit frozen AI ref/SDK/voice3.10/native repository required"
+    },
+    {
+      "module": "tests.unit.development.test_voice_proposal_adapter",
+      "name": "test_confirmation_deadline_keeps_one_formal_fallback_and_retires_owned_request",
+      "reason": "explicit existing native repository required; never download"
     }
   ]
 }

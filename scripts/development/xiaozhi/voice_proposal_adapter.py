@@ -140,7 +140,8 @@ class _State:
         self.history_guard = None
         self.output_sentence = self.output_epoch = None
         self.counts = dict(admitted=0, adopted=0, missed=0, skipped_tools=0, invalidated=0,
-                           dropped_output=0, hook_failed=0, cleanup_unconfirmed=0)
+                           dropped_output=0, hook_failed=0, cleanup_unconfirmed=0,
+                           confirmation_deadline=0, confirmation_failed=0)
 
     def current_turn(self, lease):
         return self.current is lease and self.epoch == lease.epoch and not self.closed
@@ -513,7 +514,9 @@ class VoiceProposalAdapter:
             future = asyncio.run_coroutine_threadsafe(self._confirm(lease, effective, dict(metadata)), state.loop)
             try:
                 text = future.result(timeout=self.confirmation_timeout_seconds)
-            except Exception:
+            except Exception as error:
+                with state.lock:
+                    state.counts["confirmation_deadline" if isinstance(error, TimeoutError) else "confirmation_failed"] += 1
                 future.cancel()
                 lease.candidate = False
                 self._spawn(state, self._retire(lease))

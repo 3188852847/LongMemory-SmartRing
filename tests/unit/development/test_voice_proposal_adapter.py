@@ -454,3 +454,29 @@ def test_native_dto_and_final_packet_sender_drop_old_output_after_new_speech(bou
         finally:
             await boundary.finish(h)
     asyncio.run(run())
+
+
+def test_confirmation_deadline_keeps_one_formal_fallback_and_retires_owned_request(boundary):
+    async def run():
+        rpc = boundary.SyntheticRPC()
+        async def confirm(**kwargs):
+            rpc.calls.append("confirm")
+            await asyncio.Event().wait()  # 显式屏障，不能靠机器快慢决定是否越过确认期限。
+        rpc.confirm_effective = confirm
+        h = boundary.harness(rpc_factory=lambda **_kwargs: rpc)
+        h.adapter.confirmation_timeout_seconds = .3  # 正式启动的原有界限，不放宽。
+        try:
+            await boundary.begin(h)
+            await boundary.endpoint(h)
+            for future in h.executor.futures:
+                await asyncio.wrap_future(future)
+            assert h.stored == ["原正式回答"] and len(h.requests) == 1
+            assert h.connection.memory.prepares == 1
+            counts = h.adapter.snapshot(h.connection)
+            assert counts["confirmation_deadline"] == 1 and counts["confirmation_failed"] == 0
+            assert counts["adopted"] == 0
+            assert rpc.calls.count("start") == rpc.calls.count("confirm") == rpc.calls.count("cancel") == 1
+            assert rpc.active == 0
+        finally:
+            await boundary.finish(h)
+    asyncio.run(run())
