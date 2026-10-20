@@ -13,6 +13,32 @@
   },
   "topics": [
     {
+      "id": "profile-matched-voice-waiting",
+      "scope": "当前声线私有等待缓存、Memory 前开启、答案优先及细分计时；候选软件与正式听感分开",
+      "authority": "docs/guides/语音等待提示与首答时长-20261020.md",
+      "sources": [
+        "scripts/development/xiaozhi/voice_waiting.py",
+        "scripts/development/xiaozhi/voice_latency.py",
+        "scripts/development/xiaozhi/cosyvoice_profiles.py",
+        "scripts/development/xiaozhi/prepare_voice_waiting.py",
+        "tests/unit/development/test_voice_waiting_cache.py",
+        "tests/unit/development/test_voice_waiting_handoff.py",
+        "tests/unit/development/test_vx_voice_close_integration.py"
+      ],
+      "related": [
+        "docs/development/parallel/V-voice-latency-20261020.md",
+        "docs/adr/0188-profile-matched-waiting-cache-and-answer-priority.md",
+        "docs/development/parallel/Z-vx-integration-20261020.md",
+        "docs/guides/声音设置.md"
+      ],
+      "tags": [
+        "语音",
+        "等待",
+        "延迟"
+      ],
+      "review": "verified 2026-10-20: 精确组合源码/合成测试与 Python3.10 缓存验证；真实准备/首答收益未验收"
+    },
+    {
       "id": "roundscreen-network-coexistence",
       "scope": "保留Docker另一设备，独立圆屏端口与电脑物理IP自动跟踪；候选已实现未部署，设备数字OTA仍需所有者改址",
       "authority": "docs/guides/圆屏独立端口与IP自动跟踪-20261020.md",
@@ -34,7 +60,8 @@
         "docs/development/parallel/X-hy-roundscreen-20261019.md",
         "docs/guides/React启动面板.md",
         "docs/development/launcher-contract.md",
-        "docs/development/troubleshooting.md"
+        "docs/development/troubleshooting.md",
+        "docs/development/parallel/Z-vx-integration-20261020.md"
       ],
       "tags": [
         "双设备共存",
@@ -5739,6 +5766,94 @@
         "双设备共存",
         "网络",
         "配网"
+      ]
+    },
+    {
+      "path": "docs/guides/语音等待提示与首答时长-20261020.md",
+      "title": "同声线等待提示与首答时长",
+      "status": "current",
+      "basis": "候选操作/计时入口；真实声线准备和设备体验仍待 X 维护窗口与所有者验收",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-20",
+        "scope": "291d566/5fd9f2d 合于 d5f873a 的源码与合成检查；含首次失败和隔离复核，不含部署/真实声线/设备或秒数提升验收",
+        "evidence": [
+          "docs/development/parallel/Z-vx-integration-20261020.md",
+          "docs/development/parallel/V-voice-latency-20261020.md",
+          "tests/unit/development/test_voice_waiting_cache.py",
+          "tests/unit/development/test_vx_voice_close_integration.py"
+        ]
+      },
+      "tags": [
+        "等待提示",
+        "首答时长",
+        "组合审查"
+      ]
+    },
+    {
+      "path": "docs/development/parallel/V-voice-latency-20261020.md",
+      "title": "V：等待恢复与真实首答延迟专项",
+      "status": "reference",
+      "basis": "V 精确候选的诊断、实现及合成证据；不代表真实延迟提升",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-20",
+        "scope": "291d566/5fd9f2d 合于 d5f873a 的源码与合成检查；含首次失败和隔离复核，不含部署/真实声线/设备或秒数提升验收",
+        "evidence": [
+          "docs/development/parallel/Z-vx-integration-20261020.md",
+          "docs/development/parallel/V-voice-latency-20261020.md",
+          "tests/unit/development/test_voice_waiting_cache.py",
+          "tests/unit/development/test_vx_voice_close_integration.py"
+        ]
+      },
+      "tags": [
+        "等待提示",
+        "首答时长",
+        "组合审查"
+      ]
+    },
+    {
+      "path": "docs/adr/0188-profile-matched-waiting-cache-and-answer-priority.md",
+      "title": "ADR-0188：同声线等待缓存与真实答案优先",
+      "status": "reference",
+      "basis": "记录私有派生音频身份和答案优先的边界，不授权问话时合成",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-20",
+        "scope": "291d566/5fd9f2d 合于 d5f873a 的源码与合成检查；含首次失败和隔离复核，不含部署/真实声线/设备或秒数提升验收",
+        "evidence": [
+          "docs/development/parallel/Z-vx-integration-20261020.md",
+          "docs/development/parallel/V-voice-latency-20261020.md",
+          "tests/unit/development/test_voice_waiting_cache.py",
+          "tests/unit/development/test_vx_voice_close_integration.py"
+        ]
+      },
+      "tags": [
+        "等待提示",
+        "首答时长",
+        "组合审查"
+      ]
+    },
+    {
+      "path": "docs/development/parallel/Z-vx-integration-20261020.md",
+      "title": "Z：等待提示与独立网络端口组合审查",
+      "status": "reference",
+      "basis": "V/X 精确组合、独立验证、前端构建收据和 X 待执行部署清单",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-20",
+        "scope": "291d566/5fd9f2d 合于 d5f873a 的源码与合成检查；含首次失败和隔离复核，不含部署/真实声线/设备或秒数提升验收",
+        "evidence": [
+          "docs/development/parallel/Z-vx-integration-20261020.md",
+          "docs/development/parallel/V-voice-latency-20261020.md",
+          "tests/unit/development/test_voice_waiting_cache.py",
+          "tests/unit/development/test_vx_voice_close_integration.py"
+        ]
+      },
+      "tags": [
+        "等待提示",
+        "首答时长",
+        "组合审查"
       ]
     }
   ],
