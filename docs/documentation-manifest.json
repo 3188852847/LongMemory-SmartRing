@@ -62,6 +62,7 @@
         "tests/unit/development/test_hy_campus_latency_probe.py",
         "tests/unit/development/test_hy_campus_probe_gate.py",
         "tests/unit/development/test_hy_management_receipt.py",
+        "tests/unit/development/test_hy_windows_owned_processes.py",
         "tests/unit/methods/test_short_embedding_input.py",
         "tests/unit/methods/test_hy_observation.py",
         "tests/unit/methods/test_hy_overlay_batch.py",
@@ -81,7 +82,7 @@
         "计时",
         "连接复用"
       ],
-      "review": "verified 2026-10-20: 业务冻结ae53f72，保留376项/391项及1个真实BGE跳过的隔离证据；补充双臂共享最多8次调用探针、管理测试回执工具及针对性本地合成测试、X/Z命令。真实校园/TLS/BGE/声音/端到端及最终整合管理验收未执行，旧管理证明不能复用"
+      "review": "verified 2026-10-20: 业务冻结ae53f72，保留隔离证据及共享8次探针/XZ命令；Z真实Windows发现管理execv空stdout后已复现并改为等待目标，10项真实Windows输出/配置/退出码/整树回收测试通过。真实校园/BGE/声音/端到端及最终整合管理验收未执行，旧管理证明不能复用"
     },
     {
       "id": "profile-matched-voice-waiting",
@@ -1192,7 +1193,7 @@
       "review": {
         "state": "verified",
         "date": "2026-10-20",
-        "scope": "冻结业务候选与隔离证据；补充共享8次校园探针、管理回执工具及X/Z命令，仅本地合成验证，真实校园与最终整合待验",
+        "scope": "冻结业务候选；共享8次探针、管理回执及XZ命令；Z实测Windows execv空stdout已复现修正，实际管道/配置/退出码/三级进程回收验证；真实校园和最终整合待验",
         "evidence": [
           "docs/development/parallel/V-memory-low-latency-20261020.md",
           "tests/integration/test_hy_roundscreen_sdk.py",
@@ -1203,7 +1204,8 @@
           "tests/fixtures/hy_management_receipt.py",
           "tests/unit/development/test_hy_campus_latency_probe.py",
           "tests/unit/development/test_hy_campus_probe_gate.py",
-          "tests/unit/development/test_hy_management_receipt.py"
+          "tests/unit/development/test_hy_management_receipt.py",
+          "tests/unit/development/test_hy_windows_owned_processes.py"
         ]
       },
       "tags": [

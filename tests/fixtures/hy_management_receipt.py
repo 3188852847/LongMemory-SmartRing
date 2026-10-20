@@ -21,8 +21,18 @@ import hy_campus_latency_probe as probe
 TOOL_ROOT = Path(__file__).resolve().parents[2]
 TESTS = ('tests/integration/test_hy_memory_management_rpc.py',
          'tests/integration/test_hy_release_management.py')
-BOOTSTRAP = ("import os,sys;permit=sys.stdin.buffer.read(1);"
-             "sys.exit(97) if permit!=b'1' else None;os.execv(sys.argv[1],sys.argv[1:])")
+BOOTSTRAP = """import os,subprocess,sys
+# Windows execv会结束包装进程；保持此Job根存活，等待真实目标并传回其退出码。
+if os.read(sys.stdin.fileno(),1)!=b'1':
+    sys.exit(97)
+# 许可只用原始读取；余下配置在本进程读完并显式转发，避免缓冲预读丢字节。
+payload=sys.stdin.buffer.read(262145)
+if len(payload)>262144:
+    sys.exit(98)
+result=subprocess.run(sys.argv[1:],input=payload,stdout=sys.stdout,stderr=sys.stderr,
+                      close_fds=True,creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0))
+sys.exit(result.returncode)
+"""
 METADATA = ("import sys,json;from importlib.metadata import version;"
             "print(json.dumps({'python':'.'.join(map(str,sys.version_info[:3])),'sdk':version('hy-memory')}))")
 
@@ -45,8 +55,9 @@ def new_job():
     return module.Job()
 
 
-def owned_run(command, *, cwd, env, timeout, capture=False):
-    """先等待stdin，加入自有Job后才exec测试；任何退出均回收整棵后代树。"""
+def owned_run(command, *, cwd, env, timeout, capture=False, input_bytes=b''):
+    """先等待许可，加入Job后启动并等待真实目标；任何退出均回收全部后代。"""
+    require(type(input_bytes) is bytes and len(input_bytes) <= 262144, 'management_runner_input_limit')
     try:
         job = new_job()
     except Exception:
@@ -58,7 +69,7 @@ def owned_run(command, *, cwd, env, timeout, capture=False):
             stdout=subprocess.PIPE if capture else subprocess.DEVNULL, stderr=subprocess.DEVNULL,
             creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
         job.assign(process)
-        output, _ = process.communicate(b'1', timeout=timeout)
+        output, _ = process.communicate(b'1' + input_bytes, timeout=timeout)
         output = output or b''
         require(len(output) <= 65536, 'management_runner_output_limit')
         return process.returncode, output

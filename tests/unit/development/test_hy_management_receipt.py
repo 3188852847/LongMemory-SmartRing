@@ -218,8 +218,8 @@ def test_owned_runner_assigns_job_before_releasing_stdin_and_always_reaps(monkey
             self.stdin, self.stdout = BytesIO(), BytesIO()
             self.returncode = None
             events.append('popen')
-            assert 'sys.stdin.buffer.read(1)' in command[6]
-            assert 'os.execv' in command[6]
+            assert 'os.read(sys.stdin.fileno(),1)' in command[6]
+            assert 'subprocess.run' in command[6] and 'sys.exit(result.returncode)' in command[6]
             assert kwargs['env'] == {'SYNTHETIC': '1'}
         def communicate(self, permit, timeout):
             events.append('permit')

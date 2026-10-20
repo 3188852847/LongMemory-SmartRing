@@ -92,7 +92,7 @@ $BaselineProof = Join-Path $BaselineProofDir 'management-verification.json'
 $CandidateProof = Join-Path $CandidateProofDir 'management-verification.json'
 ```
 
-审查标志是调用者已完成审查的声明，不能仅因命令需要而勾选。工具用已有主Python执行该源码下两份真实SDK集成测试：`test_hy_memory_management_rpc.py`、`test_hy_release_management.py`，SDK解释器必须Python3.12.13 / Hy2.0.3。显式源码cwd/PYTHONPATH、独立合成basetemp/JUnit、300秒超时；零失败、零错误、零跳过且有用例，源码/管理原语/SDK解释器摘要前后相同才生成四字段证明。元数据 `receipt.json`、JUnit及证明分别留存；失败不签发。该文件是可追溯验证回执，不是密码学签名；Z仍应核对对应回执、JUnit及审查提交，不能手填true或复制旧摘要。V没有替Z执行此最终验收。
+审查标志是调用者已完成审查的声明，不能仅因命令需要而勾选。工具用已有主Python执行该源码下两份真实SDK集成测试：`test_hy_memory_management_rpc.py`、`test_hy_release_management.py`，SDK解释器必须Python3.12.13 / Hy2.0.3。显式源码cwd/PYTHONPATH、独立合成basetemp/JUnit、300秒超时；零失败、零错误、零跳过且有用例，源码/管理原语/SDK解释器摘要前后相同才生成四字段证明。Windows许可包装进程保持存活并等待真实命令，显式转交stdin/stdout/stderr及真实退出码；不使用execv替换。元数据 `receipt.json`、JUnit及证明分别留存；失败不签发。该文件是可追溯验证回执，不是密码学签名；Z仍应核对对应回执、JUnit及审查提交，不能手填true或复制旧摘要。V没有替Z执行此最终验收。
 
 ### X：一次受控真实校园对照
 
@@ -118,6 +118,18 @@ if ($LASTEXITCODE -ne 0) { throw '探针已停止：保留原目录、检查回�
 时长覆盖CPU Memory内部认证HTTP至校园SSE首个非空文本；不含真实3.10提供器交接、ASR、TTS、设备播放。空delta、仅工具delta或等待提示均不计首文本。第一轮总耗时含完成/提取，答案总耗时单列并排除提取；SDK初始化前移不能折算为总链路节省1秒。各臂新目录保留合成库和来源以供核查，不提交原始产物。两个证明、三类回执与账本须一起交Z复核。
 
 新增工具针对性验证：93项工具测试及14项文档机制测试合计107项通过（46.12秒），包括真实SDK接本地合成HTTP上游的双臂成功、500/缺usage/断流即停、上限1、证明不匹配零调用、来源漂移、取消/超时、SSE分包与仅工具delta、管理回执拒签条件；独立只读审查指出的Job关闭异常跳过后续回收已修，4项模拟测试覆盖继续kill/wait/关管道及拒签。文档严格检查通过。没有真实校园、GPU、TTS、个人库、正式服务或设备调用；管理回执自身的真实SDK整体验收留Z执行。
+
+### Z实测阻塞后的Windows启动门修正
+
+Z真实执行 `0e214d8` 发现管理SDK元数据stdout为空；V已在本机复现：直接SDK命令返回0/39字节、正确版本3.12.13/2.0.3，而原 `os.execv` 包装返回0/0字节。延迟0.5秒、应输出后退出7的标准库合成目标，原包装0.069秒就返回0且无stdout，证明包装退出码不能代表目标完成。此前纯mock测试未覆盖这条真实Windows进程/管道交接，不能据其声称该入口已可运行。
+
+最小修正仅在管理工具：许可后由包装进程显式启动、等待真实目标，并传递stdout/stderr及目标退出码，继续归自有Job覆盖。许可用 `os.read(..., 1)`，余下有界配置在包装层完整读取后显式转发，避免缓冲预读丢失；不扩大句柄继承范围。修后同一SDK命令返回0/39字节；延迟目标返回7/5字节；许可后144,064字节含中文、转义及首尾字段的合成JSON到达目标，SHA-256逐字节一致。
+
+校园 `child_process` 经核查没有execv或单字节许可前缀，仍是加入Job后才发送完整JSON到 `--worker`；没有改其业务或启动方式。新增[真实Windows定向测试](../../../tests/unit/development/test_hy_windows_owned_processes.py)对管理门、校园worker分别覆盖成功、非零、超时和取消：真实进程树含目标、子进程、孙进程，在放行退出前打开稳定Windows句柄，返回后逐一确认已终止，后两级退出码均为Job终止值1。取消通过真实管道运行中注入Python KeyboardInterrupt验证收尾，不声称模拟了控制台按键。另验证错误许可不启动目标、实际SDK版本stdout与直接命令一致，10项真实Windows测试＋32项原管理模拟测试通过（7.08秒）。未运行最终管理集成验收，不生成或手填证明，交Z按原命令重验。
+
+本地忽略证据目录为 `data/test-tmp/hy-windows-pipe-5e161525225843a18d5873b0c5fdf16f/`，保留 `before.json`、`after.json`、`windows-tests.xml`、逐场景句柄/退出码记录及 `windows-summary.json`。汇总SHA-256为 `df90324341c2eb32abcc40b0b55d084496ff2d37c9817d2785749cbc59854441`。真实校园、GPU、生产及个人库调用均0；ae53业务源码、共享8次调用门、unknown暂停和源码清洁守卫保持不变。
+
+最终定向回归117项通过（54.88秒），覆盖上述10项真实Windows测试、原校园探针/共享调用门/管理回执测试及14项文档机制测试；JUnit为同证据根的 `regression-tests.xml`。文档严格检查通过；无跳过。未扩大运行冻结业务回归或最终管理签发流程。
 
 ## 后续技术排序
 
