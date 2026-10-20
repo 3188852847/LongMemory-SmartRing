@@ -3,7 +3,6 @@
 import importlib
 import importlib.util
 import json
-import os
 from pathlib import Path
 import sys
 
@@ -43,7 +42,7 @@ def test_profile_outside_range_refuses_before_native_call(length):
 
 def test_execute_refuses_unscheduled_before_probing_gpu(monkeypatch, tmp_path):
     monkeypatch.setattr(flow, "gpu_memory", lambda: pytest.fail("no GPU probe before window"))
-    with pytest.raises(ValueError, match="new_exclusive_gpu_window"):
+    with pytest.raises(ValueError, match="matching_v2_project_model_receipt"):
         flow.execute(tmp_path, tmp_path, tmp_path, tmp_path, tmp_path, Path(sys.executable), "")
 
 
@@ -73,13 +72,7 @@ def test_stage_requires_window_before_creating_process(tmp_path):
         flow.bounded([], tmp_path, "mock", {}, 1)
 
 
-@pytest.mark.skipif(sys.platform != "win32", reason="Windows resource Job")
-def test_native_broker_inherits_job_before_non_gpu_child(monkeypatch, tmp_path):
-    monkeypatch.setattr(flow, "gpu_memory", lambda: (100, 16000))
-    result = flow.bounded([sys.executable, "-I", "-B", "-c", "print('owned_cpu_mock_only')"],
-                          tmp_path, "broker-mock", dict(os.environ), 5, window_id="mock-no-gpu")
-    assert result["exit_code"] == 0
-    assert result["job_memory_limit_bytes"] == 6144 * 2**20
-    assert result["affinity_mask"].bit_count() <= 2
-    assert (tmp_path / "broker-mock.job-ready").read_text(encoding="utf-8") == "mock-no-gpu"
-    assert "owned_cpu_mock_only" in (tmp_path / "broker-mock.log").read_text(encoding="utf-8")
+def test_native_stage_rejects_id_without_receipt_and_outer_job(monkeypatch, tmp_path):
+    monkeypatch.setattr(flow.subprocess, "Popen", lambda *a, **k: pytest.fail("must not launch"))
+    with pytest.raises(ValueError, match="sole_outer_job"):
+        flow.bounded([], tmp_path, "mock", {}, 5, window_id="some-nonempty-id")

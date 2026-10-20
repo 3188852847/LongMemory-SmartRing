@@ -227,9 +227,11 @@ def worker(model: Path, output: Path, window_id: str, start_gate: Path):
 
 class WindowsResourceJob:
     """Job Object硬性限单进程提交内存与两CPU；关闭时只结束本Job所属进程。"""
-    def __init__(self, *, memory_limit_mib=2048, logical_cpus=2):
+    def __init__(self, *, memory_limit_mib=2048, logical_cpus=2, job_name=None):
         if not 1024 <= memory_limit_mib <= 8192 or logical_cpus not in (1, 2):
             raise ValueError("resource_job_budget_invalid")
+        if job_name is not None and (not job_name.startswith("ag-flow-") or len(job_name) != 40 or not all(c in "0123456789abcdef" for c in job_name[8:])):
+            raise ValueError("owned_job_name_invalid")
         class Basic(ctypes.Structure):
             _fields_ = [("PerProcessUserTimeLimit", ctypes.c_longlong), ("PerJobUserTimeLimit", ctypes.c_longlong),
                         ("LimitFlags", wintypes.DWORD), ("MinimumWorkingSetSize", ctypes.c_size_t),
@@ -247,6 +249,7 @@ class WindowsResourceJob:
         kernel.SetInformationJobObject.argtypes = [wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p, wintypes.DWORD]
         kernel.AssignProcessToJobObject.argtypes = [wintypes.HANDLE, wintypes.HANDLE]
         kernel.QueryInformationJobObject.argtypes = [wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p, wintypes.DWORD, ctypes.c_void_p]
+        kernel.TerminateJobObject.argtypes = [wintypes.HANDLE, wintypes.UINT]
         kernel.GetCurrentProcess.restype = wintypes.HANDLE
         kernel.GetProcessAffinityMask.argtypes = [wintypes.HANDLE, ctypes.POINTER(ctypes.c_size_t), ctypes.POINTER(ctypes.c_size_t)]
         kernel.CloseHandle.argtypes = [wintypes.HANDLE]
@@ -257,7 +260,11 @@ class WindowsResourceJob:
         if not bits:
             raise OSError("empty_owned_affinity_mask")
         self.affinity = sum(bits[:logical_cpus])
-        self.handle = kernel.CreateJobObjectW(None, None)
+        ctypes.set_last_error(0)
+        self.handle = kernel.CreateJobObjectW(None, job_name)
+        if self.handle and ctypes.get_last_error() == 183:
+            self.close()
+            raise OSError("owned_job_name_already_exists")
         if not self.handle:
             raise OSError("cannot_create_owned_resource_job")
         limits = Extended()
@@ -279,6 +286,22 @@ class WindowsResourceJob:
                     process_memory_limit_bytes=limits.ProcessMemoryLimit,
                     job_memory_limit_bytes=limits.JobMemoryLimit,
                     affinity_mask=limits.BasicLimitInformation.Affinity)
+    def terminate_and_confirm(self, timeout=5):
+        # 查询句柄可能仍被子进程持有，不能仅靠close触发KILL_ON_JOB_CLOSE。
+        if not self.kernel.TerminateJobObject(self.handle, 1):
+            raise OSError("cannot_terminate_owned_outer_job")
+        class Accounting(ctypes.Structure):
+            _fields_ = [(name, ctypes.c_longlong) for name in ("TotalUserTime", "TotalKernelTime", "ThisPeriodTotalUserTime", "ThisPeriodTotalKernelTime")]+[(name, wintypes.DWORD) for name in ("TotalPageFaultCount", "TotalProcesses", "ActiveProcesses", "TotalTerminatedProcesses")]
+        deadline = perf_counter()+timeout
+        while True:
+            value = Accounting()
+            if not self.kernel.QueryInformationJobObject(self.handle, 1, ctypes.byref(value), ctypes.sizeof(value), None):
+                raise OSError("cannot_confirm_owned_outer_job_exit")
+            if value.ActiveProcesses == 0:
+                return True
+            if perf_counter() > deadline:
+                raise TimeoutError("owned_outer_job_exit_not_confirmed")
+            sleep(.05)
     def close(self):
         if self.handle:
             self.kernel.CloseHandle(self.handle)

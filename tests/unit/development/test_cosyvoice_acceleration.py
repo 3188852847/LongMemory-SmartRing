@@ -26,7 +26,7 @@ cosy_runner = importlib.import_module("ag_acceleration.cosy_runner")
 
 
 def test_import_origin_and_no_gpu_import_in_clean_process():
-    code = "import sys; sys.path.insert(0, sys.argv[1]); import acceleration.capabilities, acceleration.adapters, acceleration.benchmark, acceleration.bge_benchmark, acceleration.cosy_runner, acceleration.trt11_compatibility; assert not any(n in sys.modules for n in ['torch','transformers','tensorrt','vllm'])"
+    code = "import sys; sys.path.insert(0, sys.argv[1]); import acceleration.capabilities, acceleration.adapters, acceleration.benchmark, acceleration.bge_benchmark, acceleration.cosy_runner, acceleration.trt11_compatibility, acceleration.flow_trtexec, acceleration.window_admission, acceleration.wddm_snapshot; assert not any(n in sys.modules for n in ['torch','transformers','tensorrt','vllm'])"
     subprocess.run([sys.executable, "-I", "-B", "-c", code, str(PACKAGE.parent)], check=True, cwd=ROOT)
     assert Path(cap.__file__).resolve().is_relative_to(ROOT)
 

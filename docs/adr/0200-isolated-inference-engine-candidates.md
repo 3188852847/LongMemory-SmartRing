@@ -18,6 +18,8 @@ BGE CPU 动态 INT8 只生成独立 Bert Linear 权重候选，保留原模型�
 
 第三阶段选择已有官方trtexec作为独立C++ builder/runner，避开向Cosy日用环境安装绑定或混用CUDA13/torch cu121指针。只提取固定flow checkpoint中的DiT估计器，固定FP32/buffered掩码、batch2及16..512帧profile，通过torch→ORT→TRT三者同输入数值比较后仍只形成离线flow候选。原生进程先等待Job资源限制配置，才放行构建/运行；没有GPU窗口不执行。显存采样守卫、workspace与PyTorch分配器上限分别标记，不能把workspace当总显存硬限。取消先仅支持终止自有实验Job，不承诺TTS请求粒度取消；生产接入继续待验。
 
+AI审查f65a0e4后追加执行准入：非空窗口ID不是许可。要求主会话v2项目模型窗口收据及原字节摘要，绑定清洁提交、源码、资源、解释器真实映像/运行DLL、安装包METADATA/RECORD摘要、输出路径与新期限，显式拒绝已关闭AD-GPU-20261021-01。采用AD 172a355的WDDM采集规则并加精确桌面集合/驱动校验；只有本次唯一外层Job的成员且映像已绑定才算自有GPU worker，未知C/C+G和身份漂移均停止。桌面仍共享，同PID内背景负载不可观测，不声称硬独占。全部准入、导出、构建、运行共用1320秒总期限和一个外层Job；父进程赋予stdin许可前先Assign，收尾显式Terminate自有Job并确认0活动进程再Close，避免子进程查询句柄阻止关闭式清理。该追加仅CPU/离线验证，未授权或执行GPU。
+
 ## 验收和回退
 
 GPU 操作需主会话独占窗口；显存空闲检查不替代调度许可。基准的 runner 接收 case_id、seed、取消事件，返回 CPU PCM（脉冲编码音频）块。分别记录首次 PCM、首个能量达标 PCM、总耗时、RTF（生成耗时/音频时长）、供给间隙和取消关闭时间；它们不等于用户说完到圆屏首个有效回答声音。

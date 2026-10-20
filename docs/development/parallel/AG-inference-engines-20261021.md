@@ -176,11 +176,35 @@ $flowArgs = @('-B','-m','scripts.development.cosyvoice.acceleration.flow_trtexec
   '--output',('D:/03-项目/01-正式项目/智慧圆屏/local/worktrees/ag-inference-engines-20261021/experiments/runs/ag-flow-'+[guid]::NewGuid().ToString('N')))
 & 'D:/03-项目/01-正式项目/智慧圆屏/.venv/Scripts/python.exe' @flowArgs
 # 仅主会话实际发放新窗口后：
-# & 'D:/03-项目/01-正式项目/智慧圆屏/.venv/Scripts/python.exe' @flowArgs --execute --gpu-window-id $issuedGpuWindow
+# & 'D:/03-项目/01-正式项目/智慧圆屏/.venv/Scripts/python.exe' @flowArgs --execute --receipt $mainReceipt --receipt-sha256 $mainReceiptHash --production-root 'D:/03-项目/01-正式项目/智慧圆屏'
 ```
 
 一手选项依据：[固定release11.2 sampleOptions.cpp](https://github.com/NVIDIA/TensorRT/blob/release/11.2/samples/common/sampleOptions.cpp)、[输出JSON格式](https://github.com/NVIDIA/TensorRT/blob/release/11.2/samples/common/sampleReporting.cpp)、[固定Cosy导出器](https://github.com/FunAudioLLM/CosyVoice/blob/074ca6dc9e80a2f424f1f74b48bdd7d3fea531cc/cosyvoice/bin/export_onnx.py)、[torch2.3导出限制](https://docs.pytorch.org/docs/2.3/onnx.html)。当前只证明入口/资源/契约，不能证明模型成功导出、可构建或已加速。
 
 vLLM/Linux继续保留待办：官方0.11.0 Docker tag可作为来源线索，但此次Docker Hub tag元数据页面不可访问，未核实manifest digest/体积；且纯vLLM镜像不等于固定CV3的完整依赖锁。尚无可运行完整锁+镜像+模型转换方案，故不提供半套owner获取脚本、不执行拉取/解析联网依赖、不声明完成；先执行无需新资源的本地SDK路径，再决定是否值得独立准备Linux完整环境。
 
-本分支仅提交上述自有文件，不merge main、不push。主会话接力：审查精确提交，将ADR/本记录加入公共清单；把能力字段交AD，不默认启用候选；如继续真实加速，先协调独占GPU与完整离线资源，再做同输入/声线/种子的冷/热及并发对照和owner听验。现有buffered、角色/声音与学校免费模型保持原设置。
+### f65a0e4审查后的CPU-only执行准入修复
+
+AI指出非空window ID和每阶段Job不能证明项目窗口或覆盖完整22分钟，本轮修复该实际缺口。新增 [window_admission.py](../../../scripts/development/cosyvoice/acceleration/window_admission.py)、[WDDM采集器](../../../scripts/development/cosyvoice/acceleration/wddm_snapshot.py) 和 [拒绝测试](../../../tests/unit/development/test_flow_window_admission.py)。采集器冻结自AD提交172a355de1534e621422aae90de2bab9fcd8dcbb，原文件SHA256=87ec064da57cded02bd3881724ba03fc0b29b5b62d3613c3f9e96001ff2f8892；不跨树导入或修改AD文件，后续共同规则变更需主会话协调同步。
+
+最新入口替代旧的ID许可和阶段Job：--execute必须有main提供的--receipt、--receipt-sha256、--production-root和固定--python；--gpu-window-id已删除。收据原字节SHA256由主会话外部交接，不由本工具生成或发放。已关闭且过期的AD-GPU-20261021-01显式拒绝，AD scope/ID也不能改个期限复用。软件校验是对调度证据的匹配，不给自己授予停日用/GPU权限。
+
+主会话新收据契约（仅字段说明，不是当前有效许可）：
+
+- schema_version=2；scope=ag-flow-project-model-window；state=active；issued_by=main_session；新window_id前缀AG-FLOW-GPU-。
+- project_model_window/production_stopped/other_gpu_model_workers_stopped必须为true，physical_gpu_exclusive必须为false，旧exclusive_gpu字段不接受。
+- candidate_commit绑定本树实际清洁HEAD，checkout/production_root/output为精确绝对路径，输出必须新建；max_seconds精确1320，issued_at_utc/expires_at_utc有时区、不得未来发放/过期，剩余至少整轮预算加10秒；收据寿命至多1小时。
+- bindings_sha256来自CPU-only --admission-plan：包含全部AG加速源码原字节、固定厂家源码指纹、权重/SDK关键资源、两解释器入口和Win32查询到的真实映像（避免只看venv包装器）、python*.dll摘要；Cosy环境枚举全部已安装distribution版本及METADATA/RECORD摘要。该摘要不是对每个第三方安装文件的逐字节审计，关键模型/SDK文件另按固定原字节检查。实际Cosy3.10.20及六个固定依赖版本也单独核对，不混装/升级。
+- shared_desktop_baseline须含GPU UUID、WDDM、驱动版本、main_session审查者/时间和唯一processes集合；审查距发放不得超过120秒。每个桌面上下文精确PID、创建token、context_type G或C+G及background_only批准；普通映像精确路径，受保护System/dwm保留AD逻辑角色/父代/会话和明确review_note。desktop_baseline_sha256为该完整对象的规范JSON摘要。
+
+主会话在审查并合入适当候选、工作树清洁后可先运行原flowArgs加--admission-plan，只读输出binding对象与摘要，不生成收据、不采GPU、不导入torch；当前仅离线实现/测试，没有生成真实新窗口。环境/依赖摘要由metadata subprocess读取，未载入模型或运行推理。任意绑定/源码变化要重新审查收据，不能悄悄更新字段。
+
+运行设计为唯一随机命名外层Windows Job：父进程进入execute即开始1320秒总计时，初始收据/CPU绑定核查也计入。controller先阻塞stdin，父进程Assign到外层Job成功后才发许可；controller、真正Python、原生broker、trtexec和采集辅助进程都继承同一Job，阶段不再新建Job或重置时限。外层硬限总提交内存6144MiB/两逻辑CPU。父进程communicate只使用总截止剩余值；超时、Assign失败或controller异常时仅终止本次Job，确认ActiveProcesses=0再Close，并保留outer-job-cleanup结果；不按进程名称或基线PID结束任何外部应用。Job查询句柄可能由子进程持有，故不能仅依赖KILL_ON_JOB_CLOSE。
+
+controller/导出worker在模型前及各阶段门、运行采样点重新读取原收据SHA/状态/期限、核对源码原字节和精确WDDM基线。采集沿AD的NVML XML＋compute CSV、Win32映像/创建时间及CIM父代/会话；不读取命令正文。未知C/C+G、driver/GPU变化、PID重用/路径变化/身份未解析、桌面集合新增或消失均拒绝。自有GPU进程还必须IsProcessInJob=true且映像属于本次绑定的解释器或trtexec，不能凭python名称或进程树猜测。源码改动/收据撤销在下一检查点停止；采样间隙和同PID内部背景负载仍不可观测，保留background_noise_present及physical_gpu_exclusive=false，不把显存容量/工作区采样冒作硬独占。
+
+CPU-only实际验证：三组加速相关测试90 passed，含关闭AD ID、过期/未来/无时区/撤销、scope/commit/bindings/路径错误、未知C+G、PID重用/映像/驱动漂移、精确集合变化、非Job成员、依赖摘要漂移、Assign失败不发许可、外层唯一Job全程超时清理、真实轻量子进程的命名Job成员查询及持查询句柄时的终止归零，以及解释器真实映像只读元数据。10模块由实际Cosy Python3.10 AST解析通过。旧的ID-only broker测试改为明确拒绝该已失效前提，没有放宽实现或重跑GPU。所有NVML快照均为合成输入，未采集实际GPU、未加载/导出/trtexec、未下载/安装、未停/启日用；AD旧窗口未使用。
+
+本分支仅提交上述自有文件，不merge main、不push。主会话接力：审查精确提交，将ADR/本记录加入公共清单；把能力字段交AD，不默认启用候选；如继续真实加速，先协调新的项目模型窗口与完整离线资源，再做同输入/声线/种子的冷/热及并发对照和owner听验。现有buffered、角色/声音与学校免费模型保持原设置。
+
+收尾复核：三组加速测试与14项文档机制测试合计104 passed（2.38秒）；上述两份自有文档采用内存清单补录执行audit，checked_documents=2、findings=[]，没有修改主会话负责的公共清单。Git差异检查通过。此前草稿中的125项计数不对应本次三组测试范围，已按实际输出更正，不作为额外验收证据。

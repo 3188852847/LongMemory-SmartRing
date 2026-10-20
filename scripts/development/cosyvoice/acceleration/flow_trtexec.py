@@ -16,10 +16,12 @@ import shutil
 import subprocess
 import sys
 import zipfile
+import uuid
 from time import perf_counter, sleep
 
 from .capabilities import sha256, verify_source
 from .bge_benchmark import WindowsResourceJob
+from . import window_admission as admission
 
 ROOT = Path(__file__).resolve().parents[4]
 NAMES = ("x", "mask", "mu", "t", "spks", "cond")
@@ -96,6 +98,7 @@ def resource_plan(source: Path, model: Path, sdk: Path, toolkit: Path, output: P
         "--noCudaGraph", "--includeDataTransfers", "--noSpinWait", "--noCompilationCache")}
     return dict(status="needs_isolated_validation", resources_match=all(x["matches"] for x in files.values()) and all(cli_flags.values()) and verify_source(source)["verified"] and len(estimator_keys) == 323,
                 files=files, source_verified=verify_source(source)["verified"], downloads_required=False,
+                gpu_window_scope="project_model_window_shared_windows_desktop", physical_gpu_exclusive=False,
                 harness_sha256=sha256(Path(__file__)), job_harness_sha256=sha256(Path(__file__).with_name("bge_benchmark.py")),
                 native_cli_flag_strings=cli_flags,
                 checkpoint_metadata=dict(bytes=len(metadata), estimator_keys=len(estimator_keys), unpickled=False, weights_loaded=False),
@@ -111,7 +114,9 @@ def resource_plan(source: Path, model: Path, sdk: Path, toolkit: Path, output: P
                          "no_service_integration_or_audio_quality_claim", "abort_only_terminates_owned_offline_job"])
 
 
-def export_worker(source: Path, model: Path, output: Path, gate: Path, window_id: str):
+def export_worker(source: Path, model: Path, output: Path, gate: Path, window_id: str, admission_payload: Path | None = None):
+    if admission_payload is None:
+        raise ValueError("bound_project_model_receipt_required")
     if not window_id:
         raise ValueError("gpu_window_receipt_required")
     began = perf_counter()
@@ -121,6 +126,12 @@ def export_worker(source: Path, model: Path, output: Path, gate: Path, window_id
         sleep(.05)
     if gate.read_text(encoding="utf-8") != window_id:
         raise ValueError("resource_job_gate_mismatch")
+    payload = json.loads(admission_payload.read_text(encoding="utf-8"))
+    proof = admission.AdmissionGuard(payload)
+    try:
+        proof.check("export_worker_before_torch")
+    finally:
+        proof.close()
     import socket
     def denied(*_args, **_kwargs):
         raise RuntimeError("offline_export_network_forbidden")
@@ -238,19 +249,23 @@ def gpu_memory():
     return used, free
 
 
-def bounded(command, output: Path, label: str, env: dict, seconds: int, *, gate=None, window_id="", whole_deadline=None):
+def bounded(command, output: Path, label: str, env: dict, seconds: int, *, gate=None, window_id="", whole_deadline=None, guard=None):
     started = perf_counter()
     if not window_id.strip():
         raise ValueError("gpu_window_receipt_required")
+    if guard is None or whole_deadline is None:
+        raise ValueError("validated_receipt_and_sole_outer_job_required")
+    guard.check(label+":before_spawn", remaining=max(1, whole_deadline-perf_counter()))
     if gate is None:
         gate = output / (label + ".job-ready")
         # 原生程序也先由轻量broker等待Job配置完成，其后代继承内存/亲和性限制。
         broker = "import json,sys,time,subprocess; from pathlib import Path; p=Path(sys.argv[1]); end=time.monotonic()+10;\nwhile not p.is_file():\n if time.monotonic()>end: raise RuntimeError('job_gate_timeout')\n time.sleep(.05)\nif p.read_text(encoding='utf-8')!=sys.argv[3]: raise RuntimeError('job_gate_mismatch')\nsys.exit(subprocess.call(json.loads(sys.argv[2])))"
         command = [sys.executable, "-I", "-B", "-c", broker, str(gate), json.dumps(command), window_id]
-    with WindowsResourceJob(memory_limit_mib=6144) as job, (output / (label+".log")).open("xb") as log:
+    with (output / (label+".log")).open("xb") as log:
         process = subprocess.Popen(command, cwd=output, env=env, stdout=log, stderr=subprocess.STDOUT)
         try:
-            job.assign(process)
+            # controller已在唯一外层Job内；所有阶段/原生broker后代继承，不再创建阶段Job。
+            guard.check(label+":before_gate", remaining=max(1, whole_deadline-perf_counter()))
             if gate is not None:
                 with gate.open("x", encoding="utf-8") as stream:
                     stream.write(window_id)
@@ -261,32 +276,63 @@ def bounded(command, output: Path, label: str, env: dict, seconds: int, *, gate=
                     raise RuntimeError("owned_stage_disk_budget_exceeded")
                 if gpu_memory()[0] > 12288:
                     raise RuntimeError("observed_device_vram_budget_exceeded")
+                guard.check(label+":running", remaining=max(1, whole_deadline-perf_counter()))
                 sleep(.5)
             if process.returncode:
                 raise RuntimeError("owned_stage_failed:" + label)
-            return dict(stage=label, exit_code=0, seconds=perf_counter()-started, **job.snapshot())
+            guard.check(label+":after_exit", remaining=max(1, whole_deadline-perf_counter()))
+            return dict(stage=label, exit_code=0, seconds=perf_counter()-started, sole_outer_job=True)
         finally:
             if process.poll() is None:
                 process.kill()
                 process.wait(timeout=10)
 
 
-def execute(source: Path, model: Path, sdk: Path, toolkit: Path, output: Path, python: Path, window_id: str):
-    output = output.resolve()
-    if not window_id.strip() or sys.platform != "win32":
-        raise ValueError("new_exclusive_gpu_window_required")
-    if output.exists() or ROOT / "experiments/runs" not in output.parents or source.resolve() in output.parents:
-        raise ValueError("new_owned_experiment_output_required")
+def _git_state():
+    commit = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT).decode().strip()
+    clean = not subprocess.check_output(["git", "status", "--porcelain"], cwd=ROOT).strip()
+    return commit, clean
+
+
+def bindings_plan(source: Path, model: Path, sdk: Path, toolkit: Path, output: Path, python: Path):
+    plan = resource_plan(source, model, sdk, toolkit, output)
+    commit, clean = _git_state()
+    envs = {"controller": admission.interpreter_metadata(Path(sys.executable)),
+            "export": admission.interpreter_metadata(python, export=True)}
+    installed = {name.lower().replace("_", "-"): row["version"] for name, row in envs["export"]["packages"].items()}
+    expected = {"torch": "2.3.1+cu121", "numpy": "1.26.4", "onnx": "1.16.0", "onnxruntime": "1.18.0", "transformers": "4.51.3", "x-transformers": "2.11.24"}
+    compatible = envs["export"]["version"] == "3.10.20" and all(installed.get(k) == v for k, v in expected.items())
+    bindings = dict(candidate_commit=commit, checkout=str(ROOT),
+                    paths={k: str(p.resolve()) for k, p in dict(source=source, model=model, sdk=sdk, toolkit=toolkit, output=output).items()},
+                    own_sources={p.name: sha256(p) for p in sorted(Path(__file__).parent.glob("*.py"))},
+                    resources={k: v["sha256"] for k, v in plan["files"].items()},
+                    external_source=verify_source(source), interpreters=envs)
+    return dict(bindings=bindings, bindings_sha256=admission.digest(bindings), working_tree_clean=clean,
+                resources_match=plan["resources_match"], physical_gpu_exclusive=False,
+                export_environment_compatible=compatible,
+                scope="project_model_window_shared_windows_desktop", receipt_schema_version=2,
+                receipt_issued=False, gpu_snapshot_collected=False)
+
+
+def _pipeline(source: Path, model: Path, sdk: Path, toolkit: Path, output: Path, python: Path, payload):
+    current = bindings_plan(source, model, sdk, toolkit, output, python)
+    if not current["working_tree_clean"] or not current["export_environment_compatible"] or current["bindings_sha256"] != payload["bindings_sha256"]:
+        raise ValueError("worker_source_interpreter_or_dependency_binding_changed")
+    guard = admission.AdmissionGuard(payload)
+    window_id = payload["window_id"]
+    deadline = payload["deadline_perf_counter"]
+    guard.check("controller_before_capacity", remaining=max(1, deadline-perf_counter()))
     plan = resource_plan(source, model, sdk, toolkit, output)
     if not plan["resources_match"] or shutil.disk_usage(ROOT).free < 8*2**30 or gpu_memory()[1] < 8192:
+        guard.close()
         raise RuntimeError("resources_or_free_capacity_not_ready")
-    output.mkdir(parents=True)
     for name in ("tmp", "cuda-cache"):
         (output / name).mkdir()
     env = dict(os.environ, HF_HUB_OFFLINE="1", TRANSFORMERS_OFFLINE="1", CUDA_CACHE_PATH=str(output / "cuda-cache"),
                TMP=str(output / "tmp"), TEMP=str(output / "tmp"), OMP_NUM_THREADS="2", MKL_NUM_THREADS="2")
+    receipt = admission.read_receipt(Path(payload["receipt_path"]), payload["receipt_sha256"])
+    env["CUDA_VISIBLE_DEVICES"] = receipt["shared_desktop_baseline"]["gpu_uuid"]
     stages = []
-    deadline = perf_counter() + 1320
     try:
         identity = subprocess.run(["nvidia-smi", "--id=0", "--query-gpu=name,driver_version,memory.total", "--format=csv,noheader"],
                                   capture_output=True, text=True, timeout=5, check=True)
@@ -294,15 +340,15 @@ def execute(source: Path, model: Path, sdk: Path, toolkit: Path, output: Path, p
         with (output / "plan.json").open("x", encoding="utf-8") as handle:
             json.dump(plan, handle, indent=2)
         gate = output / "export-job-ready"
-        code = "import sys; from pathlib import Path; sys.path.insert(0,sys.argv[1]); from acceleration.flow_trtexec import export_worker; export_worker(*(Path(x) for x in sys.argv[2:6]),sys.argv[6])"
-        command = [str(python), "-I", "-B", "-c", code, str(Path(__file__).parent.parent), str(source), str(model), str(output), str(gate), window_id]
-        stages.append(bounded(command, output, "export", env, 240, gate=gate, window_id=window_id, whole_deadline=deadline))
+        code = "import sys; from pathlib import Path; sys.path.insert(0,sys.argv[1]); from acceleration.flow_trtexec import export_worker; export_worker(*(Path(x) for x in sys.argv[2:6]),sys.argv[6],Path(sys.argv[7]))"
+        command = [str(python), "-I", "-B", "-c", code, str(Path(__file__).parent.parent), str(source), str(model), str(output), str(gate), window_id, str(output/"execution-admission.json")]
+        stages.append(bounded(command, output, "export", env, 240, gate=gate, window_id=window_id, whole_deadline=deadline, guard=guard))
         native_env = dict(env, PATH=os.pathsep.join(map(str, (sdk/"bin", toolkit/"bin/x64", toolkit/"bin", Path(os.environ["SystemRoot"])/"System32"))))
-        stages.append(bounded(build_command(sdk, output), output, "build", native_env, 600, window_id=window_id, whole_deadline=deadline))
+        stages.append(bounded(build_command(sdk, output), output, "build", native_env, 600, window_id=window_id, whole_deadline=deadline, guard=guard))
         checks = []
         for length in LENGTHS:
             for padded in (False, True):
-                stages.append(bounded(run_command(sdk, output, length, padded), output, case_id(length, padded), native_env, 45, window_id=window_id, whole_deadline=deadline))
+                stages.append(bounded(run_command(sdk, output, length, padded), output, case_id(length, padded), native_env, 45, window_id=window_id, whole_deadline=deadline, guard=guard))
                 checks.append(compare_output(output, length, padded))
         result = dict(status="offline_flow_numeric_candidate_only", stages=stages, checks=checks,
                       plan_sha256=sha256(output/"flow.fp32.plan"), production_ready=False, audio_quality_verified=False,
@@ -312,8 +358,85 @@ def execute(source: Path, model: Path, sdk: Path, toolkit: Path, output: Path, p
         with (output / "result.json").open("x", encoding="utf-8") as handle:
             json.dump(result, handle, indent=2)
         raise
+    finally:
+        guard.close()
     with (output / "result.json").open("x", encoding="utf-8") as handle:
         json.dump(result, handle, indent=2)
+    return result
+
+
+def controller(payload):
+    # 外层父进程仅在Assign成功后通过stdin发送payload；其后全部子进程都继承同一Job。
+    values = {k: Path(payload[k]) for k in ("source", "model", "sdk", "toolkit", "output", "python")}
+    with (values["output"]/"execution-admission.json").open("x", encoding="utf-8") as handle:
+        json.dump(payload, handle, ensure_ascii=False, indent=2)
+    return _pipeline(**values, payload=payload)
+
+
+def execute(source: Path, model: Path, sdk: Path, toolkit: Path, output: Path, python: Path, window_id="", *, receipt_path=None, receipt_sha256="", production_root=None):
+    began = perf_counter()
+    if receipt_path is None or production_root is None or window_id or sys.platform != "win32":
+        raise ValueError("matching_v2_project_model_receipt_required_no_legacy_window_id")
+    receipt = admission.read_receipt(receipt_path, receipt_sha256)
+    commit, clean = _git_state()
+    # 先拒绝过期/关闭/错scope收据，再做任何解释器探测或GPU采集。
+    admission.validate_receipt(receipt, checkout=ROOT, output=output, production=production_root, commit=commit,
+                               bindings_sha256=receipt.get("bindings_sha256", ""))
+    if not clean:
+        raise ValueError("committed_clean_candidate_checkout_required")
+    output = output.resolve()
+    if output.exists() or ROOT/"experiments/runs" not in output.parents:
+        raise ValueError("new_receipt_bound_output_required")
+    if source.resolve() != (production_root/"local/runtime/CosyVoice").resolve() or python.resolve() != (source/".venv/Scripts/python.exe").resolve():
+        raise ValueError("fixed_production_source_and_cosy_interpreter_required")
+    current = bindings_plan(source, model, sdk, toolkit, output, python)
+    if not current["resources_match"] or not current["export_environment_compatible"] or receipt["bindings_sha256"] != current["bindings_sha256"]:
+        raise ValueError("source_interpreter_dependency_digest_mismatch")
+    job_name = "ag-flow-"+uuid.uuid4().hex
+    payload = dict(checkout=str(ROOT), commit=commit, production=str(production_root), output=str(output),
+                   receipt_path=str(receipt_path.resolve()), receipt_sha256=receipt_sha256, bindings_sha256=current["bindings_sha256"],
+                   bindings=current["bindings"], window_id=receipt["window_id"], outer_job_name=job_name,
+                   deadline_perf_counter=began+1320,
+                   **{k: str(v.resolve()) for k, v in dict(source=source, model=model, sdk=sdk, toolkit=toolkit, python=python).items()})
+    output.mkdir(parents=True)
+    code = "import sys,json; sys.path.insert(0,sys.argv[1]); from acceleration.flow_trtexec import controller; controller(json.load(sys.stdin))"
+    process = None
+    assigned = False
+    result = {}
+    with WindowsResourceJob(memory_limit_mib=6144, job_name=job_name) as job, (output/"controller.log").open("xb") as log:
+        try:
+            process = subprocess.Popen([sys.executable, "-I", "-B", "-c", code, str(Path(__file__).parent.parent)],
+                                       cwd=ROOT, stdin=subprocess.PIPE, stdout=log, stderr=subprocess.STDOUT)
+            job.assign(process)
+            assigned = True
+            payload["remaining_seconds"] = max(0, 1320-(perf_counter()-began))
+            if payload["remaining_seconds"] < 1:
+                raise TimeoutError("outer_deadline_before_permission")
+            process.communicate(json.dumps(payload).encode("utf-8"), timeout=payload["remaining_seconds"])
+            if process.returncode:
+                raise RuntimeError("owned_outer_controller_failed")
+            result = dict(exit_code=0, outer_job_name=job_name, whole_seconds=perf_counter()-began, **job.snapshot())
+        finally:
+            # 仅结束本次唯一外层Job；先Terminate并确认0 active，再关闭句柄。
+            if process is not None and not assigned and process.poll() is None:
+                process.kill()  # 此时仅自建入口仍阻塞stdin，尚无GPU许可。
+            terminated = False
+            cleanup_error = None
+            try:
+                terminated = job.terminate_and_confirm()
+            except Exception as error:
+                cleanup_error = type(error).__name__
+                raise
+            finally:
+                job.close()
+                try:
+                    if process is not None:
+                        process.wait(timeout=10)
+                finally:
+                    with (output/"outer-job-cleanup.json").open("x", encoding="utf-8") as handle:
+                        json.dump(dict(result, job_closed=True, owned_tree_exit_confirmed=terminated, cleanup_error=cleanup_error,
+                                       assigned=assigned, window_id=receipt["window_id"], physical_gpu_exclusive=False,
+                                       production_services_touched=False), handle, indent=2)
     return result
 
 
@@ -323,12 +446,22 @@ def main():
         parser.add_argument("--"+name, type=Path, required=True)
     parser.add_argument("--python", type=Path)
     parser.add_argument("--execute", action="store_true")
-    parser.add_argument("--gpu-window-id", default="")
+    parser.add_argument("--receipt", type=Path)
+    parser.add_argument("--receipt-sha256", default="")
+    parser.add_argument("--production-root", type=Path)
+    parser.add_argument("--admission-plan", action="store_true", help="CPU-only源码/解释器/安装元数据摘要，不采集GPU")
     args = parser.parse_args()
-    if args.execute and args.python is None:
-        parser.error("--execute requires explicit fixed Cosy --python")
+    if args.execute and not all((args.python, args.receipt, args.receipt_sha256, args.production_root)):
+        parser.error("--execute requires fixed --python and main-session --receipt/--receipt-sha256/--production-root")
+    if args.admission_plan and args.python is None:
+        parser.error("--admission-plan requires fixed Cosy --python")
     values = {name: getattr(args, name).resolve() for name in ("source", "model", "sdk", "toolkit", "output")}
-    result = execute(**values, python=args.python or Path(sys.executable), window_id=args.gpu_window_id) if args.execute else resource_plan(**values)
+    if args.execute:
+        result = execute(**values, python=args.python, receipt_path=args.receipt, receipt_sha256=args.receipt_sha256, production_root=args.production_root)
+    elif args.admission_plan:
+        result = bindings_plan(**values, python=args.python)
+    else:
+        result = resource_plan(**values)
     print(json.dumps(result, indent=2))
 
 
