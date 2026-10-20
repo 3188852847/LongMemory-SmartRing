@@ -153,3 +153,11 @@ node ../../data/test-tmp/ah-release-70cad5b-20261021/verify-release.cjs
 该增量使`66e76b2f`发布候选同样成为历史失效候选；它与更早`70cad5b`候选都不得用于本轮最终部署。下次发布绑定将以本增量的精确新提交/tree重建，保留所有旧目录和摘要作为历史证据。
 
 `components-provenance-l0-l7.json`相关3文件36项通过；类型检查与`build-provenance-l0-l7/`通过。增量浏览器`browser-provenance-l0-l7.log`的4项通过，覆盖1366/390的L0聚合限定、L7来源/意图分离，以及L2冷链接、非零滚动、刷新和前后退；没有无理由全量重跑原14项。新增窄屏聚合/意图截图已检查。当前仍是按主会话同四字段契约的合成展示验证，AB真实SDK/正式导出配对由AI负责，AH未接触日用资源。
+
+### 当前交付候选：54ae8a40
+
+上述兼容增量提交为`54ae8a4094e91f81cd6d2ea229bdb3b495297e8f`，前端Git tree=`85c8bf6945a3fea0b6f2bdb3da3546b0873a09ec`。确认该HEAD/tree且clean后，再次使用本树既有实体依赖，离线执行类型检查与发布构建，输出独占`data/test-tmp/ah-release-provenance-54ae8a40-20261021/dist/`。Node24.19.0/TypeScript7.0.2/Vite8.2.2、pnpm11.19.0声明和原锁文件身份均未变，无安装/复制/联接依赖。
+
+当前产物45文件、1,838,948字节；规范tree SHA-256=`c5b2779d2b63980b9183561467ac423e30012dbf3a38d57216d0c28b86bb9ac5`；manifest SHA-256=`8760f1c25b01a876394af413b58734d479b021b4404fa7771b0ede6bfa3201eb`。全相对清单、逐文件SHA-256、原始日志、264处通过的本地资源引用、0发现的固定隐私/凭据/fixture扫描、源码/工具/锁文件/截图绑定均在新目录中，文件名沿用前述`artifacts.files.json/artifacts.sha256/asset-references.json/release-binding.json/delivery-receipt.json`。新回执同时列出70cad5b与66e76b2f两个旧候选已失效，不能按旧SHA发布。
+
+新产物与本次L0/L7增量浏览器已测`build-provenance-l0-l7/`逐文件相同，关联原4项通过及8张当前截图，无需无理由重复组件/浏览器。当前目录不含生产dist或私有数据；AH只提交本记录，不部署/推送/合main。AB最后L0/L7来源输出提交与本同四字段视图仍待主会话转AI做真实配对确认，未用合成截图代替SDK或所有者验收。
