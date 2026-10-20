@@ -1,6 +1,6 @@
 # Z：Hy逐层实际内容与页内滚动独立审查
 
-2026-10-21，Asia/Shanghai。**阶段：只读准备，未接AA/Y候选、未初始化SDK或执行库读取，尚无实现/测试/发布结论。** 用户本轮明确要看L0–L7实际保存内容，并反馈运行路径点选跳顶；46项机制目录不代替数据浏览。根已确认上一轮未满足这项内容展示意图，本轮单独验收，不改写旧报告的软件/发布证据或结论。
+2026-10-21，Asia/Shanghai。**阶段：AA逐层契约与Y精确滚动小提交预审；数据实现及最终组合待交，未初始化SDK或执行库读取，尚无发布结论。** 用户本轮明确要看L0–L7实际保存内容，并反馈运行路径点选跳顶；46项机制目录不代替数据浏览。根已确认上一轮未满足这项内容展示意图，本轮单独验收，不改写旧报告的软件/发布证据或结论。
 
 ## 起点与分工
 
@@ -48,3 +48,34 @@ Z核对自有树clean且无未完成工具任务，从main `34b2111d646cb1672bda
 根已将RAW默认过滤、候选截断后分页和GraphStore临时初始化三点交AA核实。AA初步方案为逐层列表GET与该层条目详情GET，含limit/offset/state，read_status、data_state、coverage、total/count_scope分开，L0走aggregate_profile；尚未收到冻结完整契约，不将这些名字当作已实现协议。审查时重点核对：read不支持/失败不能变成空，覆盖不完整不能报全范围精确total，配置关闭不能掩盖已有可读数据；state语义、RAW/历史可见性及跨层详情都须有真实离线合成反例。任何新增worker/RPC白名单和底层存储读取均需必要ADR与新指纹验证链，原管理守卫不因读页面而降级。
 
 Y在独占树做真实scrollY回归及懒加载刷新恢复，Z未进入其树。等根精确小提交后再核preventScrollReset与POP恢复的实际交互；不以这份准备文档提前宣布用户跳顶问题已修复。
+
+
+## AA完整契约预审
+
+根交AA树 `docs/development/hy-layer-data-contract.md`：逐层GET及同层详情，层只接受八个原生值；列表limit 1–50、offset 0–10000、状态白名单，read_status/data_state/coverage/count_scope分列。L0采用实际SDK纯合并/head/渲染算法、可信stamp及租约、版本逐一范围验证，超过128版本或字段上限拒绝伪完整聚合；L1及其他VDB内容拟在唯一worker既有collection下推user/agent/source/layer/state，普通页limit+1，不调用public list/get的RAW屏蔽或图回退。图只查可信固定路径存在，不打开。方向符合本轮目标，仍须等冻结源码和真实离线证据。
+
+特别核实现：非空末页才可由offset+本页数推断total，offset>0空页不能当空层或伪造总数；后验证发现坏行/范围不符时不能继续报精确总数。L0允许agent集合必须来自可信装配而非HTTP，逐字段来源不足不补造。图路径缺失/存在/无权限或非可信路径分别处理，不把无法检查当确定空。5秒应明确是RPC响应等待期限，现有worker终止/清理还可能占额外时间，不把它宣传为HTTP总耗时保证；超时关闭且不复用晚响应、不重试须有测试。本次指定AA的ADR-0194尚未读到实际文件，正式交付须核对其内容及链接，不将缺失ADR视为已经审完。
+
+## Y早期滚动小提交独立预审
+
+根交 `ced8ba53703294b567e41ddb260a632908acc280`（父34b2111），Z在保护准备提交82c65ef后接为 `a7c287d`，无冲突。仅Hy两处页内search更新加preventScrollReset；RouteWorkspace沿同一显式React Router sessionStorage key恢复坐标，保留全局ScrollRestoration。首次layout不以0覆盖已存位置，POP的ResizeObserver、用户wheel/pointer/keyboard取消及跨路径焦点逻辑保留；没有正文存储、任意JS执行或原型赋值。有限非负数过滤、最多200个Map坐标，损坏JSON/存储拒绝走空Map。
+
+Z本树无node_modules，故未启动React/Playwright或借用Y依赖/进程。用现有Node对实际savedPositions纯函数去类型注解后独立验证7类输入通过：缺失、数组、坏JSON、存储异常、有限非负数、特殊键不污染原型、201项截至200；这不是React/真实滚动验收。只读核Y固定证据 `scroll-components-v1.json` 26项通过及 `scroll-fixed-browser-v2.log` 两屏真实浏览器2项通过，后者4.7秒，原文件摘要留本树ignored元数据。实际测试代码先scrollY>100再点选，以坐标差断言节点/目录/层/tab，返回/刷新和桌面跨页回顶/主焦点；移动原生select留浏览器原生滚动容差。作者结果与Z独立纯函数检查分别记录。
+
+当前窄滚动补丁未发现阻断项，可以保留进入后续组合；数据内容UI接入后仍须在最终构建重核真实非零scrollY、分页/详情、懒加载和草稿，不将早期2项当最终两目标验收。Y仍独占其树，Z只读取作者忽略证据，没有checkout、执行或写入其目录；后续范围须剔除已pick的ced，避免重复接入。
+
+## L0纯函数与X准备报告补核
+
+独立静态读取固定SDK的basic_profile.py：`_node_timestamp`取gmt_created或valid_from，datetime转换失败/非datetime为0；`_assemble_full_kv_from_nodes`按此键稳定升序排序后遍历所有节点的basic_info_kv，后值覆盖前值，不按状态筛选。`_latest_l0_heads_from_nodes`另行筛ACTIVE、合法L0及is_latest，并优先user-level和较新时间。二者用途不同；field_sources应沿同一排序及覆盖规则确定，不能只沿gmt_created或自行过滤旧状态。这里只核源码，无SDK导入/初始化或库读取。
+
+根交X仅报告提交 `8393eabf670a7c2922838524f9a6a4dc7458ef0c`，接为 `c0b0ea1`，无冲突。[X准备报告](X-hy-layer-data-release-20261021.md)没有新可执行部署工具，候选/proof/检查点绑定仍pending，未stop/apply；其正式环境快照属于作者现场证据，Z没有访问正式服务或个人库复验。新指纹必须绑定新增模块与其语义依赖，新离线套件不能被旧两文件回执替代；后续X还须交新冻结计划、proof精确替换门及独立生命周期批准。仅登记本轮Y/X与Z清单，不改旧报告结论。
+
+本轮窄文档检查：登记Y/X后，`check_docs.py --only`选择Z/Y/X三份报告加`--strict`通过，无finding；`git diff --check`通过。此前Y尚未登记时的unlisted/unknown-selection已由清单补齐解决，没有改检查规则。检查仅覆盖链接/清单及差异，不代表分层功能或部署验收通过。
+
+## 新指纹真实SDK验收与签发门槛
+
+X准备核查确认，现行四字段proof不含测试清单，`tests/fixtures/hy_management_receipt.py` 固定TESTS只有旧管理RPC与release_management两文件；仅新原语hash配原5项通过不足以放行新增RAW/逐层读取。Z已只读核该工具，不执行旧命令冒充新验收。
+
+最终必须在精确干净候选上同时验证AA新增真实SDK逐层集成集、原管理集成与后台语义写关闭：多user/agent/source、全部原生层/状态、L0合并与上限、RAW真实内容、跨层/ID拒绝、空offset/末页计数、图不初始化、无search/LLM/BGE和前后状态不变等关键反例；真实SDK解释器/版本/固定来源、导入源码路径与原语包括新模块都须绑定。新测试具体文件与case集合等AA精确交付后冻结，不由调用者任意删减。
+
+验收签发工具需把上述固定套件作为门，而非只收一份未审任意JUnit；零failure/error/skipped且预期case均存在。伴随匿名回执记录精确HEAD/源码摘要、测试文件路径与摘要、case/JUnit摘要、SDK身份及背景写审核事实，并绑定其实际产出的四字段proof摘要；四字段生产schema本身不随意扩展。任一新测试缺失、被skip、源码变更或未知背景写均不得产出可用证明。原证明不改写，新证据独占目录、失败原样保留；生产proof配置和部署仍由根/X审后执行，Z不改私有来源。当前只设计此门槛，未运行SDK、签发或模型调用。
