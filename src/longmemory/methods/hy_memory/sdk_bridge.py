@@ -99,6 +99,11 @@ def _item(row: Any, channel: str) -> HyItem:
     memory_id = _text(row.get("memory_id"))
     chain = row.get("evolution_chain")
     visible = [memory_id]
+    evidence = row.get("evidence_memory_ids")
+    if evidence is not None:
+        if not isinstance(evidence, list) or len(evidence) > 16:
+            raise HyResponseError("hy_invalid_schema_evidence")
+        visible.extend(_text(value) for value in evidence)
     if chain is not None:
         if not isinstance(chain, list) or len(chain) > 1000:
             raise HyResponseError("hy_invalid_evolution_chain")

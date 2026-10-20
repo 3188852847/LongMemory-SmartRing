@@ -1,6 +1,7 @@
 """仅供独立解释器启动的 SDK worker；stdout 只写协议，不回传 SDK 错误正文。"""
 
 from contextlib import redirect_stdout, redirect_stderr, nullcontext
+from contextvars import ContextVar
 from datetime import datetime
 from importlib import metadata
 import json
@@ -10,6 +11,7 @@ from pathlib import Path
 import socket
 import sys
 from threading import Lock, local
+from time import perf_counter
 from urllib.parse import urlsplit
 
 from .process_client import MAX_LINE
@@ -20,6 +22,8 @@ from .management_rpc import ManagementRPC, profile_scope_proof
 from .layer_data import LayerDataRPC
 from .sdk_bridge import SOURCE_NAMESPACE
 from .observation import Observation, span
+from .semantic import SemanticCoordinator, read_intentions, graph_evidence, read_profile, SearchSourceReader
+from .candidate_snapshot import CandidateSnapshots
 
 
 class RequestBudget:
@@ -32,8 +36,19 @@ class RequestBudget:
         self.management_embedding_attempts = 0
         self.management_llm_attempts_blocked = 0
         self._lock = Lock()
+        self._operation = ContextVar("hy_budget_operation", default=None)
+
+    @property
+    def operation(self):
+        return self._operation.get()
+
+    @operation.setter
+    def operation(self, value):
+        self._operation.set(value)
 
     def check_management_request(self, url):
+        if getattr(self,"operation",None) in CandidateSnapshots.OPERATIONS:
+            raise RuntimeError("hy_candidate_model_denied")
         if getattr(self, "operation", None) in LayerDataRPC.OPERATIONS:
             raise RuntimeError("hy_layer_data_model_denied")
         if getattr(self,"operation",None) not in {"update","delete"}:
@@ -65,6 +80,7 @@ class RequestBudget:
                 "sdk_python":getattr(self,"sdk_python",None),
                 "management_embedding_attempts":self.management_embedding_attempts,
                 "management_llm_attempts_blocked":self.management_llm_attempts_blocked,
+                "semantic_local_prepared_ms":getattr(self,"semantic_local_prepared_ms",None),
                 "hard_limit": {"external_requests": self.settings.max_external_requests},
                 "token_and_currency_limits_enforced": False}
 
@@ -100,7 +116,7 @@ def install_network_denial(allowed_addresses=()):
     socket.getaddrinfo = local_resolve
 
 
-def create_sdk(settings, workspace, *, create, short_embedding_fast_path=True, prepare_local_backends=True):
+def create_sdk(settings, workspace, *, create, short_embedding_fast_path=True, prepare_local_backends=True, synthetic_responder=None):
     if metadata.version("hy-memory") != SDK_VERSION:
         raise ValueError("hy_sdk_version_mismatch")
     # 默认在 socket 层拒绝网络，包含库初始化的遥测/意外网络路径。
@@ -111,6 +127,8 @@ def create_sdk(settings, workspace, *, create, short_embedding_fast_path=True, p
     else:
         raise ValueError("hy_real_requests_require_shared_budget_gateway")
     os.environ["MEMORY_DATA_DIR"] = str(workspace)
+    if settings.semantic_layers_enabled and Path.cwd().resolve() != workspace.resolve():
+        raise ValueError("hy_semantic_worker_cwd_must_be_owned_workspace")
     sdk = workspace / "sdk"
     fresh = not any(path.is_file() for path in sdk.rglob("*"))
     if not create and not (sdk / "vector/chroma.sqlite3").is_file():
@@ -174,21 +192,32 @@ def create_sdk(settings, workspace, *, create, short_embedding_fast_path=True, p
     config = MemoryConfig.from_dict({
         "vector_store":{"provider":"chroma", "persist_directory":str(sdk / "vector"),
                         "embedding_dims":settings.embedding_dimensions, "collection_name":"smartring_synthetic"},
-        "graph_store":{"db_path":str(sdk / "graph")},
+        # Kuzu 0.11.3 Windows 原生窄字符API不能打开中文绝对路径；子进程
+        # cwd 已由 parent 固定为独占workspace，ASCII相对路径仍在同一库内。
+        "graph_store":{"db_path":"sdk/graph" if settings.semantic_layers_enabled else str(sdk / "graph")},
         "cache":{"backend":"sqlite", "db_path":str(sdk / "cache.db"),
                  "enable_profile_cache":False, "enable_system2_queue":False, "enable_intention_cache":False},
         "history":{"enable":False, "db_path":str(sdk / "history.db"), "record_searches":False},
         "coding":{"enable":False, "db_path":str(sdk / "coding.db")},
         # 2.0.3 LLM 的 max_retries 实际是总尝试次数，1 才是单次、无重试。
         "llm":{**endpoint(settings.llm), "max_retries":1, "max_tokens":settings.max_output_tokens,
-               "agent_max_tokens":settings.max_output_tokens, "enable_query_rewrite":False, "enable_intention":False},
+               "agent_max_tokens":settings.max_output_tokens, "enable_query_rewrite":False, "enable_intention":settings.semantic_layers_enabled},
         "embedder":{**endpoint(settings.embedding), "embedding_dims":settings.embedding_dimensions},
         "recall":{"strength_enabled":False, "access_tracking_enabled":False,
                   "retrieval_clauses_enabled":False},
-        "enable_graph":False, "metrics_enabled":False, "debug":False,
+        "enable_graph":settings.semantic_layers_enabled, "metrics_enabled":False, "debug":False,
     })
-    config.http_transport_factory = (lambda: httpx.MockTransport(synthetic_response)) if settings.model_mode == "synthetic_transport" else BoundedTransport
-    client = HyMemoryClient(config=config, mode="pro")
+    # fixture可注入多阶段模型替身，但生产settings/RPC不能提供可执行responder。
+    mock_response = synthetic_response if synthetic_responder is None else lambda request: synthetic_responder(request, budget)
+    config.http_transport_factory = (lambda: httpx.MockTransport(mock_response)) if settings.model_mode == "synthetic_transport" else BoundedTransport
+    if settings.semantic_layers_enabled:
+        # Windows已复现：Kuzu启动后才在SDK loop首次加载SciPy BLAS可卡在原生
+        # 模块导入。先在初始化主线程加载本机已安装CPU聚类依赖，不落在聊天路径。
+        started = perf_counter()
+        from sklearn.cluster import DBSCAN  # noqa: F401
+        import scipy.linalg  # noqa: F401
+        budget.semantic_local_prepared_ms = (perf_counter()-started)*1000
+    client = HyMemoryClient(config=config, mode="ultra" if settings.semantic_layers_enabled else "pro")
     from .sdk_observation import SDKObservation
     budget.sdk_observation=SDKObservation(sdk_version=SDK_VERSION)
     budget.local_initialization = (budget.sdk_observation.prepare_local_backends()
@@ -201,7 +230,13 @@ def create_sdk(settings, workspace, *, create, short_embedding_fast_path=True, p
         and getattr(client._vector_store,"_supports_tag_index",True) is False)
     try:
         budget.management_profile_scope_proven = profile_scope_proof(workspace,settings,
-            create=create,fresh=fresh,verified=budget.management_update_verified)
+            create=create,fresh=fresh,verified=budget.management_update_verified or settings.semantic_layers_enabled)
+        if settings.semantic_layers_enabled:
+            from .management_rpc import owner_lease_held
+            if (not budget.management_profile_scope_proven or not owner_lease_held(workspace)
+                    or not getattr(client._graph_store, "_available", False)):
+                raise ValueError("hy_semantic_scope_or_graph_unproven")
+            budget.semantic = SemanticCoordinator(client, settings, workspace)
     except BaseException:
         client.close()
         raise
@@ -222,6 +257,7 @@ class ProtocolService:
             self.client, self.budget = self.factory(self.settings,
                 Path(arguments["workspace"]), create=arguments["create"])
             self.management = ManagementRPC(self.client,self.settings,self.budget)
+            self.candidates = CandidateSnapshots(self.client,self.settings,self.budget)
             return {"ready":True, "sdk_version":SDK_VERSION}
         if self.client is None:
             raise ValueError("hy_worker_not_initialized")
@@ -229,6 +265,11 @@ class ProtocolService:
             return self.budget.report()
         if operation == "close":
             try:
+                semantic = getattr(self.budget, "semantic", None)
+                if semantic is not None and not semantic.close():
+                    # 不能在仍有原生写的 SDK 上 close；父进程将有界终止 worker，
+                    # 持久 running 留待重启判 uncertain。
+                    raise RuntimeError("hy_semantic_close_active")
                 self.client.close()
             finally:
                 fast_path = getattr(self.budget, 'short_embedding_input', None)
@@ -240,11 +281,40 @@ class ProtocolService:
             self.client = None
             return {"closed":True}
         if operation in ManagementRPC.OPERATIONS:
+            if operation in {"update","delete"}:
+                self.candidates.changed()
             self.budget.operation = operation
             return self.management.execute(operation,arguments)
+        if operation in CandidateSnapshots.OPERATIONS:
+            self.budget.operation = operation
+            return self.candidates.execute(operation,arguments)
         if operation in LayerDataRPC.OPERATIONS:
             self.budget.operation = operation
             return LayerDataRPC(self.client, self.settings, self.budget).execute(operation, arguments)
+        if operation in SemanticCoordinator.OPERATIONS:
+            semantic = getattr(self.budget, "semantic", None)
+            if semantic is None:
+                if operation == "semantic_status" and not arguments:
+                    return {"protocol": 2, "enabled": False, "mode": "pro", "schema_state": "disabled",
+                        "desired_enabled": False, "graph_available": False, "task_counts": {}, "paused": True,
+                        "management_available": False, "last_task_finished_at": None, "epoch": None, "ready_epoch": None,
+                        "native_evolve_idempotent": False, "automatic_restart_replay": False,
+                        "intention_read": "disabled", "expired_intention_policy": "disabled",
+                        "execution_authorized": False, "proactive_contact_enabled": False}
+                raise ValueError("hy_semantic_not_enabled")
+            if operation == "semantic_status" and not arguments:
+                return semantic.status()
+            if operation == "semantic_task" and set(arguments) == {"task_id"}:
+                return semantic.task(arguments["task_id"])
+            if operation == "semantic_cancel" and set(arguments) == {"task_id"}:
+                return semantic.cancel(arguments["task_id"])
+            if operation == "semantic_pause" and set(arguments) == {"paused"}:
+                return semantic.pause(arguments["paused"])
+            if operation == "semantic_enqueue" and set(arguments) <= {"task_id", "kind", "max_batches"} and "task_id" in arguments:
+                if not self.settings.management_writes_enabled or semantic.gate()["paused"]:
+                    raise ValueError("hy_semantic_write_denied")
+                return semantic.enqueue(arguments["task_id"], kind=arguments.get("kind", "evolve"), max_batches=arguments.get("max_batches", 1))
+            raise ValueError("hy_semantic_arguments_invalid")
         if operation not in {"add", "search", "get_user_profile", "get", "list_memories"}:
             raise ValueError("hy_worker_operation_not_allowed")
         arguments = dict(arguments)
@@ -253,14 +323,48 @@ class ProtocolService:
             raise ValueError("hy_profile_user_scope_invalid")
         self.budget.operation = operation
         if operation == "add":
+            self.candidates.changed()
             if (arguments.get("user_id")!=self.settings.user_id
                     or arguments.get("agent_id")!=self.settings.agent_id
                     or arguments.get("source")!=SOURCE_NAMESPACE):
                 raise ValueError("hy_add_owner_scope_invalid")
             arguments["memory_at"] = datetime.fromisoformat(arguments["memory_at"])
-        response=getattr(self.client, operation)(**arguments)
+        semantic = getattr(self.budget, "semantic", None)
+        if operation == "add" and semantic is not None:
+            if semantic.gate()["paused"]:
+                raise ValueError("hy_semantic_write_paused")
+            semantic.dirty()
+        if operation == "search" and semantic is not None:
+            # 普通读只使用原生普通通道；共享一次查询向量给无副作用 L7 读取。
+            # L6 后台运行/失效期间不读图；不在问答路径触发归纳或到期写入。
+            arguments["intention_limit"] = 0
+            arguments["schema_limit"] = 3 if semantic.gate()["schema_state"] == "ready" else 0
+            arguments["query_embedding"] = self.client._search_loop_thread.run(self.client._embed_service.embed(arguments["query"]))
+        response = (self.client._search_loop_thread.run(read_profile(self.client,self.settings,self.budget))
+            if operation == "get_user_profile" and semantic is not None else getattr(self.client, operation)(**arguments))
+        if operation == "add" and semantic is not None and response.get("success") is True:
+            semantic.after_add(arguments["request_id"])
         if operation=="search":
-            response=enrich_search(self.client,response,arguments.get("user_ids",[]))
+            if semantic is not None:
+                # 归纳启动/新写入可与 search 并行；读取结束再核对失效门。
+                if semantic.gate()["schema_state"] != "ready":
+                    response["memories"]["schema"] = []
+                else:
+                    proven = []
+                    for row in response["memories"]["schema"]:
+                        node = self.client._search_loop_thread.run(self.client._graph_store.get_node(row["memory_id"]))
+                        if (node is None or node.user_id != self.settings.user_id or node.agent_id != self.settings.agent_id
+                                or node.source != SOURCE_NAMESPACE):
+                            continue
+                        meta, evidence = self.client._search_loop_thread.run(graph_evidence(self.client, self.settings, node))
+                        if meta:
+                            row.update(meta=meta, evidence_memory_ids=evidence)
+                            proven.append(row)
+                    response["memories"]["schema"] = proven if semantic.gate()["schema_state"] == "ready" else []
+                response["memories"]["proactive"] = self.client._search_loop_thread.run(read_intentions(
+                    self.client, self.settings, arguments["query_embedding"]))
+            response=enrich_search(SearchSourceReader(self.client,self.settings) if semantic is not None else self.client,
+                response,arguments.get("user_ids",[]))
         elif operation=="get_user_profile":
             response=enrich_profile(self.client,response,arguments["user_id"])
         return response
@@ -309,6 +413,8 @@ def main(*, service=None):
             # 父进程异常退出导致 stdin EOF 时也关闭 SDK，不留下后台 loop。
             try:
                 with redirect_stdout(sink), redirect_stderr(sink):
-                    service.client.close()
+                    semantic = getattr(service.budget, "semantic", None)
+                    if semantic is None or semantic.close():
+                        service.client.close()
             except Exception:
                 pass

@@ -31,6 +31,9 @@ def clean_environment(workspace: Path) -> dict:
         MEMORY_RECALL_ACCESS_TRACKING="false", MEMORY_HISTORY_RECORD_SEARCHES="false",
         MEMORY_PIPELINE_TRACE_ENABLED="false", MEMORY_ENABLE_GRAPH="false",
         MEMORY_ENABLE_INTENTION="false", MEMORY_CODING_ENABLED="false", HY_MEMORY_READER="legacy")
+    # 归纳限定图式；不在后台把意图、治疗/画像推断转换成用户事实。
+    for name in ("FORGET", "CANONICAL_STATE", "HOLISTIC_THERAPY", "PROFILE_FACT_PROMOTION", "BALANCED_CATALOG", "SPECIFIC_SUPPLEMENT"):
+        result["MEMORY_EVOLING_" + name + "_ENABLED"] = "false"
     return result
 
 
@@ -147,6 +150,27 @@ class HyProcessClient:
 
     def diagnostics(self):
         return self._rpc("diagnostics")
+
+    def semantic_status(self):
+        return self._rpc("semantic_status", _read_only=True)
+
+    def semantic_task(self, *, task_id):
+        return self._rpc("semantic_task", _read_only=True, task_id=task_id)
+
+    def semantic_enqueue(self, *, task_id, kind="evolve", max_batches=1):
+        return self._rpc("semantic_enqueue", task_id=task_id, kind=kind, max_batches=max_batches)
+
+    def semantic_cancel(self, *, task_id):
+        return self._rpc("semantic_cancel", task_id=task_id)
+
+    def semantic_pause(self, *, paused):
+        return self._rpc("semantic_pause", paused=paused)
+
+    def candidate_snapshot(self, *, query_embedding, limit=5):
+        return self._rpc("candidate_snapshot", _read_only=True, query_embedding=query_embedding, limit=limit)
+
+    def candidate_validate(self, *, snapshot_token):
+        return self._rpc("candidate_validate", _read_only=True, snapshot_token=snapshot_token)
 
     def layer_page(self, *, layer, limit=20, offset=0, state="all"):
         return self._rpc("layer_page", _read_only=True, layer=layer, limit=limit, offset=offset, state=state)

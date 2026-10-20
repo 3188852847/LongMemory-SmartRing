@@ -43,6 +43,7 @@ class HySettings:
     provider_identity: str = ""
     management_writes_enabled: bool = False
     management_exclusive_profile: bool = False
+    semantic_layers_enabled: bool = False
 
     def __post_init__(self):
         if self.sdk_version != SDK_VERSION or not self.user_id.strip() or not self.agent_id.strip():
@@ -50,7 +51,8 @@ class HySettings:
         if type(self.embedding_dimensions) is not int or not 1 <= self.embedding_dimensions <= 65536:
             raise ValueError("hy_dimensions_invalid")
         if any(type(value) is not bool for value in (self.network_authorized, self.include_profile,
-                self.managed_gateway, self.management_writes_enabled, self.management_exclusive_profile)):
+                self.managed_gateway, self.management_writes_enabled, self.management_exclusive_profile,
+                self.semantic_layers_enabled)):
             raise ValueError("hy_flag_invalid")
         if self.model_mode not in {"disabled", "synthetic_transport"} or (self.network_authorized and self.model_mode == "synthetic_transport"):
             raise ValueError("hy_model_mode_invalid")
@@ -87,6 +89,8 @@ class HySettings:
         # 管理写是当前进程的可信权限，不改变既有库的模型/维度身份。
         public.pop("management_writes_enabled")
         public.pop("management_exclusive_profile")
+        # 接入是当前进程能力，不改变已有模型/维度/来源身份；scope stamp 仍需实证。
+        public.pop("semantic_layers_enabled")
         for name in ("llm","embedding"):
             public[name].pop("allow_loopback_http",None)
         if self.managed_gateway:
@@ -106,7 +110,7 @@ class HySettings:
 def load_offline_settings(path: Path) -> HySettings:
     """CLI 只接受离线无密钥文件；真实配置由受授权装配者显式构造。"""
     data = json.loads(path.read_text(encoding="utf-8"))
-    allowed = {"user_id", "agent_id", "embedding_dimensions", "timeout_seconds", "max_output_tokens", "include_profile", "sdk_version", "model_mode"}
+    allowed = {"user_id", "agent_id", "embedding_dimensions", "timeout_seconds", "max_output_tokens", "include_profile", "sdk_version", "model_mode", "semantic_layers_enabled"}
     if not isinstance(data, dict) or set(data) - allowed:
         raise ValueError("hy_offline_config_unknown_field")
     return HySettings(**data)

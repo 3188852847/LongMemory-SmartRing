@@ -23,6 +23,10 @@ class HyMemoryMethod:
         self._client = self._bridge = None
         self._closed = False
         self._lock = RLock()
+        self._background_write_enabled = True
+        if settings.semantic_layers_enabled:
+            self.implementation_version = "sdk-" + SDK_VERSION + "-semantic-adapter-2"
+            self.retrieval_name = "hy_chat_default_legacy_semantic_v1"
 
     def wait_until_ready(self):
         with self._lock:
@@ -51,7 +55,8 @@ class HyMemoryMethod:
         with self._lock:
             self.wait_until_ready()
             result = self._bridge.search(query, include_profile=self.settings.include_profile)
-            selected = [item for item in result.items if item.channel == "normal"]
+            semantic = getattr(self.settings, "semantic_layers_enabled", False)
+            selected = [item for item in result.items if item.channel == "normal" or semantic]
             if result.profile is not None:
                 selected.insert(0, result.profile)
             items, excluded = [], False
@@ -73,16 +78,79 @@ class HyMemoryMethod:
                     excluded = True
                     continue
                 source_ids = tuple(dict.fromkeys((item.source_event_ids or ()) + sources)) if sources else item.source_event_ids
-                items.append(RetrievedTrace(item.memory_id, item.content, source_ids))
+                content = item.content
+                if item.channel == "schema":
+                    content = "[模型归纳；不是用户直接陈述，可被纠正]\n" + content
+                elif item.channel == "proactive":
+                    content = "[未来意图／待办；不证明已发生，不代表执行或主动联系授权]\n" + content
+                items.append(RetrievedTrace(item.memory_id, content, source_ids))
             return MemorySupport(result.request_id or str(uuid4()), "\n".join(item.content for item in items),
                 tuple(items), self.retrieval_name, "hy_management_uncertain_items_excluded" if excluded else "hy_recall_may_mutate_state")
 
     def sdk_call(self, operation, **kwargs):
         with self._lock:
             self.wait_until_ready()
-            if operation not in {"get", "list_memories", "diagnostics", "get_user_profile", "history", "update", "delete"}:
+            if operation not in {"get", "list_memories", "diagnostics", "get_user_profile", "history", "update", "delete",
+                    "semantic_status", "semantic_task", "semantic_enqueue", "semantic_cancel", "semantic_pause"}:
                 raise UnsupportedCapabilityError("hy_sdk_operation_unsupported")
             return getattr(self._client, operation)(**kwargs)
+
+    def configure_background_writes(self, *, write_enabled):
+        """由Runtime.configure同步同一写开关；只阻止未认领任务，不伪造回滚。"""
+        if type(write_enabled) is not bool:
+            raise ValueError("hy_background_write_flag_invalid")
+        with self._lock:
+            if self.settings.semantic_layers_enabled:
+                self.sdk_call("semantic_pause", paused=not write_enabled)
+            self._background_write_enabled = write_enabled
+
+    def candidate_snapshot(self, *, query_embedding, limit=5):
+        """候选读取不启动引擎、不归档话轮；调用方显式提供已有查询向量。"""
+        from .semantic import SemanticBusy
+        if not self._lock.acquire(blocking=False):
+            raise SemanticBusy("hy_candidate_busy")
+        try:
+            if self._closed or self._client is None:
+                raise RuntimeError("hy_candidate_not_initialized")
+            result = self._client.candidate_snapshot(query_embedding=query_embedding,limit=limit)
+            if result["read_status"] != "readable":
+                return result
+            management = getattr(self,"_management",None)
+            overlays = management.source_overlays(identifier for row in result["items"]
+                for identifier in row["evidence_memory_ids"]) if management else {}
+            selected = []
+            for row in result["items"]:
+                values = [overlays.get(identifier,((),False)) for identifier in row["evidence_memory_ids"]]
+                if any(blocked for _,blocked in values):
+                    continue
+                extra = tuple(source for sources,_ in values for source in sources)
+                if extra:
+                    row["source_event_ids"] = list(dict.fromkeys((row["source_event_ids"] or [])+list(extra)))
+                if row["channel"]=="schema":
+                    row["content"] = "[模型归纳；不是用户直接陈述，可被纠正]\n"+row["content"]
+                elif row["channel"]=="proactive":
+                    row["content"] = "[未来意图／待办；不证明已发生，不代表执行或主动联系授权]\n"+row["content"]
+                elif row["channel"]=="profile":
+                    row["content"] = "[当前用户画像；不证明任意历史日期的状态]\n"+row["content"]
+                selected.append(row)
+            return {**result,"items":selected,"digest_scope":"native_items_before_platform_management_overlay"}
+        finally:
+            self._lock.release()
+
+    def candidate_validate(self, *, snapshot_token, memory_digest=None):
+        """提交前的时点校验；公共Runtime须在正式采用候选的同一临界区调用。"""
+        from .semantic import SemanticBusy
+        if not self._lock.acquire(blocking=False):
+            raise SemanticBusy("hy_candidate_busy")
+        try:
+            if self._closed or self._client is None:
+                return {"protocol":1,"valid":False,"reason_code":"owner_not_initialized"}
+            result = self._client.candidate_validate(snapshot_token=snapshot_token)
+            if result["valid"] and memory_digest is not None and result["memory_digest"] != memory_digest:
+                return {"protocol":1,"valid":False,"reason_code":"memory_digest_mismatch"}
+            return result
+        finally:
+            self._lock.release()
 
     def close(self):
         with self._lock:

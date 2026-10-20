@@ -165,6 +165,17 @@ class HyAdministration:
             return {"items": [dict(row) for row in rows], "total": total, "limit": limit, "offset": offset}
 
     def extension(self, operation, **arguments):
+        if operation in {"semantic_status", "semantic_task", "semantic_enqueue", "semantic_cancel"}:
+            read_only = operation in {"semantic_status", "semantic_task"}
+            if not self.method._lock.acquire(blocking=not read_only):
+                from .semantic import SemanticBusy
+                raise SemanticBusy("hy_semantic_status_busy")
+            try:
+                if operation == "semantic_enqueue" and not self.method._background_write_enabled:
+                    raise ValueError("memory_write_paused")
+                return self.method.sdk_call(operation, **arguments)
+            finally:
+                self.method._lock.release()
         layer_read = operation in {"layer_page", "layer_detail"}
         if not self.method._lock.acquire(blocking=operation != "mechanisms" and not layer_read):
             if layer_read:
@@ -309,5 +320,15 @@ class HyAdministration:
             with self._ledger() as db:
                 db.execute("UPDATE operations SET state='uncertain',error_code='hy_management_outcome_uncertain' WHERE request_id=?", (request_id,))
             raise HyManagementUncertain("hy_management_outcome_uncertain") from None
-        return {"request_id": request_id, "state": "completed", "replayed": False,
+        completion = {"request_id": request_id, "state": "completed", "replayed": False,
             "platform_sources_preserved": True}
+        if self.method.settings.semantic_layers_enabled:
+            # 管理独立读回及平台completed审计之后才重新归纳，避免失败管理的
+            # 半成品借新的ready代次绕过uncertain隔离。排队失败不抹掉已确认纠正。
+            identifier = "management:" + request_id
+            try:
+                task = self.method.sdk_call("semantic_enqueue", task_id=identifier)
+                completion.update(derivation_task_id=identifier, derivation_task_state=task["state"])
+            except Exception:
+                completion.update(derivation_task_id=None, derivation_task_state="not_enqueued_schema_isolated")
+        return completion

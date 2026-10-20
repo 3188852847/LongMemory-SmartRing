@@ -7,6 +7,7 @@ from .sdk_bridge import SDK_VERSION, SOURCE_COMMIT
 
 def describe_mechanisms(method):
     standard = getattr(method, "_mechanism_profile", None) == "standard_worker"
+    semantic = standard and getattr(method.settings, "semantic_layers_enabled", False)
     configured = "configured" if standard else "unknown"
     disabled = "disabled" if standard else "unknown"
     sdk = "hy_memory/"
@@ -191,17 +192,42 @@ def describe_mechanisms(method):
                   "Hy 新后端暂停旧主动交流，不把 SDK proactive 通道当作设备调度器。",
                   ["src/longmemory/application/memory_runtime.py"], support="platform"),
     ]
+    if semantic:
+        for item in layers[6:]:
+            item.update(integration="configured", description=(
+                "ultra显式原生归纳；持久任务按代次隔离，事实纠错先隔离派生，实际执行见语义任务状态。"
+                if item["number"] == 6 else "System1意图提取；读取仅过滤过期并判重，后台归档到期项，不获得执行或主动联系授权。"))
+        descriptions = {
+            "system2": "原生ultra evolve接入持久任务；非幂等、运行任务重启不自动重放，部分/未确认图式不注入。",
+            "graph_store": "唯一owner内接入Kuzu；固定工作目录下ASCII相对路径兼容中文仓库，不另开图客户端。",
+            "schema_recall": "仅完整且同代次归纳后读取L6；来源不完整或管理不确定证据不注入。",
+            "proactive_recall": "原生VDB与纯判重构成只读意图通道；不惰性转层、不异步删除，不启动主动联系。",
+            "schema_evolution": "接入有界原生evolve，保留L6模型推断标签、版本与证据。",
+            "cross_domain_sweep": "由原生evolve在完整周期后执行；不开放独立无界sweep命令。",
+            "intention_extraction": "System1 add时提取L7；与用户事实、L6模型推断及实际执行权限分开。",
+            "intention_lifecycle": "读取不写入；显式/写后维护任务归档到期L7，不能把过期解释为已经完成。",
+            "cache_and_tasks": "SQLite持久任务接入；原生System2队列/意图缓存仍关闭；运行任务不自动重放。",
+            "storage_backends": "固定Chroma、Kuzu与SQLite；未接入其他存储后端。",
+        }
+        for item in mechanisms:
+            if item["id"] in descriptions:
+                item.update(integration="configured", description=descriptions[item["id"]])
+        # ultra支持不等于全部实验投影开启。
+        for item in mechanisms:
+            if item["id"] == "ultra_persona_catalog":
+                item.update(integration="disabled", description="ultra模式已接入，特殊画像/事实投影仍显式关闭；不混作用户事实。")
+    selected_mode = "ultra" if semantic else "pro"
     return {
         "schema_version": 1,
         "sdk": {"version": SDK_VERSION, "source_commit": SOURCE_COMMIT},
         "observed_at": datetime.now(UTC).isoformat(),
         "scope": "adapter_declaration_and_runtime_gates",
         "assembly": "standard_worker" if standard else "custom_or_unknown",
-        "mode": "pro" if standard else None, "scene": "chat" if standard else None,
+        "mode": selected_mode if standard else None, "scene": "chat" if standard else None,
         "runtime": {"engine_initialized": method._client is not None, "worker_health": "unknown"},
         "modes": [
             {"id": name, "title": name, "description": description,
-             "selected": name == "pro" if standard else None}
+             "selected": name == selected_mode if standard else None}
             for name, description in (
                 ("lite", "仅原始记录与向量写入／检索，不调用提取模型。"),
                 ("pro", "向量与模型提取协调；图开关与 mode 独立。"),

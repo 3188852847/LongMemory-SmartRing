@@ -94,7 +94,9 @@ def validate_result(result, operation, layer, *, limit=20):
         "recorded_at", "memory_at", "valid_from", "valid_until", "supersedes", "superseded_by", "version_links_limited", "source_event_ids", "source_raw_memory_id"}
     for record in records + (versions or []):
         aggregate = isinstance(record, dict) and record.get("kind") == "aggregate_profile"
-        fields = record_fields | ({"basic_info", "field_sources", "stored_version_count"} if aggregate else set())
+        semantic_fields = {"semantic_kind", "execution_authorized", "derivation_state", "evidence_memory_ids", "updated_at"}
+        semantic = isinstance(record, dict) and "semantic_kind" in record
+        fields = record_fields | ({"basic_info", "field_sources", "stored_version_count"} if aggregate else set()) | (semantic_fields if semantic else set())
         if (not isinstance(record, dict) or set(record) != fields or record.get("layer") != layer
                 or (aggregate and (layer != LAYERS[0] or record.get("item_id") != "profile"))
                 or not isinstance(record.get("content"), str) or len(record["content"]) > 32768
@@ -102,6 +104,12 @@ def validate_result(result, operation, layer, *, limit=20):
                 or type(record.get("content_truncated")) is not bool
                 or record.get("status") not in STATES[1:] or type(record.get("is_latest")) not in {bool, type(None)}):
             raise HyResponseError("hy_layer_data_invalid_response")
+        if semantic and (layer not in LAYERS[6:] or record["execution_authorized"] is not False
+                or record["semantic_kind"] not in {"model_inference", "future_intention"}
+                or record["derivation_state"] not in {"ready", "isolated", "expired", "stored"}
+                or (record["evidence_memory_ids"] is not None and (not isinstance(record["evidence_memory_ids"], list)
+                    or len(record["evidence_memory_ids"]) > 16))):
+            raise HyResponseError("hy_layer_data_invalid_semantics")
         identifier(record["item_id"])
         identifier(record["native_id"])
         for key in ("supersedes", "superseded_by"):
@@ -132,7 +140,7 @@ class LayerDataRPC:
     def _base(self, layer):
         support = "historical" if layer == LAYERS[4] else "reserved" if layer == LAYERS[5] else "implemented"
         generation = "historical" if layer == LAYERS[4] else "reserved" if layer == LAYERS[5] else (
-            "disabled" if layer in LAYERS[6:] else "configured")
+            "disabled" if layer in LAYERS[6:] and not self.settings.semantic_layers_enabled else "configured")
         return {"schema_version": 1, "layer": layer, "sdk_support": support, "generation_state": generation,
                 "read_status": "readable", "data_state": "unknown", "coverage": "vdb_complete",
                 "reason_code": None, "observed_at": datetime.now(UTC).isoformat()}
@@ -146,7 +154,9 @@ class LayerDataRPC:
             and workspace is not None and owner_lease_held(workspace)
             and type(store).__name__ == "ChromaVectorStore" and store._collection is not None
             and config is not None and not config.vector_store.host
-            and getattr(self.client, "_graph_store", None) is None and not config.enable_graph)
+            and ((getattr(self.client, "_graph_store", None) is None and not config.enable_graph)
+                or (self.settings.semantic_layers_enabled and getattr(self.budget, "semantic", None) is not None
+                    and getattr(self.client._graph_store, "_available", False))))
 
     def _scope(self, layer, state, *, user_level=False):
         conditions = [{"user_id": {"$eq": self.settings.user_id}}, {"layer": {"$eq": layer}}]
@@ -190,6 +200,8 @@ class LayerDataRPC:
 
     def _graph_coverage(self, result):
         if result["layer"] not in LAYERS[6:]:
+            return
+        if self.settings.semantic_layers_enabled and getattr(self.budget, "semantic", None) is not None:
             return
         workspace = getattr(self.budget, "management_workspace", None)
         graph = self.client._config.graph_store
@@ -287,13 +299,15 @@ class LayerDataRPC:
                     "total": len(items), "count_scope": "aggregate_profile", "has_more": False,
                     "limit": limit, "offset": offset, "state": "all"}
         if result["read_status"] == "readable":
+            if layer == LAYERS[6] and self.settings.semantic_layers_enabled:
+                return await self._graph_page(result, operation, arguments)
             self._graph_coverage(result)
             rows = await self._rows(layer, "all" if detail else arguments["state"],
                 limit=1 if detail else arguments["limit"] + 1,
                 offset=0 if detail else arguments["offset"], item_id=arguments.get("item_id"))
             if detail:
                 if rows:
-                    return {**result, "data_state": "present", "item": _record(rows[0], detail=True), "versions": None}
+                    return {**result, "data_state": "present", "item": self._project(rows[0], detail=True), "versions": None}
                 if result["coverage"] != "vdb_complete":
                     return {**result, "read_status": "unavailable", "item": None, "versions": None}
                 return None
@@ -301,13 +315,74 @@ class LayerDataRPC:
             more = len(rows) > limit
             total = offset + len(rows) if not more and (rows or offset == 0) and result["coverage"] == "vdb_complete" else None
             return {**result, "data_state": "present" if rows else "empty" if total == 0 else "unknown",
-                "items": [_record(row) for row in rows[:limit]], "total": total,
+                "items": [self._project(row) for row in rows[:limit]], "total": total,
                 "count_scope": "owner_agent_source_layer_state_vdb", "has_more": more,
                 "limit": limit, "offset": offset, "state": arguments["state"]}
         if detail:
             return {**result, "item": None, "versions": None}
         return {**result, "items": [], "total": None, "count_scope": "aggregate_profile" if layer == LAYERS[0] else "owner_agent_source_layer_state_vdb",
                 "has_more": None, "limit": arguments["limit"], "offset": arguments["offset"], "state": arguments["state"]}
+
+    def _project(self, payload, *, detail=False):
+        item = _record(payload, detail=detail)
+        if self.settings.semantic_layers_enabled and payload["layer"] == LAYERS[7]:
+            from .semantic import _expired
+            until = payload.get("valid_until")
+            expired = until is not None and _expired(datetime.fromtimestamp(until, UTC))
+            item.update(semantic_kind="future_intention", execution_authorized=False,
+                derivation_state="expired" if expired else "stored", evidence_memory_ids=None,
+                updated_at=_time(payload.get("gmt_modified")))
+        return item
+
+    async def _graph_page(self, result, operation, arguments):
+        from hy_memory.models.memory import MemoryNode
+        from .semantic import graph_evidence
+        detail = operation == "layer_detail"
+        graph = self.client._graph_store
+        params = {"ik": MemoryNode.build_isolation_key(self.settings.user_id, self.settings.agent_id), "source": SOURCE_NAMESPACE}
+        conditions = ["m.isolation_key=$ik", "m.source=$source", "m.layer='l6_schema'"]
+        if detail:
+            conditions.append("m.node_id=$mid")
+            params["mid"] = arguments["item_id"]
+        elif arguments["state"] != "all":
+            conditions.append("m.status=$state")
+            params["state"] = arguments["state"]
+        limit, offset = (1, 0) if detail else (arguments["limit"], arguments["offset"])
+        rows = await graph._run("MATCH (m:Memory) WHERE " + " AND ".join(conditions)
+            + f" RETURN m ORDER BY m.node_id SKIP {offset} LIMIT {limit + (not detail)};", params)
+        if rows is None:
+            raise HyResponseError("hy_layer_graph_unavailable")
+        projected = []
+        state = self.budget.semantic.gate()["schema_state"]
+        for row in rows[:limit]:
+            node = graph._row_to_memory_node(row[0])
+            if node.user_id != self.settings.user_id or node.agent_id != self.settings.agent_id or node.source != SOURCE_NAMESPACE:
+                raise HyResponseError("hy_layer_graph_scope_unproven")
+            meta, evidence_ids = await graph_evidence(self.client, self.settings, node)
+            payload = {key: getattr(node, key, None) for key in ("node_id", "content", "is_latest", "supersedes", "superseded_by", "source_raw_memory_id")}
+            payload.update(layer=LAYERS[6], status=node.status.value, custom={"meta": meta})
+            for key in ("gmt_created", "gmt_modified", "memory_at", "valid_from", "valid_until"):
+                value = getattr(node, key, None)
+                payload[key] = value.timestamp() if value is not None else None
+            item = _record(payload, detail=detail)
+            item.update(semantic_kind="model_inference", execution_authorized=False,
+                derivation_state=state, evidence_memory_ids=evidence_ids, updated_at=_time(payload["gmt_modified"]))
+            projected.append(item)
+        result.update(coverage="graph_complete", reason_code="schema_injection_isolated" if state == "isolated" else None,
+            data_state="present" if projected else "unknown")
+        legacy = await self._rows(LAYERS[6], "all", limit=1)
+        if legacy:
+            result.update(read_status="partial", coverage="graph_only_legacy_vdb_present", reason_code="legacy_vdb_schema_not_in_graph_page")
+        if detail:
+            return {**result, "item": projected[0], "versions": None} if projected else None
+        more = len(rows) > limit
+        total = offset + len(rows) if not more and (rows or offset == 0) else None
+        if legacy:
+            total = None
+        if total == 0:
+            result["data_state"] = "empty"
+        return {**result, "items": projected, "total": total, "has_more": more,
+            "count_scope": "owner_agent_source_layer_state_graph", "limit": limit, "offset": offset, "state": arguments["state"]}
 
     def execute(self, operation, arguments):
         if operation not in self.OPERATIONS or not isinstance(arguments, dict):
@@ -320,7 +395,8 @@ class LayerDataRPC:
             identifier(arguments["item_id"])
         else:
             validate_page(**arguments)
-        result = self.client._loop_thread.run(self._execute(operation, arguments))
+        loop = self.client._search_loop_thread if self.settings.semantic_layers_enabled else self.client._loop_thread
+        result = loop.run(self._execute(operation, arguments))
         if isinstance(result, dict):
             result["observed_at"] = datetime.now(UTC).isoformat()
         return result

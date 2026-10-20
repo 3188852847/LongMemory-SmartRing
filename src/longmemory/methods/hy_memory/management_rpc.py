@@ -103,7 +103,9 @@ class ManagementRPC:
 
     def capabilities(self):
         verified = getattr(self.budget, "actual_sdk_version", None) == SDK_VERSION
-        safe_update = bool(getattr(self.budget, "management_update_verified", False))
+        semantic = getattr(self.budget, "semantic", None)
+        safe_update = bool(getattr(self.budget, "management_update_verified", False) or
+            (semantic is not None and self.settings.semantic_layers_enabled and not semantic._work.locked()))
         transport = self.settings.model_mode == "synthetic_transport" or (
             self.settings.network_authorized and self.settings.managed_gateway)
         update = (verified and safe_update and self.settings.management_writes_enabled
@@ -131,6 +133,8 @@ class ManagementRPC:
                 "update": ("single_active_l2_l3_content_embedding_only_raw_meta_history_preserved"
                     if update else "requires_verified_chroma_graph_clause_off_explicit_write_and_local_embedding_transport"),
                 "native_atomic_revision": False,
+                **({"semantic_derivatives": "archive_scoped_graph_and_same_source_intentions_before_mutation;busy_while_evolve;no_native_cas"}
+                    if semantic is not None else {}),
             }}
 
     @staticmethod
@@ -160,7 +164,15 @@ class ManagementRPC:
         else:
             self._owned(memory_id)
         # 不调用 add/重新提取，不把平台来源伪装进 SDK meta；不做任何自动重试。
-        result = getattr(self.client, operation)(**arguments)
+        semantic = getattr(self.budget, "semantic", None)
+        guarded = semantic is not None and operation in {"update", "delete"}
+        if guarded:
+            semantic.begin_management(self.client.get(memory_id))
+        try:
+            result = getattr(self.client, operation)(**arguments)
+        finally:
+            if guarded:
+                semantic.end_management()
         if operation == "history":
             if not isinstance(result, list) or any(not isinstance(row, dict)
                     or row.get("memory_id") != memory_id for row in result):

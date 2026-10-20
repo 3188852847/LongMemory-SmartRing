@@ -17,7 +17,7 @@ def management_primitives_identity():
     digest = hashlib.sha256(SDK_VERSION.encode())
     # worker新增的内存包装也可影响管理RPC；证明不能只绑定import语句。
     for name in ("worker.py", "process_client.py", "management_rpc.py", "sdk_bridge.py",
-                 "short_embedding_input.py", "sdk_observation.py", "observation.py", "layer_data.py"):
+                 "short_embedding_input.py", "sdk_observation.py", "observation.py", "layer_data.py", "semantic.py", "candidate_snapshot.py"):
         digest.update(name.encode())
         digest.update((directory / name).read_bytes().replace(b"\r\n", b"\n"))
     return digest.hexdigest()
@@ -77,7 +77,12 @@ class HyState:
 
     def ready(self):
         files = sorted(path.relative_to(self.root).as_posix() for path in (self.root / "sdk").rglob("*")
-            if path.is_file() and not path.name.endswith(("-wal", "-shm", ".tmp", ".lock")))
+            if path.is_file() and not path.name.endswith(("-wal", "-shm", ".wal", ".tmp", ".lock")))
+        # 启用后任务账本成为必需的持久资源；缺失不能悄悄重建为空并丢失
+        # uncertain/已认领任务。首次从旧图关闭库启用时由worker建立，再封存。
+        if (self.root / "semantic.sqlite3").is_file():
+            files.append("semantic.sqlite3")
+            files.sort()
         if not files:
             raise ValueError("hy_sdk_storage_not_initialized")
         self._write({"identity":self.identity, "status":"ready", "files":files})
@@ -119,14 +124,22 @@ def assemble_hy_backend(*, settings, state_directory, source_path, create=False,
         raise FileNotFoundError("hy_dedicated_python_required")
     if management_verification is not None:
         proof = management_verification
-        required = {"sdk_version", "rpc_source_sha256", "real_sdk_rpc_verified", "semantic_background_writes_disabled"}
+        required = ({"protocol", "sdk_version", "rpc_source_sha256", "real_sdk_rpc_verified", "semantic_background_writes",
+            "derivation_invalidation_verified", "read_only_intention_verified"} if settings.semantic_layers_enabled else
+            {"sdk_version", "rpc_source_sha256", "real_sdk_rpc_verified", "semantic_background_writes_disabled"})
+        policy_valid = (isinstance(proof, dict) and ((proof.get("protocol") == 2
+            and proof.get("semantic_background_writes") == "managed_v1"
+            and proof.get("derivation_invalidation_verified") is True and proof.get("read_only_intention_verified") is True)
+            if settings.semantic_layers_enabled else proof.get("semantic_background_writes_disabled") is True))
         if (not isinstance(proof, dict) or set(proof) != required or proof["sdk_version"] != settings.sdk_version
                 or proof["rpc_source_sha256"] != management_primitives_identity()
-                or proof["real_sdk_rpc_verified"] is not True or proof["semantic_background_writes_disabled"] is not True):
+                or proof["real_sdk_rpc_verified"] is not True or not policy_valid):
             raise ValueError("hy_management_verification_identity_mismatch")
         # 仅可信装配接收本轮真实SDK验收回执。画像还须worker在首次空库
         # 建证、每次重开核对持久证明和外部owner锁；旧库不会补发证明。
         settings = replace(settings, management_writes_enabled=True, management_exclusive_profile=True)
+    elif settings.semantic_layers_enabled:
+        raise ValueError("hy_semantic_verified_contract_required")
     state = HyState(root, settings, create=create)
     def factory():
         state.acquire()
