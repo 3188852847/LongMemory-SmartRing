@@ -1463,11 +1463,11 @@
       "path": "docs/guides/Hy记忆管理.md",
       "title": "Hy 记忆管理",
       "status": "current",
-      "basis": "Z组合软件验收后的当前管理/部署契约；正式切换与设备体验仍待X/所有者",
+      "basis": "当前管理边界及全站机制入口；09d1ba1正式恢复和只读浏览器通过，主观UI/语音及全层数据另列",
       "review": {
         "state": "verified",
         "date": "2026-10-21",
-        "scope": "本轮可信开启/拒绝/历史隔离与交接段落对照真实组合证据；不把软件验收当切换或实机；2026-10-21 Z窄核对全站身份/机制入口、8层46目录及证据缺口，发布待根/X",
+        "scope": "原管理边界保留；Z窄同步导航/8层46目录及证据缺口，发布/health/新GET/资源及正式只读浏览器依据根交接，不替代owner体验",
         "evidence": [
           "docs/development/parallel/Z-hy-release-integration-20261019.md",
           "69d3ab671c0b22cd7357e2d7e8637ed21ea1bba3",
@@ -6202,11 +6202,11 @@
       "path": "docs/development/parallel/Z-hy-mechanisms-review-20261021.md",
       "title": "Z：Hy机制与全站引擎状态独立审查",
       "status": "reference",
-      "basis": "AA/Y精确组合及Z旧库兼容修复；62后端/38组件/最终16浏览器和实际API两路径通过，待根发布",
+      "basis": "AA/Y/Z软件组合及回归、09d1ba1正式发布与HTTP/资源/只读浏览器通过；历史unknown保留，owner UI/语音未新验",
       "review": {
         "state": "verified",
         "date": "2026-10-21",
-        "scope": "固定目录/身份与源码边界、组合类型/真实server响应UI、旧库独立管理、最终构建/宽窄截图/敏感检查；尚未生产发布或真实SDK/设备验收",
+        "scope": "软件检查与X发布分来源；根实算stop/restore/browser/poststatus并独立health/端口，正式只读浏览器通过；不冒称主观UI/语音/全层数据或时延验收",
         "evidence": [
           "web/react-chat/src/components/AppShell.tsx",
           "web/react-chat/src/pages/OverviewApp.tsx",
@@ -6227,12 +6227,12 @@
     {
       "path": "docs/development/hy-mechanisms-contract.md",
       "title": "Hy固定版机制展示契约",
-      "status": "draft",
-      "basis": "AA b016c2d只读identity/机制契约；Z后端62项复核，前端及发布待组合",
+      "status": "current",
+      "basis": "AA b016c2d只读identity/机制契约经Z组合，main09d1ba1已发布；正式GET鉴权和字段声明由根核对",
       "review": {
         "state": "verified",
         "date": "2026-10-21",
-        "scope": "核对身份/目录字段、两级非阻塞锁、无status/SDK/数据库、固定目录46ID与引用；不表示前端/真实日用通过",
+        "scope": "字段/锁/零status SDK DB的软件检查及正式GET核对分列；配置声明不等于执行、worker健康或全层数据验收",
         "evidence": [
           "src/longmemory/entrypoints/api/routes/memory_identity.py",
           "src/longmemory/entrypoints/api/routes/memory_engine.py",

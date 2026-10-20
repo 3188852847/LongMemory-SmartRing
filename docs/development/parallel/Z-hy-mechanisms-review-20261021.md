@@ -1,6 +1,6 @@
 # Z：Hy机制与全站引擎状态独立审查
 
-2026-10-21，Asia/Shanghai。**当前阶段：AA/Y组合软件审查通过，已产出新Z构建，待主会话发布窗口；尚未上线本轮。** 本轮独立于上一轮语音修复，不更新其历史验收。主会话已确认main基点 `eaa65b5b2979add8fd513bba07e19e64d5afa36b`；Z核对自有树clean后建立 `codex/z-hy-mechanisms-review-20261021`，旧分支、SDK、工作树和全部证据保留。
+2026-10-21，Asia/Shanghai。**当前阶段：09d1ba1已合入推送、恢复正式ready，软件组合及正式HTTP/资源/只读浏览器通过；owner主观UI与语音本轮未新验，无剩余必要实施项。** 本轮独立于上一轮语音修复，不更新其历史验收。主会话已确认main基点 `eaa65b5b2979add8fd513bba07e19e64d5afa36b`；Z核对自有树clean后建立 `codex/z-hy-mechanisms-review-20261021`，旧分支、SDK、工作树和全部证据保留。
 
 ## 范围与交接
 
@@ -90,3 +90,28 @@ worker/process_client/management_rpc/sdk_bridge/short_embedding_input/sdk_observ
 ## 本轮交付状态
 
 当前无未处理的组合阻断项，软件组合可交根安排发布评估。AA/Y契约、报告、新指南与本记录统一登记；管理七文件及指纹仍按上节不变，未重签证明。最终匿名review receipt在干净文档提交后绑定精确HEAD、前端tree/源码字节、构建manifest/逐文件清单、实际API和浏览器证据，供X部署核对；不含个人正文、凭据、生产路径原件或个人库。Z不merge main/push/操作生产，正式是否上线及用户体验由主会话/X后续记录，不能提前登记。
+
+
+## 正式发布接力与只读浏览器验收
+
+2026-10-21，根转交实际发布证据：main已ff-only至 **`09d1ba15201ddd21b47d2ccd04635f2f047846f1`**，push成功、ls-remote同SHA。Z只在本树整理记录，不操作主检出或生产；原匿名软件审查收据继续绑定09d1ba1及最终45文件产物，不回写为新一轮业务或部署证明。本节正式运行、账本与恢复事实由X执行、根实算摘要并独立核对，Z未重新访问个人库、私有回执或服务。
+
+### 首次预检误拦截与保留的历史unknown
+
+首次stop预检见API `unknown_or_inflight=1`即退出，shutdown及检查点均未执行，原服务仍ready。后续只读账本确认校园38 completed、1 unknown、0 reserved；该unknown属于00:10:35 answer的client_disconnected、缺usage，已经terminal，不能等同正在执行。账本未清空或改写，也没有新增模型验证；历史unknown仍保留，不能记为已解决、退款或恢复为completed。
+
+仅X的ignored部署helper新版本修正停服门，固定这条历史unknown元数据摘要 `487e2320d66317f1c25965c951ebd6943bf7874fe6619dfb35b505d2d5b81529`、原免费policy来源、reserved=0和其他busy=0后才允许继续。25项合成验证由根审阅，新helper摘要由根交为 `630798…7fadc`，新计划绑定 `1ef62ef3dd943ba6df44e74ec36aa3f3535dff5b7766b13c57e4b8a9d5bdf350`，再执行成功。该修正不改产品、API协议或账本；旧失败helper、plan和证据保留。原付费unknown同样保留。校园39合计仅为启动快照的38+1+0，不声称随后计数恒定，也不与隔离合成Gate8相加。
+
+### 实际停稳、恢复和正式元信息
+
+新检查点为主项目 `local/archive/ui-mechanisms-release/20261021-011017-3d537d/`。X停止22个自有进程、释放7个服务端口，保全29份原始文件、11个一致数据库与完整旧dist；Docker及非目标字节保持。该检查点 `stopped.json` SHA-256为 `b397f5e271bb25b6090d13a5306c674afbf6797eed42535fe010e7b33498be8f`。新45文件dist的helper清单摘要为 `f4ac974878aa1cb763331df50da07073012279ec561396a8236396e2c8b9a112`，与上文构建整树摘要使用不同清单表示，不互换；manifest仍为 `d66cb33a09190bafc5458cdaae40d7304f8650bc49b0f8b648a71a5f2a1da59b`。
+
+apply/restore已成功，`restored.json` SHA-256为 `f56d59564fa241a165678a2a99ee298a60df46c24e5482d44c853f58c7e460d8`。根实算两份回执摘要并独立HTTP核对：ready=true、requires_restart=false、currentvoicewarm=true、guard=true、active=0；7项服务端口在监听。正式HTML/JS/CSS实际摘要匹配，两个新GET无cookie为401、有cookie为200，机制声明为固定SDK/pro/chat标准装配。该端点返回配置声明及内存门，不据此追加真实SDK各机制执行、全层数据或worker健康结论。
+
+X随后在实际正式in-app浏览器完成冷开mechanisms → layers → boundaries → overview → mechanisms，以及冷开overview → sidebar。实际目录46个按钮、8层0–7、3种模式，pro选中；层数量明确未知，overview不扫描计数。6个DOM观察到的JS/CSS再次经HTTP逐字节核对，均匹配本次45文件artifact。未打开真实条目、原话或对话，也未作模型/设备操作；这是正式只读浏览器与元信息验收，不是全层真实数据验收。
+
+同一检查点根目录的 `browser-readonly-receipt.json` SHA-256为 `d6fcbcb8417e273b99ce195eb82843f076267bf03b29c9397d020763d1f91700`；`post-browser-status.json` 为 `b8dc1e435e22735f6aa46629958911e6dd4efd41b0cfb508e727d398014cad6a`。根已逐份读取并实算摘要相符，restored摘要也独立核对；Z只记录根交接事实，没有重新读取私有原件或访问正式浏览器/服务。
+
+最终仍ready：22个自有进程、7项服务端口及独立启动器13757归属已核，当前声线暖机、guard applied和buffered保持。受保护资源、原SDK proof、完整旧dist备份、付费账本、Docker及主仓库6项未知Git材料保留；该6项不是模型账本unknown数量。校园此时仍38 completed、1 unknown、0 reserved，历史unknown元数据摘要保持上述487e…b81529；两个新GET和只读浏览器没有产生新模型调用。原语e358…7e04与原proof保留，未重签。通用status的correction/deletion=false来自原中立契约；X没有另探workspace，不能据此推断Hy专属权限发生变化。
+
+本轮结论为**软件组合、正式HTTP/资源及只读浏览器通过**。owner主观UI体验和圆屏语音本轮未新验，不声称已验全层数据、模型质量或整链路2秒，不要求所有者为此再讲话。Z本次仅补报告/清单并做文档strict、diff和敏感内容窄检查，不复跑业务/SDK/模型，不重启日用或占用前端树。无剩余必要实施项；根合入推送本收尾后可按既定规则整理/归档会话，全部工作树、分支、SDK、备份和证据保留。Z不先行archive、merge或push。
