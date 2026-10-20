@@ -47,6 +47,9 @@ def main(argv=None):
         return
     if not args.maintenance_window or args.server_dir is None:
         raise ValueError('waiting_preparation_requires_isolated_maintenance_window')
+    store = profile_store()
+    if not store.profile_path.is_file():
+        raise ValueError('waiting_selected_profile_missing')
     # 使用小智已经安装的音频依赖，自己的编码器与日用 TTS 编码器不共享。
     import numpy as np
     import soundfile as sf
@@ -88,7 +91,7 @@ def main(argv=None):
             raise ValueError("waiting_phrase_too_long")
         return b"LMWAIT01" + b"".join(struct.pack("!H", len(p)) + p for p in packets)
     try:
-        print(json.dumps(prepare_cache(profile_store(), synthesize, encode), ensure_ascii=False))
+        print(json.dumps(prepare_cache(store, synthesize, encode), ensure_ascii=False))
     finally:
         if dll_handle is not None:
             dll_handle.close()

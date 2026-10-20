@@ -99,6 +99,12 @@ def test_explicit_maintenance_required_before_importing_model_dependencies(tmp_p
     prepare.main([])
 
 
+def test_wrong_workspace_without_selected_profile_cannot_prepare_default_voice(tmp_path,monkeypatch):
+    monkeypatch.setattr(prepare,'profile_store',lambda:NS(profile_path=tmp_path/'missing-profile.json'))
+    with pytest.raises(ValueError,match='selected_profile_missing'):
+        prepare.main(['--prepare','--maintenance-window','--server-dir',str(tmp_path)])
+
+
 def test_prepare_snapshot_identity_publish_and_cache_hit(tmp_path):
     calls=[];store=NS(model_context=lambda:({'style':'synthetic-style'},None,'a'*64))
     synth=lambda text,profile:(calls.append((text,dict(profile))) or b'synthetic-wav')
