@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 from contextvars import ContextVar
+from collections import namedtuple
 import hashlib
 import threading
 import time
@@ -18,6 +19,38 @@ _FORMAL = ContextVar("longmemory_asr_prefetch_formal", default=None)
 _MODEL_WAIT = ContextVar("longmemory_asr_prefetch_model_wait", default=None)
 _STATE = "_longmemory_asr_prefetch_state"
 _GATE = "_longmemory_asr_prefetch_gate"
+_OBSERVER = "_longmemory_asr_prefetch_observer"
+_RECEIVE = ContextVar("longmemory_asr_prefetch_receive", default=None)
+
+
+class PrefetchProof(namedtuple("_PrefetchProof", "generation voice_stamp language size prefix_digest identity")):
+    __slots__ = ()
+
+    def __repr__(self):
+        return "PrefetchProof(generation=%d, size=%d)" % (self.generation, self.size)
+
+
+def _notify(connection, event, **values):
+    observer = getattr(connection, _OBSERVER, None) if connection is not None else None
+    if observer is not None:
+        try:
+            observer.on_prefetch_event(connection, event, **values)
+        except Exception:
+            # 旁路失败不改变ASR；候选侧必须同步撤权，不能留下可领取的半状态。
+            try:
+                observer.on_prefetch_error(connection)
+            except Exception:
+                pass
+
+
+def mark_voice_asr_handoff(connection, proof):
+    """只在原端点内部实际submit(chat)时调用；普通reset不能伪装缓冲收尾。"""
+    current = _RECEIVE.get()
+    if (current is None or current["connection"] is not connection
+            or current["verified"] is not proof or current["handed_off"] is not None):
+        return False
+    current["handed_off"] = proof
+    return True
 
 
 class _Ticket:
@@ -29,6 +62,7 @@ class _Ticket:
         self.generation = generation
         self.voice_stamp = voice_stamp
         self.language = language
+        self.proof = PrefetchProof(generation, voice_stamp, language, self.size, self.prefix_digest, object())
         self.valid = threading.Event()
         self.valid.set()
         self.task = None
@@ -165,7 +199,7 @@ def _state_for(connection):
     return state
 
 
-async def _run_prefetch(gate, ticket, state, lang_tag_filter):
+async def _run_prefetch(gate, ticket, state, lang_tag_filter, connection=None):
     try:
         status, result = await asyncio.to_thread(gate.prefetch, ticket)
         if status == "busy":
@@ -177,6 +211,9 @@ async def _run_prefetch(gate, ticket, state, lang_tag_filter):
                 status = "empty"
                 ticket.result = None
         ticket.status = status
+        if (status == "ready" and ticket.result is not None and ticket.valid.is_set()
+                and state.ticket is ticket and state.generation == ticket.generation and not state.closed):
+            _notify(connection, "ready", proof=ticket.proof, result=dict(ticket.result))
     except asyncio.CancelledError:
         # 退出事件循环可以取消等待，但底层线程还可能在推理；结果永不提交。
         ticket.valid.clear()
@@ -220,11 +257,21 @@ def install_voice_asr_prefetch(connection_class, fun_local_module, *, enabled=Fa
         if state is not None:
             stamp = _stamp(connection)
             if not eligible:
+                _notify(connection, "invalidated", reason="unsupported")
                 state.invalidate("unsupported")
             elif stamp != state.voice_stamp or (audio_have_voice and state.ticket is not None):
+                _notify(connection, "invalidated", reason="speech_resumed")
                 state.invalidate("speech_resumed")
                 state.voice_stamp = stamp
-        await original_receive(provider, connection, pcm_frame, audio_have_voice)
+        current = {"connection": connection, "verified": None, "handed_off": None, "consumed": False}
+        token = _RECEIVE.set(current)
+        try:
+            await original_receive(provider, connection, pcm_frame, audio_have_voice)
+        except BaseException:
+            _notify(connection, "invalidated", reason="receive_failed")
+            raise
+        finally:
+            _RECEIVE.reset(token)
         # 上游在端点处会提交、清空音频；这里仅对尚未提交的标准 60ms/16k PCM 检查。
         if (not eligible or state.closed or state.attempted
                 or audio_have_voice or connection.client_voice_stop
@@ -254,7 +301,7 @@ def install_voice_asr_prefetch(connection_class, fun_local_module, *, enabled=Fa
         state.ticket = ticket
         state.counts["started"] += 1
         state.latest_status = "scheduled"
-        ticket.task = asyncio.create_task(_run_prefetch(gate, ticket, state, fun_local_module.lang_tag_filter))
+        ticket.task = asyncio.create_task(_run_prefetch(gate, ticket, state, fun_local_module.lang_tag_filter, connection))
 
     async def handle_voice_stop(provider, connection, audio_task):
         state = getattr(connection, _STATE, None)
@@ -290,6 +337,7 @@ def install_voice_asr_prefetch(connection_class, fun_local_module, *, enabled=Fa
                    and ticket.language == provider.language and len(formal_pcm) >= ticket.size
                    and hashlib.sha256(formal_pcm[:ticket.size]).digest() == ticket.prefix_digest)
         if ticket is not None and not matches:
+            _notify(connection, "invalidated", reason="input_changed")
             state.invalidate("input_changed")
         if matches:
             started = time.perf_counter()
@@ -303,6 +351,10 @@ def install_voice_asr_prefetch(connection_class, fun_local_module, *, enabled=Fa
                 state.latest_status = "reused"
                 state.latest_model_queue_ms = 0
                 state.latest_overlap_ms = max(0, round((min(endpoint, ticket.finished) - ticket.started) * 1000))
+                current = _RECEIVE.get()
+                if current is not None and current["connection"] is connection:
+                    current["verified"] = ticket.proof
+                _notify(connection, "verified", proof=ticket.proof)
                 result, ticket.result = ticket.result, None
                 ticket.valid.clear()
                 state.ticket = None
@@ -323,12 +375,22 @@ def install_voice_asr_prefetch(connection_class, fun_local_module, *, enabled=Fa
         return result
 
     def reset_audio_states(connection):
+        current = _RECEIVE.get()
+        drained = (current is not None and current["connection"] is connection
+                   and current["verified"] is not None and current["handed_off"] is current["verified"]
+                   and not current["consumed"])
+        if drained:
+            current["consumed"] = True
+            _notify(connection, "buffer_released", proof=current["verified"])
+        else:
+            _notify(connection, "invalidated", reason="reset")
         state = getattr(connection, _STATE, None)
         if state is not None:
             state.invalidate("reset", reset=True)
         return original_reset(connection)
 
     async def close(connection, *args, **kwargs):
+        _notify(connection, "invalidated", reason="closed")
         state = getattr(connection, _STATE, None)
         if state is not None:
             state.closed = True
