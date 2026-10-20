@@ -6120,18 +6120,23 @@
       "path": "docs/development/parallel/Z-low-latency-review-20261020.md",
       "title": "Z：Memory 与 Cosy 低延迟组合审查",
       "status": "reference",
-      "basis": "精确V/X组合、三项P2接力及独立复验、冻结测量重算和两源码管理回执/校园接力；不替代日用性能或设备验收",
+      "basis": "精确V/X低延迟与答案边界组合、管理回执及唯一校园6请求复核；正式恢复后所有者反馈失败，离线修复不替代现场重验",
       "review": {
         "state": "verified",
         "date": "2026-10-20",
-        "scope": "冻结提交与合成SDK/CPU/Opus/真实Windows检查，清单冲突保留双方；最终干净HEAD的管理工具实际结果另存忽略交接收据，校园和设备仍待X/所有者",
+        "scope": "冻结源码与合成SDK/CPU/Opus/Windows证据，唯一校园对照与主会话正式恢复回执分来源记录；答案边界支持范围离线审查，现场格式未知、实机未通过",
         "evidence": [
           "docs/development/parallel/V-memory-low-latency-20261020.md",
           "docs/development/parallel/X-cosy-streaming-20261020.md",
           "tests/integration/test_hy_memory_management_rpc.py",
           "tests/integration/test_hy_release_management.py",
           "tests/unit/development/test_cosyvoice_unadapted_cleanup.py",
-          "tests/unit/development/test_hy_windows_owned_processes.py"
+          "tests/unit/development/test_hy_windows_owned_processes.py",
+          "docs/adr/0192-owned-answer-content-boundary.md",
+          "docs/development/parallel/V-reasoning-boundary-20261020.md",
+          "docs/development/parallel/X-voice-reasoning-boundary-20261020.md",
+          "tests/unit/methods/test_hy_answer_content.py",
+          "tests/unit/development/test_xiaozhi_voice_answer_boundary.py"
         ]
       },
       "tags": [
