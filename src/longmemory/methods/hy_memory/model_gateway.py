@@ -92,6 +92,7 @@ class ModelGateway(AbstractContextManager):
                 or budget.policy.input_micro_cny_per_token<2 or budget.policy.output_micro_cny_per_token<8):
             raise ValueError("budget_unproven_upper_bound")
         self.settings, self.budget, self.encoder = settings, budget, encoder
+        self._free_policy_verified = free and free_policy_verified is True
         self.token = secrets.token_urlsafe(32)
         self._paid_lock, self._embedding_lock = Lock(), Lock()
         self._provider_transport = PersistentProviderTransport(settings)
@@ -99,6 +100,7 @@ class ModelGateway(AbstractContextManager):
         self._remote_stream = remote_stream or self._send_stream
         self._streams, self._connections_lock = set(), Lock()
         self._downstreams = set()
+        self._candidate_handles = {}
         self._closed = False
         self.embedding_calls = 0
         self.embedding_inputs = 0
@@ -263,6 +265,25 @@ class ModelGateway(AbstractContextManager):
 
     def _send(self, payload):
         return self._provider_transport.send(payload)
+
+    def candidate_response_binding(self):
+        """导出同一策略/账本/连接池的候选接口，不创建新的网关或消费配置。"""
+        from .candidate_response import verify_candidate_policy
+        verify_candidate_policy(self)
+        return {"open_response": self.open_candidate_response, "model": self.settings.model,
+                "campus_free_verified": True}
+
+    def open_candidate_response(self, body):
+        from .candidate_response import CandidateResponse
+        return CandidateResponse(self, body)
+
+    async def cancel_candidate(self, request_id):
+        """句柄只索引候选；不得通过正式回答的attempt_id取消正式请求。"""
+        with self._connections_lock:
+            handle = self._candidate_handles.get(request_id)
+        if handle is None:
+            raise ValueError('candidate_handle_not_active')
+        return await handle.cancel()
 
     def _record_result(self, aid, **metadata):
         try:

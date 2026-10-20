@@ -64,3 +64,40 @@
 新文档的清单归属交主会话/AI统一登记，AF不抢写公共 `documentation-manifest.json`。登记建议：topic `provider-prefix-cache-evidence`，authority 为本记录，sources 为本轮源码及专属测试，related 为 ADR-0199，状态 `reference`，review 只覆盖本轮已完成六请求与隔离验证，缓存支持/设备声音保留未验证。通过临时合成清单执行两份新文档的严格链接检查；该结果不表示共享清单已登记。
 
 主会话可审查合入网关内存观测，继续保留现有持久连接；本轮没有需所有者下载的依赖/模型或GPU需求。若要扩展缓存证据，应先协调学校透传命中字段，再单独限定新样本；不要为采样牺牲角色/记忆正确性或开放后台写入。用户停说到首个有效回答声音、连续性、续说取消、插话残音和实机体验仍由其他任务/所有者验收，AF结果不代替它们。
+
+## 第二阶段：候选真实网关宿主接口
+
+首阶段提交 `e8ce66d2d7c373dfb27ee6f9b45f27c2e3928717` 已由主会话安排交AI组合；本次在同一分支追加，不改写历史。新增授权限定宿主网关/传输及专属测试，不给新真实调用额度。首阶段六次额度已结束，**第二阶段真实请求为0**；缓存支持状态继续未确认。
+
+新增 [candidate_response.py](../../../src/longmemory/methods/hy_memory/candidate_response.py)、[专属测试](../../../tests/unit/methods/test_hy_candidate_response.py)，修改原 `model_gateway.py/provider_transport.py`。没有修改AE、AB、启动器或私有配置；原持久会话的同步接口保留。新增异步逐行句柄复用同一pump/队列/事件循环/会话，不建立第二套HTTP客户端；消费者通知用跨线程event唤醒，不轮询读取或为每行另开线程。
+
+导出形状可直接供宿主装配层使用：
+
+```python
+binding = gateway.candidate_response_binding()
+# {open_response: callable, model: 精确已选模型名, campus_free_verified: True}
+handle = binding['open_response'](frozen_payload)
+async with handle as response:
+    # type(response.status) is int；response.content逐行异步迭代bytes
+    async for line in response.content:
+        pass  # 宿主候选消费者，不是正式字幕/播放
+ack = await handle.wait_closed()
+# {request_id, owned_upstream_exited: True, provider_compute_stopped: False,
+#  ledger_finalized: bool, usage_settled: bool}
+```
+
+`handle.cancel()` 显式取消该候选自有上游任务并等待同一ack；`handle.aclose()` 幂等关闭，`gateway.cancel_candidate(handle.request_id)` 可按活动候选ID取消，正式attempt_id不在查找表。三者及 `wait_closed()` 限定同一宿主asyncio循环。创建句柄不取锁、不预留、不联网；进入时重新核对免费政策，按同一网关锁和账本 `reserve('answer')` 后才向原供应商池发出。付费、身份变化、裸布尔证明、错模型或超出256输出tokens均先拒绝。
+
+请求保持冻结消息，首system和末user，不改动角色、时间或记忆边界；单choice、n=1、禁用思考、无tools、tool_choice=none、总输入最多32000字符。上游总时限10秒的timer直接取消该句柄；socket超时继续沿原设置，清理确认不使用假超时释放并发槽。包/行/总响应有界，拒绝工具/函数、非stop、缺DONE及非法usage；最终内容沿原 `FinalContent` 边界过滤。
+
+只有完整stop/usage/DONE且消费者正常退出后，等自有pump实际 `task.done()` 及响应关闭，再按原策略finish和审计。取消时即使见过部分usage也保留unknown。`gateway_results.forwarded=false`，候选没有正式归档/字幕/播放。元数据不含消息、响应、角色内容、供应商错误正文或凭据。未结usage不是零token；ack不声明远端GPU停止。
+
+隔离证据：34个专属测试通过，含实际本地HTTP连接复用、原账本/正式请求共池、身份与请求门、首头前/首片后取消、重复取消、按request_id显式取消、排队取消无迟到取锁、宿主关闭、总时限及unknown审计。延迟关闭测试在pump允许退出前明确断言网关锁仍持有、候选登记存在且 `wait_closed()` 未返回，之后才退锁。
+
+其中3个测试以本地 `git show baedad5e5ce1f4da18bb3aefabeaeeecad954c78` 提取的AE自有源码快照运行，没有下载或修改AE文件。快照位于忽略目录 `data/test-tmp/af-ae-source-baedad5/`，由测试进程临时环境变量指定；组合树中缺该显式快照/AE源码时这3项应跳过，不能谎称已组合。实际 `VoicePreemptive/GatewayPreparationModel` 完整请求能ready并一次领取；首头前和首片后取消时 `aclose(.02)` 返回False，AE `active=1`、网关锁仍持有；允许上游退出后active归零、unknown仍为1，ready/hits为0。
+
+AE `baedad5` 只接受小写模型名，因此该生命周期组合测试用绑定为小写名的合成免费政策验证；并没有把真实学校大写名偷偷换成别名。真实绑定返回 `DeepSeek-V4-Flash`，已通过主会话输出报告，须AE/AI接受精确名称后再组合。
+
+真实启动边界已核对 [bootstrap_hy_daily.py](../../../src/longmemory/bootstrap_hy_daily.py) 的 `OwnedHyModels.gateway` 属于宿主，`voice_configuration()` 给小智的是回环模型配置，非可共享的Python对象。**宿主内部接口不等于跨进程接线完成**：本阶段未新增RPC/HTTP候选入口、未复制供应商密钥到小智、未导入主环境类到3.10进程。AI需协调受限宿主RPC及AE逐连接桥，把owner/connection/epoch与候选request_id绑定，取消ack由宿主实际退出后传递；普通客户端断开不能代替这个ack。真实无写快照仍须在宿主Hy边界取得。以上接力不由AF越界修改公共启动器或AB SDK。
+
+第二阶段最终定向回归 **168 passed、3 skipped（7.85秒）**，3个跳过仍为未提供隔离小智/Hy SDK 的原集成项；AE源码快照的3个组合项实际执行通过。两份文档用临时公共清单严格检查通过，未改共享清单。原六请求账本/摘要保持原字节，未新增真实样本、联网获取、依赖安装、GPU或日用服务操作。

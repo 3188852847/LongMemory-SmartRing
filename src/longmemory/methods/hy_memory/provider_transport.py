@@ -21,6 +21,123 @@ class _Stream:
         self.task = None
         self.error = None
         self.abandoned = False
+        self.notify = None
+
+
+async def finish_before_cancel(awaitable):
+    """重复取消也等实际清理完成；不把caller取消传播给资源回收任务。"""
+    task = asyncio.ensure_future(awaitable)
+    cancelled = False
+    while True:
+        try:
+            result = await asyncio.shield(task)
+            break
+        except asyncio.CancelledError:
+            if task.cancelled():
+                raise
+            cancelled = True
+    if cancelled:
+        raise asyncio.CancelledError
+    return result
+
+
+def _notify(state):
+    callback = state.notify
+    if callback is not None:
+        try:
+            callback()
+        except RuntimeError:
+            pass  # 消费者循环已关闭时不能从provider线程回显异常或正文。
+
+
+class _AsyncResponse:
+    """同一pump/会话的异步句柄；close确认指本地请求任务退出，不证明远端停算。"""
+
+    def __init__(self, transport, payload):
+        self.transport, self.payload = transport, payload
+        self.state = _Stream()
+        self.status = None
+        self.content = self._lines()
+        self.started = self.closed = False
+        self._close_task = None
+        self._available = None
+
+    async def __aenter__(self):
+        if self.started or self.closed:
+            raise ValueError('provider_stream_already_used')
+        loop = asyncio.get_running_loop()
+        self._available = asyncio.Event()
+        self.state.notify = lambda: loop.call_soon_threadsafe(self._available.set)
+        try:
+            self.transport._submit(lambda: self.transport._pump(self.payload, self.state))
+            self.started = True
+            self.status = await asyncio.wrap_future(self.state.headers)
+            return self
+        except BaseException:
+            await self.aclose()
+            raise
+
+    async def _lines(self):
+        while not self.closed and not self.state.abandoned:
+            self._available.clear()
+            try:
+                line = self.state.packets.get_nowait()
+            except Empty:
+                if self.state.done.is_set():
+                    if self.state.error is not None:
+                        raise self.state.error from None
+                    return
+                await self._available.wait()
+                continue
+            yield line
+
+    async def _close(self):
+        self.state.abandoned = True
+        if self.started:
+            with self.transport._lock:
+                if not self.transport._closed:
+                    future = asyncio.run_coroutine_threadsafe(
+                        self.transport._cancel_stream(self.state), self.transport._loop)
+                else:
+                    future = None
+            if future is not None:
+                try:
+                    await asyncio.wrap_future(future)
+                except asyncio.CancelledError:
+                    # 全局shutdown也可能取消这个取消协程；仍以pump finally为确认。
+                    pass
+            def exited():
+                return self.state.done.is_set() and self.state.task is not None and self.state.task.done()
+            while not exited():
+                self._available.clear()
+                if not exited():
+                    await self._available.wait()
+        self.closed = True
+        self.payload = b''
+        self.state.notify = None
+        while True:
+            try:
+                self.state.packets.get_nowait()
+            except Empty:
+                break
+        if self._available is not None:
+            self._available.set()
+
+    async def aclose(self):
+        if self._close_task is None:
+            self._close_task = asyncio.create_task(self._close())
+        await finish_before_cancel(self._close_task)
+
+    async def __aexit__(self, *args):
+        await self.aclose()
+
+    async def wait_closed(self):
+        if self._close_task is not None:
+            await finish_before_cancel(self._close_task)
+        else:
+            while not self.closed:
+                await asyncio.sleep(.005)
+        return {'owned_upstream_exited': True, 'provider_compute_stopped': False}
 
 
 def _safe(error):
@@ -110,12 +227,14 @@ class PersistentProviderTransport:
 
     async def _pump(self, payload, state):
         state.task = asyncio.current_task()
+        state.task.add_done_callback(lambda task: _notify(state))
         response = None
         completed = False
         try:
             session = await self._get_session()
             async with self._post(session, payload) as response:
-                state.headers.set_result(response.status)
+                if not state.headers.done():
+                    state.headers.set_result(response.status)
                 total = 0
                 async for line in response.content:
                     total += len(line)
@@ -124,6 +243,7 @@ class PersistentProviderTransport:
                     while True:
                         try:
                             state.packets.put_nowait(line)
+                            _notify(state)
                             break
                         except Full:
                             await asyncio.sleep(0.001)
@@ -136,6 +256,11 @@ class PersistentProviderTransport:
             if not state.headers.done():
                 state.headers.set_exception(state.error or OSError('provider_stream_interrupted'))
             state.done.set()
+            _notify(state)
+
+    def async_stream(self, payload):
+        """只导出同一连接池的逐行异步句柄；不创建另一套HTTP会话。"""
+        return _AsyncResponse(self, payload)
 
     async def _cancel_stream(self, state):
         if state.task is not None and not state.task.done():

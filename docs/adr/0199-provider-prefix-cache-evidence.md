@@ -31,3 +31,15 @@ TTFT（模型首个有效文本时间）起点位于预算预留后、调用传�
 ## 一手依据
 
 [DeepSeek 官方上下文缓存说明](https://api-docs.deepseek.com/zh-cn/guides/kv_cache/)于2026-10-21核对：官方自动缓存前缀，返回命中/未命中计数，落盘为秒级且尽力而为；当前说明按完整前缀单元匹配。该能力与具体规则只归属于官方服务，不能直接归属于学校接口。这里保留字段缺失的证据边界，不据此猜测学校引擎、路由或缓存实现。
+
+## 第二阶段补充：宿主候选响应句柄
+
+主会话新增授权要求将 AE 的候选消费接口接入原网关。候选只能从宿主现有 `ModelGateway` 对象取得绑定，不能在语音进程复制供应商凭据或另建直连。`candidate_response_binding()` 重新核对当前 `FreeCampusCalls` 政策完整字段、端点/凭据摘要、精确模型、所有者免费确认和同一账本身份；有原构造布尔值但无绑定证据仍拒绝。付费网关不导出此接口，不修改旧 unknown 或付费账本。
+
+导出的 `open_response(payload)` 创建异步上下文句柄，提供整数 `status`、逐行异步 `content`、随机 `request_id`、`cancel/aclose/wait_closed`。创建本身不联网/预留；进入时复用网关同一 `_paid_lock`、`reserve('answer')`、持久传输会话、活动登记和审计。请求只允许冻结的首 system、user/assistant 历史及末尾当前 user，最多32000字符、输出256 tokens、n=1、stream/usage、禁用思考、tool_choice=none，无 tools 或额外参数。上游计时10秒到期显式取消；退出清理没有伪确认超时，调用方可以有界等待但并发名额继续保留。
+
+候选严格检查单一choice、assistant delta、无工具/函数调用、正常stop、完整DONE及有效完整usage；开头显式think与reasoning字段不输出。只有完整消费、正常退出并取得本地上游关闭确认才按原免费规则结算；取消、非stop、断流、错误或不完整usage仍记unknown。元数据追加在原 `responses` 与 `gateway_results`，`candidate=true` 只在内存标识，`forwarded=false` 明示没有正式输出；不添加库表、正式对话、检索、归档或播放操作。
+
+`cancel_candidate(request_id)` 只查候选句柄表，与正式调用ID隔离。取消在首响应头前也直接取消自有传输pump，不依赖下游HTTP断开通知。`wait_closed()` 的ack含 `owned_upstream_exited=true`、`provider_compute_stopped=false`、`ledger_finalized` 和 `usage_settled`。它在pump任务实际done、响应释放和账本审计之后返回；重复取消不会中断关闭或提前退锁。ack只证明自有请求任务退出，不能证明供应商GPU停止或释放外部未知费用。生命周期方法限定同一宿主asyncio循环。
+
+该接口当前只证明Python3.12宿主内部闭环。真实小智Python3.10是另一个进程，跨进程能力、调用者/connection/epoch作用域和取消ack的可信传递由主会话/AI协调；本阶段没有新增HTTP/RPC端点，也未宣称语音实际已接线。AE基线只接受小写别名，AF返回实际学校精确大写模型名；协调AE兼容，不静默替换模型。隔离组合与未验证项见AF记录。
