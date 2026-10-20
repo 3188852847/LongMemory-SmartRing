@@ -13,6 +13,7 @@ EXTRA_FIELDS = {
     "confirm": {"snapshot_id", "query", "messages", "tools_required", "formal_turn_id", "client_round_id", "session_id"},
     "cancel": set(), "close": set(),
 }
+MODEL_INPUT_FIELDS = {"input_protocol", "model_user_message"}
 
 
 def _hex(value, minimum=32, maximum=32):
@@ -21,12 +22,20 @@ def _hex(value, minimum=32, maximum=32):
 
 def validate_voice_proposal_request(action, value):
     invalid = ValueError("voice_proposal_request_invalid")
-    if (action not in ACTIONS or not isinstance(value, dict)
-            or set(value) != BASE_FIELDS | EXTRA_FIELDS[action]
+    if action not in ACTIONS or not isinstance(value, dict):
+        raise invalid
+    expected = BASE_FIELDS | EXTRA_FIELDS[action]
+    model_input = action in {"start", "confirm"} and bool(set(value) & MODEL_INPUT_FIELDS)
+    if model_input:
+        expected = expected | MODEL_INPUT_FIELDS
+    if (set(value) != expected
             or type(value["version"]) is not int or value["version"] != 1
             or not _hex(value["connection_id"])
             or any(type(value[key]) is not int or not 0 <= value[key] < 2**63
                    for key in ("turn_id", "transcript_revision", "cancel_epoch"))):
+        raise invalid
+    if model_input and (type(value["input_protocol"]) is not int or value["input_protocol"] != 2
+            or not isinstance(value["model_user_message"], str) or not value["model_user_message"].strip()):
         raise invalid
     if "query" in value and (not isinstance(value["query"], str) or not value["query"].strip() or len(value["query"]) > 16000):
         raise invalid
@@ -47,11 +56,14 @@ def validate_voice_proposal_request(action, value):
                        or row[0] not in {"system", "user", "assistant"}
                        or not isinstance(row[1], str) for row in rows)
                 or rows[0][0] != "system" or any(row[0] == "system" for row in rows[1:])
-                or sum(len(row[1]) for row in rows) > 32000 or type(value["tools_required"]) is not bool):
+                or sum(len(row[1]) for row in rows) + (len(value["model_user_message"]) if model_input else 0) > 32000
+                or type(value["tools_required"]) is not bool):
             raise invalid
     try:
         if "query" in value:
             value["query"].encode("utf-8")
+        if model_input:
+            value["model_user_message"].encode("utf-8")
         for row in value.get("messages", []):
             row[1].encode("utf-8")
     except UnicodeError:
