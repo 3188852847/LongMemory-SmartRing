@@ -9,6 +9,7 @@ mkdirSync(temporary, {recursive:true});
 const python = process.env.SMART_RING_TEST_PYTHON || resolve('../../.venv/Scripts/python.exe');
 export default defineConfig({
   ...base,
+  projects:[{name:'chromium'}],
   testMatch: 'chat-workspace.spec.ts',
   use: {...base.use, baseURL:'http://127.0.0.1:18831'},
   webServer: {

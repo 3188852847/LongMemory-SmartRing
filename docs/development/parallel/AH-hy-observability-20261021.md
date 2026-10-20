@@ -209,3 +209,13 @@ CI前端仍执行全部组件、类型/构建，然后执行 `scripts/ci/browser
 证据根目录为 ignored `data/test-tmp/ah-ci-browser-20261021/`。第一次完整新主机回归 `browser-v1` 实际133通过/6失败/3既有资源跳过，定位后修正装配前提/新增键盘步骤/种子隔离；后续定向 `browser-target-v2` 为5通过/2失败，后者是新夹具准备POST漏Origin，补齐后完整诊断 `browser-q-v3` 8/8通过。所有失败JSON/trace原样保留。快照初次缺共享appearance资源的收集错误也保留，成功原始收集为 `collection-original-v3.json`，不会把失败原始JSON当143项证据。
 
 本阶段生产API字节有真实变化，旧c5b2779d候选不能作为新修复产物。完整组件、实际CI入口浏览器、精确新提交构建、资源/隐私扫描与外围绑定在下文追加；本机结果不代替新远程Quality。AH不修改后端资源清单、日用服务/私有配置/个人库/设备，不合main、不推送，由主会话转AI组合审查。
+
+### 完整回归结果与最后一份专用配置
+
+`d3571b2ce5e6e85ce6fbc5a2e7f2134106f06300` / 前端tree `f67e81269f919b222bca1f13258bd3f577e0bb9a` 的普通配置组件回归为63文件、350/350通过（原348+新增2项会话协议回归）；类型检查、Vite构建、Python夹具语法和workflow YAML解析通过。真实CI入口 `node ../../scripts/ci/browser_quality.mjs` 的4项护栏自测通过，预检143项与实际143项逐项相同；完整浏览器结果为140通过、0失败、0flaky、3项原有Otto固定素材条件跳过，耗时237973ms。真实SDK1项只收集、未运行，不属于上述通过数。原始结果在 `data/test-tmp/ci/browser/run-1792539648051-45220/`，主原始日志为 `data/test-tmp/ah-ci-browser-20261021/browser-ci-final.log`。
+
+此全量在本轮运行时实际字节上完成：45文件/1,839,032字节，规范产物tree `bcde5ee77a08fa513942c7f13ffe60885e7a3c4acfe237f5dac4975886679af1`，冻结文件清单见 `tested-build-binding.json`。类型/构建使用Node24.19.0与原锁定依赖；Python3.12.13的实际longmemory导入路径已断言位于AH/src。没有安装、下载、复制/联接依赖或启动模型/声音服务。全量退出后19871/19872监听已释放。
+
+收尾发现此前检索未覆盖的 `chat-workspace.config.ts` 同样继承默认配置，故补齐单项目覆盖，避免聊天专用入口额外收集诊断。该修改不被默认完整入口消费、不改变任何生产字节或业务断言；`collection-chat-final.json` 确认只收集原4项、没有诊断项目。最后这一配置补充单独提交并验证，完整143项的实际运行提交仍明确为上述d3571b2c，不冒写成后一提交又全量重跑。最终候选将在精确最后代码提交上重建并逐文件匹配上述已测字节。
+
+文档严格检查当前只有一项 `missing-source` 告警：共享 `documentation-manifest.json` 的来源仍为 `web/react-chat/e2e/hy-release-live.spec.ts`，应由主会话/AI按文件归属改成 `web/react-chat/e2e-live/hy-release-live.spec.ts`；AH未越界修改公共清单。该告警未清除，不能声称文档严格检查通过。
