@@ -55,6 +55,31 @@ async function synthetic(page:Page,initialMode:Mode='normal'){
 async function noOverflow(page:Page){expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(await page.evaluate(()=>innerWidth+1));}
 async function openLayer(page:Page,layer:HyLayerId){await page.goto(`/memories?view=mechanisms&mechanism_tab=layers&layer=${layer}`);await expect(page.getByRole('heading',{name:/已保存内容/})).toBeVisible();}
 
+for(const width of [1366,390])test(`L6/L7五轴证据与旧协议未知状态 ${width}`,async({page},info)=>{
+  await page.setViewportSize({width,height:844});const state=await synthetic(page);
+  await openLayer(page,'l6_schema');if(width===390)await largerReading(page);
+  const panel=page.getByLabel('分层接入与运行证据');
+  await panel.locator('summary').click();
+  await expect(panel.getByText('未启用',{exact:true})).toBeVisible();
+  await expect(panel.getByText('部分覆盖',{exact:true})).toBeVisible();
+  await expect(panel.getByText('未知',{exact:true})).toHaveCount(3);
+  await expect(panel.getByText(/本次运行开关快照/)).toBeVisible();
+  await expect(panel.getByText(/原生最后更新时间尚未提供/)).toBeVisible();
+  await expect(panel.getByText('已启用',{exact:true})).toHaveCount(0);
+  await expect(panel.getByRole('button')).toHaveCount(0);
+  await panel.evaluate(el=>el.scrollIntoView({block:'start'}));
+  await noOverflow(page);await page.screenshot({path:info.outputPath(`layer-capability-${width}.png`),animations:'disabled'});
+  await panel.locator('summary').click();
+  await page.getByRole('button',{name:/Hy L7 /}).click();
+  await expect(page.getByText('当前页没有返回记录，整层是否为空尚不能确认')).toBeInViewport();
+  await expect(panel.locator('summary')).toContainText('部分覆盖');
+  await page.goBack();await expect(page).toHaveURL(/layer=l6_schema/);
+  await expect(page.getByText('合成 l6_schema 保存正文 0：周末沿河散步。',{exact:true})).toBeVisible();
+  state.setMode('busy');await page.getByRole('button',{name:'刷新本层'}).click();
+  await expect(page.getByText('本层内容读取失败')).toBeVisible();await expect(panel).toHaveCount(0);
+  expect(state.calls.every(call=>call.method==='GET')).toBe(true);expect(state.errors).toEqual([]);
+});
+
 for(const viewport of [{width:1920,height:1080},{width:1366,height:768},{width:390,height:844}])test(`逐层内容分页详情与视口 ${viewport.width}`,async({page},info)=>{
   await page.setViewportSize(viewport);await page.emulateMedia({reducedMotion:'reduce'});const state=await synthetic(page);
   await openLayer(page,'l2_fact');if(viewport.width===390){await largerReading(page);await expect(page.locator('html')).toHaveAttribute('data-reading','larger');}

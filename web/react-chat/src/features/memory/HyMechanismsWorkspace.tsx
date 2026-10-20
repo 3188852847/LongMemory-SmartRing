@@ -99,7 +99,7 @@ export function HyMechanismsWorkspace() {
         <p className="mechanism-caption">平台原话不等于 Hy L0：L0 是聚合基本信息，L1 是 SDK RAW 原始记忆。下面按所选层读取真实保存内容。</p>
         <div className="hy-layer-map">{layers.map(item=><button type="button" key={item.id} aria-pressed={layer?.id===item.id} onClick={()=>{choose({layer:item.id,layer_offset:undefined,layer_item:undefined,layer_state:undefined});setLayerReveal(value=>value+1);}}><strong>Hy L{item.number}</strong><span>{item.title}</span><small>机制：{integrations[item.integration].label}</small></button>)}</div>
         {!layer?<Empty description="接口未提供层级目录，不推断为空库"/>:<>
-          {HY_LAYERS.includes(layer.id as HyLayerId)?<HyLayerBrowser layer={layer.id as HyLayerId} title={`Hy L${layer.number} · ${layer.title}`} revealRequest={layerReveal}/>:<Alert type="warning" title="当前层标识尚不支持内容读取" description="未使用混合列表或其他层来补齐。"/>}
+          {HY_LAYERS.includes(layer.id as HyLayerId)?<HyLayerBrowser layer={layer.id as HyLayerId} title={`Hy L${layer.number} · ${layer.title}`} revealRequest={layerReveal} runtimeSnapshot={{runtime:data.runtime,observed_at:data.observed_at,stale:!current||query.isFetching}}/>:<Alert type="warning" title="当前层标识尚不支持内容读取" description="未使用混合列表或其他层来补齐。"/>}
           <details className="hy-layer-description"><summary>本层机制说明与代码依据</summary><Integration value={layer.integration}/><p>{layer.description}</p><p>生成开关与是否存在已保存内容分别判断；关闭或保留状态不等于没有历史数据。</p><CodeEvidence item={layer}/></details>
         </>}
       </section>}

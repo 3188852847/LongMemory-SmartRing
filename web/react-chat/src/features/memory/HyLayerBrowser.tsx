@@ -7,6 +7,8 @@ import {MemoryEngineApi} from '../../api/memoryEngine';
 import {HY_LAYER_STATES,HyLayerContractError,hyLayerIdentifier,type HyLayerId,type HyLayerRead,type HyLayerState,type HyStoredRecord} from '../../api/hyLayerData';
 import {useMemoryEngine} from '../../app/MemoryEngineProvider';
 import {memoryTime} from './HyMemoryWorkspace';
+import {HyLayerStatus} from './HyLayerStatus';
+import type {HyCapabilityView,HyRuntimeGateSnapshot} from './hyCapabilityView';
 import './hy-layer-data.css';
 
 const api=new MemoryEngineApi(new ChatApi());
@@ -47,7 +49,7 @@ function ProfileFields({item,onVersion}:{item:HyStoredRecord;onVersion:(id:strin
 }
 
 /** 只在用户打开所选层后读取；页、详情和来源各自有界，失败不复用另一层内容。 */
-export function HyLayerBrowser({layer,title,revealRequest=0}:{layer:HyLayerId;title:string;revealRequest?:number}) {
+export function HyLayerBrowser({layer,title,revealRequest=0,capabilities,runtimeSnapshot}:{layer:HyLayerId;title:string;revealRequest?:number;capabilities?:HyCapabilityView;runtimeSnapshot?:HyRuntimeGateSnapshot}) {
   const engine=useMemoryEngine();
   const heading=useRef<HTMLHeadingElement>(null);
   const previousReveal=useRef(revealRequest);
@@ -55,8 +57,8 @@ export function HyLayerBrowser({layer,title,revealRequest=0}:{layer:HyLayerId;ti
     if(previousReveal.current===revealRequest)return;
     previousReveal.current=revealRequest;
     const target=heading.current;
-    // 仅响应显式点层。标题仍在屏外时就近进入内容，历史恢复/刷新不触发此滚动。
-    if(target&&target.getBoundingClientRect().top>innerHeight-240){target.scrollIntoView({block:'start',behavior:'instant'});target.focus({preventScroll:true});}
+    // 仅响应显式点层；为边界提示和正文留足视口。历史恢复、筛选和刷新不触发滚动。
+    if(target&&target.getBoundingClientRect().top>innerHeight*.35){target.scrollIntoView({block:'start',behavior:'instant'});target.focus({preventScroll:true});}
   },[revealRequest]);
   const [params,setParams]=useSearchParams();
   const rawOffset=params.get('layer_offset')??'0';
@@ -102,6 +104,7 @@ export function HyLayerBrowser({layer,title,revealRequest=0}:{layer:HyLayerId;ti
       <details className="hy-layer-scope"><summary>读取范围与分页说明</summary><p>{data.count_scope==='aggregate_profile'?'计数单位是当前聚合画像，不是 L0 原生存储行数。':'计数范围限当前拥有者、助手、来源、本层、所选状态和向量存储；未知总数保持未知。'}</p><p>按原生存储顺序有界分页，不是全库时间排序；跨页不冻结快照，期间写入或刷新可能改变后续页。本页没有全库扫描、启用机制或写入操作。</p></details>
     </>}
     </div>
+    {data&&!hiddenOld&&<HyLayerStatus page={data} capabilities={capabilities} runtimeSnapshot={runtimeSnapshot}/>}
     <Drawer title={`${title}内容详情`} open={selected!==null} onClose={()=>choose({layer_item:undefined})} size="large" className="hy-layer-detail">
       {!enabled&&<Alert type="info" title="当前引擎身份尚未确认，未读取或展示分层详情"/>}
       {!validId&&<Alert type="error" title="记录链接格式无效"/>}
