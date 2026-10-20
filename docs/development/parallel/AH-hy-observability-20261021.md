@@ -89,3 +89,37 @@ AH重新核对AB冻结的`semantic.task_id`：非空/strip后非空、最多256�
 `components-task-id-fix.json`的28项针对性测试通过，覆盖原生自动ID冷链接、编码GET、精确回执、256码点、Python空白/C0控制、路径拒绝和原有只读状态；TypeScript及`build-task-id-fix/`独占构建通过。`browser-task-id-fix.log`的5项全部通过：新增自动add/management冷链接/返回及原4项桌面/390px只读语义路径，输出与截图保留在同名独占目录。既有第二阶段44项/29项历史验证不改写为本修正后全量重跑。
 
 AI同时负责公共HTTP白名单及RPC缺失/忙碌错误映射修正，AH未编辑其文件；新前端提交须与AI该修正配对验证。AH仍未运行真实SDK/组合HTTP、未更改日用或后台写入，整个分支不推送、不合main。
+
+## 离线发布构建交付
+
+主会话确认AI当前前端Git tree与AH一致，指定AH用既有实体依赖构建。本轮开始硬核对：HEAD=`70cad5b765c16632e808b8861b4dff875b09d3f8`、工作树clean、`web/react-chat` tree=`43ecb03553163f675e437193345f26a7f77942f4`；共享`web/assets` tree=`3cc3fce0066fb30dcea0ac15e383fbde1a491929`。构建完成后只追加本记录，记录提交不改变上述前端tree或构建输入。
+
+产物根目录为AH树内 `data/test-tmp/ah-release-70cad5b-20261021/`，以下文件均被Git忽略，没有提交产物或原始日志：
+
+| 路径 | 内容 |
+|---|---|
+| `dist/` | 本轮新建的独占发布候选，不是生产dist |
+| `artifacts.files.json`、`artifacts.sha256` | 全部45个相对文件、字节数和逐文件SHA-256；清单包含`.vite/manifest.json` |
+| `release-binding.json` | 源提交/前端与共享资源Git tree、Node路径/版本、实际依赖版本、命令、锁文件身份、产物tree/manifest摘要、引用校验、扫描与截图关联 |
+| `asset-references.json` | HTML/CSS/JS/manifest的264处本地资源引用，均存在；manifest导入键同时校验 |
+| `typecheck.log`、`build.log`、`verification.log` | 未截断原始日志；既有大chunk警告保留 |
+| `verify-release.cjs` | 本任务冻结源码的只读核验脚本，仅将清单和绑定写入该证据目录 |
+| `delivery-receipt.json` | 对上述清单、绑定、脚本与原始日志的外围文件摘要 |
+
+在本树 `web/react-chat/` 用既有Node24.19.0执行，无安装、复制或联接node_modules：
+
+```powershell
+node node_modules/typescript/bin/tsc --noEmit
+node node_modules/vite/bin/vite.js build --outDir ../../data/test-tmp/ah-release-70cad5b-20261021/dist
+node ../../data/test-tmp/ah-release-70cad5b-20261021/verify-release.cjs
+```
+
+固定工具为TypeScript7.0.2、Vite8.2.2，包声明仍为pnpm11.19.0；没有调用本机其他版本pnpm。`pnpm-lock.yaml` Git blob=`ab2596b2d7c2fda56690dbe7ccf9778461183924`，工作文件SHA-256=`c0e083751833a86c21a0f4cfa7cf66d8a8621d1459b91a66991dcfbe6ad6fdd9`；package.json和其他构建输入逐项摘要在绑定中。既有632个包内链接全部仍指向AH实体依赖目录，主依赖/开发依赖的实际版本与原声明逐项一致。
+
+实际结果：45文件、1,835,506字节；规范tree SHA-256=`278ed5f109b2ffcce9246e5f26719dd6add19d94f9b5e7d28bcee4dc48a9a1ef`；`.vite/manifest.json` SHA-256=`fff8f17b610f6bb55cd83f518a831eb73a9359c6f89332ace572c0caa774df53`。tree算法为：相对路径统一`/`并按UTF-8字节排序，依次连接`路径UTF8 + NUL + 文件SHA256 ASCII + LF`，再SHA-256；不是JSON文件摘要。
+
+全部文件与本树此前同提交/同tree的`build-task-id-fix/`及其已保存绑定逐文件一致，没有新增构建差异。因此关联原5项浏览器通过及7张原始截图，不重复运行无新增变化的组件/浏览器测试；本次重新视觉查看1366桌面与390大字图式/来源截图，正文、隔离与部分覆盖说明可读，无横向溢出。截图路径和逐张摘要在发布绑定中。
+
+构建资源引用无缺失；产物仅包含预期HTML/JS/CSS及manifest，无source map或额外文件。全部产物文本的固定凭据、私有机器路径及合成fixture标记扫描0发现；前端无`.env`文件、生产源码未引用测试fixture，未读私有配置或个人数据。扫描结果表示所列检查范围，不替代组合运行与所有者实机验收。
+
+此交付只作为AI按相同前端tree审查的可部署候选。主会话另负责备份、正式dist切换/服务恢复与生产保护核验；AH没有修改生产dist、服务、config、管理proof、个人库或固件，也没有推送/合入main。
