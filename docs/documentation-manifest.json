@@ -121,7 +121,9 @@
         "src/longmemory/methods/hy_memory/candidate_response.py",
         "tests/unit/methods/test_hy_candidate_response.py",
         "src/longmemory/application/voice_proposals.py",
-        "tests/unit/application/test_voice_proposals.py"
+        "tests/unit/application/test_voice_proposals.py",
+        "src/longmemory/methods/hy_memory/model_admission.py",
+        "tests/unit/methods/test_hy_model_admission.py"
       ],
       "related": [
         "docs/development/parallel/AI-hy-advanced-low-latency-20261021.md",

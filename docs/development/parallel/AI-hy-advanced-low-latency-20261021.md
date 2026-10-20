@@ -280,3 +280,11 @@ AG `flow_trtexec.py` 静态审查及CPU契约/source绑定组 **18 passed / 0.83
 后续公共临界区审查修正：候选CPU编码移出Runtime锁，保留原网关编码锁；编码完非阻塞重取Runtime锁，再核对原Runtime修订、使用门、网关/编码器实例，失效或忙直接回退。不能持Runtime锁等待编码器而让正式prepare被可选候选拖住。新增受控阻塞编码测试确认前台可取锁，配置变化后迟到向量不进入引擎快照；首轮失败是合成模型服务替身遗漏status()，补齐其契约后整组 **81 passed / 29.38秒**（公共门＋实际SDK/RPC＋真实AF宿主），没有改系统实现来迁就测试。
 
 AI也只读核对原校园 `raw-models/model-{3,6,10,14}-{request,response}.json`，不复制正文/库或追加学校调用：S1与协调请求均确含四个seed完整原文；两个响应中的61字L2正文SHA-256均为`df816339ced67c876fedad75b20f0a2065d53d7916dc8eb22ce1b735ab73f173`，与公开收据一致。基于该实际捕获正文、公开条目ID/meta和当前AI HyMemoryMethod实代码，回放桥/召回投影＋管理叠加替身，normal正文原样返回且来源仅future；overlay只查询该新L2 ID，未查询旧seed ID，即使旧seed被标为blocked也不能由现路径自动传递到新L2。这是当前缺口的具体反例，尚不是完整SDK纠错/删除重放；AB仍负责持久依赖/来源隔离修复与原SDK离线回归。该手工探针首轮因未指定src而解析到主环境editable安装，在对象构造前失败；重跑明确将AI src置首并断言import路径。探针未访问日用服务、个人库或学校，未在Git保存原捕获正文。
+
+## AF前台优先准入接入（待AB实际后台接线）
+
+主会话交付AF `3308a8251706da0cb0289ed9ec2cb0dccfa02b87`，AI核对调度/网关/候选ACK/测试后无冲突接入为 `1eb3ea0c`。单上游槽继续沿原锁、预算phase、真实owned传输和unknown；显式background仅允许hy，新同authority路由`/hy-background/v1`，默认/未知标签保持required_hy；模型body不取得调度权。优先次序answer→required_hy→candidate→background，同级有界FIFO，排队不reserve。候选抢占必须匹配实际request_id/owned退出/ledger关闭回执，ACK前不得归还槽；错误ACK隔离并阻止新provider请求。正式或后台在飞请求不被此抢占取消。
+
+`local_settings('hy',work_class='background')` 和 `complete('hy',body,work_class='background')` 已可用；Bearer保护的`GET /hy-background/v1/admission`只给空闲建议，不持lease、不reserve，不授权运行SDK。AB须在任务标running/进入原子evolve之前先查建议，忙仍pending；实际内部LLM请求仍须走background路由并由SDKBudget可信同authority白名单认领，不能全局改/hy类别。路由属当前进程策略，不改变持久模型/来源身份。该SDK侧接力尚未交付，AI没有擅改AB worker/semantic文件或生产proof。
+
+AI在组合树实跑准入、原候选、流式回答与宿主 **99 passed / 6.56秒**，包括AF真实随机回环HTTP竞争/延迟ACK/错ACK隔离/关停唤醒场景。AI原共享锁反例现按显式background重跑，保留在飞后台160ms受控屏障，实际顺序hy→answer→hy；本样本正式请求到provider168.450ms、独立model_queue166.600ms、拿槽后过滤首文本0.110ms。排队候选取消0.077ms且无预留；总实际3次原预算请求、unknown0。固定sleep改为等answer真正入队后使用perf_counter保持屏障，避免将sleep参数当Windows实际时长。此处供应商为受控函数替身；真实HTTP顺序另由AF专属测试覆盖，不声称已完成实际SDK后台组合、学校性能或用户停说→答声提速。

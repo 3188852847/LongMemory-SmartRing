@@ -15,7 +15,7 @@ sys.path.insert(0, str(ROOT/"tests/unit/methods"))
 from test_hy_candidate_response import gateway, complete_wire, body, consume, USAGE
 
 
-def test_background_generation_holds_formal_answer_while_candidate_can_cancel_queued(tmp_path):
+def test_inflight_background_delays_formal_answer_but_queued_background_yields_and_candidate_cancels(tmp_path):
     entered, release, formal_entered, queued = Event(), Event(), Event(), Event()
     lock, calls, timings = Lock(), [], {}
     class Handler:
@@ -44,11 +44,11 @@ def test_background_generation_holds_formal_answer_while_candidate_can_cancel_qu
             "max_tokens":256,"stream":False}
         handler = Handler()
         with ThreadPoolExecutor(max_workers=3) as executor:
-            first = executor.submit(model.complete, "hy", background)
+            first = executor.submit(model.complete, "hy", background, work_class="background")
             assert entered.wait(1)
             def next_background():
                 queued.set()
-                return model.complete("hy", background)
+                return model.complete("hy", background, work_class="background")
             second = executor.submit(next_background)
             assert queued.wait(1)
             timings["formal_submitted"] = perf_counter()
@@ -57,7 +57,13 @@ def test_background_generation_holds_formal_answer_while_candidate_can_cancel_qu
                 handle = model.open_candidate_response(body())
                 pending = asyncio.create_task(consume(handle))
                 try:
-                    await asyncio.sleep(.16)
+                    deadline = perf_counter()+1
+                    while model._admission.snapshot()["waiting"]["answer"] != 1:
+                        assert perf_counter() < deadline
+                        await asyncio.sleep(.002)
+                    deadline = perf_counter()+.16
+                    while perf_counter() < deadline:
+                        await asyncio.sleep(.002)
                     assert not formal_entered.is_set() and not answer.done() and not second.done()
                     assert ledger.status()["attempt_count"] == 1
                     began = perf_counter()
@@ -78,10 +84,15 @@ def test_background_generation_holds_formal_answer_while_candidate_can_cancel_qu
         assert b"[DONE]" in handler.wfile.getvalue()
         assert ledger.status()["attempt_count"] == 3 and ledger.status()["unknown_or_inflight"] == 0
         assert not received and not model._candidate_handles
+        assert calls == ["hy", "answer", "hy"]
+        assert [row["admission_class"] for row in model.responses] == ["background", "answer", "background"]
+        formal = next(row for row in model.responses if row["admission_class"] == "answer")
+        assert formal["model_queue_ms"] >= 150 and formal["model_queue_by_active_ms"]["background"] >= 150
         report = {"controlled_background_hold_ms":160,
             "formal_wait_to_provider_ms":round((timings["formal_provider_entered"]-timings["formal_submitted"])*1000,3),
             "candidate_cancel_ms":round(timings["candidate_cancel_ms"],3),
-            "provider_order":calls,"priority_guaranteed":False,"supplier":"controlled_function",
+            "provider_order":calls,"expected_priority_observed":True,"supplier":"controlled_function",
+            "model_queue_ms":formal["model_queue_ms"],"model_ttft_ms":formal["model_ttft_ms"],
             "physical_playback":False,"school_requests":0}
         assert report["formal_wait_to_provider_ms"] >= 150
         (tmp_path/"gateway-contention.json").write_text(json.dumps(report),encoding="utf-8")
