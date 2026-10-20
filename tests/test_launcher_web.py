@@ -425,6 +425,39 @@ def test_launcher_failure_codes_never_copy_exception_body(panel):
     assert panel.events.snapshot()['events'][0]['code'] == 'readiness_timeout'
 
 
+@pytest.mark.parametrize(('error_code', 'code', 'message'), [
+    (10049, 'lan_address_unavailable', '此 IP 已不属于本机'),
+    (10048, 'port_in_use', '端口已被其他服务占用'),
+    (10013, 'bind_denied', '系统拒绝绑定'),
+    (99999, 'bind_failed', '绑定检查失败'),
+])
+def test_launcher_binding_failure_is_actionable_without_raw_exception(panel, error_code, code, message):
+    panel.manager.failure = controller.AddressBindingError('192.168.1.22', 8000, error_code)
+    panel.action('start', request_id='a' * 24)
+    panel.perform_pending()
+    snapshot = panel.snapshot()
+    assert snapshot['state'] == 'failed' and snapshot['can_start']
+    assert message in snapshot['message'] and '192.168.1.22:8000' in snapshot['message']
+    assert panel.events.snapshot()['events'][0]['code'] == code
+    assert '192.168.1.22' not in json.dumps(panel.events.snapshot())
+    assert panel.manager.services == {} and panel.manager.stop_count == 1
+
+
+def test_network_settings_are_validated_and_saved_without_starting_services(panel):
+    old = panel.revision()
+    result = panel.update_settings({'voice_ws_port': 18000, 'voice_http_port': 18003, 'network_auto': True}, old)
+    assert result['settings']['voice_ws_port'] == 18000
+    assert result['settings']['voice_http_port'] == 18003
+    assert result['settings']['network_auto'] is True
+    assert not panel.manager.services and panel.state == 'stopped'
+    before = panel.paths['launcher'].read_bytes()
+    for values in ({'voice_ws_port': True}, {'voice_http_port': '18003'}, {'voice_ws_port': 8766},
+                   {'voice_ws_port': 18003}, {'network_auto': 'true'}, {'lan_interface_id': 'arbitrary'}):
+        with pytest.raises(controller.ControllerError):
+            panel.update_settings(values, panel.revision())
+        assert panel.paths['launcher'].read_bytes() == before
+
+
 def test_readonly_launcher_observability_requires_auth_and_does_not_add_events(host):
     assert request(host, 'GET', '/api/launcher/observability', token=False)[0] == 401
     request(host, 'POST', '/api/launcher/actions', {'action': 'start'})

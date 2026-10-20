@@ -101,6 +101,31 @@ test('窄屏设置和减少动画正常，缺少权限不开放启动', async ({
   await expect(page.getByRole('button', {name: '开启陪伴'})).toBeDisabled();
 });
 
+test('独立圆屏端口及自动IP设置在窄屏可操作，保存不启动服务', async ({page}) => {
+  await page.setViewportSize({width: 390, height: 844});
+  await page.goto(`${origin}/#token=${token}`);
+  const actions: string[] = [];
+  page.on('request', request => {
+    if (request.method() === 'POST' && request.url().endsWith('/api/launcher/actions')) actions.push(request.postData() ?? '');
+  });
+  await page.getByRole('button', {name: /启动设置/}).click();
+  await page.getByLabel('圆屏语音端口').fill('18000');
+  await page.getByLabel('圆屏 OTA 端口').fill('18003');
+  await page.getByLabel('自动跟踪电脑 IP').click();
+  await expect(page.getByLabel('圆屏语音端口')).toHaveValue('18000');
+  await expect(page.getByLabel('圆屏 OTA 端口')).toHaveValue('18003');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  if (process.env.LAUNCHER_SCREENSHOT_DIR) {
+    await page.screenshot({path: resolve(process.env.LAUNCHER_SCREENSHOT_DIR, 'network-settings-390.png'), fullPage: true});
+  }
+  await page.getByRole('button', {name: '保存设置'}).click();
+  await expect(page.getByRole('dialog')).not.toBeVisible();
+  await page.getByRole('button', {name: /启动设置/}).click();
+  await expect(page.getByLabel('圆屏语音端口')).toHaveValue('18000');
+  await expect(page.getByLabel('自动跟踪电脑 IP')).toHaveAttribute('aria-checked', 'true');
+  expect(actions).toEqual([]);
+});
+
 test('持续光效可关闭，放大字号与键盘切换保留草稿和焦点', async ({page}) => {
   await page.setViewportSize({width: 1366, height: 768});
   await page.goto(`${origin}/#token=${token}`);

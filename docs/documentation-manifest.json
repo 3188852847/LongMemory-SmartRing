@@ -13,6 +13,38 @@
   },
   "topics": [
     {
+      "id": "roundscreen-network-coexistence",
+      "scope": "保留Docker另一设备，独立圆屏端口与电脑物理IP自动跟踪；候选已实现未部署，设备数字OTA仍需所有者改址",
+      "authority": "docs/guides/圆屏独立端口与IP自动跟踪-20261020.md",
+      "sources": [
+        "scripts/development/launcher/**",
+        "scripts/development/xiaozhi/setup.py",
+        "scripts/development/xiaozhi/control_http.py",
+        "src/longmemory/entrypoints/api/network_maintenance.py",
+        "src/longmemory/entrypoints/api/server.py",
+        "src/longmemory/entrypoints/api/routes/chat.py",
+        "src/longmemory/entrypoints/api/security.py",
+        "web/react-chat/src/features/launcher/**",
+        "web/react-chat/e2e/launcher.spec.ts",
+        "tests/unit/development/test_network_watch.py",
+        "tests/unit/entrypoints/test_network_maintenance.py"
+      ],
+      "related": [
+        "docs/adr/0187-roundscreen-network-coexistence-and-auto-lan.md",
+        "docs/development/parallel/X-hy-roundscreen-20261019.md",
+        "docs/guides/React启动面板.md",
+        "docs/development/launcher-contract.md",
+        "docs/development/troubleshooting.md"
+      ],
+      "tags": [
+        "双设备共存",
+        "独立端口",
+        "IP自动跟踪",
+        "设备配网"
+      ],
+      "review": "verified 2026-10-20: 04f92df+8b347be隔离实现；393 passed/1 Tk初始化失败、隔离43 passed，前端13/浏览器5及3.10网络副本保护；只读网卡/端口/固件来源已核，未部署或验收真实双设备/设备解析/声音，不承诺稳定主机名"
+    },
+    {
       "id": "hy-campus-free-forward",
       "scope": "所有者确认校园免费与正式前向切换；自然唤醒正常回答/字幕/声音反馈通过，长期记忆/纠正/插话待验",
       "authority": "docs/guides/Hy-Memory圆屏与日用装配-20261019.md",
@@ -271,20 +303,28 @@
         "启动智慧圆屏.cmd",
         "scripts/development/launcher/**",
         "web/react-chat/src/features/launcher/**",
-        "web/react-chat/src/app/launcher-main.tsx"
+        "web/react-chat/src/app/launcher-main.tsx",
+        "tests/test_launcher_web.py",
+        "tests/unit/development/test_launcher.py",
+        "tests/unit/development/test_launcher_events.py"
       ],
       "related": [
         "docs/development/launcher-contract.md",
         "docs/guides/统一启动.md",
-        "docs/adr/0177-react-local-launcher.md"
+        "docs/adr/0177-react-local-launcher.md",
+        "docs/development/troubleshooting.md",
+        "docs/development/parallel/X-hy-roundscreen-20261019.md",
+        "docs/guides/圆屏独立端口与IP自动跟踪-20261020.md"
       ],
       "tags": [
         "启动",
         "停止",
         "退出",
-        "Edge"
+        "Edge",
+        "局域网地址变化",
+        "端口冲突"
       ],
-      "review": "pending: 本轮只建立维护归属，未完成全篇实现核对"
+      "review": "verified 2026-10-20: 仅核对绑定脱敏提示、独立端口/自动物理IP及安全重开候选04f92df+8b347be，393/1 Tk初始化失败、隔离43通过、浏览器5通过；正式部署/设备重连未执行，其余全篇核对仍pending"
     },
     {
       "id": "machine-layout",
@@ -1181,17 +1221,20 @@
       "path": "docs/development/parallel/X-hy-roundscreen-20261019.md",
       "title": "X：Hy-Memory 圆屏适配、可信装配与条件日用切换",
       "status": "reference",
-      "basis": "X五阶段及所有者校园正常回答/字幕/声音反馈；长期记忆闭环、纠正及插话待验",
+      "basis": "X五阶段及所有者校园正常回答/字幕/声音反馈；长期记忆闭环、纠正及插话待验；另记录2026-10-20网络共存/自动IP候选与未部署边界",
       "review": {
         "state": "verified",
-        "date": "2026-10-19",
-        "scope": "仅本次Z放行/主会话推送与X受控校园部署、检查点/原197条/来源分段/同Runtime/免费政策/保护项实际核验，前阶段历史数字保留；主会话转达所有者自然唤醒你好后的正常校园回答/字幕/声音通过，仅窄范围反馈，不读取正文或复验服务",
+        "date": "2026-10-20",
+        "scope": "仅本次Z放行/主会话推送与X受控校园部署、检查点/原197条/来源分段/同Runtime/免费政策/保护项实际核验，前阶段历史数字保留；主会话转达所有者自然唤醒你好后的正常校园回答/字幕/声音通过，仅窄范围反馈，不读取正文或复验服务；2026-10-20仅核对独立端口/自动IP候选04f92df+8b347be及受控副本保护、393/1 Tk组合失败与隔离43通过；未部署或验收设备/双设备共存，其余全篇核对不扩张",
         "evidence": [
           "docs/development/parallel/X-hy-roundscreen-20261019.md",
           "b1f22dc421b1b6d519db1df9060c49899c87ccde",
           "e146ce22caff9d9c909a4e44401f84797776ef0e",
           "aaf3afc87e43301e4be50da8f4d839c65ff99649",
-          "6d12559bc3b883cce8d439fab022ddcf72aa588a"
+          "6d12559bc3b883cce8d439fab022ddcf72aa588a",
+          "docs/guides/圆屏独立端口与IP自动跟踪-20261020.md",
+          "docs/adr/0187-roundscreen-network-coexistence-and-auto-lan.md",
+          "8b347be37409481d8639ce18b7c38b7ebb5166df"
         ]
       },
       "tags": [
@@ -3898,11 +3941,14 @@
       "basis": "按 ROADMAP、恢复/工程约定及本轮任务确定的维护入口；仅限定对应事实范围，语义核对另列",
       "review": {
         "state": "verified",
-        "date": "2026-10-19",
-        "scope": "；X仅核对新增平台圆屏/可信装配段落与引用，未重验整篇历史结论",
+        "date": "2026-10-20",
+        "scope": "X仅核对新增平台圆屏/可信装配段落与引用，未重验整篇历史结论；2026-10-20仅核对独立端口/自动IP候选04f92df+8b347be及受控副本保护、393/1 Tk组合失败与隔离43通过；未部署或验收设备/双设备共存，其余全篇核对不扩张",
         "evidence": [
           "docs/development/parallel/X-hy-roundscreen-20261019.md",
-          "docs/guides/Hy-Memory圆屏与日用装配-20261019.md"
+          "docs/guides/Hy-Memory圆屏与日用装配-20261019.md",
+          "docs/guides/圆屏独立端口与IP自动跟踪-20261020.md",
+          "docs/adr/0187-roundscreen-network-coexistence-and-auto-lan.md",
+          "8b347be37409481d8639ce18b7c38b7ebb5166df"
         ]
       },
       "tags": [
@@ -4138,10 +4184,13 @@
       "basis": "已盘点路径与标题，尚无本轮充分证据确定现行用途；保留原文等待任务核对",
       "review": {
         "state": "pending",
-        "date": "2026-10-19",
-        "scope": "；X仅新增校园免费候选/官方unknown故障段，未重审历史全篇；X仅同步校园main6d12559实际技术部署段，不改写官方旧unknown或历史故障",
+        "date": "2026-10-20",
+        "scope": "X仅新增校园免费候选/官方unknown故障段，未重审历史全篇；X仅同步校园main6d12559实际技术部署段，不改写官方旧unknown或历史故障；2026-10-20仅核对独立端口/自动IP候选04f92df+8b347be及受控副本保护、393/1 Tk组合失败与隔离43通过；未部署或验收设备/双设备共存，其余全篇核对不扩张",
         "evidence": [
-          "docs/development/parallel/X-hy-roundscreen-20261019.md"
+          "docs/development/parallel/X-hy-roundscreen-20261019.md",
+          "docs/guides/圆屏独立端口与IP自动跟踪-20261020.md",
+          "docs/adr/0187-roundscreen-network-coexistence-and-auto-lan.md",
+          "8b347be37409481d8639ce18b7c38b7ebb5166df"
         ]
       },
       "tags": [
@@ -4205,7 +4254,14 @@
       "status": "current",
       "basis": "按 ROADMAP、恢复/工程约定及本轮任务确定的维护入口；仅限定对应事实范围，语义核对另列",
       "review": {
-        "state": "pending"
+        "state": "pending",
+        "date": "2026-10-20",
+        "scope": "2026-10-20仅核对独立端口/自动IP候选04f92df+8b347be及受控副本保护、393/1 Tk组合失败与隔离43通过；未部署或验收设备/双设备共存，其余全篇核对不扩张",
+        "evidence": [
+          "docs/guides/圆屏独立端口与IP自动跟踪-20261020.md",
+          "docs/adr/0187-roundscreen-network-coexistence-and-auto-lan.md",
+          "8b347be37409481d8639ce18b7c38b7ebb5166df"
+        ]
       },
       "tags": [
         "guides"
@@ -5640,6 +5696,49 @@
         "memory",
         "backend",
         "U"
+      ]
+    },
+    {
+      "path": "docs/adr/0187-roundscreen-network-coexistence-and-auto-lan.md",
+      "title": "ADR-0187：圆屏独立端口与物理网卡自动跟踪",
+      "status": "reference",
+      "basis": "所有者授权双设备共存/电脑自动IP更新，记录安全窗口与设备稳定寻址限制",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-20",
+        "scope": "用户决定、04f92df+8b347be候选边界与合成证据；不代表正式部署或设备验收",
+        "evidence": [
+          "docs/development/parallel/X-hy-roundscreen-20261019.md",
+          "tests/unit/development/test_network_watch.py",
+          "tests/unit/entrypoints/test_network_maintenance.py"
+        ]
+      },
+      "tags": [
+        "ADR",
+        "网络",
+        "独立端口",
+        "IP自动跟踪"
+      ]
+    },
+    {
+      "path": "docs/guides/圆屏独立端口与IP自动跟踪-20261020.md",
+      "title": "圆屏独立端口与 IP 自动跟踪",
+      "status": "current",
+      "basis": "本轮网络候选的维护/操作入口；候选实现完成但尚未正式部署",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-20",
+        "scope": "候选端口/监控/保护范围与源码支持的所有者配网步骤；当前设备配置/真实可达性未验",
+        "evidence": [
+          "docs/development/parallel/X-hy-roundscreen-20261019.md",
+          "docs/adr/0187-roundscreen-network-coexistence-and-auto-lan.md"
+        ]
+      },
+      "tags": [
+        "圆屏",
+        "双设备共存",
+        "网络",
+        "配网"
       ]
     }
   ],

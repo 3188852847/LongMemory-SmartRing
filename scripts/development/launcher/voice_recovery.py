@@ -7,6 +7,7 @@ from network import private_ipv4
 
 
 SAFE_REASONS = {
+    "independent_ports_require_owned_launcher",
     "ambiguous_8000_owner",
     "voice_port_ownership_mismatch",
     "owner_is_not_python",
@@ -25,13 +26,15 @@ LOCAL_TTS = {
 }
 
 
-def close_stale_voice(address: str) -> dict:
+def close_stale_voice(address: str, *, ws_port=8000, http_port=8003) -> dict:
     """核对 8000/8003/8766 的共同所有者后，只停止该单个进程。
 
     端口不能脱离进程单独关闭。三端口共同归属和 Python 进程名是当前
     项目侧小智启动契约；不满足时宁可拒绝，也不根据一个 PID 猜测。
     核对与停止放在同一个 PowerShell 进程中，降低 PID 在两步间复用的风险。
     """
+    if (ws_port, http_port) != (8000, 8003):
+        return {'state': 'refused', 'reason': 'independent_ports_require_owned_launcher'}
     selected = private_ipv4(address)
     source = """
 $ErrorActionPreference = 'Stop'

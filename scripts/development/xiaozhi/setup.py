@@ -17,6 +17,12 @@ import sys
 import re
 from urllib.parse import urlsplit
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'launcher'))
+try:
+    from voice_ports import validate_voice_ports
+finally:
+    sys.path.pop(0)
+
 
 ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_SERVER = ROOT / "local/runtime/xiaozhi-esp32-server/main/xiaozhi-server"
@@ -113,18 +119,21 @@ def validate_tts_config(config: dict, backend: str) -> None:
 
 
 def validate_config(config: dict, lan_ip: str | None = None, tts_backend: str = "edge",
-                    voice_mode: str = "pipeline") -> dict:
+                    voice_mode: str = "pipeline", *, ws_port=8000, http_port=8003) -> dict:
     """检查本阶段边界，避免沿用上游默认公网监听或默认模型。"""
     server = config.get("server", {})
+    validate_voice_ports(ws_port, http_port)
+    if voice_mode != 'pipeline' and (ws_port, http_port) != (8000, 8003):
+        raise SetupError('独立端口当前仅支持本地语音链路。')
     expected_ip = validate_lan_ip(lan_ip) if lan_ip else "127.0.0.1"
     if server.get("ip") != expected_ip:
         raise SetupError("server.ip 与本次模式不一致；局域网启动须显式指定 --lan-ip。")
-    if server.get("port") != 8000 or server.get("http_port") != 8003:
-        raise SetupError("本阶段端口必须为 8000 / 8003。")
-    if server.get("websocket") != f"ws://{expected_ip}:8000/xiaozhi/v1/":
-        raise SetupError("WebSocket 地址必须指向本次监听 IP 的 8000 端口。")
+    if server.get("port") != ws_port or server.get("http_port") != http_port:
+        raise SetupError('语音端口与本次启动选择不一致。')
+    if server.get("websocket") != f"ws://{expected_ip}:{ws_port}/xiaozhi/v1/":
+        raise SetupError('WebSocket 地址必须与本次监听地址和端口一致。')
     if lan_ip:
-        if server.get("vision_explain") != f"http://{expected_ip}:8003/mcp/vision/explain":
+        if server.get("vision_explain") != f"http://{expected_ip}:{http_port}/mcp/vision/explain":
             raise SetupError("vision_explain 地址应与本次监听 IP 和 HTTP 端口一致。")
         auth = server.get("auth", {})
         if auth.get("enabled") is not True or auth.get("allowed_devices") != []:
@@ -275,6 +284,8 @@ def main() -> int:
     parser.add_argument("--ffmpeg-dir", type=Path, default=DEFAULT_FFMPEG)
     parser.add_argument("--allow-insecure-http", action="store_true")
     parser.add_argument("--lan-ip", help="显式启用局域网演示，填写电脑有线 IPv4 地址")
+    parser.add_argument('--voice-ws-port', type=int, default=8000)
+    parser.add_argument('--voice-http-port', type=int, default=8003)
     parser.add_argument("--device-control", action="store_true", help="显式开启本机 8766 音量验证接口")
     parser.add_argument("--voice-mode", choices=["pipeline", "doubao_realtime"], default="pipeline")
     parser.add_argument("--voice-latency-mode", choices=["realtime", "original"], default="realtime")
@@ -299,7 +310,8 @@ def main() -> int:
             config = yaml.safe_load(handle)
         if not isinstance(config, dict):
             raise SetupError("私有配置必须是 YAML 映射，不能是空文件。")
-        model = validate_config(config, args.lan_ip, args.tts_backend, args.voice_mode)
+        model = validate_config(config, args.lan_ip, args.tts_backend, args.voice_mode,
+                                ws_port=args.voice_ws_port, http_port=args.voice_http_port)
         realtime = args.voice_mode == "doubao_realtime"
         if realtime:
             if args.action == "check-stream":

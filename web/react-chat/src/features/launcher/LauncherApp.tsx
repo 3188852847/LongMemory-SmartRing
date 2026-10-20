@@ -28,7 +28,7 @@ const settingsGroups = [
   {value: 'display', label: '显示', keys: ['start_page']},
 ];
 
-/** 面板只负责发出显式命令；轮询、打开设置、关闭页面都不会启动或停止服务。 */
+/** 页面轮询只读；已开启的网络自动跟踪由受管主机在安全窗口执行。 */
 export function LauncherApp({api, pollMs = 1200}: {api: LauncherApi; pollMs?: number}) {
   const [snapshot, setSnapshot] = useState<LauncherSnapshot | null>(null);
   const [error, setError] = useState('');
@@ -156,6 +156,7 @@ export function LauncherApp({api, pollMs = 1200}: {api: LauncherApi; pollMs?: nu
         </div>
       </section>
       {error && <Alert className="launcher-error" type="error" title="需要处理" description={error} showIcon action={<Button disabled={pending || closed} onClick={() => setRefreshKey(value => value + 1)}>刷新状态</Button>}/>}
+      {snapshot?.settings.network_auto && snapshot.network && <div role="status" aria-live="polite"><Alert type={snapshot.network.state === 'network_stable' ? 'info' : 'warning'} title="圆屏网络自动跟踪" description={<>{snapshot.network.message}{snapshot.network.address && <span> 当前检测地址：{snapshot.network.address}</span>}</>} showIcon/></div>}
       <SciFiSurface className="launcher-services">
         <div className="launcher-services-heading"><h2>连接状态</h2><span>来自本机服务</span></div>
         <ul>{snapshot?.services.map(service => <li key={service.id}><span className="service-label">{service.label}</span><StatusIndicator tone={service.tone === 'idle' ? 'quiet' : service.tone === 'error' ? 'bad' : service.tone ?? 'quiet'}>{service.state}</StatusIndicator></li>) ?? <li><span className="service-label">本机启动服务</span><StatusIndicator>正在检查</StatusIndicator></li>}</ul>
@@ -173,6 +174,9 @@ export function LauncherApp({api, pollMs = 1200}: {api: LauncherApi; pollMs?: nu
           {fields.filter(field => settingsGroups.find(group => group.value === settingsGroup)?.keys.includes(field.key)).map(field => <div className="launcher-field" key={field.key}><label htmlFor={`launcher-${field.key}`}>{field.label}</label><Select id={`launcher-${field.key}`} options={field.options} value={String(draft[field.key])} disabled={settingsLocked || (draft.memory_backend === 'hy_memory' && ['memory_extraction', 'memory_retrieval'].includes(field.key))} onChange={value => setDraft({...draft, [field.key]: value})}/></div>)}
           {settingsGroup === 'memory' && draft.memory_backend === 'hy_memory' && <Alert type="info" showIcon title="Hy 使用独立的新记忆库和模型设置。旧提取/召回选项暂不生效，旧主动交流暂停；保存后需重启并核对实际后端。"/>}
           {settingsGroup === 'daily' && <div className="launcher-field"><label htmlFor="launcher-ip">电脑局域网 IP</label><Input id="launcher-ip" value={draft.lan_ip} placeholder="填写圆屏可访问的电脑 IPv4 地址" maxLength={64} disabled={settingsLocked} onChange={event => setDraft({...draft, lan_ip: event.target.value})}/></div>}
+          {settingsGroup === 'daily' && <><div className="launcher-switch-row"><label htmlFor="launcher-network-auto">自动跟踪电脑 IP</label><Switch id="launcher-network-auto" checked={draft.network_auto ?? false} disabled={settingsLocked} onChange={network_auto => setDraft({...draft, network_auto})}/></div><p>只跟踪已确认的物理网卡。多网卡有歧义时会等待；运行中的聊天和设备连接未结束时不会自动重开。圆屏保存的旧连接地址仍需在设备配网页更新。</p>
+            <div className="launcher-field"><label htmlFor="launcher-ws-port">圆屏语音端口</label><Input id="launcher-ws-port" type="number" min={1024} max={65535} value={draft.voice_ws_port ?? 8000} disabled={settingsLocked} onChange={event => setDraft({...draft, voice_ws_port: Number(event.target.value)})}/></div>
+            <div className="launcher-field"><label htmlFor="launcher-http-port">圆屏 OTA 端口</label><Input id="launcher-http-port" type="number" min={1024} max={65535} value={draft.voice_http_port ?? 8003} disabled={settingsLocked} onChange={event => setDraft({...draft, voice_http_port: Number(event.target.value)})}/></div></>}
           {settingsGroup === 'voice' && <div className="launcher-engine"><span>当前声音引擎</span><strong>{draft.tts_backend === 'cosyvoice3' ? 'CosyVoice 3' : draft.tts_backend}</strong><p>声音与助手表达的详细选项，请进入陪伴空间查看。</p></div>}
           {settingsGroup === 'display' && <><div className="launcher-switch-row"><span>持续光效</span><AmbientMotionToggle/></div><p className="launcher-config-summary">光效立即改变当前浏览器，不需要保存，也不会启停服务。减少动画设置始终优先。</p></>}
         </TransitionSurface>

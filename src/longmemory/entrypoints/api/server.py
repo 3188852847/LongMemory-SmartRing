@@ -99,10 +99,14 @@ def create_app(*, port=8765, bridge=None, web_root=None, database=None, allow_me
     client = bridge if bridge is not None else XiaozhiControlClient(ROOT / "data/control/device-control.token")
     operation_lock = asyncio.Lock()
     observer = diagnostics if diagnostics is not None else Diagnostics(observability_root)
+    from .network_maintenance import NetworkMaintenance, owned_runtime_idle, PATH as MAINTENANCE_PATH
+    maintenance = NetworkMaintenance(instance_id)
     app = web.Application(client_max_size=1024, middlewares=[
         observability_middleware(observer),
-        security_middleware(f"127.0.0.1:{port}", sessions, memory_runtime_token)
+        security_middleware(f"127.0.0.1:{port}", sessions, memory_runtime_token),
+        maintenance.middleware,
     ])
+    app.router.add_post(MAINTENANCE_PATH, maintenance.handle)
     register_observability(app, observer)
 
     async def static(request):
@@ -202,7 +206,8 @@ def create_app(*, port=8765, bridge=None, web_root=None, database=None, allow_me
         app.on_cleanup.append(stop_proactive_schedule)
     register_memory_routes(app, memory_backend)
     register_proactive_policy_routes(app, memory_backend, client, operation_lock)
-    register_chat_routes(app, chat_backend)
+    chat_idle = register_chat_routes(app, chat_backend)
+    maintenance.idle_checks.extend([chat_idle, lambda: not operation_lock.locked(), lambda: owned_runtime_idle(runtime)])
     register_memory_mode_routes(app, chat_backend)
     register_memory_command_routes(app, chat_backend)
     register_l1_sufficiency_shadow_routes(app, chat_backend)
@@ -260,7 +265,11 @@ def create_app(*, port=8765, bridge=None, web_root=None, database=None, allow_me
     experiments = experiment_backend if experiment_backend is not None else ExperimentBackend(ROOT / "experiments")
     register_experiment_routes(app, experiments)
     register_l1_policy_replay_routes(app, experiments)
-    register_job_routes(app, job_backend if job_backend is not None else ExperimentJobs(experiments))
+    jobs = job_backend if job_backend is not None else ExperimentJobs(experiments)
+    register_job_routes(app, jobs)
+    # 不能证明后台算法空闲时，自动重开保守拒绝；当前Hy日用已暂停这些后台入口。
+    maintenance.supported = (not legacy_sqlite and not proactive_schedule_enabled and not consolidation_background_enabled
+                             and getattr(jobs, 'enabled', True) is False)
     app.on_cleanup.append(close)
     return app
 

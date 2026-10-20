@@ -7,7 +7,10 @@ from tkinter import messagebox, ttk
 from firewall import inspect, change, scope
 
 
-def open_panel(parent, address, root):
+def open_panel(parent, address, root, *, ws_port=8000, http_port=8003):
+    if (ws_port, http_port) != (8000, 8003):
+        messagebox.showinfo('独立圆屏端口', f'本项目使用 {ws_port}/{http_port}，壁纸仍为8768。旧面板仅支持默认端口规则，未查询或修改规则。请先核对新端口监听和现有防火墙范围。', parent=parent)
+        return
     window = tk.Toplevel(parent)
     window.title('圆屏网络与防火墙')
     window.geometry('740x420')
