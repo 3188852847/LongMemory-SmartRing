@@ -1057,7 +1057,9 @@
       "authority": "docs/development/continuous-integration.md",
       "sources": [
         ".github/workflows/**",
-        "scripts/ci/**"
+        "scripts/ci/**",
+        "pyproject.toml",
+        "uv.lock"
       ],
       "related": [
         "docs/development/setup.md"
@@ -1067,7 +1069,7 @@
         "CI",
         "GitHub"
       ],
-      "review": "pending: 本轮只建立维护归属，未完成全篇实现核对"
+      "review": "verified 2026-10-21: 窄范围后端dev原锁依赖/精确资源清单/无ignore入口；本地受控3550通过与181资源跳过、浅历史13通过6资源跳过；不是干净安装或远端通过，前端另验"
     },
     {
       "id": "research-evaluation",

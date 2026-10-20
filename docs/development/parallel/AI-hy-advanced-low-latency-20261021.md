@@ -451,3 +451,17 @@ GitHub Quality `39503121912` 在28dc后端收集失败，四项分别缺requests
 父进程取消/超时/来源变化三项在child_process边界注入失败，不执行SDK，preflight仅需可指纹化的自有合成文件，不能借用本机SDK使CI意外依赖安装。它们改用两份独立当前HEAD源码快照，适应checkout默认浅检出；真正SDK双版本对照仍固定87a25e2/ae53f729、保留专属资源要求，不为CI另取历史或降为同版性能对照。加速模块的真实CPU torch对象替换/量化两项精确标识已有CPU torch要求，其余合成/Job测试照常执行，不引入torch dev依赖。
 
 以上前提修正参与第二次完整受控CI运行 **3550 passed / 181 skipped / 229.82秒，零failure/error**，并通过实际backend_quality报告护栏；未ignore/deselect，requests/NumPy/YAML合成测试已执行。之后额外核出的仅当前HEAD快照变化再做真实无历史仓库的定向验证，不为它复跑全部3550或把前一次数字伪称新冻结全面证明。本机受控环境不是干净安装，更不是远端通过；远端仍需主会话合入push后的Quality结果。
+
+夹具/前提修正独立提交`18f86eab47b15c3d141d0b4418d6ed1883598dfb`。从该提交只导出公开src/scripts/tests/pyproject到本树新合成Git仓库，核对只有一个commit且87a25e2/ae53f729对象不存在；导入源码断言属于该合成src。定向运行校园探针文件 **13 passed / 6个精确SDK资源skip / 10.83秒**，含三项父进程失败路径全部执行通过；原历史双版本SDK组保持缺资源跳过。实际报告护栏亦通过，JUnit在`data/test-tmp/ci-shallow-source-20261021-01/result.xml`。不把它冒充真实性能双版本对照，不联网fetch，也不初始化/改动主项目Git。
+
+## CI/dev依赖与资源契约交付
+
+依赖方案按主会话新增授权执行：requests==2.34.2用于既有无模型HTTP/超时边界，numpy==2.5.2用于PCM数值与固定上游控制流替身，PyYAML==6.0.3用于真实配置投影。三者全部来自原uv.lock确定版本/原来源/原制品；仅增加根项目dev引用和对应锁元数据，逐项验证43个外部包记录完全不变，`uv lock --offline --check --python <原主Python>`通过。替代的生产惰性import/标量替身/整模块skip均未采用；没有改AD生产模块、安装包、联网解析、升级锁版本或混装三套Python。console运行依赖/semantic extra不变，不引入torch等大依赖。
+
+完整入口取消原requests文件ignore和installer单项deselect；原六模块/配置的yaml缺包例外撤销，入口强制导入console和这三项dev依赖。新增`scripts/ci/backend_resources.py`明确181个可缺资源/宿主能力用例，包括全部参数及固定原因；短向量函数49个长参数以显式有限输入组合构造完整ID，不前缀/模块通配、不从未来报告自动放行。真实SDK/3.10/原始捕获/CPU BGE、CPU torch两项、固定Otto素材、FFmpeg与两项具体symlink权限边界各自保留准确原因；新的用例/参数/不同原因/任何失败或collection error仍拒绝。资源护栏合成自测 **7项通过**，其中旧yaml例外、未知参数和错误资源原因必须失败。
+
+第二次完整本地受控记录目录`data/test-tmp/ci-minimal-20261021-02/`：backend.log SHA-256=`fae8fcb0e49731b77bb64b9100dc3bf5d7191a3f05c49a35ec4d4c21ced3315e`；backend.xml=`79e9e145a0c167e5dcfb1d067e60527cfff8c63638c189c6dab2f0978e20c409`；boundary.json=`25f19acb581b576770ba87bddc788954ebff9dea4b883fd0d41afed52b2e569b`，列出从console/dev锁闭包计算的允许包和屏蔽模块；replay.py=`39410086dea915b0116af74061b899fd630a3d07df29f932415869c87142046f`。屏蔽仅在独立测试进程内，工作树外local资源只模拟不存在；不改安装目录/全局环境，不连接日用端口。第一轮14失败与初始化复现日志单独保留，未覆盖成成功。
+
+此后src/语音/前端业务字节保持890热修一致；本CI/dev提交不包含AE适配或AH前端改动，不再触发业务原语变更。远端Quality39503121912的失败记录保留，新远端结果由主会话整合推送后核实，本地通过不能提前写成远端通过。
+
+主会话后续报告890已按新owned检查点在本机热修：`local/archive/hy-advanced-release/20261020T222107Z-feedback-88534a/`共93文件/14,715,389字节，manifest SHA-256=`ec7ec0ea021a8016f27895fae13cc046caf46a29c5731af00e44782e7efa62be`。旧launcher及监听owner退出后，main本地ff到890；此时remote仍28dc，等待CI修复同批正常push。新launcher33512创建UTC `2026-10-20T22:23:03.424590+00`，control readytrue/TTS readywarmtrue；semantic仍预期初始isolated0/-1、无任务，调用审计仍38 completed＋1 unknown；配置/声线/前端字节未变。AI没有复读个人库或执行这些生产操作，不把主会话报告当自己测量。主src/xiaozhi业务摘要为`c62d3fb11c568a69580bf39daaf7e96f6beead9341c4d2edf42af2ba0cf50739`，与隔离热修源码一致；管理原语与原proof字节保持，旧219回执不修改。

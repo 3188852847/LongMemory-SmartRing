@@ -45,6 +45,10 @@ longmemory-console = "longmemory.entrypoints.api.server:main"
 [dependency-groups]
 dev = [
     "pytest>=9.1.1",
+    # 无模型HTTP、PCM数值与配置投影单测；复用原锁，不安装语音/semantic运行环境。
+    "requests==2.34.2",
+    "numpy==2.5.2",
+    "PyYAML==6.0.3",
 ]
 
 [tool.setuptools.packages.find]

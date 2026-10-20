@@ -4,34 +4,14 @@ import os
 from pathlib import Path
 import sys
 import xml.etree.ElementTree as ET
+from backend_resources import declared_skips
 
 
 ROOT = Path(__file__).resolve().parents[2]
 TEST_PATHS = ("tests",)
-# 只允许这些需要另行下载专属资源的验收跳过；依赖安装失败不能伪装成绿色。
-ALLOWED_SKIPS = {
-    ("tests.integration.device_control.test_transport", "test_real_http_and_upstream_mcp_with_simulated_device"),
-    ("tests.integration.memory_pipeline.test_xiaozhi_bridge", "test_real_upstream_dialogue_injects_context_if_available"),
-    ("tests.integration.memory_pipeline.test_xiaozhi_bridge", "test_python310_provider_calls_python312_worker_if_available"),
-    ("tests.unit.infrastructure.test_round_wallpaper_library", "test_library_real_ffmpeg_roundtrip_when_local_tools_exist"),
-}
-# 这些模块属于语音运行环境，PyYAML 没有在主项目 console/dev 中声明。
-# 允许精确模块的 collection skip，其他任何模块缺依赖仍然失败。
-ALLOWED_SKIPS.update(("", f"tests.unit.development.{name}") for name in (
-    "test_sync_memory_config", "test_sync_model_config", "test_sync_role",
-    "test_sync_tts_backend", "test_sync_vad_config", "test_voice_settings",
-))
-ALLOWED_SKIPS.update(("tests.unit.development.test_launcher", name) for name in (
-    "test_network_sync_preserves_other_configuration_and_backups",
-    "test_network_sync_rejects_ambiguous_format",
-))
-SKIP_REASON_SUBSTRINGS = {
-    ("tests.unit.development.test_local_config_layout", "test_migration_rejects_escape_and_symlink"):
-        "host does not grant synthetic symlink creation",
-    ("tests.unit.development.test_local_config_layout", "test_ui_sync_changes_canonical_then_generation_updates_vendor"):
-        "could not import 'yaml'",
-}
-ALLOWED_SKIPS.update(SKIP_REASON_SUBSTRINGS)
+# 精确用例与精确资源原因同时匹配；声明依赖缺失不能冒充资源不可用。
+SKIP_REASON_SUBSTRINGS = declared_skips()
+ALLOWED_SKIPS = set(SKIP_REASON_SUBSTRINGS)
 
 
 def audit_report(path: Path) -> tuple[int, int]:
@@ -63,6 +43,10 @@ def main() -> int:
     import longmemory
     import aiohttp  # noqa: F401
     import pydantic  # noqa: F401
+    # 这些是锁定的合成测试依赖；缺失必须失败，不能落入专属模型/SDK例外。
+    import requests  # noqa: F401
+    import numpy  # noqa: F401
+    import yaml  # noqa: F401
     import pytest
 
     if not Path(longmemory.__file__).resolve().is_relative_to(ROOT / "src"):
@@ -72,8 +56,6 @@ def main() -> int:
     report.parent.mkdir(parents=True, exist_ok=True)
     result = pytest.main([
         *TEST_PATHS, "-q", f"--junitxml={report}",
-        "--ignore=tests/unit/development/test_cosyvoice_streaming.py",
-        "--deselect=tests/unit/development/test_cosyvoice_segments.py::test_actual_v6_installer_keeps_each_drained_segment_separate",
     ])
     if result != 0:
         return int(result)

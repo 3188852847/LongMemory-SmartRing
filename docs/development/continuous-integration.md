@@ -13,6 +13,9 @@ Playwright 启动器使用 Windows，所以第一版选择与日用系统相同�
 | Frontend and browser tests | Vitest；TypeScript 检查与 Vite 构建；Chromium Playwright | `web/react-chat/.node-version` 的 Node 24.19.0；`packageManager` 对应 pnpm 11.19.0；原锁文件 |
 
 没有安装 `semantic` extra、torch、BGE、语音模型、厂家源码或 ESP-IDF。
+dev另外显式声明原锁已有的requests 2.34.2、numpy 2.5.2、PyYAML 6.0.3，
+分别用于无模型HTTP/超时边界、真实PCM数值/固定控制流替身、配置投影回归。
+仅复用原锁的版本、来源和制品摘要；不引入完整语音或GPU环境。
 浏览器通过现有 `playwright_console.py` 启动一次性 Fake 控制台、临时数据库和
 离线设备替身，仅监听回环地址 18777；不连接日用控制台和圆屏。
 前端 job 用主项目 console 环境启动这个替身，不混用语音专属 Python。
@@ -28,15 +31,17 @@ Playwright 启动器使用 Windows，所以第一版选择与日用系统相同�
 | `test_transport::test_real_http_and_upstream_mcp_with_simulated_device` | 全新检出没有小智上游源码和 Python 3.10；在语音恢复环境另行验收 |
 | `test_xiaozhi_bridge` 的真实上游 dialogue、Python 3.10→3.12 两项 | 同上；该文件其他合成协议回归仍执行 |
 | `test_round_wallpaper_library` 的真实 FFmpeg 往返一项 | FFmpeg 是用户下载的专属工具；同文件其他合成边界检查执行 |
-| `test_sync_memory_config`、`test_sync_model_config`、`test_sync_role`、`test_sync_tts_backend`、`test_sync_vad_config`、`test_voice_settings` 的模块 collection skip | PyYAML 属于语音环境，主项目 `console/dev` 没有声明该依赖；在现有语音环境执行 |
-| `test_launcher` 的网络同步保留配置、拒绝歧义格式两项 | 同样依赖语音环境的 PyYAML；其他启动器回归执行 |
-| 精确排除 `tests/unit/development/test_cosyvoice_streaming.py`（16 项） | 被测语音脚本无条件导入 requests，而 requests 不在主项目 console/dev 中；该文件仍由完整本机回归和语音验收执行 |
-| `test_cosyvoice_segments` 的实际 v6 installer 分段一项 | 同样通过 streaming 脚本依赖 requests；只 deselect 该项，其他分段策略合成用例执行 |
-| `test_local_config_layout` 的 UI 同步后生成 vendor 配置一项 | 同样依赖 PyYAML；该文件其他迁移/回滚/模板/路径隔离用例执行 |
 | `test_local_config_layout` 的符号链接创建防护一项 | 仅允许 Windows 不授予创建合成 symlink 权限这一原因；同文件实际 junction 防护用例仍执行 |
+| `test_otto_preview_api` 的符号链接防护、显式固定素材两项 | 分别仅允许宿主不授予symlink权限、没有显式绑定素材目录；合成预览/API用例仍执行 |
+| 固定Hy SDK、独立3.10解释器、固定上游源码、原始捕获、实际CPU BGE | 精确参数化用例及各自缺失原因见[资源清单](../../scripts/ci/backend_resources.py)，不由CI下载资源；真实SDK证明与本机验收另存 |
+| `test_cosyvoice_acceleration` 的真实CPU模块替换、真实CPU量化两项 | 明确要求已安装CPU torch；其余适配/Job/纯合成测试仍执行，不为两项加入torch/GPU依赖 |
 
 例外是明确的验收边界，不是上述功能已经在线验证的证据。不要为让 CI 变绿
 扩大目录排除范围或直接允许所有 skip。新增配置迁移等测试默认进入全 pytest。
+完整入口没有ignore/deselect。清单逐条匹配classname、含全部参数的testcase名和
+固定缺失原因，不允许模块/函数前缀通配；新增用例、参数或不同原因均失败。
+原PyYAML模块/配置跳过例外已撤销，requests/NumPy/PyYAML与aiohttp/Pydantic
+在入口强制导入；声明依赖缺失直接失败，不能伪装为专属资源未部署。
 
 ## 依赖、权限与产物
 
@@ -66,6 +71,20 @@ GitHub 托管 runner 为一次性环境，CI 中的依赖和 Chromium 安装仅�
 CI 的后端入口显式选择当前检出 `src` 并检查来源；在多工作树环境不会让
 本机另一工作树的 editable 安装替代待检查代码。pytest 使用每进程独立临时目录。
 上述入口不负责依赖安装；用户需要重建依赖时仍自行执行已审阅命令。
+
+2026-10-21：28dc78ff的远端Quality `39503121912`在后端四处collection失败，
+根因是新增合成测试使用requests/NumPy/PyYAML却未声明dev依赖。当前修复仅增加
+根项目dev引用与锁元数据；43个外部包记录未变，`uv lock --offline --check`通过，
+没有本机安装、联网解析或升级。完整本地受控缺包复现又暴露Runtime反馈字典处理、
+两处应用层具体Hy依赖及旧夹具前提，公共热修单独提交；本地与后续远端结果见
+[AI本轮记录](parallel/AI-hy-advanced-low-latency-20261021.md)。下面各次较早数量保留
+为历史证据，不作为当前CI通过结论；真实SDK219项证明也不替代最小依赖CI。
+本次完整受控入口为3550 passed、181个精确资源/宿主条件skip、0 failure/error、
+229.82秒，质量报告护栏通过。随后仅将三个父进程故障测试的源码夹具改为当前HEAD，
+在一个仅含当前源码、明确不存在两条历史基线的单提交合成Git仓库定向验证：
+13 passed、6个既有SDK专属skip、10.83秒，护栏同样通过；不为浅检出下载历史。
+真实双版本SDK测试仍固定历史提交并另行验收。当前结果来自本地既有解释器的
+受控依赖/资源缺失，不代表GitHub安装已成功；新提交的远端Quality尚待主会话推送。
 
 2026-10-14：工作流 YAML 已由现有解析器读取，质量报告护栏的 5 项合成自测通过。
 本地验证通过屏蔽 yaml/requests/torch/transformers 等未声明依赖，模拟

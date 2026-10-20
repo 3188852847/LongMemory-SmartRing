@@ -478,7 +478,10 @@ semantic = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "numpy" },
     { name = "pytest" },
+    { name = "pyyaml" },
+    { name = "requests" },
 ]
 
 [package.metadata]
@@ -492,7 +495,12 @@ requires-dist = [
 provides-extras = ["console", "semantic"]
 
 [package.metadata.requires-dev]
-dev = [{ name = "pytest", specifier = ">=9.1.1" }]
+dev = [
+    { name = "numpy", specifier = "==2.5.2" },
+    { name = "pytest", specifier = ">=9.1.1" },
+    { name = "pyyaml", specifier = "==6.0.3" },
+    { name = "requests", specifier = "==2.34.2" },
+]
 
 [[package]]
 name = "markupsafe"
