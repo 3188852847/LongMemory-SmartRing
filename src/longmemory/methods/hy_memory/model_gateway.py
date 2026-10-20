@@ -10,12 +10,14 @@ import json
 import secrets
 import socket
 from threading import Lock, Thread
+from time import perf_counter
 from urllib.parse import urlsplit
 
 from longmemory.infrastructure.config.model_profiles import ModelProfileStore
 from .budget import BudgetStopped
 from .provider_transport import PersistentProviderTransport
 from .answer_content import FinalStream, final_response
+from .prefix_cache import cache_evidence, has_final_text
 
 
 MAX_BODY = 2_000_000
@@ -231,6 +233,7 @@ class ModelGateway(AbstractContextManager):
                 raise BudgetStopped("gateway_closed")
             aid=self.budget.reserve(phase)
             status, usage, failure = None, None, None
+            started = perf_counter()
             try:
                 status,data=self._remote(payload)
                 parsed=json.loads(data)
@@ -240,7 +243,10 @@ class ModelGateway(AbstractContextManager):
                 self.budget.finish(aid,usage,successful=status==200)
                 self.responses.append({"attempt_id":aid,"phase":phase,"http_status":status,
                     "response_model":parsed.get("model") if isinstance(parsed,dict) else None,
-                    "usage":usage,"finish_reason":((parsed.get("choices") or [{}])[0].get("finish_reason") if isinstance(parsed,dict) else None)})
+                    "usage":usage,"finish_reason":((parsed.get("choices") or [{}])[0].get("finish_reason") if isinstance(parsed,dict) else None),
+                    "cache":cache_evidence(usage, completed=status==200),
+                    # 非流式只能测完整响应时间，不能把它冒充TTFT。
+                    "model_ttft_ms":None, "provider_elapsed_ms":round((perf_counter()-started)*1000, 3)})
                 if status!=200:
                     failure = "provider_http_error"
                     return 502,{"error":"selected_provider_failed"}
@@ -300,8 +306,10 @@ class ModelGateway(AbstractContextManager):
             if self._closed:
                 raise BudgetStopped("gateway_closed")
             aid = self.budget.reserve("answer")
+            started, first_text = perf_counter(), None
             usage, done, total, event_lines, event_size = None, False, 0, [], 0
             final_content = FinalStream()
+            finish_reason = None
             status, failure, writing, forwarded = None, None, False, False
             try:
                 with self._remote_stream(payload) as (status, lines):
@@ -345,6 +353,12 @@ class ModelGateway(AbstractContextManager):
                                 if packet.get("usage") is not None:
                                     usage = packet["usage"]
                                 packet = final_content.packet(packet)
+                                for choice in packet.get("choices") or []:
+                                    reason = choice.get("finish_reason")
+                                    if reason is not None:
+                                        finish_reason = reason if isinstance(reason, str) and reason in {"stop", "length", "tool_calls", "content_filter", "function_call"} else "other"
+                                if first_text is None and has_final_text(packet, streaming=True):
+                                    first_text = round((perf_counter()-started)*1000, 3)
                                 writing = True
                                 handler.wfile.write(b"data: " + json.dumps(packet, ensure_ascii=False).encode() + b"\n\n")
                                 handler.wfile.flush()
@@ -365,4 +379,7 @@ class ModelGateway(AbstractContextManager):
             self._record_result(aid, status=status, failure=failure, done=done,
                 forwarded=forwarded, usage_seen=usage is not None)
             self.responses.append({"attempt_id": aid, "phase": "answer", "stream": True,
-                "completed": done, "usage": usage if done else None, "failure": failure, "http_status": status})
+                "completed": done, "usage": usage if done else None, "failure": failure, "http_status": status,
+                "cache":cache_evidence(usage, completed=done and failure is None),
+                "finish_reason":finish_reason,
+                "model_ttft_ms":first_text, "provider_elapsed_ms":round((perf_counter()-started)*1000, 3)})
