@@ -99,7 +99,9 @@ def build_owned_daily_runtime(root, deployment, *, create=False, encoder_loader=
         gateway.__enter__()
         settings = replace(prototype,
             llm=Endpoint(gateway.base + "/hy/v1", model.model, gateway.token, True),
-            embedding=Endpoint(gateway.base + "/hy/v1", encoder.identity, gateway.token, True))
+            embedding=Endpoint(gateway.base + "/hy/v1", encoder.identity, gateway.token, True),
+            # 只由已经建立的受控网关装配后台类别；不把运行时路由写进持久身份。
+            background_priority_enabled=prototype.semantic_layers_enabled)
         if settings.identity() != prototype.identity():
             raise ValueError("daily_ephemeral_gateway_changed_identity")
         runtime = build_hy_memory_runtime(settings=settings, python=deployment.python,

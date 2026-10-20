@@ -323,3 +323,15 @@ AI受控SQLite成本测量（合成Store、不载SDK/模型）：begin_add在100
 当前日用适用性已只读核实：保存首选pipeline/realtime、搜索configured=true；实际正式launch_with_memory进程命令也为realtime，未输出命令全文/密钥，未连接日用端口。当前web_response函数工具和精确实时时间路径下，此纯无工具候选必miss，不能静默关搜索/冻结日期来假称生效，也不应默认打开必废弃的请求。发布时保持候选双端关闭；无工具可采用只作为支持边界证明，待另有正当完整工具/时间载荷方案才讨论当前日用实效，其余来源/调度/TTS可独立验收。
 
 未来模型下载只提供所有者入口 `powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/development/xiaozhi/Download-SmartTurn.ps1`；固定官方revision/大小/SHA、断点临时文件保留、正式文件仅校验不覆盖。所有者本次已完成下载校验，无需重跑；AI未执行该入口或联网。正式模型目的路径仍为`local/runtime/models/smart-turn-v3.2/smart-turn-v3.2-cpu.onnx`，只有正式部署方核验后复制已有文件，不把工作树当永久运行资源。
+
+## 实际后台准入与可信日用装配
+
+AB背景路由`afd6b7d15dadeebc70623c1e2f510ec4ae963581`→AI`692ddde6`；冷语义读取`48a19305a334a9346b643d96258daeade316f467`→AI`f87ebc74`。AI审查同authority精确background别名、ContextVar跨原生线程的受控作用域、task running之前建议查询及原始请求预算；没有把所有Hy请求降级。cold真实对象/管理入口/忙与关闭组合 **40 passed / 0.42秒**，验证不触发factory/SQLite/子进程/SDK导入，不仅是外层HTTP peek。
+
+AI公共bootstrap在owned网关启动后，仅随已验语义模式设置运行时`background_priority_enabled=true`；pro模式false，人工settings中此标记必须不存在或false。llm/embedding仍以原`/hy/v1`托管端点建立，只有AB的后台scope改写LLM请求，稳定provider/source/settings身份不变。公共部署/装配、AB单位与实际SDK路由组 **30 passed / 13.19秒**。没有读取或修改生产配置值或重签proof。
+
+新增`test_hy_background_gateway_combination.py` **1 passed / 7.26秒**：真实SDK/Kuzu/Chroma/Runtime、真实自有ModelGateway及原单槽/合成独立免费账本、随机回环HTTP供应商替身。实际原生evolve在模型忙时保持pending、仅查询建议而不预留；候选排队取消不占新额度；在飞后台结束后正式voice SSE先完成，再运行实际原生evolve并观测background类别；后续实际SDK add仍为required_hy，原生自动evolve再沿background。无新增学校请求、GPU或个人数据。SDK/HTTP组合未以原生reader耗时代替整轮延迟，也不取消在飞背景。
+
+主会话决定本轮保持网页同步observe行为，只修账本批读并量化实际prepare/recall新增成本。网页异步队列仅为有明确行为变化的后续候选，未实现，不在本轮为它改提取/取消/最终写入语义。
+
+生产交接精确路径已由主会话白名单提供，AI不读取其私有值：部署描述`local/config/hy-memory/deployment.json`中的python为`local/worktrees/v-hy-memory-20261019/local/runtime/hy-memory/.venv/Scripts/python.exe`；state_directory=`data/memory/hy-campus-daily-20261019`；source_path=`data/databases/hy-campus-sources-20261019.sqlite3`；调用审计=`data/databases/hy-campus-calls-20261019.sqlite3`。现行sdk_version=2.0.3、embedding_dimensions=512、include_profile=true、model_mode=disabled；托管真实模型由managed_gateway/network_authorized及现有模型档案装配，不能改成不存在的ultra模型枚举。开启字段是semantic_layers_enabled，运行期background标记由可信bootstrap提供。最终协议2 proof须由融合源码实际SDK回归产生，旧4字段background-disabled证明不能只改hash/字段冒充验收。完整引擎检查点须包括sdk目录、hy-state.json、engine.owner、scope/stamp、management.sqlite3、semantic.sqlite3、provenance.sqlite3及所有现存WAL/SHM/其他伴随文件；来源/调用审计与人工配置同时按停机边界保全。最终可执行命令及新前端产物将在剩余门通过后固定，不执行本节生产操作。

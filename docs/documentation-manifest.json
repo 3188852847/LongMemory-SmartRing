@@ -26,6 +26,10 @@
         "tests/unit/methods/test_hy_source_storage_binding.py",
         "tests/fixtures/ab_hy_semantic_campus.py",
         "src/longmemory/methods/hy_memory/provenance.py",
+        "src/longmemory/methods/hy_memory/background.py",
+        "tests/unit/methods/test_hy_background.py",
+        "tests/integration/test_hy_background_sdk.py",
+        "tests/unit/methods/test_hy_semantic_cold.py",
         "tests/unit/methods/test_hy_provenance.py",
         "tests/integration/test_ab_hy_provenance_replay.py",
         "tests/fixtures/ab_hy_provenance_replay.py",
@@ -51,7 +55,9 @@
         "scripts/development/xiaozhi/voice_turn_end*.py",
         "tests/unit/development/test_voice_turn_end.py",
         "tests/unit/development/test_voice_turn_end_*.py",
-        "tests/fixtures/voice_turn_end_sidecar_worker.py"
+        "tests/fixtures/voice_turn_end_sidecar_worker.py",
+        "scripts/development/xiaozhi/Download-SmartTurn.ps1",
+        "tests/unit/development/test_voice_turn_end_download.py"
       ],
       "related": [
         "docs/development/parallel/AI-hy-advanced-low-latency-20261021.md",
@@ -207,7 +213,11 @@
         "tests/integration/test_voice_proposal_sdk_rpc.py",
         "tests/fixtures/voice_proposal_rpc_sdk_client.py",
         "tests/integration/test_voice_gateway_background_contention.py",
-        "tests/unit/application/test_managed_memory_proposals.py"
+        "tests/unit/application/test_managed_memory_proposals.py",
+        "src/longmemory/bootstrap_hy_daily.py",
+        "src/longmemory/infrastructure/config/hy_deployment.py",
+        "tests/unit/application/test_owned_background_bootstrap.py",
+        "tests/integration/test_hy_background_gateway_combination.py"
       ],
       "related": [
         "docs/adr/0201-composed-runtime-write-gates-and-observation.md"

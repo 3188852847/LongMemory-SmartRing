@@ -53,6 +53,17 @@ def test_daily_settings_cannot_self_authorize_management_without_trusted_receipt
     assert not (tmp_path / "data").exists()
 
 
+@pytest.mark.parametrize("value", [True, 1, "background"])
+def test_daily_background_priority_is_set_only_by_owned_bootstrap_not_saved_settings(tmp_path,value):
+    setup_config(tmp_path)
+    path = tmp_path / "local/config/hy-memory/settings.json"
+    settings = json.loads(path.read_text()); settings["background_priority_enabled"] = value
+    path.write_text(json.dumps(settings))
+    with pytest.raises(ValueError,match="background_flag_requires_owned_bootstrap"):
+        load_hy_deployment(tmp_path)
+    assert not (tmp_path / "data").exists()
+
+
 @pytest.mark.parametrize("change", [
     {"version": 2}, {"url": "https://forbidden.invalid"},
     {"python_version": "3.10.20"},
