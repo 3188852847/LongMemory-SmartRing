@@ -239,7 +239,8 @@ def test_abort_rejects_all_remaining_cue_packets_and_new_turn_cannot_reuse():
     asyncio.run(module._do_send_audio(c, waiting.WaitingPacket(b"old", state), {}))
 
 
-def test_actual_waiting_assets_are_bounded_and_identical_frame_durations():
+def test_actual_waiting_assets_are_bounded_and_identical_frame_durations(monkeypatch):
+    monkeypatch.setattr(waiting, '_voice_context', lambda: {'identity':'f'*64, 'default':True})
     for kind in ("model", "web"):
         assert len(waiting.load_packets(kind, 16000)) == len(waiting.load_packets(kind, 24000))
         assert 1 <= len(waiting.load_packets(kind, 16000)) <= 35
@@ -257,12 +258,14 @@ def test_real_sender_separates_cue_answer_and_rejects_late_packets():
     assert state.first_feedback_ms is not None and state.first_answer_ms is None
     waiting.mark_answer_ready(c)
     asyncio.run(module._do_send_audio(c, waiting.WaitingPacket(b"cue-tail", state), {}))
+    assert state.cue_state == 'sent'  # 尾包取消不能抹掉提示首包已发送这一事实。
     asyncio.run(module._do_send_audio(c, waiting.AnswerPacket(b"answer", state), {}))
     assert state.first_answer_ms is not None
     c.sentence_id = "next"
     asyncio.run(module._do_send_audio(c, waiting.WaitingPacket(b"late", state), {}))
     asyncio.run(module._do_send_audio(c, waiting.AnswerPacket(b"old-answer", state), {}))
-    assert sent == [b"cue", b"cue-tail", b"answer"]
+    # 真答案就绪后提示尾包立即作废；提示已开头也不能继续挡住有用回答。
+    assert sent == [b"cue", b"answer"]
 
 
 def test_answer_ready_before_cue_suppresses_cue():

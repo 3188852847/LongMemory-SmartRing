@@ -27,6 +27,8 @@ TIMING_FIELDS = (
     "first_audio_sent_ms",
     "response_completed_ms",
 )
+STAGE_FIELDS = ('memory_requested_ms', 'memory_returned_ms', 'model_first_text_ms', 'first_segment_ready_ms',
+                'audio_dispatch_ms')
 
 
 def _backend(connection):
@@ -134,8 +136,27 @@ class VoiceLatencyTracker:
                 # 每个元素只记录顺序与时间，不保存本段文本或音频。短句模型具有
                 # 固定启动开销时，这能区分“首段慢”和“每段都慢”。
                 "tts_segments": [],
+                "stages": {field: None for field in STAGE_FIELDS},
             }
             return self.sequence
+
+    def mark_stage(self, field, *, sentence_id=None):
+        """细分观测独立于严格 v6 设备协议；仅固定阶段/毫秒日志，无正文。"""
+        if field not in STAGE_FIELDS:
+            raise ValueError('voice_stage_invalid')
+        with self.lock:
+            item = self.current
+            if (item is None or item['stages'][field] is not None
+                    or (sentence_id is not None and sentence_id != item['sentence_id'])):
+                return
+            elapsed = max(0, round((self.clock() - item['started']) * 1000))
+            item['stages'][field] = elapsed
+        self.connection.logger.bind(tag='voice-latency').info(
+            f'圆屏细分计时 stage={field} elapsed={elapsed}ms')
+
+    def stage_snapshot(self):
+        with self.lock:
+            return None if self.current is None else {'version': 1, 'timings_ms': dict(self.current['stages'])}
 
     def set_response_path(self, value):
         """标记封闭的回答路径，不保存输入、回答或命中规则。"""
@@ -379,6 +400,12 @@ def _observe_generator(connection, responses, waiting=None, trace=None):
                 connection._longmemory_voice_latency.mark("llm_first_output_ms")
                 if trace is not None:
                     trace.event("model_output")
+            text = response[0] if isinstance(response, tuple) and len(response) == 2 else response
+            text = text.get('content') if isinstance(text, dict) else text
+            if isinstance(text, str) and text.strip():
+                tracker = connection._longmemory_voice_latency
+                if callable(getattr(tracker, 'mark_stage', None)):
+                    tracker.mark_stage('model_first_text_ms')
             yield response
         if trace is not None:
             trace.event("model_returned")
@@ -458,8 +485,36 @@ class _ObservedLLM:
         return self._call("response_with_functions", *args, **kwargs)
 
 
+def _observe_memory_waiting(connection):
+    memory = getattr(connection, 'memory', None)
+    if memory is None or getattr(memory, '_longmemory_waiting_observed', False):
+        return
+    original = getattr(memory, 'query_memory', None)
+    if not callable(original):
+        return
+    async def query(*args, **kwargs):
+        tracker = connection._longmemory_voice_latency
+        sentence_id = getattr(connection, 'sentence_id', None)
+        tracker.bind_sentence(sentence_id)
+        tracker.mark_stage('memory_requested_ms', sentence_id=sentence_id)
+        begin_waiting(connection, None)
+        waiting = getattr(connection, '_longmemory_waiting', None)
+        try:
+            result = await original(*args, **kwargs)
+        except BaseException:
+            if waiting is not None:
+                waiting.cancel()
+            raise
+        tracker.mark_stage('memory_returned_ms', sentence_id=sentence_id)
+        tracker.mark('memory_ready_ms', sentence_id=sentence_id)
+        return result
+    memory.query_memory = query
+    memory._longmemory_waiting_observed = True
+
+
 def _observe_components(connection):
     """每个连接使用私有代理，避免把共享模型的阶段记到另一个设备。"""
+    _observe_memory_waiting(connection)
     llm = getattr(connection, "llm", None)
     if llm is not None and not isinstance(llm, _ObservedLLM):
         connection.llm = _ObservedLLM(connection, llm)
@@ -474,6 +529,15 @@ def _observe_components(connection):
         install_cosyvoice_streaming(tts, connection)
         # 首段合并短开头，后续保留自然边界；模型与记忆核心不承担切段职责。
         install_cosyvoice_punctuation_policy(tts)
+    original_segment = getattr(tts, '_get_segment_text', None)
+    if callable(original_segment):
+        def segment():
+            value = original_segment()
+            if isinstance(value, str) and value.strip():
+                connection._longmemory_voice_latency.mark_stage('first_segment_ready_ms',
+                    sentence_id=getattr(tts, 'current_sentence_id', None))
+            return value
+        tts._get_segment_text = segment
     original_stream = getattr(tts, "to_tts_stream", None)
     original_opus = getattr(tts, "handle_opus", None)
     active_segment = threading.local()
@@ -482,6 +546,7 @@ def _observe_components(connection):
             tracker = connection._longmemory_voice_latency
             tracker.bind_sentence()
             sentence_id = getattr(tts, "current_sentence_id", None)
+            tracker.mark_stage('first_segment_ready_ms', sentence_id=sentence_id)
             trace = for_sentence(connection, sentence_id)
             if trace is not None:
                 trace.event("tts_requested")
@@ -574,6 +639,9 @@ def install_voice_latency(connection_class):
     original_close = getattr(connection_class, "close", None)
     if inspect.iscoroutinefunction(original_close):
         async def close(connection, *args, **kwargs):
+            waiting = getattr(connection, '_longmemory_waiting', None)
+            if waiting is not None:
+                waiting.cancel()
             trace = getattr(connection, "_longmemory_diagnostic_round", None)
             if trace is not None:
                 trace.event("cancelled")
@@ -590,9 +658,13 @@ def observed_audio_sender(original):
             state = first_packet.state
             if not state.current():
                 return
-            if not isinstance(first_packet, AnswerPacket) and state.answer_ready and state.first_feedback_ms is None:
+            if not isinstance(first_packet, AnswerPacket) and (state.answer_ready or not state.cue_current()):
                 state.cue_state = "skipped"
                 return
+        if audios and (not isinstance(first_packet, WaitingPacket) or isinstance(first_packet, AnswerPacket)):
+            tracker = getattr(connection, '_longmemory_voice_latency', None)
+            if callable(getattr(tracker, 'mark_stage', None)):
+                tracker.mark_stage('audio_dispatch_ms', sentence_id=sentence_id)
         result = await original(connection, sentence_type, audios, text, sentence_id)
         has_audio = isinstance(audios, bytes) and bool(audios)
         has_audio = has_audio or (isinstance(audios, (list, tuple)) and len(audios) > 0)
