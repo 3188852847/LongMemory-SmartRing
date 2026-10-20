@@ -119,26 +119,19 @@ speech_ms/pause_ms 从音频起点交替覆盖连续时间，最后 speech 后�
 & '<独立验证环境>/Scripts/python.exe' -X utf8 -B scripts/development/xiaozhi/voice_turn_end_replay.py --manifest '<公开合成数据目录>/manifest.json' --model '<本地固定模型>/smart-turn-v3.2-cpu.onnx'
 ```
 
-## 所有者执行的精确获取命令（本轮未执行）
+## 下载入口（后续工具，本次无需再次执行）
 
-下载只写 AC 自己的忽略目录，不覆盖已有文件；固定模型核验失败保留下载文件供排查。以下整段从任意 PowerShell 执行，变量仅限当前会话：
+本次模型已由所有者下载并验过，不要求重跑。原长命令已由主会话授权补充的 [Download-SmartTurn.ps1](../../../scripts/development/xiaozhi/Download-SmartTurn.ps1) 替代；将来需要取得该固定模型时，所有者从所用工作树根目录只执行一条入口：
 
 ```powershell
-$acTree = 'D:/03-项目/01-正式项目/智慧圆屏/local/worktrees/ac-smart-turn-20261021'
-$acModelDir = Join-Path $acTree 'local/runtime/models/smart-turn-v3.2'
-$acModelFile = Join-Path $acModelDir 'smart-turn-v3.2-cpu.onnx'
-$acDownloadFile = $acModelFile + '.download'
-if ((Test-Path -LiteralPath $acModelFile) -or (Test-Path -LiteralPath $acDownloadFile)) { throw '目标已存在，先只读核验，不覆盖' }
-New-Item -ItemType Directory -Path $acModelDir -Force | Out-Null
-Invoke-WebRequest -Uri 'https://huggingface.co/pipecat-ai/smart-turn-v3/resolve/f766f81d3cfdf7737ac64aad813d91bbfd56bf93/smart-turn-v3.2-cpu.onnx' -OutFile $acDownloadFile
-if ((Get-Item -LiteralPath $acDownloadFile).Length -ne 8679182) { throw '模型大小不符' }
-if ((Get-FileHash -LiteralPath $acDownloadFile -Algorithm SHA256).Hash.ToLowerInvariant() -ne '2bb026316b14a660486a75b1733cd3fbab8c2fd0314dc9af7be49f8cca967e4f') { throw '模型摘要不符' }
-Move-Item -LiteralPath $acDownloadFile -Destination $acModelFile
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/development/xiaozhi/Download-SmartTurn.ps1
 ```
+
+默认目标为该脚本所属工作树的 `local/runtime/models/smart-turn-v3.2/`。需要代理时在同一入口末尾加 `-Proxy '<所有者明确指定的代理URL>'`；不内置本机端口、不改环境变量或代理配置。`-ModelDirectory` 可显式指定目标目录，`-CurlPath` 可指定已安装原生 curl；不自动安装工具或运行模型。
 
 依赖用途：ONNX Runtime 执行 CPU 模型、Transformers 提供 Whisper 特征、numpy 提供 PCM 转换；替代方案是继续原静音端点，不引入 Pipecat 全框架/PortAudio/录音依赖。**原先未执行的独立环境安装候选已撤回，不让所有者安装传递依赖未锁住的大环境。** 主会话随后要求优先复用现有 CosyVoice 解释器，实测结果见下一节。没有创建新环境、补装包或修改任何锁文件。
 
-主会话已给所有者固定模型获取命令，并在收到完成反馈后独立核验大小/摘要，正式交 AC 做真实 CPU 验证。该后续证据另追加；本节第一版下载段只保留来源可追溯，不要求所有者重复下载。所有者反馈长命令不便使用；未来下载/安装须交付已审阅脚本及一条入口，脚本内固定来源、断点续传、禁止覆盖、大小/摘要校验和稳定错误，助手不执行联网获取。
+主会话已在收到所有者完成反馈后独立核验模型并正式交 AC 做真实 CPU 验证。未来下载/安装统一交付已审阅脚本及一条入口，脚本内固定来源、断点续传、禁止覆盖、大小/摘要校验和稳定错误，助手不执行联网获取。
 
 ## 免安装 CPU 常驻侧车（第二阶段交付）
 
@@ -234,6 +227,16 @@ python -B scripts/development/xiaozhi/voice_turn_end_replay.py --manifest '<生�
 本次真实 WAV 首次回放暴露摘要契约错误：旧 loader 校验 PCM 摘要，文档/生成器定义为完整 WAV。已修正为有界读取完整 WAV 后校验全文件摘要，并增加反例；旧测试夹具也从 PCM 摘要改为真正文件摘要，未放松校验。CLI 现在在模型启动前拒绝覆盖已有报告。
 
 第三阶段相关回归与文档维护测试 **106 passed**（其中语音/生成器相关 92 项）；新增测试不在 pytest 中调用系统 TTS，实际合成和真实模型验证由上述单独工具完成。原始音频/模型/实验 JSON 均验证命中 Git 忽略规则，不提交。
+
+## 下载操作简化的离线交付（第四阶段）
+
+`Download-SmartTurn.ps1` 固定前述 GitHub source commit、模型 revision/HTTPS URL、8,679,182 字节及 SHA-256；不提供来源/大小/摘要覆盖参数。原生 curl 以 `-q` 首参数禁用 .curlrc，HTTPS 重定向、`--continue-at -` 对 `.download` 续传，不自动重试或换源。正式文件存在时只核验，正确则结束、错误则报错，均不联网、不覆盖，也不处理旧临时文件。完整有效 `.download` 可离线核验后同目录重命名；过大/完整但摘要错的临时文件原样保留，不重新下载。下载返回非零时立即保留现场；仅完整且 SHA 匹配后使用无覆盖的 .NET File.Move，另一调用者若抢先建立正式文件则失败并保留两者。
+
+错误输出为稳定的 CURL_FAILED/大小/摘要/目标/代理/工具/IO 标识；成功为 VERIFIED_EXISTING 或 VERIFIED_SAVED。curl 的 `$LASTEXITCODE` 在原生调用后立即取值，Windows PowerShell 5 的 stderr 进度不被当作失败，退出码非零不能因后续命令成功而被掩盖。SHA-256 使用 .NET 流计算：离线测试实际发现当前继承环境下 PowerShell 5 找不到 Get-FileHash，修复不依赖该 cmdlet，也不改 PSModulePath 或机器环境。脚本为 UTF-8 BOM，兼容 PowerShell 5.1。
+
+本阶段仅运行离线 AST 解析和假 curl 可控测试，**没有执行真实联网下载、安装或模型运行，没有让所有者重跑本次下载**。测试在 Windows PowerShell 5 与 PowerShell 7 中覆盖中文/空格路径、初次获取、断点续传、原生 stderr、非零退出码、既有文件保留、完整临时文件离线提升、大小/摘要错、显式代理/无默认代理、缺 curl、目标抢先创建和目录冒充文件。假 curl 只写合成字节；测试副本只缩小期望大小/摘要，正式脚本的固定常量另精确断言。
+
+`test_voice_turn_end_download.py` **35 项通过**，含两个宿主对正式脚本的纯解析；加文档维护测试为 **49 passed**。既有声音链路未修改，不重跑模型或声学实验。公共说明/清单由 AI 统一整合。
 
 ## 未验证与主会话下一步
 
