@@ -202,6 +202,18 @@ def test_memory_failure_cancels_waiting_without_changing_error_or_archival_seman
     Timer.created[0].fire();assert c.tts.tts_audio_queue.empty()
 
 
+def test_first_tool_delta_is_not_reported_as_first_answer_text(monkeypatch,tmp_path):
+    c,now=connection(monkeypatch,tmp_path)
+    def responses():
+        now[0]=0.2;yield '',[{'synthetic_tool':True}]
+        now[0]=0.4;yield 'synthetic answer',[]
+    list(latency._observe_generator(c,responses()))
+    assert c._longmemory_voice_latency.snapshot()['timings_ms']['llm_first_output_ms']==200
+    stages=c._longmemory_voice_latency.stage_snapshot()['timings_ms']
+    assert stages['model_first_text_ms']==400
+    assert c._longmemory_voice_latency.snapshot()['timings_ms']['first_audio_sent_ms'] is None
+
+
 def test_fast_answer_cancel_missing_cache_and_voice_switch(monkeypatch,tmp_path):
     c,now=connection(monkeypatch,tmp_path)
     w.begin_waiting(c,None);w.mark_answer_ready(c);Timer.created[0].fire()

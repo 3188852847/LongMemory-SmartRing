@@ -72,7 +72,7 @@ def run_case(*,after,frames=35,answer_ready_ms=120):
 
 def comparison():
     rows=[run_case(after=after,frames=frames,answer_ready_ms=ready)
-        for frames,ready in ((8,120),(20,120),(35,120),(35,0)) for after in (False,True)]
+        for frames,ready in ((8,120),(20,120),(35,120),(35,125),(35,0)) for after in (False,True)]
     return {'baseline_sha':BASELINE_SHA,'upstream_sha':UPSTREAM_SHA,
         'scope':'already_queued_waiting_tail_only_not_end_to_end_latency', 'rows':rows}
 

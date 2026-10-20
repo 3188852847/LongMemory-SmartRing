@@ -27,7 +27,7 @@ TIMING_FIELDS = (
     "first_audio_sent_ms",
     "response_completed_ms",
 )
-STAGE_FIELDS = ('memory_requested_ms', 'memory_returned_ms', 'first_segment_ready_ms',
+STAGE_FIELDS = ('memory_requested_ms', 'memory_returned_ms', 'model_first_text_ms', 'first_segment_ready_ms',
                 'audio_dispatch_ms')
 
 
@@ -400,6 +400,12 @@ def _observe_generator(connection, responses, waiting=None, trace=None):
                 connection._longmemory_voice_latency.mark("llm_first_output_ms")
                 if trace is not None:
                     trace.event("model_output")
+            text = response[0] if isinstance(response, tuple) and len(response) == 2 else response
+            text = text.get('content') if isinstance(text, dict) else text
+            if isinstance(text, str) and text.strip():
+                tracker = connection._longmemory_voice_latency
+                if callable(getattr(tracker, 'mark_stage', None)):
+                    tracker.mark_stage('model_first_text_ms')
             yield response
         if trace is not None:
             trace.event("model_returned")

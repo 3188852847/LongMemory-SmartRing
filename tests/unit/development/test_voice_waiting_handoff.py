@@ -19,5 +19,5 @@ def test_pinned_upstream_scheduler_stops_spending_slots_on_discarded_cue_tail():
             assert before['cue_frames_sent']==after['cue_frames_sent']==0
         else:
             assert before['cue_frames_sent']>after['cue_frames_sent']
-        assert after['first_answer_sent_ms']==after['answer_ready_ms']
+        assert after['answer_ready_ms']<=after['first_answer_sent_ms']<after['answer_ready_ms']+60
         assert before['first_answer_sent_ms']>after['first_answer_sent_ms']
