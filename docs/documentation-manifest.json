@@ -6295,6 +6295,32 @@
         "全站身份",
         "机制界面"
       ]
+    },
+    {
+      "path": "docs/development/parallel/Z-hy-layer-data-review-20261021.md",
+      "title": "Z：Hy逐层实际内容与页内滚动独立审查",
+      "status": "draft",
+      "basis": "34b2111新一轮内容澄清和跳顶缺陷的只读准备；不改旧报告，不表示候选实现或发布通过",
+      "review": {
+        "state": "pending",
+        "date": "2026-10-21",
+        "scope": "固定2.0.3逐层读取/RAW屏蔽/source与总数/graph初始化边界，基点search参数与ScrollRestoration；真实SDK离线/前端滚动及组合待交付",
+        "evidence": [
+          "src/longmemory/methods/hy_memory/administration.py",
+          "src/longmemory/methods/hy_memory/worker.py",
+          "src/longmemory/methods/hy_memory/assembly.py",
+          "web/react-chat/src/features/memory/HyMechanismsWorkspace.tsx",
+          "web/react-chat/src/features/memory/HyMemoryWorkspace.tsx",
+          "web/react-chat/src/app/RouteWorkspace.tsx"
+        ]
+      },
+      "tags": [
+        "Z",
+        "Hy-Memory",
+        "逐层内容",
+        "滚动",
+        "审查准备"
+      ]
     }
   ],
   "integration_sources": {
