@@ -95,6 +95,16 @@ def test_timeout_terminates_only_owned_process_and_disables_no_retry():
     assert client.process.poll() is not None
 
 
+def test_snapshot_does_not_claim_ready_after_child_exit():
+    client = make_client()
+    try:
+        client.process.terminate()
+        client.process.wait(timeout=2)
+        assert not client.snapshot()["ready"]
+    finally:
+        client.close()
+
+
 def test_concurrent_request_is_rejected_without_queue_or_new_process():
     client = make_client("brief", request_timeout_ms=500)
     results = []

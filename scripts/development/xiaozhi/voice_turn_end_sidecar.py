@@ -137,7 +137,7 @@ class SidecarDetector:
         while not self.ready.wait(min(0.05, max(0, deadline - time.monotonic()))):
             if time.monotonic() >= deadline or (_cancel_startup is not None and _cancel_startup.is_set()):
                 break
-        if (not self.ready.is_set() or not self.ready_ok
+        if (not self.ready.is_set() or not self.ready_ok or self.stopped.is_set()
                 or (_cancel_startup is not None and _cancel_startup.is_set())):
             self.close()
             raise RuntimeError("turn_end_sidecar_unavailable")
@@ -233,7 +233,7 @@ class SidecarDetector:
             self.serial.release()
 
     def snapshot(self):
-        return {"version": 1, "backend": "cpu_pipe", "ready": self.ready_ok and not self.stopped.is_set(),
+        return {"version": 1, "backend": "cpu_pipe", "ready": self.ready_ok and not self.stopped.is_set() and self.process.poll() is None,
                 "latest_processing_ms": self.latest_processing_ms, **self.counts}
 
     def close(self):
@@ -320,6 +320,90 @@ def compare_features(candidate_python):
             "model_compatibility": "not_tested"}
 
 
+def benchmark_cpu(python, model, *, cold_starts=3, warm_calls=20):
+    """有界真实 CPU 模型基准；非语音输入仅验证兼容和资源预算。"""
+    from voice_turn_end_model import MODEL_SHA256
+    if not 1 <= cold_starts <= 3 or not 1 <= warm_calls <= 30:
+        raise ValueError("turn_end_benchmark_budget")
+    startup, first, warm = [], [], []
+    processing = []
+    probabilities = []
+    for _ in range(cold_starts):
+        started = time.perf_counter()
+        client = SidecarDetector(python, model, request_timeout_ms=120)
+        startup.append((time.perf_counter() - started) * 1000)
+        try:
+            for index in range(warm_calls + 1):
+                started = time.perf_counter()
+                probability = client.predict(b"\x00\x00" * 128000)
+                duration = (time.perf_counter() - started) * 1000
+                (first if index == 0 else warm).append(duration)
+                processing.append(client.latest_processing_ms)
+                probabilities.append(probability)
+        finally:
+            client.close()
+        if client.process.poll() is None or client.io_thread.is_alive():
+            raise RuntimeError("turn_end_benchmark_child_not_reaped")
+
+    def stats(values):
+        ordered = sorted(values)
+        return {"samples": len(values), "p50_ms": round(ordered[(len(values) - 1) // 2], 3),
+                "p95_ms": round(ordered[max(0, math.ceil(len(values) * .95) - 1)], 3),
+                "max_ms": round(max(values), 3)}
+    return {"version": 1, "evidence": "real_onnx_cpu_silence_compatibility_not_chinese_accuracy",
+            "model_sha256": MODEL_SHA256, "startup": stats(startup), "first_request": stats(first),
+            "warm_request": stats(warm), "worker_feature_plus_model": stats(processing),
+            "probability_min": min(probabilities), "probability_max": max(probabilities),
+            "all_children_reaped": True, "request_budget_ms": 120,
+            "effective_answer_audio_ms": None, "chinese_accuracy": None}
+
+
+def verify_cpu_lifecycle(python, model):
+    """真实 CPU 请求在续说后不得重新取得提交权限，超时子进程必须回收。"""
+    from voice_turn_end import InferenceSlot, TurnEndConfig, TurnEndState
+
+    async def continued():
+        detector = await SidecarDetector.create(python, model)
+        events = []
+        state = TurnEndState(TurnEndConfig(mode="enabled"), InferenceSlot(detector), events.append)
+        try:
+            state.observe(pcm=b"\x00\x00" * 16000, audio_have_voice=False,
+                          voice_stamp=1, silence_ms=300, upstream_stop=False)
+            pending = state.pending[0]
+            state.observe(pcm=b"\x00\x00" * 16000, audio_have_voice=True,
+                          voice_stamp=2, silence_ms=0, upstream_stop=False)
+            ticks = 0
+            while not pending.done():
+                ticks += 1
+                await asyncio.sleep(.002)
+            await asyncio.shield(pending)
+            if state.probability is not None or any(event["type"] == "confirmed" for event in events):
+                raise RuntimeError("turn_end_cancelled_result_reused")
+            return {"events": [event["type"] for event in events],
+                    "audio_revision": state.audio_revision, "cancel_epoch": state.cancel_epoch,
+                    "heartbeat_ticks": ticks, "stale_result_reused": False}
+        finally:
+            await detector.aclose()
+
+    cancellation = asyncio.run(continued())
+    detector = SidecarDetector(python, model, request_timeout_ms=10)
+    started = time.perf_counter()
+    try:
+        try:
+            detector.predict(b"\x00\x00" * 128000)
+        except TimeoutError:
+            timeout_ms = (time.perf_counter() - started) * 1000
+        else:
+            raise RuntimeError("turn_end_timeout_probe_too_fast")
+        disabled = not detector.snapshot()["ready"]
+    finally:
+        detector.close()
+    return {"version": 1, "evidence": "real_onnx_cpu_lifecycle_synthetic_pcm",
+            "continued": cancellation, "forced_budget_ms": 10,
+            "timeout_ms": round(timeout_ms, 3), "disabled_after_timeout": disabled,
+            "timeout_child_reaped": detector.process.poll() is not None}
+
+
 def main():
     # -I 不会加入脚本目录；这里只加本项目自有模块目录，不拼接其他环境的包。
     sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -329,11 +413,23 @@ def main():
     parser.add_argument("--feature-probe", action="store_true")
     parser.add_argument("--reference-torch-features", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--compare-python", type=Path, help="与已有纯CPU Torch参考解释器逐元素比较")
+    parser.add_argument("--benchmark-python", type=Path, help="使用现有解释器进行有界真实CPU侧车基准")
+    parser.add_argument("--verify-lifecycle-python", type=Path, help="真实CPU模型续说取消与超时回收核验")
     parser.add_argument("--probe-model", action="store_true")
     parser.add_argument("--model", type=Path)
     args = parser.parse_args()
     if args.compare_python:
         print(json.dumps(compare_features(args.compare_python), indent=2))
+        return 0
+    if args.benchmark_python:
+        if args.model is None:
+            parser.error("--benchmark-python requires --model")
+        print(json.dumps(benchmark_cpu(args.benchmark_python, args.model), indent=2))
+        return 0
+    if args.verify_lifecycle_python:
+        if args.model is None:
+            parser.error("--verify-lifecycle-python requires --model")
+        print(json.dumps(verify_cpu_lifecycle(args.verify_lifecycle_python, args.model), indent=2))
         return 0
     if args.reference_torch_features:
         if not args.feature_probe or not importlib.metadata.version("torch").endswith("+cpu"):
@@ -355,6 +451,7 @@ def main():
             print(json.dumps({"version": 1, "status": "ok", "model_sha256": MODEL_SHA256,
                               "probability": probability, "provider": detector.session.get_providers(),
                               "input_shape": detector.session.get_inputs()[0].shape,
+                              "input_type": detector.session.get_inputs()[0].type,
                               "feature_shape": [1, 80, 800], "torch_imported": "torch" in sys.modules,
                               "processing_ms": round((time.perf_counter() - started) * 1000, 3)}))
             return 0

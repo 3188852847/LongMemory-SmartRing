@@ -180,9 +180,64 @@ await detector.aclose()
 
 新增真实合成子进程测试后，与原相关回归共 **84 passed**：含常驻复用、CPU 环境隔离、事件循环仍响应、单请求拒绝、超时停用、错序/异常净化、启动失败/取消及关闭回收。首次测试里大字节参数自动生成超长 ID 导致夹具报错，改为命名 ID 后恢复；没有改变输入上限断言。真实 ONNX 与声学验收仍由后续证据说明。
 
+## 真实模型与 CPU 中文合成初筛（第三阶段）
+
+主会话收到所有者下载完成反馈后授权本阶段。AC 独立读取模型并确认 8,679,182 字节、SHA-256 `2bb026316b14a660486a75b1733cd3fbab8c2fd0314dc9af7be49f8cca967e4f`，只读使用现有 CosyVoice 解释器，无下载、安装或 GPU 模型加载。
+
+`--probe-model` 已实际创建 ORT 1.18.0 会话，真实输入名沿用 input_features、类型 `tensor(float)`、形状 `["s6",80,800]`（动态批次），提交实际 float32 特征 `(1,80,800)` 成功。provider 仅 `CPUExecutionProvider`，`torch_imported=false`。人工静音输入输出概率 0.9870367050170898，证明输入/输出兼容，**不代表有中文语音或话轮质量**；必须保留上游真实发声/VAD 门，不能把静音概率当识别结果。
+
+固定工具真实模型基准：
+
+```powershell
+python -B scripts/development/xiaozhi/voice_turn_end_sidecar.py --benchmark-python '<已有CosyVoice解释器>' --model '<已核验模型>'
+python -B scripts/development/xiaozhi/voice_turn_end_sidecar.py --verify-lifecycle-python '<已有CosyVoice解释器>' --model '<已核验模型>'
+```
+
+| 检查 | 实际结果 |
+|---|---|
+| 三次新进程启动，包含 import/模型核验/session | P50 1025.851 ms，P95/max 1055.018 ms |
+| 三次首个模型请求 | P50 41.079 ms，max 41.469 ms |
+| 60 次热请求（人工八秒静音，含 IPC） | P50 39.279 ms，P95 40.762 ms，max 40.917 ms |
+| 工作者特征+模型处理，63 次 | P50 39.054 ms，P95 40.631 ms，max 41.251 ms |
+| 默认请求预算 120 ms | 无超时，三个专属进程全部回收 |
+| 真实模型进行中立即续说 | 只产生 cancel/continued，audio_revision=1、cancel_epoch=1；迟到分数未复用，事件循环仍运行（3 次 heartbeat） |
+| 强制 10 ms 请求预算 | 22.532 ms 返回超时（包含调度/终止开销），随后停用，专属进程回收，不重试 |
+
+这些是 CPU 兼容/资源数据，不是用户停嘴到回答声音。10 ms 是结果等待预算，不是硬实时墙钟承诺；外层 150 ms 结果权限门仍保留。
+
+为避免等待 GPU，新增 [voice_turn_end_synthetic.py](../../../scripts/development/xiaozhi/voice_turn_end_synthetic.py)，使用已装 Windows System.Speech 的 `Microsoft Huihui Desktop` 离线 CPU 合成，不播放、不触碰日用声线/角色。PowerShell 7 查询能列出 Kangkang，但实际选用的 Windows PowerShell 5 合成宿主不支持该声线；初次生成在第二声线处稳定失败，诊断已定位，残留原样保留。当前固定为已实测成功的 Huihui Desktop，rate=0、volume=100、16000 Hz/mono/PCM16，无环境或注册表修改。
+
+六个场景为完整陈述、思考续说、三段列举、短答、短停顿续说、更正；分别合成分句，按 60 ms 能量帧裁首尾，再插入固定静音。语料含 5 次中途停顿，标签是合成结构/能量边界，**不是人工听审的自然中文 VAD 标签**。片段内部停顿仍视为说话段，这限制了结果外推。生成与回放入口分别只需运行现有脚本，输出目录唯一且拒绝覆盖：
+
+```powershell
+python -B scripts/development/xiaozhi/voice_turn_end_synthetic.py
+python -B scripts/development/xiaozhi/voice_turn_end_replay.py --manifest '<生成的manifest.json>' --model '<固定模型>' --sidecar-python '<已有CosyVoice解释器>' --output '<不存在的报告路径>'
+```
+
+语料/音频/完整逐例报告保存在 AC 忽略目录 `experiments/runs/ac-smart-turn-synthetic-828174acab71/`，没有提交 Git：
+
+- 固定文本/停顿规格摘要 `24ab0a14b473b2466c74b4c0c9878ceba586df6f5326f0180242a9715533037c`。
+- manifest.json SHA-256 `adb42e113996d7bd90c3a2dcb68e73bbfee87f6a1446d61952378ac10e229ddc`，每 WAV 都有全文件摘要。
+- smart-turn-v3.2-results.json SHA-256 `f634f97a9b5ca33f1e0a0a0f8bcb01faae3bccf194a6f5c85a643b80f600c2d4`。
+- Sidecar 20 次真实请求成功，failed/timeout/busy 均 0；未调用 ASR、学校模型、记忆或播放。
+
+| 同一六个合成中文场景 | off | shadow（实际上游提交） | enabled 候选 |
+|---|---:|---:|---:|
+| 中途误切/五次停顿机会 | 4/5 | 4/5 | 4/5 |
+| 最后发声后超过 1200 ms 未判停 | 0/6 | 0/6 | 0/6 |
+| 最终端点 P50 | 600 ms | 600 ms | 420 ms |
+| 最终端点 P95 | 600 ms | 600 ms | 600 ms |
+| 首个有效回答声音 | unknown | unknown | unknown |
+
+在这些真实合成语音上，默认 0.7 分/420 ms 候选**没有减少误切**；思考、更正分别误切一次，列举误切两次。样本仅单声线六例、人工拼接停顿，不报告总体中文准确率，不据判停中位改善宣称上线收益。当前仍不满足启用条件，保持 off/shadow；下一步应补自然或公开中文长停顿/续说标注，按说话人和场景分开校准/留出验证。可先用本工具扩大合成模板与说话速率做开发回归，无需 GPU；自然中文与设备体验的证据不能由该扩展替代。
+
+本次真实 WAV 首次回放暴露摘要契约错误：旧 loader 校验 PCM 摘要，文档/生成器定义为完整 WAV。已修正为有界读取完整 WAV 后校验全文件摘要，并增加反例；旧测试夹具也从 PCM 摘要改为真正文件摘要，未放松校验。CLI 现在在模型启动前拒绝覆盖已有报告。
+
+第三阶段相关回归与文档维护测试 **106 passed**（其中语音/生成器相关 92 项）；新增测试不在 pytest 中调用系统 TTS，实际合成和真实模型验证由上述单独工具完成。原始音频/模型/实验 JSON 均验证命中 Git 忽略规则，不提交。
+
 ## 未验证与主会话下一步
 
 1. 主会话转 AE/AI 采用上述事件；AI 独占修改 launch_with_memory 与公共清单，登记本记录/ADR。候选文件提交后可先在缺模型条件下组合验证 shadow/unavailable。
-2. 所有者获取固定模型及独立验证依赖；AC 接力核验真实 v3.2 的输入形状、冷/热 CPU 推理、中文公开/合成标注误切/漏判/延迟。当前真实模型准确率和本机兼容性均未知。
+2. 模型取得、现有解释器 CPU 兼容/冷热/生命周期以及最小合成中文初筛已完成，无需依赖安装或 GPU 窗口。AI 可接线常驻侧车并保持 shadow；自然中文标注、声学质量与实机仍未验收。
 3. 默认 off。enabled 不满足真实校准条件，不向日用切换。最终首答声音、连续性、误抢话、续说取消、打断残音及记忆一致性须组合及所有者实机验收；本次合成检查不能代替。
 4. 分支仅由 AC 提交，不 merge main、不 push、不操作其他会话；主会话安排审查、合入、组合回归和发布。

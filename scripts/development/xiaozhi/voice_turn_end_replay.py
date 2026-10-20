@@ -173,6 +173,10 @@ def load_public_manifest(path):
         target = (path.parent / relative).resolve()
         if relative.is_absolute() or not target.is_relative_to(path.parent):
             raise ValueError("turn_end_audio_outside_manifest")
+        if target.stat().st_size > 4 * 1024 * 1024:
+            raise ValueError("turn_end_wav_file_budget")
+        if hashlib.sha256(target.read_bytes()).hexdigest() != case.get("audio_sha256"):
+            raise ValueError("turn_end_audio_hash_mismatch")
         with wave.open(str(target), "rb") as stream:
             if (stream.getnchannels(), stream.getsampwidth(), stream.getframerate(), stream.getcomptype()) != (1, 2, 16000, "NONE"):
                 raise ValueError("turn_end_wav_requires_16k_mono_pcm16")
@@ -180,8 +184,6 @@ def load_public_manifest(path):
                 raise ValueError("turn_end_wav_duration_budget")
             pcm = stream.readframes(stream.getnframes())
         required = sum(speech + pauses) * 32
-        if hashlib.sha256(pcm).hexdigest() != case.get("audio_sha256"):
-            raise ValueError("turn_end_audio_hash_mismatch")
         if len(pcm) < required:
             raise ValueError("turn_end_audio_shorter_than_labels")
         # 只使用标签覆盖的原始音频，再补固定静音以观察有界的最后一次端点。
@@ -200,7 +202,7 @@ def public_report(manifest, detector):
                 for mode in ("off", "shadow", "enabled") for scenario, audio in cases]
     rows = asyncio.run(run())
     return {"version": 1, "evidence": "offline_public_zh_wav_with_annotated_vad_and_zero_tail",
-            "manifest_sha256": digest, "rows": rows,
+            "manifest_sha256": digest, "rows": rows, "summary": summarize(rows),
             "source_sha256": hashlib.sha256(Path(__file__).with_name("voice_turn_end.py").read_bytes()).hexdigest(),
             "config": asdict(TurnEndConfig()), "source_commit": SOURCE_COMMIT,
             "model_revision": MODEL_REVISION, "model_sha256": MODEL_SHA256,
@@ -208,10 +210,7 @@ def public_report(manifest, detector):
             "limitations": "annotated_vad_not_live_vad_no_device_playback"}
 
 
-def report():
-    async def run():
-        return [await replay(scenario, mode) for mode in ("off", "shadow", "enabled") for scenario in SCENARIOS]
-    rows = asyncio.run(run())
+def summarize(rows):
     summary = {}
     for mode in ("off", "shadow", "enabled"):
         selected = [row for row in rows if row["mode"] == mode]
@@ -223,11 +222,18 @@ def report():
                          "missed_1200ms": sum(row["missed_1200ms"] for row in selected),
                          "endpoint_p50_ms": percentile(latencies, 0.5),
                          "endpoint_p95_ms": percentile(latencies, 0.95)}
+    return summary
+
+
+def report():
+    async def run():
+        return [await replay(scenario, mode) for mode in ("off", "shadow", "enabled") for scenario in SCENARIOS]
+    rows = asyncio.run(run())
     fixtures = json.dumps([asdict(scenario) for scenario in SCENARIOS], ensure_ascii=False, sort_keys=True)
     return {"version": 1, "evidence": "synthetic_pcm_scripted_scores_not_model_accuracy",
             "dataset_sha256": hashlib.sha256(fixtures.encode()).hexdigest(),
             "source_sha256": hashlib.sha256(Path(__file__).with_name("voice_turn_end.py").read_bytes()).hexdigest(),
-            "config": asdict(TurnEndConfig()), "summary": summary, "rows": rows,
+            "config": asdict(TurnEndConfig()), "summary": summarize(rows), "rows": rows,
             "effective_answer_audio_ms": None, "real_chinese_model_accuracy": None}
 
 
@@ -235,15 +241,38 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--manifest", type=Path, help="已本地取得的公开/合成中文 WAV 标签清单")
     parser.add_argument("--model", type=Path, help="固定哈希的本地 v3.2 CPU ONNX")
+    parser.add_argument("--sidecar-python", type=Path, help="用既有解释器的独立CPU进程执行模型")
+    parser.add_argument("--output", type=Path, help="只新建报告，不覆盖已有结果")
     args = parser.parse_args()
+    if args.output and args.output.exists():
+        parser.error("output already exists; keep the original report")
     if bool(args.manifest) != bool(args.model):
         parser.error("--manifest and --model must be supplied together")
+    if args.sidecar_python and not args.model:
+        parser.error("--sidecar-python requires --manifest and --model")
     if args.model:
-        from voice_turn_end_model import SmartTurnCPU
-        output = public_report(args.manifest, SmartTurnCPU(args.model))
+        from voice_turn_end_sidecar import CPU_ENV, SidecarDetector
+        import os
+        os.environ.update(CPU_ENV)
+        if args.sidecar_python:
+            detector = SidecarDetector(args.sidecar_python, args.model)
+            try:
+                output = public_report(args.manifest, detector)
+                output["sidecar"] = detector.snapshot()
+            finally:
+                detector.close()
+        else:
+            from voice_turn_end_model import SmartTurnCPU
+            output = public_report(args.manifest, SmartTurnCPU(args.model))
     else:
         output = report()
-    print(json.dumps(output, ensure_ascii=False, indent=2))
+    encoded = json.dumps(output, ensure_ascii=False, indent=2)
+    if args.output:
+        with args.output.open("x", encoding="utf-8") as stream:
+            stream.write(encoded)
+        print(json.dumps({"output": str(args.output), "summary": output["summary"]}, ensure_ascii=False, indent=2))
+    else:
+        print(encoded)
 
 
 if __name__ == "__main__":

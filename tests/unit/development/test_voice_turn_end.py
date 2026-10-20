@@ -362,7 +362,7 @@ def make_manifest(tmp_path, **overrides):
     with wave.open(str(tmp_path / "synthetic.wav"), "wb") as stream:
         stream.setparams((1, 2, 16000, 0, "NONE", "not compressed"))
         stream.writeframes(pcm)
-    case = {"audio": "synthetic.wav", "audio_sha256": hashlib.sha256(pcm).hexdigest(),
+    case = {"audio": "synthetic.wav", "audio_sha256": hashlib.sha256((tmp_path / "synthetic.wav").read_bytes()).hexdigest(),
             "speech_ms": [1200], "pause_ms": []}
     case.update(overrides)
     data = {"provenance": "synthetic", "language": "zh", "cases": [case]}
@@ -392,6 +392,25 @@ def test_public_replay_rejects_wrong_resource_or_labels(monkeypatch, tmp_path, o
     replay = load_script(monkeypatch, "voice_turn_end_replay")
     with pytest.raises(ValueError, match=reason):
         replay.load_public_manifest(make_manifest(tmp_path, **overrides))
+
+
+def test_manifest_hash_covers_full_wave_file_not_only_pcm(monkeypatch, tmp_path):
+    import hashlib
+    replay = load_script(monkeypatch, "voice_turn_end_replay")
+    path = make_manifest(tmp_path, audio_sha256=hashlib.sha256(PCM * 20).hexdigest())
+    with pytest.raises(ValueError, match="hash_mismatch"):
+        replay.load_public_manifest(path)
+
+
+def test_replay_cli_refuses_existing_report_without_model_start(tmp_path):
+    import subprocess
+    target = tmp_path / "keep.json"
+    target.write_text("original", encoding="utf-8")
+    result = subprocess.run([sys.executable, "-B", str(SCRIPTS / "voice_turn_end_replay.py"),
+                             "--output", str(target)], stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=10)
+    assert result.returncode == 2
+    assert b"already exists" in result.stderr
+    assert target.read_text(encoding="utf-8") == "original"
 
 
 def test_model_preprocessing_is_pcm16le_tail_eight_seconds_and_left_padding(monkeypatch):
