@@ -493,6 +493,10 @@ def main():
             "database": database.get().strip(),
             "voice_root": server.get().strip(),
             "lan_ip": ip.get().strip(),
+            "voice_ws_port": saved['voice_ws_port'],
+            "voice_http_port": saved['voice_http_port'],
+            "network_auto": saved['network_auto'],
+            "lan_interface_id": saved['lan_interface_id'],
             "role": selected_role(),
             "memory_extraction": selected_extraction(),
             "memory_retrieval": selected_retrieval(),
@@ -627,18 +631,20 @@ def main():
             return
         try:
             selected = ip.get().strip()
-            info = config_action(Path(server.get()), selected)
+            ports = dict(ws_port=saved['voice_ws_port'], http_port=saved['voice_http_port'])
+            info = config_action(Path(server.get()), selected, **ports)
             if messagebox.askyesno('同步小智网络配置？',
                     f"配置地址 {info['old_ip']} → {selected}\n仅修改监听、WebSocket、视觉接口地址，原目录备份。\n请确认外部小智服务已停止。不会修改防火墙或圆屏。"):
-                config_action(Path(server.get()), selected, apply=True)
+                config_action(Path(server.get()), selected, apply=True, expected_digest=info['digest'], **ports)
                 save_preferences(choice_path, current_preferences())
-                network_status.set(f'已同步。圆屏 OTA：http://{selected}:8003/xiaozhi/ota/；防火墙见指南。')
+                network_status.set(f"已同步。圆屏 OTA：http://{selected}:{saved['voice_http_port']}/xiaozhi/ota/；防火墙见指南。")
         except (ValueError, OSError) as error:
             messagebox.showerror('未完成同步', str(error))
 
     ttk.Button(address_row, text='刷新地址', command=refresh).pack(side='left', padx=8)
     ttk.Button(address_row, text='同步小智地址', command=sync_address).pack(side='left')
-    ttk.Button(address_row, text='网络与防火墙', command=lambda: open_panel(window, ip.get(), ROOT)).pack(side='left', padx=8)
+    ttk.Button(address_row, text='网络与防火墙', command=lambda: open_panel(window, ip.get(), ROOT,
+        ws_port=saved['voice_ws_port'], http_port=saved['voice_http_port'])).pack(side='left', padx=8)
     ttk.Label(network_box, textvariable=network_status, wraplength=760).pack(anchor='w', pady=(8, 0))
     refresh()
     behavior_box = ttk.LabelFrame(intelligence, text="日常智能", style="Section.TLabelframe")
@@ -1082,7 +1088,7 @@ def main():
             set_status("本面板当前拥有受管服务；请使用“停止服务”结束整棵进程树。", "busy")
             return
         try:
-            voice_result = close_stale_voice(ip.get().strip())
+            voice_result = close_stale_voice(ip.get().strip(), ws_port=saved['voice_ws_port'], http_port=saved['voice_http_port'])
             tts_result = (close_stale_tts(selected_tts()) if selected_voice_mode() == "pipeline"
                           else {"state": "free"})
         except ValueError as error:
@@ -1139,10 +1145,13 @@ def main():
                 next_tts = load_tts_backend(tts_backend_path, selected_tts())
                 set_tts_backend(next_tts)
                 tts_pointer_seen["backend"] = next_tts
+            if saved['network_auto']:
+                raise ValueError('自动网络跟踪请使用根目录正式 React 启动入口；兼容 Tk 不会静默退回旧地址。')
             options = Options(database=Path(database.get()), voice=voice.get(), voice_root=Path(server.get()),
                               voice_mode=selected_voice_mode(),
                               voice_latency_mode=selected_voice_latency_mode(),
                               lan_ip=ip.get().strip(), role=selected_role(), consent=consent.get(),
+                              voice_ws_port=saved['voice_ws_port'], voice_http_port=saved['voice_http_port'],
                               tts_backend=selected_tts(),
                               sanotts_source_root=Path(sanotts_source.get()),
                               vad_profile=selected_vad_profile(),

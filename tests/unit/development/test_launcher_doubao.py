@@ -95,7 +95,7 @@ def test_cloud_manager_only_syncs_network_and_does_not_pass_memory_token(options
     monkeypatch.setattr(modules.runtime, "require_no_listener", lambda *args: pytest.fail("local TTS port queried"))
     def network_action(*args, **kwargs):
         network_calls.append(kwargs.get("apply", False))
-        return {"changed": True}
+        return {"changed": True, 'digest': 'a' * 64}
     monkeypatch.setitem(sys.modules, "network", SimpleNamespace(config_action=network_action))
     for name in ("tts", "model", "memory", "vad"):
         monkeypatch.setitem(sys.modules, name, SimpleNamespace(

@@ -123,7 +123,7 @@ def failure_hint(exited, tts_backend=None, voice_mode="pipeline"):
         elif name == "cosyvoice3":
             hint = "CosyVoice 3 已退出；先核对独立环境、模型快照、CUDA 和 18770 端口"
         elif name == "voice":
-            hint = "圆屏语音进程意外退出；先核对小智配置、网络地址和 8000/8003/8766 端口"
+            hint = "圆屏语音进程意外退出；先核对小智配置、启动设置中的语音/OTA端口及本机8766控制桥"
         elif name == "console":
             hint = "网页控制台意外退出；先核对数据库、模型配置和 8767 端口"
         else:

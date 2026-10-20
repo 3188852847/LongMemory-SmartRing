@@ -518,3 +518,4 @@ def register_chat_routes(app, backend):
     )
     app.router.add_delete("/api/chats/{chat_id}", forget)
     app.on_cleanup.append(cleanup)
+    return lambda: not tasks and not any(chat.pending for chat in chats.values())
