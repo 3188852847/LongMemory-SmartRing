@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from copy import deepcopy
 from importlib import import_module
 import inspect
 import json
@@ -15,6 +16,22 @@ import platform
 from typing import Any, Callable
 
 from .capabilities import SOURCE_COMMIT, package_versions, sha256, verify_source
+
+BGE_INT8_RECIPE = {"algorithm": "torch.ao.quantization.quantize_dynamic", "module_types": ["torch.nn.Linear"],
+                   "weight_dtype": "qint8", "activation_quantization": "dynamic", "inplace": False,
+                   "pooling": "cls", "normalization": "l2", "dimensions": 512, "max_tokens": 512}
+
+
+def bge_candidate_identity(baseline_metadata: dict) -> dict:
+    """量化是新的embedding recipe/身份；绝不沿用原provider_identity写现有索引。"""
+    import hashlib
+    metadata = dict(deepcopy(baseline_metadata), provider="local_bge_dynamic_int8_candidate",
+                    dtype="mixed_fp32_and_dynamic_qint8_linear", quantization_recipe=deepcopy(BGE_INT8_RECIPE))
+    def digest(value):
+        return hashlib.sha256(json.dumps(value, ensure_ascii=False, sort_keys=True, allow_nan=False).encode("utf-8")).hexdigest()
+    return dict(baseline_identity=digest(baseline_metadata), candidate_identity=digest(metadata),
+                candidate_metadata=metadata, recipe_changed=True, personal_index_migration_authorized=False,
+                compatibility_scope="synthetic_old_index_query_and_synthetic_rebuilt_index_only")
 
 
 class CandidateExecutionError(RuntimeError):
@@ -36,6 +53,7 @@ class Adapter:
     _name: str = ""
     _original: Any = None
     _had_local: bool = False
+    recipe: dict | None = None
 
     def restore(self) -> bool:
         if not self.applied or self._owner is None:
@@ -194,7 +212,7 @@ def bge_cpu_int8_candidate(model: Any, *, torch: Any) -> Adapter:
         return Adapter(False, "requires_eval_cpu_model", model)
     try:
         candidate = torch.ao.quantization.quantize_dynamic(model, {torch.nn.Linear}, dtype=torch.qint8, inplace=False)
-        return Adapter(True, "cpu_int8_candidate_requires_ranking_gate", candidate)
+        return Adapter(True, "cpu_int8_candidate_requires_ranking_gate", candidate, recipe=deepcopy(BGE_INT8_RECIPE))
     except Exception as error:
         return Adapter(False, "quantization_failed:" + type(error).__name__, model)
 

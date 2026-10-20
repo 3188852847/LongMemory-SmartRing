@@ -83,7 +83,8 @@ def matrix(packages: dict, os_name: str, source_verified: bool, artifacts: dict)
     add("torch_fp16_hidden_only", common + runtime, "CosyVoice3 native LLM/flow/HiFT", True, True,
         "existing_stream_runtime_required", selectable_default=False)
     add("native_flow_tensorrt", trt, "CosyVoice3 flow.decoder.estimator only; adapter restricts buffered model", False, True,
-        "existing_stream_runtime_required", precision="fp32 isolated model only; fp16 raw pointers incompatible", protocol_streaming="caller_can_chunk_completed_audio")
+        "existing_stream_runtime_required", precision="fp32 isolated model only; fp16 raw pointers incompatible", protocol_streaming="caller_can_chunk_completed_audio",
+        acquisition_recommendation="none; do_not_install_legacy_runtime; inspect_existing_sdk11_first")
     add("native_vllm", vllm, "CosyVoice3 speech-token LLM; destructive export/layer removal", True, False,
         "abort_not_validated; no_bistream", registration="CosyVoice2ForCausalLM applies to CV3 too")
     add("triton_trtllm", common + ["separate_linux_stack_and_engine_build_required", "model_and_container_digests_not_pinned", "gpu_exclusive_window_required"],

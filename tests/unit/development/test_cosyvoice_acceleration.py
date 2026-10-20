@@ -20,10 +20,13 @@ spec.loader.exec_module(package)
 cap = importlib.import_module("ag_acceleration.capabilities")
 adapters = importlib.import_module("ag_acceleration.adapters")
 bench = importlib.import_module("ag_acceleration.benchmark")
+bge_bench = importlib.import_module("ag_acceleration.bge_benchmark")
+trt11 = importlib.import_module("ag_acceleration.trt11_compatibility")
+cosy_runner = importlib.import_module("ag_acceleration.cosy_runner")
 
 
 def test_import_origin_and_no_gpu_import_in_clean_process():
-    code = "import sys; sys.path.insert(0, sys.argv[1]); import acceleration.capabilities, acceleration.adapters, acceleration.benchmark; assert not any(n in sys.modules for n in ['torch','transformers','tensorrt','vllm'])"
+    code = "import sys; sys.path.insert(0, sys.argv[1]); import acceleration.capabilities, acceleration.adapters, acceleration.benchmark, acceleration.bge_benchmark, acceleration.cosy_runner, acceleration.trt11_compatibility; assert not any(n in sys.modules for n in ['torch','transformers','tensorrt','vllm'])"
     subprocess.run([sys.executable, "-I", "-B", "-c", code, str(PACKAGE.parent)], check=True, cwd=ROOT)
     assert Path(cap.__file__).resolve().is_relative_to(ROOT)
 
@@ -273,3 +276,153 @@ def test_bounded_concurrency_is_separate_from_engine_speed_claim(concurrency):
     assert len(report["records"]) == 4 * concurrency
     assert not report["real_gpu_verified"] and not report["device_first_answer_verified"]
     assert [r["engine"] for r in report["records"]][::concurrency] == ["base", "candidate", "candidate", "base"]
+
+
+def test_bge_metadata_reads_header_only_without_loading_payload(tmp_path):
+    import struct
+    (tmp_path / "config.json").write_text(json.dumps(dict(model_type="bert", num_hidden_layers=4, hidden_size=512)), encoding="utf-8")
+    header = json.dumps({"embeddings.word_embeddings.weight": {"shape": [2, 2], "dtype": "F32", "data_offsets": [0, 16]},
+                         "encoder.layer.0.dense.weight": {"shape": [2, 2], "dtype": "F32", "data_offsets": [16, 32]}}).encode("utf-8")
+    (tmp_path / "model.safetensors").write_bytes(struct.pack("<Q", len(header)) + header)
+    report = bge_bench.metadata_plan(tmp_path)
+    assert report["stage"] == "metadata_only_no_model_load" and not report["model_load_executed"]
+    assert report["estimated_int8_payload_mib"] == 20 / 2**20
+    assert report["maximum_forward_calls"] == 40
+
+
+class SyntheticBGE:
+    def __init__(self):
+        self._model = object()
+        self._tokenizer = lambda text: {"input_ids": list(range(len(text) + 2))}
+    def encode_query(self, text):
+        if not text:
+            raise ValueError("empty")
+        relevant = next(labels for _, case, labels in bge_bench.QUERIES if case == text)
+        return [float(i in relevant) for i in range(12)]
+    def encode_documents(self, texts):
+        rows = []
+        for text in texts:
+            if not text or len(text) > 510:
+                raise ValueError("empty_or_overlong")
+            index = bge_bench.DOCUMENTS.index(text) if text in bge_bench.DOCUMENTS else 0
+            rows.append([float(i == index) for i in range(12)])
+        return rows
+
+
+def test_bge_pair_matrix_existing_and_rebuilt_synthetic_indexes(monkeypatch):
+    monkeypatch.setattr(bge_bench, "bge_cpu_int8_candidate", lambda *args, **kwargs: SimpleNamespace(applied=True, candidate=object()))
+    encoder = SyntheticBGE()
+    original = encoder._model
+    clock_values = iter(i / 1000 for i in range(100))
+    result = bge_bench.run_loaded(encoder, object(), clock=lambda: next(clock_values), expected_dimensions=12)
+    assert encoder._model is original
+    assert len(result["records"]) == 30 and result["all_automatic_gates_passed"]
+    assert result["ranking_gates"]["existing_fp32_synthetic_index"]["candidate_recall_at_k"] == 1
+    assert result["timings_median_ms"]["8"]["fp32_over_int8_ratio"] == pytest.approx(1)
+    assert not result["production_ready"] and not result["final_memory_answers_verified"]
+
+
+def test_bge_pair_restores_model_when_boundary_or_inference_fails(monkeypatch):
+    monkeypatch.setattr(bge_bench, "bge_cpu_int8_candidate", lambda *args, **kwargs: SimpleNamespace(applied=True, candidate=object()))
+    encoder = SyntheticBGE()
+    original = encoder._model
+    encoder._tokenizer = lambda text: {"input_ids": []}
+    with pytest.raises(RuntimeError, match="boundary_fixture"):
+        bge_bench.run_loaded(encoder, object(), expected_dimensions=12)
+    assert encoder._model is original
+
+
+def test_bge_execute_requires_window_before_spawning(monkeypatch, tmp_path):
+    monkeypatch.setattr(subprocess, "Popen", lambda *args, **kwargs: pytest.fail("must not spawn"))
+    with pytest.raises(ValueError, match="window_receipt"):
+        bge_bench.execute_owned(tmp_path, "")
+
+
+def test_trt11_reports_removed_apis_without_importing_runtime(tmp_path, monkeypatch):
+    monkeypatch.setattr(trt11, "verify_source", lambda _: {"verified": True})
+    source = tmp_path / "source"
+    sdk = tmp_path / "sdk"
+    for path in (source / "cosyvoice/utils", source / "cosyvoice/bin", sdk / "include"):
+        path.mkdir(parents=True)
+    (source / "cosyvoice/utils/file_utils.py").write_text("NetworkDefinitionCreationFlag.EXPLICIT_BATCH; BuilderFlag.FP16", encoding="utf-8")
+    (source / "cosyvoice/bin/export_onnx.py").write_text("AutoModel; opset_version=18", encoding="utf-8")
+    (sdk / "include/NvInferVersion.h").write_text("\n".join(f"#define TRT_{key}_ENTERPRISE {value}\n#define NV_TENSORRT_{key} TRT_{key}_ENTERPRISE" for key, value in zip(("MAJOR", "MINOR", "PATCH", "BUILD"), (11, 2, 1, 2))), encoding="utf-8")
+    (sdk / "include/NvInfer.h").write_text("kSTRONGLY_TYPED", encoding="utf-8")
+    (sdk / "include/NvInferRuntime.h").write_text("enqueueV3 setTensorAddress setInputShape getNbIOTensors", encoding="utf-8")
+    result = trt11.inspect_sdk(source, sdk)
+    assert result["sdk_version"] == "11.2.1.2" and result["independent_candidate_possible"]
+    assert not result["direct_fixed_converter_compatible"] and not result["gpu_work_performed"]
+    assert all(result["retained_runtime_apis"].values())
+    assert len([r for r in result["reasons"] if "removed" in r]) == 2
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows Job Object")
+def test_resource_job_limits_apply_to_launcher_and_python_child():
+    job = bge_bench.WindowsResourceJob()
+    process = subprocess.Popen([sys.executable, "-I", "-B", "-c", "import os,time; print(os.getpid(),flush=True); time.sleep(.2)"], stdout=subprocess.PIPE)
+    try:
+        job.assign(process)
+        stdout, _ = process.communicate(timeout=3)
+        snapshot = job.snapshot()
+        assert snapshot["process_memory_limit_bytes"] == 2048 * 2**20
+        assert snapshot["job_memory_limit_bytes"] == 2048 * 2**20
+        assert snapshot["affinity_mask"].bit_count() <= 2
+        assert snapshot["peak_job_memory_bytes"] > 0
+        assert int(stdout.strip()) > 0
+    finally:
+        if process.poll() is None:
+            process.kill()
+            process.wait(timeout=3)
+        job.close()
+
+
+def test_cosy_runner_decodes_actual_wav_closes_cancel_and_disables_cache(monkeypatch):
+    import io
+    import struct
+    import threading
+    import wave
+    data = io.BytesIO()
+    with wave.open(data, "wb") as output:
+        output.setnchannels(1)
+        output.setsampwidth(2)
+        output.setframerate(16000)
+        output.writeframes(struct.pack("<160h", *([3276] * 160)))
+    calls, seeds, closed = [], [], []
+    class Synth:
+        stream_runtime = SimpleNamespace(applied=True)
+        _torch = SimpleNamespace(manual_seed=seeds.append)
+        def stream_chunks(self, text, *, use_cache, model_streaming, cancel_event):
+            calls.append((use_cache, model_streaming))
+            try:
+                yield data.getvalue()
+                yield data.getvalue()
+            finally:
+                closed.append(True)
+    monkeypatch.setattr(cosy_runner, "_service_origin", lambda _: ROOT / "scripts/development/cosyvoice/service.py")
+    runner = cosy_runner.make_runner(Synth(), context=adapters.ExperimentContext(True, "mock-gpu-window"), model_streaming=True)
+    cancel = threading.Event()
+    iterator = runner("short", 17, cancel)
+    first = next(iterator)
+    assert first.sample_rate == 16000 and len(first.samples) == 160
+    assert first.samples[0] == pytest.approx(3276 / 32768)
+    cancel.set()
+    assert list(iterator) == [] and closed == [True]
+    assert calls == [(False, True)] and seeds == [17]
+    assert cosy_runner.evaluation_contract()["status"] == "needs_isolated_validation"
+
+
+def test_cosy_runner_refuses_unscheduled_or_foreign_synth():
+    with pytest.raises(ValueError, match="exclusive_gpu_window"):
+        cosy_runner.make_runner(object(), context=adapters.ExperimentContext(), model_streaming=False)
+
+
+def test_quantized_embedding_identity_never_reuses_baseline_or_mutates_recipe():
+    baseline = dict(provider="local_bge", dtype="float32", model="BAAI/bge-small-zh-v1.5", pooling="cls", normalization="l2")
+    before = json.dumps(baseline, sort_keys=True)
+    identity = adapters.bge_candidate_identity(baseline)
+    assert identity["baseline_identity"] != identity["candidate_identity"]
+    assert identity["recipe_changed"] and not identity["personal_index_migration_authorized"]
+    assert identity["candidate_metadata"]["quantization_recipe"]["dimensions"] == 512
+    assert json.dumps(baseline, sort_keys=True) == before
+    identity["candidate_metadata"]["quantization_recipe"]["module_types"].append("must_not_leak")
+    assert "must_not_leak" not in adapters.BGE_INT8_RECIPE["module_types"]

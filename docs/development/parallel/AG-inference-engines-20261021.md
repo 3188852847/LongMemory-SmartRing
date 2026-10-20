@@ -4,7 +4,7 @@
 
 ## 范围与实际文件
 
-只新增 [能力检查](../../../scripts/development/cosyvoice/acceleration/capabilities.py)、[适配器](../../../scripts/development/cosyvoice/acceleration/adapters.py)、[PCM 基准](../../../scripts/development/cosyvoice/acceleration/benchmark.py)、包入口、[专属测试](../../../tests/unit/development/test_cosyvoice_acceleration.py)、本记录及 [ADR-0200](../../adr/0200-isolated-inference-engine-candidates.md)。没有修改 AD 的 service/cosyvoice_streaming/voice_latency 或公共接线，也没有改锁文件。公共文档清单条目由主会话统一接力。
+首阶段新增 [能力检查](../../../scripts/development/cosyvoice/acceleration/capabilities.py)、[适配器](../../../scripts/development/cosyvoice/acceleration/adapters.py)、[PCM 基准](../../../scripts/development/cosyvoice/acceleration/benchmark.py)、包入口、[专属测试](../../../tests/unit/development/test_cosyvoice_acceleration.py)、本记录及 [ADR-0200](../../adr/0200-isolated-inference-engine-candidates.md)。第二阶段新增BGE配对、SDK11静态核查与Cosy runner，详见后文。没有修改 AD 的 service/cosyvoice_streaming/voice_latency 或公共接线，也没有改锁文件。公共文档清单条目由主会话统一接力。
 
 完成标准：固定源码核查、一手官方支持矩阵、可运行的隔离适配与 benchmark、CPU/mock 验证、准确资源阻塞与 owner 下载需求。生产加速、GPU 编译、真实学校调用、个人库/设备/日用服务操作不在已完成范围。主会话本轮明确暂不给 GPU 独占租约。
 
@@ -23,7 +23,7 @@
 
 读到的机器历史清单驱动为610.74；本轮直接 nvidia-smi 为610.88，按此次读数登记，不改写历史清单，也未升级驱动。没有运行 torch.cuda.is_available、模型加载、compile 或 GPU benchmark。
 
-## 适用性矩阵
+## 第一阶段适用性矩阵（第二阶段变化见后）
 
 | 方向 | 固定源的真实能力 | 当前条件 / 本轮实现 | 流式与取消边界 |
 |---|---|---|---|
@@ -52,7 +52,7 @@
 
 `paired_benchmark` 在同输入/种子下轮流运行engine，另做并发1/2/4；基准方需先独立warmup并另记冷启动，不能把demo里的快时间报告为模型速度。能量/摘要分析放在每次生成计时之后；group_wall_ms另含分析开销并显式标记，不能当纯推理吞吐。`audio_gate` 自动筛查时长±20%、削波增量≤1%、连续性无退化并保留人工声质/取消门；这组工程筛查阈值不是语音质量研究结论。`ranking_gate` 接收同合成库的分数及相关文档标签，要求Recall@k不降且首位一致；真实样本及最终问答另验。任何候选选择前还要比较用户说完到设备有效回答声音，并排除等待提示和推理内容。
 
-## 可重跑命令与本轮真实验证
+## 第一阶段可重跑命令与真实验证
 
 从 AG 工作树执行，使用已存在解释器，不安装。只读能力检查可直接用 Cosy Python运行绝对脚本路径：
 
@@ -73,35 +73,65 @@
 | 文档检查 | 默认公共清单报2个unlisted-document/2个unknown-selection；尚未接力登记。内存中为两文档添加draft/reference条目后，同一audit检查2文档、0 findings；未改公共清单。曾尝试experiments中的临时manifest，检查器按公开目录边界拒绝，随后改用内存清单 |
 | 真实GPU/听感/圆屏/学校 | 未运行；没有速度收益、音质、取消时限或日用切换结论 |
 
-## 所有者资源获取：精确工件与边界
+## 第二阶段资源优先级：先用已有资源
 
-当前无需下载即可使用能力检查、CPU量化替身和mock基准。主会话尚未发GPU租约，故本轮不执行任何安装、模型下载、git fetch/clone、WSL/Docker变更。以下只供所有者取得固定工件，**不是安装或部署命令**；将目标目录换成自己的新增实验资源目录，禁止写日用Cosy `.venv`。有同名文件即拒绝覆盖。
+主会话要求收窄后，撤回首阶段两只Linux wheel下载命令；它们缺runtime/完整锁，不能作为用户下一步。旧命令仅留在首阶段提交e6e8db5的历史中，本记录不再提供半套下载。当前无新增下载/安装需求。
 
-官方 PyPI 元数据提供的精确工件：
-
-| 工件 | SHA256 | 官方元数据 |
+| 优先级 | 现在推进 | 资源/结论 |
 |---|---|---|
-| vllm-0.11.0-cp38-abi3-manylinux1_x86_64.whl | `3861c75ff2b12e24f6d179ff5c084d791b42ded8675d76c8706697c79f68cd62` | [PyPI0.11.0](https://pypi.org/pypi/vllm/0.11.0/json) |
-| tensorrt_cu12_bindings-10.13.3.9-cp310-none-manylinux_2_28_x86_64.whl | `3ca2635394789dd62346ff5ee3f02def53cee2cd21247cc342461dc721893a1e` | [NVIDIA PyPI10.13.3.9](https://pypi.org/pypi/tensorrt-cu12-bindings/10.13.3.9/json) |
+| P0 | AD同模型adaptive（自适应缓冲）、AC CPU话轮 | 主会话近期优先；不把BGE数毫秒局部收益宣传成聊天首答收益 |
+| P1 | 既有BGE CPU INT8一次性真实配对 | 已在AG-CPU-BGE-20261021-01完成，结果见下；不切日用/不改个人索引 |
+| P2 | 既有Windows TensorRT11.2.1.2独立候选 | SDK、CP310绑定wheel、CUDA13.3 DLL已在本机；静态兼容检查可做，GPU导出/构建待新调度；不先安装旧10.13或混用DLL |
+| P3 | Linux vLLM/TRTLLM完整环境 | 暂缓获取。完整传递依赖锁、镜像digest/平台/体积及恢复边界尚未齐全；不发下载或部署命令 |
 
-```powershell
-$artifactDir = 'D:/03-项目/01-正式项目/智慧圆屏/local/worktrees/ag-inference-engines-20261021/experiments/runs/ag-owner-artifacts-20261021'
-New-Item -ItemType Directory -Path $artifactDir -ErrorAction Stop | Out-Null
-$artifacts = @(
-  @{Name='vllm-0.11.0-cp38-abi3-manylinux1_x86_64.whl'; Url='https://files.pythonhosted.org/packages/47/33/d19e0763c34392ec956534536fa837c060495bfff31ed83452135ea7608d/vllm-0.11.0-cp38-abi3-manylinux1_x86_64.whl'; Hash='3861c75ff2b12e24f6d179ff5c084d791b42ded8675d76c8706697c79f68cd62'},
-  @{Name='tensorrt_cu12_bindings-10.13.3.9-cp310-none-manylinux_2_28_x86_64.whl'; Url='https://files.pythonhosted.org/packages/03/b4/768d8e1d4cd949422ede434397d5f68b2281a2a269602257ab2922674f36/tensorrt_cu12_bindings-10.13.3.9-cp310-none-manylinux_2_28_x86_64.whl'; Hash='3ca2635394789dd62346ff5ee3f02def53cee2cd21247cc342461dc721893a1e'}
-)
-foreach ($item in $artifacts) {
-  $targetFile = Join-Path $artifactDir $item.Name
-  if (Test-Path -LiteralPath $targetFile) { throw "拒绝覆盖 $targetFile" }
-  Invoke-WebRequest -Uri $item.Url -OutFile $targetFile
-  if ((Get-FileHash -LiteralPath $targetFile -Algorithm SHA256).Hash.ToLowerInvariant() -ne $item.Hash) { throw "工件摘要不符：$targetFile；保留现场，勿安装" }
-}
-```
+P3重新进入执行前需交完整可复现环境：Linux/Python/torch/CUDA/TRT/vLLM/transformers及Cosy固定源的相容锁、所有工件哈希、NGC镜像manifest digest及拉取/展开体积、模型revision和转换资源指纹、隔离目录/端口/显存/进程所有权与回退步骤。没有这些证据时保持needs_isolated_validation，不能把两个顶层版本当全锁。
 
-两文件都是Linux候选，不能装入Windows日用环境，也不组成完整运行时。vLLM还需独立Linux Python3.10、torch/torchaudio2.8.0、transformers4.57.1与固定Cosy依赖重解锁；原uv.lock不动。TensorRT绑定还需同版实际runtime库，不能把PyPI几十KB包装sdist或703字节libs占位sdist当完整库；不能混用机器11.2.1.2。完整运行时wheel/NGC镜像digest与全部传递依赖未锁定前不建议执行安装。无需新Cosy模型即可规划本地导出，但实际导出/构建仍需GPU独占窗口并写实验副本，生成后记录plan哈希与GPU/TRT身份。
+## 第二阶段：真实BGE CPU配对
 
-TRT-LLM专用路径另需转换LLM与FP16-ONNX资源；固定脚本引用贡献者yuekai仓库且未pin revision，官方模型与贡献转换工件须分别登记。当前不使用其Stage0自动下载、不直接运行其clone/升级依赖的Compose。下一接力应先在新隔离Linux环境形成完整锁和镜像digest，后由所有者获取；不能向Windows原环境建议一个 `pip install vllm` 解决。
+新增 [BGE实验](../../../scripts/development/cosyvoice/acceleration/bge_benchmark.py)，默认只读safetensors头与配置，不加载torch/模型；--execute必须提供主会话CPU调度收据。现有BGE固定revision为7999e1d3359715c523056ef9478215996d62a620，真实payload91.381MiB、Linear权重49MiB，估算INT8权重54.631MiB；估算不含框架与激活，不把文件大小当进程峰值。
+
+主会话发放一次性AG-CPU-BGE-20261021-01后，只运行一次：12条明确合成文档、4查询、FP32/INT8交替3次、batch8、512窗口/超长与空输入。实际前向19+19=38次。torch线程2、interop1；模型加载前通过Windows Job Object设置2048MiB单进程提交内存限制、两逻辑CPU亲和性和关闭Job即结束自有子进程，Assign成功后才创建start gate放行加载。180秒父看门狗；子进程禁止socket连接/DNS/UDP及HF在线访问，CUDA_VISIBLE_DEVICES为空、模型明确to(cpu)，导入来源为AG树LocalBGEEncoder，快照沿既有hash校验；权重/服务/索引不写。
+
+| 实际指标 | 本次结果 |
+|---|---|
+| 一次矩阵总墙钟 | 4.928秒；加载约2245.486ms、量化112.083ms；没有重试 |
+| batch1查询中位数 | FP32 13.416ms / INT8 9.133ms；比值1.469，仅这4查询×3次 |
+| batch8文档中位数 | FP32 57.043ms / INT8 32.625ms；比值1.748，仅3次，不报P95 |
+| 合成旧FP32文档＋INT8查询 | Recall@3 1.0→1.0、首位一致率1.0 |
+| 合成INT8文档＋INT8查询 | Recall@3 1.0→1.0、首位一致率1.0 |
+| recipe与边界 | 512维、CLS pooling、L2归一化、512token有限输出、513token拒绝、空输入拒绝；两候选均通过 |
+| 退出/恢复 | exit0，stop_reason=null，原模型实例恢复；Job关闭、资源归还；没有GPU或真实学校调用 |
+
+内存测量限制必须保留：该次receipt的peak_private_mib约0.84MiB是Windows虚拟环境入口包装进程采样，**不是实际模型worker峰值**。用无模型PID探针已复现Popen.pid与解释器os.getpid不同；原Job单进程2048MiB限制继承到实际worker，但不能据此给出实测峰值。原收据原样保留，追加stage2-annotations说明，未为补峰值重跑BGE。后续harness已改为查询整个Job的PeakJobMemoryUsed，并同时限制聚合Job提交内存2048MiB；用轻量无模型子进程验证实际Job限制查询及继承，未产生第二次BGE测量。
+
+量化是独立recipe/身份。适配器输出quantization recipe；报告未来显式分baseline_identity/candidate_identity/candidate_metadata，本次旧报告model_identity只表示FP32基线，旁注按相同量化调用补足候选配方指纹，不假装当时原报告已发出：
+
+- 基线身份：43435848b0ebf50613b0090a38953e56754b11962a79000f096121f0b15b297b。
+- 候选身份：ce4912d9f13ee93b6459e08e1d6158bff4861db08f532e31a1f4c0ed33285d8e。
+- 不沿用原provider_identity写索引，不把本次小合成集通过推广为真实记忆问答或日用切换结论。未来生产需独立旧索引query/新索引配对质量与身份迁移验收；当前不授权个人重建。
+
+原始输出保留于本树忽略目录experiments/runs/ag-bge-ab142f4539d342f8af47c41189374adc/，不提交原产物。report.json SHA256=7651e23a8857225dc33e2777a4a3938cb5d6632e6aceaac2f9938f6d471c28f2；receipt.json=27831434330e75c00010553121b92c84171d21a57959cbec2bf6b5e1b06322bd；stage2-annotations.json=37c0af1f6205ce023e9a50d82432498114e1b6fa839be66b906274c87d0e1e14。报告内包含实际运行时harness/adapter及本树encoder源码摘要；随后只修资源统计/身份标识，不改这次原始字节或重跑模型。
+
+实际运行版本的harness-at-run.py/adapter-at-run.py/encoder-at-run.py已逐字节归档到同一忽略目录，摘要与原report记录全部匹配；harness为33e958794af3325061308d4906ed0bd41a10496452422fd7ae7513ec502645ed。后续只读重算模型6文件摘要与加载前receipt一致，model-protection.json=28bd20d351f4c3c8f55653b91134fa520cec52bbfb706da836715230b0f9f4be，原权重和快照保留。
+
+## 第二阶段：既有Windows SDK11兼容结论
+
+新增 [静态SDK核查](../../../scripts/development/cosyvoice/acceleration/trt11_compatibility.py)。本机NvInferVersion.h用TRT_*_ENTERPRISE宏间接给出11.2.1.2，CP310 Windows wheel和nvinfer_11.dll存在；不导入绑定或创建CUDA上下文。
+
+- 固定convert_onnx_to_trt使用NetworkDefinitionCreationFlag.EXPLICIT_BATCH，本机11.2.1.2头文件已无kEXPLICIT_BATCH；fp16分支使用的BuilderFlag.FP16也已移除。故**固定转换器不能直接使用SDK11**，不放宽首阶段10.13适配器版本守卫。需独立构建器create_network(0)、强类型ONNX与明确精度图；fp32对照需明确TF32策略。
+- runtime路径仍有set_input_shape、set_tensor_address、num_io_tensors和execute_async_v3对应API；这仅说明接口形状可迁移，不能证明混合CUDA13 SDK与torch cu121对象/流可互操作。优先分进程导出/构建/CPU张量边界，SDK11不装入日用Cosy环境。
+- 固定export_onnx.py走AutoModel、opset18、六输入和estimator_out，动态sequence轴，但未暴露streaming模式输入，默认图固定该掩码语义；脚本原写入model_dir，本轮不执行，未来改写实验副本。CV3可由AutoModel识别、DiT有out_channels，只构成导出入口证据；ONNX算子解析、形状可泛化、实际构建/推理/数值与声质均尚未验证。
+- 后续GPU矩阵应有日用fp16 eager、fp32 eager控制、fp32 TRT11三路，区分精度变化与引擎效果；同输入/种子/声线/取消与质量门，不直接比较不同精度后宣称纯引擎收益。
+
+一手依据：[NVIDIA11.2.1发布说明](https://docs.nvidia.com/deeplearning/tensorrt/latest/getting-started/release-notes-11/11.2.1.html)、[release11.2官方源码与Windows CUDA13.3包说明](https://github.com/NVIDIA/TensorRT/blob/release/11.2/README.md)、[11.x移除Python API](https://docs.nvidia.com/deeplearning/tensorrt/latest/api/migration/tensorrt-10x-to-11x-python-api-reference.html)、[11.2 runtime绑定](https://github.com/NVIDIA/TensorRT/blob/release/11.2/python/src/infer/pyCore.cpp)。静态报告保留SDK头文件指纹，当前状态仍needs_isolated_validation。
+
+## 第二阶段：无需下载的Cosy/AD评测接力
+
+新增 [Cosy runner](../../../scripts/development/cosyvoice/acceleration/cosy_runner.py)：make_runner接收调用方在整合树已隔离加载的本树synth，要求GPU调度收据、现有native取消适配和stream_chunks契约；禁用回复缓存，只接受3条固定合成case，WAV解码为真实PCM，设置同一seed后不允许并发重置，关闭迭代器沿原取消清理。模块不加载模型/创建服务器；本轮仅真实合成WAV替身测试，没有GPU执行。
+
+evaluation_contract为AD/AI提供两层接口：producer有buffered/incremental、3case×2seed×2mode=12次测量，warmup另记；AD consumer在相同producer trace比较current/adaptive，分别记录协议支持与本实例可用、first_effective_answer_pcm/first_opus/buffer_ready、underrun、worst_gap、cancel_requested/last_delivered_frame/native_cleanup及followup_usable。AG的model PCM runner**不测AD实际播放策略收益**；需由AD真实consumer给这些观测，不能把生产块提前当自适应播放加速。设备扬声器、误抢话/续说和说完到有效声音仍须owner真实验收。
+
+第二阶段组合回归74 passed（4.51秒），含原hidden-only/stream_runtime、文档机制、BGE合成矩阵替身、独立身份、实际Windows轻量Job限额查询及真实WAV解码替身；不重复运行BGE真实模型，也不运行GPU。
 
 ## 提交与接力
 

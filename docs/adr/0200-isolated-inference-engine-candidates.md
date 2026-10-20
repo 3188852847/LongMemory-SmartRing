@@ -14,6 +14,8 @@ vLLM0.11.0/torch2.8.0/transformers4.57.1 是另一套 Linux 依赖，不能混�
 
 BGE CPU 动态 INT8 只生成独立 Bert Linear 权重候选，保留原模型，不重建持久索引。相同合成库和查询必须同时核对 Recall@k（前 k 名中的相关文档召回率）、首位一致性及实际速度。不存在已证明的 CosyVoice3 INT8/INT4/FP8 量化契约时，不套通用 Qwen 模型支持。
 
+量化改变 embedding recipe（向量生成配方）及 provider identity（编码器身份）；候选输出独立元数据/指纹，不能沿用现有FP32身份。19+19次真实CPU前向的12候选/4查询实验只验合成旧索引查询及合成新索引配对，不授权日用切换、个人索引重建或身份迁移。第二阶段收窄为已有资源优先：AD同模型自适应缓冲/AC CPU话轮优先，BGE只交局部测量；不先下载Linux绑定wheel。现有Windows TensorRT11.2.1.2具有独立兼容候选条件，但固定转换器的EXPLICIT_BATCH/FP16构建API与SDK不兼容；导出/构建/推理/精度仍需独占GPU验证，不能用SDK历史测试替代。
+
 ## 验收和回退
 
 GPU 操作需主会话独占窗口；显存空闲检查不替代调度许可。基准的 runner 接收 case_id、seed、取消事件，返回 CPU PCM（脉冲编码音频）块。分别记录首次 PCM、首个能量达标 PCM、总耗时、RTF（生成耗时/音频时长）、供给间隙和取消关闭时间；它们不等于用户说完到圆屏首个有效回答声音。
