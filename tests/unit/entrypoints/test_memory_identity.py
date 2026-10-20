@@ -151,3 +151,43 @@ def test_identity_rechecks_lazy_backend_reference_without_initializing(tmp_path,
         asyncio.run(check())
     finally:
         selected.close()
+
+
+@pytest.mark.parametrize("standard", [True, False])
+def test_hy_catalog_through_real_server_peek_stays_read_only(tmp_path, monkeypatch, standard):
+    from longmemory.methods.hy_memory.method import HyMemoryMethod, HyAdministration
+    from longmemory.methods.hy_memory.settings import HySettings
+
+    monkeypatch.setattr(server, "ROOT", tmp_path)
+    method = HyMemoryMethod(settings=HySettings(user_id="synthetic-user"), client_factory=forbidden)
+    if standard:
+        method._mechanism_profile = "standard_worker"
+    admin = HyAdministration(method)
+    selected = MemoryRuntime(tmp_path / "PRIVATE_NEVER_OPENED.sqlite3", method=method,
+        backend_assembly=SimpleNamespace(legacy_sqlite=False, management=admin))
+    selected.status = forbidden
+    selected._round_screen_store = SimpleNamespace(expire=forbidden)
+
+    async def check():
+        async with production(memory_runtime=selected) as (client, base):
+            monkeypatch.setattr(sqlite3, "connect", forbidden)
+            await login(client, base)
+            identity = await client.get(base + "/api/memory-engine/identity")
+            assert identity.status == 200
+            assert (await identity.json())["method"] == "hy_memory_pro_chat"
+            response = await client.get(base + "/api/memory-engine/hy/mechanisms")
+            assert response.status == 200
+            result = await response.json()
+            assert result["assembly"] == ("standard_worker" if standard else "custom_or_unknown")
+            assert result["mode"] == ("pro" if standard else None)
+            assert len(result["layers"]) == 8 and len(result["mechanisms"]) == 46
+            assert result["runtime"] == {"engine_initialized": False, "worker_health": "unknown",
+                "write_enabled": True, "use_enabled": True}
+            assert method._client is None
+            assert "PRIVATE_NEVER_OPENED" not in await response.text()
+    try:
+        asyncio.run(check())
+        assert not selected.database.exists()
+    finally:
+        selected._round_screen_store = None
+        selected.close()

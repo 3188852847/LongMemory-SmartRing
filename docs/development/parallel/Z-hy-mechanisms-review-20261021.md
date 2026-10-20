@@ -1,6 +1,6 @@
 # Z：Hy机制与全站引擎状态独立审查
 
-2026-10-21，Asia/Shanghai。**阶段：只读准备，尚无候选交付、整合、业务测试或发布结论。** 本轮独立于上一轮语音修复，不更新其历史验收。主会话已确认main基点 `eaa65b5b2979add8fd513bba07e19e64d5afa36b`；Z核对自有树clean后建立 `codex/z-hy-mechanisms-review-20261021`，旧分支、SDK、工作树和全部证据保留。
+2026-10-21，Asia/Shanghai。**初始阶段：只读准备；后端接力结果见文末，前端/完整组合尚未验收。** 本轮独立于上一轮语音修复，不更新其历史验收。主会话已确认main基点 `eaa65b5b2979add8fd513bba07e19e64d5afa36b`；Z核对自有树clean后建立 `codex/z-hy-mechanisms-review-20261021`，旧分支、SDK、工作树和全部证据保留。
 
 ## 范围与交接
 
@@ -48,3 +48,18 @@ Y独占前端，AA独占固定2.0.3机制清单及最小只读能力接口。Z�
 等根精确交AA/Y提交、接口样例/覆盖表及串行Y树移交，再核源码/固定来源、组合类型契约与必要隔离测试、实际宽窄截图和键盘。只用已有依赖，临时端口与合成库；缺依赖不安装、不联接共享可变node_modules。根负责发布/推送与最终验收；Z提供可追溯精确组合SHA、实际检查/限制及工作树状态。
 
 本阶段仅源码/元数据静态准备及此记录/清单，未运行业务、SDK调用、模型、前端构建或浏览器；没有候选验收结论。Z会话 `01a15404-7df1-7f92-818f-e25093730b61`，主会话 `01a1534f-3c56-78c1-9e13-4777422a67bb`，AA会话 `01a15a18-68cc-77c0-a6d2-76ba574e74d5`；Y范围仍待根串行移交。
+
+
+## AA精确后端接力审查
+
+根交AA `b016c2d828cfd67e03a26d8d72afe28d06a78445`（父main `eaa65b5`，作者树clean），Z在保护准备提交 `93b5162a05a9d9de544a2c5f3d6e32675f13df16` 后接为 `b97a2eb`，无冲突。新增中立identity与Hy机制目录，未接Y代码或操作其树。完整契约见[Hy机制契约](../hy-mechanisms-contract.md)，作者证据见[AA记录](AA-hy-mechanisms-20261021.md)。
+
+独立源码审查确认：server通过existing_memory_runtime只窥已存Runtime引用，不调用memory_runtime懒创建方法。identity的available仅表示现有内存身份；旧库显式配置但未初始化时method为null，不打开旧库来补值；busy/closing/closed返回503，不伪装旧引擎。机制GET拒绝参数和body，沿既有会话权限；依次非阻塞取得Runtime/Hy锁，finally释放。它不走status、wait_until_ready、workspace、diagnostics或SDK RPC，只投影内存门/目录；Runtime和方法关闭路径均拒绝。标准来源标记只在client_factory为None的可信装配处建立，自定义factory保留unknown；engine_initialized不是健康，observed_at不是上次成功调用时间。
+
+静态抽查固定SDK枚举/写入保留层、三通道及独立profile、pro/ultra路径，以及平台worker显式关闭项、process_client固定legacy reader和trace关闭环境。目录46个ID唯一，全部出现在契约覆盖矩阵；每条仓库/SDK相对源码引用文件存在，无绝对路径或越界引用。这里只证明该一级目录覆盖与已核边界，不声称每个环境变量/内部算法分支或真实运行均已验证；未知增强不执行模型补数。新目录没有条目数量/逐写决策/逐答完整注入轨迹，count=null及evidence_gaps分别呈现限制。
+
+Z补充正式create_app的标准/自定义Hy目录成功路径两项检查，连接真实server路由和鉴权，使用合成Runtime且禁止SDK初始化/status/SQLite连接；验证identity与机制响应能组合，未创建PRIVATE测试库或启动SDK。与AA独立路由测试互补，不把替身client当成真实日用/SDK验收。定向7模块 **62 passed，1.06秒，0失败/0跳过**：identity、机制、Runtime扩展、管理HTTP/守卫、版本演化及来源叠加；全部随机非日用端口、独立合成目录，无模型/生产操作。日志临时根为 `data/test-tmp/z-hy-mechanisms-20261021/pytest-aa-review`。AA报告的191项是作者记录，不混写为Z独立执行。
+
+worker/process_client/management_rpc/sdk_bridge/short_embedding_input/sdk_observation/observation七文件相对eaa65b5差异为空；实际原语函数重算仍为 `e358debcfa870e09c6072645758d70ac4fa6792bcfb1dd5d589f3c1490657e04`。没有改写或重签原证明、管理RPC或持久身份。新增中立identity不返回数据库/资源路径、用户/助手命名空间、模型或凭据；异常只返稳定代码。暂停写入/use不阻止只读机制展示。
+
+**后端当前未发现阻断项；前端及完整组合仍待精确提交与串行交接，不能发布放行。** 后续特别核对Y对available/not_initialized/unconfigured、503与旧缓存的解释，不把known legacy未初始化等同装配健康；机制深链/质量替代入口、真实响应TypeScript契约、宽窄大字/键盘/截图仍待验。本段仅更新Z记录与统一清单，AA/Y原文件范围不越界，上一轮历史结论不变。

@@ -6202,11 +6202,11 @@
       "path": "docs/development/parallel/Z-hy-mechanisms-review-20261021.md",
       "title": "Z：Hy机制与全站引擎状态独立审查",
       "status": "draft",
-      "basis": "eaa65b5基点只读准备及验收标准；AA/Y尚未精确交付，不表示实现或发布验收",
+      "basis": "eaa65b5基点准备及AA b016c2d后端独立62项审查；Y与完整组合未交付，不表示发布验收",
       "review": {
         "state": "pending",
         "date": "2026-10-21",
-        "scope": "只读核对基点导航/总览/状态栏/管理契约、已装2.0.3枚举与装配边界；候选与完整官方机制清单待交接",
+        "scope": "基点缺口/固定版边界与AA精确后端、46ID覆盖/路径、62项独立合成检查；前端类型/交互/截图和发布待验",
         "evidence": [
           "web/react-chat/src/components/AppShell.tsx",
           "web/react-chat/src/pages/OverviewApp.tsx",
@@ -6222,6 +6222,54 @@
         "全站引擎",
         "机制",
         "审查准备"
+      ]
+    },
+    {
+      "path": "docs/development/hy-mechanisms-contract.md",
+      "title": "Hy固定版机制展示契约",
+      "status": "draft",
+      "basis": "AA b016c2d只读identity/机制契约；Z后端62项复核，前端及发布待组合",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-21",
+        "scope": "核对身份/目录字段、两级非阻塞锁、无status/SDK/数据库、固定目录46ID与引用；不表示前端/真实日用通过",
+        "evidence": [
+          "src/longmemory/entrypoints/api/routes/memory_identity.py",
+          "src/longmemory/entrypoints/api/routes/memory_engine.py",
+          "src/longmemory/methods/hy_memory/mechanisms.py",
+          "src/longmemory/application/memory_runtime.py",
+          "tests/unit/entrypoints/test_memory_identity.py",
+          "tests/unit/methods/test_hy_mechanisms.py"
+        ]
+      },
+      "tags": [
+        "Hy-Memory",
+        "机制",
+        "只读契约",
+        "全站身份"
+      ]
+    },
+    {
+      "path": "docs/development/parallel/AA-hy-mechanisms-20261021.md",
+      "title": "AA：Hy固定机制与只读能力接口",
+      "status": "reference",
+      "basis": "AA精确候选b016c2d的机制清单/只读实现与作者验证；Z独立后端审查，未发布",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-21",
+        "scope": "作者191项与Z62项分别记录，源码/两新入口/固定版边界核对；前端组合与生产未验",
+        "evidence": [
+          "docs/development/hy-mechanisms-contract.md",
+          "src/longmemory/methods/hy_memory/mechanisms.py",
+          "tests/unit/entrypoints/test_memory_identity.py",
+          "tests/unit/methods/test_hy_mechanisms.py"
+        ]
+      },
+      "tags": [
+        "AA",
+        "Hy-Memory",
+        "机制",
+        "只读后端"
       ]
     }
   ],
