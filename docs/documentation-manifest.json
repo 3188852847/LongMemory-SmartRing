@@ -29,18 +29,19 @@
         "docs/development/parallel/V-voice-latency-20261020.md",
         "docs/adr/0188-profile-matched-waiting-cache-and-answer-priority.md",
         "docs/development/parallel/Z-vx-integration-20261020.md",
-        "docs/guides/声音设置.md"
+        "docs/guides/声音设置.md",
+        "docs/development/parallel/X-hy-roundscreen-20261019.md"
       ],
       "tags": [
         "语音",
         "等待",
         "延迟"
       ],
-      "review": "verified 2026-10-20: 精确组合源码/合成测试与 Python3.10 缓存验证；真实准备/首答收益未验收；c1f1537 后两场景统一完整短句、默认回退停用、双守卫不放宽；Z129项/3.10假HTTP与原Opus通过，正式缓存未验收"
+      "review": "verified 2026-10-20: c1f1537中性完整短句/新配方/双守卫经Z129项、3.10假HTTP与原Opus核验；X按cb3实际准备四组22帧新缓存并恢复正式ready，两轮真实隔离校园+TTS宏观探针5次unknown0；未验等条件提速、生产切句、ASR/播放或设备听感"
     },
     {
       "id": "roundscreen-network-coexistence",
-      "scope": "保留Docker另一设备，独立圆屏端口与电脑物理IP自动跟踪；候选已实现未部署，设备数字OTA仍需所有者改址",
+      "scope": "保留Docker另一设备，独立圆屏端口与物理IP自动跟踪；cb3正式ready，所有者改址后正常问答/字幕/声音通过，另一设备体验待验",
       "authority": "docs/guides/圆屏独立端口与IP自动跟踪-20261020.md",
       "sources": [
         "scripts/development/launcher/**",
@@ -69,7 +70,7 @@
         "IP自动跟踪",
         "设备配网"
       ],
-      "review": "verified 2026-10-20: 04f92df+8b347be隔离实现；393 passed/1 Tk初始化失败、隔离43 passed，前端13/浏览器5及3.10网络副本保护；只读网卡/端口/固件来源已核，未部署或验收真实双设备/设备解析/声音，不承诺稳定主机名"
+      "review": "verified 2026-10-20: 04f92df+8b347be隔离实现，393 passed/1 Tk初始化失败、隔离43 passed及前端13/浏览器5保留；X按cb3实际部署18000/18003/自动IP，当前.4自有监听与Docker保护核验通过；未验证实际换址、双设备体验或稳定主机名；所有者反馈仅确认目标圆屏改址后连接/正常问答/字幕/声音，不扩张为等待听感或另一设备体验"
     },
     {
       "id": "hy-campus-free-forward",
@@ -1248,11 +1249,11 @@
       "path": "docs/development/parallel/X-hy-roundscreen-20261019.md",
       "title": "X：Hy-Memory 圆屏适配、可信装配与条件日用切换",
       "status": "reference",
-      "basis": "X五阶段及所有者校园正常回答/字幕/声音反馈；长期记忆闭环、纠正及插话待验；另记录2026-10-20网络共存/自动IP候选与未部署边界",
+      "basis": "X分阶段交付、正式校园/网络/缓存部署及所有者本轮改址正常回答/字幕/声音反馈；等待听感/记忆纠正打断及另一设备体验仍待验",
       "review": {
         "state": "verified",
         "date": "2026-10-20",
-        "scope": "仅本次Z放行/主会话推送与X受控校园部署、检查点/原197条/来源分段/同Runtime/免费政策/保护项实际核验，前阶段历史数字保留；主会话转达所有者自然唤醒你好后的正常校园回答/字幕/声音通过，仅窄范围反馈，不读取正文或复验服务；2026-10-20仅核对独立端口/自动IP候选04f92df+8b347be及受控副本保护、393/1 Tk组合失败与隔离43通过；未部署或验收设备/双设备共存，其余全篇核对不扩张",
+        "scope": "仅核对X实际分阶段交付与本次部署：保留前阶段校园所有者反馈、393/1 Tk组合失败与隔离43通过；第八阶段核对088缓存超长拒绝/两次harness失败0模型调用、cb3新检查点/四组22帧/正式ready/保护项、两轮真实隔离宏观探针5次unknown0及受控取消。随后所有者仅确认目标圆屏改址后正常回答/字幕/声音；另一设备体验、等待听感/长程记忆纠正与打断仍待验，不扩张为全篇重验",
         "evidence": [
           "docs/development/parallel/X-hy-roundscreen-20261019.md",
           "b1f22dc421b1b6d519db1df9060c49899c87ccde",
@@ -1261,7 +1262,8 @@
           "6d12559bc3b883cce8d439fab022ddcf72aa588a",
           "docs/guides/圆屏独立端口与IP自动跟踪-20261020.md",
           "docs/adr/0187-roundscreen-network-coexistence-and-auto-lan.md",
-          "8b347be37409481d8639ce18b7c38b7ebb5166df"
+          "8b347be37409481d8639ce18b7c38b7ebb5166df",
+          "cb3c6d57bc0b7f4d7e5def88ea04016a1a5e41ba"
         ]
       },
       "tags": [
@@ -5751,14 +5753,15 @@
       "path": "docs/guides/圆屏独立端口与IP自动跟踪-20261020.md",
       "title": "圆屏独立端口与 IP 自动跟踪",
       "status": "current",
-      "basis": "本轮网络候选的维护/操作入口；候选实现完成但尚未正式部署",
+      "basis": "cb3正式部署的独立端口/自动IP操作入口；所有者改址后目标圆屏正常问答/字幕/声音通过，另一设备体验待验",
       "review": {
         "state": "verified",
         "date": "2026-10-20",
-        "scope": "候选端口/监控/保护范围与源码支持的所有者配网步骤；当前设备配置/真实可达性未验",
+        "scope": "既有端口/监控/保护机制与设备配网源码步骤，加X实际cb3部署ready、LAN.4/18000/18003/已选物理网卡/原Docker保持；未制造真实换址或验收设备可达性；所有者本轮反馈确认目标圆屏新端口连接/正常问答/字幕/声音，不推及另一设备或等待/插话",
         "evidence": [
           "docs/development/parallel/X-hy-roundscreen-20261019.md",
-          "docs/adr/0187-roundscreen-network-coexistence-and-auto-lan.md"
+          "docs/adr/0187-roundscreen-network-coexistence-and-auto-lan.md",
+          "cb3c6d57bc0b7f4d7e5def88ea04016a1a5e41ba"
         ]
       },
       "tags": [
@@ -5772,17 +5775,19 @@
       "path": "docs/guides/语音等待提示与首答时长-20261020.md",
       "title": "同声线等待提示与首答时长",
       "status": "current",
-      "basis": "候选操作/计时入口；真实声线准备和设备体验仍待 X 维护窗口与所有者验收",
+      "basis": "等待缓存准备及计时入口；cb3实际新recipe缓存ready，设备听感/打断与等条件速度待验",
       "review": {
         "state": "verified",
         "date": "2026-10-20",
-        "scope": "291d566/5fd9f2d 合于 d5f873a 的源码与合成检查；含首次失败和隔离复核，不含部署/真实声线/设备或秒数提升验收；后续 c1f1537 中性短句配方/旧缓存失效/完整音频与35帧双守卫经 Z 129项及3.10合成准备入口验证，真实新缓存仍待X",
+        "scope": "既有291d566/5fd9f2d组合及c1f1537中性短句新配方、完整音频/35帧双守卫的Z源码和合成检查保留；本次仅追加X按cb3一次真实准备/四组22帧/正式health与缓存核验、隔离两轮宏观链路。早期失败保留，未验生产切句、ASR/播放、等条件提速或设备听感；所有者本轮普通问答/字幕/声音通过仅单列记录，等待提示听感仍待验",
         "evidence": [
           "docs/development/parallel/Z-vx-integration-20261020.md",
           "docs/development/parallel/V-voice-latency-20261020.md",
           "tests/unit/development/test_voice_waiting_cache.py",
           "tests/unit/development/test_vx_voice_close_integration.py",
-          "c1f15374031b3ea888359bb364c0407b35a6b2f7"
+          "c1f15374031b3ea888359bb364c0407b35a6b2f7",
+          "cb3c6d57bc0b7f4d7e5def88ea04016a1a5e41ba",
+          "docs/development/parallel/X-hy-roundscreen-20261019.md"
         ]
       },
       "tags": [
