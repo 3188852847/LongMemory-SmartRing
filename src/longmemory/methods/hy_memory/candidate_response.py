@@ -89,6 +89,7 @@ class CandidateResponse:
         self._ledger_finalized = False
         self._loop = None
         self._timer = None
+        self._admission_ticket = self._lease = None
 
     def _check_loop(self):
         loop = asyncio.get_running_loop()
@@ -102,11 +103,13 @@ class CandidateResponse:
             raise ValueError('candidate_handle_already_used')
         self._entered = True
         try:
-            # 不用to_thread(lock.acquire)：取消排队的线程可能迟到取锁并永远不释放。
+            # 不用to_thread阻塞取锁：取消排队的线程可能迟到取槽并永远不释放。
+            self._admission_ticket = self._gateway._admission.enqueue('candidate', preempt=self._request_preempt)
             while True:
                 if self._cancelled or self._gateway._closed or self._closed.is_set():
                     raise ValueError('candidate_request_cancelled')
-                if self._gateway._paid_lock.acquire(blocking=False):
+                self._lease = self._admission_ticket.try_acquire()
+                if self._lease is not None:
                     break
                 await asyncio.sleep(.005)
             self._locked = True
@@ -131,6 +134,27 @@ class CandidateResponse:
             self._failure = 'client_disconnected' if isinstance(error, asyncio.CancelledError) else 'transport_error'
             await self.aclose()
             raise
+
+    def _request_preempt(self):
+        # 调度器可能从HTTP线程调用；只能回原loop操作此候选，不取消正式/后台请求。
+        def schedule():
+            task = asyncio.create_task(self._preempt())
+            task.add_done_callback(lambda done: done.exception() if not done.cancelled() else None)
+        self._loop.call_soon_threadsafe(schedule)
+
+    async def _preempt(self):
+        try:
+            ack = await self.cancel()
+            if (not isinstance(ack, dict) or ack.get('request_id') != self.request_id
+                    or ack.get('owned_upstream_exited') is not True
+                    or ack.get('ledger_finalized') is not True or type(ack.get('usage_settled')) is not bool
+                    or ack.get('provider_compute_stopped') is not False):
+                raise RuntimeError('candidate_preempt_ack_invalid')
+            if self._lease is not None:
+                self._gateway._admission.release(self._lease, acknowledged=True)
+                self._locked = False
+        except BaseException:
+            if self._lease is not None: self._gateway._admission.quarantine(self._lease)
 
     def _expire(self):
         self._failure = 'transport_error'
@@ -241,6 +265,7 @@ class CandidateResponse:
                 'stream': True, 'http_status': self.status, 'completed': success and not ledger_error,
                 'usage': self._usage if success and not ledger_error else None, 'cache': evidence,
                 'failure': failure, 'finish_reason': 'stop' if self._done else None,
+                **(self._lease.metadata() if self._lease is not None else {}),
                 'model_ttft_ms': self._first,
                 'provider_elapsed_ms': round((perf_counter()-self._started)*1000, 3)})
         else:
@@ -250,8 +275,10 @@ class CandidateResponse:
             self._gateway._candidate_handles.pop(self.request_id, None)
         self._payload = b''
         if self._locked:
-            self._locked = False
-            self._gateway._paid_lock.release()
+            # 前台已请求抢占时，只能由_preempt核对原句柄ACK后移交；错ACK保持隔离。
+            if self._gateway._admission.release(self._lease): self._locked = False
+        elif self._admission_ticket is not None:
+            self._admission_ticket.cancel()
         self._closed.set()
         if ledger_error:
             raise RuntimeError('candidate_ledger_close_unconfirmed') from None

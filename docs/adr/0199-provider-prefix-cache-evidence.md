@@ -55,3 +55,15 @@ start传入唯一首system的 `[role,text]` 冻结上下文，服务追加已冻
 同步等待超时与外层取消先撤销同一原子门；已进入loop领取时worker须等它结束才放锁，尚未进入时迟到回调不得领取。取消、新轮、修订、Runtime替换或host关闭同样撤销门；结果回到loop后再检查代次才返回text。每轮只调度一次模型，prepare与confirm不自动重试。关闭确认沿AF句柄和AE实际request ID核验，未确认返回closing并保留计算槽；ACK不等于远端GPU停算。此阶段无持久模型/库迁移，只在内存保留有界候选与临时来源证明。
 
 隔离测试已组合实际AF gateway/transport/SQLite、AE `44c3538` 控制器以及AI候选Runtime方法的只读源码快照，包含一次成功与正文/来源/token/fresh负例。它证明宿主接口能执行；AI的真实跨进程HTTP及AE语音桥仍须在其组合树连接验证，不以同进程测试或本地替身冒充日用上线/实机通过。第三阶段学校真实调用为0。
+
+## 后续补充：单槽前台优先准入
+
+主会话核查确认旧 `_paid_lock` 覆盖整个上游生成；Hy读取不等待System2写loop，不能推出正式回答不等待后台模型请求。按新授权保持owned上游并发1、原预算phase/身份/账本/unknown/消息/连接池及无重试，仅将准入改为有界同级FIFO：answer优先，其次正式必需required_hy，再candidate，最后显式background。旧或未知Hy标记保持required_hy，不能从模型body/消息、缺少ContextVar或所有/hy请求猜测后台。
+
+宿主新增 `complete(...,work_class=None)` 和 `local_settings('hy',work_class='background')`，后者仅投影同网关 `/hy-background/v1`；默认调用地址和语义不变。受限路径使用原网关口令，将请求记作原hy费用phase；正式voice/web始终answer。后台admission GET只读返回idle建议，无lease、预算或模型调用；AB应在任务running/SDK原子操作前查询并决定延后，不能外层持模型槽再在内部模型请求二次取同槽。建议存在竞态，真实请求仍须再次按队列及原预算门准入；eligible不代表SDK/预算/语义状态授权通过。
+
+队列上限为answer32、required_hy32、candidate1、background1，活动请求另计1。满队列503且未reserve；关闭唤醒等待者且不再发请求。非候选在飞请求不抢占、不强杀SDK observe/evolve，前台承受其剩余等待。前台到达只取消在飞候选；候选实际owned流退出、原账本finish且同request_id ACK核对完成后才移交槽。错ACK/清理失败隔离该槽，保留unknown，关闭可唤醒排队请求但不伪造成功或远端GPU停算。
+
+内存响应新增 `admission_class/model_queue_ms/model_queue_by_active_ms`；等待从合法请求入队到拿槽，按当时占槽类别分段；原过滤后 `model_ttft_ms` 继续从reserve后调用传输前计起，非流式仍null。二者不包括同一套全部前置开销，尤其不能相加冒充用户停说到声音，也不能用reader耗时替代模型排队。
+
+实际本地HTTP验证覆盖在飞后台A、后续后台B、正式answer、必要Hy及候选同时竞争，释放A后顺序为answer→required_hy→candidate→B；在飞候选首头前取消须等实际ACK，正式请求不误取消、未知费用不释放、错误ACK不移交、关闭唤醒、异常释放和单槽/队列边界。结果与局限见AF记录。AB可信跨循环标记和任务前置准入仍需主会话接力，AF不修改AB/AI文件或触发个人库整理。

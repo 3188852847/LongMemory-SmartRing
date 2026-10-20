@@ -151,3 +151,53 @@ AF已有测试与本阶段组合最终 **207 passed、3 skipped（10.35秒）**�
 宿主专属 **48 passed（1.54秒，无跳过）**。AI实际Runtime方法的组合改为“1画像＋4事实＋1意图”共6项，验证完整snapshot→start→fresh claim成功，并保留context/source/token/runtime revision四种拒绝。新增正常12项全通道上限保留、四通道分别超限、未知通道、总正文及多字节receipt字节超限。另以本地Git取得AE `d4cee7009b3e5006b03f38d98e325fbfa954b624` 的 `voice_proposal_rpc.py` 快照（忽略文件 `data/test-tmp/af-ae-rpc-d4cee70.py`），实际严格解析宿主unavailable/miss DTO；用进程内DTO分派替身，不冒充真实HTTP已通过。
 
 本次无新增真实学校请求、依赖、端口、GPU或个人数据操作。AI/AE/AB当前组合树和跨进程/SDK实际验收仍由主会话协调；原207项结果保留为修复前隔离回归，不能替代该真实组合验收。
+
+## 第五阶段：共享模型槽前台优先
+
+承接主会话对原模型锁的只读核查及明确实施授权。新增 [model_admission.py](../../../src/longmemory/methods/hy_memory/model_admission.py)、[专属测试](../../../tests/unit/methods/test_hy_model_admission.py)，修改AF自有 `model_gateway.py/candidate_response.py`；没有修改provider传输实现、AB worker/semantic、AI Runtime/路由/启动器或任何日用配置。原 `0ea551a90c7ef04863dc887c8295627059edfe1d` 及之前提交保留，另作追加提交。
+
+### AB接线所需的精确接口
+
+```python
+gateway.complete('hy', payload, work_class='background')
+settings = gateway.local_settings('hy', max_tokens=..., work_class='background')
+# settings.base_url == gateway.base + '/hy-background/v1'
+# settings.api_key仍是该owned gateway原口令，模型/供应商/账本身份不变。
+gateway.background_readiness()
+# {'version': 1, 'eligible': bool, 'reason_code': None或closed/requests_waiting/model_busy}
+```
+
+跨进程模型请求由已鉴权的 `POST /hy-background/v1/chat/completions` 明确标记，仍调用原phase='hy'和原中文记忆约束。`GET /hy-background/v1/admission` 使用同一个网关Bearer口令，返回上述只读建议；无新key、无预算预留、无供应商请求。该token是Hy已持有的回环模型token，不是复制供应商key，也不是另开用户账号。原 `/hy/v1` 始终作为required_hy保留，未知 `work_class` 字符串同样保留前台；只有字面background且phase=hy才降级。answer/voice不能传background降低优先级，模型body/metadata/消息中的priority不参与分类。
+
+AB须在 `SemanticCoordinator` 把任务标running/进入原子observe或evolve之前做建议查询，忙则留在现有受控任务队列延后。eligible只代表网关槽/队列空闲，不证明费用、SDK门或语义ready；真正每个模型请求仍再次排队和reserve。此接口**不提供外层lease**，不允许持模型slot进SDK再在其HTTP请求中重复取槽。空闲建议与实际请求之间可能进入新前台，仍按单请求准入处理，不能宣称后台任务已获得无竞争时窗。
+
+跨SDK线程/loop的后台类别须由AB受控适配明确传到此路径，并更新其既有同authority网络白名单；不能在运行中改共享LLM配置、仅靠ContextVar默认空值判后台或把整个/hy都降级。AB接线不在本提交中。旧日用没有新语义后台，这次不为测试开启整理，未声明已部署新后台策略。
+
+### 单槽、ACK、队列与指标
+
+固定优先级为answer→required_hy→candidate→background。同级FIFO，等待队列分别至多32/32/1/1，另有一个活动owned请求。队列满或关闭返回503 `model_admission_unavailable`，排队/拒绝/只读建议均不reserve、不生成unknown；只有真正拿槽后才走原reserve/finish。既有budget phase、模型身份、消息顺序、原连接池与无重试保持。关闭唤醒全部等待者，正常异常退出归还槽，候选排队取消没有迟到取锁线程；同一ticket归还后不能重领。
+
+已在飞的正式、必要Hy或后台请求不取消。正式请求到达只对在飞候选发原loop显式cancel；owned pump真正退出、ledger已finish且匹配request_id/owned/ledger ACK后移交。ACK前网关锁和原AE计算名额保持，错ACK则quarantine并阻止后续provider请求；unknown仍保留。取消回调在调度Condition锁外执行，避免关闭/释放回取同锁死锁。网关关闭可中断自有传输、唤醒排队者，不把这个本地确认解释成供应商GPU停算。
+
+`responses` 新增 `admission_class`、`model_queue_ms`、`model_queue_by_active_ms`。等待按answer/required_hy/candidate/background/queue_or_external分段，和原过滤后TTFT分别记录，不保存正文或用户身份。model_queue从入队到拿槽；原TTFT从预算reserve之后到首个过滤后非空白content，非流式保持null。两项不含完整ASR/记忆/预算预留/播放前置时间，不相加冒充用户停说到有效声音。
+
+### 本地HTTP竞争与实际数值
+
+最终组合回归 **228 passed、3 skipped（13.05秒）**，新增准入专属12项实际通过。3个跳过仍是原未提供隔离小智/Hy SDK项；本阶段只用真实随机回环HTTP供应商替身、合成免费账本/消息，没有学校、个人库、GPU或运行服务操作。
+
+竞争用例在后台A实际HTTP在飞时，加入后续后台B、候选、正式必需Hy及正式voice answer，屏障前实际调用/账本预留仍只有A。释放A后真实上游顺序为 A→answer→required_hy→candidate→B，费用phase仍hy/answer/ hy/answer/hy，5次成功且无unknown。示例数值仅属这次受控替身：
+
+| 条件 | model_queue ms | 主要等待分段 ms | 过滤后TTFT ms |
+|---|---:|---:|---:|
+| 后台A在飞时到达answer | 36.695 | background 36.603 | 0.872 |
+| 同场必要Hy | 60.164 | background 53.333、answer 6.604 | null（非流式） |
+| 同场候选 | 82.041 | background 69.245、answer 6.604、required_hy 5.638 | 0.813 |
+| 同场后续后台B | 93.683 | background 74.277及前台/候选等待 | null（非流式） |
+| 首头前抢占候选→answer | 53.505 | candidate 53.477 | 1.339 |
+| 首头前抢占候选→必要Hy | 54.991 | candidate 54.966 | null（非流式） |
+
+这直接证明在飞后台的剩余时间仍会计入正式回答等待；优先队列只阻止后续后台抢先。候选关闭测试特意延迟本地cancel清理，ACK前不发下一个HTTP；关闭后供应商替身的原处理handler仍可未结束，证明owned退出不等于远端停算。错request_id ACK用例维持quarantine，后续answer/HY没有新预留，关闭后排队调用退出；正式在飞用例不触发候选抢占回调，队列超限无额外调用，异常后原槽可重用。
+
+一次中间回归只有固定sleep阈值断言失败（实测19.264ms低于假定20ms），顺序/预算/ACK门已通过。测试修正为使用与model_queue同源的perf_counter实际保持屏障，不把sleep参数当实测时长，保留原时间下界和所有业务断言；之后228项通过。未将此未定位计时差异写成日用故障或供应商性能结论。
+
+忽略证据目录为 `data/test-tmp/af-admission-combined-20261021-c/`，包含 `test_true_http_background_queu0/competition-metrics.json` 及 `test_answer_preempts_only_cand0/`、`test_answer_preempts_only_cand2/` 的 `preempt-metrics.json`。它们只有脱敏类别与时间，不提交原始产物；不报告P95、缓存命中、学校速度或圆屏体验。AI仍需组合当前AB可信标记/任务前置准入及完整最终声音指标，不能再用普通recall约11ms推断后台模型不影响回答。

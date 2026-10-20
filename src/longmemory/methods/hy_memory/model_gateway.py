@@ -18,6 +18,7 @@ from .budget import BudgetStopped
 from .provider_transport import PersistentProviderTransport
 from .answer_content import FinalStream, final_response
 from .prefix_cache import cache_evidence, has_final_text
+from .model_admission import ModelAdmission, AdmissionClosed, AdmissionFull, work_kind
 
 
 MAX_BODY = 2_000_000
@@ -95,6 +96,7 @@ class ModelGateway(AbstractContextManager):
         self._free_policy_verified = free and free_policy_verified is True
         self.token = secrets.token_urlsafe(32)
         self._paid_lock, self._embedding_lock = Lock(), Lock()
+        self._admission = ModelAdmission(self._paid_lock)
         self._provider_transport = PersistentProviderTransport(settings)
         self._remote = remote or self._send
         self._remote_stream = remote_stream or self._send_stream
@@ -123,6 +125,13 @@ class ModelGateway(AbstractContextManager):
                     with gateway._connections_lock:
                         gateway._downstreams.discard(self.connection)
             def log_message(self,*args): pass
+            def do_GET(self):
+                if not hmac.compare_digest(self.headers.get("Authorization",""),"Bearer "+gateway.token):
+                    self.respond(401,{"error":"local_gateway_auth_failed"}); return
+                if self.path == "/hy-background/v1/admission":
+                    self.respond(200, gateway.background_readiness())
+                else:
+                    self.respond(404,{"error":"local_gateway_path_not_allowed"})
             def do_POST(self):
                 if not hmac.compare_digest(self.headers.get("Authorization",""),"Bearer "+gateway.token):
                     self.respond(401,{"error":"local_gateway_auth_failed"}); return
@@ -139,10 +148,15 @@ class ModelGateway(AbstractContextManager):
                     elif self.path == "/hy/v1/embeddings":
                         result = gateway.embed(body,self.headers.get("X-Hy-Embedding-Role","document"))
                         self.respond(200,result)
+                    elif self.path == "/hy-background/v1/chat/completions":
+                        status, payload = gateway.complete("hy", body, work_class="background")
+                        self.respond(status, payload)
                     elif self.path in paths:
                         status, payload = gateway.complete(paths[self.path],body)
                         self.respond(status,payload)
                     else: self.respond(404,{"error":"local_gateway_path_not_allowed"})
+                except (AdmissionClosed, AdmissionFull):
+                    self.respond(503,{"error":"model_admission_unavailable"})
                 except BudgetStopped:
                     self.respond(429,{"error":"global_budget_stopped"})
                 except Exception:
@@ -172,6 +186,7 @@ class ModelGateway(AbstractContextManager):
                 return
             self._closed = True
             downstreams = tuple(self._downstreams)
+        self._admission.close()
         # 不持登记锁执行取消/shutdown或join：处理线程finally也需取此锁。
         transport_failure = None
         try:
@@ -191,11 +206,17 @@ class ModelGateway(AbstractContextManager):
         if transport_failure is not None:
             raise transport_failure
 
-    def local_settings(self, phase, *, max_tokens=1024):
+    def local_settings(self, phase, *, max_tokens=1024, work_class=None):
         from longmemory.infrastructure.config.campus_calls import FreeCampusCalls
-        return replace(self.settings,base_url=self.base+f"/{phase}/v1",api_key=self.token,
+        kind = work_kind(phase, work_class)
+        route = "hy-background" if kind == "background" else phase
+        return replace(self.settings,base_url=self.base+f"/{route}/v1",api_key=self.token,
             allow_http=True,max_tokens=max_tokens,timeout_seconds=(self.settings.timeout_seconds
                 if isinstance(self.budget, FreeCampusCalls) else max(60,self.settings.timeout_seconds*2)))
+
+    def background_readiness(self):
+        """仅建议，不返回lease或预留；AB应在任务running/SDK原子操作之前查询。"""
+        return self._admission.background_readiness()
 
     def embed(self,body,role):
         if body.get("model") != self.encoder.identity or role not in {"query","document"}:
@@ -211,7 +232,8 @@ class ModelGateway(AbstractContextManager):
         return {"object":"list","model":self.encoder.identity,
             "data":[{"object":"embedding","index":i,"embedding":vector} for i,vector in enumerate(vectors)]}
 
-    def complete(self,phase,body):
+    def complete(self,phase,body,*,work_class=None):
+        kind = work_kind(phase, work_class)
         if not isinstance(body,dict) or body.get("model") != self.settings.model or body.get("stream",False) is not False:
             raise ValueError("model_payload_invalid")
         # 禁止服务器搜索/抓取等另收费工具；SDK 只可声明本地 function 工具。
@@ -230,7 +252,7 @@ class ModelGateway(AbstractContextManager):
         # 独立核实 API 全窗口上界来预留；不拿下面的 body 字节数估 token。
         payload=json.dumps(body,ensure_ascii=False).encode()
         if len(payload)>MAX_BODY:raise ValueError("model_payload_too_large")
-        with self._paid_lock:
+        with self._admission.acquire(kind) as admission:
             if self._closed:
                 raise BudgetStopped("gateway_closed")
             aid=self.budget.reserve(phase)
@@ -247,6 +269,7 @@ class ModelGateway(AbstractContextManager):
                     "response_model":parsed.get("model") if isinstance(parsed,dict) else None,
                     "usage":usage,"finish_reason":((parsed.get("choices") or [{}])[0].get("finish_reason") if isinstance(parsed,dict) else None),
                     "cache":cache_evidence(usage, completed=status==200),
+                    **admission.metadata(),
                     # 非流式只能测完整响应时间，不能把它冒充TTFT。
                     "model_ttft_ms":None, "provider_elapsed_ms":round((perf_counter()-started)*1000, 3)})
                 if status!=200:
@@ -323,7 +346,7 @@ class ModelGateway(AbstractContextManager):
         payload = json.dumps(body, ensure_ascii=False).encode()
         if len(payload) > MAX_BODY:
             raise ValueError("model_payload_too_large")
-        with self._paid_lock:
+        with self._admission.acquire("answer") as admission:
             if self._closed:
                 raise BudgetStopped("gateway_closed")
             aid = self.budget.reserve("answer")
@@ -402,5 +425,6 @@ class ModelGateway(AbstractContextManager):
             self.responses.append({"attempt_id": aid, "phase": "answer", "stream": True,
                 "completed": done, "usage": usage if done else None, "failure": failure, "http_status": status,
                 "cache":cache_evidence(usage, completed=done and failure is None),
+                **admission.metadata(),
                 "finish_reason":finish_reason,
                 "model_ttft_ms":first_text, "provider_elapsed_ms":round((perf_counter()-started)*1000, 3)})
