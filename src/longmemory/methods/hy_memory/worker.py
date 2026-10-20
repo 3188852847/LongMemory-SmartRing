@@ -231,6 +231,12 @@ def create_sdk(settings, workspace, *, create, short_embedding_fast_path=True, p
     try:
         budget.management_profile_scope_proven = profile_scope_proof(workspace,settings,
             create=create,fresh=fresh,verified=budget.management_update_verified or settings.semantic_layers_enabled)
+        if budget.management_profile_scope_proven:
+            from .provenance import ProvenanceGuard
+            budget.provenance = ProvenanceGuard(client, settings, budget, workspace)
+            client._platform_provenance = budget.provenance
+        elif (workspace / "provenance.sqlite3").exists():
+            raise ValueError("hy_provenance_owner_scope_unproven")
         if settings.semantic_layers_enabled:
             from .management_rpc import owner_lease_held
             if (not budget.management_profile_scope_proven or not owner_lease_held(workspace)
@@ -342,8 +348,19 @@ class ProtocolService:
             arguments["intention_limit"] = 0
             arguments["schema_limit"] = 3 if semantic.gate()["schema_state"] == "ready" else 0
             arguments["query_embedding"] = self.client._search_loop_thread.run(self.client._embed_service.embed(arguments["query"]))
-        response = (self.client._search_loop_thread.run(read_profile(self.client,self.settings,self.budget))
-            if operation == "get_user_profile" and semantic is not None else getattr(self.client, operation)(**arguments))
+        provenance = getattr(self.budget, "provenance", None)
+        token = (self.client._loop_thread.run(provenance.begin_add(arguments))
+            if operation == "add" and provenance is not None else None)
+        try:
+            # ContextVar token必须在创建它的主调用上下文中重置；SDK线程继承该上下文。
+            if token is not None:
+                capture = token
+                token = provenance.capture.set(capture)
+            response = (self.client._search_loop_thread.run(read_profile(self.client,self.settings,self.budget))
+                if operation == "get_user_profile" and provenance is not None else getattr(self.client, operation)(**arguments))
+        finally:
+            if token is not None:
+                provenance.end_add(token)
         if operation == "add" and semantic is not None and response.get("success") is True:
             semantic.after_add(arguments["request_id"])
         if operation=="search":
@@ -361,12 +378,16 @@ class ProtocolService:
                         meta, evidence = self.client._search_loop_thread.run(graph_evidence(self.client, self.settings, node))
                         if meta:
                             row.update(meta=meta, evidence_memory_ids=evidence)
+                            if provenance is not None:
+                                row["content"] = self.client._search_loop_thread.run(provenance.project_schema(evidence,row["content"]))
                             proven.append(row)
                     response["memories"]["schema"] = proven if semantic.gate()["schema_state"] == "ready" else []
                 response["memories"]["proactive"] = self.client._search_loop_thread.run(read_intentions(
                     self.client, self.settings, arguments["query_embedding"]))
             response=enrich_search(SearchSourceReader(self.client,self.settings) if semantic is not None else self.client,
                 response,arguments.get("user_ids",[]))
+            if provenance is not None:
+                response = self.client._search_loop_thread.run(provenance.project_search(response))
         elif operation=="get_user_profile":
             response=enrich_profile(self.client,response,arguments["user_id"])
         return response

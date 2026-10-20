@@ -172,6 +172,9 @@ class ManagementRPC:
             from .semantic import invalidate_inactive_semantics
             invalidate_inactive_semantics(getattr(self.budget,"management_workspace",None))
         try:
+            provenance = getattr(self.budget, "provenance", None)
+            if provenance is not None and operation in {"update", "delete"}:
+                provenance.invalidate(self.client.get(memory_id), operation, arguments.get("content"))
             result = getattr(self.client, operation)(**arguments)
         finally:
             if guarded:

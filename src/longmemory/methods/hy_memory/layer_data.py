@@ -96,7 +96,8 @@ def validate_result(result, operation, layer, *, limit=20):
         aggregate = isinstance(record, dict) and record.get("kind") == "aggregate_profile"
         semantic_fields = {"semantic_kind", "execution_authorized", "derivation_state", "evidence_memory_ids", "updated_at"}
         semantic = isinstance(record, dict) and "semantic_kind" in record
-        fields = record_fields | ({"basic_info", "field_sources", "stored_version_count"} if aggregate else set()) | (semantic_fields if semantic else set())
+        provenance = isinstance(record,dict) and "provenance" in record
+        fields = record_fields | ({"basic_info", "field_sources", "stored_version_count"} if aggregate else set()) | (semantic_fields if semantic else set()) | ({"provenance"} if provenance else set())
         if (not isinstance(record, dict) or set(record) != fields or record.get("layer") != layer
                 or (aggregate and (layer != LAYERS[0] or record.get("item_id") != "profile"))
                 or not isinstance(record.get("content"), str) or len(record["content"]) > 32768
@@ -110,6 +111,15 @@ def validate_result(result, operation, layer, *, limit=20):
                 or (record["evidence_memory_ids"] is not None and (not isinstance(record["evidence_memory_ids"], list)
                     or len(record["evidence_memory_ids"]) > 16))):
             raise HyResponseError("hy_layer_data_invalid_semantics")
+        if provenance:
+            value = record["provenance"]
+            if (layer not in LAYERS[2:5] or not isinstance(value,dict)
+                    or set(value)!={"status","semantic_source_complete","dependency_basis","injection_allowed"}
+                    or value["status"] not in {"verbatim_user","explicit_correction","model_inference_unverified"}
+                    or value["dependency_basis"] not in {"explicit_correction","scope_context_envelope","legacy_unobserved","verbatim_current_input","raw_exact_match"}
+                    or type(value["semantic_source_complete"]) is not bool or type(value["injection_allowed"]) is not bool
+                    or value["semantic_source_complete"] != (value["status"]!="model_inference_unverified")):
+                raise HyResponseError("hy_layer_data_invalid_provenance")
         identifier(record["item_id"])
         identifier(record["native_id"])
         for key in ("supersedes", "superseded_by"):
@@ -305,9 +315,15 @@ class LayerDataRPC:
             rows = await self._rows(layer, "all" if detail else arguments["state"],
                 limit=1 if detail else arguments["limit"] + 1,
                 offset=0 if detail else arguments["offset"], item_id=arguments.get("item_id"))
+            provenance = getattr(self.budget,"provenance",None)
+            async def project(row, *, detail=False):
+                item = self._project(row,detail=detail)
+                if provenance is not None and layer in LAYERS[2:5]:
+                    item["provenance"] = await provenance.describe(self.client._vector_store._payload_to_node(row))
+                return item
             if detail:
                 if rows:
-                    return {**result, "data_state": "present", "item": self._project(rows[0], detail=True), "versions": None}
+                    return {**result, "data_state": "present", "item": await project(rows[0], detail=True), "versions": None}
                 if result["coverage"] != "vdb_complete":
                     return {**result, "read_status": "unavailable", "item": None, "versions": None}
                 return None
@@ -315,7 +331,7 @@ class LayerDataRPC:
             more = len(rows) > limit
             total = offset + len(rows) if not more and (rows or offset == 0) and result["coverage"] == "vdb_complete" else None
             return {**result, "data_state": "present" if rows else "empty" if total == 0 else "unknown",
-                "items": [self._project(row) for row in rows[:limit]], "total": total,
+                "items": [await project(row) for row in rows[:limit]], "total": total,
                 "count_scope": "owner_agent_source_layer_state_vdb", "has_more": more,
                 "limit": limit, "offset": offset, "state": arguments["state"]}
         if detail:

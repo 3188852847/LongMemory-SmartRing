@@ -368,6 +368,13 @@ async def read_profile(client, settings, budget):
         raise ValueError("hy_semantic_profile_scope_unproven")
     if item is None:
         return {"profile": None}
+    provenance = getattr(budget,"provenance",None)
+    if provenance is not None:
+        # L0原生聚合包含所有历史版本；不能仅隐藏一版后仍返回残留聚合。
+        rows = await provenance.list(user_id=settings.user_id,limit=10001,with_vectors=False,
+            layers=["l0_basic_info"])
+        if len(rows)>10000 or not all([await provenance.allowed(node) for node in rows]):
+            return {"profile":None}
     # 字段及来源均由固定SDK纯合并函数/逐版本同范围读取取得；这里仅适配
     # 既有profile结果形状，不调用会扫描图目录/等待write loop的公开聚合API。
     sources = item["source_event_ids"]

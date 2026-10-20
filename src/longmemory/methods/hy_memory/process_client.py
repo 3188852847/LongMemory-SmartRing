@@ -29,6 +29,7 @@ def clean_environment(workspace: Path) -> dict:
         MEMORY_LOG_DIR=str(workspace / "logs"), MEMORY_LOG_LEVEL="CRITICAL",
         MEMORY_SEARCH_DEDUP_ENABLED="false", MEMORY_RECALL_STRENGTH_ENABLED="false",
         MEMORY_RECALL_ACCESS_TRACKING="false", MEMORY_HISTORY_RECORD_SEARCHES="false",
+        MEMORY_EXISTING_TAGS_CACHE_TTL_SEC="0",
         MEMORY_PIPELINE_TRACE_ENABLED="false", MEMORY_ENABLE_GRAPH="false",
         MEMORY_ENABLE_INTENTION="false", MEMORY_CODING_ENABLED="false", HY_MEMORY_READER="legacy")
     # 归纳限定图式；不在后台把意图、治疗/画像推断转换成用户事实。

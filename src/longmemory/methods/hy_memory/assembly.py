@@ -20,7 +20,7 @@ def management_primitives_identity():
     # worker新增的内存包装也可影响管理RPC；证明不能只绑定import语句。
     for name in ("worker.py", "process_client.py", "management_rpc.py", "sdk_bridge.py",
                  "short_embedding_input.py", "sdk_observation.py", "observation.py", "layer_data.py", "semantic.py", "candidate_snapshot.py",
-                 "method.py", "assembly.py"):
+                 "method.py", "assembly.py", "provenance.py"):
         digest.update(name.encode())
         digest.update((directory / name).read_bytes().replace(b"\r\n", b"\n"))
     return digest.hexdigest()
@@ -85,6 +85,9 @@ class HyState:
         # uncertain/已认领任务。首次从旧图关闭库启用时由worker建立，再封存。
         if (self.root / "semantic.sqlite3").is_file():
             files.append("semantic.sqlite3")
+            files.sort()
+        if (self.root / "provenance.sqlite3").is_file():
+            files.append("provenance.sqlite3")
             files.sort()
         if not files:
             raise ValueError("hy_sdk_storage_not_initialized")

@@ -76,11 +76,15 @@ def audit(directory):
             content='合成用户姓名',custom={**template.custom,'basic_info_kv':{'name':'合成甲'}})
         seed(basic);before=snapshot();counters=service.budget.report()
         profile=service.execute('get_user_profile',{'user_id':settings.user_id})
-        assert profile['profile']['basic_info']=={'name':'合成甲'}
+        # 原始profile历史仍可审计；它沿用已退出的旧来源，不能再用于回答。
+        assert profile['profile'] is None
+        profile_audit=service.execute('layer_detail',{'layer':'l0_basic_info','item_id':'profile'})
+        assert profile_audit['item']['basic_info']=={'name':'合成甲'}
         assert service.execute('history',{'memory_id':memory_id})==[]
         assert snapshot()==before
         assert service.budget.report()['simulated_model_requests']==counters['simulated_model_requests']
         result['profile_history_no_model_no_node_change']=True
+        result['unproven_profile_injection_isolated']=True
 
         before=snapshot();counters=service.budget.report()
         deleted=service.execute('delete',{'memory_id':memory_id})
@@ -100,6 +104,14 @@ def audit(directory):
                 'tail':replace(template,node_id=ids['tail'],content='最早事实',supersedes=[],
                     superseded_by=[ids['middle']],is_latest=False,status=MemoryStatus.SUPERSEDED),
             }
+            # 拓扑/叠加测试用独立且逐字可证的用户来源；不能借已纠正/删除的
+            # synthetic-only来源制造仍可注入的“新事实”。来源隔离由专属回放覆盖。
+            for name,node in nodes.items():
+                raw_id=str(uuid5(NAMESPACE_URL,f'synthetic-{target}-{name}-raw'))
+                meta={'meta':[{'namespace':SOURCE_NAMESPACE,'role':'user','source_event_ids':[f'chain-{target}-{name}']}]}
+                seed(replace(node,node_id=raw_id,layer=MemoryLayer.L1_RAW,supersedes=[],superseded_by=[],
+                    is_latest=True,status=MemoryStatus.ACTIVE,source_raw_memory_id=None,custom=meta))
+                nodes[name]=replace(node,source_raw_memory_id=raw_id,custom={**meta,'source_raw_memory_ids':[raw_id]})
             for node in nodes.values():seed(node)
             before=snapshot()
             for name in ids:

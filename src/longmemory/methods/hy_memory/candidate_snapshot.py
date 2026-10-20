@@ -29,18 +29,21 @@ class CandidateSnapshots:
 
     def _version(self):
         semantic = getattr(self.budget,"semantic",None)
+        provenance = getattr(self.budget,"provenance",None)
+        pending = provenance is not None and provenance.management_pending()
         if semantic is None:
-            return {"revision":self._revision,"epoch":None,"ready_epoch":None,"stable":True}
+            return {"revision":self._revision,"epoch":None,"ready_epoch":None,"stable":not pending}
         with semantic._condition, semantic._db() as db:
             revision = db.execute("SELECT value FROM control WHERE key='revision'").fetchone()[0]
             running = db.execute("SELECT 1 FROM tasks WHERE state='running' LIMIT 1").fetchone()
             return {"revision":revision+self._revision,"epoch":semantic._epoch(db),
                 "ready_epoch":db.execute("SELECT value FROM control WHERE key='ready_epoch'").fetchone()[0],
-                "stable":not running and not semantic._work.locked()}
+                "stable":not pending and not running and not semantic._work.locked()}
 
     async def _read(self, embedding, limit):
         from hy_memory.models.memory import MemoryLayer, MemoryStatus, MemoryNode
         from hy_memory.pipelines._retrieval.memory_format import format_final_content
+        provenance = getattr(self.budget,"provenance",None)
         hits = await self.client._vector_store.search(query_embedding=embedding,
             user_ids=[self.settings.user_id],agent_ids=[self.settings.agent_id],include_sources=[SOURCE_NAMESPACE],
             layers=[MemoryLayer.L2_FACT,MemoryLayer.L3_SUMMARY,MemoryLayer.L4_IDENTITY],
@@ -53,6 +56,8 @@ class CandidateSnapshots:
                 raise ValueError("hy_candidate_scope_unproven")
             sources = _sources((node.custom or {}).get("meta"))
             content = format_final_content({**hit,"node":node,"content":node.content})
+            if provenance is not None:
+                content = await provenance.project(node,content)
             items.append({"memory_id":node.node_id,"content":content[:32768],"layer":node.layer.value,
                 "channel":"normal","source_event_ids":list(sources) if sources else None,"evidence_memory_ids":[node.node_id]})
         if self.settings.include_profile:
@@ -76,6 +81,8 @@ class CandidateSnapshots:
                     meta, evidence = await graph_evidence(self.client,self.settings,node)
                     if meta:
                         content = format_final_content({**hit,"node":node,"content":node.content})
+                        if provenance is not None:
+                            content = await provenance.project_schema(evidence,content)
                         items.append({"memory_id":node.node_id,"content":content[:32768],"layer":"l6_schema","channel":"schema",
                             "source_event_ids":list(_sources(meta)),"evidence_memory_ids":[node.node_id,*evidence]})
             intentions = await read_intentions(self.client,self.settings,embedding)

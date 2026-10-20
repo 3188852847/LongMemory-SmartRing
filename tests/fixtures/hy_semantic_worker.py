@@ -84,7 +84,9 @@ def run(scenario="normal"):
                 for i in range(4):
                     meta = {"meta": [{"namespace": SOURCE_NAMESPACE, "role": "user", "source_event_ids": ["ab-source-"+str(i)]}]}
                     await client._vector_store.upsert(MemoryNode(node_id="ab-raw-"+str(i), user_id=settings.user_id,
-                        agent_id=settings.agent_id, source=SOURCE_NAMESPACE, layer=MemoryLayer.L1_RAW, content="合成原话"+str(i),
+                        # 这些种子声称是直接用户证据，故完整原话必须与L2一致；
+                        # 未证实概括另由provenance回放夹具专门覆盖。
+                        agent_id=settings.agent_id, source=SOURCE_NAMESPACE, layer=MemoryLayer.L1_RAW, content="合成规划核查事实"+str(i),
                         embedding=[1.0]+[0.0]*(settings.embedding_dimensions-1), custom=meta))
                     vector = [0.8]+[0.0]*(settings.embedding_dimensions-1)
                     vector[i+1] = 0.6

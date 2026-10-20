@@ -103,11 +103,12 @@ def check_profile_scope(fresh,settings):
     client=HyProcessClient(python=SDK,workspace=fresh,settings=settings,create=False)
     try:assert client.management_capabilities()['profile']
     finally:client.close()
-    proof=fresh/'management-scope.json';data=json.loads(proof.read_text(encoding='utf-8'))
+    proof=fresh/'management-scope.json';original=proof.read_text(encoding='utf-8');data=json.loads(original)
     data['agent_id']='different';proof.write_text(json.dumps(data),encoding='utf-8')
-    client=HyProcessClient(python=SDK,workspace=fresh,settings=settings,create=False)
-    try:assert not client.management_capabilities()['profile']
-    finally:client.close()
+    # 已有来源隔离账本不能因stamp失配而降级成无保护读取；应拒绝启动。
+    with pytest.raises(HyResponseError,match='state_unknown'):
+        HyProcessClient(python=SDK,workspace=fresh,settings=settings,create=False)
+    proof.write_text(original,encoding='utf-8')
 
 
 def test_real_sdk_full_node_audit_update_raw_preservation_and_chain_delete_effects(tmp_path):
