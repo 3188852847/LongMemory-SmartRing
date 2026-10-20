@@ -51,8 +51,11 @@ def main():
     parser.add_argument('--source-root', type=Path, required=True)
     parser.add_argument('--expected-head', required=True)
     parser.add_argument('--voice-python', type=Path, required=True)
+    parser.add_argument('--native-root', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--require-clean-answer', action='store_true')
+    parser.add_argument('--require-supported-answer', action='store_true',
+        help='Assert the agreed reasoning_content/leading lowercase think scope; preserve other-format negative controls.')
     args = parser.parse_args()
     source, output = args.source_root.resolve(), args.output.resolve()
     assert output.is_relative_to(ROOT/'data/test-tmp') and not output.exists()
@@ -62,6 +65,8 @@ def main():
         assert head == args.expected_head
         return head
     identity()
+    from xiaozhi_voice_boundary_driver import verify_snapshot
+    native_identity = verify_snapshot(args.native_root)
     output.mkdir(parents=True)
     sys.path.insert(0, str(source/'src'))
     from longmemory.methods.hy_memory.model_gateway import ModelGateway
@@ -72,8 +77,10 @@ def main():
     cases = {
         'reasoning_field': [wire(reasoning_content='synthetic-internal'), wire('合成回答。')],
         'think_complete': [wire('<think>synthetic-internal'), wire('</think>合成回答。')],
+        'think_single_chunk': [wire('<think>synthetic-internal</think>合成回答。')],
         'think_fragmented': [wire(t) for t in ('<thi','nk>','synthetic-internal','</thi','nk>','合成回答。')],
         'analysis_fragmented': [wire(t) for t in ('<anal','ysis>','synthetic-internal','</analysis>','合成回答。')],
+        'plain_unlabelled': [wire('synthetic-internal 合成回答。')],
         'normal_words': [wire('合成回答包含 analysis 和 think 普通词。')],
     }
     rows = []
@@ -114,19 +121,26 @@ def main():
             assert len(called)==1 and state['attempt_count']==1 and state['unknown_or_inflight']==0
             common=data['tts_input_text']==data['stored_sentence_text']==data['assistant_text']
             row={'case':name,'functions':functions,'common_text_sinks_equal':common,
+                'supported_format':name not in ('analysis_fragmented', 'plain_unlabelled'),
                 'answer_exact':common and data['tts_input_text']==expected,
                 'internal_sentinel_emitted':'synthetic-internal' in data['tts_input_text'],
                 'completed':data['completed'],'gateway_mock_attempts':len(called),
                 'budget_unknown_or_inflight':state['unknown_or_inflight']}
             rows.append(row)
     assert identity()==args.expected_head
+    assert verify_snapshot(args.native_root) == native_identity
     report={'source_head':args.expected_head,'real_external_model_calls':0,'tts_or_gpu':False,
         'personal_config_or_database':False,'real_installed_openai_sdk':True,
-        'pinned_native_methods':True,'rows':rows,'all_clean_answers':all(r['answer_exact'] for r in rows)}
+        'pinned_native_methods':native_identity,'rows':rows,'all_clean_answers':all(r['answer_exact'] for r in rows),
+        'all_supported_answers_clean':all(r['answer_exact'] for r in rows if r['supported_format'])}
     path=output/'report.json'
     path.write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding='utf-8')
     print(json.dumps({'report':str(path),'sha256':hashlib.sha256(path.read_bytes()).hexdigest(),**report},ensure_ascii=False))
     if args.require_clean_answer: assert report['all_clean_answers']
+    if args.require_supported_answer:
+        assert report['all_supported_answers_clean']
+        assert all(r['common_text_sinks_equal'] and r['completed'] for r in rows)
+        assert all(r['internal_sentinel_emitted'] for r in rows if not r['supported_format'])
 
 
 if __name__ == '__main__':main()

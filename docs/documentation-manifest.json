@@ -1065,6 +1065,27 @@
       "related": ["docs/development/parallel/W-hy-review-integration-20261019.md", "docs/guides/Hy-Memory隔离接入与验证-20261019.md", "docs/requirements/记忆修复效果验证方案-20261015.md"],
       "tags": ["主动交流", "Hy-Memory", "事项跟进", "draft"],
       "review": "pending: W核对当前代码与边界，首切片/新ADR/持久化/实施范围待主会话定案，验收矩阵未执行"
+    },
+    {
+      "id": "x-voice-answer-consumer-contract",
+      "scope": "X固定小智消费者、网关到实际SDK的共同文本契约和既有合成格式证据；不拥有V答案解析实现",
+      "authority": "docs/development/parallel/X-voice-reasoning-boundary-20261020.md",
+      "sources": [
+        "tests/fixtures/xiaozhi_voice_snapshot_eb4b28c.py",
+        "tests/fixtures/xiaozhi_voice_boundary_driver.py",
+        "tests/fixtures/xiaozhi_gateway_boundary_probe.py",
+        "tests/unit/development/test_xiaozhi_voice_answer_boundary.py"
+      ],
+      "related": [
+        "docs/development/parallel/X-cosy-streaming-20261020.md"
+      ],
+      "tags": [
+        "推理隔离",
+        "字幕",
+        "语音",
+        "SSE"
+      ],
+      "review": "verified 2026-10-20: 实际源码身份与AST、8项固定消费者、14项候选组合、旧合成库只读元数据及首文本口径；无现场格式根因或实机通过结论"
     }
   ],
   "old_path_rules": [
@@ -6118,6 +6139,29 @@
         "低延迟",
         "组合审查",
         "管理回执"
+      ]
+    },
+    {
+      "path": "docs/development/parallel/X-voice-reasoning-boundary-20261020.md",
+      "title": "X：固定语音消费者与答案边界离线联验",
+      "status": "reference",
+      "basis": "固定实际小智方法与真实SDK合成链路；支持范围通过，现场格式与实机仍待验",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-20",
+        "scope": "固定源码AST/摘要、8项消费者契约、V177950f的14个SDK消费组合、原配对合成证据和首文本口径；没有真实模型/个人库/生产操作",
+        "evidence": [
+          "tests/fixtures/xiaozhi_voice_snapshot_eb4b28c.py",
+          "tests/fixtures/xiaozhi_voice_boundary_driver.py",
+          "tests/fixtures/xiaozhi_gateway_boundary_probe.py",
+          "tests/unit/development/test_xiaozhi_voice_answer_boundary.py"
+        ]
+      },
+      "tags": [
+        "X",
+        "推理隔离",
+        "语音",
+        "离线联验"
       ]
     }
   ],

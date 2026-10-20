@@ -1,13 +1,40 @@
 """Run pinned provider/chat methods with synthetic chunks, queues and no runtime imports."""
 import ast
+import hashlib
 import importlib.util
 import json
 from pathlib import Path
 from types import SimpleNamespace as NS
 from urllib.parse import urlparse
 import uuid
+import subprocess
 
 FIXTURE = Path(__file__).with_name('xiaozhi_voice_snapshot_eb4b28c.py')
+
+
+def verify_snapshot(native_root):
+    """只读验证当前外部源码身份与快照AST，不导入或启动小智。"""
+    module = load_snapshot()
+    root = Path(native_root).resolve()
+    assert subprocess.check_output(['git', '-C', str(root), 'rev-parse', 'HEAD']).decode().strip() == module.SOURCE_COMMIT
+    frozen = ast.parse(FIXTURE.read_text(encoding='utf-8'))
+    frozen_methods = {node.name: node for node in frozen.body if isinstance(node, ast.FunctionDef)}
+    frozen_class = next(node for node in frozen.body if isinstance(node, ast.ClassDef) and node.name == 'LLMProvider')
+    frozen_methods.update({node.name: node for node in frozen_class.body if isinstance(node, ast.FunctionDef)})
+    for relative, expected in module.SOURCE_FILES.items():
+        path = root / relative
+        assert hashlib.sha256(path.read_bytes()).hexdigest() == expected['sha256']
+        subprocess.run(['git', '-C', str(root), 'diff', '--quiet', 'HEAD', '--', relative], check=True)
+        source = ast.parse(path.read_text(encoding='utf-8'))
+        class_name = 'ConnectionHandler' if relative.endswith('connection.py') else 'LLMProvider'
+        original = next(node for node in source.body if isinstance(node, ast.ClassDef) and node.name == class_name)
+        wanted = {'chat'} if class_name == 'ConnectionHandler' else set(frozen_methods) - {'chat'}
+        for node in original.body:
+            if isinstance(node, ast.FunctionDef) and node.name in wanted:
+                assert ast.dump(node, include_attributes=False) == ast.dump(frozen_methods[node.name], include_attributes=False)
+                wanted.remove(node.name)
+        assert not wanted
+    return {'commit': module.SOURCE_COMMIT, 'files': module.SOURCE_FILES, 'ast_equal': True}
 
 
 class Log:
