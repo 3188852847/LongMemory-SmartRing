@@ -264,3 +264,34 @@ $env:LONGMEMORY_TEST_VOICE_HOST_REF = '0ea551a90c7ef04863dc887c8295627059edfe1d'
 主会话已授权只读复用现有V的Python3.10 SDK解释器用于后续隔离合成验收；不修改该工作树、环境或账本，不安装依赖、不调用外网。AF双输入宿主固定提交为 `06a332baae5416fcdbad2790dc71c162152e5da2`；正式Runtime/SDK组合将选定AI精确提交后从公共Git对象装配，不能导入AI脏树。后续实际结果另记，不能将计划当通过。
 
 阶段实现提交 `0ee9e0aa9c5e792dbf72a17c8e99041f80e3d128` 后，另核对RPC防回退：观察到完整当前user改变即消费本轮确认机会，之后即使调用者回传旧字符串也不能领取旧候选；清理仍须宿主ACK。新增针对性测试验证变化后回退无任何confirm网络请求。AF固定06a332ba上的七项真实宿主生命周期也复验通过，最终已有文件回归 **242 passed in 13.35s，0 skipped**。下一阶段SDK/正式路由证据单列，不与此测试替身的Runtime混同。
+
+## 第八阶段：真实SDK、正式Runtime路由与3.10双输入闭环
+
+防回退补丁提交 `5501aa22425804a6f66765fa89ad012537d20187` 后，以只读捕获的AI固定提交 **`692ddde656d212d45549df3754006dbf159eb7b0`** 装配正式src、SDK公共合成夹具与网关测试夹具；AE四个模块取本分支HEAD原字节并核对本树一致，所有导入来源断言位于本轮临时装配树。没有导入AI/V脏树，也没有编辑其他会话文件。
+
+新增两个 `voice_proposal_rpc_sdk_input_*` 夹具和 `test_voice_proposal_sdk_input.py`：独立3.12宿主实际运行Hy SDK2.0.3合成传输、Managed/MemoryRuntime、VoiceProposalHost、原Gateway/账本/持久传输以及正式security中间件和proposals/memory_runtime路由；其子进程是实际Python3.10原生RPC客户端。SDK解释器只读复用所有者已安装的V路径，worker用 `-I -X utf8 -B`，新建库/账本与端口均在AE独立测试目录，外部HTTP计数0。SDK模型为合成传输，学校供应商为随机回环SSE，不代表真实模型质量或学校调用。
+
+候选开始后、放行正式prepare前，逐场景断言正式prepare次数0、sources.db字节不变、来源journal为空、SDK模型请求数不增、后台semantic任务计数为空。然后客户端通过正常prepare路由提交原始JSON，宿主断言实际传给Runtime的是提取后的 `检查资料` 正文且prepare恰好一次；完整JSON含language/emotion/speaker及自定义字段，只作为实际当前user送入候选模型。真实供应商收到的最后user原字符串、全部历史消息和system内画像1/fact4/intent1共六项逐项核对，未简化正文或截断记忆。
+
+| 真实跨解释器有效输入场景 | 最终结果 | 候选模型请求 | 正式prepare |
+|---|---|---:|---:|
+| 完整ASR原字符串/正文/历史一致，无工具 | adopted | 1 | 1 |
+| emotion变化 | null miss | 1 | 1 |
+| speaker变化 | null miss | 1 | 1 |
+| 当前正文变化 | null miss | 1 | 1 |
+| 历史变化 | null miss | 1 | 1 |
+| 实际system日期说明变化 | null miss | 1 | 1 |
+| 实际输入带工具 | null miss | 0 | 1 |
+
+七例最终 **7 passed in 46.29s，0 skipped**；每例均核对owned句柄已退出、unknown为0、两端socket/子进程关闭，只有状态输出，无正文/身份/token。未发助手complete或播放；正式合成轮仅用原cancel结束。另一次初验7例47.23s通过后补强Runtime正文断言，并在5501aa22后取得上述最终证据，未将初验替代最终复验。
+
+复跑（不安装任何依赖）：
+
+```powershell
+$env:LONGMEMORY_TEST_PY310 = 'D:/01-开发环境/01-Python/versions/cpython-3.10.20-windows-x86_64-none/python.exe'
+$env:LONGMEMORY_TEST_HY_PYTHON = 'D:/03-项目/01-正式项目/智慧圆屏/local/worktrees/v-hy-memory-20261019/local/runtime/hy-memory/.venv/Scripts/python.exe'
+$env:LONGMEMORY_TEST_SDK_HOST_REF = '692ddde656d212d45549df3754006dbf159eb7b0'
+& 'D:/03-项目/01-正式项目/智慧圆屏/.venv/Scripts/python.exe' -X utf8 -B -m pytest tests/unit/development/test_voice_proposal_sdk_input.py -q
+```
+
+缺任一显式解释器/固定引用时七例skip，不计通过。本文与ADR仍由AE维护，公共清单由AI整合，AE仅做内存补充清单的窄范围文档检查，不声称公共清单已登记。AE本次交付证明真实SDK/Runtime/路由的隔离合成双输入边界；AI仍负责原ASR预取钩子、表达/联网/声纹最终装配点接线、唯一派发门和完整生产链回归。未启用日用候选、未操作个人配置/数据、GPU、学校服务、设备或串口，真实声音/延迟/误抢话仍未验收。
