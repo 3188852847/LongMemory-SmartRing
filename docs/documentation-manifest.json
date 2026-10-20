@@ -271,20 +271,27 @@
         "启动智慧圆屏.cmd",
         "scripts/development/launcher/**",
         "web/react-chat/src/features/launcher/**",
-        "web/react-chat/src/app/launcher-main.tsx"
+        "web/react-chat/src/app/launcher-main.tsx",
+        "tests/test_launcher_web.py",
+        "tests/unit/development/test_launcher.py",
+        "tests/unit/development/test_launcher_events.py"
       ],
       "related": [
         "docs/development/launcher-contract.md",
         "docs/guides/统一启动.md",
-        "docs/adr/0177-react-local-launcher.md"
+        "docs/adr/0177-react-local-launcher.md",
+        "docs/development/troubleshooting.md",
+        "docs/development/parallel/X-hy-roundscreen-20261019.md"
       ],
       "tags": [
         "启动",
         "停止",
         "退出",
-        "Edge"
+        "Edge",
+        "局域网地址变化",
+        "端口冲突"
       ],
-      "review": "pending: 本轮只建立维护归属，未完成全篇实现核对"
+      "review": "verified 2026-10-20: 仅核对保存LAN沿用、固定语音端口、受控绑定失败提示及41项合成验证；现场旧IP失效和Docker占用已只读确认，正式恢复/设备重连未执行；其余全篇核对仍pending"
     },
     {
       "id": "machine-layout",
