@@ -6145,11 +6145,11 @@
       "path": "docs/development/parallel/Z-low-latency-review-20261020.md",
       "title": "Z：Memory 与 Cosy 低延迟组合审查",
       "status": "reference",
-      "basis": "精确V/X组合、管理回执及唯一校园6请求复核；34f9022补丁已发布ready并补齐当前提示缓存，实机重验待回复",
+      "basis": "精确V/X组合与两次发布证据；实机再次失败后消息顺序及ASR快路窄验证通过，真实双臂仍待审",
       "review": {
         "state": "verified",
         "date": "2026-10-20",
-        "scope": "冻结源码与合成SDK/CPU/Opus/Windows证据；两次正式恢复、34f9022发布及当前提示缓存补齐依据主会话回执分来源记录；保留此前失败，实机重验待回复",
+        "scope": "发布和两次失败按来源保留；V910消息构造/X33b6336+d8aed97快路组合55项及Python3.10叶文件检查，未执行真实对照或登记实机通过",
         "evidence": [
           "docs/development/parallel/V-memory-low-latency-20261020.md",
           "docs/development/parallel/X-cosy-streaming-20261020.md",
@@ -6161,7 +6161,11 @@
           "docs/development/parallel/V-reasoning-boundary-20261020.md",
           "docs/development/parallel/X-voice-reasoning-boundary-20261020.md",
           "tests/unit/methods/test_hy_answer_content.py",
-          "tests/unit/development/test_xiaozhi_voice_answer_boundary.py"
+          "tests/unit/development/test_xiaozhi_voice_answer_boundary.py",
+          "docs/adr/0193-owned-voice-system-instruction-placement.md",
+          "docs/development/parallel/V-system-message-order-20261020.md",
+          "tests/unit/development/test_voice_web_search.py",
+          "tests/unit/development/test_fast_voice_responses.py"
         ]
       },
       "tags": [
