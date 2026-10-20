@@ -1,6 +1,6 @@
 # AI：L6/L7 与低延迟组合契约、审查和隔离整合
 
-日期：2026-10-21。状态：第一里程碑已交付，契约候选与离线工具完成；功能分支尚未接力，组合接线与日用发布未执行。本文是本轮公共任务书，功能交付、组合证据与日用发布分别记录，不能互相代替。
+日期：2026-10-21。状态：第一里程碑已提交 `795beb2`；第二阶段正在隔离审查/组合接线。AC/AD/AE/AF/AG/AH 首期已接入本分支，AB 及各方向后续接口等待精确提交。日用发布未执行。本文是本轮公共任务书，功能交付、组合证据与日用发布分别记录，不能互相代替。
 
 ## 授权、范围与完成标准
 
@@ -151,3 +151,41 @@ GPU 独占建议：主会话先核对正式资源所有权并安排已授权窗�
 主会话登记清单时建议使用：`status=draft`（接口尚未跨分支冻结），`review.state=verified`、`date=2026-10-21`，scope 仅为“基线源码核查、5 场景离线回放与 235 项测试；无 AB–AH 集成、日用/设备/真实模型性能证明”。`topics[].sources` 关联回放工具、合成输入、两个新增测试和 `scripts/development/xiaozhi/launch_with_memory.py`；最终生产能力继续归对应指南，不把本文设为日用步骤权威。主会话登记后须重跑严格检查。
 
 未验证：AB 真实 L6/L7 后台持久化/管理一致性；AC 中文模型准确率；AD 连续增量听感、缓冲恢复和残音；AE 真实无副作用快照与候选调用；AF 学校缓存实际字段；AG 可用引擎/GPU 性能；AH 真 DTO 联调；任意同条件 E2E 收益与圆屏实际播放。AI 未编辑 `launch_with_memory.py`，因为新方向导出接口尚未交付；既有启动次序已回归，不用占位安装器冒充接线。
+
+## 第二阶段：经主会话授权的隔离整合
+
+主会话转接所有者新要求：查 AB–AI、安排接口接力，完成后审查整合，验证通过由主会话合入推送并恢复日用。AI 已获普通 cherry-pick/公共接线及共享文档清单、`docs/README.md` 登记授权；仍不合 main、不 push、不部署、不停日用、不动个人数据/设备。以下范围替代第一阶段“待批准接入”和“清单不归AI”的暂时边界；第一阶段 strict 失败是历史实际结果，保留。
+
+### 实际接入顺序与提交
+
+| 方向 | 主会话交付原提交 | AI 隔离分支对应提交 | 当前意义 |
+|---|---|---|---|
+| AC | `67ec9165641f6a9004e13837c7726c5586eea524` | `1217572` | 话轮状态与直接 CPU 适配；侧车及模型文件仍等接力 |
+| AD | `fee1d86f489cf5cf49ab1d90d587ccf6ed76b7ee` | `7d132ea` | 有界 reader、自适应 PCM、队列/最终发送取消保护；真实 GPU 播放未验 |
+| AF | `e8ce66d2d7c373dfb27ee6f9b45f27c2e3928717` | `6ed1a71` | 缓存/首有效文本观测；学校六次已用完，缓存字段未确认 |
+| AE | `baedad5e5ce1f4da18bb3aefabeaeeecad954c78` | `5aad033` | 逐连接候选控制与 SSE 解析；实际快照/网关取消 ACK 桥仍等接力 |
+| AG | `e6e8db5c82775360b920c3888a104fc0d0242938` | `61cc018` | 固定源码适用矩阵和隔离加速工具；不默认选择新引擎 |
+| AH | `a741ec7ec6beb9f15f2c9675dfd4c10600d83779` | `e7f32a1` | 配置/实例/执行/内容证据分开展示；真实 AB DTO 后续联调中 |
+| AB | 待精确提交 | 未接入脏树源码 | 只读取主会话允许的公共交付记录，按稳定候选接口先接公共门 |
+
+每项先核文件归属、导出接口、记录和关键实现，再按上表顺序 cherry-pick，均无冲突。没有把隔离分支提交算作主库合入或生产放行。
+
+### 本阶段公共实现
+
+- `launch_with_memory.py` 接在输入计时/预取之后安装真实 AC 话轮模块。新增显式进程参数 `--voice-turn-end-mode` / `--voice-turn-end-model` / `--cosy-delivery-mode`，也可通过对应子进程环境输入。off 不导入模型；固定模型/依赖失败为 unavailable；enabled 缺真实校准决定不激活。buffered 为默认，adaptive 不自动开启。AC 常驻 CPU 侧车交付后再接独立工位，不自行安装依赖或调用 GPU。
+- `MemoryRuntime` 初始化及写门实际变化时同步方法 `configure_background_writes`；失败保持前台暂停且不先改其他配置。新语义任务 Runtime 白名单、请求参数与 enqueue 写门共用原串行边界；只读 status/task 非阻塞，关闭中拒绝，cancel 可在前台暂停时请求，不声称 running 可回滚。
+- 新增 `application/semantic_tasks.py` 固定参数白名单；新 `routes/hy_semantic.py` 由既有 `register_memory_engine_routes` 注册，全部只使用 peek 实例，不懒创建。读响应按主会话冻结为 AB DTO 顶层，status 附 runtime 门，读取附 `observed_at`；碰到保留附加字段冲突拒绝，不覆盖 AB 字段。权限、URL 和错误码见 [管理契约](../hy-memory-management-contract.md)。
+- 新增 [ADR-0201](../../adr/0201-composed-runtime-write-gates-and-observation.md)，统一登记 13 份独立任务/ADR 和 7 个主题，补 `docs/README.md` 及管理/声音权威入口的窄范围说明。没有改根 README、CHANGELOG、ROADMAP 或原已接受 ADR。
+
+### 第二阶段实际验证（持续追加）
+
+1. `test_advanced_voice_bootstrap.py` + `test_hy_semantic_platform.py` + 既有包装器组合 + 两模式启动顺序 selector：**28 passed in 0.59s**。使用真实 Runtime/HTTP/会话/CSRF、合成方法/任务 DTO；这不是 AB SDK 后台一致性已验。
+2. AC、AD、AE、AG 新模块与 AF 缓存、既有时序/等待/搜索/system/最终答案/流式预算/传输交叉回归：**331 passed in 10.82s**。其中 AD 本地 HTTP/Opus 使用合成音频，不能替代 GPU 模型或设备播放。
+3. `check_docs.py --only` 对本阶段 17 份新/改文档实际 **0 findings，strict 通过**；此前未登记问题由本阶段真实登记解决，未屏蔽检查。
+4. 公共门改动后补跑旧 Hy 管理/守卫/机制/逐层浏览、Runtime 证据/时间召回及文档机制：**109 passed in 1.87s**。与前述分组有交集，不相加冒充独立用例总数。
+
+主会话已核对所有者下载的 Smart Turn ONNX：8,679,182 字节，SHA-256 `2bb026316b14a660486a75b1733cd3fbab8c2fd0314dc9af7be49f8cca967e4f`；AC 可继续真实 CPU/侧车验证，AI 未复制到正式资源。正式部署方必须逐项校验并明确复制到正式 `local/runtime/models/`，不能默默将可清理工作树当成永久资源。ONNX 加载不是中文校准通过，enabled 门仍保留。AG 的新小样本 CPU 量化结果等精确提交后登记，不能据此切换日用向量或重建个人索引。
+
+仍未完成的真实接力：AB 最终提交和协议 2 证明；只读候选快照的实际向量/上下文/版本/校验令牌；AF 进入原网关审计的异步响应与 owned 请求退出 ACK（确认回执）；AE 声音事件/正式 prepare 后 fresh 校验与原取消门之间无 await 派发；AC 已装 Cosy Python 的常驻纯 CPU worker；AH 对最终 DTO 与任务状态；AG 新 CPU 证据/AD GPU 计划。普通 search、正式 prepare 不能用作候选快照。取消客户端连接不等于 owned 请求/供应商计算已结束，未知保持未知，计算槽保留至约定退出边界。
+
+以上缺口正在由主会话转各自所有者，AI 继续公共实现与组合验证。软件模块默认关闭或 unavailable 只能说明安全降级，**不能写成用户要求的全部方向已完成**。

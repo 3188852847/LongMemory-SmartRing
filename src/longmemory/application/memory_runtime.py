@@ -154,6 +154,9 @@ class MemoryRuntime:
         self._l1_sufficiency_shadow = l1_sufficiency_shadow
         self._l2_sufficiency_shadow = l2_sufficiency_shadow
         self._clock = clock or (lambda: datetime.now(UTC))
+        # Hy的持久后台队列与平台前台写门保持一致；旧方法没有此能力则不接管。
+        # 初始化失败前不创建本Runtime的工作线程，避免留下无人拥有的执行器。
+        self._sync_background_writes(self._write_enabled)
         # 单工作线程保证候选模型不会并发轰击供应商。任务只由圆屏完成回执
         # 触发，Runtime 关闭时会等待它收尾，再关闭 SQLite 连接。
         self._deferred_executor = ThreadPoolExecutor(
@@ -767,17 +770,21 @@ class MemoryRuntime:
     def administer_extension(self, namespace, operation, **arguments):
         """专属管理也经过统一串行和来源守卫，不能从HTTP任意调用方法。"""
         from longmemory.methods.contracts import UnsupportedCapabilityError
-        allowed = {"workspace", "profile", "history", "operations", "correct", "delete", "mechanisms", "layer_page", "layer_detail"}
+        allowed = {"workspace", "profile", "history", "operations", "correct", "delete", "mechanisms", "layer_page", "layer_detail",
+                   "semantic_status", "semantic_task", "semantic_enqueue", "semantic_cancel"}
         layer_read = operation in {"layer_page", "layer_detail"}
+        semantic_read = operation in {"semantic_status", "semantic_task"}
         # 仪表盘读取不能排在长模型/写入操作之后；未取得一致快照就明确busy。
-        if not self._lock.acquire(blocking=operation != "mechanisms" and not layer_read):
+        if not self._lock.acquire(blocking=operation != "mechanisms" and not layer_read and not semantic_read):
+            if semantic_read:
+                raise RuntimeError("hy_semantic_busy")
             if layer_read:
                 from longmemory.methods.hy_memory.layer_data import HyLayerDataBusy
                 raise HyLayerDataBusy("hy_layer_data_busy")
             raise RuntimeError("hy_mechanisms_busy")
         try:
             self._ensure_open()
-            if (operation == "mechanisms" or layer_read) and self._closing:
+            if (operation == "mechanisms" or layer_read or semantic_read) and self._closing:
                 raise RuntimeError("hy_mechanisms_unavailable")
             assembly = self.backend_assembly
             admin = assembly.management if assembly else None
@@ -785,6 +792,13 @@ class MemoryRuntime:
                     or admin is None or getattr(admin, "extension_namespace", None) != namespace
                     or not callable(getattr(admin, "extension", None))):
                 raise UnsupportedCapabilityError("memory_management_extension_unsupported")
+            if operation.startswith("semantic_"):
+                if self._closing:
+                    raise RuntimeError("hy_semantic_unavailable")
+                from .semantic_tasks import validate_semantic_request
+                validate_semantic_request(operation, arguments)
+                if operation == "semantic_enqueue" and not self._write_enabled:
+                    raise ValueError("memory_write_paused")
             if operation in {"correct", "delete"}:
                 if not self._write_enabled:
                     raise ValueError("memory_write_paused")
@@ -812,6 +826,12 @@ class MemoryRuntime:
                 self._method.archive(source)
                 arguments["source"] = source
             result = admin.extension(operation, **arguments)
+            if operation == "semantic_status":
+                # 不调用status()：仪表盘不应过期处理圆屏账本或执行懒初始化。
+                if not isinstance(result, dict) or "runtime" in result:
+                    raise RuntimeError("hy_semantic_envelope_conflict")
+                result = {**result, "runtime": {"write_enabled": self._write_enabled,
+                                                "use_enabled": self._use_enabled}}
             if operation == "mechanisms":
                 # status()会过期处理圆屏账本；展示只观察当前内存门，不触碰持久状态。
                 result = {**result, "runtime": {**result["runtime"],
@@ -941,6 +961,8 @@ class MemoryRuntime:
                 raise ValueError("scenario_memory_unavailable")
             if persona_use_enabled and self._persona_provider is None:
                 raise ValueError("persona_memory_unavailable")
+            if write_enabled != self._write_enabled:
+                self._sync_background_writes(write_enabled)
             self._write_enabled = write_enabled
             self._use_enabled = use_enabled
             if scenario_use_enabled is not None:
@@ -948,6 +970,16 @@ class MemoryRuntime:
             if persona_use_enabled is not None:
                 self._persona_use_enabled = persona_use_enabled
             return self.status()
+
+    def _sync_background_writes(self, write_enabled):
+        gate = getattr(self._method, "configure_background_writes", None)
+        if callable(gate):
+            try:
+                gate(write_enabled=write_enabled)
+            except Exception:
+                # 未能证明后台屏障已更新时，前台至少保持暂停；不伪报任务回滚。
+                self._write_enabled = False
+                raise RuntimeError("memory_background_write_gate_failed") from None
 
     def close(self) -> None:
         # 不能在持锁状态 shutdown：正在完成模型调用的工作线程随后还需

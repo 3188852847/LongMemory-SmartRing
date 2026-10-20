@@ -14,6 +14,55 @@ from threading import Lock
 from voice_diagnostics import CURRENT
 
 
+def install_advanced_voice_policy(connection_class, *, turn_end_mode="off",
+                                  turn_end_model=None, cosy_delivery_mode="buffered",
+                                  detector_factory=None, asr_provider_class=None,
+                                  on_turn_event=None, calibration_approved=False):
+    """公共接线只激活有实际前提的方向；失败保留既有 buffered/VAD 主链路。
+
+    必须在输入计时/ASR预取后安装话轮层。off 不导入模型或推理依赖。
+    calibration_approved 由可信组合验收提供，CLI/环境变量不能自行声明通过。
+    """
+    if turn_end_mode not in {"off", "shadow", "enabled"}:
+        raise ValueError("voice_turn_end_mode_invalid")
+    if cosy_delivery_mode not in {"buffered", "incremental", "adaptive"}:
+        raise ValueError("cosyvoice_delivery_mode_invalid")
+    if getattr(connection_class, "_longmemory_advanced_voice_installed", False):
+        raise RuntimeError("advanced_voice_policy_restart_required")
+    report = {"version": 1,
+              "cosy": {"mode": cosy_delivery_mode, "actual_playback_proven": False},
+              "turn_end": {"requested": turn_end_mode, "mode": "off", "installed": False,
+                           "reason": "disabled"}}
+    if turn_end_mode == "enabled" and not calibration_approved:
+        report["turn_end"]["reason"] = "calibration_required"
+    elif turn_end_mode != "off":
+        if turn_end_model is None or asr_provider_class is None:
+            report["turn_end"]["reason"] = "model_unavailable"
+        else:
+            try:
+                if detector_factory is None:
+                    from voice_turn_end_model import SmartTurnCPU
+                    detector_factory = SmartTurnCPU
+                detector = detector_factory(turn_end_model)
+                if not callable(getattr(detector, "predict", None)):
+                    raise ValueError("turn_end_detector_invalid")
+            except Exception:
+                # 固定错误码，不输出模型路径、依赖异常或凭据；不尝试下载/换源。
+                report["turn_end"]["reason"] = "model_unavailable"
+            else:
+                from voice_turn_end import TurnEndConfig, install_voice_turn_end
+                installed = install_voice_turn_end(
+                    connection_class, asr_provider_class, detector=detector,
+                    config=TurnEndConfig(mode=turn_end_mode), on_event=on_turn_event,
+                    calibration_approved=calibration_approved)
+                report["turn_end"] = {"requested": turn_end_mode, **installed, "reason": None}
+    # 明确的子进程参数；不改共享声音档案、服务端默认或已运行连接。
+    connection_class._longmemory_cosy_delivery_mode = cosy_delivery_mode
+    connection_class._longmemory_advanced_voice_status = report
+    connection_class._longmemory_advanced_voice_installed = True
+    return report
+
+
 def install_pipeline_latency_policy(connection_class, *, mode, enable_asr_prefetch=False,
                                     enable_http_keepalive=False):
     """语音策略只在独立服务进程内生效；各项优化经过独立基准后才接入。"""
@@ -255,9 +304,18 @@ def main():
     parser.add_argument("--device-control", action="store_true")
     parser.add_argument("--voice-mode", choices=["pipeline", "doubao_realtime"], default="pipeline")
     parser.add_argument("--voice-latency-mode", choices=["realtime", "original"], default="realtime")
+    parser.add_argument("--voice-turn-end-mode", choices=["off", "shadow", "enabled"],
+                        default=os.environ.get("LONGMEMORY_TURN_END_MODE", "off"))
+    parser.add_argument("--voice-turn-end-model", type=Path,
+                        default=os.environ.get("LONGMEMORY_TURN_END_MODEL") or None)
+    parser.add_argument("--cosy-delivery-mode", choices=["buffered", "incremental", "adaptive"],
+                        default=os.environ.get("LONGMEMORY_COSY_DELIVERY_MODE", "buffered"))
     parser.add_argument("--doubao-env", "--doubao-env-file", type=Path,
                         default=Path(__file__).resolve().parents[3] / "local/config/.env.doubao.local")
     args = parser.parse_args()
+    if args.voice_mode != "pipeline" and (args.voice_turn_end_mode != "off"
+                                         or args.cosy_delivery_mode != "buffered"):
+        parser.error("advanced_voice_policy_requires_pipeline")
     root = Path.cwd()
     if args.device_control or args.voice_mode == "doubao_realtime":
         from control_compatibility import verify_control_snapshot
@@ -290,6 +348,15 @@ def main():
     # 不改系统环境或网页策略；面板选择在重启时生效。
     install_pipeline_latency_policy(ConnectionHandler, mode=args.voice_latency_mode,
                                     enable_asr_prefetch=True, enable_http_keepalive=True)
+    turn_asr_class = None
+    if args.voice_turn_end_mode != "off":
+        # 接在已有预取包装器外层，清空上游音频前先取得真实PCM版本。
+        from core.providers.asr import fun_local
+        turn_asr_class = fun_local.ASRProvider
+    install_advanced_voice_policy(
+        ConnectionHandler, turn_end_mode=args.voice_turn_end_mode,
+        turn_end_model=args.voice_turn_end_model, asr_provider_class=turn_asr_class,
+        cosy_delivery_mode=args.cosy_delivery_mode)
     if os.environ.get("LONGMEMORY_MEMORY_BACKEND") == "hy_memory":
         from core.providers.llm.openai import openai as provider_module
         from voice_budget import install_no_retry_gateway_client

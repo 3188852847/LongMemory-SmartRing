@@ -1,5 +1,11 @@
 # Hy 记忆管理
 
+## L6/L7 后台状态（2026-10-21 隔离候选）
+
+本轮正在把真实语义后台、运行期暂停与只读展示组合接入；正式日用尚未由此记录切换。配置期望、当前实例初始化、保存内容、后台任务、管理可用性分别展示，某项成功不证明其他项通过。后台任务的 `pending/running/completed/partial/uncertain/cancelled` 以真实回执为准；取消 running 不表示回滚。暂停记忆写入会同步后台认领门，已有运行任务仍须观察实际结果。
+
+逐层只读与任务状态读取不自动开启生成、搜索或模型，不授权执行未来意图或主动联系。接口形状、权限和实际进度见 [管理接线契约](../development/hy-memory-management-contract.md)及 [AI 任务书](../development/parallel/AI-hy-advanced-low-latency-20261021.md)。下列既有使用说明和历史验收保留原范围，新能力须等组合和正式发布记录。
+
 日期：2026-10-19。V/X/Y 接线与 Z 组合软件验收已完成，正式切换仍由主会话/X交接；可用能力由本次装配决定。旧引擎与个人旧库保留。证据见 [Z 报告](../development/parallel/Z-hy-release-integration-20261019.md)。
 
 ## 全站导航与机制入口（2026-10-21界面）

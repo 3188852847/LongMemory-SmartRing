@@ -13,6 +13,156 @@
   },
   "topics": [
     {
+      "id": "voice-turn-end",
+      "scope": "AC：中文话轮结束与Smart Turn；候选/配置/执行/播放证据分开，不宣称全目标或日用通过",
+      "authority": "docs/development/parallel/AC-smart-turn-20261021.md",
+      "sources": [
+        "scripts/development/xiaozhi/voice_turn_end*.py",
+        "tests/unit/development/test_voice_turn_end.py"
+      ],
+      "related": [
+        "docs/development/parallel/AI-hy-advanced-low-latency-20261021.md",
+        "docs/adr/0196-bounded-audio-turn-end.md"
+      ],
+      "tags": [
+        "AC",
+        "L6",
+        "L7",
+        "低延迟"
+      ],
+      "review": "verified 2026-10-21: AI核已交付源码和接口并登记；六方向交叉331项与公共门28项通过，AB新SDK/AE完整模型链及GPU/设备另验"
+    },
+    {
+      "id": "cosy-adaptive-continuity",
+      "scope": "AD：CosyVoice连续增量与自适应缓冲；候选/配置/执行/播放证据分开，不宣称全目标或日用通过",
+      "authority": "docs/development/parallel/AD-cosy-continuity-20261021.md",
+      "sources": [
+        "scripts/development/xiaozhi/cosyvoice_streaming.py",
+        "scripts/development/xiaozhi/voice_latency.py",
+        "tests/unit/development/test_ad_cosy*.py"
+      ],
+      "related": [
+        "docs/development/parallel/AI-hy-advanced-low-latency-20261021.md",
+        "docs/adr/0197-cosyvoice-adaptive-playback-buffer.md"
+      ],
+      "tags": [
+        "AD",
+        "L6",
+        "L7",
+        "低延迟"
+      ],
+      "review": "verified 2026-10-21: AI核已交付源码和接口并登记；六方向交叉331项与公共门28项通过，AB新SDK/AE完整模型链及GPU/设备另验"
+    },
+    {
+      "id": "voice-preemptive",
+      "scope": "AE：可取消受控提前生成；候选/配置/执行/播放证据分开，不宣称全目标或日用通过",
+      "authority": "docs/development/parallel/AE-preemptive-20261021.md",
+      "sources": [
+        "scripts/development/xiaozhi/voice_preemptive*.py",
+        "tests/unit/development/test_voice_preemptive*.py"
+      ],
+      "related": [
+        "docs/development/parallel/AI-hy-advanced-low-latency-20261021.md",
+        "docs/adr/0198-no-side-effect-preemptive-generation.md"
+      ],
+      "tags": [
+        "AE",
+        "L6",
+        "L7",
+        "低延迟"
+      ],
+      "review": "verified 2026-10-21: AI核已交付源码和接口并登记；六方向交叉331项与公共门28项通过，AB新SDK/AE完整模型链及GPU/设备另验"
+    },
+    {
+      "id": "provider-prefix-cache-evidence",
+      "scope": "AF：学校前缀缓存取证；候选/配置/执行/播放证据分开，不宣称全目标或日用通过",
+      "authority": "docs/development/parallel/AF-prefix-cache-20261021.md",
+      "sources": [
+        "src/longmemory/methods/hy_memory/model_gateway.py",
+        "src/longmemory/methods/hy_memory/prefix_cache.py",
+        "scripts/development/models/benchmark_prefix_cache.py",
+        "tests/unit/methods/test_hy_prefix_cache.py"
+      ],
+      "related": [
+        "docs/development/parallel/AI-hy-advanced-low-latency-20261021.md",
+        "docs/adr/0199-provider-prefix-cache-evidence.md"
+      ],
+      "tags": [
+        "AF",
+        "L6",
+        "L7",
+        "低延迟"
+      ],
+      "review": "verified 2026-10-21: AI核已交付源码和接口并登记；六方向交叉331项与公共门28项通过，AB新SDK/AE完整模型链及GPU/设备另验"
+    },
+    {
+      "id": "cosy-inference-acceleration",
+      "scope": "AG：隔离推理加速候选；候选/配置/执行/播放证据分开，不宣称全目标或日用通过",
+      "authority": "docs/development/parallel/AG-inference-engines-20261021.md",
+      "sources": [
+        "scripts/development/cosyvoice/acceleration/*.py",
+        "tests/unit/development/test_cosyvoice_acceleration.py"
+      ],
+      "related": [
+        "docs/development/parallel/AI-hy-advanced-low-latency-20261021.md",
+        "docs/adr/0200-isolated-inference-engine-candidates.md"
+      ],
+      "tags": [
+        "AG",
+        "L6",
+        "L7",
+        "低延迟"
+      ],
+      "review": "verified 2026-10-21: AI核已交付源码和接口并登记；六方向交叉331项与公共门28项通过，AB新SDK/AE完整模型链及GPU/设备另验"
+    },
+    {
+      "id": "hy-capability-ui",
+      "scope": "AH：Hy能力与执行证据展示；候选/配置/执行/播放证据分开，不宣称全目标或日用通过",
+      "authority": "docs/development/parallel/AH-hy-observability-20261021.md",
+      "sources": [
+        "web/react-chat/src/features/memory/hyCapabilityView.ts",
+        "web/react-chat/src/features/memory/HyLayerStatus*",
+        "web/react-chat/src/tests/fixtures/hyCapabilityView.ts"
+      ],
+      "related": [
+        "docs/development/parallel/AI-hy-advanced-low-latency-20261021.md"
+      ],
+      "tags": [
+        "AH",
+        "L6",
+        "L7",
+        "低延迟"
+      ],
+      "review": "verified 2026-10-21: AI核已交付源码和接口并登记；六方向交叉331项与公共门28项通过，AB新SDK/AE完整模型链及GPU/设备另验"
+    },
+    {
+      "id": "hy-advanced-combination",
+      "scope": "AI：L6/L7与低延迟组合审查；候选/配置/执行/播放证据分开，不宣称全目标或日用通过",
+      "authority": "docs/development/parallel/AI-hy-advanced-low-latency-20261021.md",
+      "sources": [
+        "scripts/development/xiaozhi/launch_with_memory.py",
+        "scripts/development/xiaozhi/voice_combination_replay.py",
+        "datasets/synthetic/hy-advanced-combination-v1.json",
+        "src/longmemory/application/memory_runtime.py",
+        "src/longmemory/application/semantic_tasks.py",
+        "src/longmemory/entrypoints/api/routes/hy_semantic.py",
+        "tests/integration/test_hy_semantic_platform.py",
+        "tests/integration/test_voice_combination_boundaries.py",
+        "tests/unit/development/test_advanced_voice_bootstrap.py",
+        "tests/unit/development/test_voice_combination_replay.py"
+      ],
+      "related": [
+        "docs/adr/0201-composed-runtime-write-gates-and-observation.md"
+      ],
+      "tags": [
+        "AI",
+        "L6",
+        "L7",
+        "低延迟"
+      ],
+      "review": "verified 2026-10-21: AI核已交付源码和接口并登记；六方向交叉331项与公共门28项通过，AB新SDK/AE完整模型链及GPU/设备另验"
+    },
+    {
       "id": "owned-voice-system-instruction-placement",
       "scope": "V仅修本项目两处联网动态system追加位置，保留消息/工具/日期/隐私契约；学校模板与实机待验",
       "authority": "docs/development/parallel/V-system-message-order-20261020.md",
@@ -6440,6 +6590,266 @@
         ]
       },
       "tags": ["AA", "Hy-Memory", "逐层内容", "发布收尾", "回执"]
+    },
+    {
+      "path": "docs/development/parallel/AC-smart-turn-20261021.md",
+      "title": "AC：中文话轮结束与Smart Turn",
+      "status": "draft",
+      "basis": "本轮独立方向交付与AI隔离审查登记；不表示正式部署或真机验收",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-21",
+        "scope": "仅本轮文档链接、接口边界与已交付源码；真实模型/设备与全部方向完成状态见AI任务书",
+        "evidence": [
+          "docs/development/parallel/AI-hy-advanced-low-latency-20261021.md"
+        ]
+      },
+      "tags": [
+        "AC",
+        "Hy-Memory",
+        "低延迟",
+        "隔离"
+      ]
+    },
+    {
+      "path": "docs/adr/0196-bounded-audio-turn-end.md",
+      "title": "ADR-0196：中文话轮结束与Smart Turn",
+      "status": "draft",
+      "basis": "本轮独立方向交付与AI隔离审查登记；不表示正式部署或真机验收",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-21",
+        "scope": "仅本轮文档链接、接口边界与已交付源码；真实模型/设备与全部方向完成状态见AI任务书",
+        "evidence": [
+          "docs/development/parallel/AI-hy-advanced-low-latency-20261021.md"
+        ]
+      },
+      "tags": [
+        "AC",
+        "Hy-Memory",
+        "低延迟",
+        "隔离"
+      ]
+    },
+    {
+      "path": "docs/development/parallel/AD-cosy-continuity-20261021.md",
+      "title": "AD：CosyVoice连续增量与自适应缓冲",
+      "status": "draft",
+      "basis": "本轮独立方向交付与AI隔离审查登记；不表示正式部署或真机验收",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-21",
+        "scope": "仅本轮文档链接、接口边界与已交付源码；真实模型/设备与全部方向完成状态见AI任务书",
+        "evidence": [
+          "docs/development/parallel/AI-hy-advanced-low-latency-20261021.md"
+        ]
+      },
+      "tags": [
+        "AD",
+        "Hy-Memory",
+        "低延迟",
+        "隔离"
+      ]
+    },
+    {
+      "path": "docs/adr/0197-cosyvoice-adaptive-playback-buffer.md",
+      "title": "ADR-0197：CosyVoice连续增量与自适应缓冲",
+      "status": "draft",
+      "basis": "本轮独立方向交付与AI隔离审查登记；不表示正式部署或真机验收",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-21",
+        "scope": "仅本轮文档链接、接口边界与已交付源码；真实模型/设备与全部方向完成状态见AI任务书",
+        "evidence": [
+          "docs/development/parallel/AI-hy-advanced-low-latency-20261021.md"
+        ]
+      },
+      "tags": [
+        "AD",
+        "Hy-Memory",
+        "低延迟",
+        "隔离"
+      ]
+    },
+    {
+      "path": "docs/development/parallel/AE-preemptive-20261021.md",
+      "title": "AE：可取消受控提前生成",
+      "status": "draft",
+      "basis": "本轮独立方向交付与AI隔离审查登记；不表示正式部署或真机验收",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-21",
+        "scope": "仅本轮文档链接、接口边界与已交付源码；真实模型/设备与全部方向完成状态见AI任务书",
+        "evidence": [
+          "docs/development/parallel/AI-hy-advanced-low-latency-20261021.md"
+        ]
+      },
+      "tags": [
+        "AE",
+        "Hy-Memory",
+        "低延迟",
+        "隔离"
+      ]
+    },
+    {
+      "path": "docs/adr/0198-no-side-effect-preemptive-generation.md",
+      "title": "ADR-0198：可取消受控提前生成",
+      "status": "draft",
+      "basis": "本轮独立方向交付与AI隔离审查登记；不表示正式部署或真机验收",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-21",
+        "scope": "仅本轮文档链接、接口边界与已交付源码；真实模型/设备与全部方向完成状态见AI任务书",
+        "evidence": [
+          "docs/development/parallel/AI-hy-advanced-low-latency-20261021.md"
+        ]
+      },
+      "tags": [
+        "AE",
+        "Hy-Memory",
+        "低延迟",
+        "隔离"
+      ]
+    },
+    {
+      "path": "docs/development/parallel/AF-prefix-cache-20261021.md",
+      "title": "AF：学校前缀缓存取证",
+      "status": "reference",
+      "basis": "本轮独立方向交付与AI隔离审查登记；不表示正式部署或真机验收",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-21",
+        "scope": "仅本轮文档链接、接口边界与已交付源码；真实模型/设备与全部方向完成状态见AI任务书",
+        "evidence": [
+          "docs/development/parallel/AI-hy-advanced-low-latency-20261021.md"
+        ]
+      },
+      "tags": [
+        "AF",
+        "Hy-Memory",
+        "低延迟",
+        "隔离"
+      ]
+    },
+    {
+      "path": "docs/adr/0199-provider-prefix-cache-evidence.md",
+      "title": "ADR-0199：学校前缀缓存取证",
+      "status": "draft",
+      "basis": "本轮独立方向交付与AI隔离审查登记；不表示正式部署或真机验收",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-21",
+        "scope": "仅本轮文档链接、接口边界与已交付源码；真实模型/设备与全部方向完成状态见AI任务书",
+        "evidence": [
+          "docs/development/parallel/AI-hy-advanced-low-latency-20261021.md"
+        ]
+      },
+      "tags": [
+        "AF",
+        "Hy-Memory",
+        "低延迟",
+        "隔离"
+      ]
+    },
+    {
+      "path": "docs/development/parallel/AG-inference-engines-20261021.md",
+      "title": "AG：隔离推理加速候选",
+      "status": "draft",
+      "basis": "本轮独立方向交付与AI隔离审查登记；不表示正式部署或真机验收",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-21",
+        "scope": "仅本轮文档链接、接口边界与已交付源码；真实模型/设备与全部方向完成状态见AI任务书",
+        "evidence": [
+          "docs/development/parallel/AI-hy-advanced-low-latency-20261021.md"
+        ]
+      },
+      "tags": [
+        "AG",
+        "Hy-Memory",
+        "低延迟",
+        "隔离"
+      ]
+    },
+    {
+      "path": "docs/adr/0200-isolated-inference-engine-candidates.md",
+      "title": "ADR-0200：隔离推理加速候选",
+      "status": "draft",
+      "basis": "本轮独立方向交付与AI隔离审查登记；不表示正式部署或真机验收",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-21",
+        "scope": "仅本轮文档链接、接口边界与已交付源码；真实模型/设备与全部方向完成状态见AI任务书",
+        "evidence": [
+          "docs/development/parallel/AI-hy-advanced-low-latency-20261021.md"
+        ]
+      },
+      "tags": [
+        "AG",
+        "Hy-Memory",
+        "低延迟",
+        "隔离"
+      ]
+    },
+    {
+      "path": "docs/development/parallel/AH-hy-observability-20261021.md",
+      "title": "AH：Hy能力与执行证据展示",
+      "status": "draft",
+      "basis": "本轮独立方向交付与AI隔离审查登记；不表示正式部署或真机验收",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-21",
+        "scope": "仅本轮文档链接、接口边界与已交付源码；真实模型/设备与全部方向完成状态见AI任务书",
+        "evidence": [
+          "docs/development/parallel/AI-hy-advanced-low-latency-20261021.md"
+        ]
+      },
+      "tags": [
+        "AH",
+        "Hy-Memory",
+        "低延迟",
+        "隔离"
+      ]
+    },
+    {
+      "path": "docs/development/parallel/AI-hy-advanced-low-latency-20261021.md",
+      "title": "AI：L6/L7与低延迟组合审查",
+      "status": "draft",
+      "basis": "本轮独立方向交付与AI隔离审查登记；不表示正式部署或真机验收",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-21",
+        "scope": "仅本轮文档链接、接口边界与已交付源码；真实模型/设备与全部方向完成状态见AI任务书",
+        "evidence": [
+          "docs/development/parallel/AI-hy-advanced-low-latency-20261021.md"
+        ]
+      },
+      "tags": [
+        "AI",
+        "Hy-Memory",
+        "低延迟",
+        "隔离"
+      ]
+    },
+    {
+      "path": "docs/adr/0201-composed-runtime-write-gates-and-observation.md",
+      "title": "ADR-0201：L6/L7与低延迟组合审查",
+      "status": "draft",
+      "basis": "本轮独立方向交付与AI隔离审查登记；不表示正式部署或真机验收",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-21",
+        "scope": "仅本轮文档链接、接口边界与已交付源码；真实模型/设备与全部方向完成状态见AI任务书",
+        "evidence": [
+          "docs/development/parallel/AI-hy-advanced-low-latency-20261021.md"
+        ]
+      },
+      "tags": [
+        "AI",
+        "Hy-Memory",
+        "低延迟",
+        "隔离"
+      ]
     }
   ],
   "integration_sources": {

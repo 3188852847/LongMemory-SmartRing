@@ -16,6 +16,7 @@
 | 运行测试或核对 CI | [测试产物](development/test-artifacts.md)、[CI 说明](development/continuous-integration.md) | [开发环境](development/setup.md)；本地测试与远程结果分别记录 |
 | 判断能力、计划和历史验收 | [ROADMAP](../ROADMAP.md)、[产品能力地图](requirements/product-capability-map.md) | [自定义功能清单](requirements/自定义功能清单.md)、[历史索引](history/README.md)；候选不是执行授权 |
 | Hy 圆屏适配与条件日用切换 | [Hy 日用装配](guides/Hy-Memory圆屏与日用装配-20261019.md) | [X 记录](development/parallel/X-hy-roundscreen-20261019.md)；当前候选未切换，需 V/Y 组合及主会话交接 |
+| L6/L7、话轮与连续音频组合实施 | [AI 公共任务书](development/parallel/AI-hy-advanced-low-latency-20261021.md) | 各方向提交、接口与隔离证据见任务书；功能接入、真实模型及日用/设备验收分别记录 |
 | 追查设计理由或研究方法 | `docs/adr/` 中对应的架构决策记录（ADR） | `docs/research/` 的对应报告；用清单检索主题，不默认通读全部文档 |
 
 同一“事实范围”只指定一个权威文档。例如日常生命周期归 React 启动指南，恢复步骤归对应恢复指南，研究指标归原报告；这里提供链接，不复制版本表、操作命令或测试数字。权威入口表示维护归属，**不表示整篇语义已经核对**。语义核对范围、证据和待办由清单中的 `review` 与 `known_gaps` 明示。

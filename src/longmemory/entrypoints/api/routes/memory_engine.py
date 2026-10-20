@@ -223,3 +223,7 @@ def register_memory_engine_routes(app, runtime, *, allow_delete=False, allow_cor
     from .hy_layer_data import register_hy_layer_data_routes
     register_hy_layer_data_routes(app,
         snapshot_runtime if snapshot_runtime is not None else lambda: runtime if not callable(runtime) else None)
+    from .hy_semantic import register_hy_semantic_routes
+    register_hy_semantic_routes(app,
+        snapshot_runtime if snapshot_runtime is not None else lambda: runtime if not callable(runtime) else None,
+        allow_management=allow_correction)
