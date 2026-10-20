@@ -62,9 +62,10 @@ def test_drift_expired_or_closed_receipts_rejected(tmp_path, field, value):
         gate.validate_receipt(receipt, **kwargs)
 
 
-def test_closed_ad_id_is_explicitly_rejected_even_with_new_dates(tmp_path):
+@pytest.mark.parametrize("window", ["AD-GPU-20261021-01", "AG-FLOW-GPU-20261021-01"])
+def test_closed_id_is_explicitly_rejected_even_with_new_dates(tmp_path, window):
     receipt, kwargs, _ = fixture_receipt(tmp_path)
-    receipt["window_id"] = "AD-GPU-20261021-01"
+    receipt["window_id"] = window
     with pytest.raises(ValueError, match="closed_window"):
         gate.validate_receipt(receipt, **kwargs)
 
@@ -138,7 +139,8 @@ def test_only_job_member_with_bound_image_can_be_gpu_worker(tmp_path):
 
 
 @pytest.mark.parametrize("failure", ["timeout", "assign"])
-def test_execute_has_one_outer_job_before_permission_and_terminates_all(monkeypatch, tmp_path, failure):
+@pytest.mark.parametrize("snapshot_failure", [False, True])
+def test_execute_has_one_outer_job_before_permission_and_terminates_all(monkeypatch, tmp_path, failure, snapshot_failure):
     receipt, kwargs, bindings = fixture_receipt(tmp_path)
     root = kwargs["checkout"]
     monkeypatch.setattr(flow, "ROOT", root)
@@ -155,6 +157,9 @@ def test_execute_has_one_outer_job_before_permission_and_terminates_all(monkeypa
             actions.append("assigned")
             if failure=="assign":raise OSError("mock assign failure")
         def terminate_and_confirm(self):actions.append("terminated_tree");return True
+        def snapshot(self):
+            if snapshot_failure:raise OSError("synthetic query failure")
+            return dict(active_processes=0, peak_job_memory_bytes=1234, job_memory_limit_bytes=6144*2**20)
         def close(self):actions.append("closed")
     class Process:
         returncode=None
@@ -172,6 +177,12 @@ def test_execute_has_one_outer_job_before_permission_and_terminates_all(monkeypa
         flow.execute(source,tmp_path/"model",tmp_path/"sdk",tmp_path/"toolkit",kwargs["output"],source/".venv/Scripts/python.exe",
                      receipt_path=path,receipt_sha256=hashlib.sha256(raw).hexdigest(),production_root=production)
     assert actions.count("one_outer_job")==1 and "terminated_tree" in actions and "reaped" in actions
+    resources=json.loads((kwargs["output"]/"outer-job-resources.json").read_text())
+    if snapshot_failure:assert len(resources["errors"])==2
+    else:
+        assert resources["before_termination"]["peak_job_memory_bytes"]==1234
+        assert resources["after_termination"]["active_processes"]==0
+    assert resources["entry_error"]
     if failure=="assign":assert "permission_sent" not in actions
     else:assert actions.index("assigned")<actions.index("permission_sent")<actions.index("terminated_tree")
 
@@ -179,13 +190,14 @@ def test_execute_has_one_outer_job_before_permission_and_terminates_all(monkeypa
 @pytest.mark.skipif(sys.platform!="win32",reason="Windows Job query")
 def test_named_outer_job_membership_uses_actual_interpreter_pid(tmp_path):
     name="ag-flow-"+uuid.uuid4().hex
-    code="import sys,os,json; sys.path.insert(0,sys.argv[1]); from acceleration.window_admission import OuterJobQuery; sys.stdin.buffer.read(); q=OuterJobQuery(sys.argv[2]); print(json.dumps({'member':q.contains(os.getpid())})); q.close()"
+    code="import sys,os,json; sys.path.insert(0,sys.argv[1]); from acceleration.window_admission import OuterJobQuery; sys.stdin.buffer.read(); q=OuterJobQuery(sys.argv[2]); print(json.dumps({'member':q.contains(os.getpid()),'resources':q.snapshot()})); q.close()"
     with flow.WindowsResourceJob(memory_limit_mib=6144,job_name=name) as job:
         process=subprocess.Popen([sys.executable,"-I","-B","-c",code,str(PACKAGE.parent),name],stdin=subprocess.PIPE,stdout=subprocess.PIPE)
         try:
             job.assign(process)
             out,_=process.communicate(b"CPU mock only",timeout=5)
             assert json.loads(out)["member"]
+            assert json.loads(out)["resources"]["job_memory_limit_bytes"]==6144*2**20
             assert job.terminate_and_confirm()
         finally:
             if process.poll() is None:job.terminate_and_confirm()
@@ -241,6 +253,7 @@ def test_guard_rechecks_source_and_receipt_before_snapshot(monkeypatch, tmp_path
     def collect():snapshots.append(True);return snapshot_for(receipt)
     class Query:
         def contains(self,pid):return pid==gate.os.getpid()
+        def snapshot(self):return {"peak_job_memory_bytes":1234}
         def close(self):pass
     proof=gate.AdmissionGuard(payload,collector=collect,job_query=Query())
     assert proof.check("first")["allowed"]

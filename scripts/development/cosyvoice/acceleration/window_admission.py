@@ -14,8 +14,9 @@ import re
 import subprocess
 
 from . import wddm_snapshot as wddm
+from .job_accounting import read_job_snapshot
 
-CLOSED_WINDOW_IDS = {"AD-GPU-20261021-01"}
+CLOSED_WINDOW_IDS = {"AD-GPU-20261021-01", "AG-FLOW-GPU-20261021-01"}
 SCOPE = "ag-flow-project-model-window"
 SECONDS = 1320
 
@@ -154,6 +155,9 @@ class OuterJobQuery:
             self.kernel.CloseHandle(self.handle)
             self.handle = None
 
+    def snapshot(self):
+        return read_job_snapshot(self.handle)
+
 
 def classify(snapshot, baseline, *, is_own_pid, allowed_images):
     owned = []
@@ -203,8 +207,10 @@ class AdmissionGuard:
         bound = p["bindings"]
         images = [row[key] for row in bound["interpreters"].values() for key in ("executable", "launcher")]
         images.append(str((Path(bound["paths"]["sdk"])/"bin/trtexec.exe").resolve()))
+        resources = self.query.snapshot()
         report = classify(self.collector(), receipt["shared_desktop_baseline"],
                           is_own_pid=self.query.contains, allowed_images=images)
+        report["outer_job_resources"] = resources
         with (Path(p["output"]) / "window-checks.jsonl").open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(dict(phase=phase, **report), ensure_ascii=False) + "\n")
         if not report["allowed"]:

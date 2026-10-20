@@ -208,3 +208,40 @@ CPU-only实际验证：三组加速相关测试90 passed，含关闭AD ID、过�
 本分支仅提交上述自有文件，不merge main、不push。主会话接力：审查精确提交，将ADR/本记录加入公共清单；把能力字段交AD，不默认启用候选；如继续真实加速，先协调新的项目模型窗口与完整离线资源，再做同输入/声线/种子的冷/热及并发对照和owner听验。现有buffered、角色/声音与学校免费模型保持原设置。
 
 收尾复核：三组加速测试与14项文档机制测试合计104 passed（2.38秒）；上述两份自有文档采用内存清单补录执行audit，checked_documents=2、findings=[]，没有修改主会话负责的公共清单。Git差异检查通过。此前草稿中的125项计数不对应本次三组测试范围，已按实际输出更正，不作为额外验收证据。
+
+### 唯一真实窗口001：失败事实与证据保留
+
+ROOT签发AG-FLOW-GPU-20261021-01，绑定清洁e4dc45cd、原plan及新精确共享桌面基线；发放原字节SHA256为79326d14df79f0e5a6666321796284c1a65be75a0a6d86a49746f96818d7def2。AG仅执行一次，UTC 2026-10-20 22:44:52.750199至22:45:30.316225，入口退出码1。到达DiT FP32导出，子进程在torch.onnx的graph._export_onnx处出现MemoryError，随后RuntimeError: Could not allocate bytes object!；没有生成ONNX/engine，未进入trtexec构建/运行，未完成任何10样本数值验收或声音验收。日志另有opset18支持警告，不能把警告等同此次错误原因。
+
+21次准入记录中前20次通过；最后一次export:running拒绝：此前被认定为本Job成员的PID4744此时身份无法解析（Win32错误87），同时新增PID63724 OpenWith.exe的C+G上下文，精确桌面集合变化。保存的这些事实不能把4744直接改写成外来模型，也不能免除63724的拒绝；不推断OpenWith出现原因。控制器最后保存GPUWindowBlocked，导出日志另有独立分配错误，因此两者都保留，不将stale采样作为唯一根因。Job显式终止并确认ActiveProcesses=0，记录owned_tree_exit_confirmed=true、cleanup_error=null、production_services_touched=false。e4旧异常路径没有保存Job峰值，无法事后补测；不把6GiB限制或TensorRT能力当已证根因。
+
+ignored原始目录为`experiments/runs/ag-flow-6496873888c34589899f89c0c3debcd4/`，保留全部8个原文件及后加attempt-summary.json；摘要SHA256=c98762d6aa8511c1c3fa4d709938858a83c586b87651583c34fc20c39be0366a，含retained8文件摘要。ROOT随后报告已独立核对这些字节、退出状态、无剩余模型上下文及flow.pt原摘要，关闭001并保留issued副本；closed收据SHA256=2242d0fe04feef9686a9bf0113f238cec202d219b0d269026d9d18085638152d。ROOT负责恢复buffered日用，AG未操作生产生命周期，以上不替代ROOT的ready验收记录。不提交原日志、张量、plan或二进制，也不修改原失败产物。
+
+### CPU-only：异常路径计量与退出取证
+
+新增[job_accounting.py](../../../scripts/development/cosyvoice/acceleration/job_accounting.py)公开只读查询：JobExtendedLimitInformation及BasicAndIoAccounting。原自有WindowsResourceJob.snapshot与OuterJobQuery.snapshot均使用该接口，只需查询权限，不读取AD/launcher私有句柄/字段。记录Job/单进程峰值提交字节、Job/进程内存硬限、亲和性和limit flags，以及活动/累计/终止进程、CPU 100ns计量、缺页与IO字节/次数；这些不是工作集，也不自动证明某次失败由限额导致。
+
+父入口无论成功、非零退出、超时或Assign失败，均在终止前和终止后、关闭句柄前尽力保存outer-job-resources.json；查询失败写errors且仍清理，保留原异常。每次合法准入采样附同一外层Job的计量。阶段保存export-exit.json等退出证据与原日志摘要：若检查期间子进程已自行非零退出，OwnedStageFailure优先携带其退出码，同时保留并发准入拒绝；正常退出或尚存活的子进程遇外部上下文变化仍拒绝。无stale PID豁免、无重试、无阈值放宽。001另加入显式关闭集合，即使修改收据日期也不能再用。
+
+轻量CPU验证覆盖8MiB分配后的正常/异常退出，以及1GiB测试Job拒绝一次2GiB VirtualAlloc提交请求（立即失败，未实际占用2GiB缓冲），确认峰值/限额/CPU/IO计量可在退出后读取，终止后active_processes=0且峰值保留；命名Job的只读查询句柄也验证通过。合成测试保留子进程非零退出与同时新增外部上下文两条证据，并核对采样失败仍终止。真实GPU预算仍为6GiB/2CPU/1320秒，本轮仅轻量CPU测试。
+
+### CPU小图：opset17/18实测与低内存提案
+
+只读取现装torch2.3.1的onnx/utils.py、_constants.py及_internal/onnx_proto_utils.py。utils.py:1544针对大于ONNX_TORCHSCRIPT_EXPORTER_MAX_OPSET的请求只发warning，注释说明仍允许较新opset的自定义symbolic；_constants.py中旧导出器max/default为17，另一个ONNX_MAX_OPSET=19不是同一能力字段。utils.py:1647–1693先由graph._export_onnx生成Python proto字节，再经_add_onnxscript_fn及_export_file；export_params=False分支传空参数字典。这里可定位分配阶段，不能确定原生分配大小或6GiB因果。
+
+使用固定Cosy3.10环境，CUDA_VISIBLE_DEVICES为空，禁止CUDA初始化、checkpoint加载及网络连接；小图仅88参数，Linear＋LayerNorm＋CPU scaled_dot_product_attention，输入长度3/5与完整/尾部掩码。父进程先Assign自有2GiB/2CPU Job再通过stdin放行，60秒CPU预算，ORT仅CPUExecutionProvider，不加载真实Flow或声线。
+
+第一份ignored证据`experiments/runs/ag-cpu-opset-20261021-01/`保留失败：图参数输入仍启用常量折叠时，Linear权重变成onnx::MatMul_32，直接按named_parameters喂入失败。没有掩盖该参数映射前提错误。第二份独立小图证据`experiments/runs/ag-cpu-opset-20261021-02/`仅对参数输入变体关闭常量折叠，内嵌参数变体保持原配置：
+
+| 小图变体 | opset17 | opset18 |
+|---|---|---|
+| 内嵌参数、常量折叠开启 | 图写入17；4组CPU比较通过 | 图写入18；4组CPU比较通过，保留支持范围warning |
+| 参数输入、常量折叠关闭 | 图写入17；4组CPU比较通过 | 图写入18；4组CPU比较通过，保留支持范围warning |
+
+共16组比较，rtol=1e-4/atol=1e-5，最大绝对误差3.5762786865234375e-7；只证明这些玩具算子/形状。report.json SHA256=472f7c77e248669ec43ad8fe99826a94ac2adc66c93153c7022f3cca580c7a81，probe.py=3afe3c65ebc2da14f91b9117d932335c60e2a37f6a303e57b3d1d60e283ffb33，receipt.json=04006552c94362cc03dc47b6d6f9ceb28ebc1a9fcca90bc0a3049fd66f978717。该小图Job峰值525000704字节、退出码0、终止前后active_processes=0；不可外推真实Flow峰值/耗时/性能。source-analysis.json另保存三份现装源码原字节摘要，SHA256=ca0a0c98c590496b64c6297a5b9712e3e288fab55f531a7bb57391bb7961c318。全部原始证据继续ignored。
+
+可审低内存候选尚未实施到真实导出器：先export_params=False生成无内嵌大权重的图，明确关闭折叠对参数映射的影响；逐个检查参数名/维度/类型与原FP32权重一致，再以有界块写external data并用offset/length引用，避免一次构造整份Python权重proto。必须拒绝缺失/衍生/不明参数，打包后ORT及原10样本比较与trtexec解析仍需重新验收；每个图/外部数据文件均纳入不可变摘要。普通onnx.save_model追加raw_data可能仍复制整份权重，不能仅换文件后缀宣称省内存。真实内存下降、导出时间和SDK读取兼容性均未知，当前只提出方向，不估算为结果。
+
+opset更改与低内存打包是独立变量：不因小图成功直接把真实18改成17，也不引入dynamo/新依赖、FP16、profile变化或提高6GiB限制。若主会话选择进一步实施，先确定单项变化及CPU小图/外置数据契约，再用新plan和ROOT新窗口检验真实模型；本次没有第二次真实导出或GPU操作。新源码/提交使旧0d918f...bindings失效，001已用完，不沿用旧plan或收据。
+
+本轮收尾验证：加速相关四组测试及文档机制测试合计113 passed（2.84秒），含真实轻量CPU进程与只读Job计量、子进程/并发拒绝双证据、关闭001及计量查询失败后的清理。11模块通过Python3.10语法核对；两份自有文档内存清单audit检查无findings，公共清单仍交主会话处理。本轮只提交自有源码/测试/这两份文档，不提交ignored原始证据、不merge/push，不代表真实模型导出已修复。

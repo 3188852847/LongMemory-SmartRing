@@ -249,6 +249,13 @@ def gpu_memory():
     return used, free
 
 
+class OwnedStageFailure(RuntimeError):
+    def __init__(self, label, exit_code, concurrent_error=None):
+        self.label, self.exit_code = label, exit_code
+        self.concurrent_error = concurrent_error
+        super().__init__(f"owned_stage_failed:{label}:exit={exit_code}")
+
+
 def bounded(command, output: Path, label: str, env: dict, seconds: int, *, gate=None, window_id="", whole_deadline=None, guard=None):
     started = perf_counter()
     if not window_id.strip():
@@ -263,6 +270,7 @@ def bounded(command, output: Path, label: str, env: dict, seconds: int, *, gate=
         command = [sys.executable, "-I", "-B", "-c", broker, str(gate), json.dumps(command), window_id]
     with (output / (label+".log")).open("xb") as log:
         process = subprocess.Popen(command, cwd=output, env=env, stdout=log, stderr=subprocess.STDOUT)
+        evidence = dict(stage=label, pid=process.pid, sole_outer_job=True)
         try:
             # controller已在唯一外层Job内；所有阶段/原生broker后代继承，不再创建阶段Job。
             guard.check(label+":before_gate", remaining=max(1, whole_deadline-perf_counter()))
@@ -279,13 +287,27 @@ def bounded(command, output: Path, label: str, env: dict, seconds: int, *, gate=
                 guard.check(label+":running", remaining=max(1, whole_deadline-perf_counter()))
                 sleep(.5)
             if process.returncode:
-                raise RuntimeError("owned_stage_failed:" + label)
+                raise OwnedStageFailure(label, process.returncode)
             guard.check(label+":after_exit", remaining=max(1, whole_deadline-perf_counter()))
             return dict(stage=label, exit_code=0, seconds=perf_counter()-started, sole_outer_job=True)
+        except Exception as error:
+            # 采集器运行期间子进程可能先失败；同时保留子进程退出与准入拒绝，绝不放行背景漂移。
+            exited = process.poll()
+            evidence.update(exit_code_observed_before_parent_stop=exited,
+                            checkpoint_error=dict(type=type(error).__name__, reason=str(error)))
+            if exited not in (None, 0) and not isinstance(error, OwnedStageFailure):
+                concurrent = dict(type=type(error).__name__, reason=str(error))
+                raise OwnedStageFailure(label, exited, concurrent) from error
+            raise
         finally:
+            evidence["parent_stopped_live_entry"] = process.poll() is None
             if process.poll() is None:
                 process.kill()
-                process.wait(timeout=10)
+            process.wait(timeout=10)
+            evidence.update(final_exit_code=process.returncode, seconds=perf_counter()-started,
+                            log_sha256=sha256(output/(label+".log")))
+            with (output/(label+"-exit.json")).open("x", encoding="utf-8") as handle:
+                json.dump(evidence, handle, indent=2)
 
 
 def _git_state():
@@ -355,6 +377,9 @@ def _pipeline(source: Path, model: Path, sdk: Path, toolkit: Path, output: Path,
                       interruption_verified=False, dynamic_profile_max=512, gpu_window_id=window_id)
     except Exception as error:
         result = dict(status="failed_stop_no_retry", error=type(error).__name__, reason=str(error), stages=stages, gpu_window_id=window_id)
+        if isinstance(error, OwnedStageFailure):
+            result.update(failed_stage=error.label, child_exit_code=error.exit_code,
+                          concurrent_checkpoint_error=error.concurrent_error, child_evidence=error.label+"-exit.json")
         with (output / "result.json").open("x", encoding="utf-8") as handle:
             json.dump(result, handle, indent=2)
         raise
@@ -403,6 +428,7 @@ def execute(source: Path, model: Path, sdk: Path, toolkit: Path, output: Path, p
     process = None
     assigned = False
     result = {}
+    resource_evidence = dict(outer_job_name=job_name, before_termination=None, after_termination=None, errors=[])
     with WindowsResourceJob(memory_limit_mib=6144, job_name=job_name) as job, (output/"controller.log").open("xb") as log:
         try:
             process = subprocess.Popen([sys.executable, "-I", "-B", "-c", code, str(Path(__file__).parent.parent)],
@@ -416,23 +442,36 @@ def execute(source: Path, model: Path, sdk: Path, toolkit: Path, output: Path, p
             if process.returncode:
                 raise RuntimeError("owned_outer_controller_failed")
             result = dict(exit_code=0, outer_job_name=job_name, whole_seconds=perf_counter()-began, **job.snapshot())
+        except BaseException as error:
+            resource_evidence["entry_error"] = dict(type=type(error).__name__, reason=str(error))
+            raise
         finally:
             # 仅结束本次唯一外层Job；先Terminate并确认0 active，再关闭句柄。
+            resource_evidence["controller_returncode_before_parent_stop"] = process.poll() if process is not None else None
             if process is not None and not assigned and process.poll() is None:
                 process.kill()  # 此时仅自建入口仍阻塞stdin，尚无GPU许可。
             terminated = False
             cleanup_error = None
+            def capture_resources(phase):
+                try:
+                    resource_evidence[phase] = job.snapshot()
+                except Exception as error:
+                    resource_evidence["errors"].append(dict(phase=phase, type=type(error).__name__, reason=str(error)))
+            capture_resources("before_termination")
             try:
                 terminated = job.terminate_and_confirm()
             except Exception as error:
                 cleanup_error = type(error).__name__
                 raise
             finally:
+                capture_resources("after_termination")
                 job.close()
                 try:
                     if process is not None:
                         process.wait(timeout=10)
                 finally:
+                    with (output/"outer-job-resources.json").open("x", encoding="utf-8") as handle:
+                        json.dump(resource_evidence, handle, indent=2)
                     with (output/"outer-job-cleanup.json").open("x", encoding="utf-8") as handle:
                         json.dump(dict(result, job_closed=True, owned_tree_exit_confirmed=terminated, cleanup_error=cleanup_error,
                                        assigned=assigned, window_id=receipt["window_id"], physical_gpu_exclusive=False,

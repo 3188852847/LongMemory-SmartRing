@@ -19,6 +19,7 @@ import uuid
 
 from .adapters import bge_candidate_identity, bge_cpu_int8_candidate
 from .benchmark import ranking_gate
+from .job_accounting import BasicAccounting, ExtendedLimits, read_job_snapshot
 
 ROOT = Path(__file__).resolve().parents[4]
 REVISION = "7999e1d3359715c523056ef9478215996d62a620"
@@ -232,17 +233,6 @@ class WindowsResourceJob:
             raise ValueError("resource_job_budget_invalid")
         if job_name is not None and (not job_name.startswith("ag-flow-") or len(job_name) != 40 or not all(c in "0123456789abcdef" for c in job_name[8:])):
             raise ValueError("owned_job_name_invalid")
-        class Basic(ctypes.Structure):
-            _fields_ = [("PerProcessUserTimeLimit", ctypes.c_longlong), ("PerJobUserTimeLimit", ctypes.c_longlong),
-                        ("LimitFlags", wintypes.DWORD), ("MinimumWorkingSetSize", ctypes.c_size_t),
-                        ("MaximumWorkingSetSize", ctypes.c_size_t), ("ActiveProcessLimit", wintypes.DWORD),
-                        ("Affinity", ctypes.c_size_t), ("PriorityClass", wintypes.DWORD), ("SchedulingClass", wintypes.DWORD)]
-        class IO(ctypes.Structure):
-            _fields_ = [(name, ctypes.c_ulonglong) for name in ("ReadOperationCount", "WriteOperationCount", "OtherOperationCount", "ReadTransferCount", "WriteTransferCount", "OtherTransferCount")]
-        class Extended(ctypes.Structure):
-            _fields_ = [("BasicLimitInformation", Basic), ("IoInfo", IO), ("ProcessMemoryLimit", ctypes.c_size_t),
-                        ("JobMemoryLimit", ctypes.c_size_t), ("PeakProcessMemoryUsed", ctypes.c_size_t), ("PeakJobMemoryUsed", ctypes.c_size_t)]
-        self.Extended = Extended
         self.kernel = kernel = ctypes.WinDLL("kernel32", use_last_error=True)
         kernel.CreateJobObjectW.argtypes = [ctypes.c_void_p, wintypes.LPCWSTR]
         kernel.CreateJobObjectW.restype = wintypes.HANDLE
@@ -267,7 +257,7 @@ class WindowsResourceJob:
             raise OSError("owned_job_name_already_exists")
         if not self.handle:
             raise OSError("cannot_create_owned_resource_job")
-        limits = Extended()
+        limits = ExtendedLimits()
         limits.BasicLimitInformation.LimitFlags = 0x100 | 0x200 | 0x2000 | 0x10
         limits.BasicLimitInformation.Affinity = self.affinity
         limits.ProcessMemoryLimit = memory_limit_mib * 2**20
@@ -279,22 +269,14 @@ class WindowsResourceJob:
         if not self.kernel.AssignProcessToJobObject(self.handle, wintypes.HANDLE(int(process._handle))):
             raise OSError("cannot_assign_owned_worker_to_resource_job")
     def snapshot(self):
-        limits = self.Extended()
-        if not self.kernel.QueryInformationJobObject(self.handle, 9, ctypes.byref(limits), ctypes.sizeof(limits), None):
-            raise OSError("cannot_query_owned_resource_job")
-        return dict(peak_job_memory_bytes=limits.PeakJobMemoryUsed,
-                    process_memory_limit_bytes=limits.ProcessMemoryLimit,
-                    job_memory_limit_bytes=limits.JobMemoryLimit,
-                    affinity_mask=limits.BasicLimitInformation.Affinity)
+        return read_job_snapshot(self.handle)
     def terminate_and_confirm(self, timeout=5):
         # 查询句柄可能仍被子进程持有，不能仅靠close触发KILL_ON_JOB_CLOSE。
         if not self.kernel.TerminateJobObject(self.handle, 1):
             raise OSError("cannot_terminate_owned_outer_job")
-        class Accounting(ctypes.Structure):
-            _fields_ = [(name, ctypes.c_longlong) for name in ("TotalUserTime", "TotalKernelTime", "ThisPeriodTotalUserTime", "ThisPeriodTotalKernelTime")]+[(name, wintypes.DWORD) for name in ("TotalPageFaultCount", "TotalProcesses", "ActiveProcesses", "TotalTerminatedProcesses")]
         deadline = perf_counter()+timeout
         while True:
-            value = Accounting()
+            value = BasicAccounting()
             if not self.kernel.QueryInformationJobObject(self.handle, 1, ctypes.byref(value), ctypes.sizeof(value), None):
                 raise OSError("cannot_confirm_owned_outer_job_exit")
             if value.ActiveProcesses == 0:
