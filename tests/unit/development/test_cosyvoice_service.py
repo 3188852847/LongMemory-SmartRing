@@ -313,6 +313,7 @@ def test_stream_uses_cached_reference_and_resets_hop_before_inference(model_stre
     synth._prompt_wav = Path("fixed-reference.wav")
     synth.stream_token_hop_len = 25
     synth.model_streaming = model_streaming
+    synth.stream_runtime = SimpleNamespace(applied=True)
     synth._wave_bytes = lambda _speech: b"RIFF-chunk"
 
     assert list(synth.stream_chunks("短句")) == [b"RIFF-chunk"]

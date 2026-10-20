@@ -27,6 +27,7 @@
         "tests/unit/development/test_cosyvoice_stream_runtime.py",
         "tests/unit/development/test_cosyvoice_continuous_pcm.py",
         "tests/unit/development/test_cosyvoice_stream_benchmark.py",
+        "tests/unit/development/test_cosyvoice_unadapted_cleanup.py",
         "tests/fixtures/cosyvoice_tts_074ca6d.py"
       ],
       "related": [
@@ -41,7 +42,7 @@
         "取消",
         "候选"
       ],
-      "review": "verified 2026-10-20: X候选/118项CPU、第二窗口46调用及321.2秒恢复、45组音频和46条曲线核对；增量默认因欠载未放行，保持buffered，显式候选待Z审查；未部署/未验扬声器或整链路2秒"
+      "review": "verified 2026-10-20: X候选/第二窗口46调用及321.2秒恢复、45组音频和46条曲线；Z审查P2未适配取消泄漏已用固定原始控制流修复，137项CPU通过；保持buffered，待Z复审；未部署/未验扬声器或整链路2秒"
     },
     {
       "id": "hy-low-latency-and-request-observation",
@@ -1125,7 +1126,7 @@
       "review": {
         "state": "verified",
         "date": "2026-10-20",
-        "scope": "候选/默认门、118项CPU、46调用GPU/45组音频和缓冲离线回放、321.2秒恢复及保护事实；Z审查/部署/扬声器待验",
+        "scope": "候选/默认门、46调用GPU及离线回放和恢复保护；Z P2未适配取消清理修复及137项CPU，待Z复审/部署/扬声器验收",
         "evidence": [
           "scripts/development/cosyvoice/stream_runtime.py",
           "scripts/development/xiaozhi/cosyvoice_streaming.py",

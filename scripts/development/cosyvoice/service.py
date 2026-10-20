@@ -299,26 +299,35 @@ class CosyVoiceSynthesizer:
                       model_streaming=None, cancel_event=None):
         """逐块交付音频；完全相同的近期回复可复用本次进程内结果。"""
         with self._lock:
+            def check_cancelled():
+                if cancel_event is not None and cancel_event.is_set():
+                    raise _stream_runtime.StreamCancelled()
+
+            check_cancelled()
             context = self._voice_context(voice_profile)
+            guard = getattr(self, 'stream_runtime', None)
+            adapted = getattr(guard, 'applied', False) is True
             streaming = self.model_streaming if model_streaming is None else model_streaming
-            streaming = streaming and not getattr(self, 'force_buffered_audio', False)
+            # 未安装finally适配时，legacy v1/显式模型流式也必须耗尽后再发布。
+            streaming = streaming and adapted and not getattr(self, 'force_buffered_audio', False)
             key = self._audio_key(text, context, 'incremental' if streaming else 'buffered')
             if use_cache:
                 cached = self._stream_cache.pop(key, None)
                 if cached is not None:
                     self._stream_cache[key] = cached
-                    yield from cached
+                    for chunk in cached:
+                        check_cancelled()
+                        yield chunk
                     return
+            check_cancelled()
             self._prepare_stream()
             generated = []
-            guard = getattr(self, 'stream_runtime', None)
-            if guard is not None:
+            if adapted:
                 guard.external_cancel = cancel_event
             iterator = self._inference(text, context, model_streaming=streaming)
             try:
                 for item in iterator:
-                    if cancel_event is not None and cancel_event.is_set():
-                        raise _stream_runtime.StreamCancelled()
+                    check_cancelled()
                     speech = item.get("tts_speech")
                     if speech is None:
                         raise RuntimeError("empty audio chunk")
@@ -328,14 +337,24 @@ class CosyVoiceSynthesizer:
                     if streaming:
                         yield chunk
                 if not streaming:
-                    yield from generated
+                    for chunk in generated:
+                        check_cancelled()
+                        yield chunk
             finally:
                 try:
-                    close = getattr(iterator, 'close', None)
-                    if callable(close):
-                        close()
+                    try:
+                        if not adapted:
+                            # 固定上游在最后yield后才清理三个请求字典。取消/消费端
+                            # close/封装失败都不能直接关闭它；保持锁并安全耗尽，
+                            # 不发布剩余音频，也不把applied=False当作协作取消支持。
+                            for _ in iterator:
+                                pass
+                    finally:
+                        close = getattr(iterator, 'close', None)
+                        if callable(close):
+                            close()
                 finally:
-                    if guard is not None:
+                    if adapted:
                         guard.external_cancel = None
             if use_cache and generated:
                 self._stream_cache[key] = tuple(generated)
