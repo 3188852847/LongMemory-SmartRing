@@ -114,9 +114,9 @@ AE `baedad5` 只接受小写模型名，因此该生命周期组合测试用绑�
 
 | 操作 | 额外必需字段 | 返回JSON（固定顶层） |
 |---|---|---|
-| snapshot | query、session_id | `{version:1,state:"ready"或"unavailable",snapshot_id:字符串或null,memory_context:字符串,reason_code:字符串或null}` |
+| snapshot | query、session_id | `{version:1,state:"ready"或"unavailable",snapshot_id:字符串或null,memory_context:字符串或null,reason_code:字符串或null}` |
 | start | snapshot_id、messages、tools_required | `{version:1,state:"preparing"或"miss",reason_code:字符串或null}`，无正文 |
-| confirm | snapshot_id、query、messages、tools_required、formal_turn_id、client_round_id、session_id | `{version:1,state:"adopted"或"miss",text:字符串,reason_code:字符串或null}`，仅adopted允许非空text |
+| confirm | snapshot_id、query、messages、tools_required、formal_turn_id、client_round_id、session_id | `{version:1,state:"adopted"或"miss",text:字符串或null,reason_code:字符串或null}`，仅adopted允许非空text |
 | cancel | 无 | `{version:1,state:"cancelled"或"closing",owned_upstream_exited:布尔,provider_compute_stopped:false}` |
 | close | 无 | `{version:1,state:"closed"或"closing",owned_upstream_exited:布尔,provider_compute_stopped:false}` |
 
@@ -141,3 +141,13 @@ Runtime读取/策略/claim使用2个物理worker；操作等待1秒超时，但w
 组合使用AE提交 `44c3538acf9b3bbde8967f5af8627a66900104c6` 的本地Git源码快照；它已接受精确学校大写名并要求关闭确认。另只读提取AI当时 `memory_runtime.py` 源码（SHA-256 `05c54f087829928f4f907f11ec16a82e7adf336d2c4c6f3fcf9777319a62dbbe`），实际运行其 `candidate_memory_snapshot/candidate_model_binding/claim_candidate_memory/validate_candidate_memory` 方法，构造无数据库的合成方法/正式记录边界；成功采用以及context、source、token、runtime revision变化四种负例均通过，没有伪造fresh成功或削弱正文/来源核对。快照在忽略目录 `data/test-tmp/af-ae-host-source-44c3538/`；正式整合须使用AI当前树再跑，不能把该快照当生产SDK部署来源。
 
 AF已有测试与本阶段组合最终 **207 passed、3 skipped（10.35秒）**。3个跳过仍是原隔离小智/Hy SDK未指定项；新宿主39项、AE源码和AI实际Runtime方法均实际执行。仍未验证：AI内部HTTP路由/认证/关闭钩子与AE真实Python3.10客户端的跨进程组合、AB真实SDK快照与候选正式prepare配对、真实学校候选延迟及圆屏实机。AF不以此结果宣称日用接线完成，按顺序交AI整合三个提交。
+
+### AI初审后的窄修：null DTO和多通道快照
+
+主会话转交AI真实组合发现的两处不匹配，本次在 `bf317915f6df2ba96e77be65288acc113e710906` 后追加修复。原实现把unavailable的memory_context及miss的text写成空字符串，与AE严格null解析冲突；现分别为null，成功快照/采用时才允许相应字符串。原测试将空字符串当作协议前提不正确，已按冻结DTO改断言，并组合AE实际RPC解析器验证，不弱化检查。
+
+原实现误把普通recall limit=5当作所有通道总数上限。只读核对AB `candidate_snapshot.py` 与 `semantic.py:read_intentions()` 后，宿主按真实通道分别验证：normal≤5、profile≤1、schema≤3、proactive≤3，总计最多12项。未知通道和任一通道超限拒绝；所有原条目、顺序、receipt和来源均保持，不截断、不去重，也不跳过正式正文/来源/fresh核对。总正文继续≤16000字符且UTF-8≤64KiB，完整私有receipt规范JSON的UTF-8总量≤192KiB；超限整体unavailable，不能用裁切后的上下文签发候选。
+
+宿主专属 **48 passed（1.54秒，无跳过）**。AI实际Runtime方法的组合改为“1画像＋4事实＋1意图”共6项，验证完整snapshot→start→fresh claim成功，并保留context/source/token/runtime revision四种拒绝。新增正常12项全通道上限保留、四通道分别超限、未知通道、总正文及多字节receipt字节超限。另以本地Git取得AE `d4cee7009b3e5006b03f38d98e325fbfa954b624` 的 `voice_proposal_rpc.py` 快照（忽略文件 `data/test-tmp/af-ae-rpc-d4cee70.py`），实际严格解析宿主unavailable/miss DTO；用进程内DTO分派替身，不冒充真实HTTP已通过。
+
+本次无新增真实学校请求、依赖、端口、GPU或个人数据操作。AI/AE/AB当前组合树和跨进程/SDK实际验收仍由主会话协调；原207项结果保留为修复前隔离回归，不能替代该真实组合验收。

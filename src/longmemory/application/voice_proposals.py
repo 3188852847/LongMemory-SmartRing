@@ -25,6 +25,8 @@ MAX_OPERATIONS = 200
 RUNTIME_TIMEOUT = 1.0
 CLAIM_TIMEOUT = .25
 CLOSE_TIMEOUT = .5
+MAX_SNAPSHOT_BYTES = 192*1024
+MAX_CONTEXT_BYTES = 64*1024
 COMMON = {'version', 'connection_id', 'turn_id', 'transcript_revision', 'cancel_epoch'}
 
 
@@ -88,8 +90,8 @@ def _messages(value):
 
 def _miss(kind, reason='unavailable'):
     result = {'version': 1, 'state': 'unavailable' if kind == 'snapshot' else 'miss', 'reason_code': reason}
-    if kind == 'snapshot': result.update(snapshot_id=None, memory_context='')
-    if kind == 'confirm': result['text'] = ''
+    if kind == 'snapshot': result.update(snapshot_id=None, memory_context=None)
+    if kind == 'confirm': result['text'] = None
     return result
 
 
@@ -262,18 +264,28 @@ class VoiceProposalHost:
             engine = receipt['engine']
             if (type(engine.get('protocol')) is not int or engine['protocol'] != 1
                     or engine.get('read_status') != 'readable' or not isinstance(engine.get('items'), list)
-                    or len(engine['items']) > limit or not isinstance(engine.get('snapshot_token'), str)
+                    or len(engine['items']) > limit+1+3+3 or not isinstance(engine.get('snapshot_token'), str)
                     or not engine['snapshot_token'] or len(engine['snapshot_token']) > 8192
                     or not isinstance(engine.get('memory_digest'), str) or re.fullmatch(r'[0-9a-f]{64}', engine['memory_digest']) is None
                     or not isinstance(receipt.get('runtime_revision'), str) or not 1 <= len(receipt['runtime_revision']) <= 256):
                 return miss
             rows = engine['items']
+            # AB的limit仅约束normal；profile/L6/L7是独立通道，不截断正式所需投影。
+            caps = {'normal': limit, 'profile': 1, 'schema': 3, 'proactive': 3}
+            counts = dict.fromkeys(caps, 0)
             if any(not isinstance(row, dict) or not isinstance(row.get('content'), str)
                    or not isinstance(row.get('memory_id'), str) or not 1 <= len(row['memory_id']) <= 256
                    or not isinstance(row.get('source_event_ids'), list) or len(row['source_event_ids']) > 1024
                    or any(not isinstance(value, str) or not 1 <= len(value) <= 256 for value in row['source_event_ids']) for row in rows): return miss
+            for row in rows:
+                channel = row.get('channel')
+                if not isinstance(channel, str) or channel not in caps: return miss
+                counts[channel] += 1
+                if counts[channel] > caps[channel]: return miss
             context = '\n'.join(row['content'] for row in rows)
-            if len(context) > 16000 or self._closed or state.closed or state.generation != generation: return miss
+            if (len(context) > 16000 or len(context.encode('utf-8')) > MAX_CONTEXT_BYTES
+                    or len(json.dumps(receipt, ensure_ascii=False, separators=(',', ':'), allow_nan=False).encode('utf-8')) > MAX_SNAPSHOT_BYTES
+                    or self._closed or state.closed or state.generation != generation): return miss
             # 每连接仅保留一个快照；同代次新快照也撤销旧候选及领取门。
             self._invalidate(cid, state)
             if state.controller is not None: state.controller.context_changed()

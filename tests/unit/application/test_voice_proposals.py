@@ -70,7 +70,7 @@ class Runtime:
         self.snapshots += 1
         if self.snapshot_block: self.snapshot_block.wait(2)
         return {'engine': {'protocol': 1, 'read_status': 'readable', 'snapshot_token': 'SYNTHETIC_ENGINE_SECRET',
-            'memory_digest': 'd'*64, 'items': [{'memory_id': 'synthetic-memory', 'content': '合成记忆事实',
+            'memory_digest': 'd'*64, 'items': [{'memory_id': 'synthetic-memory', 'content': '合成记忆事实', 'channel': 'normal',
                 'source_event_ids': ['synthetic-source']}]}, 'runtime_revision': self.revision}
 
     def candidate_model_binding(self):
@@ -94,13 +94,13 @@ class Runtime:
             finally: self.lock_released.set()
 
 
-async def prepare(host, cid=CID, turn=1):
+async def prepare(host, cid=CID, turn=1, *, messages=MESSAGES):
     common = scope(cid, turn)
     snapshot = await host.snapshot({**common, 'query': QUERY, 'session_id': SESSION})
     assert snapshot['state'] == 'ready'
     assert 'SYNTHETIC_ENGINE_SECRET' not in json.dumps(snapshot)
     started = await host.start({**common, 'snapshot_id': snapshot['snapshot_id'],
-        'messages': deepcopy(MESSAGES), 'tools_required': False})
+        'messages': deepcopy(messages), 'tools_required': False})
     assert started['state'] == 'preparing' and 'text' not in started
     return snapshot
 
@@ -115,7 +115,7 @@ def test_default_disabled_never_gets_runtime_loads_ae_or_starts_worker():
     async def run():
         host = module.VoiceProposalHost(fail)
         result = await host.snapshot({**scope(), 'query': QUERY, 'session_id': SESSION})
-        assert result == {'version': 1, 'state': 'unavailable', 'snapshot_id': None, 'memory_context': '', 'reason_code': 'unavailable'}
+        assert result == {'version': 1, 'state': 'unavailable', 'snapshot_id': None, 'memory_context': None, 'reason_code': 'unavailable'}
         assert host._executor is host._controllers is None
         assert (await host.aclose())['closed']
     asyncio.run(run())
@@ -166,7 +166,7 @@ def test_changed_actual_context_or_formal_memory_never_adopts(tmp_path, controll
             elif change == 'policy': runtime.policy = 'e'*64
             else: active[0] = Runtime(server)
             result = await host.confirm(request)
-            assert result['state'] == 'miss' and result['text'] == ''
+            assert result['state'] == 'miss' and result['text'] is None
             assert runtime.claimed == 0
             await host.aclose()
         asyncio.run(run())
@@ -372,29 +372,34 @@ def test_real_ai_runtime_fresh_guard_is_called_before_loop_claim(tmp_path, contr
         runtime._lock = RLock(); runtime._closed = runtime._closing = False
         runtime._use_enabled = True; runtime._proposal_instance = 'synthetic'; runtime._proposal_revision = 1
         runtime.backend_assembly = SimpleNamespace(legacy_sqlite=False)
-        rows = [{'memory_id': 'synthetic-memory', 'content': '合成记忆事实', 'source_event_ids': ['synthetic-source']}]
+        channels = ['profile', *['normal']*4, 'proactive']
+        rows = [{'memory_id': f'synthetic-memory-{index}', 'content': f'合成{channel}记忆{index}',
+                 'channel': channel, 'source_event_ids': [f'synthetic-source-{index}']} for index, channel in enumerate(channels)]
+        context = '\n'.join(row['content'] for row in rows)
+        messages = [['system', '合成角色；完整记忆：\n'+context]]
         runtime._method = SimpleNamespace(implementation_version='synthetic',
             candidate_snapshot=lambda **kwargs: {'protocol': 1, 'read_status': 'readable', 'snapshot_token': 'PRIVATE_ENGINE_TOKEN', 'memory_digest': 'd'*64, 'items': rows},
             candidate_validate=lambda **kwargs: {'protocol': 1, 'valid': True, 'memory_digest': 'd'*64})
         server.encoder = SimpleNamespace(identity='synthetic-encoder', encode_query=lambda text: [1.0])
         runtime._model_service = SimpleNamespace(gateway=server)
         formal = str(uuid4()); client = 'c'*24
-        evidence = [{'item_id': rows[0]['memory_id'], 'rank': 1, 'content_sha256': sha256(rows[0]['content'].encode()).hexdigest(), 'source_event_ids': rows[0]['source_event_ids']}]
+        evidence = [{'item_id': row['memory_id'], 'rank': index+1, 'content_sha256': sha256(row['content'].encode()).hexdigest(), 'source_event_ids': row['source_event_ids']} for index, row in enumerate(rows)]
         runtime._proposal_formal = {formal: {'eligible': True, 'created': perf_counter(), 'client_round_id': client,
-            'session_id': SESSION, 'query': runtime._proposal_digest(QUERY), 'context': runtime._proposal_digest(rows[0]['content']), 'evidence': runtime._proposal_digest(evidence)}}
+            'session_id': SESSION, 'query': runtime._proposal_digest(QUERY), 'context': runtime._proposal_digest(context), 'evidence': runtime._proposal_digest(evidence)}}
         async def run():
             host = module.VoiceProposalHost(lambda: runtime, enabled=True)
-            snapshot = await prepare(host)
+            snapshot = await prepare(host, messages=messages)
+            assert snapshot['memory_context'] == context and len(host._snapshots[snapshot['snapshot_id']].receipt['engine']['items']) == 6
             if change == 'context': runtime._proposal_formal[formal]['context'] = '0'*64
             elif change == 'source': runtime._proposal_formal[formal]['evidence'] = '0'*64
             elif change == 'invalid_token': runtime._method.candidate_validate = lambda **kwargs: {'protocol': 1, 'valid': False, 'memory_digest': 'd'*64}
             elif change == 'runtime_revision': runtime._proposal_revision += 1
-            result = await host.confirm(confirm_body(snapshot, formal_turn_id=formal, client_round_id=client))
+            result = await host.confirm(confirm_body(snapshot, formal_turn_id=formal, client_round_id=client, messages=messages))
             if change == 'none':
                 assert result['state'] == 'adopted' and result['text'] == '合成回答'
                 assert formal not in runtime._proposal_formal
             else:
-                assert result['state'] == 'miss' and result['text'] == ''
+                assert result['state'] == 'miss' and result['text'] is None
                 assert formal in runtime._proposal_formal
                 assert host._connections[CID].controller.snapshot()['hits'] == 0
             await host.aclose()
@@ -416,3 +421,63 @@ def test_same_turn_has_one_attempt_and_shared_model_total_budget_is_not_reset(tm
             assert (await host.aclose())['closed']
         asyncio.run(run())
         assert len(received) == ledger.status()['attempt_count'] == 1
+
+
+@pytest.mark.parametrize('case', ['all_caps', 'normal_over', 'profile_over', 'schema_over', 'proactive_over', 'unknown_channel', 'context_over', 'receipt_bytes_over'])
+def test_native_multichannel_caps_and_full_receipt_byte_bound_never_truncate(tmp_path, case):
+    with gateway(tmp_path, []) as (server, ledger, received, _, __):
+        runtime = Runtime(server)
+        channels = ['profile', *['normal']*5, *['schema']*3, *['proactive']*3]
+        if case.endswith('_over') and case.split('_')[0] in {'normal', 'profile', 'schema', 'proactive'}:
+            channel = case.split('_')[0]
+            caps = {'normal': 5, 'profile': 1, 'schema': 3, 'proactive': 3}
+            channels = [channel]*(caps[channel]+1)
+        elif case != 'all_caps': channels = ['unknown' if case == 'unknown_channel' else 'normal']
+        rows = [{'memory_id': f'memory-{index}', 'channel': channel, 'content': f'完整条目-{index}',
+                 'source_event_ids': [f'source-{index}']} for index, channel in enumerate(channels)]
+        if case == 'context_over': rows[0]['content'] = '文'*16001
+        if case == 'receipt_bytes_over': rows[0]['source_event_ids'] = ['源'*150+str(index) for index in range(500)]
+        original = runtime.candidate_memory_snapshot
+        def snapshot(query, **kwargs):
+            result = original(query, **kwargs)
+            result['engine']['items'] = deepcopy(rows)
+            return result
+        runtime.candidate_memory_snapshot = snapshot
+        async def run():
+            host = module.VoiceProposalHost(lambda: runtime, enabled=True)
+            result = await host.snapshot({**scope(), 'query': QUERY, 'session_id': SESSION})
+            if case == 'all_caps':
+                assert result['state'] == 'ready'
+                assert result['memory_context'] == '\n'.join(row['content'] for row in rows)
+                assert host._snapshots[result['snapshot_id']].receipt['engine']['items'] == rows
+            else:
+                assert result['state'] == 'unavailable'
+                assert result['snapshot_id'] is result['memory_context'] is None
+                assert not host._snapshots
+            assert not received
+            await host.aclose()
+        asyncio.run(run())
+
+
+def test_actual_ae_rpc_strict_null_parser_accepts_disabled_host_dtos(controllers, monkeypatch):
+    path = Path(os.environ.get('LONGMEMORY_TEST_PROPOSAL_RPC_SOURCE', str(ROOT/'scripts/development/xiaozhi/voice_proposal_rpc.py')))
+    if not path.is_file(): pytest.skip('AE strict RPC source required in combined tree or explicit isolated snapshot')
+    monkeypatch.setitem(sys.modules, 'voice_preemptive', controllers[0])
+    rpc_module = load('af_host_strict_ae_rpc', path)
+    async def run():
+        host = module.VoiceProposalHost(lambda: pytest.fail('disabled host must not access runtime'))
+        rpc = rpc_module.VoiceProposalRPC(1, 'e'*64, CID, 2, 1)
+        async def post(operation, body, **kwargs):
+            return await getattr(host, operation)(body)
+        monkeypatch.setattr(rpc, '_post', post)  # DTO组合，不建立HTTP或声称网络已验。
+        turn = rpc_module.TurnStamp(1, 0, 0)
+        result = await rpc.snapshot(scope=turn, query=QUERY, session_id=SESSION)
+        assert result['state'] == 'unavailable' and result['memory_context'] is None
+        result = await rpc.start(scope=turn, snapshot_id='c'*32, messages=MESSAGES)
+        assert result['state'] == 'miss' and 'text' not in result
+        result = await rpc.confirm(scope=turn, snapshot_id='c'*32, query=QUERY, messages=MESSAGES,
+            formal_turn_id=str(uuid4()), client_round_id='d'*24, session_id=SESSION)
+        assert result['state'] == 'miss' and result['text'] is None
+        assert (await rpc.close(scope=turn))['state'] == 'closed'
+        assert (await host.aclose())['closed']
+    asyncio.run(run())
