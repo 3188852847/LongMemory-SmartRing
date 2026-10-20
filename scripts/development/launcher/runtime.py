@@ -1,4 +1,4 @@
-"""最小启动编排：不修改配置、不迁移数据库、不探测模型。"""
+"""受管启动编排：预检后同步授权配置，不迁移数据库或探测模型。"""
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -13,8 +13,10 @@ import shutil
 import socket
 import subprocess
 import sys
+import time
 
 from winjob import Job
+from voice_ports import validate_voice_ports, port_arguments
 
 ROOT = Path(__file__).resolve().parents[3]
 # 项目专用运行资源随项目保存；不依赖重装前的机器绝对路径。
@@ -87,6 +89,8 @@ class Options:
     vad_profile: str = "normal"
     voice_root: Path = VOICE_ROOT
     lan_ip: str = ""
+    voice_ws_port: int = 8000
+    voice_http_port: int = 8003
     consent: bool = False
     model_profile: str = "campus"
     voice_model_profile: str = "campus"
@@ -139,6 +143,9 @@ def require_no_listener(host, port):
 
 def build_commands(options, uv=None):
     """返回参数列表，绝不拼接 shell 命令；只引用现有环境和配置。"""
+    validate_voice_ports(options.voice_ws_port, options.voice_http_port, console_port=options.port)
+    if options.voice_mode == 'doubao_realtime' and (options.voice_ws_port, options.voice_http_port) != (8000, 8003):
+        raise ValueError('独立圆屏端口当前支持本地语音链路；豆包备用请使用原默认端口。')
     if options.model_profile not in {"campus", "official"}:
         raise ValueError("未知模型配置档。")
     if options.voice_model_profile not in {"campus", "official"}:
@@ -153,7 +160,7 @@ def build_commands(options, uv=None):
             (options.voice and options.voice_mode == "pipeline"
              and options.voice_model_profile == "campus")) and not options.consent:
         raise ValueError("请先确认聊天写入及当前 HTTP 传输风险。")
-    if not 1024 <= options.port <= 65535 or options.port in {8000, 8003, 8766, WALLPAPER_DELIVERY_PORT}:
+    if not 1024 <= options.port <= 65535 or options.port in {options.voice_ws_port, options.voice_http_port, 8766, WALLPAPER_DELIVERY_PORT}:
         raise ValueError("控制台端口需在 1024–65535 且不占用小智端口。")
     if options.role not in {"plain_v1", "elysia_v1"}:
         raise ValueError("未知助手角色。")
@@ -292,6 +299,7 @@ def build_commands(options, uv=None):
             )])
         else:
             voice_command.extend(["--voice-latency-mode", options.voice_latency_mode])
+        voice_command.extend(port_arguments(options.voice_ws_port, options.voice_http_port))
         commands.append(("voice", voice_command, options.voice_root.resolve()))
     return commands
 
@@ -346,6 +354,9 @@ class Manager:
         self.instance = ""
         self.options = None
         self.status_path = None
+        self.runtime_token = None
+        self._binding_next_check = 0
+        self._binding_ready = False
 
     def _service_state(self, name, *, ready=False):
         """只报告启动器拥有的进程事实，不把“进程活着”冒充业务就绪。"""
@@ -419,7 +430,7 @@ class Manager:
         commands = build_commands(options)
         require_free("127.0.0.1", options.port)
         if options.voice:
-            for host, port in [(options.lan_ip, 8000), (options.lan_ip, 8003),
+            for host, port in [(options.lan_ip, options.voice_ws_port), (options.lan_ip, options.voice_http_port),
                                (options.lan_ip, WALLPAPER_DELIVERY_PORT),
                                ("127.0.0.1", 8766)]:
                 require_free(host, port)
@@ -435,10 +446,13 @@ class Manager:
             # 语音服务换地址、声音、模型、记忆后端或拾音档位。先完成只读检查，
             # 再逐项备份写入；格式错误不会造成“改了一半才发现无法检查”。
             from network import config_action as network_config_action
-            network_checked = network_config_action(options.voice_root, options.lan_ip)
+            network_ports = ({} if (options.voice_ws_port, options.voice_http_port) == (8000, 8003)
+                             else dict(ws_port=options.voice_ws_port, http_port=options.voice_http_port))
+            network_checked = network_config_action(options.voice_root, options.lan_ip, **network_ports)
+            network_apply = {**network_ports, 'expected_digest': network_checked['digest']}
             if options.voice_mode == "doubao_realtime":
                 if network_checked["changed"]:
-                    network_config_action(options.voice_root, options.lan_ip, apply=True)
+                    network_config_action(options.voice_root, options.lan_ip, apply=True, **network_apply)
             else:
                 from tts import config_action as tts_config_action
                 from model import config_action as model_config_action
@@ -458,7 +472,7 @@ class Manager:
                 )
                 config_changed = False
                 if network_checked["changed"]:
-                    network_config_action(options.voice_root, options.lan_ip, apply=True)
+                    network_config_action(options.voice_root, options.lan_ip, apply=True, **network_apply)
                     config_changed = True
                 # 五个配置域共用同一个私有 YAML。上一个域一旦写入，后面预检时
                 # 取得的摘要就已经陈旧；写入前重新检查既保留“全部先预检”的安全
@@ -504,10 +518,13 @@ class Manager:
                         apply=True, expected_digest=vad_checked["digest"],
                     )
         self.options = options
+        self._binding_next_check = 0
+        self._binding_ready = False
         self.instance = secrets.token_hex(24)
         self.status_path = options.root.resolve() / "data/control" / LAUNCHER_STATUS_NAME
         self.publish_status("starting")
         runtime_token = secrets.token_hex(32)
+        self.runtime_token = runtime_token
         env = os.environ.copy()
         env.update(
             PYTHONUTF8="1",
@@ -555,6 +572,73 @@ class Manager:
             return False
         return not self.options.voice or self.voice_bridge_ready()
 
+    def _maintenance(self, *, voice, draining):
+        if self.options is None or not self.instance:
+            return False
+        if voice:
+            try:
+                token = (self.options.root / 'data/control/device-control.token').read_text(encoding='ascii').strip()
+                if len(token) != 64 or any(c not in '0123456789abcdef' for c in token):
+                    return False
+            except OSError:
+                return False
+            port, path = 8766, '/api/network-maintenance'
+        else:
+            token = self.runtime_token
+            port, path = self.options.port, '/api/internal/network-maintenance'
+        if not token:
+            return False
+        conn = http.client.HTTPConnection('127.0.0.1', port, timeout=0.5)
+        try:
+            conn.request('POST', path, json.dumps({'instance': self.instance, 'draining': draining}),
+                         headers={'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json',
+                                  'Host': f'127.0.0.1:{port}'})
+            response = conn.getresponse()
+            body = json.loads(response.read(4096))
+            return (response.status == 200 and isinstance(body, dict)
+                    and body.get('instance') == self.instance and body.get('draining') is draining)
+        except (OSError, http.client.HTTPException, ValueError):
+            return False
+        finally:
+            conn.close()
+
+    def acquire_network_restart(self):
+        """仅本面板Job存活、设备已断开、网页和后台均空闲才加闸；失败不停止。"""
+        if (self.options is None or not self.options.voice or self.options.voice_mode != 'pipeline'
+                or not self.services or not all(isinstance(service, OwnedService)
+                    and getattr(service.job, 'handle', None) and service.process.poll() is None
+                    for service in self.services.values())):
+            return False
+        if self._maintenance(voice=True, draining=True) and self._maintenance(voice=False, draining=True):
+            return True
+        self.release_network_restart()
+        return False
+
+    def sync_network_only(self, options):
+        """停止状态下同步本项目网络；外部监听者存在时不写任何配置。"""
+        if self.services:
+            raise ValueError('同步前必须停止本面板服务。')
+        validate_voice_ports(options.voice_ws_port, options.voice_http_port, console_port=options.port)
+        for host, port in [('127.0.0.1', options.port), (options.lan_ip, options.voice_ws_port),
+                           (options.lan_ip, options.voice_http_port), (options.lan_ip, WALLPAPER_DELIVERY_PORT),
+                           ('127.0.0.1', 8766)]:
+            require_free(host, port)
+        from network import config_action
+        ports = dict(ws_port=options.voice_ws_port, http_port=options.voice_http_port)
+        checked = config_action(options.voice_root, options.lan_ip, **ports)
+        config_action(options.voice_root, options.lan_ip, apply=True, expected_digest=checked['digest'], **ports)
+        # 无运行服务领取该副本；正式启动再生成当次专属Hy网关投影，不复用旧网关。
+        result = subprocess.run([str(options.voice_root / '.venv/Scripts/python.exe'),
+                                 str(Path(__file__).parents[1] / 'xiaozhi/config_paths.py'),
+                                 '--server-dir', str(options.voice_root), '--render'],
+                                capture_output=True, timeout=15, creationflags=subprocess.CREATE_NO_WINDOW)
+        if result.returncode:
+            raise ValueError('网络消费副本未确认更新；保留备份，请核对配置。')
+
+    def release_network_restart(self):
+        self._maintenance(voice=False, draining=False)
+        self._maintenance(voice=True, draining=False)
+
     def voice_bridge_ready(self):
         """验权读取本机桥状态；只证明语音控制面已监听，不要求圆屏在线。"""
         if (self.options is None or not self.options.voice
@@ -577,12 +661,24 @@ class Manager:
             })
             response = conn.getresponse()
             body = json.loads(response.read(32_768))
-            return (
+            valid = (
                 response.status == 200
                 and isinstance(body, dict)
                 and type(body.get("connection_count")) is int
                 and type(body.get("ready")) is bool
             )
+            if not valid:
+                return False
+            # 控制面就绪之外，还核对本次选中的两个LAN监听；不向模型或圆屏发命令。
+            now = time.monotonic()
+            if now < self._binding_next_check:
+                return self._binding_ready
+            self._binding_next_check, self._binding_ready = now + 5, False
+            for port in (self.options.voice_ws_port, self.options.voice_http_port):
+                with socket.create_connection((self.options.lan_ip, port), timeout=0.25):
+                    pass
+            self._binding_ready = True
+            return True
         except (OSError, http.client.HTTPException, json.JSONDecodeError):
             return False
         finally:

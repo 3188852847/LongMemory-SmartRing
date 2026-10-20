@@ -3,9 +3,10 @@
 import json
 import os
 from pathlib import Path
+from voice_ports import validate_voice_ports
 
 
-PREFERENCES_VERSION = 6
+PREFERENCES_VERSION = 7
 RISK_ACK_VERSION = "campus-http-v1"
 # 只影响当前本机启动面板，不写入偏好文件，也不改变服务端安全默认。
 DEFAULT_SESSION_ALLOW_MEMORY_DELETE = True
@@ -18,6 +19,10 @@ DEFAULTS = {
     "database": "",
     "voice_root": "",
     "lan_ip": "",
+    "voice_ws_port": 8000,
+    "voice_http_port": 8003,
+    "network_auto": False,
+    "lan_interface_id": "",
     "role": "elysia_v1",
     "memory_extraction": "rules",
     "memory_retrieval": "keyword",
@@ -74,6 +79,16 @@ def load_preferences(path: Path) -> dict:
     lan_ip = raw.get("lan_ip")
     if isinstance(lan_ip, str) and len(lan_ip) <= 64:
         result["lan_ip"] = lan_ip
+    try:
+        ws, http = validate_voice_ports(raw.get('voice_ws_port', 8000), raw.get('voice_http_port', 8003))
+        result.update(voice_ws_port=ws, voice_http_port=http)
+    except ValueError:
+        # 显式坏端口不能悄悄退回8000去碰另一实例；仅缺字段才用旧默认。
+        result.update(voice_ws_port=0, voice_http_port=0)
+    result['network_auto'] = raw.get('network_auto') is True
+    identity = raw.get('lan_interface_id', '')
+    if isinstance(identity, str) and len(identity) <= 64:
+        result['lan_interface_id'] = identity
     result["http_risk_ack"] = raw.get("http_risk_ack_version") == RISK_ACK_VERSION
     return result
 
@@ -90,6 +105,10 @@ def save_preferences(path: Path, values: dict) -> None:
         "database": str(values.get("database", ""))[:2048],
         "voice_root": str(values.get("voice_root", ""))[:2048],
         "lan_ip": str(values.get("lan_ip", ""))[:64],
+        "voice_ws_port": values.get('voice_ws_port', 8000),
+        "voice_http_port": values.get('voice_http_port', 8003),
+        "network_auto": values.get('network_auto') is True,
+        "lan_interface_id": str(values.get('lan_interface_id', ''))[:64],
         "role": values.get("role", DEFAULTS["role"]),
         "memory_extraction": values.get(
             "memory_extraction", DEFAULTS["memory_extraction"]
@@ -115,6 +134,7 @@ def save_preferences(path: Path, values: dict) -> None:
     for field, allowed in _CHOICES.items():
         if body[field] not in allowed:
             raise ValueError(f"launcher_preference_{field}_invalid")
+    validate_voice_ports(body['voice_ws_port'], body['voice_http_port'])
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
     try:

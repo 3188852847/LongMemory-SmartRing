@@ -6,6 +6,10 @@
 
 import re
 import secrets
+import os
+import time
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from device_control import ControlError
@@ -13,6 +17,37 @@ from device_control import ControlError
 
 PORT = 8766
 TOKEN_FILE = Path(__file__).resolve().parents[3] / "data/control/device-control.token"
+
+
+def remember_background(control, connection):
+    """关闭前保留工作者句柄；固定上游close会清空executor但不等待它结束。"""
+    background_idle(control)
+    objects = [getattr(connection, 'executor', None)]
+    tts = getattr(connection, 'tts', None)
+    objects.extend(getattr(tts, name, None) for name in ('tts_priority_thread', 'audio_play_priority_thread'))
+    for worker in objects:
+        if worker is not None and not isinstance(worker, (ThreadPoolExecutor, threading.Thread)):
+            control._network_unknown_background = True
+        elif worker is not None and worker not in control._network_retiring:
+            control._network_retiring.append(worker)
+
+
+def background_idle(control):
+    pending = []
+    for worker in control._network_retiring:
+        try:
+            if isinstance(worker, ThreadPoolExecutor):
+                busy = not worker._shutdown or any(thread.is_alive() for thread in tuple(worker._threads))
+            elif isinstance(worker, threading.Thread):
+                busy = worker.is_alive()
+            else:
+                busy = True  # 未知工作者不能被猜成空闲。
+        except Exception:
+            busy = True
+        if busy:
+            pending.append(worker)
+    control._network_retiring = pending
+    return not pending and not control._network_unknown_background
 
 
 def read_token(path=TOKEN_FILE):
@@ -34,6 +69,25 @@ def ensure_token(path=TOKEN_FILE):
 
 def create_app(control, token, port=PORT):
     from aiohttp import web
+    control._network_drain_until = 0
+    control._network_incoming = 0
+    control._network_retiring = []
+    control._network_unknown_background = False
+
+    async def network_maintenance(request):
+        data = await request.json()
+        instance = os.environ.get('LONGMEMORY_LAUNCHER_INSTANCE')
+        if (not instance or not isinstance(data, dict) or set(data) != {'instance', 'draining'}
+                or data['instance'] != instance or type(data['draining']) is not bool):
+            return web.json_response({'error': 'maintenance_identity_mismatch'}, status=409)
+        if not data['draining']:
+            control._network_drain_until = 0
+        elif (control.connections or control._network_incoming or control.operation_lock.locked()
+              or not background_idle(control)):
+            return web.json_response({'error': 'network_restart_busy'}, status=409)
+        else:
+            control._network_drain_until = time.monotonic() + 60
+        return web.json_response({'instance': instance, 'draining': data['draining']})
 
     @web.middleware
     async def guard(request, handler):
@@ -59,6 +113,7 @@ def create_app(control, token, port=PORT):
         return response
 
     async def status(request):
+        background_idle(control)
         return web.json_response(control.status())
 
     async def read_volume(request):
@@ -157,6 +212,7 @@ def create_app(control, token, port=PORT):
         return web.json_response(await control.stop_speech())
 
     app = web.Application(middlewares=[guard], client_max_size=1024)
+    app.router.add_post('/api/network-maintenance', network_maintenance)
     app.router.add_get("/api/device", status, allow_head=False)
     app.router.add_get("/api/device/volume", read_volume, allow_head=False)
     app.router.add_post("/api/device/volume", set_volume)
@@ -188,6 +244,25 @@ def install_control_server(server_class, connection_class):
         control = DeviceControl(allowed_id)
         runner = web.AppRunner(create_app(control, ensure_token()), access_log=None)
         previous_handle = connection_class.handle_connection
+        previous_close = connection_class.close
+        async def close(connection, *args, **kwargs):
+            try:
+                remember_background(control, connection)
+            except Exception:
+                control._network_unknown_background = True
+            return await previous_close(connection, *args, **kwargs)
+        connection_class.close = close
+        previous_accept = server._handle_connection
+        async def accept(websocket):
+            if control._network_drain_until > time.monotonic():
+                await websocket.close(code=1013)
+                return
+            control._network_incoming += 1
+            try:
+                return await previous_accept(websocket)
+            finally:
+                control._network_incoming -= 1
+        server._handle_connection = accept
         install_connection_tracking(connection_class, control)
         try:
             await runner.setup()
@@ -198,7 +273,9 @@ def install_control_server(server_class, connection_class):
             print("设备控制端口启动失败；未自动换端口，请检查 8766 是否占用。", flush=True)
             raise
         finally:
+            server._handle_connection = previous_accept
             connection_class.handle_connection = previous_handle
+            connection_class.close = previous_close
             await runner.cleanup()
 
     server_class.start = start

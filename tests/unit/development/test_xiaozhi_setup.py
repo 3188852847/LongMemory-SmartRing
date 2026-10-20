@@ -30,6 +30,21 @@ def test_local_config_is_accepted(config):
     assert setup.validate_config(config)["model_name"] == "synthetic-model"
 
 
+def test_independent_ports_are_consumed_and_default_is_still_explicit(config, monkeypatch):
+    import yaml
+    monkeypatch.syspath_prepend(str(SCRIPT.parents[1] / 'launcher'))
+    from sync_network import updated_text
+    config['server'].update(ip='192.168.1.2', auth={'enabled': True, 'allowed_devices': []},
+                            vision_explain='http://192.168.1.2:8003/mcp/vision/explain')
+    text, _ = updated_text(yaml.safe_dump(config, sort_keys=False), '192.168.1.4', 18000, 18003)
+    actual = yaml.safe_load(text)
+    assert setup.validate_config(actual, '192.168.1.4', ws_port=18000, http_port=18003)['model_name'] == 'synthetic-model'
+    with pytest.raises(setup.SetupError):
+        setup.validate_config(actual, '192.168.1.4')
+    restored, _ = updated_text(text, '192.168.1.4')
+    assert setup.validate_config(yaml.safe_load(restored), '192.168.1.4')['model_name'] == 'synthetic-model'
+
+
 def test_provider_instance_prefix_before_v1_is_accepted(config):
     config["LLM"]["CampusLLM"]["base_url"] = "http://example.invalid/instance-123/v1"
     assert setup.validate_config(config)["model_name"] == "synthetic-model"

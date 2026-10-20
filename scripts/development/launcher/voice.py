@@ -6,6 +6,7 @@ import http.client
 import json
 import sys
 import time
+from voice_ports import port_arguments
 
 
 MEMORY_PROVIDERS = {
@@ -82,6 +83,8 @@ def main():
         parser.add_argument("--voice-mode", choices=("pipeline", "doubao_realtime"), default="pipeline")
         parser.add_argument("--voice-latency-mode", choices=("realtime", "original"), default="realtime")
         parser.add_argument("--doubao-env", type=Path)
+        parser.add_argument('--voice-ws-port', type=int, default=8000)
+        parser.add_argument('--voice-http-port', type=int, default=8003)
         arguments = parser.parse_args(sys.argv[7:])
         sys.path.insert(0, str(root / "scripts/development/xiaozhi"))
         import setup
@@ -96,7 +99,8 @@ def main():
             return setup.main()
         import yaml
         config = yaml.safe_load((config_path(server)).read_text(encoding="utf-8"))
-        setup.validate_config(config, lan_ip, tts_backend)
+        setup.validate_config(config, lan_ip, tts_backend,
+                              ws_port=arguments.voice_ws_port, http_port=arguments.voice_http_port)
         if (not memory_contract_matches(config, root, database, memory_backend)
                 or not tts_matches(config, tts_backend)):
             return 3
@@ -109,6 +113,7 @@ def main():
                     "--lan-ip", lan_ip, "--allow-insecure-http", "--device-control",
                     "--tts-backend", tts_backend,
                     "--voice-latency-mode", arguments.voice_latency_mode]
+        sys.argv.extend(port_arguments(arguments.voice_ws_port, arguments.voice_http_port))
         return setup.main()
     except Exception:
         return 3  # 私有配置/路径错误，绝不回传 YAML 或第三方异常正文。

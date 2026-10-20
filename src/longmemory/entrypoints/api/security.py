@@ -41,7 +41,8 @@ def security_middleware(authority: str, sessions: Sessions, internal_token: str 
     async def protect(request, handler):
         response = None
         try:
-            internal = request.path.startswith("/api/internal/memory/")
+            internal = (request.path.startswith("/api/internal/memory/")
+                        or request.path == '/api/internal/network-maintenance')
             # Host 限定阻挡 DNS 重绑定；跨源网站不能借用本机浏览器管理设备。
             if request.remote != "127.0.0.1" or request.host != authority:
                 response = web.json_response({"error": "origin_rejected"}, status=403)

@@ -199,7 +199,7 @@ def test_launcher_status_snapshot_contains_only_bounded_runtime_facts(options):
 
 
 def test_voice_bridge_readiness_requires_authenticated_bounded_status(options, monkeypatch):
-    selected = replace(options, voice=True)
+    selected = replace(options, voice=True, lan_ip='192.168.1.2', voice_ws_port=18000, voice_http_port=18003)
     token_path = selected.root / "data/control/device-control.token"
     token_path.parent.mkdir(parents=True)
     token_path.write_text("a" * 64, encoding="ascii")
@@ -232,7 +232,18 @@ def test_voice_bridge_readiness_requires_authenticated_bounded_status(options, m
     manager.options = selected
     manager.services = {"voice": Owned()}
     monkeypatch.setattr(runtime.http.client, "HTTPConnection", Connection)
+    sockets = []
+    class Probe:
+        def __enter__(self): return self
+        def __exit__(self, *_args): pass
+    def connect(address, timeout):
+        sockets.append((address, timeout))
+        return Probe()
+    monkeypatch.setattr(runtime.socket, 'create_connection', connect)
     assert manager.voice_bridge_ready() is True
+    assert sockets == [(('192.168.1.2', 18000), 0.25), (('192.168.1.2', 18003), 0.25)]
+    assert manager.voice_bridge_ready() is True
+    assert len(sockets) == 2
 
 
 def test_explicit_launcher_choice_enables_l1_delete_capability(options):
@@ -779,12 +790,14 @@ def test_manager_syncs_selected_voice_model_and_memory_after_ports_are_free(opti
             config_revision["value"] += 1
         return {"config_matches": bool(kwargs.get("apply")), "digest": digest}
 
-    def network_action(server, address, apply=False):
+    def network_action(server, address, apply=False, expected_digest=None):
         ordering.append("network_apply" if apply else "network_check")
         network_calls.append((server, address, apply))
+        digest = str(config_revision['value']) * 64
         if apply:
+            assert expected_digest == digest
             config_revision["value"] += 1
-        return {"changed": not apply, "old_ip": "192.168.1.8"}
+        return {"changed": not apply, "old_ip": "192.168.1.8", 'digest': digest}
 
     def tts_action(server, project, backend, **kwargs):
         ordering.append("tts_apply" if kwargs.get("apply") else "tts_check")

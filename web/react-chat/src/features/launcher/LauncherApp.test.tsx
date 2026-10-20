@@ -16,6 +16,29 @@ function fake(snapshot = stopped) {
   const request = vi.spyOn(api, 'request').mockResolvedValue(snapshot);
   return {api, request};
 }
+
+test('独立端口与自动跟踪只有保存时写入，状态读取不触发服务动作', async () => {
+  const {api, request} = fake(); render(<LauncherApp api={api}/>);
+  fireEvent.click(await screen.findByRole('button', {name: /启动设置/}));
+  fireEvent.change(await screen.findByLabelText('圆屏语音端口'), {target: {value: '18000'}});
+  fireEvent.change(screen.getByLabelText('圆屏 OTA 端口'), {target: {value: '18003'}});
+  fireEvent.click(screen.getByLabelText('自动跟踪电脑 IP'));
+  expect(request.mock.calls.every(([path]) => path === 'status')).toBe(true);
+  fireEvent.click(screen.getByRole('button', {name: '保存设置'}));
+  await waitFor(() => expect(request).toHaveBeenCalledWith('settings', {
+    settings: {voice_ws_port: 18000, voice_http_port: 18003, network_auto: true}, expected_revision: 'rev-1',
+  }));
+  expect(request.mock.calls.some(([path]) => path === 'actions')).toBe(false);
+});
+
+test('网络变化等待状态可见，不把电脑地址同步当作设备重连', async () => {
+  const {api, request} = fake({...stopped, settings: {...stopped.settings, network_auto: true},
+    network: {state: 'network_waiting', message: '设备仍连接，等待安全窗口；圆屏地址需单独核对。', address: '192.168.1.4'}});
+  render(<LauncherApp api={api}/>);
+  expect(await screen.findByText('圆屏网络自动跟踪')).toBeTruthy();
+  expect(screen.getByText(/圆屏地址需单独核对/)).toBeTruthy();
+  expect(request.mock.calls.every(([path]) => path === 'status')).toBe(true);
+});
 describe('React 启动面板', () => {
   test('设置分类保留草稿，分类与光效开关不会写启动配置', async () => {
     const {api, request} = fake(); render(<LauncherApp api={api}/>);

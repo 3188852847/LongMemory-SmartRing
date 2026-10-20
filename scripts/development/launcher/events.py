@@ -27,7 +27,7 @@ class LauncherEvents:
 
     def record(self, request_id, *, event, status=200, action=None, phase=None,
                code=None, duration_ms=None, initial_only=False):
-        if self.path is None or event not in {'request_result', 'phase_changed'}:
+        if self.path is None or event not in {'request_result', 'phase_changed', 'network_changed'}:
             return
         # 请求 ID 只接受服务端的固定十六进制格式，拒绝把任意字符串落盘。
         if not isinstance(request_id, str) or not re.fullmatch('[0-9a-f]{24}', request_id):
@@ -40,7 +40,9 @@ class LauncherEvents:
             body['phase'] = phase
         if code in {'operation_failed', 'configuration_rejected', 'readiness_timeout',
                     'child_exited', 'health_check_failed', 'stop_unconfirmed',
-                    'lan_address_unavailable', 'port_in_use', 'bind_denied', 'bind_failed'}:
+                    'lan_address_unavailable', 'port_in_use', 'bind_denied', 'bind_failed',
+                    'network_stable', 'network_waiting', 'network_unavailable', 'network_ambiguous',
+                    'network_restarting', 'network_updated', 'network_update_failed'}:
             body['code'] = code
         if isinstance(duration_ms, int) and duration_ms >= 0:
             body['duration_ms'] = duration_ms

@@ -3,6 +3,7 @@ export type LauncherSettings = {
   voice_mode: string; voice_latency_mode: string; memory_extraction: string;
   memory_retrieval: string; memory_backend: string; vad_profile: string;
   start_page: string; lan_ip: string; http_risk_ack: boolean; tts_backend: string;
+  voice_ws_port?: number; voice_http_port?: number; network_auto?: boolean;
 };
 export type LauncherSnapshot = {
   state: 'stopped' | 'starting' | 'ready' | 'stopping' | 'failed'; message: string;
@@ -10,6 +11,7 @@ export type LauncherSnapshot = {
   shutdown_complete?: boolean;
   console_url: string | null; settings: LauncherSettings; settings_revision: string;
   can_start: boolean; can_stop: boolean;
+  network?: {state: string; message: string; address?: string};
 };
 export type LauncherAction = 'start' | 'stop' | 'open_console' | 'shutdown';
 

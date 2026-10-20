@@ -443,6 +443,21 @@ def test_launcher_binding_failure_is_actionable_without_raw_exception(panel, err
     assert panel.manager.services == {} and panel.manager.stop_count == 1
 
 
+def test_network_settings_are_validated_and_saved_without_starting_services(panel):
+    old = panel.revision()
+    result = panel.update_settings({'voice_ws_port': 18000, 'voice_http_port': 18003, 'network_auto': True}, old)
+    assert result['settings']['voice_ws_port'] == 18000
+    assert result['settings']['voice_http_port'] == 18003
+    assert result['settings']['network_auto'] is True
+    assert not panel.manager.services and panel.state == 'stopped'
+    before = panel.paths['launcher'].read_bytes()
+    for values in ({'voice_ws_port': True}, {'voice_http_port': '18003'}, {'voice_ws_port': 8766},
+                   {'voice_ws_port': 18003}, {'network_auto': 'true'}, {'lan_interface_id': 'arbitrary'}):
+        with pytest.raises(controller.ControllerError):
+            panel.update_settings(values, panel.revision())
+        assert panel.paths['launcher'].read_bytes() == before
+
+
 def test_readonly_launcher_observability_requires_auth_and_does_not_add_events(host):
     assert request(host, 'GET', '/api/launcher/observability', token=False)[0] == 401
     request(host, 'POST', '/api/launcher/actions', {'action': 'start'})
