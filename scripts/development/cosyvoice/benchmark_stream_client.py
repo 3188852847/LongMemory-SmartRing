@@ -65,6 +65,7 @@ def run(config):
              'segmented':bool(config.get('segmented')),
              'cancel_after_packets':cancel_after,'sample_rate':connection.sample_rate}
         holder.update(row=row,started=time.perf_counter(),pcm=[],decoded=[])
+        cpu_started=time.process_time()
         decoder=Decoder(connection.sample_rate,1)
         def deliver(packet):
             assert connection.sentence_id==tts.current_sentence_id
@@ -79,6 +80,7 @@ def run(config):
         else:
             tts.to_tts_stream(text,opus_handler=deliver)
         row['total_ms']=round((time.perf_counter()-holder['started'])*1000,3)
+        row['client_process_cpu_ms']=round((time.process_time()-cpu_started)*1000,3)
         row['first_pcm_ms']=row['chunks'][0]['at_ms'] if row['chunks'] else None
         row['first_opus_ms']=row['packet_arrivals_ms'][0] if row['packet_arrivals_ms'] else None
         row['audio_ms']=sum(item['audio_ms'] for item in row['chunks'])

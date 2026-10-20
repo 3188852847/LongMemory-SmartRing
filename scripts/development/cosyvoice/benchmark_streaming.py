@@ -81,6 +81,7 @@ def main():
         random.seed(seed);np.random.seed(seed)
         torch.cuda.reset_peak_memory_stats()
         native.clear();request_index[0]=0;case_started[0]=time.perf_counter()
+        cpu_started=time.process_time()
         config={'source_root':str(ROOT),'voice_root':str(voice),'url':f'http://127.0.0.1:{server.server_address[1]}/v1/audio/stream',
           'text':CASES[case],'mode':mode,'cache':cache,'sample_rate':24000,
           'cancel_after_packets':cancel,'segmented':segmented}
@@ -92,6 +93,7 @@ def main():
             raise RuntimeError('isolated_real_opus_client_failed')
         row={'case':case,'mode':mode,'repeat':repeat,'condition':condition,'reply_cache':cache,'seed':seed,
              'daily_punctuation_policy':segmented,
+             'server_process_cpu_ms':round((time.process_time()-cpu_started)*1000,3),
              **json.loads(result.stdout),'peak_allocated_mib':round(torch.cuda.max_memory_allocated()/1048576,2),
              'peak_reserved_mib':round(torch.cuda.max_memory_reserved()/1048576,2),
              'server_pcm_chunks':list(native),'server_first_pcm_ms':native[0]['at_ms'] if native else None,
@@ -128,6 +130,7 @@ def main():
                 values=sorted(row[field] for row in chosen)
                 summary[mode][field]={'median':statistics.median(values),'max':max(values),'samples':len(values)}
         report={'schema_version':1,'base_commit':'87a25e2fd2c9b4486267dd3469fca354c12925a1',
+          'candidate_commit':subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT).decode().strip(),
           'comparison':'same candidate process and model; buffered reproduces complete-segment delivery barrier; not a separate untouched old executable',
           'source_commit':subprocess.check_output(['git','-C',str(source),'rev-parse','HEAD']).decode().strip(),
           'gpu':synth._torch.cuda.get_device_name(0),'runtime':synth.runtime_info,'qos':qos,
