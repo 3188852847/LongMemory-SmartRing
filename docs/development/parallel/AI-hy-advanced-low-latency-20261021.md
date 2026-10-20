@@ -465,3 +465,13 @@ GitHub Quality `39503121912` 在28dc后端收集失败，四项分别缺requests
 此后src/语音/前端业务字节保持890热修一致；本CI/dev提交不包含AE适配或AH前端改动，不再触发业务原语变更。远端Quality39503121912的失败记录保留，新远端结果由主会话整合推送后核实，本地通过不能提前写成远端通过。
 
 主会话后续报告890已按新owned检查点在本机热修：`local/archive/hy-advanced-release/20261020T222107Z-feedback-88534a/`共93文件/14,715,389字节，manifest SHA-256=`ec7ec0ea021a8016f27895fae13cc046caf46a29c5731af00e44782e7efa62be`。旧launcher及监听owner退出后，main本地ff到890；此时remote仍28dc，等待CI修复同批正常push。新launcher33512创建UTC `2026-10-20T22:23:03.424590+00`，control readytrue/TTS readywarmtrue；semantic仍预期初始isolated0/-1、无任务，调用审计仍38 completed＋1 unknown；配置/声线/前端字节未变。AI没有复读个人库或执行这些生产操作，不把主会话报告当自己测量。主src/xiaozhi业务摘要为`c62d3fb11c568a69580bf39daaf7e96f6beead9341c4d2edf42af2ba0cf50739`，与隔离热修源码一致；管理原语与原proof字节保持，旧219回执不修改。
+
+## AH前端CI测试修正接入
+
+按主会话明确授权审查并顺序接入AH `0d5d33f441ad5637d3ed76a8d966dae3b320c648`→AI `6ac7bbe1`，`09c2d912110c16a99d9458e9889621ead85d072f`→AI `d2e45a1edb29d96f3eb999d55c32ea165b9f48de`，无冲突。差异仅`MemoryApp.test.tsx`、`RoundDisplayApp.test.tsx`及AH记录；生产组件/配置、依赖锁、超时、原业务断言和零重试保持。作用是将角色查询限制到当前任务/条目/dialog/editor，等待query status=success而非不充分的fetchStatus=idle，并把会被后台轮询抢走的一次性响应改为按endpoint稳定响应及实际状态切换。没有增加skip或架构/测试白名单。
+
+AI没有在本树安装/复制node_modules、重跑全量组件/browser或改生产dist，而是复核AH原始完整证据与其精确源码/工具/锁身份。`ci-full-after.json`实际63文件、348/348通过、pending/todo/failure均0，摘要=`903a13d100c6c7f1d850b71f63b7c7a31e4c06f7f0e38869fe824ec7c134a33d`；对应日志及typecheck/build日志均与交付回执一致。这是AH本地双worker实跑并由AI核验；修复前本地同样348通过，远端五项未完整复现，局部查询耗时/fixture竞态证据不能冒充远端已绿。
+
+新的前端Git tree=`64c17c8e6e3f950fed66360632b748fda677c1d4`，与融合tree精确匹配；旧85c8…不能写成新源码身份。新发布绑定SHA-256=`e30c7d507b9edfbc2432e35b9eaca3a340b994c60410c11bab101dfe750b3f4c`，外围delivery-receipt SHA-256=`f546c4cf74dfea3fc41a9843dab5f67b2e1614669a47ca4a3d733e335f20ce01`，位于AH树`data/test-tmp/ah-release-ci-0d5d33f4-20261021/`。AI逐项重算完整45文件、1,838,948字节、264处本地资源引用与manifest导入键、五项构建输入、八张既有截图及交付证据文件摘要，均一致；不是执行交付的verify脚本后照抄结果。
+
+新dist与此前AI核验的54ae8a40候选逐字节相同，规范运行产物tree仍=`c5b2779d2b63980b9183561467ac423e30012dbf3a38d57216d0c28b86bb9ac5`，manifest仍=`8760f1c25b01a876394af413b58734d479b021b4404fa7771b0ede6bfa3201eb`。主会话已报告生产部署该同摘要运行字节，因此本次测试修正不需替换生产UI；实际生产目录仍只由主会话操作，AI没有访问/变更它。Python业务/管理原语/proof均保持890热修边界，本次也没有接入AE或采用AG引擎；后续新远端Quality由主会话正常整合推送后验收。
