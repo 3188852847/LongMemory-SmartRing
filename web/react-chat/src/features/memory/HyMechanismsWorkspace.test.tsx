@@ -5,11 +5,13 @@ import {QueryClient,QueryClientProvider} from '@tanstack/react-query';
 import {ApiError,ChatApi} from '../../api';
 import {parseHyMechanisms} from '../../api/hyMechanisms';
 import {mechanismFixture} from '../../tests/fixtures/hyMechanisms';
+import {layerPage} from '../../tests/fixtures/hyLayerData';
+import type {HyLayerId} from '../../api/hyLayerData';
 import {KnownMemoryEngine} from '../../tests/memoryEngine';
 import {HyMechanismsWorkspace} from './HyMechanismsWorkspace';
 afterEach(()=>vi.restoreAllMocks());
 function setup(route='/memories?view=mechanisms',response:unknown=mechanismFixture,kind:'hy'|'legacy'='hy') {
-  const request=vi.spyOn(ChatApi.prototype,'request').mockImplementation(async path=>{if(path==='/api/memory-engine/hy/mechanisms')return response as never;throw new Error('unexpected '+path);});
+  const request=vi.spyOn(ChatApi.prototype,'request').mockImplementation(async path=>{if(path==='/api/memory-engine/hy/mechanisms')return response as never;if(path.startsWith('/api/memory-engine/hy/layers/'))return layerPage(path.split('/').pop()!.split('?')[0] as HyLayerId) as never;throw new Error('unexpected '+path);});
   render(<QueryClientProvider client={new QueryClient({defaultOptions:{queries:{retry:false}}})}><MemoryRouter initialEntries={[route]}><KnownMemoryEngine kind={kind}><HyMechanismsWorkspace/></KnownMemoryEngine></MemoryRouter></QueryClientProvider>);
   return request;
 }
@@ -25,11 +27,11 @@ test('完整动态目录、选择与真实来源入口；不调用SDK列表/检�
 
 test('八层编号与平台来源分开；关闭/保留不当作零',async()=>{
   setup('/memories?view=mechanisms&mechanism_tab=layers&layer=l7_intention');
-  expect(await screen.findByText('平台原话不等于 Hy L0')).toBeTruthy();
+  expect(await screen.findByText(/平台原话不等于 Hy L0/)).toBeTruthy();
   expect(screen.getByRole('heading',{name:/Hy L7/})).toBeTruthy();
-  expect(screen.getByText('条目数量：未知。该声明接口不扫描或计数，不能用 0 代替未知。')).toBeTruthy();
+  expect(await screen.findByText('合成 l7_intention 保存正文 0：周末沿河散步。')).toBeTruthy();
   fireEvent.click(screen.getByRole('button',{name:/Hy L4/}));expect(screen.getByRole('heading',{name:/Hy L4/})).toBeTruthy();
-  expect(screen.getAllByText('保留层').length).toBeGreaterThan(0);
+  expect((await screen.findAllByText(/保留层/)).length).toBeGreaterThan(0);
 });
 
 test('模式/场景及全部边界可探索，不出现启用开关',async()=>{

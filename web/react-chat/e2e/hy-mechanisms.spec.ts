@@ -1,5 +1,8 @@
 import {test,expect,type Page} from '@playwright/test';
 import {mechanismFixture} from '../src/tests/fixtures/hyMechanisms';
+import {layerPage} from '../src/tests/fixtures/hyLayerData';
+import type {HyLayerId} from '../src/api/hyLayerData';
+import {largerReading} from './hy-test-appearance';
 
 const hyIdentity={schema_version:1,configured:true,method:'hy_memory_pro_chat',representation:'method_defined',legacy_sqlite:false,state:'available'};
 const legacyIdentity={...hyIdentity,method:'longmemory_daily_llm_v2',representation:'atomic_fact',legacy_sqlite:true};
@@ -24,6 +27,7 @@ async function synthetic(page:Page,options:{legacy?:boolean;identityBusy?:boolea
       if(options.catalog==='delay')await new Promise(resolve=>setTimeout(resolve,1200));
       return mechanismsBusy?ok({error:'hy_mechanisms_busy'},503):ok(options.catalog==='empty'?{...mechanismFixture,mechanisms:[],layers:[]}:options.catalog==='mismatch'?{...mechanismFixture,sdk:{...mechanismFixture.sdk,version:'2.0.4'}}:mechanismFixture);
     }
+    if(url.pathname.startsWith('/api/memory-engine/hy/layers/'))return ok(layerPage(url.pathname.split('/').pop() as HyLayerId));
     if(url.pathname==='/api/chat-config')return ok({enabled:true,database:'synthetic-only',model:'Synthetic model',role:'合成角色',provider:'fake',method:options.legacy?legacyIdentity.method:hyIdentity.method,retrieval:options.legacy?'keyword_dense_rrf_v1':'hy_chat_default_legacy'});
     if(url.pathname==='/api/device')return ok({connection_count:0,ready:false,read_status_supported:false,set_volume_supported:false});
     if(url.pathname==='/api/runtime-status')return ok({enabled:false,state:'launcher_unavailable',reason:null,services:{}});
@@ -98,7 +102,7 @@ test('旧引擎与未初始化兼容，method=null不冒充L1统计',async({brow
 
 test('窄屏大字号、键盘与其余页面冷加载的全局导航',async({page},info)=>{
   await page.setViewportSize({width:390,height:844});await page.emulateMedia({reducedMotion:'reduce'});const state=await synthetic(page);
-  await page.goto('/memories?view=mechanisms');await expect(page.getByText('本次装配声明')).toBeVisible();await page.evaluate(()=>document.documentElement.dataset.reading='larger');await noOverflow(page);
+  await page.goto('/memories?view=mechanisms');await expect(page.getByText('本次装配声明')).toBeVisible();await largerReading(page);await expect(page.locator('html')).toHaveAttribute('data-reading','larger');await noOverflow(page);
   await page.getByRole('button',{name:'模式与能力边界',exact:true}).focus();await page.keyboard.press('Enter');await expect(page.getByRole('heading',{name:'模式与场景'})).toBeVisible();await noOverflow(page);await page.screenshot({animations:'disabled',path:info.outputPath('mechanisms-mobile-large.png')});
   for(const path of ['/chat-react','/settings','/device','/display-preview','/experiments-react']) {
     await page.goto(path);await expect(page.getByRole('link',{name:'我的记忆',exact:true,includeHidden:true})).toHaveCount(1);await openNav(page);await expect(page.getByRole('link',{name:'我的记忆',exact:true})).toBeVisible();await expect(page.getByRole('link',{name:'记忆机制',exact:true})).toBeVisible();await expect(page.getByRole('link',{name:'用户画像',exact:true})).toHaveCount(0);
@@ -125,7 +129,7 @@ test('机制加载、空目录、协议错误和首次繁忙保持各自语义',
 for(const viewport of [{width:1366,height:768},{width:390,height:844}])test(`非零滚动选择机制不会跳顶 ${viewport.width}`,async({page},info)=>{
   await page.setViewportSize(viewport);await page.emulateMedia({reducedMotion:'reduce'});const state=await synthetic(page);
   await page.goto('/memories?view=mechanisms');await expect(page.getByText('本次装配声明')).toBeVisible();
-  if(viewport.width===390)await page.evaluate(()=>document.documentElement.dataset.reading='larger');
+  if(viewport.width===390){await largerReading(page);await expect(page.locator('html')).toHaveAttribute('data-reading','larger');}
   const stage=page.locator('.mechanism-path button').nth(3);
   await stage.evaluate(el=>el.scrollIntoView({block:'center'}));
   const before=await page.evaluate(()=>scrollY);expect(before).toBeGreaterThan(100);
@@ -147,8 +151,10 @@ for(const viewport of [{width:1366,height:768},{width:390,height:844}])test(`非
   const tabs=page.getByRole('button',{name:'L0–L7 分层',exact:true});await tabs.evaluate(el=>el.scrollIntoView({block:'center'}));const tabsY=await page.evaluate(()=>scrollY);
   await tabs.click();await expect(page.getByRole('region',{name:'Hy 原生记忆分层'})).toBeVisible();expect(Math.abs(await page.evaluate(()=>scrollY)-tabsY)).toBeLessThan(5);
   const layer=page.getByRole('button',{name:/Hy L3/});await layer.evaluate(el=>el.scrollIntoView({block:'center'}));const layerY=await page.evaluate(()=>scrollY);expect(layerY).toBeGreaterThan(100);
-  await layer.click();await expect(layer).toHaveAttribute('aria-pressed','true');expect(Math.abs(await page.evaluate(()=>scrollY)-layerY)).toBeLessThan(5);
+  await layer.click();await expect(layer).toHaveAttribute('aria-pressed','true');expect(await page.evaluate(()=>scrollY)).toBeGreaterThan(100);
+  const contentHeading=page.getByRole('heading',{name:/Hy L3/});await expect(contentHeading).toBeVisible();expect((await contentHeading.boundingBox())!.y).toBeLessThan(viewport.height-100);
   await page.reload();await expect(page.getByRole('heading',{name:/Hy L3/})).toBeVisible();await expect.poll(()=>page.evaluate(()=>scrollY)).toBeGreaterThan(100);
+  if(viewport.width===390)await expect(page.locator('html')).toHaveAttribute('data-reading','larger');
   if(viewport.width>760){await page.getByRole('link',{name:'系统总览',exact:true}).click();await expect(page.getByRole('heading',{name:'系统总览',exact:true})).toBeVisible();await expect.poll(()=>page.evaluate(()=>scrollY)).toBe(0);await expect(page.locator('#main-content')).toBeFocused();}
   expect(state.errors).toEqual([]);
 });

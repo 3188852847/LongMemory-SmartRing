@@ -1,4 +1,4 @@
-import {useMemo} from 'react';
+import {useMemo,useState} from 'react';
 import {useQuery} from '@tanstack/react-query';
 import {Alert, Button, Empty, Skeleton, Tag} from 'antd';
 import {Link, useSearchParams} from 'react-router-dom';
@@ -9,6 +9,8 @@ import {useMemoryEngine, memoryEngineLabel} from '../../app/MemoryEngineProvider
 import {AppShell, ConsoleNav} from '../../components/AppShell';
 import {PageHeader} from '../../components/PageHeader';
 import {memoryTime} from './HyMemoryWorkspace';
+import {HY_LAYERS,type HyLayerId} from '../../api/hyLayerData';
+import {HyLayerBrowser} from './HyLayerBrowser';
 import './hy-mechanisms.css';
 
 const api=new MemoryEngineApi(new ChatApi());
@@ -58,6 +60,7 @@ function readFailure(error:unknown) {
 
 export function HyMechanismsWorkspace() {
   const engine=useMemoryEngine();
+  const [layerReveal,setLayerReveal]=useState(0);
   const [params,setParams]=useSearchParams();
   const requested=params.get('mechanism_tab');
   const tab=tabs.some(item=>item.id===requested)?requested!:'path';
@@ -69,19 +72,19 @@ export function HyMechanismsWorkspace() {
   const layers=useMemo(()=>[...(data?.layers??[])].sort((a,b)=>a.number-b.number),[data?.layers]);
   const layer=layers.find(item=>item.id===params.get('layer'))??layers[0];
   const grouped=useMemo(()=>{const map=new Map<string,HyMechanism[]>();for(const item of mechanisms)map.set(item.group,[...(map.get(item.group)??[]),item]);return Array.from(map);},[mechanisms]);
-  function choose(values:Record<string,string>) {setParams(previous=>{const next=new URLSearchParams(previous);next.set('view','mechanisms');for(const [key,value] of Object.entries(values))next.set(key,value);return next;},{preventScrollReset:true});}
+  function choose(values:Record<string,string|undefined>) {setParams(previous=>{const next=new URLSearchParams(previous);next.set('view','mechanisms');for(const [key,value] of Object.entries(values)){if(value===undefined)next.delete(key);else next.set(key,value);}return next;},{preventScrollReset:true});}
   const current=data&&!query.isError&&engine.phase==='ready';
   const selectedMissing=Boolean(params.get('mechanism'))&&!mechanisms.some(item=>item.id===params.get('mechanism'));
 
   return <AppShell subtitle="理解记忆怎样形成与使用" className="hy-mechanisms-shell" sidebar={<ConsoleNav active="mechanisms" legacyPath="/memories-legacy"/>}>
-    <PageHeader eyebrow="长期记忆" title="记忆机制" description="从一段原话到一次回答，区分固定版支持、当前接入和真正可得的证据。"
+    <PageHeader eyebrow="长期记忆" title="记忆机制" description={tab==='layers'?'选择一层，查看实际保存内容、状态、来源与原生版本。':'从一段原话到一次回答，区分固定版支持、当前接入和真正可得的证据。'}
       action={<Button disabled={query.isFetching||engine.refreshing} onClick={()=>engine.phase!=='ready'?engine.refresh():void query.refetch()}>刷新声明</Button>}/>
     {engine.phase!=='ready'&&<Alert showIcon type={engine.phase==='error'?'error':'info'} title={engine.phase==='error'?'当前引擎身份尚未确认':'正在确认当前引擎'} description="其他功能可继续使用；确认前不加载旧引擎数据。"/>}
     {engine.phase==='ready'&&engine.kind!=='hy'&&<Empty description={`${memoryEngineLabel(engine)}，当前未选择 Hy`}><Link to="/memories">进入当前记忆管理</Link><p>本页不会为查看机制而切换引擎、模式或资源。</p></Empty>}
     {query.isError&&<Alert showIcon type="warning" title={data?'未取得新声明，以下保留上次快照':'暂时无法读取机制声明'} description={<>{readFailure(query.error)}{data&&<p>上次快照：{memoryTime(data.observed_at)}。以下状态不是本次实时确认。</p>}</>}/>}
     {engine.phase==='ready'&&engine.kind==='hy'&&!data&&query.isFetching&&<div role="status" aria-label="正在读取机制声明"><Skeleton active paragraph={{rows:7}}/></div>}
     {data&&<>
-      <section className="mechanism-snapshot" aria-label="机制声明范围"><div><strong>{current?'本次装配声明':'上次装配声明'}</strong><span>{memoryTime(data.observed_at)}</span></div><p>固定 SDK {data.sdk.version}；{data.mode??'模式未知'} / {data.scene??'场景未知'}。{data.assembly==='standard_worker'?'标准 worker 装配':'自定义或未知装配'}。</p><p>写入{data.runtime.write_enabled?'开启':'暂停'}，回答使用{data.runtime.use_enabled?'开启':'暂停'}；初始化标记{data.runtime.engine_initialized?'已设置':'未设置'}，worker 健康不可观测。</p><small>这里只读装配声明和内存开关，不扫描库、不计数、不执行检索，不代表最近成功时间。</small></section>
+      <section className={`mechanism-snapshot${tab==='layers'?' compact':''}`} aria-label="机制声明范围"><div><strong>{current?'本次装配声明':'上次装配声明'}</strong><span>{memoryTime(data.observed_at)}</span></div>{tab==='layers'?<details><summary>装配与声明范围</summary><p>固定 SDK {data.sdk.version}；{data.mode??'模式未知'} / {data.scene??'场景未知'}。{data.assembly==='standard_worker'?'标准 worker 装配':'自定义或未知装配'}。</p><p>写入{data.runtime.write_enabled?'开启':'暂停'}，回答使用{data.runtime.use_enabled?'开启':'暂停'}；初始化标记{data.runtime.engine_initialized?'已设置':'未设置'}，worker 健康不可观测。</p><small>这里只读装配声明和内存开关，不扫描库、不计数、不执行检索，不代表最近成功时间。</small></details>:<><p>固定 SDK {data.sdk.version}；{data.mode??'模式未知'} / {data.scene??'场景未知'}。{data.assembly==='standard_worker'?'标准 worker 装配':'自定义或未知装配'}。</p><p>写入{data.runtime.write_enabled?'开启':'暂停'}，回答使用{data.runtime.use_enabled?'开启':'暂停'}；初始化标记{data.runtime.engine_initialized?'已设置':'未设置'}，worker 健康不可观测。</p><small>这里只读装配声明和内存开关，不扫描库、不计数、不执行检索，不代表最近成功时间。</small></>}</section>
       <nav className="mechanism-tabs" aria-label="机制探索视图">{tabs.map(item=><button type="button" key={item.id} aria-current={tab===item.id?'page':undefined} onClick={()=>choose({mechanism_tab:item.id})}>{item.title}</button>)}</nav>
       {tab==='path'&&<>
         <section className="mechanism-path" aria-label="从原话到回答的常见路径">{stages.map((stage,index)=><button key={stage.id} type="button" disabled={!mechanisms.some(item=>item.id===stage.id)} aria-pressed={selected?.id===stage.id} onClick={()=>choose({mechanism:stage.id})}><span>{index+1}</span><strong>{stage.title}</strong><small>{stage.hint}</small></button>)}</section>
@@ -92,11 +95,13 @@ export function HyMechanismsWorkspace() {
           <nav className="mechanism-picker" aria-label="完整机制目录">{grouped.map(([group,items])=><section key={group}><h2>{groups[group]??group}</h2>{items.map(item=><button key={item.id} type="button" aria-pressed={selected?.id===item.id} onClick={()=>choose({mechanism:item.id})}><span>{item.title}</span><small>{integrations[item.integration].label}</small></button>)}</section>)}</nav>
           {selected&&<MechanismDetail item={selected}/>}</div>}
       </>}
-      {tab==='layers'&&<section aria-label="Hy 原生记忆分层"><Alert type="info" showIcon title="平台原话不等于 Hy L0" description="Hy L0 是基本信息聚合，L1 才是 SDK 原始记忆。平台来源账本独立保存用户/助手原话和处理状态。"/>
-        <div className="hy-layer-map">{layers.map(item=><button type="button" key={item.id} aria-pressed={layer?.id===item.id} onClick={()=>choose({layer:item.id})}><strong>Hy L{item.number}</strong><span>{item.title}</span><small>{integrations[item.integration].label}</small></button>)}</div>
-        {!layer?<Empty description="接口未提供层级目录，不推断为空库"/>:<section className="mechanism-detail layer-detail" aria-labelledby="layer-heading"><Integration value={layer.integration}/><h2 id="layer-heading">Hy L{layer.number}：{layer.title}</h2><p className="mechanism-description">{layer.description}</p><p>条目数量：未知。该声明接口不扫描或计数，不能用 0 代替未知。</p>
-          {layer.number===0?<Link to="/memories?view=profile">核对基本画像与范围能力</Link>:layer.number===1?<p>SDK RAW 独立浏览尚未接入。可从已有条目回看可得的平台来源，不能把两者视为同一份原文。</p>:<Link to="/memories?view=items">浏览全部活动条目</Link>}
-          <p className="mechanism-limit">列表没有全库按层筛选；浏览活动条目后只能筛选已加载的本页。保留层和关闭层不因为没有可见条目而变为零。</p><CodeEvidence item={layer}/></section>}
+      {tab==='layers'&&<section aria-label="Hy 原生记忆分层">
+        <p className="mechanism-caption">平台原话不等于 Hy L0：L0 是聚合基本信息，L1 是 SDK RAW 原始记忆。下面按所选层读取真实保存内容。</p>
+        <div className="hy-layer-map">{layers.map(item=><button type="button" key={item.id} aria-pressed={layer?.id===item.id} onClick={()=>{choose({layer:item.id,layer_offset:undefined,layer_item:undefined,layer_state:undefined});setLayerReveal(value=>value+1);}}><strong>Hy L{item.number}</strong><span>{item.title}</span><small>机制：{integrations[item.integration].label}</small></button>)}</div>
+        {!layer?<Empty description="接口未提供层级目录，不推断为空库"/>:<>
+          {HY_LAYERS.includes(layer.id as HyLayerId)?<HyLayerBrowser layer={layer.id as HyLayerId} title={`Hy L${layer.number} · ${layer.title}`} revealRequest={layerReveal}/>:<Alert type="warning" title="当前层标识尚不支持内容读取" description="未使用混合列表或其他层来补齐。"/>}
+          <details className="hy-layer-description"><summary>本层机制说明与代码依据</summary><Integration value={layer.integration}/><p>{layer.description}</p><p>生成开关与是否存在已保存内容分别判断；关闭或保留状态不等于没有历史数据。</p><CodeEvidence item={layer}/></details>
+        </>}
       </section>}
       {tab==='boundaries'&&<section aria-labelledby="modes-heading"><h2 id="modes-heading">模式与场景</h2><p className="mechanism-caption">以下差异属于锁定 SDK；选中标记来自装配声明。本页没有模式切换或启用按钮。</p><div className="mechanism-modes">{data.modes.map(mode=><article key={mode.id}><h3>{mode.title} {mode.selected===true&&<Tag color="cyan">当前装配</Tag>}</h3><p>{mode.description}</p>{mode.selected===null&&<small>当前选择未观测</small>}</article>)}</div><h2>全部机制的接入边界</h2><div className="mechanism-boundaries">{mechanisms.map(item=><article key={item.id}><div><h3>{item.title}</h3><Integration value={item.integration}/></div><p>{item.description}</p><button type="button" onClick={()=>choose({mechanism_tab:'path',mechanism:item.id})}>查看机制与证据</button></article>)}</div></section>}
       {tab==='evidence'&&<section aria-labelledby="evidence-heading"><h2 id="evidence-heading">从哪里核对事实</h2><div className="mechanism-evidence-table">
