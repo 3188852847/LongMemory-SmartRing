@@ -12,8 +12,10 @@ from copy import copy, deepcopy
 from dataclasses import dataclass, field
 import html
 import json
+import queue
 import re
 import threading
+from time import monotonic
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -136,11 +138,20 @@ class _State:
         self.tasks = set()
         self.cleanup_lock = asyncio.Lock()
         self.history_guard = None
+        self.output_sentence = self.output_epoch = None
         self.counts = dict(admitted=0, adopted=0, missed=0, skipped_tools=0, invalidated=0,
                            dropped_output=0, hook_failed=0, cleanup_unconfirmed=0)
 
     def current_turn(self, lease):
         return self.current is lease and self.epoch == lease.epoch and not self.closed
+
+    def output_current(self, sentence):
+        if self.closed:
+            return False
+        if sentence is None:
+            return self.output_epoch is None or self.output_epoch == self.epoch
+        return (sentence == getattr(self.connection, "sentence_id", None)
+                and (sentence != self.output_sentence or self.output_epoch == self.epoch))
 
 
 class _QueueGate:
@@ -150,12 +161,14 @@ class _QueueGate:
     def __getattr__(self, name):
         return getattr(self.original, name)
 
+    @staticmethod
+    def _sentence(item):
+        return item[3] if isinstance(item, tuple) and len(item) == 4 else getattr(item, "sentence_id", None)
+
     def put(self, item, *args, **kwargs):
         state = self.state
         lease = _CHAT.get()
-        sentence = getattr(item, "sentence_id", None)
-        if isinstance(item, tuple) and len(item) == 4:
-            sentence = item[3]
+        sentence = self._sentence(item)
         with state.lock:
             if lease is not None and lease.state is state:
                 if lease.sentence_id is None:
@@ -163,19 +176,32 @@ class _QueueGate:
                 valid = state.current_turn(lease)
             else:
                 # TTS后台线程没有chat ContextVar，仍须核对它实际生产的句子。
-                owned = state.current
-                valid = not state.closed
-                if sentence is not None:
-                    valid = valid and sentence == getattr(state.connection, "sentence_id", None)
-                    if owned is not None and sentence == owned.sentence_id:
-                        valid = valid and state.current_turn(owned)
+                valid = state.output_current(sentence)
             if not valid:
                 state.counts["dropped_output"] += 1
                 return None
+            if sentence is not None:
+                state.output_sentence, state.output_epoch = sentence, state.epoch
             return self.original.put(item, *args, **kwargs)
 
     def put_nowait(self, item):
         return self.put(item, block=False)
+
+    def get(self, block=True, timeout=None):
+        until = None if timeout is None else monotonic() + timeout
+        while True:
+            remaining = None if until is None else max(0, until - monotonic())
+            item = self.original.get(block=block, timeout=remaining)
+            with self.state.lock:
+                if self.state.output_current(self._sentence(item)):
+                    return item
+                self.state.counts["dropped_output"] += 1
+            self.original.task_done()
+            if until is not None and monotonic() >= until:
+                raise queue.Empty
+
+    def get_nowait(self):
+        return self.get(block=False)
 
 
 class _Provider:
@@ -265,11 +291,13 @@ class VoiceProposalAdapter:
         if any(getattr(queue, "maxsize", None) != 0 for queue in queues):
             return False  # 不在取消锁内阻塞有界队列。
         store = tts.store_tts_text
+        state.output_sentence = getattr(connection, "sentence_id", None)
+        state.output_epoch = state.epoch - 1 if state.output_sentence is not None else None
         self._guard_history(connection, state)
         def store_text(sentence_id, text, *args, **kwargs):
             with state.lock:
                 lease = _CHAT.get()
-                valid = sentence_id == getattr(connection, "sentence_id", None) and not state.closed
+                valid = state.output_current(sentence_id)
                 if lease is not None and lease.state is state:
                     valid = valid and state.current_turn(lease)
                 if not valid:

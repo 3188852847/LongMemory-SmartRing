@@ -339,3 +339,30 @@ def test_native_preview_with_tools_skips_without_reading_live_dialogue_or_config
     raw = '{"content":"检查资料","emotion":"calm"}'
     plan = proposal.preview_native_input(conn, raw, tools_required=True, web_configured=True)
     assert plan.input.tools_required and plan.with_memory("unused") is None
+
+
+def test_new_audio_revokes_queued_output_and_background_put_before_sentence_id_changes(boundary):
+    async def run():
+        h = boundary.harness()
+        try:
+            await boundary.begin(h)
+            await boundary.endpoint(h)
+            for future in h.executor.futures:
+                await asyncio.wrap_future(future)
+            old_sentence = h.connection.sentence_id
+            assert h.connection.tts.tts_text_queue.qsize() > 0
+            h.connection.tts.tts_audio_queue.put(("middle", [b"synthetic"], None, old_sentence))
+            h.connection.client_have_voice = True
+            h.connection.vad_last_voice_time = boundary.time.time() * 1000
+            await h.provider.receive_audio(h.connection, boundary.PCM, True)
+            assert h.connection.sentence_id == old_sentence  # 故意停在尚未调度新chat的空档。
+            await asyncio.to_thread(h.connection.tts.tts_audio_queue.put, ("middle", [b"late"], None, old_sentence))
+            assert h.connection.tts.tts_audio_queue.qsize() == 1  # 已有旧包仍待消费者清理，晚包已拒绝。
+            for q in (h.connection.tts.tts_text_queue, h.connection.tts.tts_audio_queue):
+                with pytest.raises(boundary.queue.Empty):
+                    q.get_nowait()
+                assert q.empty()
+            assert h.adapter.snapshot(h.connection)["dropped_output"] >= 4
+        finally:
+            await boundary.finish(h)
+    asyncio.run(run())
