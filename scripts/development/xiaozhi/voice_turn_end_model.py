@@ -13,6 +13,21 @@ MODEL_SIZE = 8679182
 MODEL_URL = f"https://huggingface.co/pipecat-ai/smart-turn-v3/resolve/{MODEL_REVISION}/{MODEL_FILE}"
 
 
+def extract_features(pcm, np, extractor):
+    """共享官方处理步骤，供真实模型与跨解释器数值核验使用。"""
+    if not isinstance(pcm, bytes) or not pcm or len(pcm) % 2:
+        raise ValueError("smart_turn_requires_pcm16le")
+    audio = np.frombuffer(pcm[-256000:], dtype="<i2").astype(np.float32) / 32768.0
+    audio = np.pad(audio, (128000 - len(audio), 0))
+    inputs = extractor(audio, sampling_rate=16000, return_tensors="np",
+                       padding="max_length", max_length=128000,
+                       truncation=True, do_normalize=True)
+    features = inputs.input_features.astype(np.float32)
+    if features.shape != (1, 80, 800) or not np.isfinite(features).all():
+        raise ValueError("smart_turn_invalid_features")
+    return features
+
+
 class SmartTurnCPU:
     """启动阶段显式构造；推理由调用方的单工位预算控制。
 
@@ -55,15 +70,7 @@ class SmartTurnCPU:
         return digest.hexdigest()
 
     def predict(self, pcm):
-        if not isinstance(pcm, bytes) or not pcm or len(pcm) % 2:
-            raise ValueError("smart_turn_requires_pcm16le")
-        np = self.np
-        audio = np.frombuffer(pcm[-256000:], dtype="<i2").astype(np.float32) / 32768.0
-        audio = np.pad(audio, (128000 - len(audio), 0))
-        inputs = self.extractor(audio, sampling_rate=16000, return_tensors="np",
-                                padding="max_length", max_length=128000,
-                                truncation=True, do_normalize=True)
-        features = inputs.input_features.astype(np.float32)
+        features = extract_features(pcm, self.np, self.extractor)
         probability = float(self.session.run(None, {"input_features": features})[0].reshape(-1)[0])
         if not math.isfinite(probability) or not 0 <= probability <= 1:
             raise ValueError("smart_turn_invalid_probability")

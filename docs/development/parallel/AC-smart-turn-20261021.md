@@ -136,21 +136,49 @@ if ((Get-FileHash -LiteralPath $acDownloadFile -Algorithm SHA256).Hash.ToLowerIn
 Move-Item -LiteralPath $acDownloadFile -Destination $acModelFile
 ```
 
-依赖用途：ONNX Runtime 执行 CPU 模型、Transformers 提供 Whisper 特征、numpy 提供 PCM 转换；替代方案是继续原静音端点，不引入 Pipecat 全框架/PortAudio/录音依赖。小智环境缺 Transformers，禁止自动补装日用环境。下面仅创建 AC 独立 Python 3.10 验证环境，固定直接依赖，不安装 torch、不改全局/生产/原锁文件：
+依赖用途：ONNX Runtime 执行 CPU 模型、Transformers 提供 Whisper 特征、numpy 提供 PCM 转换；替代方案是继续原静音端点，不引入 Pipecat 全框架/PortAudio/录音依赖。**原先未执行的独立环境安装候选已撤回，不让所有者安装传递依赖未锁住的大环境。** 主会话随后要求优先复用现有 CosyVoice 解释器，实测结果见下一节。没有创建新环境、补装包或修改任何锁文件。
+
+主会话已给所有者固定模型获取命令，并在收到完成反馈后独立核验大小/摘要，正式交 AC 做真实 CPU 验证。该后续证据另追加；本节第一版下载段只保留来源可追溯，不要求所有者重复下载。所有者反馈长命令不便使用；未来下载/安装须交付已审阅脚本及一条入口，脚本内固定来源、断点续传、禁止覆盖、大小/摘要校验和稳定错误，助手不执行联网获取。
+
+## 免安装 CPU 常驻侧车（第二阶段交付）
+
+新增 [voice_turn_end_sidecar.py](../../../scripts/development/xiaozhi/voice_turn_end_sidecar.py)；只读使用现有 `local/runtime/CosyVoice/.venv/Scripts/python.exe`，实际 Python 3.10.20、numpy 1.26.4、onnxruntime 1.18.0、transformers 4.51.3。该环境同时有 torch 2.3.1+cu121，但侧车子进程在 import 前设置 `USE_TORCH=0/USE_TF=0/USE_FLAX=0`、`CUDA_VISIBLE_DEVICES=-1` 和离线变量，清除 PYTHONPATH/PYTHONHOME；未导入 torch，不加载 CosyVoice 模型或 GPU，不从其他环境拼包。CPU 特征器单次初查约 9.207 ms，不含 import/启动或 ONNX 推理。
+
+沿用官方特征器，没有自行用 numpy 重写算法。对照 [v4.51.3 官方实现](https://github.com/huggingface/transformers/blob/v4.51.3/src/transformers/models/whisper/feature_extraction_whisper.py)与 [v4.57.6 官方实现](https://github.com/huggingface/transformers/blob/v4.57.6/src/transformers/models/whisper/feature_extraction_whisper.py)，固定工具实际比较两环境 NumPy 结果，及主环境 `torch==2.8.0+cpu` 的官方 Torch 路径；参考命令如下，均为 CPU、合成非语音波形：
 
 ```powershell
-$acTree = 'D:/03-项目/01-正式项目/智慧圆屏/local/worktrees/ac-smart-turn-20261021'
-$acCheckEnv = Join-Path $acTree '.venv-smart-turn'
-if (Test-Path -LiteralPath $acCheckEnv) { throw '验证环境已存在，先核验，不覆盖' }
-& 'D:/03-项目/01-正式项目/智慧圆屏/local/runtime/xiaozhi-esp32-server/main/xiaozhi-server/.venv/Scripts/python.exe' -m venv $acCheckEnv
-if ($LASTEXITCODE -ne 0) { throw '创建验证环境失败' }
-$acCheckPython = Join-Path $acCheckEnv 'Scripts/python.exe'
-& $acCheckPython -m pip install --index-url https://pypi.org/simple 'numpy==1.26.4' 'onnxruntime==1.20.1' 'transformers==4.57.6'
-if ($LASTEXITCODE -ne 0) { throw '安装验证候选失败，不换源重试' }
-& $acCheckPython -m pip freeze
+& 'D:/03-项目/01-正式项目/智慧圆屏/.venv/Scripts/python.exe' -X utf8 -B scripts/development/xiaozhi/voice_turn_end_sidecar.py --compare-python 'D:/03-项目/01-正式项目/智慧圆屏/local/runtime/CosyVoice/.venv/Scripts/python.exe'
 ```
 
-此命令是尚未执行的兼容性候选，传递依赖未锁定，不能作为生产可复现锁定证明；所有者运行后需记录 freeze、包来源与冷/热实测，再由 AI 设计正式进程中的依赖接线。不会向 .venv 或既有锁文件自动增加依赖。真实模型到位后先只跑上述离线中文标签回放；没有本轮调度不发学校请求，也不启动日用。
+| 合成 PCM | 特征元素 | Cosy NumPy 对主 NumPy 最大绝对差 | 对主 CPU Torch 最大绝对差 |
+|---|---:|---:|---:|
+| 静音（左补零） | 64000 | 0 | 0 |
+| 正负极值 | 64000 | 0 | 7.3313713e-6 |
+| 440Hz 正弦 | 64000 | 0 | 6.3180923e-6 |
+| 固定种子八秒噪声 | 64000 | 2.9802322e-7 | 8.3446503e-7 |
+| 十秒截取末八秒 | 64000 | 3.5762787e-7 | 2.2649765e-6 |
+
+所有形状 `(1,80,800)`，`rtol=atol=1e-5` 全通过。两 NumPy 进程未 import torch；参考 Torch 进程必须确认包版本 `+cpu` 才允许执行。共享 `extract_features` 函数已应用于真实适配器和探针，避免测试另一套处理。上述结果不代替真实 ONNX 加载/输出或中文语音质量验证。
+
+给 AI 的最小生命周期接线：
+
+```python
+from voice_turn_end_sidecar import SidecarDetector
+
+# 在服务启动阶段创建一次；不要在 receive_audio 或每个静音帧中创建。
+detector = await SidecarDetector.create(cosy_python, fixed_model_path,
+                                      startup_timeout=30, request_timeout_ms=120)
+# 把 detector 交给现有 install_voice_turn_end，仍保持 off/shadow 和原校准门。
+# 已有 InferenceSlot 在线程内调用 detector.predict，事件循环从不读写管道。
+# 服务关闭时：
+await detector.aclose()
+```
+
+进程间通信使用私有 stdin/stdout 匿名管道，不监听端口。请求为固定头+至多 256000 字节 PCM，响应为至多 4096 字节的版本/序号/概率/耗时 JSON；只保留一个请求，无排队预生成或音频日志。专用 I/O 线程处理管道阻塞，预测总预算默认 120 ms，外层原 150 ms 结果权限门仍有效；超时/序号错误/模型错误停用并仅终止自身创建的进程，晚结果不复用，不自动重启。启动最长 30 秒，可异步取消，取消与就绪竞争也回收；服务关闭须执行 aclose。快照只含计数和处理毫秒。
+
+真实 Cosy Python 3.10 子进程、合成检测器、每次 256000 字节的 30 次管道回环：同一 PID，IPC+合成返回 P50=0.084 ms、P95=0.182 ms、max=0.257 ms；全部成功、进程退出回收。**这不是模型推理或用户判停延迟。** 缺模型 probe 返回净化的 unavailable，未泄露文件路径或加载 GPU。
+
+新增真实合成子进程测试后，与原相关回归共 **84 passed**：含常驻复用、CPU 环境隔离、事件循环仍响应、单请求拒绝、超时停用、错序/异常净化、启动失败/取消及关闭回收。首次测试里大字节参数自动生成超长 ID 导致夹具报错，改为命名 ID 后恢复；没有改变输入上限断言。真实 ONNX 与声学验收仍由后续证据说明。
 
 ## 未验证与主会话下一步
 
