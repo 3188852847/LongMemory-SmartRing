@@ -14,7 +14,7 @@
   "topics": [
     {
       "id": "cosyvoice-continuous-audio-candidate",
-      "scope": "X连续音频候选、固定上游取消适配、真实Opus合成基准和独占GPU窗口；不代表当前日用提速通过",
+      "scope": "X连续音频显式候选、buffered默认门、固定上游取消适配、46调用GPU对照及离线缓冲分析；日用仍为87a25e2",
       "authority": "docs/development/parallel/X-cosy-streaming-20261020.md",
       "sources": [
         "scripts/development/cosyvoice/service.py",
@@ -41,7 +41,7 @@
         "取消",
         "候选"
       ],
-      "review": "verified 2026-10-20: 仅X候选代码/CPU契约与首个失败窗口及59秒恢复记录；GPU性能、Z审查、日用部署与实机体验均待验"
+      "review": "verified 2026-10-20: X候选/118项CPU、第二窗口46调用及321.2秒恢复、45组音频和46条曲线核对；增量默认因欠载未放行，保持buffered，显式候选待Z审查；未部署/未验扬声器或整链路2秒"
     },
     {
       "id": "hy-low-latency-and-request-observation",
@@ -1115,11 +1115,11 @@
       "path": "docs/development/parallel/X-cosy-streaming-20261020.md",
       "title": "X：CosyVoice 低延迟连续音频交付",
       "status": "reference",
-      "basis": "连续音频候选与首个失败窗口恢复事实；未作为日用性能通过证据",
+      "basis": "连续音频候选、两次窗口与恢复事实；第二窗口否决全量增量默认，保留buffered安全门及显式试验能力",
       "review": {
         "state": "verified",
         "date": "2026-10-20",
-        "scope": "候选实现、CPU契约、维护窗口失败与恢复事实；GPU有效样本、Z审查、部署与实机待验",
+        "scope": "候选/默认门、118项CPU、46调用GPU/45组音频和缓冲离线回放、321.2秒恢复及保护事实；Z审查/部署/扬声器待验",
         "evidence": [
           "scripts/development/cosyvoice/stream_runtime.py",
           "scripts/development/xiaozhi/cosyvoice_streaming.py",
@@ -1138,11 +1138,11 @@
       "path": "docs/adr/0190-cosyvoice-continuous-audio-delivery.md",
       "title": "ADR-0190：CosyVoice 连续音频交付与协作取消",
       "status": "draft",
-      "basis": "拟在审查及GPU验收后局部替代ADR-0166的完整片段交付选择；当前仍为候选",
+      "basis": "保留ADR-0166完整片段默认，拟替代其清理/阻塞取消实现；增量仅显式试验，待Z审查整合",
       "review": {
         "state": "verified",
         "date": "2026-10-20",
-        "scope": "已核对X候选实现及历史决定的适用范围，未宣告日用生效或GPU提速",
+        "scope": "已核对X候选/默认门与46调用结果及历史决定范围，否决增量全量默认；未宣告日用部署/实机/整链路目标通过",
         "evidence": [
           "docs/development/parallel/X-cosy-streaming-20261020.md",
           "docs/adr/0166-cosyvoice-measured-runtime-optimization.md"
