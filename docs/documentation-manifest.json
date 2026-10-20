@@ -25,6 +25,10 @@
         "src/longmemory/methods/hy_memory/assembly.py",
         "tests/unit/methods/test_hy_source_storage_binding.py",
         "tests/fixtures/ab_hy_semantic_campus.py",
+        "src/longmemory/methods/hy_memory/provenance.py",
+        "tests/unit/methods/test_hy_provenance.py",
+        "tests/integration/test_ab_hy_provenance_replay.py",
+        "tests/fixtures/ab_hy_provenance_replay.py",
         "docs/development/parallel/AB-campus-l6-l7-20261021-receipt.json"
       ],
       "related": [

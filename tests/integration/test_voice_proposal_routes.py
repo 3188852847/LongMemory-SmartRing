@@ -47,17 +47,17 @@ def test_v2_actual_model_user_message_stays_distinct_from_memory_query_and_withi
             "model_user_message":'{"content":"合成问题","language":"zh","emotion":"neutral","speaker":"合成说话人"}'}
     assert validate_voice_proposal_request(action, body) is body
     if action == "confirm": assert body["query"] == "合成问题"
-    body["messages"] = [["system", "a"]]
-    body["model_user_message"] = "b"*31999
+    body["messages"] = [["system", "a"*16000]]
+    body["model_user_message"] = "b"*16000
     validate_voice_proposal_request(action, body)
-    body["model_user_message"] += "c"
+    body["messages"][0][1] += "c"
     with pytest.raises(ValueError, match="voice_proposal_request_invalid"):
         validate_voice_proposal_request(action, body)
 
 
 @pytest.mark.parametrize("action", ["start", "confirm"])
 @pytest.mark.parametrize("change", ["missing_protocol", "missing_message", "protocol_one", "protocol_bool",
-                                    "protocol_three", "empty", "whitespace", "not_string", "invalid_utf8"])
+                                    "protocol_three", "empty", "whitespace", "not_string", "invalid_utf8", "too_long"])
 def test_v2_model_input_requires_exact_pair_and_never_silently_downgrades(action, change):
     body = {**request(action), "input_protocol":2,"model_user_message":"合成当前模型消息"}
     if change == "missing_protocol": body.pop("input_protocol")
@@ -65,7 +65,7 @@ def test_v2_model_input_requires_exact_pair_and_never_silently_downgrades(action
     elif change.startswith("protocol_"):
         body["input_protocol"] = {"protocol_one":1,"protocol_bool":True,"protocol_three":3}[change]
     else:
-        body["model_user_message"] = {"empty":"","whitespace":" \n\t","not_string":{},"invalid_utf8":"\ud800"}[change]
+        body["model_user_message"] = {"empty":"","whitespace":" \n\t","not_string":{},"invalid_utf8":"\ud800","too_long":"x"*16001}[change]
     with pytest.raises(ValueError, match="voice_proposal_request_invalid"):
         validate_voice_proposal_request(action, body)
 

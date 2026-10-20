@@ -35,7 +35,8 @@ def validate_voice_proposal_request(action, value):
                    for key in ("turn_id", "transcript_revision", "cancel_epoch"))):
         raise invalid
     if model_input and (type(value["input_protocol"]) is not int or value["input_protocol"] != 2
-            or not isinstance(value["model_user_message"], str) or not value["model_user_message"].strip()):
+            or not isinstance(value["model_user_message"], str) or not value["model_user_message"].strip()
+            or len(value["model_user_message"]) > 16000):
         raise invalid
     if "query" in value and (not isinstance(value["query"], str) or not value["query"].strip() or len(value["query"]) > 16000):
         raise invalid

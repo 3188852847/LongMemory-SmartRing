@@ -313,3 +313,13 @@ AD `b88fc80597d773005ba5f5bf3644b8061316d807` 记录经审查接入为AI `20dbe2
 主会话冻结外层version1、输入协议2的兼容演进。snapshot仍只收query作为记忆查询；start/confirm必须成对新增`input_protocol:2`及完整`model_user_message`，历史messages不含当前user，由AF宿主追加该真实字符串。纯文本旧格式不带二者并沿query=currentuser兼容，新语音桥一律显式2，不因JSON难匹配自动降级。当前消息不解释/重组ASR JSON，全文参与候选/正式比较，query仍单独参与记忆/来源校验；工具、时间、角色、声纹变化均应miss。
 
 AI仅改公共 `voice_proposal_contract.py` 和正式HTTP契约测试：两字段缺任一个、protocol为1/3/bool、空白/非字符串/无效UTF-8均拒绝，snapshot/cancel/close不能夹带新字段。模型当前消息加历史文本总量≤32000字符，query仍≤16000字符，请求体仍≤192KiB；没有额外模型额度。旧请求和响应不变。实际鉴权HTTP验证v2字段原样送宿主、无效组合在调用宿主前400拒绝。契约/包装/Runtime组合 **78 passed / 0.44秒**。这时AF/AE尚未交付v2实现，不把替身分派当真实ASR采用已过；等待精确提交后组合，不直接重复其文件。
+
+后续精确接力：AB来源保护`92d40492658d0f972435bc73d218e1f683bba649`→AI`167efac5`，AF双输入宿主`06a332baae5416fcdbad2790dc71c162152e5da2`→AI`f1a09481`，AC所有者下载入口`4c2fbd31195d7e84db0ff9615002106b141d9ccd`→AI`f4681e57`。公共校验额外对齐AF原文本上限：model_user_message自身≤16000字符，模型当前消息与历史合计≤32000；未扩大原额度。AF70项宿主＋公共HTTP＋AC离线下载入口测试 **146 passed / 13.33秒**；此后新增自身上限断言及真实SDK/v2正式HTTP三场景，后者与契约组 **49 passed / 34.52秒**：完整raw ASR消息原样进入模型、元数据仅变emotion即miss、tools_required在预请求前miss且模型调用0。Python3.10子进程旧协议仍通过，新协议真实桥仍待AE交付，不能据本组宣称实际ASR回调/播放已经接通。
+
+AB实际捕获反例的完整SDK离线回放和单元门 **10 passed / 73.13秒**，包含原源码缺陷对照、guarded/旧库upgrade及纠错/删除后召回/候选/后续SDK提取不复活、重开后仍隔离；外部HTTP0。新`provenance.sqlite3`已在HyState.ready()登记为状态必需文件，完整检查点须连同其SQLite伴随文件保留。但AI另用实际SDK projection合成库核验发现profile/proactive正式和候选均没有“语义来源未证实”标识，已交主会话转AB；单纯可读来源meta/当前画像/未来意图标签不能代替来源完整性。新L2分页有provenance字段，现前端未消费其细分状态，需AH接力后重新绑定前端产物。
+
+AI受控SQLite成本测量（合成Store、不载SDK/模型）：begin_add在1000节点打开3000连接、279.404ms；10000节点打开30000连接、2827.577ms。不是生产性能或P95。AB负责同ledger/audit/retired批读和同规模对照；正式网页ChatBackend.run仍同步prepare_user，因此本轮不能把此新增扫描当轻量。圆屏prepare使用defer_slow_observation=true，但既有后台完整observe仍保守持Runtime锁，不能借模型准入优先级掩盖该串行边界。网页改为延后提取不是来源门最小修复：会改变当前轮可检索内容、模型失败/取消后的提取时机；应先批读并量化新增成本，若改网页须独立验证原话持久化/失败/取消/重开，不仅切参数。未放宽来源安全或提前改写现有网页契约。
+
+当前日用适用性已只读核实：保存首选pipeline/realtime、搜索configured=true；实际正式launch_with_memory进程命令也为realtime，未输出命令全文/密钥，未连接日用端口。当前web_response函数工具和精确实时时间路径下，此纯无工具候选必miss，不能静默关搜索/冻结日期来假称生效，也不应默认打开必废弃的请求。发布时保持候选双端关闭；无工具可采用只作为支持边界证明，待另有正当完整工具/时间载荷方案才讨论当前日用实效，其余来源/调度/TTS可独立验收。
+
+未来模型下载只提供所有者入口 `powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/development/xiaozhi/Download-SmartTurn.ps1`；固定官方revision/大小/SHA、断点临时文件保留、正式文件仅校验不覆盖。所有者本次已完成下载校验，无需重跑；AI未执行该入口或联网。正式模型目的路径仍为`local/runtime/models/smart-turn-v3.2/smart-turn-v3.2-cpu.onnx`，只有正式部署方核验后复制已有文件，不把工作树当永久运行资源。
