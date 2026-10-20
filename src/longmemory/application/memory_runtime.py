@@ -10,6 +10,7 @@ from uuid import uuid4
 import re
 import json
 import logging
+from hashlib import sha256
 from longmemory.application.round_screen_turns import memory_receipt, validate_receipt, PlatformTurnCompletion
 from longmemory.application.round_screen_memory_feedback import classify_explicit_round_screen_feedback
 
@@ -135,6 +136,11 @@ class MemoryRuntime:
         self._closed = False
         self._write_enabled = True
         self._use_enabled = True
+        # 候选票据只在本Runtime实例和当前设置版本内有效，重启不能复用旧版本。
+        from secrets import token_hex
+        self._proposal_instance = token_hex(16)
+        self._proposal_revision = 0
+        self._proposal_formal = {}
         self._scenario_provider = scenario_provider
         # L2 刚进入真实回答链，默认关闭，避免升级后无提示改变既有行为。
         self._scenario_use_enabled = False
@@ -565,6 +571,7 @@ class MemoryRuntime:
                     raise ValueError("round_screen_platform_unavailable")
                 for expired in store.expire():
                     self._deferred_events.pop(expired, None)
+                    self._proposal_formal.pop(expired, None)
                 event_id = store.reserve(client_round_id=client_round_id, session_id=session_id,
                                          request_id=request_id, voice_round_id=voice_round_id)
                 try:
@@ -575,6 +582,17 @@ class MemoryRuntime:
                     store.failed(event_id)
                     raise
                 feedback = store.feedback(prepared.event, classify_explicit_round_screen_feedback(text))
+                # 正式prepare已获写入授权；仅在内存留下短期比对摘要，不复制正文。
+                # 候选不能自行伪造“已正式准备”的上下文或来源证明。
+                if len(self._proposal_formal) >= 64:
+                    self._proposal_formal.pop(next(iter(self._proposal_formal)))
+                self._proposal_formal[event_id] = {
+                    "client_round_id": client_round_id, "session_id": session_id,
+                    "created": perf_counter(), "query": self._proposal_digest(text.strip()),
+                    "context": self._proposal_digest(prepared.support.context),
+                    "evidence": self._proposal_digest(memory_receipt(prepared)["evidence"]),
+                    "eligible": (prepared.memory_command is None and prepared.follow_up_suggestion is None
+                                 and not (feedback is not None and feedback.recorded))}
                 status = 'completed'
                 return prepared, feedback
         finally:
@@ -588,6 +606,7 @@ class MemoryRuntime:
             validate_receipt(receipt)
             assistant_id, created = self._round_screen_store.complete(event_id=turn_id,
                 answer=answer, receipt=receipt, request_id=request_id, client_round_id=client_round_id)
+            self._proposal_formal.pop(turn_id, None)
             # 来源与助手关联已持久提交，然后才排队；后台失败由来源账本保存。
             if self._round_screen_store.claim_dispatch(turn_id):
                 self.complete_deferred_observation(turn_id, resume_pending=True)
@@ -599,6 +618,7 @@ class MemoryRuntime:
             result = self._round_screen_store.cancel(turn_id, reason=reason, client_round_id=client_round_id,
                                                     request_id=request_id)
             self._deferred_events.pop(turn_id, None)
+            self._proposal_formal.pop(turn_id, None)
             return result
 
     def round_screen_status(self, turn_id):
@@ -754,6 +774,8 @@ class MemoryRuntime:
                 raise ValueError("memory_write_paused")
             if capability == "correction" and kwargs["source"].role != "user":
                 raise ValueError("memory_correction_source_must_be_user")
+            if capability in {"correction", "deletion"}:
+                self._proposal_revision += 1
             if capability == "correction" and not self.legacy_sqlite:
                 # 新引擎管理来源也先归档；管理失败不声称跨存储回滚。
                 self._method.archive(kwargs["source"])
@@ -823,6 +845,9 @@ class MemoryRuntime:
                     # HTTP重放会产生新接收时间；复用第一次真实来源，不能冲突覆盖。
                     source = MemoryEvent(source.event_id, "user", previous["content"],
                         datetime.fromisoformat(previous["occurred_at"]), previous["session_id"])
+                # 管理可能在平台留下running/uncertain而SDK正文未变。先撤销旧候选，
+                # 不能仅依赖原生内容digest发现来源叠加或不确定隔离的变化。
+                self._proposal_revision += 1
                 self._method.archive(source)
                 arguments["source"] = source
             result = admin.extension(operation, **arguments)
@@ -961,6 +986,9 @@ class MemoryRuntime:
                 raise ValueError("scenario_memory_unavailable")
             if persona_use_enabled and self._persona_provider is None:
                 raise ValueError("persona_memory_unavailable")
+            proposal_changed = (write_enabled != self._write_enabled or use_enabled != self._use_enabled
+                or (scenario_use_enabled is not None and scenario_use_enabled != self._scenario_use_enabled)
+                or (persona_use_enabled is not None and persona_use_enabled != self._persona_use_enabled))
             if write_enabled != self._write_enabled:
                 self._sync_background_writes(write_enabled)
             self._write_enabled = write_enabled
@@ -969,6 +997,8 @@ class MemoryRuntime:
                 self._scenario_use_enabled = scenario_use_enabled
             if persona_use_enabled is not None:
                 self._persona_use_enabled = persona_use_enabled
+            if proposal_changed:
+                self._proposal_revision += 1
             return self.status()
 
     def _sync_background_writes(self, write_enabled):
@@ -979,7 +1009,123 @@ class MemoryRuntime:
             except Exception:
                 # 未能证明后台屏障已更新时，前台至少保持暂停；不伪报任务回滚。
                 self._write_enabled = False
+                self._proposal_revision += 1
                 raise RuntimeError("memory_background_write_gate_failed") from None
+
+    def candidate_memory_snapshot(self, query, *, limit=5):
+        """宿主候选专用读取；绝不调用prepare/recall/reserve/归档或派生接口。
+
+        向量沿宿主已有CPU编码器和网关embedding锁产生，不携带供应商凭据。
+        引擎短期令牌仍由Hy真实只读路径签发；这里额外绑定Runtime实例和设置。
+        """
+        from longmemory.methods.contracts import UnsupportedCapabilityError
+        if not isinstance(query, str) or not query.strip() or len(query) > 16000:
+            raise ValueError("candidate_query_invalid")
+        if type(limit) is not int or not 1 <= limit <= 10:
+            raise ValueError("candidate_limit_invalid")
+        if not self._lock.acquire(blocking=False):
+            raise RuntimeError("candidate_memory_busy")
+        try:
+            self._ensure_open()
+            snapshot = getattr(self._method, "candidate_snapshot", None)
+            gateway = getattr(self._model_service, "gateway", None)
+            if self._closing or not self._use_enabled:
+                raise RuntimeError("candidate_memory_unavailable")
+            if self.legacy_sqlite or not callable(snapshot) or gateway is None:
+                raise UnsupportedCapabilityError("candidate_memory_unsupported")
+            encoded = gateway.embed({"model": gateway.encoder.identity, "input": [query]}, "query")
+            vector = encoded["data"][0]["embedding"]
+            result = snapshot(query_embedding=vector, limit=limit)
+            if not isinstance(result, dict):
+                raise RuntimeError("candidate_memory_response_invalid")
+            return {"engine": result, "runtime_revision": self._candidate_runtime_revision()}
+        finally:
+            self._lock.release()
+
+    def _candidate_runtime_revision(self):
+        return self._proposal_instance + ":" + str(self._proposal_revision)
+
+    def candidate_model_binding(self):
+        """只供宿主装配取得现有已核验网关；不向小智/HTTP返回供应商凭据。"""
+        with self._lock:
+            self._ensure_open()
+            gateway = getattr(self._model_service, "gateway", None)
+            if self._closing or gateway is None:
+                raise RuntimeError("candidate_model_unavailable")
+            return {**gateway.candidate_response_binding(), "policy_revision": self.candidate_policy_revision()}
+
+    def candidate_policy_revision(self):
+        """模型/政策/Runtime设置的内部版本；角色、日期和历史另由实际消息绑定。"""
+        with self._lock:
+            self._ensure_open()
+            gateway = getattr(self._model_service, "gateway", None)
+            if self._closing or gateway is None:
+                raise RuntimeError("candidate_model_unavailable")
+            # 完整设置只进哈希；凭据和端点绝不作为候选状态或诊断字段返回。
+            return self._proposal_digest({"runtime": self._candidate_runtime_revision(),
+                "model": asdict(gateway.settings), "policy": gateway.budget.identity,
+                "embedding": gateway.encoder.identity,
+                "method": self._method.implementation_version})
+
+    @staticmethod
+    def _proposal_digest(value):
+        return sha256(json.dumps(value, ensure_ascii=False, sort_keys=True,
+                                 separators=(",", ":"), allow_nan=False).encode()).hexdigest()
+
+    def claim_candidate_memory(self, receipt, *, query, formal_turn_id, client_round_id,
+                               session_id, claim):
+        """同一前台临界区内比对正式正文/来源、fresh令牌并同步一次性领取。
+
+        claim只能是进程内同步领取函数，不能执行网络、TTS或任何正式入库。
+        返回客户端后仍由语音侧在原取消门内同步检查epoch再入队。
+        """
+        with self._lock:
+            self._ensure_open()
+            record = self._proposal_formal.get(formal_turn_id)
+            if (self._closing or record is None or not record["eligible"]
+                    or perf_counter() - record["created"] > 30
+                    or record["client_round_id"] != client_round_id or record["session_id"] != session_id
+                    or record["query"] != self._proposal_digest(query.strip())):
+                return None
+            engine = receipt["engine"]
+            if engine.get("read_status") != "readable":
+                return None
+            rows = engine["items"]
+            context = "\n".join(row["content"] for row in rows)
+            evidence = [{"item_id": row["memory_id"], "rank": rank,
+                         "content_sha256": sha256(row["content"].encode()).hexdigest(),
+                         "source_event_ids": row["source_event_ids"]} for rank, row in enumerate(rows, 1)]
+            if (record["context"] != self._proposal_digest(context)
+                    or record["evidence"] != self._proposal_digest(evidence)):
+                return None
+            valid = self.validate_candidate_memory(snapshot_token=engine["snapshot_token"],
+                memory_digest=engine["memory_digest"], runtime_revision=receipt["runtime_revision"])
+            if (not isinstance(valid, dict) or valid.get("protocol") != 1 or valid.get("valid") is not True
+                    or valid.get("memory_digest") != engine["memory_digest"]):
+                return None
+            # 从fresh校验到claim没有await；正式源归档/工具/音频仍不在候选内执行。
+            text = claim()
+            if text is not None:
+                if not isinstance(text, str) or not text.strip() or len(text) > 16000:
+                    raise ValueError("candidate_claim_invalid")
+                self._proposal_formal.pop(formal_turn_id, None)
+            return text
+
+    def validate_candidate_memory(self, *, snapshot_token, memory_digest, runtime_revision):
+        """正式采用前重验宿主设置与引擎令牌；结果只供宿主候选服务使用。"""
+        from longmemory.methods.contracts import UnsupportedCapabilityError
+        if not self._lock.acquire(blocking=False):
+            raise RuntimeError("candidate_memory_busy")
+        try:
+            self._ensure_open()
+            if self._closing or not self._use_enabled or runtime_revision != self._candidate_runtime_revision():
+                return False
+            validate = getattr(self._method, "candidate_validate", None)
+            if self.legacy_sqlite or not callable(validate):
+                raise UnsupportedCapabilityError("candidate_memory_unsupported")
+            return validate(snapshot_token=snapshot_token, memory_digest=memory_digest)
+        finally:
+            self._lock.release()
 
     def close(self) -> None:
         # 不能在持锁状态 shutdown：正在完成模型调用的工作线程随后还需
@@ -989,6 +1135,7 @@ class MemoryRuntime:
                 return
             self._closing = True
             self._deferred_events.clear()
+            self._proposal_formal.clear()
         self._deferred_executor.shutdown(wait=True, cancel_futures=True)
         with self._lock:
             if not self._closed:

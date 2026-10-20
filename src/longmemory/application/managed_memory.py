@@ -109,6 +109,39 @@ class ManagedMemoryMethod:
             self._check()
             self.engine.wait_until_ready()
 
+    def configure_background_writes(self, *, write_enabled):
+        """显式穿透来源包装的后台写门；不归档事件、不把暂停变成一次observe。"""
+        with self._lock:
+            self._check()
+            gate = getattr(self.engine, "configure_background_writes", None)
+            if callable(gate):
+                return gate(write_enabled=write_enabled)
+
+    def candidate_snapshot(self, *, query_embedding, limit=5):
+        """候选专用能力；不能通过来源包装器的普通recall猜测只读语义。"""
+        if not self._lock.acquire(blocking=False):
+            raise RuntimeError("candidate_memory_busy")
+        try:
+            self._check()
+            snapshot = getattr(self.engine, "candidate_snapshot", None)
+            if not callable(snapshot):
+                raise UnsupportedCapabilityError("candidate_memory_unsupported")
+            return snapshot(query_embedding=query_embedding, limit=limit)
+        finally:
+            self._lock.release()
+
+    def candidate_validate(self, *, snapshot_token, memory_digest=None):
+        if not self._lock.acquire(blocking=False):
+            raise RuntimeError("candidate_memory_busy")
+        try:
+            self._check()
+            validate = getattr(self.engine, "candidate_validate", None)
+            if not callable(validate):
+                raise UnsupportedCapabilityError("candidate_memory_unsupported")
+            return validate(snapshot_token=snapshot_token, memory_digest=memory_digest)
+        finally:
+            self._lock.release()
+
     def close(self):
         with self._lock:
             if not self._closed:

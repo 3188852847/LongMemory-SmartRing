@@ -4,6 +4,8 @@ import importlib.util
 from pathlib import Path
 import sys
 from types import SimpleNamespace
+from contextvars import ContextVar
+from threading import Lock
 
 import pytest
 
@@ -85,3 +87,24 @@ def test_live_reinstallation_requires_restart():
     with pytest.raises(RuntimeError, match="restart_required"):
         launch.install_advanced_voice_policy(connection, cosy_delivery_mode="adaptive")
     assert connection._longmemory_cosy_delivery_mode == "buffered"
+
+
+def test_formal_metadata_uses_this_context_not_other_pending_round_or_fixed_reply():
+    context = ContextVar("synthetic-formal-key", default="a"*32)
+    one = {"memory_protocol": 2, "client_round_id": "a"*32,
+           "turn_id": "11111111-1111-4111-8111-111111111111"}
+    memory = SimpleNamespace(_turn_key=context, _lock=Lock(), _session_id="b"*32,
+        _pending_completions={"a"*32: one, "c"*32: {"PRIVATE": "must-not-return"}})
+    connection = SimpleNamespace(memory=memory)
+    assert launch.voice_proposal_formal_metadata(connection) == {
+        "formal_turn_id": one["turn_id"], "client_round_id": "a"*32, "session_id": "b"*32}
+    with memory._lock:
+        assert launch.voice_proposal_formal_metadata(connection) is None
+    one["fixed_reply"] = "合成预算/管理回复"
+    assert launch.voice_proposal_formal_metadata(connection) is None
+    one.pop("fixed_reply")
+    token = context.set("c"*32)
+    try:
+        assert launch.voice_proposal_formal_metadata(connection) is None
+    finally:
+        context.reset(token)

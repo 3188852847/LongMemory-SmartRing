@@ -9,6 +9,8 @@ from longmemory.application.semantic_tasks import validate_semantic_request
 from longmemory.methods.contracts import UnsupportedCapabilityError
 from longmemory.methods.hy_memory.administration import HyManagementConflict, HyManagementUncertain
 from longmemory.methods.hy_memory.sdk_bridge import HyResponseError
+from longmemory.methods.hy_memory.semantic import SemanticBusy
+from longmemory.methods.hy_memory.layer_data import HyLayerDataBusy
 from ..method_management import invoke_hy_management
 
 
@@ -28,6 +30,14 @@ def register_hy_semantic_routes(app, runtime_provider, *, allow_management=False
             return web.json_response(result)
         except UnsupportedCapabilityError:
             return web.json_response({"error": "memory_backend_capability_unsupported"}, status=501)
+        except (SemanticBusy, HyLayerDataBusy):
+            return web.json_response({"error": "hy_semantic_busy"}, status=503)
+        except HyResponseError as error:
+            # 现有JSONL RPC保留固定异常类型、不透传正文。只读单任务的确定性
+            # LookupError可以映射不存在；其他SDK失败继续保持不确定/不可用。
+            if operation in {"semantic_task", "semantic_cancel"} and str(error) == "hy_worker_operation_failed_LookupError_state_unknown":
+                return web.json_response({"error": "hy_semantic_task_not_found"}, status=404)
+            return web.json_response({"error": "hy_semantic_unavailable"}, status=503)
         except LookupError:
             return web.json_response({"error": "hy_semantic_task_not_found"}, status=404)
         except HyManagementConflict:

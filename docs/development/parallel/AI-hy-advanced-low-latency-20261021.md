@@ -189,3 +189,88 @@ GPU 独占建议：主会话先核对正式资源所有权并安排已授权窗�
 仍未完成的真实接力：AB 最终提交和协议 2 证明；只读候选快照的实际向量/上下文/版本/校验令牌；AF 进入原网关审计的异步响应与 owned 请求退出 ACK（确认回执）；AE 声音事件/正式 prepare 后 fresh 校验与原取消门之间无 await 派发；AC 已装 Cosy Python 的常驻纯 CPU worker；AH 对最终 DTO 与任务状态；AG 新 CPU 证据/AD GPU 计划。普通 search、正式 prepare 不能用作候选快照。取消客户端连接不等于 owned 请求/供应商计算已结束，未知保持未知，计算槽保留至约定退出边界。
 
 以上缺口正在由主会话转各自所有者，AI 继续公共实现与组合验证。软件模块默认关闭或 unavailable 只能说明安全降级，**不能写成用户要求的全部方向已完成**。
+
+### 后续接入与真实公共边界核查
+
+已按主会话逐项授权继续接入：AC `2c022a6→364e079`、`9eb2f98→d562d90`；AB `5a4c1ec→8e7f3d0`、投影修复 `eb031738→66a2b108`；AF `85b1d715→a5f75cd`、宿主服务 `bf317915→4803d303`；AE `07773e8→dee964554`；AG `d230d01→43eaf4c`、`f65a0e4→442bbc5f`；AH `ca1e488→c883d8f`、`70cad5b→ca5223e`；AD `fb9deec→30228f2`、WDDM 窗口修复 `172a355→16cf16df`。左侧为作者提交，右侧为 AI 隔离分支对应提交；不是主库合入提交。
+
+真实 SDK 组合暴露出 `ManagedMemoryMethod` 来源包装器没有传递新能力，先前直接方法替身无法发现。AI 在该公共包装器新增显式受锁委托 `configure_background_writes/candidate_snapshot/candidate_validate`；读取不调用 archive/observe/recall，不泛化成任意 `__getattr__`。这同时修正了真实 Runtime 的后台写门穿透。
+
+Runtime 候选读取使用宿主原网关的 CPU `embed(...,"query")` 及其已有编码锁，再调 AB 专用读取；不运行正式 prepare，不 reserve/归档/派生。候选票据额外绑定随机 Runtime 实例和配置修订，模型政策版本覆盖完整设置摘要、免费账本政策、嵌入配方身份、方法实现版本；凭据/端点只进内部摘要，绝不投给小智。角色、日期、历史由实际冻结 messages 和正式 messages 完整比对，不能用旧消息伪装 fresh。
+
+只有实际正式 `prepare_round_screen` 才留下最多 64 条、30 秒有效的临时比对摘要，包含真实输入、记忆 context 和来源/正文证据，不复制正文、不新增持久表。confirm 要关联实际 `formal_turn_id/client_round_id/session_id`，完整比较后，在 Runtime 临界区内 fresh 校验引擎令牌并同步领取；完成/取消/关闭移除摘要。普通 search 和平台 round.status 均不能用来生成候选证明，后者本身会过期写状态。
+
+新 [候选协议校验器](../../../src/longmemory/application/voice_proposal_contract.py) 和 [内部路由](../../../src/longmemory/entrypoints/api/routes/voice_proposals.py) 冻结五类 POST：`/api/internal/memory/proposals/{snapshot,start,confirm,cancel,close}`，沿原内部 Bearer/回环鉴权。三项 stamp 均是真整数 `[0,2^63)`；connection/snapshot/session ID 为 32 位小写 hex，client_round_id 为 24–32 位小写 hex，formal_turn_id 为规范 UUID。query 非空≤16000，messages 最多128条 `[role,text]`、首项唯一 system、后续仅 user/assistant、正文合计≤32000，准备上下文不含本次 user。请求体≤192KiB，不收额外字段或 transcript 别名；tools_required=true 直接 miss，不提前执行工具。具体请求字段由校验器 `EXTRA_FIELDS` 唯一维护。
+
+读快照返回 ready 的 snapshot_id/memory_context 或 unavailable/null；start 只返回 preparing/miss；confirm 仅 adopted 才有最终 text，miss 为 null；cancel/close 只有真实 owned 请求退出确认才返回非 closing 和 `owned_upstream_exited=true`，`provider_compute_stopped` 始终 false。费用 unknown 继续由原账本保留，不从 ACK 推定已结算。server 仅在现有内部 token 通路注册宿主实例，默认关闭，可显式 `--enable-voice-preemptive` / 子进程 `LONGMEMORY_PREEMPTIVE_ENABLED=1`；这项候选开关与 SmartTurn enabled 独立。AE 语音 RPC client 仍待精确提交后接入 launch，宿主类/客户端不得重复实现。
+
+当前新增实证：
+
+- 真实 SDK 原生语义/逐层读取组 **13 passed in 80.19s**，无网络、无 skip；此组是较早指纹的隔离回归，不能替代最终源码的 release proof。
+- 新 `test_hy_semantic_platform_sdk.py` 在当前公共 Runtime/包装器下 **2 passed in 11.59s**：真实非空画像＋事实＋意图的候选与正式 prepare 完全一致并单次领取；历史展开场景保留差异并回退。首次测试误假设“最新条目候选能覆盖历史展开”，实际定位为 SDK 的 Current/When 历史格式与来源不同，按已声明 latest-only 边界改为正反两组，没有删正式上下文或放宽比较门。
+- 公共协议/真实会话鉴权、Runtime 的实际正式摘要、跨 session/轮次/输入/内容/来源/设置/引擎失效、单次领取与启动关闭组 **54 passed in 0.43s**；它们仍不替代真正跨进程正常命中。
+- 新增候选宿主和 AB 正式身份迁移问题仍在接力。发现既有 source 账本将 implementation_version 绑定为持久身份，semantic adapter 版本变化会拒绝旧账本；未修复并真实验证 pro→semantic→重开→pro 前不部署，不改个人 identity 表。发现冷 pro Runtime 的 semantic status 可能经 sdk_call 懒初始化，已交 AB 补只读 guard。
+
+前端 Git tree 已独立比对：AI 与 AH `70cad5b…` 的 `web/react-chat` 都为 `43ecb03553163f675e437193345f26a7f77942f4`。由主会话转 AH 使用其实体依赖离线构建和交付 dist/manifest/tree 摘要，AI 不联接 node_modules、不安装。
+
+### AD 独立评审与实机门
+
+`172a355` 的 v2 项目模型窗口代码独立复审通过，**46 passed in 4.59s**。AI 的真实只读采集得到 WDDM、37 C+G、1 C，36 verified_image＋2 protected_os_logical；未运行 GPU。只允许主会话按 PID/创建时间/路径或明确系统逻辑身份逐条审查的桌面基线，C/unknown、未批准身份、PID复用、上下文变化均拒绝。C+G不改称纯图形，保留 `same_process_background_workload_not_observable=true`，不是物理独占。只读基线不授予 GPU 租约。
+
+主会话随后安排唯一 `AD-GPU-20261021-01`，已关闭并恢复原 main=`a93258e` 日用 ready。AI 只读核对报告 SHA-256 `90b350633537d1e902a581c5df2eee06abb4104d86d588f68c39509065fc689b` 与逐项数值：真实 TTS-only 149.92秒，当前 uses_default_voice=true、选中声线暖机后测量；physical_playback/selected_voice_quality/full_ASR_memory_LLM 均未证明。每类/模式 n=3，不报 P95 收益。
+
+| 文本 / 指标中位数 | buffered | adaptive |
+|---|---:|---:|
+| 多句首能量帧 ms | 1791.824 | 1585.521 |
+| 长句首能量帧 ms | 1871.434 | 1514.748 |
+| 多句 TTS 生成/交付墙钟 ms | 4409.465 | 5437.864 |
+| 长句 TTS 生成/交付墙钟 ms | 7986.935 | 11617.542 |
+| 多句预测供给欠载 ms | 156.382 | 0 |
+| 长句预测供给欠载 ms | 645.414 | 0 |
+
+音频时长配对一致，中位多句6760ms、长句13000ms；墙钟包含背压，不能据此声称额外 GPU 运算或整体计算更快，也不能把 TTS 首能量帧当用户停说→首有效答声。before_audio/buffering/after_audio 三例新增旧帧0、后继新轮52/58/57帧、服务active_requests=0。**after_audio前三帧未过能量门**，只能说出帧后取消，未覆盖有效发声后打断。设备已收帧不能被软件回收。
+
+结论为可进入受控 adaptive 上线候选，仍保持 buffered 默认。正式发布技术门通过后，由所有者使用原角色/声音，分别比较短答/多句长答连续性；在确实听到开口及中途改问，核对旧声残留、字幕与新轮完整性，再连续两三轮看连接/声音和记忆一致性。SmartTurn 正式 EOU 继续原策略（合成中文初筛4/5误切未改善），不把候选启用绑死于其 enabled。听感/残音/新轮异常则回 buffered；AI 不把电脑声音或出帧当圆屏验收。
+
+## 最终部署/回退操作计划（只交接，不在AI执行）
+
+本计划由主会话持有操作责任；需要先补齐最终 clean commit、公共后端/候选真实跨进程与旧 source 身份兼容、最终精确指纹的无网络 SDK/管理/HTTP 回归、前端同 tree 产物和新协议2证明。未满足则继续原日用，不提前改配置或重签 proof。AG TensorRT/vLLM/量化候选不阻塞其他已证实方向，也不混入本轮日用默认。
+
+1. **冻结/登记**：记录原 main/目标提交、SDK解释器字节身份、所有新原语摘要、前端 manifest/资源tree、实际部署配置/引擎/来源/管理/调用账本/stamp 精确路径、当前模型/声音/角色和运行期开关。所有检查点放主项目新建且不存在的 `local/archive/hy-advanced-release/<UTC时间-随机ID>/`，不覆盖旧档案。原付费 unknown 与 V/X/Y/Z/AA 发布证据/解释器引用继续保留。
+2. **按所有权停止**：先用生产根的正式 control 读 status，重新核对 launcher/PID/创建时间/Job与监听归属；只有对应 owned 服务才执行 stop，再确认其整个任务树退出、目标端口释放。示例命令仅由主会话在生产根执行：
+
+   ```powershell
+   $releaseRoot = 'D:/03-项目/01-正式项目/智慧圆屏'
+   $releasePython = Join-Path $releaseRoot '.venv/Scripts/python.exe'
+   & $releasePython -B -X utf8 (Join-Path $releaseRoot 'scripts/development/launcher/control.py') status
+   & $releasePython -B -X utf8 (Join-Path $releaseRoot 'scripts/development/launcher/control.py') stop
+   ```
+
+3. **一致备份**：在已证实停止后，复制**完整 Hy 引擎目录**（Chroma/Kuzu、新 `semantic.sqlite3`、管理账本、scope/state stamp 与相关侧文件）、平台 source/round 账本、校园调用审计及其存在的 WAL/SHM、相关人工配置/偏好/角色/声音档案与旧证明。保留路径相对关系，检查前后逐文件大小/SHA-256；来源和审计必须同一停机边界，不能只备份向量库或只复制主 sqlite 文件。备份包含私有数据/密钥，不进Git；运行中变化或仍有owner则中止这一步定位，不继续复制成“成功”。
+4. **逐项应用**：先合入已审代码和同 tree 前端产物，校验下载到 AC 的固定 ONNX 大小/摘要后，由部署方明确复制到正式 `local/runtime/models/smart-turn-v3.2/`；已有不同文件不盲覆盖。侧车显式使用正式 Cosy Python，不将工作树资源当永久依赖。保留校园模型精确名、原声音/角色和 buffered，SmartTurn 先 off/shadow。按已验证迁移方案开启语义能力，使用最终代码实际SDK验证产生的新协议2证明；不复制历史字典或仅改摘要来假称验证。
+5. **重开原入口**：若使用新进程环境开关，必须退出旧launcher，再从携带这些环境变量的新进程执行 `启动智慧圆屏.cmd`；仅向旧launcher发送 start 不会更新其环境。日用启动仍走根唯一入口，不直接起另一套服务。候选宿主与语音侧启用必须同时匹配，缺任一端降级并报告；自适应音频只作为本次受控实验单独选择，不顺带开启所有候选引擎。
+6. **只读健康/层状态**：核对 owned 服务 ready、原端口/设备路由、校园/声音/角色标识和 provider策略；读取真实 Hy semantic/status 的 protocol2/mode/graph/epoch、Runtime门、L6/L7的保存/覆盖/隔离状态和单任务回执，检查前端产物身份。查看不得懒启动、跑普通search或后台生成。技术检查不自动向个人库发合成对话，不发未经本轮调度的学校请求。通过后才安排所有者真实文字/圆屏与听感/插话验收。
+7. **受控回退**：停止同一 owned 服务，保全失败时当前状态和新日志/审计。优先按已经过“pro→semantic→pro”实测的**新代码保守模式**恢复：语义能力关闭、buffered、候选关闭、对应当前代码的 pro 证明，按原入口重开；新 pro 保留图/任务并在后续写入时隔离保留图式。此测试不等于旧 `a93258e` 写入器具备相同失效能力。真正旧代码/旧前端撤回须另验其对已新增图/任务/当前source与后续写入的兼容和隔离，未证明时不把旧代码回退列为可自动执行。所有新增/现有个人来源、费用unknown、派生与任务证据保留，不删除Kuzu/任务账本、不重建索引、不覆盖个人数据库。若代码无法兼容当前状态或已有新对话，保留当前完整检查点并报告精确阻塞，不能拿写前备份覆盖新增记录来换取“恢复成功”。数据恢复属另行精确授权范围。
+
+操作交付追溯表最后由主会话填写实际停止/备份/应用/健康/回退或接受时间与证据摘要，以及“任务→提交→AI验收→main合入提交→会话ID”。本计划未执行任何生产生命周期；AD临时窗口恢复原版不等于新版发布。
+
+## 追加组合检查点：真实 SDK、RPC 与上线阻断项
+
+本批新增接力：AE `0a9531b7924fa24d540295a2f51cc6cbff729c48` → AI `76843487`；AH 离线发布记录 `1c272770e101fb49acb4a189cfe90c11ecffb25c` → AI `d73a2f89`。此前真实校园 harness/收据、稳定 source 身份、3.10 RPC/null/多通道等接力已经进入同一组合树；历史分组测试数量不相加作为最终覆盖数。
+
+AI 实际修复 ManagedMemoryMethod 包装层缺少显式 `configure_background_writes` / `candidate_snapshot` / `candidate_validate` 委托导致底层能力不可达的问题；不增加任意属性穿透。Runtime 初始化及配置变更同步同一写门，失败保持关闭；候选读取不写来源、不跑普通 recall。正式 prepare 在内存暂存有界/短期的本轮身份、查询/上下文/完整来源哈希，确认在同一 Runtime 锁内新鲜复核并同步领取；命令、反馈、跟进、预算回执以及内容/来源/策略变化均不能直接采用候选。没有把“最近一轮”当当前线程实际 Memory 回执。
+
+`test_voice_proposal_sdk_rpc.py` 的三个场景在实际固定 SDK、真实 Managed/Runtime、实际 AF 网关/独立合成免费账本、正式五种候选路由与原 prepare/cancel 路由、既有鉴权、所有者既有 Python3.10 子进程 RPC 上 **3 passed / 17.58秒**。供应商只用随机回环 HTTP 合成响应，学校调用0；projection 场景画像1＋事实4＋意图1六项全部进入实际模型载荷，来源/上下文一致可 adopted，包含历史链的正式上下文差异及 Runtime 策略变化均 miss。分阶段证明正式 prepare 前来源文件无变化、journal 事件空、SDK 模型计数和语义任务未增加；没有发助手完成或假装设备已播放。该组仍使用合成角色/标准消息，**不是实际 ASR 接线已通过**。
+
+上线前仍须处理或取得对应证据：
+
+- **真实 L2 来源**：AB 校园收据 `new_l2_semantic_provenance_complete=false` 是质量/派生管理阻断项。新 L2 从四个旧 seed 概括习惯却只挂 future 事件，不算本轮用户直接事实；不能靠文档脚注或补齐可读 ID 假装语义来源完整。AB 正在离线复现并处理来源依赖/未证实内容隔离。最终需复核旧来源纠错/删除及后续 L6 不会重新引入该概括；不追加学校请求、不批改个人库。
+- **共享模型排队**：AI `test_voice_gateway_background_contention.py` 实际网关/独立账本、受控函数供应商替身复现：后台持锁160ms时正式回答167.655ms后才进入供应商，本次顺序hy→hy→answer；候选排队可取消（0.077ms本样本），不等于取消已在飞背景。旧 model_ttft 从拿锁后计，掩盖该等待。AF 已由主会话授权实现有界准入优先级，保留上游并发1和原预算/unknown/关闭ACK；此处是修复前对照，最终须重跑实际HTTP与SDK后台组合。不能以reader耗时推断最终回答不受影响。
+- **实际 ASR 当前消息**：固定上游 ASR 会把包含content/language/emotion/speaker的JSON字符串送入当前用户消息，正式记忆 prepare 另提取content。候选协议当前单一query同时用于记忆和追加模型当前消息，不能同时绑定两份实际载荷。需分别冻结/复核记忆查询与模型当前消息；不得剥掉正式元数据或弱化上下文以制造命中。原角色、时间、声纹及联网工具约束仍按最终真实模型载荷比较；已配工具时不能抢答绕过搜索。SmartTurn off/shadow 不作为禁用原ASR候选的理由。
+- **冷语义读取**：HTTP/provider已禁止懒装配，但现有 HyAdministration.semantic 仍可能经 sdk_call 懒启动未初始化的自定义引擎；正式装配总是ready不抹掉该接口边界。须底层明确拒绝cold读取并给实际对象测试。
+
+AH离线发布候选已由AI只读逐文件重算：45文件、1,835,506字节，规范树SHA-256=`278ed5f109b2ffcce9246e5f26719dd6add19d94f9b5e7d28bcee4dc48a9a1ef`，manifest=`fff8f17b610f6bb55cd83f518a831eb73a9359c6f89332ace572c0caa774df53`；与当前前端tree及共享assets tree匹配，关键构建输入与7张截图摘要均匹配。未在AI安装/复制依赖、未重建或切换生产dist，浏览器视觉结果沿AH精确同产物证据，不能替代组合HTTP/日用。
+
+AG `flow_trtexec.py` 静态审查及CPU契约/source绑定组 **18 passed / 0.83秒**，未导入GPU模型。固定资源/参数/10组数值计划、逐阶段Job 6GiB/2CPU与墙钟限制存在；但execute仅窗口ID非空，尚未核验AD v2 WDDM项目模型窗口和精确桌面基线，不能阻止未知owner混入；当前不接受执行准入。另需将全流程22分钟/唯一自有外层Job、固定解释器/依赖与源码摘要绑定到窗口接力。工作区大小是采样限制、GPU显存是观察阈值，均不冒充硬物理独占。没有自动停服务、下载、混装、重试或删除外部结果；此实验不阻塞其他已验方向。
+
+本检查点另实际运行：旧pro→semantic→pro及旧semantic source别名重开 **2 passed / 35.44秒**；公共Runtime/实际SDK/五路由/宿主/3.10 RPC/启动/文档机制组 **158 passed、7 skipped / 33.78秒**（7项缺显式冻结宿主ref，未当通过）。补入确切AF `0ea551a90c7ef04863dc887c8295627059edfe1d` 后，3.10 RPC全组和新增管理uncertain撤销测试 **69 passed / 10.77秒、无skip**；这两组有交集，不相加。补充Runtime管理尝试在来源归档前递增候选版本，因此SDK正文未变但平台可能running/uncertain时仍会撤销旧候选，不让原生digest遗漏来源管理隔离。

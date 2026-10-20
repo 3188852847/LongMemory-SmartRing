@@ -6,7 +6,7 @@
 
 新增 HTTP 固定入口：`GET /api/memory-engine/hy/semantic/status`、`GET /api/memory-engine/hy/semantic/tasks/{task_id}`；读响应为原 AB DTO 顶层，追加 `observed_at` UTC 读取时间，status 追加 `runtime:{write_enabled,use_enabled}`。只窥视现存实例、非阻塞，不调用普通 search 或 Runtime.status 的过期处理，不为查看懒创建引擎。schema disabled 仍由 AB 返回完整关闭结构；读成功不获得管理写、未来意图执行或主动联系权限。
 
-显式管理请求为 `POST .../semantic/tasks`，JSON 精确字段 `task_id/kind/max_batches`，kind 仅 `evolve/intention_maintenance`、batches 整数 1–4；取消为 `POST .../semantic/tasks/{task_id}/cancel`，JSON `{}`。任务 ID 限有界字母数字/下划线/短横线，不接受路径、来源、用户或 SDK 方法。两项沿现有管理启动权限和会话/CSRF；enqueue 另查 Runtime 写门，pause 无 HTTP 入口。语义后台生成不是新增用户事实，不伪造 user 来源。任务结果以 AB 实际回执为准，取消已认领任务不回滚。
+显式管理请求为 `POST .../semantic/tasks`，JSON 精确字段 `task_id/kind/max_batches`，kind 仅 `evolve/intention_maintenance`、batches 整数 1–4；取消为 `POST .../semantic/tasks/{task_id}/cancel`，JSON `{}`。任务 ID 沿原生 Unicode 码点计长，上限 256，接受 `add:` / `management:`、百分号等真实 ID；HTTP 单路径段额外拒绝斜杠、反斜杠、点段和不可 UTF-8 编码字符，禁止 C0 控制字符与全空白。不接受来源、用户或 SDK 方法。两项沿现有管理启动权限和会话/CSRF；enqueue 另查 Runtime 写门，pause 无 HTTP 入口。语义后台生成不是新增用户事实，不伪造 user 来源。任务结果以 AB 实际回执为准，取消已认领任务不回滚。
 
 稳定错误为 400 请求错误、403 `hy_management_write_disabled/memory_write_paused`、404 `hy_semantic_task_not_found`、409 `hy_semantic_conflict/hy_semantic_operation_rejected`、501 `memory_backend_capability_unsupported`、503 `hy_semantic_busy/hy_semantic_unavailable/hy_semantic_outcome_uncertain`；会话与 CSRF 的 401/403 继续沿原中间件。公共决策见 [ADR-0201](../adr/0201-composed-runtime-write-gates-and-observation.md)，实际接力/验证见 [AI 任务书](parallel/AI-hy-advanced-low-latency-20261021.md)。这是隔离实现说明，不表示正式服务已提供新入口。
 

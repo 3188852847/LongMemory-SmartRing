@@ -14,6 +14,43 @@ from threading import Lock
 from voice_diagnostics import CURRENT
 
 
+def voice_proposal_formal_metadata(connection):
+    """领取本线程实际Memory prepare的关联ID；不调用query、不取最近一轮冒充。
+
+    只给语音RPC桥提供已有平台回执的身份。拿不到无竞争快照或遇固定管理/预算
+    回复时直接放弃候选；原回答链路保持原有处理，不等待旧轮网络回执。
+    """
+    import re
+    from uuid import UUID
+    memory = getattr(connection, "memory", None)
+    context = getattr(memory, "_turn_key", None)
+    lock = getattr(memory, "_lock", None)
+    if not callable(getattr(context, "get", None)) or not callable(getattr(lock, "acquire", None)):
+        return None
+    key = context.get()
+    if not lock.acquire(blocking=False):
+        return None
+    try:
+        pending = getattr(memory, "_pending_completions", {}).get(key)
+        if (not isinstance(pending, dict) or pending.get("memory_protocol") != 2
+                or pending.get("fixed_reply") is not None or pending.get("client_round_id") != key):
+            return None
+        session = getattr(memory, "_session_id", None)
+        formal = pending.get("turn_id")
+        if (not isinstance(key, str) or re.fullmatch(r"[0-9a-f]{24,32}", key) is None
+                or not isinstance(session, str) or re.fullmatch(r"[0-9a-f]{32}", session) is None
+                or not isinstance(formal, str)):
+            return None
+        try:
+            if str(UUID(formal)) != formal:
+                return None
+        except ValueError:
+            return None
+        return {"formal_turn_id": formal, "client_round_id": key, "session_id": session}
+    finally:
+        lock.release()
+
+
 def install_advanced_voice_policy(connection_class, *, turn_end_mode="off",
                                   turn_end_model=None, cosy_delivery_mode="buffered",
                                   detector_factory=None, asr_provider_class=None,
@@ -51,10 +88,22 @@ def install_advanced_voice_policy(connection_class, *, turn_end_mode="off",
                 report["turn_end"]["reason"] = "model_unavailable"
             else:
                 from voice_turn_end import TurnEndConfig, install_voice_turn_end
-                installed = install_voice_turn_end(
-                    connection_class, asr_provider_class, detector=detector,
-                    config=TurnEndConfig(mode=turn_end_mode), on_event=on_turn_event,
-                    calibration_approved=calibration_approved)
+                try:
+                    installed = install_voice_turn_end(
+                        connection_class, asr_provider_class, detector=detector,
+                        config=TurnEndConfig(mode=turn_end_mode), on_event=on_turn_event,
+                        calibration_approved=calibration_approved)
+                except BaseException:
+                    close = getattr(detector, "close", None)
+                    if callable(close):
+                        close()
+                    raise
+                connection_class._longmemory_advanced_detector = detector
+                close = getattr(detector, "close", None)
+                if callable(close):
+                    # app.py拥有自己的事件循环；启动中途异常也须回收仅本进程创建的侧车。
+                    import atexit
+                    atexit.register(close)
                 report["turn_end"] = {"requested": turn_end_mode, **installed, "reason": None}
     # 明确的子进程参数；不改共享声音档案、服务端默认或已运行连接。
     connection_class._longmemory_cosy_delivery_mode = cosy_delivery_mode
@@ -308,6 +357,8 @@ def main():
                         default=os.environ.get("LONGMEMORY_TURN_END_MODE", "off"))
     parser.add_argument("--voice-turn-end-model", type=Path,
                         default=os.environ.get("LONGMEMORY_TURN_END_MODEL") or None)
+    parser.add_argument("--voice-turn-end-python", type=Path,
+                        default=os.environ.get("LONGMEMORY_TURN_END_PYTHON") or None)
     parser.add_argument("--cosy-delivery-mode", choices=["buffered", "incremental", "adaptive"],
                         default=os.environ.get("LONGMEMORY_COSY_DELIVERY_MODE", "buffered"))
     parser.add_argument("--doubao-env", "--doubao-env-file", type=Path,
@@ -353,10 +404,14 @@ def main():
         # 接在已有预取包装器外层，清空上游音频前先取得真实PCM版本。
         from core.providers.asr import fun_local
         turn_asr_class = fun_local.ASRProvider
+    detector_factory = None
+    if args.voice_turn_end_python is not None:
+        from voice_turn_end_sidecar import SidecarDetector
+        detector_factory = lambda model: SidecarDetector(args.voice_turn_end_python, model)
     install_advanced_voice_policy(
         ConnectionHandler, turn_end_mode=args.voice_turn_end_mode,
         turn_end_model=args.voice_turn_end_model, asr_provider_class=turn_asr_class,
-        cosy_delivery_mode=args.cosy_delivery_mode)
+        cosy_delivery_mode=args.cosy_delivery_mode, detector_factory=detector_factory)
     if os.environ.get("LONGMEMORY_MEMORY_BACKEND") == "hy_memory":
         from core.providers.llm.openai import openai as provider_module
         from voice_budget import install_no_retry_gateway_client

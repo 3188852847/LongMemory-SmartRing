@@ -87,7 +87,8 @@ def create_app(*, port=8765, bridge=None, web_root=None, database=None, allow_me
                round_wallpaper_delivery=None, launcher_status_file=None,
                semantic_relation_previewer=None, proactive_greeting_composer=None,
                proactive_schedule_enabled=True, diagnostics=None, observability_root=None,
-               otto_asset_root=None, memory_runtime=None):
+               otto_asset_root=None, memory_runtime=None,
+               voice_proposals_enabled=False, voice_proposal_host=None):
     # 显式新后端必须同时支配聊天和管理，禁止管理悄悄打开另一套旧库。
     if memory_runtime is not None and chat_backend is not None:
         if chat_backend.memory_runtime() is not memory_runtime:
@@ -221,6 +222,12 @@ def create_app(*, port=8765, bridge=None, web_root=None, database=None, allow_me
     register_l1_extraction_audit_routes(app, chat_backend)
     if memory_runtime_token:
         register_memory_runtime_routes(app, chat_backend)
+        # 与3.10小智共享的仅是受信内部RPC，宿主模型/预算/记忆对象留在3.12。
+        from longmemory.application.voice_proposals import VoiceProposalHost
+        from .routes.voice_proposals import register_voice_proposal_routes
+        proposal_host = voice_proposal_host or VoiceProposalHost(
+            existing_memory_runtime, enabled=voice_proposals_enabled)
+        register_voice_proposal_routes(app, proposal_host)
     device_role = DeviceRole(xiaozhi_server, chat_backend.roles, chat_backend.database, ROOT) if xiaozhi_server and chat_backend else None
     register_role_routes(app, chat_backend, device_role)
     register_voice_routes(app, VoiceSettings(xiaozhi_server, chat_backend.database, ROOT) if xiaozhi_server and chat_backend else None)
@@ -289,6 +296,9 @@ def main():
     parser.add_argument("--allow-scenario-management", action="store_true", help="启用显式 L2 候选创建与复核；默认只读")
     parser.add_argument("--allow-persona-management", action="store_true", help="启用显式 L3 候选创建与复核；默认只读")
     parser.add_argument("--enable-chat", action="store_true", help="允许网页向指定已有记忆库写入对话和记忆")
+    parser.add_argument("--enable-voice-preemptive", action="store_true",
+                        default=os.environ.get("LONGMEMORY_PREEMPTIVE_ENABLED") == "1",
+                        help="显式开启受限语音候选宿主；只经原免费网关，不改变正式EOU")
     parser.add_argument("--disable-proactive-schedule", action="store_true",
                         help="本次不运行圆屏定时联系，不修改已保存的联系设置")
     parser.add_argument(
@@ -620,6 +630,7 @@ def main():
                                chat_backend=chat_backend, job_backend=job_backend,
                                instance_id=os.environ.get("LONGMEMORY_LAUNCHER_INSTANCE"), xiaozhi_server=args.xiaozhi_server,
                                memory_runtime_token=runtime_token,
+                               voice_proposals_enabled=args.enable_voice_preemptive,
                                scenario_producer=scenario_producer, scenario_model=scenario_model,
                                persona_producer=persona_producer, persona_model=persona_model,
                                consolidation_background_enabled=args.enable_memory_consolidation,

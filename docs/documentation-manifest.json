@@ -13,12 +13,41 @@
   },
   "topics": [
     {
+      "id": "hy-managed-semantic-derivation",
+      "scope": "真实受管L6/L7任务与原生无写候选快照；不替代最终整合/生产证明",
+      "authority": "docs/development/parallel/AB-hy-l6-l7-20261021.md",
+      "sources": [
+        "src/longmemory/methods/hy_memory/semantic.py",
+        "src/longmemory/methods/hy_memory/candidate_snapshot.py",
+        "src/longmemory/methods/hy_memory/method.py",
+        "tests/integration/test_hy_semantic_sdk.py",
+        "tests/unit/methods/test_hy_semantic.py",
+        "src/longmemory/methods/hy_memory/assembly.py",
+        "tests/unit/methods/test_hy_source_storage_binding.py",
+        "tests/fixtures/ab_hy_semantic_campus.py",
+        "docs/development/parallel/AB-campus-l6-l7-20261021-receipt.json"
+      ],
+      "related": [
+        "docs/adr/0195-hy-managed-semantic-derivation.md",
+        "docs/development/parallel/AI-hy-advanced-low-latency-20261021.md"
+      ],
+      "tags": [
+        "AB",
+        "L6",
+        "L7",
+        "语义后台"
+      ],
+      "review": "verified 2026-10-21: AI核AB交付与本树真实SDK隔离组合；存储身份兼容、最终hash重验和正式部署仍待接力"
+    },
+    {
       "id": "voice-turn-end",
       "scope": "AC：中文话轮结束与Smart Turn；候选/配置/执行/播放证据分开，不宣称全目标或日用通过",
       "authority": "docs/development/parallel/AC-smart-turn-20261021.md",
       "sources": [
         "scripts/development/xiaozhi/voice_turn_end*.py",
-        "tests/unit/development/test_voice_turn_end.py"
+        "tests/unit/development/test_voice_turn_end.py",
+        "tests/unit/development/test_voice_turn_end_*.py",
+        "tests/fixtures/voice_turn_end_sidecar_worker.py"
       ],
       "related": [
         "docs/development/parallel/AI-hy-advanced-low-latency-20261021.md",
@@ -39,7 +68,9 @@
       "sources": [
         "scripts/development/xiaozhi/cosyvoice_streaming.py",
         "scripts/development/xiaozhi/voice_latency.py",
-        "tests/unit/development/test_ad_cosy*.py"
+        "tests/unit/development/test_ad_cosy*.py",
+        "scripts/development/cosyvoice/benchmark_ad*.py",
+        "scripts/development/cosyvoice/gpu_window.py"
       ],
       "related": [
         "docs/development/parallel/AI-hy-advanced-low-latency-20261021.md",
@@ -59,7 +90,11 @@
       "authority": "docs/development/parallel/AE-preemptive-20261021.md",
       "sources": [
         "scripts/development/xiaozhi/voice_preemptive*.py",
-        "tests/unit/development/test_voice_preemptive*.py"
+        "tests/unit/development/test_voice_preemptive*.py",
+        "scripts/development/xiaozhi/voice_prediction.py",
+        "scripts/development/xiaozhi/voice_proposal_rpc.py",
+        "tests/unit/development/test_voice_proposal_rpc.py",
+        "tests/fixtures/voice_proposal_rpc*.py"
       ],
       "related": [
         "docs/development/parallel/AI-hy-advanced-low-latency-20261021.md",
@@ -81,7 +116,12 @@
         "src/longmemory/methods/hy_memory/model_gateway.py",
         "src/longmemory/methods/hy_memory/prefix_cache.py",
         "scripts/development/models/benchmark_prefix_cache.py",
-        "tests/unit/methods/test_hy_prefix_cache.py"
+        "tests/unit/methods/test_hy_prefix_cache.py",
+        "src/longmemory/methods/hy_memory/provider_transport.py",
+        "src/longmemory/methods/hy_memory/candidate_response.py",
+        "tests/unit/methods/test_hy_candidate_response.py",
+        "src/longmemory/application/voice_proposals.py",
+        "tests/unit/application/test_voice_proposals.py"
       ],
       "related": [
         "docs/development/parallel/AI-hy-advanced-low-latency-20261021.md",
@@ -122,7 +162,10 @@
       "sources": [
         "web/react-chat/src/features/memory/hyCapabilityView.ts",
         "web/react-chat/src/features/memory/HyLayerStatus*",
-        "web/react-chat/src/tests/fixtures/hyCapabilityView.ts"
+        "web/react-chat/src/tests/fixtures/hyCapabilityView.ts",
+        "web/react-chat/src/api/hySemantic*",
+        "web/react-chat/src/features/memory/HySemantic*",
+        "web/react-chat/e2e/hy-layer-data.spec.ts"
       ],
       "related": [
         "docs/development/parallel/AI-hy-advanced-low-latency-20261021.md"
@@ -149,7 +192,15 @@
         "tests/integration/test_hy_semantic_platform.py",
         "tests/integration/test_voice_combination_boundaries.py",
         "tests/unit/development/test_advanced_voice_bootstrap.py",
-        "tests/unit/development/test_voice_combination_replay.py"
+        "tests/unit/development/test_voice_combination_replay.py",
+        "src/longmemory/application/managed_memory.py",
+        "src/longmemory/application/voice_proposal_contract.py",
+        "src/longmemory/entrypoints/api/routes/voice_proposals.py",
+        "tests/integration/test_voice_proposal_routes.py",
+        "tests/integration/test_hy_semantic_platform_sdk.py",
+        "tests/integration/test_voice_proposal_sdk_rpc.py",
+        "tests/fixtures/voice_proposal_rpc_sdk_client.py",
+        "tests/integration/test_voice_gateway_background_contention.py"
       ],
       "related": [
         "docs/adr/0201-composed-runtime-write-gates-and-observation.md"
@@ -166,9 +217,20 @@
       "id": "owned-voice-system-instruction-placement",
       "scope": "V仅修本项目两处联网动态system追加位置，保留消息/工具/日期/隐私契约；学校模板与实机待验",
       "authority": "docs/development/parallel/V-system-message-order-20261020.md",
-      "sources": ["scripts/development/xiaozhi/voice_web_search.py", "scripts/development/xiaozhi/voice_latency.py", "tests/unit/development/test_voice_web_search.py"],
-      "related": ["docs/adr/0193-owned-voice-system-instruction-placement.md"],
-      "tags": ["圆屏", "system", "消息顺序", "联网搜索"],
+      "sources": [
+        "scripts/development/xiaozhi/voice_web_search.py",
+        "scripts/development/xiaozhi/voice_latency.py",
+        "tests/unit/development/test_voice_web_search.py"
+      ],
+      "related": [
+        "docs/adr/0193-owned-voice-system-instruction-placement.md"
+      ],
+      "tags": [
+        "圆屏",
+        "system",
+        "消息顺序",
+        "联网搜索"
+      ],
       "review": "verified 2026-10-20: main34原函数与候选十组合成对照、角色/日期/原列表/工具配对已核；未读个人历史或新真实请求，不宣称学校模板根因或实机通过"
     },
     {
@@ -183,8 +245,15 @@
         "tests/unit/methods/test_hy_daily_stream.py",
         "tests/unit/methods/test_hy_provider_transport.py"
       ],
-      "related": ["docs/adr/0192-owned-answer-content-boundary.md"],
-      "tags": ["推理", "最终答案", "SSE", "圆屏"],
+      "related": [
+        "docs/adr/0192-owned-answer-content-boundary.md"
+      ],
+      "tags": [
+        "推理",
+        "最终答案",
+        "SSE",
+        "圆屏"
+      ],
       "review": "verified 2026-10-20: 对照765ef5a与固定消费类合成重现独立字段/同块/跨块/无标签四类，候选仅修可识别边界；临时HTTP和定向测试通过，现场格式与实机待验"
     },
     {
@@ -380,9 +449,31 @@
       "id": "hy-layer-stored-content",
       "scope": "Hy固定2.0.3逐层已保存内容的有界页/详情与只读存储边界；软件组合通过，正式发布另验",
       "authority": "docs/development/hy-layer-data-contract.md",
-      "sources": ["src/longmemory/methods/hy_memory/layer_data.py", "src/longmemory/entrypoints/api/routes/hy_layer_data.py", "web/react-chat/src/api/hyLayerData.ts", "web/react-chat/src/features/memory/HyLayerBrowser*", "web/react-chat/src/features/memory/hy-layer-data.css", "web/react-chat/e2e/hy-layer-data.spec.ts", "web/react-chat/e2e/hy-test-appearance.ts", "tests/unit/methods/test_hy_layer_data.py", "tests/integration/test_hy_layer_data_sdk.py", "tests/fixtures/hy_layer_data_worker.py"],
-      "related": ["docs/adr/0194-hy-layer-read-only-browsing.md", "docs/guides/Hy记忆管理.md", "docs/development/parallel/AA-hy-layer-data-20261021.md", "docs/development/parallel/Y-hy-layer-data-ui-20261021.md", "docs/development/parallel/Z-hy-layer-data-review-20261021.md"],
-      "tags": ["Hy-Memory", "逐层内容", "RAW", "只读"],
+      "sources": [
+        "src/longmemory/methods/hy_memory/layer_data.py",
+        "src/longmemory/entrypoints/api/routes/hy_layer_data.py",
+        "web/react-chat/src/api/hyLayerData.ts",
+        "web/react-chat/src/features/memory/HyLayerBrowser*",
+        "web/react-chat/src/features/memory/hy-layer-data.css",
+        "web/react-chat/e2e/hy-layer-data.spec.ts",
+        "web/react-chat/e2e/hy-test-appearance.ts",
+        "tests/unit/methods/test_hy_layer_data.py",
+        "tests/integration/test_hy_layer_data_sdk.py",
+        "tests/fixtures/hy_layer_data_worker.py"
+      ],
+      "related": [
+        "docs/adr/0194-hy-layer-read-only-browsing.md",
+        "docs/guides/Hy记忆管理.md",
+        "docs/development/parallel/AA-hy-layer-data-20261021.md",
+        "docs/development/parallel/Y-hy-layer-data-ui-20261021.md",
+        "docs/development/parallel/Z-hy-layer-data-review-20261021.md"
+      ],
+      "tags": [
+        "Hy-Memory",
+        "逐层内容",
+        "RAW",
+        "只读"
+      ],
       "review": "2026-10-21: Z源码/HTTP/真实SDK/Edge及实际create_app组合独立验收；最终同HEAD证据与生产切换单列"
     },
     {
@@ -509,8 +600,19 @@
         "tests/integration/test_hy_memory_sdk_offline.py",
         "tests/fixtures/hy_memory_fake_worker.py"
       ],
-      "related": ["docs/development/parallel/V-hy-memory-20261019.md", "docs/development/parallel/W-hy-review-integration-20261019.md", "docs/architecture/method-boundary.md", "docs/requirements/主动交流阶段方案-20261019.md"],
-      "tags": ["Hy-Memory", "隔离", "来源", "对比", "主动交流后续"],
+      "related": [
+        "docs/development/parallel/V-hy-memory-20261019.md",
+        "docs/development/parallel/W-hy-review-integration-20261019.md",
+        "docs/architecture/method-boundary.md",
+        "docs/requirements/主动交流阶段方案-20261019.md"
+      ],
+      "tags": [
+        "Hy-Memory",
+        "隔离",
+        "来源",
+        "对比",
+        "主动交流后续"
+      ],
       "review": "verified 2026-10-19: W后端559/2skip含4项SDK及前端11项/TS/Vite；主会话另34项通过，f6dc99f合入推送且远端同SHA；两项旧失败保留，真实模型/日用/主动调度未验"
     },
     {
@@ -1230,8 +1332,17 @@
         "src/longmemory/entrypoints/api/proactive_backend.py",
         "src/longmemory/entrypoints/api/proactive_runtime_backend.py"
       ],
-      "related": ["docs/development/parallel/W-hy-review-integration-20261019.md", "docs/guides/Hy-Memory隔离接入与验证-20261019.md", "docs/requirements/记忆修复效果验证方案-20261015.md"],
-      "tags": ["主动交流", "Hy-Memory", "事项跟进", "draft"],
+      "related": [
+        "docs/development/parallel/W-hy-review-integration-20261019.md",
+        "docs/guides/Hy-Memory隔离接入与验证-20261019.md",
+        "docs/requirements/记忆修复效果验证方案-20261015.md"
+      ],
+      "tags": [
+        "主动交流",
+        "Hy-Memory",
+        "事项跟进",
+        "draft"
+      ],
       "review": "pending: W核对当前代码与边界，首切片/新ADR/持久化/实施范围待主会话定案，验收矩阵未执行"
     },
     {
@@ -1331,32 +1442,85 @@
       "title": "V：圆屏公共system约束顺序修复候选",
       "status": "reference",
       "basis": "main34后由根授权的公共追加点候选修复；真实语义与EOS待受控验证",
-      "review": {"state": "verified", "date": "2026-10-20", "scope": "两个自有追加点、十组合成消息对照、日期/隐私/工具/输入不变性；学校后端未验证", "evidence": ["scripts/development/xiaozhi/voice_web_search.py", "tests/unit/development/test_voice_web_search.py", "docs/adr/0193-owned-voice-system-instruction-placement.md"]},
-      "tags": ["V", "system", "消息顺序"]
+      "review": {
+        "state": "verified",
+        "date": "2026-10-20",
+        "scope": "两个自有追加点、十组合成消息对照、日期/隐私/工具/输入不变性；学校后端未验证",
+        "evidence": [
+          "scripts/development/xiaozhi/voice_web_search.py",
+          "tests/unit/development/test_voice_web_search.py",
+          "docs/adr/0193-owned-voice-system-instruction-placement.md"
+        ]
+      },
+      "tags": [
+        "V",
+        "system",
+        "消息顺序"
+      ]
     },
     {
       "path": "docs/adr/0193-owned-voice-system-instruction-placement.md",
       "title": "ADR-0193：圆屏公共动态约束放在前导system",
       "status": "reference",
       "basis": "仅移动本模块自有动态约束的候选决定，不全局规范化合法system历史",
-      "review": {"state": "verified", "date": "2026-10-20", "scope": "自有约束合并规则、工具序列与未知学校模板边界", "evidence": ["docs/development/parallel/V-system-message-order-20261020.md", "scripts/development/xiaozhi/voice_web_search.py", "tests/unit/development/test_voice_web_search.py"]},
-      "tags": ["ADR", "system", "圆屏"]
+      "review": {
+        "state": "verified",
+        "date": "2026-10-20",
+        "scope": "自有约束合并规则、工具序列与未知学校模板边界",
+        "evidence": [
+          "docs/development/parallel/V-system-message-order-20261020.md",
+          "scripts/development/xiaozhi/voice_web_search.py",
+          "tests/unit/development/test_voice_web_search.py"
+        ]
+      },
+      "tags": [
+        "ADR",
+        "system",
+        "圆屏"
+      ]
     },
     {
       "path": "docs/development/parallel/V-reasoning-boundary-20261020.md",
       "title": "V：答案与显式推理边界修复",
       "status": "reference",
       "basis": "765ef5a后所有者异常反馈的隔离修复候选，不是现场根因或实机通过记录",
-      "review": {"state": "verified", "date": "2026-10-20", "scope": "网关投影、固定消费类合成对照、预算与取消边界；现场格式和真实设备待验", "evidence": ["src/longmemory/methods/hy_memory/answer_content.py", "src/longmemory/methods/hy_memory/model_gateway.py", "tests/unit/methods/test_hy_answer_content.py", "tests/unit/methods/test_hy_provider_transport.py"]},
-      "tags": ["V", "推理", "答案边界"]
+      "review": {
+        "state": "verified",
+        "date": "2026-10-20",
+        "scope": "网关投影、固定消费类合成对照、预算与取消边界；现场格式和真实设备待验",
+        "evidence": [
+          "src/longmemory/methods/hy_memory/answer_content.py",
+          "src/longmemory/methods/hy_memory/model_gateway.py",
+          "tests/unit/methods/test_hy_answer_content.py",
+          "tests/unit/methods/test_hy_provider_transport.py"
+        ]
+      },
+      "tags": [
+        "V",
+        "推理",
+        "答案边界"
+      ]
     },
     {
       "path": "docs/adr/0192-owned-answer-content-boundary.md",
       "title": "ADR-0192：自有网关区分最终答案与显式推理",
       "status": "reference",
       "basis": "集中在自有答案边界的候选协议决定；保留普通正文与供应商未知边界",
-      "review": {"state": "verified", "date": "2026-10-20", "scope": "前导显式标签有界解析与独立推理字段策略，不认定现场格式", "evidence": ["docs/development/parallel/V-reasoning-boundary-20261020.md", "src/longmemory/methods/hy_memory/answer_content.py", "tests/unit/methods/test_hy_answer_content.py"]},
-      "tags": ["ADR", "推理", "协议"]
+      "review": {
+        "state": "verified",
+        "date": "2026-10-20",
+        "scope": "前导显式标签有界解析与独立推理字段策略，不认定现场格式",
+        "evidence": [
+          "docs/development/parallel/V-reasoning-boundary-20261020.md",
+          "src/longmemory/methods/hy_memory/answer_content.py",
+          "tests/unit/methods/test_hy_answer_content.py"
+        ]
+      },
+      "tags": [
+        "ADR",
+        "推理",
+        "协议"
+      ]
     },
     {
       "path": "docs/development/parallel/X-cosy-streaming-20261020.md",
@@ -1737,32 +1901,87 @@
       "title": "主动交流阶段方案",
       "status": "draft",
       "basis": "W审查后基于现有策略/跟进/账本提出首切片；等待主会话定案，未实现、迁移或启动",
-      "review": {"state": "pending", "scope": "现有代码已核对；提议接口、ADR、阶段门槛与日用范围待确定"},
-      "tags": ["主动交流", "事项跟进", "Hy-Memory", "draft"]
+      "review": {
+        "state": "pending",
+        "scope": "现有代码已核对；提议接口、ADR、阶段门槛与日用范围待确定"
+      },
+      "tags": [
+        "主动交流",
+        "事项跟进",
+        "Hy-Memory",
+        "draft"
+      ]
     },
     {
       "path": "docs/development/parallel/W-hy-review-integration-20261019.md",
       "title": "W：Hy-Memory 独立审查、整合候选与主动交流规划",
       "status": "reference",
       "basis": "W最终候选8587af2经主会话f6dc99f合入推送；本节收据待主会话接入，日用未切换",
-      "review": {"state": "verified", "date": "2026-10-19", "scope": "U/V映射、W后端/前端证据；主会话34项、敏感扫描0、候选同树和远端同SHA收据；U/W归档待收据接入，V保留待办，规划仍draft", "evidence": ["f251f98", "8587af2", "f6dc99f07e636a5fcbddfea8c60371b348b02c89", "tests/unit/methods/test_hy_memory_process.py", "tests/integration/test_hy_memory_sdk_offline.py", "web/react-chat/src/pages/MemoryApp.test.tsx", "docs/requirements/主动交流阶段方案-20261019.md"]},
-      "tags": ["W", "Hy-Memory", "审查", "整合", "主动交流"]
+      "review": {
+        "state": "verified",
+        "date": "2026-10-19",
+        "scope": "U/V映射、W后端/前端证据；主会话34项、敏感扫描0、候选同树和远端同SHA收据；U/W归档待收据接入，V保留待办，规划仍draft",
+        "evidence": [
+          "f251f98",
+          "8587af2",
+          "f6dc99f07e636a5fcbddfea8c60371b348b02c89",
+          "tests/unit/methods/test_hy_memory_process.py",
+          "tests/integration/test_hy_memory_sdk_offline.py",
+          "web/react-chat/src/pages/MemoryApp.test.tsx",
+          "docs/requirements/主动交流阶段方案-20261019.md"
+        ]
+      },
+      "tags": [
+        "W",
+        "Hy-Memory",
+        "审查",
+        "整合",
+        "主动交流"
+      ]
     },
     {
       "path": "docs/guides/Hy-Memory隔离接入与验证-20261019.md",
       "title": "Hy-Memory 隔离接入与验证",
       "status": "current",
       "basis": "本轮固定来源、所有者专属安装与实际离线接入操作；限定SDK加模拟模型，不表示真实模型质量或日用切换",
-      "review": {"state": "verified", "date": "2026-10-19", "scope": "V装配/零外部请求，W协议/首批提示与前端补验；主会话f6dc99f合入推送收据；真实质量和日用未验", "evidence": ["tests/unit/methods/test_hy_memory_backend.py", "tests/integration/test_hy_memory_sdk_offline.py", "tests/unit/evaluation/test_hy_memory_runner.py", "docs/development/parallel/W-hy-review-integration-20261019.md"]},
-      "tags": ["Hy-Memory", "隔离", "SDK", "比较"]
+      "review": {
+        "state": "verified",
+        "date": "2026-10-19",
+        "scope": "V装配/零外部请求，W协议/首批提示与前端补验；主会话f6dc99f合入推送收据；真实质量和日用未验",
+        "evidence": [
+          "tests/unit/methods/test_hy_memory_backend.py",
+          "tests/integration/test_hy_memory_sdk_offline.py",
+          "tests/unit/evaluation/test_hy_memory_runner.py",
+          "docs/development/parallel/W-hy-review-integration-20261019.md"
+        ]
+      },
+      "tags": [
+        "Hy-Memory",
+        "隔离",
+        "SDK",
+        "比较"
+      ]
     },
     {
       "path": "docs/development/parallel/V-hy-memory-20261019.md",
       "title": "V：Hy-Memory 接入与隔离验证",
       "status": "reference",
       "basis": "分阶段保留首轮预检和U接力后的实际结果、失败事实及尚未验收项",
-      "review": {"state": "verified", "date": "2026-10-19", "scope": "本会话文件/测试/SDK实测/安装授权记录；不推及U全量或真实模型效果", "evidence": ["docs/guides/Hy-Memory隔离接入与验证-20261019.md", "tests/integration/test_hy_memory_sdk_offline.py"]},
-      "tags": ["V", "Hy-Memory", "交付", "主动交流后续"]
+      "review": {
+        "state": "verified",
+        "date": "2026-10-19",
+        "scope": "本会话文件/测试/SDK实测/安装授权记录；不推及U全量或真实模型效果",
+        "evidence": [
+          "docs/guides/Hy-Memory隔离接入与验证-20261019.md",
+          "tests/integration/test_hy_memory_sdk_offline.py"
+        ]
+      },
+      "tags": [
+        "V",
+        "Hy-Memory",
+        "交付",
+        "主动交流后续"
+      ]
     },
     {
       "path": "docs/development/parallel/N-otto-review-20261014.md",
@@ -6500,7 +6719,12 @@
           "docs/development/parallel/Z-hy-layer-data-review-20261021.md"
         ]
       },
-      "tags": ["Y", "Hy-Memory", "逐层内容", "滚动"]
+      "tags": [
+        "Y",
+        "Hy-Memory",
+        "逐层内容",
+        "滚动"
+      ]
     },
     {
       "path": "docs/development/parallel/X-hy-layer-data-release-20261021.md",
@@ -6517,7 +6741,13 @@
           "docs/development/parallel/Z-hy-layer-data-review-20261021.md"
         ]
       },
-      "tags": ["X", "Hy-Memory", "逐层内容", "发布准备", "证明"]
+      "tags": [
+        "X",
+        "Hy-Memory",
+        "逐层内容",
+        "发布准备",
+        "证明"
+      ]
     },
     {
       "path": "docs/adr/0194-hy-layer-read-only-browsing.md",
@@ -6528,9 +6758,18 @@
         "state": "verified",
         "date": "2026-10-21",
         "scope": "固定2.0.3私有读取/范围/RAW/L0聚合/图不初始化/有界页/新指纹源码及真实组合核对，生产未验",
-        "evidence": ["src/longmemory/methods/hy_memory/layer_data.py", "tests/integration/test_hy_layer_data_sdk.py", "docs/development/parallel/Z-hy-layer-data-review-20261021.md"]
+        "evidence": [
+          "src/longmemory/methods/hy_memory/layer_data.py",
+          "tests/integration/test_hy_layer_data_sdk.py",
+          "docs/development/parallel/Z-hy-layer-data-review-20261021.md"
+        ]
       },
-      "tags": ["ADR", "Hy-Memory", "逐层内容", "只读"]
+      "tags": [
+        "ADR",
+        "Hy-Memory",
+        "逐层内容",
+        "只读"
+      ]
     },
     {
       "path": "docs/development/hy-layer-data-contract.md",
@@ -6541,9 +6780,19 @@
         "state": "verified",
         "date": "2026-10-21",
         "scope": "八层/状态/参数/范围/有界计数/L0版本/RAW/partial及超时语义，Z186项相关回归和12项真实SDK集成；不表示个人内容部署通过",
-        "evidence": ["src/longmemory/entrypoints/api/routes/hy_layer_data.py", "src/longmemory/methods/hy_memory/layer_data.py", "tests/unit/methods/test_hy_layer_data.py", "tests/integration/test_hy_layer_data_sdk.py"]
+        "evidence": [
+          "src/longmemory/entrypoints/api/routes/hy_layer_data.py",
+          "src/longmemory/methods/hy_memory/layer_data.py",
+          "tests/unit/methods/test_hy_layer_data.py",
+          "tests/integration/test_hy_layer_data_sdk.py"
+        ]
       },
-      "tags": ["Hy-Memory", "逐层内容", "契约", "只读"]
+      "tags": [
+        "Hy-Memory",
+        "逐层内容",
+        "契约",
+        "只读"
+      ]
     },
     {
       "path": "docs/development/parallel/AA-hy-layer-data-20261021.md",
@@ -6554,9 +6803,19 @@
         "state": "verified",
         "date": "2026-10-21",
         "scope": "AA源码/契约/ADR与作者分组口径核对，Z真实SDK八层合成读取及旧管理兼容通过；最终UI/正式发布未验",
-        "evidence": ["docs/development/hy-layer-data-contract.md", "docs/adr/0194-hy-layer-read-only-browsing.md", "tests/integration/test_hy_layer_data_sdk.py", "docs/development/parallel/Z-hy-layer-data-review-20261021.md"]
+        "evidence": [
+          "docs/development/hy-layer-data-contract.md",
+          "docs/adr/0194-hy-layer-read-only-browsing.md",
+          "tests/integration/test_hy_layer_data_sdk.py",
+          "docs/development/parallel/Z-hy-layer-data-review-20261021.md"
+        ]
       },
-      "tags": ["AA", "Hy-Memory", "逐层内容", "后端交付"]
+      "tags": [
+        "AA",
+        "Hy-Memory",
+        "逐层内容",
+        "后端交付"
+      ]
     },
     {
       "path": "docs/development/parallel/X-hy-layer-data-release-tools-20261021.md",
@@ -6567,9 +6826,18 @@
         "state": "pending",
         "date": "2026-10-21",
         "scope": "Z核证据接口原字节摘要与最终绑定要求并登记报告；作者工具结果不冒作Z独立复验，未执行生产生命周期",
-        "evidence": ["docs/development/parallel/X-hy-layer-data-release-20261021.md", "docs/development/parallel/Z-hy-layer-data-review-20261021.md"]
+        "evidence": [
+          "docs/development/parallel/X-hy-layer-data-release-20261021.md",
+          "docs/development/parallel/Z-hy-layer-data-review-20261021.md"
+        ]
       },
-      "tags": ["X", "Hy-Memory", "逐层内容", "发布工具", "证据接口"]
+      "tags": [
+        "X",
+        "Hy-Memory",
+        "逐层内容",
+        "发布工具",
+        "证据接口"
+      ]
     },
     {
       "path": "docs/development/parallel/AA-hy-layer-data-release-closure-20261021.md",
@@ -6589,7 +6857,13 @@
           "final-readonly-acceptance.json SHA-256 4360e19164851b9d0a0303e469c311c19ff1bd51a17da112643418a6cd8d95d5"
         ]
       },
-      "tags": ["AA", "Hy-Memory", "逐层内容", "发布收尾", "回执"]
+      "tags": [
+        "AA",
+        "Hy-Memory",
+        "逐层内容",
+        "发布收尾",
+        "回执"
+      ]
     },
     {
       "path": "docs/development/parallel/AC-smart-turn-20261021.md",
@@ -6849,6 +7123,69 @@
         "Hy-Memory",
         "低延迟",
         "隔离"
+      ]
+    },
+    {
+      "path": "docs/adr/0195-hy-managed-semantic-derivation.md",
+      "title": "ADR-0195：Hy受管语义派生",
+      "status": "draft",
+      "basis": "AB精确提交及AI真实SDK隔离接入；正式迁移、真实模型与设备另验",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-21",
+        "scope": "仅持久任务/原生快照/投影源码及隔离证据，不表示旧来源身份兼容或正式部署已通过",
+        "evidence": [
+          "docs/development/parallel/AI-hy-advanced-low-latency-20261021.md",
+          "tests/integration/test_hy_semantic_sdk.py"
+        ]
+      },
+      "tags": [
+        "AB",
+        "L6",
+        "L7",
+        "候选快照"
+      ]
+    },
+    {
+      "path": "docs/development/parallel/AB-hy-l6-l7-20261021.md",
+      "title": "AB：Hy受管L6/L7与原生候选快照",
+      "status": "draft",
+      "basis": "AB精确提交及AI真实SDK隔离接入；正式迁移、真实模型与设备另验",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-21",
+        "scope": "仅持久任务/原生快照/投影源码及隔离证据，不表示旧来源身份兼容或正式部署已通过",
+        "evidence": [
+          "docs/development/parallel/AI-hy-advanced-low-latency-20261021.md",
+          "tests/integration/test_hy_semantic_sdk.py"
+        ]
+      },
+      "tags": [
+        "AB",
+        "L6",
+        "L7",
+        "候选快照"
+      ]
+    },
+    {
+      "path": "docs/development/parallel/AB-campus-l6-l7-20261021.md",
+      "title": "AB：单次真实校园L6/L7验证与来源限制",
+      "status": "draft",
+      "basis": "单次有界真实校园收据；L2语义来源不完整，未通过最终组合与质量验收",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-21",
+        "scope": "仅核单次4请求/真实产出/显式来源缺口记录，不认可完整语义溯源或开启上线",
+        "evidence": [
+          "docs/development/parallel/AB-campus-l6-l7-20261021-receipt.json",
+          "docs/development/parallel/AI-hy-advanced-low-latency-20261021.md"
+        ]
+      },
+      "tags": [
+        "AB",
+        "L6",
+        "L7",
+        "来源限制"
       ]
     }
   ],
