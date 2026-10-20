@@ -67,3 +67,11 @@ start传入唯一首system的 `[role,text]` 冻结上下文，服务追加已冻
 内存响应新增 `admission_class/model_queue_ms/model_queue_by_active_ms`；等待从合法请求入队到拿槽，按当时占槽类别分段；原过滤后 `model_ttft_ms` 继续从reserve后调用传输前计起，非流式仍null。二者不包括同一套全部前置开销，尤其不能相加冒充用户停说到声音，也不能用reader耗时替代模型排队。
 
 实际本地HTTP验证覆盖在飞后台A、后续后台B、正式answer、必要Hy及候选同时竞争，释放A后顺序为answer→required_hy→candidate→B；在飞候选首头前取消须等实际ACK，正式请求不误取消、未知费用不释放、错误ACK不移交、关闭唤醒、异常释放和单槽/队列边界。结果与局限见AF记录。AB可信跨循环标记和任务前置准入仍需主会话接力，AF不修改AB/AI文件或触发个人库整理。
+
+## 后续补充：记忆正文与真实模型当前消息分离
+
+AI的真实ASR集成确认模型当前user是含content/language/emotion/speaker的原始JSON字符串，正式记忆prepare按既有 `extract_user_text` 只取正文。原候选把单一query同时用于两处会改变模型实际输入。按主会话冻结的AE兼容方案，外层version仍1，snapshot的query只作记忆正文；start/confirm通过成对必需的 `input_protocol:2` 与 `model_user_message` 绑定完整实际模型当前user。messages仍只有历史/首system，由宿主追加原始模型字符串一次。响应DTO和cancel/close不变，旧无新增字段的纯文本v1继续兼容；不能把半套字段或新旧协议不匹配默认为旧格式。
+
+宿主仅用既有无副作用ASR映射叶函数检查新模型字符串提取出的正文是否等于记忆query，不重建JSON、不移除任何元数据、不以speaker字段重设身份或记忆事实。原字符串、输入协议与记忆query一起进入上下文版本摘要，AE候选/最终比较用完整模型当前消息；正式Runtime claim仍用正文和原fresh receipt。元数据、序列化、历史、system/时间/角色、工具要求或协议变化即miss，不剥元数据、冻结时间或改工具门制造命中。
+
+完整模型字符串按原字符限制计入AE实际输入预算，start/confirm整体继续受192KiB UTF-8限制，不扩大候选总量、输出或调用额度。新增字段仅保存在有界内存快照，不写个人库或日志；无数据库迁移。AI公共协议/HTTP与AE实际3.10桥由各自所有者同步，AF只实现宿主并隔离验证；本阶段无新真实模型请求。

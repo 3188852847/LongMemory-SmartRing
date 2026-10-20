@@ -201,3 +201,28 @@ AB须在 `SemanticCoordinator` 把任务标running/进入原子observe或evolve�
 一次中间回归只有固定sleep阈值断言失败（实测19.264ms低于假定20ms），顺序/预算/ACK门已通过。测试修正为使用与model_queue同源的perf_counter实际保持屏障，不把sleep参数当实测时长，保留原时间下界和所有业务断言；之后228项通过。未将此未定位计时差异写成日用故障或供应商性能结论。
 
 忽略证据目录为 `data/test-tmp/af-admission-combined-20261021-c/`，包含 `test_true_http_background_queu0/competition-metrics.json` 及 `test_answer_preempts_only_cand0/`、`test_answer_preempts_only_cand2/` 的 `preempt-metrics.json`。它们只有脱敏类别与时间，不提交原始产物；不报告P95、缓存命中、学校速度或圆屏体验。AI仍需组合当前AB可信标记/任务前置准入及完整最终声音指标，不能再用普通recall约11ms推断后台模型不影响回答。
+
+## 第六阶段：独立绑定ASR记忆正文与模型当前消息
+
+第五阶段提交 `3308a8251706da0cb0289ed9ec2cb0dccfa02b87` 保留。AI实际ASR组合发现原单一query同时承担记忆正文和模型当前user有误：模型收到content/language/emotion/speaker等完整JSON字符串，记忆prepare经 [mapping.py](../../../src/longmemory/entrypoints/xiaozhi/mapping.py) 只取用户content。AF先只读确认，再按主会话冻结的AE方案实现；没有另用此前建议的model_user_content别名或改外层version，也没有修改AI公共contract/HTTP/启动器、AE客户端/桥或AB SDK。
+
+### 冻结字段与兼容行为
+
+- 外层仍 `version:1`，snapshot原query/session_id不变；query明确是记忆查询正文。
+- 新实际语音链的start/confirm都增加成对必需字段 `input_protocol:2`（真int，拒绝bool）及 `model_user_message`（完整实际当前user字符串，非空且≤16000字符）。历史messages不含该user，宿主原样追加一次。
+- confirm继续携带原query、完整实际messages、工具要求、正式turn/client_round/session与所有共同代次；分别比较记忆query、当前模型字符串和全部冻结上下文。响应state/text/reason_code、null门和cancel/close保持。
+- 不带两个新增字段的旧组合仅按query=currentuser纯文本v1兼容；旧query若是JSON包装则miss。半套字段、显式input_protocol=1搭配新字段、bool/其他协议值或超长模型字符串均400；不能静默降级。已按2生成而确认时缺字段或切换格式即miss。
+
+宿主复用既有 `extract_user_text` 无写叶函数，仅检查 `model_user_message` 投影的用户正文与snapshot/confirm的query一致。JSON解析只用于这项对应关系检查，不用解析后对象重写模型消息；所有language/emotion/speaker/未知扩展、空白和字段顺序仍逐字传给模型。该检查沿既有ASR映射的来源和正文限制，不将附带情绪/身份当用户事实或重设声纹作用域。关系不符返回input_mismatch/miss，非用户role或不支持的ASR结构返回固定request_invalid。
+
+内存快照新增input_protocol与repr隐藏的model_user_message；上下文版本摘要同时覆盖历史messages、记忆query、输入协议及完整模型当前字符串。AE `provisional/confirmed` 的transcript现在专指真实模型当前user，最终一次性claim受该绑定与原同步撤销门约束；Runtime `candidate_memory_snapshot/claim_candidate_memory` 仍只收正文query及原receipt，不把模型JSON送进记忆事实提取。原正式正文/来源/fresh比较没有放松。
+
+原角色/时间/工具约束保持，不剥元数据、关工具或冻结时钟来制造命中。完整模型当前消息计入既有AE总输入字符门；较大的元数据会正常导致not_admitted，不能只按content计预算。宿主还对完整请求做192KiB UTF-8界限复核；没有扩大原HTTP/模型预算、输出或次数。供应商payload形状不增加input_protocol字段，只有真实user内容保持原字符串。
+
+### 实际验证与交接
+
+宿主专属 **70项通过**，实际AF网关/HTTP/SQLite与AE控制器组合验证：query的快照/claim均为正文，实际上游末尾user逐字等于含元数据和原始空白的ASR字符串。相同正文但speaker、emotion、language或JSON序列化变化均miss；新旧协议切换不领取；半套字段、错协议、raw超长、JSON来源错误、content关联不一致、旧JSON包装、元数据超原总输入及整体body超192KiB均拒绝，无额外模型调用。
+
+AI实际Runtime方法的六条多通道记忆组合同时跑纯文本v1和ASR v2：完整匹配采用一次，context/source/token/runtime revision四类负例仍拒绝；角色/完整记忆上下文进入模型的原顺序保持。所用AE/AI源码快照沿本记录原隔离版本，仅证明宿主与对应类，不冒充AE新RPC/实际最终ASR跨进程已通过。
+
+最终组合 **250 passed、3 skipped（13.12秒）**；三个跳过仍为原未指定隔离小智/Hy SDK的集成项，新增宿主/实际类组合均执行。学校真实请求、个人库、GPU、依赖安装及日用操作仍为0。公共校验器由AI按成对字段同步，AE负责3.10 RPC/bridge和真实最终ASR消息捕获；他们的当前树组合及实机仍由主会话接力，AF只提交自己的宿主/测试/记录。

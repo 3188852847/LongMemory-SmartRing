@@ -94,13 +94,14 @@ class Runtime:
             finally: self.lock_released.set()
 
 
-async def prepare(host, cid=CID, turn=1, *, messages=MESSAGES):
+async def prepare(host, cid=CID, turn=1, *, messages=MESSAGES, model_user_message=None):
     common = scope(cid, turn)
     snapshot = await host.snapshot({**common, 'query': QUERY, 'session_id': SESSION})
     assert snapshot['state'] == 'ready'
     assert 'SYNTHETIC_ENGINE_SECRET' not in json.dumps(snapshot)
     started = await host.start({**common, 'snapshot_id': snapshot['snapshot_id'],
-        'messages': deepcopy(messages), 'tools_required': False})
+        'messages': deepcopy(messages), 'tools_required': False,
+        **({'input_protocol': 2, 'model_user_message': model_user_message} if model_user_message is not None else {})})
     assert started['state'] == 'preparing' and 'text' not in started
     return snapshot
 
@@ -362,7 +363,8 @@ def test_messages_are_exact_bounded_context_pairs(messages):
 
 
 @pytest.mark.parametrize('change', ['none', 'context', 'source', 'invalid_token', 'runtime_revision'])
-def test_real_ai_runtime_fresh_guard_is_called_before_loop_claim(tmp_path, controllers, change):
+@pytest.mark.parametrize('input_protocol', [1, 2])
+def test_real_ai_runtime_fresh_guard_is_called_before_loop_claim(tmp_path, controllers, change, input_protocol):
     path = Path(os.environ.get('LONGMEMORY_TEST_PROPOSAL_RUNTIME_SOURCE', str(ROOT/'src/longmemory/application/memory_runtime.py')))
     cls = load('af_host_actual_ai_runtime', path).MemoryRuntime
     if not hasattr(cls, 'claim_candidate_memory'): pytest.skip('AI Runtime candidate interface required')
@@ -377,6 +379,8 @@ def test_real_ai_runtime_fresh_guard_is_called_before_loop_claim(tmp_path, contr
                  'channel': channel, 'source_event_ids': [f'synthetic-source-{index}']} for index, channel in enumerate(channels)]
         context = '\n'.join(row['content'] for row in rows)
         messages = [['system', '合成角色；完整记忆：\n'+context]]
+        raw = json.dumps({'content': QUERY, 'language': 'zh', 'emotion': 'calm', 'speaker': 'synthetic-speaker'}, ensure_ascii=False)
+        model_fields = {'input_protocol': 2, 'model_user_message': raw} if input_protocol == 2 else {}
         runtime._method = SimpleNamespace(implementation_version='synthetic',
             candidate_snapshot=lambda **kwargs: {'protocol': 1, 'read_status': 'readable', 'snapshot_token': 'PRIVATE_ENGINE_TOKEN', 'memory_digest': 'd'*64, 'items': rows},
             candidate_validate=lambda **kwargs: {'protocol': 1, 'valid': True, 'memory_digest': 'd'*64})
@@ -388,13 +392,13 @@ def test_real_ai_runtime_fresh_guard_is_called_before_loop_claim(tmp_path, contr
             'session_id': SESSION, 'query': runtime._proposal_digest(QUERY), 'context': runtime._proposal_digest(context), 'evidence': runtime._proposal_digest(evidence)}}
         async def run():
             host = module.VoiceProposalHost(lambda: runtime, enabled=True)
-            snapshot = await prepare(host, messages=messages)
+            snapshot = await prepare(host, messages=messages, model_user_message=raw if input_protocol == 2 else None)
             assert snapshot['memory_context'] == context and len(host._snapshots[snapshot['snapshot_id']].receipt['engine']['items']) == 6
             if change == 'context': runtime._proposal_formal[formal]['context'] = '0'*64
             elif change == 'source': runtime._proposal_formal[formal]['evidence'] = '0'*64
             elif change == 'invalid_token': runtime._method.candidate_validate = lambda **kwargs: {'protocol': 1, 'valid': False, 'memory_digest': 'd'*64}
             elif change == 'runtime_revision': runtime._proposal_revision += 1
-            result = await host.confirm(confirm_body(snapshot, formal_turn_id=formal, client_round_id=client, messages=messages))
+            result = await host.confirm(confirm_body(snapshot, formal_turn_id=formal, client_round_id=client, messages=messages, **model_fields))
             if change == 'none':
                 assert result['state'] == 'adopted' and result['text'] == '合成回答'
                 assert formal not in runtime._proposal_formal
@@ -404,6 +408,7 @@ def test_real_ai_runtime_fresh_guard_is_called_before_loop_claim(tmp_path, contr
                 assert host._connections[CID].controller.snapshot()['hits'] == 0
             await host.aclose()
         asyncio.run(run())
+        assert json.loads(received[0]['body'])['messages'][-1]['content'] == (raw if input_protocol == 2 else QUERY)
 
 
 def test_same_turn_has_one_attempt_and_shared_model_total_budget_is_not_reset(tmp_path, controllers):
@@ -481,3 +486,108 @@ def test_actual_ae_rpc_strict_null_parser_accepts_disabled_host_dtos(controllers
         assert (await rpc.close(scope=turn))['state'] == 'closed'
         assert (await host.aclose())['closed']
     asyncio.run(run())
+
+
+@pytest.mark.parametrize('change', ['none', 'speaker', 'emotion', 'language', 'serialization', 'downgrade'])
+def test_input_protocol2_preserves_full_asr_message_and_rejects_metadata_only_changes(tmp_path, controllers, change):
+    with gateway(tmp_path, [{'body': complete_wire()}]) as (server, ledger, received, _, __):
+        runtime = Runtime(server)
+        memory_queries = []
+        original_snapshot = runtime.candidate_memory_snapshot
+        original_claim = runtime.claim_candidate_memory
+        def snapshot(query, **kwargs):
+            memory_queries.append(('snapshot', query))
+            return original_snapshot(query, **kwargs)
+        def claim(receipt, **kwargs):
+            memory_queries.append(('claim', kwargs['query']))
+            return original_claim(receipt, **kwargs)
+        runtime.candidate_memory_snapshot, runtime.claim_candidate_memory = snapshot, claim
+        payload = {'content': QUERY, 'language': 'zh', 'emotion': 'calm', 'speaker': 'synthetic-A', 'extra': {'keep': True}}
+        raw = ' '+json.dumps(payload, ensure_ascii=False)+' '
+        async def run():
+            host = module.VoiceProposalHost(lambda: runtime, enabled=True)
+            snapshot_result = await prepare(host, model_user_message=raw)
+            for _ in range(100):
+                if received: break
+                await asyncio.sleep(.005)
+            assert len(received) == 1
+            final = raw
+            if change in ('speaker', 'emotion', 'language'):
+                changed = dict(payload); changed[change] = 'synthetic-changed'
+                final = ' '+json.dumps(changed, ensure_ascii=False)+' '
+            elif change == 'serialization': final = json.dumps(payload, ensure_ascii=False, sort_keys=True)
+            fields = {} if change == 'downgrade' else {'input_protocol': 2, 'model_user_message': final}
+            result = await host.confirm(confirm_body(snapshot_result, **fields))
+            assert result['state'] == ('adopted' if change == 'none' else 'miss')
+            if change == 'none': assert result['text'] == '合成回答'
+            else: assert result['text'] is None and runtime.claimed == 0
+            assert all(query == QUERY for _, query in memory_queries)
+            await host.aclose()
+        asyncio.run(run())
+        assert len(received) == ledger.status()['attempt_count'] == 1
+        assert json.loads(received[0]['body'])['messages'][-1]['content'] == raw
+
+
+@pytest.mark.parametrize('fields', [
+    {'input_protocol': 2}, {'model_user_message': QUERY},
+    {'input_protocol': True, 'model_user_message': QUERY},
+    {'input_protocol': 1, 'model_user_message': QUERY},
+    {'input_protocol': 2, 'model_user_message': 'x'*16001},
+])
+def test_new_input_fields_are_explicit_paired_bounded_and_never_fall_back(fields):
+    async def run():
+        host = module.VoiceProposalHost(lambda: pytest.fail('invalid protocol must not access runtime'), enabled=True)
+        with pytest.raises(ValueError, match='^voice_proposal_request_invalid$'):
+            await host.start({**scope(), 'snapshot_id': 'c'*32, 'messages': MESSAGES, 'tools_required': False, **fields})
+        await host.aclose()
+    asyncio.run(run())
+
+
+def test_model_metadata_counts_against_original_model_input_budget(tmp_path, controllers):
+    with gateway(tmp_path, []) as (server, ledger, received, _, __):
+        runtime = Runtime(server)
+        raw = json.dumps({'content': QUERY, 'speaker': 'synthetic', 'metadata': 'x'*11000}, ensure_ascii=False)
+        async def run():
+            host = module.VoiceProposalHost(lambda: runtime, enabled=True)
+            snapshot_result = await host.snapshot({**scope(), 'query': QUERY, 'session_id': SESSION})
+            result = await host.start({**scope(), 'snapshot_id': snapshot_result['snapshot_id'],
+                'messages': [['system', 'x'*6000]], 'tools_required': False, 'input_protocol': 2, 'model_user_message': raw})
+            assert result['state'] == 'miss'
+            assert host._budget.requests == 0 and not received
+            await host.aclose()
+        asyncio.run(run())
+        assert ledger.status()['attempt_count'] == 0
+
+
+def test_added_model_user_message_does_not_widen_192kib_body_bound():
+    async def run():
+        host = module.VoiceProposalHost(lambda: pytest.fail('oversized body must not access runtime'), enabled=True)
+        request = confirm_body({'snapshot_id': 'c'*32}, query='😀'*16000, messages=[['system', '😀'*32000]],
+            input_protocol=2, model_user_message='😀'*16000)
+        with pytest.raises(ValueError, match='^voice_proposal_request_invalid$'):
+            await host.confirm(request)
+        await host.aclose()
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize('case', ['content_mismatch', 'assistant_role', 'no_content', 'legacy_json'])
+def test_memory_projection_must_match_without_stripping_or_guessing_a_model_payload(tmp_path, controllers, case):
+    with gateway(tmp_path, []) as (server, ledger, received, _, __):
+        runtime = Runtime(server)
+        raw = json.dumps({'content': QUERY, 'language': 'zh', 'speaker': 'synthetic'}, ensure_ascii=False)
+        if case == 'content_mismatch': raw = json.dumps({'content': '另一个合成问题'}, ensure_ascii=False)
+        elif case == 'assistant_role': raw = json.dumps({'role': 'assistant', 'content': QUERY}, ensure_ascii=False)
+        elif case == 'no_content': raw = json.dumps({'speaker': 'synthetic'})
+        async def run():
+            host = module.VoiceProposalHost(lambda: runtime, enabled=True)
+            snapshot_result = await host.snapshot({**scope(), 'query': raw if case == 'legacy_json' else QUERY, 'session_id': SESSION})
+            request = {**scope(), 'snapshot_id': snapshot_result['snapshot_id'], 'messages': MESSAGES, 'tools_required': False,
+                       **({} if case == 'legacy_json' else {'input_protocol': 2, 'model_user_message': raw})}
+            if case in ('assistant_role', 'no_content'):
+                with pytest.raises(ValueError, match='^voice_proposal_request_invalid$'): await host.start(request)
+            else:
+                assert (await host.start(request))['state'] == 'miss'
+            assert not received
+            await host.aclose()
+        asyncio.run(run())
+        assert ledger.status()['attempt_count'] == 0

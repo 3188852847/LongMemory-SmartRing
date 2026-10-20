@@ -17,6 +17,7 @@ from time import monotonic
 from uuid import UUID
 
 from longmemory.methods.hy_memory.provider_transport import finish_before_cancel
+from longmemory.entrypoints.xiaozhi.mapping import extract_user_text
 
 
 SNAPSHOT_TTL = 10.0
@@ -27,6 +28,7 @@ CLAIM_TIMEOUT = .25
 CLOSE_TIMEOUT = .5
 MAX_SNAPSHOT_BYTES = 192*1024
 MAX_CONTEXT_BYTES = 64*1024
+MAX_REQUEST_BYTES = 192*1024
 COMMON = {'version', 'connection_id', 'turn_id', 'transcript_revision', 'cancel_epoch'}
 
 
@@ -62,6 +64,11 @@ def _scope(body, required=(), optional=()):
             or any(type(body.get(key)) is not int or not 0 <= body[key] < 2**63
                    for key in ('turn_id', 'transcript_revision', 'cancel_epoch'))):
         raise ValueError('voice_proposal_request_invalid')
+    try:
+        if len(json.dumps(body, ensure_ascii=False, separators=(',', ':'), allow_nan=False).encode('utf-8')) > MAX_REQUEST_BYTES:
+            raise ValueError
+    except (ValueError, TypeError, UnicodeError):
+        raise ValueError('voice_proposal_request_invalid') from None
     return (body['turn_id'], body['transcript_revision'], body['cancel_epoch'])
 
 
@@ -86,6 +93,29 @@ def _messages(value):
             or sum(len(row[1]) for row in value) > 32000):
         raise ValueError('voice_proposal_request_invalid')
     return tuple((row[0], row[1]) for row in value)
+
+
+def _input_fields(body):
+    fields = {'input_protocol', 'model_user_message'} & set(body)
+    if not fields: return (1, None)
+    if fields != {'input_protocol', 'model_user_message'} or type(body['input_protocol']) is not int or body['input_protocol'] != 2:
+        raise ValueError('voice_proposal_request_invalid')
+    raw = _text(body['model_user_message'])
+    return (2, raw)
+
+
+def _model_input(body, memory_query):
+    """只校验两份载荷的对应关系；模型原字符串不重建、不剥ASR元数据。"""
+    protocol, raw = _input_fields(body)
+    if protocol == 1:
+        # 旧组合只支持纯文本；不能把JSON包装当作旧协议正文或静默降级新协议。
+        return None if memory_query.lstrip().startswith('{') else (1, memory_query)
+    try:
+        raw.encode('utf-8')
+        projected = extract_user_text(raw)
+    except (ValueError, UnicodeError):
+        raise ValueError('voice_proposal_request_invalid') from None
+    return (2, raw) if projected == memory_query else None
 
 
 def _miss(kind, reason='unavailable'):
@@ -125,6 +155,8 @@ class _Snapshot:
     context: object = field(default=None, repr=False)
     policy_revision: str | None = field(default=None, repr=False)
     consumed: bool = False
+    input_protocol: int | None = None
+    model_user_message: str | None = field(default=None, repr=False)
 
 
 class _ClaimGate:
@@ -299,7 +331,8 @@ class VoiceProposalHost:
             return miss
 
     async def start(self, body):
-        stamp = _scope(body, {'snapshot_id', 'messages', 'tools_required'})
+        stamp = _scope(body, {'snapshot_id', 'messages', 'tools_required'}, {'input_protocol', 'model_user_message'})
+        _input_fields(body)
         if type(body['tools_required']) is not bool: raise ValueError('voice_proposal_request_invalid')
         _session(body['snapshot_id'])
         messages = _messages(body['messages'])
@@ -309,6 +342,9 @@ class VoiceProposalHost:
         cid = body['connection_id']
         entry = self._entry(body['snapshot_id'], cid, stamp)
         if entry is None: return miss
+        model_input = _model_input(body, entry.query)
+        if model_input is None: return _miss('start', 'input_mismatch')
+        input_protocol, model_user_message = model_input
         state = self._connections[cid]
         if state.attempted_turn == stamp[0]: return miss
         try:
@@ -333,13 +369,15 @@ class VoiceProposalHost:
                     state.controller = p.VoicePreemptive(model, self._budget, limits=p.Limits(enabled=True))
             state.controller._host_policy_revision = binding['policy_revision']
             entry.messages, entry.policy_revision = messages, binding['policy_revision']
+            entry.input_protocol, entry.model_user_message = input_protocol, model_user_message
             version = p.SnapshotVersion(_digest({'runtime': entry.receipt['runtime_revision'],
-                'memory': entry.receipt['engine']['memory_digest']}), _digest(messages), 'none', binding['policy_revision'])
+                'memory': entry.receipt['engine']['memory_digest']}), _digest({'messages': messages, 'query': entry.query,
+                'input_protocol': input_protocol, 'model_user_message': model_user_message}), 'none', binding['policy_revision'])
             entry.context = p.ContextSnapshot(version, messages)
             turn = p.TurnStamp(*stamp)
             scope = p.RequestScope(self._owner, cid, turn, stamp[1])
             state.attempted_turn = stamp[0]
-            started = state.controller.provisional(turn=turn, transcript=entry.query, context=entry.context, scope=scope)
+            started = state.controller.provisional(turn=turn, transcript=model_user_message, context=entry.context, scope=scope)
             return {'version': 1, 'state': 'preparing' if started else 'miss', 'reason_code': None if started else 'not_admitted'}
         except asyncio.CancelledError:
             raise
@@ -347,9 +385,11 @@ class VoiceProposalHost:
             return miss
 
     async def confirm(self, body):
-        stamp = _scope(body, {'snapshot_id', 'query', 'messages', 'tools_required', 'formal_turn_id', 'client_round_id', 'session_id'})
+        stamp = _scope(body, {'snapshot_id', 'query', 'messages', 'tools_required', 'formal_turn_id', 'client_round_id', 'session_id'},
+                       {'input_protocol', 'model_user_message'})
         _session(body['snapshot_id'])
         transcript, session = _text(body['query']), _session(body['session_id'])
+        model_input = _model_input(body, transcript)
         messages = _messages(body['messages'])
         formal, client = body['formal_turn_id'], body['client_round_id']
         try:
@@ -365,7 +405,8 @@ class VoiceProposalHost:
         if state is None or state.controller is None: return miss
         sid = body['snapshot_id']
         entry = self._entry(sid, cid, stamp)
-        if (entry is None or entry.messages != messages or entry.query != transcript or entry.session_id != session):
+        if (entry is None or model_input is None or entry.messages != messages or entry.query != transcript or entry.session_id != session
+                or (entry.input_protocol, entry.model_user_message) != model_input):
             state.controller.context_changed()
             return miss
         gate = None
@@ -374,7 +415,7 @@ class VoiceProposalHost:
             if self._provider() is not entry.runtime: return miss
             p = self._controllers[0]
             turn = p.TurnStamp(*stamp)
-            lease = await state.controller.confirmed(turn=turn, transcript=transcript, context=entry.context)
+            lease = await state.controller.confirmed(turn=turn, transcript=model_input[1], context=entry.context)
             if lease is None or self._entry(sid, cid, stamp) is not entry: return miss
             def loop_claim():
                 if self._closed or self._entry(sid, cid, stamp) is not entry or self._provider() is not entry.runtime: return None
