@@ -56,6 +56,23 @@ async function synthetic(page:Page,initialMode:Mode='normal'){
 async function noOverflow(page:Page){expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(await page.evaluate(()=>innerWidth+1));}
 async function openLayer(page:Page,layer:HyLayerId){await page.goto(`/memories?view=mechanisms&mechanism_tab=layers&layer=${layer}`);await expect(page.getByRole('heading',{name:/已保存内容/})).toBeVisible();}
 
+for(const width of [1366,390])test(`L0/L7来源标签保守展示 ${width}`,async({page},info)=>{
+  await page.setViewportSize({width,height:844});const state=await synthetic(page);
+  const aggregate={...profileRecord,provenance:{status:'verbatim_user' as const,semantic_source_complete:true,dependency_basis:'raw_exact_match' as const,injection_allowed:true}};
+  const intention=semanticRecord('l7_intention',{derivation_state:'expired',provenance:{status:'model_inference_unverified',semantic_source_complete:false,dependency_basis:'scope_context_envelope',injection_allowed:false}});
+  await page.route('**/api/memory-engine/hy/layers/l0_basic_info**',route=>{const req=route.request(),url=new URL(req.url());state.calls.push({path:url.pathname+url.search,method:req.method()});return route.fulfill({json:url.pathname.includes('/items/')?layerDetail('l0_basic_info',aggregate):layerPage('l0_basic_info',{items:[aggregate]})});});
+  await page.route('**/api/memory-engine/hy/layers/l7_intention**',route=>{const req=route.request(),url=new URL(req.url());state.calls.push({path:url.pathname+url.search,method:req.method()});return route.fulfill({json:url.pathname.includes('/items/')?layerDetail('l7_intention',intention):layerPage('l7_intention',{items:[intention]})});});
+  await page.goto('/memories?view=mechanisms&mechanism_tab=layers&layer=l0_basic_info&layer_item=profile');if(width===390)await largerReading(page);
+  const drawer=page.getByRole('dialog');await expect(drawer.getByText(/不能证明整份聚合画像的语义来源完整/)).toBeVisible();
+  await expect(drawer.getByText('记录级语义来源完整性',{exact:true})).toBeVisible();
+  await drawer.getByLabel('来源可信类型与注入许可').scrollIntoViewIfNeeded();await page.screenshot({path:info.outputPath(`provenance-profile-${width}.png`),animations:'disabled'});
+  await page.keyboard.press('Escape');await page.getByRole('button',{name:/Hy L7 /}).click();await page.getByRole('button',{name:'查看全文与来源'}).click();
+  await expect(drawer.getByText('意图已过期',{exact:true})).toBeVisible();await expect(drawer.getByText('未证实模型推断',{exact:true})).toBeVisible();
+  await expect(drawer.getByText(/不代表未来意图已执行/)).toBeVisible();await drawer.getByLabel('来源可信类型与注入许可').scrollIntoViewIfNeeded();
+  await page.screenshot({path:info.outputPath(`provenance-intention-${width}.png`),animations:'disabled'});await noOverflow(page);
+  expect(state.calls.every(call=>call.method==='GET')).toBe(true);expect(state.errors).toEqual([]);
+});
+
 for(const width of [1366,390])test(`L2来源可信与注入许可冷链接滚动 ${width}`,async({page},info)=>{
   await page.setViewportSize({width,height:844});const state=await synthetic(page);
   const rows=[

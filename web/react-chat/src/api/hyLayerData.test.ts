@@ -1,6 +1,6 @@
 import {expect,test} from 'vitest';
 import {parseHyLayerDetail,parseHyLayerPage} from './hyLayerData';
-import {graphPage,layerDetail,layerPage,semanticRecord,storedRecord} from '../tests/fixtures/hyLayerData';
+import {graphPage,layerDetail,layerPage,profileRecord,semanticRecord,storedRecord} from '../tests/fixtures/hyLayerData';
 
 test('AB原生图页和图计数范围；旧VDB共存时只保留部分覆盖及未知总数',()=>{
   expect(parseHyLayerPage(graphPage(),'l6_schema',0,'all').coverage).toBe('graph_complete');
@@ -33,4 +33,12 @@ test.each(['l2_fact','l3_summary','l4_identity'] as const)('%s来源四字段独
   expect(parseHyLayerPage(layerPage(layer),layer,0,'all').items[0].provenance).toBeUndefined();
   for(const bad of [{...p,semantic_source_complete:true},{...p,injection_allowed:'true'},{...p,status:'confirmed'},{status:p.status},{...p,private_field:'hidden'}])
     expect(()=>parseHyLayerDetail(layerDetail(layer,{...record,provenance:bad} as never),layer,record.item_id)).toThrow();
+});
+
+test('L0聚合和L7可选同四字段可读，不由聚合类型补来源证明',()=>{
+  const provenance={status:'model_inference_unverified' as const,semantic_source_complete:false,dependency_basis:'scope_context_envelope' as const,injection_allowed:false};
+  const aggregate={...profileRecord,provenance};
+  expect(parseHyLayerDetail(layerDetail('l0_basic_info',aggregate),'l0_basic_info','profile').item?.provenance).toEqual(provenance);
+  const intention=semanticRecord('l7_intention',{provenance});
+  expect(parseHyLayerDetail(layerDetail('l7_intention',intention),'l7_intention',intention.item_id).item?.provenance).toEqual(provenance);
 });

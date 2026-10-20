@@ -52,7 +52,7 @@ function semanticRecord(v:Record<string,unknown>,layer:HyLayerId):boolean {
 function provenanceRecord(v:Record<string,unknown>,layer:HyLayerId):boolean {
   if(!Object.hasOwn(v,'provenance'))return true;
   const p=v.provenance;
-  return ['l2_fact','l3_summary','l4_identity'].includes(layer)&&object(p)&&Object.keys(p).length===4&&
+  return ['l0_basic_info','l2_fact','l3_summary','l4_identity','l7_intention'].includes(layer)&&object(p)&&Object.keys(p).length===4&&
     ['status','semantic_source_complete','dependency_basis','injection_allowed'].every(key=>Object.hasOwn(p,key))&&
     oneOf(p.status,['verbatim_user','explicit_correction','model_inference_unverified'])&&
     oneOf(p.dependency_basis,['explicit_correction','scope_context_envelope','legacy_unobserved','verbatim_current_input','raw_exact_match'])&&

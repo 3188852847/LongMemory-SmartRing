@@ -135,3 +135,21 @@ node ../../data/test-tmp/ah-release-70cad5b-20261021/verify-release.cjs
 实际验证：`components-provenance-v1.json`相关3个文件33项通过；TypeScript与独占`build-provenance-ui-v1/`通过；`browser-provenance-v1.log`逐层14项通过，包含新增1366/390大字号的来源类型/未知/注入许可、冷详情链接、非零滚动、刷新恢复、浏览器前后退及原分页/状态/图覆盖/单任务/只读GET。新增桌面与窄屏详情截图已视觉核查，依赖说明可读且无横向溢出。全部数据为合成响应，不是个人库或AB真实SDK验收。
 
 核心展示先独立提交供AI接入。**此前`70cad5b`/tree`43ecb035…`的45文件发布候选从本次前端变更起失效，只保留历史证据，不能用于本轮发布；新的dist、manifest、tree摘要与资源引用校验将在精确新提交/tree上重新生成，不沿用旧SHA。** 依赖锁、生产dist、日用服务/config、个人库及proof均未修改，无联网/安装。
+
+### 来源标签新版发布候选
+
+核心提交为`66e76b2f83caaf4b5adaae9f2e2c31e9c0c8b30a`，前端Git tree为`629d4cdac8470e1dd56ed453a32b931a8384a9b7`。确认该HEAD且clean后，使用AH既有实体依赖与Node24.19.0，重新执行`tsc --noEmit`和Vite8.2.2离线构建到全新`data/test-tmp/ah-release-provenance-66e76b2f-20261021/dist/`，没有安装/复制/联接node_modules。锁文件、package.json、共享`web/assets` tree与上一发布记录相同，精确身份重新写入新绑定。
+
+新目录继续提供`artifacts.files.json`完整相对清单/字节数/逐文件SHA-256、`artifacts.sha256`、`asset-references.json`、`release-binding.json`、`delivery-receipt.json`、核验脚本及未截断`typecheck/build/verification.log`。新外围回执显式记录旧`70cad5b`候选已失效，以及AB来源契约提交；所有文件保留在忽略目录，不提交产物。
+
+新产物45文件、1,838,677字节；规范tree SHA-256=`6c5d8af45189996439cc93a741c0f6ce7797c998bcb80c73973a14f7fdfb132e`；manifest SHA-256=`93931ebb21d7e500becfe819a58c777554eb3d46d3d2885d70eec8d6c18357b5`。tree算法沿前述UTF-8相对路径字节排序、路径+NUL+文件摘要+LF后SHA-256，包含manifest。264处本地资源引用与manifest导入键均通过；固定凭据/私有路径/fixture标记（含新增“合成来源样例”）扫描0发现。
+
+新发布字节与本次`build-provenance-ui-v1/`浏览器已测目录逐文件一致；原14项通过日志、26张截图及新增桌面/窄屏来源详情截图按摘要关联到新绑定，不把旧发布截图冒充新版来源展示。常规测试未无理由重复运行。类型检查、构建和引用核验通过，保留既有大chunk提示；这仍是前端合成验收，真实前后端来源策略由AI组合验证。记录提交仅改本文件，前端tree保持上述新值，不改生产资源、不推送、不合main。
+
+### L0/L7同四字段适配与聚合边界
+
+主会话随后要求L0/L7也消费同四字段，最终AB提交/DTO有异时再转接。本轮原先层级guard不是通用的，因此在上述核心提交后补充L0/L7解析与只读显示；仍不猜新的状态枚举。缺标签的L0/L7也显示来源/注入未知。L7保留原“未来意图/已过期”说明，不把来源核对当执行完成；L0聚合显式提示“记录级来源标签不能证明整份聚合画像的语义来源完整”，完整性字段标题限定为记录级，各字段来源继续单独核对，即使标签返回true也不推定整份聚合画像完整。
+
+该增量使`66e76b2f`发布候选同样成为历史失效候选；它与更早`70cad5b`候选都不得用于本轮最终部署。下次发布绑定将以本增量的精确新提交/tree重建，保留所有旧目录和摘要作为历史证据。
+
+`components-provenance-l0-l7.json`相关3文件36项通过；类型检查与`build-provenance-l0-l7/`通过。增量浏览器`browser-provenance-l0-l7.log`的4项通过，覆盖1366/390的L0聚合限定、L7来源/意图分离，以及L2冷链接、非零滚动、刷新和前后退；没有无理由全量重跑原14项。新增窄屏聚合/意图截图已检查。当前仍是按主会话同四字段契约的合成展示验证，AB真实SDK/正式导出配对由AI负责，AH未接触日用资源。
