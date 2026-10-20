@@ -6197,6 +6197,32 @@
         "语音",
         "离线联验"
       ]
+    },
+    {
+      "path": "docs/development/parallel/Z-hy-mechanisms-review-20261021.md",
+      "title": "Z：Hy机制与全站引擎状态独立审查",
+      "status": "draft",
+      "basis": "eaa65b5基点只读准备及验收标准；AA/Y尚未精确交付，不表示实现或发布验收",
+      "review": {
+        "state": "pending",
+        "date": "2026-10-21",
+        "scope": "只读核对基点导航/总览/状态栏/管理契约、已装2.0.3枚举与装配边界；候选与完整官方机制清单待交接",
+        "evidence": [
+          "web/react-chat/src/components/AppShell.tsx",
+          "web/react-chat/src/pages/OverviewApp.tsx",
+          "web/react-chat/src/features/chat/ChatObservability.tsx",
+          "src/longmemory/methods/hy_memory/worker.py",
+          "src/longmemory/methods/hy_memory/sdk_bridge.py",
+          "src/longmemory/methods/hy_memory/assembly.py"
+        ]
+      },
+      "tags": [
+        "Z",
+        "Hy-Memory",
+        "全站引擎",
+        "机制",
+        "审查准备"
+      ]
     }
   ],
   "integration_sources": {
