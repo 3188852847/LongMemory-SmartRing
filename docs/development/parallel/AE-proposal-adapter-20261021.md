@@ -57,3 +57,39 @@ $env:LONGMEMORY_TEST_XIAOZHI_ROOT = 'D:/03-项目/01-正式项目/智慧圆屏/l
 后续复核补充后台TTS的狭窄边界：新发声已撤权、但原sentence_id尚未更换时，不能只比较字符串ID。增加单个当前输出句子/epoch绑定，并在队列put和get都校验；旧排队文本/音频在出队时丢弃，后台新生产的旧包在入队时拒绝。队列等待不持取消锁；abort原清队列在锁内执行。绑定只保留当前句子的标识和整数，不累积历史正文/票据。新增测试明确停在尚未提交新chat、sentence_id仍为旧值的空档，验证旧包不可出队、晚包不可重入；合法已归档历史保留。
 
 该补强后的十一文件回归 **283 passed in 15.91s，0 skipped**。Memory投影补丁为 `f9f6d62c58e15c90f134bd2a676567c9645c3e56`。真实组合曾在该补丁后取得十场景68.27s全通过，新增出队门后的最终十一场景将另取得完整结果，不用前次十例替代。
+
+## 第二阶段：真实3.10 RPC、SDK与正式Runtime组合
+
+输出门补丁 `e6450b55ac4c38133eeb581c2d927f144311adac` 后，新增[真实语音客户端夹具](../../../tests/fixtures/voice_proposal_adapter_sdk_client.py)、[真实宿主夹具](../../../tests/fixtures/voice_proposal_adapter_sdk_host.py)及[组合测试](../../../tests/unit/development/test_voice_proposal_adapter_sdk.py)。宿主src/SDK公共合成夹具来自固定AI `ee03aec75c2d6788fb67fd52043385712ef5b18f` Git对象，语音脚本取本树HEAD并校验adapter/prefetch/RPC字节与工作树一致；没有导入AI editable安装或AI脏树。
+
+实际链路为：原小智Python3.10.20解释器 → 固定上游原ASR receive/handle、startToChat、ContextExecutor、原chat/Message/Dialogue/LLM方法 → 实际prefetch与本段adapter → 实际3.10原生RPC → 独立3.12正式security/五种proposal路由 → 真正VoiceProposalHost/Gateway/SQLite计算账本/持久HTTP传输 → 随机回环合成SSE。记忆侧同时运行V既有解释器中的真实SDK2.0.3、Managed/MemoryRuntime与完整ChatBackend；普通prepare/complete/cancel均经正式路由。实际MemoryProvider、AI completion包装和formal_metadata在语音线程执行，不用固定ID或“最近一轮”替身；原Memory基类与日志是可控接口，未加载私有配置。
+
+最终输入真实经过原Dialogue/Message方法、`prepare_voice_dialogue`、`_ObservedLLM`和`web_response`。只替换等待提示的外围计时对象，避免加载声音档案/提示音；未替换消息/工具装配函数。上游LLM实际方法仅用可控SDK stream记录fallback请求；候选供应商才走真实Gateway回环SSE，学校请求0。搜索配置为明确合成对象，任何真实工具执行都在夹具中拒绝；有工具场景保留实际 `[web_search]` 提供能力，仍正常执行原正式回答，不关闭搜索或删工具来命中。
+
+逐场景分阶段检查：候选ready后正式prepare为0、sources.db字节不变、来源journal为空、SDK模拟模型计数不增、semantic后台任务为空、外部HTTP计数0。之后放行真实原端点，原缓冲reset确实执行；正式路由断言只收到提取后的 `检查资料` 正文，并按实际话轮计数恰好一次。供应商实际JSON最后user保留原ASR language/emotion封装，首system包含真实表达/联网说明以及画像1＋事实4＋意图1全部六项。未把标准消息手工传给confirm冒充真实接线。
+
+| 实际组合场景 | 结果 | 候选模型请求 | 正式prepare |
+|---|---|---:|---:|
+| worker屏障：内部reset完成后才运行chat | adopted | 1 | 1 |
+| 最终emotion变化 | null miss，原正式回答 | 1 | 1 |
+| 最终speaker变化 | null miss，原正式回答 | 1 | 1 |
+| 最终日期说明变化 | null miss，原正式回答 | 1 | 1 |
+| 最终角色说明变化 | null miss，原正式回答 | 1 | 1 |
+| 最终历史变化 | null miss，原正式回答 | 1 | 1 |
+| 正式完整PCM前缀变化 | null miss，完整ASR后原正式回答 | 1 | 1 |
+| 实际配置/提供functions | 原正式回答，候选RPC为0 | 0 | 1 |
+| 已获得候选、原chat尚未入TTS时取消 | 队列/存储/助手历史均无旧回答 | 1 | 1 |
+| 旧worker暂停，新轮先完成，再释放旧worker | 仅新轮输出/助手历史 | 2 | 2 |
+| 旧句子已排队，新发声但sentence_id未换 | 旧包不能出队、晚包不能重入，合法历史保留 | 1 | 1 |
+
+最终 **11 passed in 76.80s，0 skipped**。每例都核对实际owned句柄退出、unknown为0、adapter/RPC关闭成功及子进程退出。候选供应商在进入后续屏障前已完整返回，故这里不是新的“上游流中取消”证据；该边界由前段真实宿主header/body取消用例另行覆盖。没有声称外部供应商计算停止。完成回执使用原“playback_acknowledgement=unavailable”语义，只归档本轮合成正式助手文本，不冒充设备播放。
+
+```powershell
+$env:LONGMEMORY_TEST_XIAOZHI_ROOT = 'D:/03-项目/01-正式项目/智慧圆屏/local/runtime/xiaozhi-esp32-server'
+$env:LONGMEMORY_TEST_PY310 = 'D:/03-项目/01-正式项目/智慧圆屏/local/runtime/xiaozhi-esp32-server/main/xiaozhi-server/.venv/Scripts/python.exe'
+$env:LONGMEMORY_TEST_HY_PYTHON = 'D:/03-项目/01-正式项目/智慧圆屏/local/worktrees/v-hy-memory-20261019/local/runtime/hy-memory/.venv/Scripts/python.exe'
+$env:LONGMEMORY_TEST_ADAPTER_HOST_REF = 'ee03aec75c2d6788fb67fd52043385712ef5b18f'
+& 'D:/03-项目/01-正式项目/智慧圆屏/.venv/Scripts/python.exe' -X utf8 -B -m pytest tests/unit/development/test_voice_proposal_adapter_sdk.py -q
+```
+
+解释器只读复用，所有模型替身、SDK库、账本和临时端口均隔离；不安装、下载或复制环境。缺任一显式路径/固定引用时skip，不能当集成通过。stdout/stderr只含状态/计数/脱敏错误位置，无凭据或对话正文。最终字节未修改AI启动入口，仍待AI独立融合这两处接线与真实能力回调、登记公共清单并完成发布回归；本段不能与已冻结core release混同。日用双端仍关闭，真实录音识别质量、学校性能、TTS声音/打断和设备体验未验收。
