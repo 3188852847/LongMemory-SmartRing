@@ -1,5 +1,9 @@
 import type {RoundWallpaperItem, RoundWallpaperUploadOptions} from './types/device';
 
+// 同源 Cookie 由浏览器共享；并发冷启动只建立一份会话，避免各客户端
+// 持有不同 CSRF、而浏览器最终只保留最后一份 Cookie。结束后不缓存令牌。
+let sessionBootstrap:Promise<string>|undefined;
+
 // 所有请求复用本机 Cookie/CSRF；不持久缓存正文，不自动重试写请求。
 export class ApiError extends Error {
   constructor(public readonly code: string, public readonly status: number) {
@@ -42,11 +46,16 @@ export class ChatApi {
   }
 
   async bootstrap() {
-    const response = await fetch('/api/session', {
-      headers: {'X-Console-Bootstrap': '1'}, cache: 'no-store',
-    });
-    if (!response.ok) throw new Error('无法建立本机会话，请刷新页面。');
-    this.csrf = (await response.json()).csrf;
+    sessionBootstrap ??= (async()=>{
+      const response = await fetch('/api/session', {
+        headers: {'X-Console-Bootstrap': '1'}, cache: 'no-store',
+      });
+      if (!response.ok) throw new Error('无法建立本机会话，请刷新页面。');
+      return (await response.json()).csrf as string;
+    })();
+    const pending=sessionBootstrap;
+    try {this.csrf=await pending;}
+    finally {if(sessionBootstrap===pending)sessionBootstrap=undefined;}
   }
 
   async request<T>(path: string, method = 'GET', body?: unknown): Promise<T> {

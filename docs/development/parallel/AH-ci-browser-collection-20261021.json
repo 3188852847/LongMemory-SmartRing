@@ -1,0 +1,1310 @@
+{
+  "base_commit": "49083dbd3eceedbf9f36f1fba91bc7b7703f0c89",
+  "original_collection_count": 143,
+  "mapped_once": 143,
+  "default_original": 142,
+  "owner_actual_sdk": 1,
+  "additional_default": 1,
+  "evidence": {
+    "original_collection_sha256": "a7d45ee9809100615e4f5c924731e401246033694d28bec16502088691c9931d",
+    "default_collection_sha256": "735ba94388c4e9e17d530df6c9b245d5a86814092cf5618a42d2967d0eae14b7",
+    "live_collection_sha256": "e5a176f0ca19c4f5a98b24cc85484da75c80218d7ebc9a585462e6ee3ffc1b3a"
+  },
+  "mapping": [
+    {
+      "original_file": "e2e/chat-workspace.spec.ts",
+      "title": "chat-workspace.spec.ts > 聊天滚动、证据与输入 1366×768 normal",
+      "original_project": "chromium",
+      "new_file": "e2e/chat-workspace.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/chat-workspace.spec.ts",
+      "title": "chat-workspace.spec.ts > 聊天滚动、证据与输入 1440×900 normal",
+      "original_project": "chromium",
+      "new_file": "e2e/chat-workspace.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/chat-workspace.spec.ts",
+      "title": "chat-workspace.spec.ts > 聊天滚动、证据与输入 390×844 normal",
+      "original_project": "chromium",
+      "new_file": "e2e/chat-workspace.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/chat-workspace.spec.ts",
+      "title": "chat-workspace.spec.ts > 聊天滚动、证据与输入 1366×768 larger",
+      "original_project": "chromium",
+      "new_file": "e2e/chat-workspace.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/console.spec.ts",
+      "title": "console.spec.ts > 文字聊天可保存并在刷新后恢复，React 页面可统一导航",
+      "original_project": "chromium",
+      "new_file": "e2e/console.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/console.spec.ts",
+      "title": "console.spec.ts > 窄窗口保留全部主导航且页面不产生横向溢出",
+      "original_project": "chromium",
+      "new_file": "e2e/console.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/console.spec.ts",
+      "title": "console.spec.ts > 只读实验服务不能误启动模型作业",
+      "original_project": "chromium",
+      "new_file": "e2e/console.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/console.spec.ts",
+      "title": "console.spec.ts > 所有者可合并并恢复重复 L1，矛盾候选没有合并入口",
+      "original_project": "chromium",
+      "new_file": "e2e/console.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/data-workspaces.spec.ts",
+      "title": "data-workspaces.spec.ts > 1366×768 /memories normal",
+      "original_project": "chromium",
+      "new_file": "e2e/data-workspaces.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/data-workspaces.spec.ts",
+      "title": "data-workspaces.spec.ts > 1366×768 /memories empty",
+      "original_project": "chromium",
+      "new_file": "e2e/data-workspaces.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/data-workspaces.spec.ts",
+      "title": "data-workspaces.spec.ts > 1366×768 /memories failure",
+      "original_project": "chromium",
+      "new_file": "e2e/data-workspaces.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/data-workspaces.spec.ts",
+      "title": "data-workspaces.spec.ts > 1366×768 /memory-quality normal",
+      "original_project": "chromium",
+      "new_file": "e2e/data-workspaces.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/data-workspaces.spec.ts",
+      "title": "data-workspaces.spec.ts > 1366×768 /memory-quality empty",
+      "original_project": "chromium",
+      "new_file": "e2e/data-workspaces.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/data-workspaces.spec.ts",
+      "title": "data-workspaces.spec.ts > 1366×768 /memory-quality failure",
+      "original_project": "chromium",
+      "new_file": "e2e/data-workspaces.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/data-workspaces.spec.ts",
+      "title": "data-workspaces.spec.ts > 1366×768 /scenarios normal",
+      "original_project": "chromium",
+      "new_file": "e2e/data-workspaces.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/data-workspaces.spec.ts",
+      "title": "data-workspaces.spec.ts > 1366×768 /scenarios empty",
+      "original_project": "chromium",
+      "new_file": "e2e/data-workspaces.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/data-workspaces.spec.ts",
+      "title": "data-workspaces.spec.ts > 1366×768 /scenarios failure",
+      "original_project": "chromium",
+      "new_file": "e2e/data-workspaces.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/data-workspaces.spec.ts",
+      "title": "data-workspaces.spec.ts > 1366×768 /personas normal",
+      "original_project": "chromium",
+      "new_file": "e2e/data-workspaces.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/data-workspaces.spec.ts",
+      "title": "data-workspaces.spec.ts > 1366×768 /personas empty",
+      "original_project": "chromium",
+      "new_file": "e2e/data-workspaces.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/data-workspaces.spec.ts",
+      "title": "data-workspaces.spec.ts > 1366×768 /personas failure",
+      "original_project": "chromium",
+      "new_file": "e2e/data-workspaces.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/data-workspaces.spec.ts",
+      "title": "data-workspaces.spec.ts > 1366×768 /device normal",
+      "original_project": "chromium",
+      "new_file": "e2e/data-workspaces.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/data-workspaces.spec.ts",
+      "title": "data-workspaces.spec.ts > 1366×768 /device empty",
+      "original_project": "chromium",
+      "new_file": "e2e/data-workspaces.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/data-workspaces.spec.ts",
+      "title": "data-workspaces.spec.ts > 1366×768 /device failure",
+      "original_project": "chromium",
+      "new_file": "e2e/data-workspaces.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/data-workspaces.spec.ts",
+      "title": "data-workspaces.spec.ts > 1366×768 /experiments-react normal",
+      "original_project": "chromium",
+      "new_file": "e2e/data-workspaces.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/data-workspaces.spec.ts",
+      "title": "data-workspaces.spec.ts > 1366×768 /experiments-react empty",
+      "original_project": "chromium",
+      "new_file": "e2e/data-workspaces.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/data-workspaces.spec.ts",
+      "title": "data-workspaces.spec.ts > 1366×768 /experiments-react failure",
+      "original_project": "chromium",
+      "new_file": "e2e/data-workspaces.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/data-workspaces.spec.ts",
+      "title": "data-workspaces.spec.ts > 1440×900 /memories normal",
+      "original_project": "chromium",
+      "new_file": "e2e/data-workspaces.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/data-workspaces.spec.ts",
+      "title": "data-workspaces.spec.ts > 1440×900 /memories empty",
+      "original_project": "chromium",
+      "new_file": "e2e/data-workspaces.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/data-workspaces.spec.ts",
+      "title": "data-workspaces.spec.ts > 1440×900 /memories failure",
+      "original_project": "chromium",
+      "new_file": "e2e/data-workspaces.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/data-workspaces.spec.ts",
+      "title": "data-workspaces.spec.ts > 1440×900 /memory-quality normal",
+      "original_project": "chromium",
+      "new_file": "e2e/data-workspaces.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/data-workspaces.spec.ts",
+      "title": "data-workspaces.spec.ts > 1440×900 /memory-quality empty",
+      "original_project": "chromium",
+      "new_file": "e2e/data-workspaces.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/data-workspaces.spec.ts",
+      "title": "data-workspaces.spec.ts > 1440×900 /memory-quality failure",
+      "original_project": "chromium",
+      "new_file": "e2e/data-workspaces.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/data-workspaces.spec.ts",
+      "title": "data-workspaces.spec.ts > 1440×900 /scenarios normal",
+      "original_project": "chromium",
+      "new_file": "e2e/data-workspaces.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/data-workspaces.spec.ts",
+      "title": "data-workspaces.spec.ts > 1440×900 /scenarios empty",
+      "original_project": "chromium",
+      "new_file": "e2e/data-workspaces.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/data-workspaces.spec.ts",
+      "title": "data-workspaces.spec.ts > 1440×900 /scenarios failure",
+      "original_project": "chromium",
+      "new_file": "e2e/data-workspaces.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/data-workspaces.spec.ts",
+      "title": "data-workspaces.spec.ts > 1440×900 /personas normal",
+      "original_project": "chromium",
+      "new_file": "e2e/data-workspaces.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/data-workspaces.spec.ts",
+      "title": "data-workspaces.spec.ts > 1440×900 /personas empty",
+      "original_project": "chromium",
+      "new_file": "e2e/data-workspaces.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/data-workspaces.spec.ts",
+      "title": "data-workspaces.spec.ts > 1440×900 /personas failure",
+      "original_project": "chromium",
+      "new_file": "e2e/data-workspaces.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/data-workspaces.spec.ts",
+      "title": "data-workspaces.spec.ts > 1440×900 /device normal",
+      "original_project": "chromium",
+      "new_file": "e2e/data-workspaces.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/data-workspaces.spec.ts",
+      "title": "data-workspaces.spec.ts > 1440×900 /device empty",
+      "original_project": "chromium",
+      "new_file": "e2e/data-workspaces.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/data-workspaces.spec.ts",
+      "title": "data-workspaces.spec.ts > 1440×900 /device failure",
+      "original_project": "chromium",
+      "new_file": "e2e/data-workspaces.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/data-workspaces.spec.ts",
+      "title": "data-workspaces.spec.ts > 1440×900 /experiments-react normal",
+      "original_project": "chromium",
+      "new_file": "e2e/data-workspaces.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/data-workspaces.spec.ts",
+      "title": "data-workspaces.spec.ts > 1440×900 /experiments-react empty",
+      "original_project": "chromium",
+      "new_file": "e2e/data-workspaces.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/data-workspaces.spec.ts",
+      "title": "data-workspaces.spec.ts > 1440×900 /experiments-react failure",
+      "original_project": "chromium",
+      "new_file": "e2e/data-workspaces.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/data-workspaces.spec.ts",
+      "title": "data-workspaces.spec.ts > 480×800 /memories normal",
+      "original_project": "chromium",
+      "new_file": "e2e/data-workspaces.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/data-workspaces.spec.ts",
+      "title": "data-workspaces.spec.ts > 480×800 /memories empty",
+      "original_project": "chromium",
+      "new_file": "e2e/data-workspaces.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/data-workspaces.spec.ts",
+      "title": "data-workspaces.spec.ts > 480×800 /memories failure",
+      "original_project": "chromium",
+      "new_file": "e2e/data-workspaces.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/data-workspaces.spec.ts",
+      "title": "data-workspaces.spec.ts > 480×800 /memory-quality normal",
+      "original_project": "chromium",
+      "new_file": "e2e/data-workspaces.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/data-workspaces.spec.ts",
+      "title": "data-workspaces.spec.ts > 480×800 /memory-quality empty",
+      "original_project": "chromium",
+      "new_file": "e2e/data-workspaces.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/data-workspaces.spec.ts",
+      "title": "data-workspaces.spec.ts > 480×800 /memory-quality failure",
+      "original_project": "chromium",
+      "new_file": "e2e/data-workspaces.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/data-workspaces.spec.ts",
+      "title": "data-workspaces.spec.ts > 480×800 /scenarios normal",
+      "original_project": "chromium",
+      "new_file": "e2e/data-workspaces.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/data-workspaces.spec.ts",
+      "title": "data-workspaces.spec.ts > 480×800 /scenarios empty",
+      "original_project": "chromium",
+      "new_file": "e2e/data-workspaces.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/data-workspaces.spec.ts",
+      "title": "data-workspaces.spec.ts > 480×800 /scenarios failure",
+      "original_project": "chromium",
+      "new_file": "e2e/data-workspaces.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/data-workspaces.spec.ts",
+      "title": "data-workspaces.spec.ts > 480×800 /personas normal",
+      "original_project": "chromium",
+      "new_file": "e2e/data-workspaces.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/data-workspaces.spec.ts",
+      "title": "data-workspaces.spec.ts > 480×800 /personas empty",
+      "original_project": "chromium",
+      "new_file": "e2e/data-workspaces.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/data-workspaces.spec.ts",
+      "title": "data-workspaces.spec.ts > 480×800 /personas failure",
+      "original_project": "chromium",
+      "new_file": "e2e/data-workspaces.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/data-workspaces.spec.ts",
+      "title": "data-workspaces.spec.ts > 480×800 /device normal",
+      "original_project": "chromium",
+      "new_file": "e2e/data-workspaces.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/data-workspaces.spec.ts",
+      "title": "data-workspaces.spec.ts > 480×800 /device empty",
+      "original_project": "chromium",
+      "new_file": "e2e/data-workspaces.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/data-workspaces.spec.ts",
+      "title": "data-workspaces.spec.ts > 480×800 /device failure",
+      "original_project": "chromium",
+      "new_file": "e2e/data-workspaces.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/data-workspaces.spec.ts",
+      "title": "data-workspaces.spec.ts > 480×800 /experiments-react normal",
+      "original_project": "chromium",
+      "new_file": "e2e/data-workspaces.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/data-workspaces.spec.ts",
+      "title": "data-workspaces.spec.ts > 480×800 /experiments-react empty",
+      "original_project": "chromium",
+      "new_file": "e2e/data-workspaces.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/data-workspaces.spec.ts",
+      "title": "data-workspaces.spec.ts > 480×800 /experiments-react failure",
+      "original_project": "chromium",
+      "new_file": "e2e/data-workspaces.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/data-workspaces.spec.ts",
+      "title": "data-workspaces.spec.ts > 场景搜索、抽屉、刷新与浏览器返回保留浏览坐标",
+      "original_project": "chromium",
+      "new_file": "e2e/data-workspaces.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/data-workspaces.spec.ts",
+      "title": "data-workspaces.spec.ts > 放大字号、减少动画与键盘切换仍可找到任务，实验同题并排",
+      "original_project": "chromium",
+      "new_file": "e2e/data-workspaces.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/h-regressions.spec.ts",
+      "title": "h-regressions.spec.ts > R1 1440 full 角色与删除确认的键盘关闭真实释放遮罩",
+      "original_project": "chromium",
+      "new_file": "e2e/h-regressions.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/h-regressions.spec.ts",
+      "title": "h-regressions.spec.ts > R1 1440 reduce 角色与删除确认的键盘关闭真实释放遮罩",
+      "original_project": "chromium",
+      "new_file": "e2e/h-regressions.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/h-regressions.spec.ts",
+      "title": "h-regressions.spec.ts > R1 390 full 角色与删除确认的键盘关闭真实释放遮罩",
+      "original_project": "chromium",
+      "new_file": "e2e/h-regressions.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/h-regressions.spec.ts",
+      "title": "h-regressions.spec.ts > R1 390 reduce 角色与删除确认的键盘关闭真实释放遮罩",
+      "original_project": "chromium",
+      "new_file": "e2e/h-regressions.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/h-regressions.spec.ts",
+      "title": "h-regressions.spec.ts > R1 full 脏角色 Esc 拒绝放弃继续保护，明确放弃才关闭",
+      "original_project": "chromium",
+      "new_file": "e2e/h-regressions.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/h-regressions.spec.ts",
+      "title": "h-regressions.spec.ts > R2 390px质量样本的全部处置可见且键盘可达",
+      "original_project": "chromium",
+      "new_file": "e2e/h-regressions.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/h-regressions.spec.ts",
+      "title": "h-regressions.spec.ts > R3 自定义保存不沿用另一个对象的预览选择成功提示",
+      "original_project": "chromium",
+      "new_file": "e2e/h-regressions.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/h-regressions.spec.ts",
+      "title": "h-regressions.spec.ts > R4 390 更大字号九种交互阶段完整可读",
+      "original_project": "chromium",
+      "new_file": "e2e/h-regressions.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/h-regressions.spec.ts",
+      "title": "h-regressions.spec.ts > R4 1366 更大字号九种交互阶段完整可读",
+      "original_project": "chromium",
+      "new_file": "e2e/h-regressions.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/hy-layer-data.spec.ts",
+      "title": "hy-layer-data.spec.ts > L0/L7来源标签保守展示 1366",
+      "original_project": "chromium",
+      "new_file": "e2e/hy-layer-data.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/hy-layer-data.spec.ts",
+      "title": "hy-layer-data.spec.ts > L0/L7来源标签保守展示 390",
+      "original_project": "chromium",
+      "new_file": "e2e/hy-layer-data.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/hy-layer-data.spec.ts",
+      "title": "hy-layer-data.spec.ts > L2来源可信与注入许可冷链接滚动 1366",
+      "original_project": "chromium",
+      "new_file": "e2e/hy-layer-data.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/hy-layer-data.spec.ts",
+      "title": "hy-layer-data.spec.ts > L2来源可信与注入许可冷链接滚动 390",
+      "original_project": "chromium",
+      "new_file": "e2e/hy-layer-data.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/hy-layer-data.spec.ts",
+      "title": "hy-layer-data.spec.ts > 自动add/management任务ID冷链接、编码GET和浏览器返回",
+      "original_project": "chromium",
+      "new_file": "e2e/hy-layer-data.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/hy-layer-data.spec.ts",
+      "title": "hy-layer-data.spec.ts > 真实契约图式、意图与只读任务快照 1366",
+      "original_project": "chromium",
+      "new_file": "e2e/hy-layer-data.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/hy-layer-data.spec.ts",
+      "title": "hy-layer-data.spec.ts > 真实契约图式、意图与只读任务快照 390",
+      "original_project": "chromium",
+      "new_file": "e2e/hy-layer-data.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/hy-layer-data.spec.ts",
+      "title": "hy-layer-data.spec.ts > L6/L7五轴证据与旧协议未知状态 1366",
+      "original_project": "chromium",
+      "new_file": "e2e/hy-layer-data.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/hy-layer-data.spec.ts",
+      "title": "hy-layer-data.spec.ts > L6/L7五轴证据与旧协议未知状态 390",
+      "original_project": "chromium",
+      "new_file": "e2e/hy-layer-data.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/hy-layer-data.spec.ts",
+      "title": "hy-layer-data.spec.ts > 逐层内容分页详情与视口 1920",
+      "original_project": "chromium",
+      "new_file": "e2e/hy-layer-data.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/hy-layer-data.spec.ts",
+      "title": "hy-layer-data.spec.ts > 逐层内容分页详情与视口 1366",
+      "original_project": "chromium",
+      "new_file": "e2e/hy-layer-data.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/hy-layer-data.spec.ts",
+      "title": "hy-layer-data.spec.ts > 逐层内容分页详情与视口 390",
+      "original_project": "chromium",
+      "new_file": "e2e/hy-layer-data.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/hy-layer-data.spec.ts",
+      "title": "hy-layer-data.spec.ts > 八层分别读取实际内容：聚合、RAW、历史、保留与部分图范围",
+      "original_project": "chromium",
+      "new_file": "e2e/hy-layer-data.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/hy-layer-data.spec.ts",
+      "title": "hy-layer-data.spec.ts > 分层加载、真实空层、繁忙、错误、范围拒绝与错层响应",
+      "original_project": "chromium",
+      "new_file": "e2e/hy-layer-data.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/hy-layer-data.spec.ts",
+      "title": "hy-layer-data.spec.ts > 只读详情404、长正文截断与RAW关联不越范围补读",
+      "original_project": "chromium",
+      "new_file": "e2e/hy-layer-data.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/hy-layer-data.spec.ts",
+      "title": "hy-layer-data.spec.ts > 总览与聊天继续轻量，不预取任何层内容",
+      "original_project": "chromium",
+      "new_file": "e2e/hy-layer-data.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/hy-mechanisms.spec.ts",
+      "title": "hy-mechanisms.spec.ts > 全局Hy身份与机制探索 1920",
+      "original_project": "chromium",
+      "new_file": "e2e/hy-mechanisms.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/hy-mechanisms.spec.ts",
+      "title": "hy-mechanisms.spec.ts > 全局Hy身份与机制探索 1366",
+      "original_project": "chromium",
+      "new_file": "e2e/hy-mechanisms.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/hy-mechanisms.spec.ts",
+      "title": "hy-mechanisms.spec.ts > 全局Hy身份与机制探索 390",
+      "original_project": "chromium",
+      "new_file": "e2e/hy-mechanisms.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/hy-mechanisms.spec.ts",
+      "title": "hy-mechanisms.spec.ts > 全部机制、边界与单条来源有真实入口，SDK历史关闭不假装可读",
+      "original_project": "chromium",
+      "new_file": "e2e/hy-mechanisms.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/hy-mechanisms.spec.ts",
+      "title": "hy-mechanisms.spec.ts > 繁忙保留旧快照且无紧密轮询；首次忙保留未知身份",
+      "original_project": "chromium",
+      "new_file": "e2e/hy-mechanisms.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/hy-mechanisms.spec.ts",
+      "title": "hy-mechanisms.spec.ts > 旧引擎与未初始化兼容，method=null不冒充L1统计",
+      "original_project": "chromium",
+      "new_file": "e2e/hy-mechanisms.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/hy-mechanisms.spec.ts",
+      "title": "hy-mechanisms.spec.ts > 窄屏大字号、键盘与其余页面冷加载的全局导航",
+      "original_project": "chromium",
+      "new_file": "e2e/hy-mechanisms.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/hy-mechanisms.spec.ts",
+      "title": "hy-mechanisms.spec.ts > 机制加载、空目录、协议错误和首次繁忙保持各自语义",
+      "original_project": "chromium",
+      "new_file": "e2e/hy-mechanisms.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/hy-mechanisms.spec.ts",
+      "title": "hy-mechanisms.spec.ts > 非零滚动选择机制不会跳顶 1366",
+      "original_project": "chromium",
+      "new_file": "e2e/hy-mechanisms.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/hy-mechanisms.spec.ts",
+      "title": "hy-mechanisms.spec.ts > 非零滚动选择机制不会跳顶 390",
+      "original_project": "chromium",
+      "new_file": "e2e/hy-mechanisms.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/hy-memory.spec.ts",
+      "title": "hy-memory.spec.ts > 内容、详情与来源 1920",
+      "original_project": "chromium",
+      "new_file": "e2e/hy-memory.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/hy-memory.spec.ts",
+      "title": "hy-memory.spec.ts > 内容、详情与来源 1366",
+      "original_project": "chromium",
+      "new_file": "e2e/hy-memory.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/hy-memory.spec.ts",
+      "title": "hy-memory.spec.ts > 内容、详情与来源 390",
+      "original_project": "chromium",
+      "new_file": "e2e/hy-memory.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/hy-memory.spec.ts",
+      "title": "hy-memory.spec.ts > 大字号、长内容、减少动态、键盘与纠正草稿",
+      "original_project": "chromium",
+      "new_file": "e2e/hy-memory.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/hy-memory.spec.ts",
+      "title": "hy-memory.spec.ts > 画像、变化、处理状态和旧书签守卫",
+      "original_project": "chromium",
+      "new_file": "e2e/hy-memory.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/hy-memory.spec.ts",
+      "title": "hy-memory.spec.ts > 加载、空、失败、未知来源及能力拒绝",
+      "original_project": "chromium",
+      "new_file": "e2e/hy-memory.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/hy-memory.spec.ts",
+      "title": "hy-memory.spec.ts > 未知结果明确显示并阻止重新提交",
+      "original_project": "chromium",
+      "new_file": "e2e/hy-memory.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/hy-memory.spec.ts",
+      "title": "hy-memory.spec.ts > 窄屏大字号与跨页草稿保护",
+      "original_project": "chromium",
+      "new_file": "e2e/hy-memory.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/hy-release-live.spec.ts",
+      "title": "hy-release-live.spec.ts > 最终组合真实HTTP与SDK：来源、纠正、重读、历史及单条删除",
+      "original_project": "chromium",
+      "new_file": "e2e-live/hy-release-live.spec.ts",
+      "new_project": "",
+      "host": "explicit_owner_isolated_actual_SDK",
+      "default_ci": false
+    },
+    {
+      "original_file": "e2e/integration.spec.ts",
+      "title": "integration.spec.ts > C/F 聊天输入与持续光效 1366",
+      "original_project": "chromium",
+      "new_file": "e2e/integration.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/integration.spec.ts",
+      "title": "integration.spec.ts > C/F 聊天输入与持续光效 1440",
+      "original_project": "chromium",
+      "new_file": "e2e/integration.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/integration.spec.ts",
+      "title": "integration.spec.ts > C/F 聊天输入与持续光效 390",
+      "original_project": "chromium",
+      "new_file": "e2e/integration.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/integration.spec.ts",
+      "title": "integration.spec.ts > 跨页点击与历史返回拒绝离页时保留聊天草稿",
+      "original_project": "chromium",
+      "new_file": "e2e/integration.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/integration.spec.ts",
+      "title": "integration.spec.ts > E/G 摘要刷新只读，保留未知执行与硬件未确认",
+      "original_project": "chromium",
+      "new_file": "e2e/integration.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/integration.spec.ts",
+      "title": "integration.spec.ts > H01 回看期间新回答不拉底，回到最新恢复跟随",
+      "original_project": "chromium",
+      "new_file": "e2e/integration.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/integration.spec.ts",
+      "title": "integration.spec.ts > H04 390px 来源抽屉标题和全部动作可见，关闭保留筛选",
+      "original_project": "chromium",
+      "new_file": "e2e/integration.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/integration.spec.ts",
+      "title": "integration.spec.ts > H07 新页面归零和焦点、历史返回恢复文档位置与筛选",
+      "original_project": "chromium",
+      "new_file": "e2e/integration.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/integration.spec.ts",
+      "title": "integration.spec.ts > H11 父级失败不保留连接中或已保存承诺",
+      "original_project": "chromium",
+      "new_file": "e2e/integration.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/integration.spec.ts",
+      "title": "integration.spec.ts > G 页面读取真实认证摘要，返回版本和设备未确认语义",
+      "original_project": "chromium",
+      "new_file": "e2e/integration.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/launcher.spec.ts",
+      "title": "launcher.spec.ts > 真实本机主机与 React 页面启动、停止闭环",
+      "original_project": "chromium",
+      "new_file": "e2e/launcher.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/launcher.spec.ts",
+      "title": "launcher.spec.ts > 窄屏设置和减少动画正常，缺少权限不开放启动",
+      "original_project": "chromium",
+      "new_file": "e2e/launcher.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/launcher.spec.ts",
+      "title": "launcher.spec.ts > 独立圆屏端口及自动IP设置在窄屏可操作，保存不启动服务",
+      "original_project": "chromium",
+      "new_file": "e2e/launcher.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/launcher.spec.ts",
+      "title": "launcher.spec.ts > 持续光效可关闭，放大字号与键盘切换保留草稿和焦点",
+      "original_project": "chromium",
+      "new_file": "e2e/launcher.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/launcher.spec.ts",
+      "title": "launcher.spec.ts > 装饰无输入焦点，循环只改变合成属性并记录浏览器帧间隔",
+      "original_project": "chromium",
+      "new_file": "e2e/launcher.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/observability.spec.ts",
+      "title": "observability.spec.ts > Q 合成诊断：轮次／预算／键盘 1366 大字=false",
+      "original_project": "chromium",
+      "new_file": "e2e/observability.spec.ts",
+      "new_project": "observability",
+      "host": "synthetic_observability_host",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/observability.spec.ts",
+      "title": "observability.spec.ts > Q 合成诊断：轮次／预算／键盘 1440 大字=true",
+      "original_project": "chromium",
+      "new_file": "e2e/observability.spec.ts",
+      "new_project": "observability",
+      "host": "synthetic_observability_host",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/observability.spec.ts",
+      "title": "observability.spec.ts > Q 合成诊断：轮次／预算／键盘 390 大字=false",
+      "original_project": "chromium",
+      "new_file": "e2e/observability.spec.ts",
+      "new_project": "observability",
+      "host": "synthetic_observability_host",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/observability.spec.ts",
+      "title": "observability.spec.ts > Q 合成诊断：轮次／预算／键盘 390 大字=true",
+      "original_project": "chromium",
+      "new_file": "e2e/observability.spec.ts",
+      "new_project": "observability",
+      "host": "synthetic_observability_host",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/observability.spec.ts",
+      "title": "observability.spec.ts > Q 刷新失败保留上次摘要；只读 GET 不自动重试或重放业务",
+      "original_project": "chromium",
+      "new_file": "e2e/observability.spec.ts",
+      "new_project": "observability",
+      "host": "synthetic_observability_host",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/observability.spec.ts",
+      "title": "observability.spec.ts > Q 正在读取与真实空数据模型明确展示缺失，不伪装零容量",
+      "original_project": "chromium",
+      "new_file": "e2e/observability.spec.ts",
+      "new_project": "observability",
+      "host": "synthetic_observability_host",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/observability.spec.ts",
+      "title": "observability.spec.ts > Q 达到事件上限与观测持久化失败均明确提示，未提供清理动作",
+      "original_project": "chromium",
+      "new_file": "e2e/observability.spec.ts",
+      "new_project": "observability",
+      "host": "synthetic_observability_host",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/observability.spec.ts",
+      "title": "observability.spec.ts > S 兼容旧响应：缺少语音和容量字段仍显示原 HTTP 摘要",
+      "original_project": "chromium",
+      "new_file": "e2e/observability.spec.ts",
+      "new_project": "observability",
+      "host": "synthetic_observability_host",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/p-experience.spec.ts",
+      "title": "p-experience.spec.ts > 日常聊天与实验准备 1366×768",
+      "original_project": "chromium",
+      "new_file": "e2e/p-experience.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/p-experience.spec.ts",
+      "title": "p-experience.spec.ts > 日常聊天与实验准备 1440×900",
+      "original_project": "chromium",
+      "new_file": "e2e/p-experience.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/p-experience.spec.ts",
+      "title": "p-experience.spec.ts > 日常聊天与实验准备 390×844",
+      "original_project": "chromium",
+      "new_file": "e2e/p-experience.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/p-experience.spec.ts",
+      "title": "p-experience.spec.ts > 真实 Otto 循环、21 张解码、暂停与网页状态优先级",
+      "original_project": "chromium",
+      "new_file": "e2e/p-experience.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/p-experience.spec.ts",
+      "title": "p-experience.spec.ts > 21 张 Otto 原始 GIF 均有真实画面变化",
+      "original_project": "chromium",
+      "new_file": "e2e/p-experience.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/p-experience.spec.ts",
+      "title": "p-experience.spec.ts > Otto 更大字号/减少动态/失败与无素材 1366",
+      "original_project": "chromium",
+      "new_file": "e2e/p-experience.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/p-experience.spec.ts",
+      "title": "p-experience.spec.ts > Otto 更大字号/减少动态/失败与无素材 390",
+      "original_project": "chromium",
+      "new_file": "e2e/p-experience.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/p-experience.spec.ts",
+      "title": "p-experience.spec.ts > S Otto 旧请求迟到失败不能覆盖新阶段，离开页面不残留回调错误",
+      "original_project": "chromium",
+      "new_file": "e2e/p-experience.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/settings-display.spec.ts",
+      "title": "settings-display.spec.ts > 设置分类、声音草稿与圆屏编辑 1366×768",
+      "original_project": "chromium",
+      "new_file": "e2e/settings-display.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/settings-display.spec.ts",
+      "title": "settings-display.spec.ts > 设置分类、声音草稿与圆屏编辑 1440×900",
+      "original_project": "chromium",
+      "new_file": "e2e/settings-display.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/settings-display.spec.ts",
+      "title": "settings-display.spec.ts > 设置分类、声音草稿与圆屏编辑 390×844",
+      "original_project": "chromium",
+      "new_file": "e2e/settings-display.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    },
+    {
+      "original_file": "e2e/settings-display.spec.ts",
+      "title": "settings-display.spec.ts > 大字号、减少动画与键盘分类导航",
+      "original_project": "chromium",
+      "new_file": "e2e/settings-display.spec.ts",
+      "new_project": "chromium",
+      "host": "synthetic_fake_console",
+      "default_ci": true
+    }
+  ],
+  "additional": [
+    {
+      "file": "e2e/session-bootstrap.spec.ts",
+      "title": "session-bootstrap.spec.ts > 全新浏览器会话的身份与聊天并发挂载共享Cookie和CSRF，可直接发送",
+      "project": "chromium",
+      "host": "synthetic_fake_console"
+    }
+  ]
+}

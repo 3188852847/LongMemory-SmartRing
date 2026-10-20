@@ -17,9 +17,17 @@ from longmemory.infrastructure.logging.retention import retention_plan
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def seed_diagnostics(root):
+def seed_diagnostics(root, observer=None):
     """只生成测试输入，绝不声称实际 ASR、模型、合成或播放已经执行。"""
-    observer = Diagnostics(root)
+    if observer is None:
+        observer = Diagnostics(root)
+    else:
+        # 仅此一次性主机的合成状态；每个用例重置，避免100条环形缓冲
+        # 随前序页面请求逐出既定种子。不扩大生产容量，也不清理日用记录。
+        with observer.lock:
+            observer.rows.clear()
+            observer.started.clear()
+            observer.voice_rows.clear()
     old_round, current_round = secrets.token_hex(12), secrets.token_hex(12)
     trace = observer.begin("device", mutating=True)
     observer.finish(trace, 504, code="bridge_timeout")
@@ -65,6 +73,11 @@ def main():
                 return web.json_response({"fixture": "Q_SYNTHETIC_OBSERVABILITY_ONLY", "revision": revision,
                                           "manifest_sha256": manifest_sha256, "device_playback": "unconfirmed"})
 
+            async def reset(_request):
+                seed_diagnostics(Path(directory), observer)
+                return web.json_response({"fixture": "Q_SYNTHETIC_OBSERVABILITY_ONLY",
+                                          "capacity": observer.capacity, "seeded_requests": len(observer.rows)})
+
             async def empty(_request):
                 # 与第一次进程尚无事件时相同的实际数据模型，不回填伪造“成功”。
                 return web.json_response({**Diagnostics().snapshot(), "logs": [], "log_retention": retention_plan(None)})
@@ -79,6 +92,7 @@ def main():
                 return web.json_response({**sample.snapshot(), "logs": [], "log_retention": retention_plan(None)})
 
             app.router.add_get("/api/q-fixture/identity", identity)
+            app.router.add_post("/api/q-fixture/reset", reset)
             app.router.add_get("/api/q-fixture/empty", empty)
             app.router.add_get("/api/q-fixture/truncated", truncated)
             return app

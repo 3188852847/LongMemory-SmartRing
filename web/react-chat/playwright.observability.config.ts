@@ -13,6 +13,7 @@ if (!python || !edge) throw new Error('Q 验收必须显式指定现有 Python �
 if (process.version !== 'v24.19.0') throw new Error('Q 验收固定 Node 24.19.0。');
 
 export default defineConfig({...base,
+  projects:[{name:'chromium'}],
   testMatch: 'observability.spec.ts', workers: 1,
   outputDir: 'test-results/observability', reporter: [['list']],
   use: {...base.use, baseURL: 'http://127.0.0.1:18892', launchOptions: {executablePath: edge}},

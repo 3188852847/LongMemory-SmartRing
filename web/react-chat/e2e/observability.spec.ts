@@ -3,6 +3,15 @@ import {readFileSync, writeFileSync} from 'node:fs';
 import {execFileSync} from 'node:child_process';
 import {expect, test} from '@playwright/test';
 
+test.beforeEach(async({request,baseURL})=>{
+  const session=await request.get('/api/session',{headers:{'X-Console-Bootstrap':'1'}});
+  expect(session.ok()).toBe(true);
+  const {csrf}=await session.json();
+  const reset=await request.post('/api/q-fixture/reset',{headers:{'X-Console-CSRF':csrf,Origin:new URL(baseURL!).origin}});
+  expect(reset.ok()).toBe(true);
+  expect(await reset.json()).toEqual({fixture:'Q_SYNTHETIC_OBSERVABILITY_ONLY',capacity:100,seeded_requests:2});
+});
+
 const widths = [
   {width: 1366, height: 768, large: false}, {width: 1440, height: 900, large: true},
   {width: 390, height: 844, large: false}, {width: 390, height: 844, large: true},
@@ -106,7 +115,7 @@ test('Q 正在读取与真实空数据模型明确展示缺失，不伪装零容
   const waiting = new Promise<void>(resolve => {release = resolve;});
   await page.route('**/api/observability', async route => {
     await waiting;
-    const empty = await route.fetch({url:'http://127.0.0.1:18892/api/q-fixture/empty'});
+    const empty = await route.fetch({url:new URL('/api/q-fixture/empty',route.request().url()).href});
     await route.fulfill({response:empty});
   });
   await page.goto('/device?view=diagnostics');
@@ -123,7 +132,7 @@ test('Q 正在读取与真实空数据模型明确展示缺失，不伪装零容
 
 test('Q 达到事件上限与观测持久化失败均明确提示，未提供清理动作', async ({page}) => {
   await page.route('**/api/observability', async route => {
-    const snapshot = await route.fetch({url:'http://127.0.0.1:18892/api/q-fixture/truncated'});
+    const snapshot = await route.fetch({url:new URL('/api/q-fixture/truncated',route.request().url()).href});
     await route.fulfill({response:snapshot});
   });
   await page.goto('/device?view=diagnostics');

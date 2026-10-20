@@ -8,6 +8,7 @@ export function syntheticResponse(path:string, populated:boolean):unknown {
   const page=(items:unknown[])=>({items,total:items.length,offset:0,limit:25});
   switch(url.pathname) {
     case '/api/session':return {csrf:'synthetic-only'};
+    case '/api/memory-engine/identity':return {schema_version:1,configured:true,method:'longmemory_v1',representation:'atomic_fact',legacy_sqlite:true,state:'available'};
     case '/api/observability':return {schema_version:1,scope:'current_process',capacity:100,persistence:'disabled',
       requests:[],device_playback:'unconfirmed',coverage:['http_request'],uncovered:['asr','tts','device_playback','background_completion'],logs:[]};
     case '/api/memory-config':return {configured:true,database:'synthetic.db',allow_delete:false,allow_clear:false,allow_correction:false,allow_change:false,allow_promote_source:false,allow_scenario_management:false,allow_persona_management:false};

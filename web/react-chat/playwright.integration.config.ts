@@ -14,6 +14,7 @@ if (!process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH) throw new Error('请指定
 
 /** J 使用一个离线合成主机；launcher.spec 自己启动另一随机端口替身。 */
 export default defineConfig({...base,
+  projects:[{name:'chromium'}],
   testMatch: ['console.spec.ts', 'chat-workspace.spec.ts', 'settings-display.spec.ts',
     'data-workspaces.spec.ts', 'launcher.spec.ts', 'integration.spec.ts', 'h-regressions.spec.ts'],
   outputDir: 'test-results/integration', reporter: [['list']],

@@ -24,6 +24,7 @@ for (const size of sizes) test(`聊天滚动、证据与输入 ${size.width}×${
     if (request.method() === 'POST') posts.push(path);
     let body:unknown;
     if (path === '/api/session') body = {csrf:'synthetic-csrf'};
+    else if (path === '/api/memory-engine/identity') body = {schema_version:1,configured:true,method:'longmemory_v1',representation:'atomic_fact',legacy_sqlite:true,state:'available'};
     else if (path === '/api/chat-config') body = {enabled:true,database:'synthetic.db',provider:'fake',model:'Fake',role:'测试'};
     else if (path === '/api/chats') body = {chats:[{chat_id:snapshot.chat_id,title:snapshot.title,turn_count:snapshot.turns.length}]};
     else if (path === `/api/chats/${snapshot.chat_id}`) body = snapshot;

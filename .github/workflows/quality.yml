@@ -77,4 +77,4 @@ jobs:
       - name: Install Chromium for isolated browser tests
         run: pnpm exec playwright install chromium
       - name: Run browser tests against temporary Fake console
-        run: pnpm exec playwright test
+        run: node ../../scripts/ci/browser_quality.mjs

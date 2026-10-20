@@ -20,7 +20,8 @@ async function syntheticPage(page:Page,mode:'normal'|'empty'|'failure') {
     if(url.hostname!=='127.0.0.1')return route.abort();
     if(url.pathname.startsWith('/api/')) {
       if(request.method()!=='GET'){writes.push(url.pathname);return route.fulfill({status:405,json:{error:'synthetic_read_only'}});}
-      if(mode==='failure' && url.pathname!=='/api/session')return route.fulfill({status:503,json:{error:'http_503'}});
+      // 引擎身份属于页面装配前提；本矩阵验证的是已知旧引擎下各业务读取失败。
+      if(mode==='failure' && !['/api/session','/api/memory-engine/identity','/api/memory-config'].includes(url.pathname))return route.fulfill({status:503,json:{error:'http_503'}});
       return route.fulfill({json:syntheticResponse(url.pathname+url.search,mode==='normal')});
     }
     if(request.isNavigationRequest())return route.fulfill({contentType:'text/html',body:await readFile(resolve(dist,'index.html'))});
@@ -81,6 +82,7 @@ test('放大字号、减少动画与键盘切换仍可找到任务，实验同�
   // 1440px 主从布局应给逐题比较足够宽度；坐标证明两组实际并排。
   expect(right!.x).toBeGreaterThan(left!.x);expect(Math.abs(right!.y-left!.y)).toBeLessThan(2);
   const first=page.getByRole('button',{name:'档案与逐题对照',exact:true});await first.focus();await page.keyboard.press('Tab');
+  await expect(page.getByRole('button',{name:'准备档案',exact:true})).toBeFocused();await page.keyboard.press('Tab');
   await expect(page.getByRole('button',{name:'运行实验',exact:true})).toBeFocused();await page.keyboard.press('Enter');
   await expect(page.getByRole('button',{name:'运行实验',exact:true})).toHaveAttribute('aria-pressed','true');
 });

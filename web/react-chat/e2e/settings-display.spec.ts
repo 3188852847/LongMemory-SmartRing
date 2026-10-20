@@ -29,6 +29,7 @@ async function mockWorkspace(page:Page) {
     if (request.method() !== 'GET') writes.push({path,body});
     let response:unknown;
     if (path === '/api/session') response = {csrf:'synthetic-token'};
+    else if (path === '/api/memory-engine/identity') response = {schema_version:1,configured:true,method:'longmemory_v1',representation:'atomic_fact',legacy_sqlite:true,state:'available'};
     else if (path === '/api/chat-config') response = {enabled:true,model:'fake',role:'合成助手',provider:'fake'};
     else if (path === '/api/otto-preview') response = {commit:'synthetic',valid_count:0,items:[]};
     else if (path === '/api/voice-profile' && request.method() === 'GET') response = snapshot();
