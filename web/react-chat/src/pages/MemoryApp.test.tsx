@@ -411,9 +411,9 @@ test('显式旧库未初始化仍可只读管理，不猜方法或懒建Runtime'
   });
   const identity={schema_version:1 as const,configured:true,method:null,representation:'atomic_fact' as const,legacy_sqlite:true,state:'not_initialized' as const};
   render(<QueryClientProvider client={new QueryClient({defaultOptions:{queries:{retry:false}}})}><MemoryRouter><KnownMemoryEngine kind="uninitialized" value={{identity}}><MemoryApp/></KnownMemoryEngine></MemoryRouter></QueryClientProvider>);
-  await screen.findByRole('heading',{name:'原话与事实',exact:true});
+  await screen.findByRole('heading',{name:/^原话与事实$/});
   await waitFor(()=>expect(request.mock.calls.some(([path])=>path.startsWith('/api/memories?'))).toBe(true));
   expect(request.mock.calls.some(([path])=>path==='/api/memory-mode'||path.startsWith('/api/memory-engine/hy/'))).toBe(false);
-  expect(screen.queryByRole('link',{name:'原话与事实',exact:true})).toBeNull();
+  expect(screen.queryByRole('link',{name:/^原话与事实$/})).toBeNull();
   expect(identity.method).toBeNull();
 });
