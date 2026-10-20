@@ -1,5 +1,5 @@
 {
-  "purpose": "精确资源声明候选，交主会话统一CI整合；不是运行时跳过放行表",
+  "purpose": "与backend_resources.py逐项对应的精确专属资源登记；不是运行时跳过放行表",
   "cases": [
     {
       "module": "tests.unit.development.test_voice_proposal_adapter",
