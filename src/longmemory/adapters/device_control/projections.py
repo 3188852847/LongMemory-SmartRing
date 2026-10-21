@@ -13,6 +13,7 @@ from .protocol import (
     volume_value,
 )
 from .voice_interruption import voice_interruption
+from .tts_interrupt import tts_interrupt
 
 
 def read_volume(data: dict) -> dict:
@@ -354,6 +355,8 @@ def device_status(data: dict) -> dict:
         result["voice_latency_mode"] = mode
     if "voice_interruption" in data:
         result["voice_interruption"] = voice_interruption(data["voice_interruption"])
+    if "tts_interrupt" in data:
+        result["tts_interrupt"] = tts_interrupt(data["tts_interrupt"])
     if "reason" in data:
         result["reason"] = safe_reason(data["reason"])
     if "announcement_reason" in data:

@@ -111,7 +111,9 @@ def test_formal_main_adapter_wraps_all_chat_paths_before_connections_are_created
     modules = {
         'core': NS(handle=NS(receiveAudioHandle=receive, sendAudioHandle=send)),
         'core.connection': NS(ConnectionHandler=connection),
-        'core.handle': NS(receiveAudioHandle=receive, sendAudioHandle=send),
+        'core.handle': NS(receiveAudioHandle=receive, sendAudioHandle=send, helloHandle=NS()),
+        'core.handle.textHandler': NS(listenMessageHandler=NS()),
+        'voice_output_protocol': NS(install_tts_interrupt_protocol=lambda *_a, **_k: calls.append('wire')),
         'core.handle.receiveAudioHandle': receive,
         'core.providers.asr': NS(base=base, fun_local=fun),
         'core.providers.memory.longmemory.longmemory': NS(MemoryProvider=object),
@@ -137,4 +139,4 @@ def test_formal_main_adapter_wraps_all_chat_paths_before_connections_are_created
     monkeypatch.setattr(launch, 'install_voice_output_revocation_policy', lambda *_a: calls.append('revocation'))
     monkeypatch.setattr(launch.runpy, 'run_path', lambda *_a, **_k: calls.append('run'))
     launch.main()
-    assert calls == ['input', 'prefetch', 'turn', 'observer', 'completion', *(['adapter'] if enable != 'off' else []), 'revocation', 'run']
+    assert calls == ['input', 'prefetch', 'turn', 'observer', 'completion', *(['adapter'] if enable != 'off' else []), 'revocation', 'wire', 'run']

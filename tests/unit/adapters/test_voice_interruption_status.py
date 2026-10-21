@@ -97,6 +97,7 @@ def test_random_http_guard_projection_readonly_and_disconnect_do_not_reuse_old_o
     async def run():
         import control_http
         from device_control import DeviceControl
+        import voice_output_protocol as wire
         bound = asyncio.Event(); bound.set()
         conn = NS(websocket=NS(state=NS(name='OPEN')), bind_completed_event=bound, need_bind=False,
             mcp_client=NS(ready=True,tools={}), features={'mcp':True}, tts=NS(_longmemory_cosy_streaming_installed=True),
@@ -104,6 +105,11 @@ def test_random_http_guard_projection_readonly_and_disconnect_do_not_reuse_old_o
             _longmemory_cosy_delivery_mode='buffered')
         lease = producer.OutputLease(conn, 'synthetic')
         lease.state.producer('buffered_pcm','buffered',lease=lease)
+        protocol = wire.OutputProtocol(conn, NS())
+        setattr(conn, wire.ATTRIBUTE, protocol)
+        protocol.hello_sent = protocol.negotiated = True
+        protocol.reason = 'confirmed'
+        protocol.counts['hello_confirmed'] = 1
         control = DeviceControl('synthetic-device')
         control.attach(conn,'synthetic-device')
         sock = socket.socket();sock.bind(('127.0.0.1',0));port=sock.getsockname()[1]
@@ -127,12 +133,16 @@ def test_random_http_guard_projection_readonly_and_disconnect_do_not_reuse_old_o
             before=deepcopy(producer.snapshot(conn))
             first=await client.status();second=await client.status()
             assert first['voice_interruption']==second['voice_interruption']==before
+            assert first['tts_interrupt']==second['tts_interrupt']==protocol.snapshot()
+            assert first['tts_interrupt']['device_playback_acknowledged'] is False
+            assert len(json.dumps(first).encode()) < 16384
             assert producer.snapshot(conn)==before
             control.detach(conn)
             offline=await client.status()
             assert offline['ready'] is False
             assert offline['voice_interruption']==producer.snapshot(None)
             assert offline['voice_interruption']['observed'] is None
+            assert offline['tts_interrupt']==wire.protocol_snapshot(None)
         finally:
             await session.close();await runner.cleanup();sock.close()
     asyncio.run(run())

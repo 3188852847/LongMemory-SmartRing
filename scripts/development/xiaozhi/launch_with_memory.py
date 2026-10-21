@@ -322,8 +322,9 @@ def install_answer_completion(connection_class):
                         lease = current.get("output_lease") if current is not None else None
                         if lease is not None and getattr(message, "role", None) == "assistant":
                             # 与音频撤权共用同一锁，不能在检查后被撤权，再把旧助手文本写入历史。
-                            with lease.state.lock:
-                                if not lease.current():
+                            from voice_completion import completion_guard
+                            with completion_guard(lease) as current_output:
+                                if not current_output:
                                     return None
                                 if isinstance(getattr(message, "content", None), str) and message.content.strip():
                                     current["answers"].append(message.content)
@@ -529,6 +530,11 @@ def main():
     install_persistent_device_session(ConnectionHandler, receive_audio_handle)
     # 所有既有ASR/等待音/AE等包装完成后装配，保留各自别名；普通candidate OFF也有效。
     install_voice_output_revocation_policy(ConnectionHandler, receive_audio_handle, asr_base)
+    from core.handle import sendAudioHandle, helloHandle
+    from core.handle.textHandler import listenMessageHandler
+    from voice_output_protocol import install_tts_interrupt_protocol
+    install_tts_interrupt_protocol(ConnectionHandler, sendAudioHandle,
+        hello_module=helloHandle, listen_module=listenMessageHandler, upstream_root=root)
     if args.device_control:
         from core.websocket_server import WebSocketServer
         from control_http import install_control_server

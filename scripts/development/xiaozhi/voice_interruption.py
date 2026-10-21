@@ -255,10 +255,12 @@ def install_voice_interruption(connection_class, receive_module, asr_base_module
                     and not getattr(connection, "need_bind", False)):
                 state = state_for(connection)
                 state.note("asr_handoff")
+                protocol = getattr(connection, "_longmemory_tts_interrupt_wire", None)
                 # speaking布尔可能已被迟到stop清除；生产/播放生命周期才是额外依据。
                 if (getattr(connection, "client_listen_mode", None) != "manual"
                         and not getattr(connection, "calling", False)
-                        and (state.active or getattr(connection, "client_is_speaking", False))):
+                        and (state.active or getattr(connection, "client_is_speaking", False)
+                             or (protocol is not None and protocol.has_interrupt_target()))):
                     state.revoke("asr_handoff_revoked")
                     token = _ABORT.set((connection, state.epoch))
                     try:

@@ -1,7 +1,7 @@
 """将提交时的不可变撤权证据带到聊天线程，保护普通回答的历史和完成回执。"""
 
 from contextvars import Context, ContextVar, copy_context
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 
 _TURN = ContextVar("voice_completion_output_lease", default=None)
 
@@ -10,7 +10,10 @@ _TURN = ContextVar("voice_completion_output_lease", default=None)
 def completion_guard(lease):
     """只覆盖pending原子领取；调用者必须把RPC留在此上下文之外。"""
     with lease.state.lock:
-        yield lease.current()
+        protocol = getattr(lease.state.connection, "_longmemory_tts_interrupt_wire", None)
+        # 与撤权同序：Memory锁→音频锁→wire锁；wire换轮/关闭也不能穿过领取。
+        with protocol.state_lock if protocol is not None else nullcontext():
+            yield lease.current()
 
 
 def output_lease(connection):

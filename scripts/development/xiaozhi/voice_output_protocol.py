@@ -149,12 +149,18 @@ class OutputProtocol:
     def revoke(self, reason):
         with self.state_lock:
             turn = self.turn
-            if turn is not None and not turn.revoked and not turn.eos:
+            # EOS只关闭接收；没有播放回执，设备可能仍在排空该轮尾音。
+            if turn is not None and not turn.revoked:
                 turn.revoked = True
                 if turn.started and self.negotiated:
                     self.pending.append(turn)
             # 捕获此次abort的目标；迟到raw stop不得误指向下一轮。
             _ABORT.set((self, turn))
+
+    def has_interrupt_target(self):
+        with self.state_lock:
+            return (self.negotiated and not self.closed and self.turn is not None
+                    and self.turn.started and not self.turn.revoked)
 
     def _reserve(self):
         if self.next_epoch >= MAX_EPOCH:

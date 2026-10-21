@@ -154,28 +154,37 @@ class ContinuousPCM:
 
 @contextmanager
 def _open_stream(_url, *, json, timeout, headers, cancelled, **_kwargs):
-    """持有自己创建的socket，取消可打断阻塞读取；不追随重定向或环境代理。"""
+    """持有自有socket；首次明确busy后最多400ms准入等待，不限制已获200的生成。"""
     import json as json_module
     target = urlsplit(_url)
     if (target.scheme != 'http' or target.hostname != '127.0.0.1' or target.port is None
             or target.path != '/v1/audio/stream' or target.query or target.fragment
             or target.username is not None or target.password is not None):
         raise ValueError('cosyvoice_stream_loopback_required')
-    busy_deadline = time.monotonic() + .4
+    busy_deadline = None  # 首请求保留原超时；只对已确认尚未生成的busy开放重试。
     while True:
         if cancelled():
             raise _SpeechCancelled()
-        connection = http.client.HTTPConnection("127.0.0.1", target.port, timeout=timeout[0])
+        def remaining(limit):
+            if busy_deadline is None:
+                return limit
+            left = busy_deadline - time.monotonic()
+            if left <= 0:
+                raise RuntimeError("cosyvoice_stream_http_rejected")
+            return min(limit, left)
+        connection = http.client.HTTPConnection("127.0.0.1", target.port, timeout=remaining(timeout[0]))
         done = threading.Event()
+        admitted = threading.Event()
         watcher = response = None
         retry_busy = False
         try:
             connection.connect()
             owned_socket = connection.sock
-            owned_socket.settimeout(timeout[1])
-            def watch(own_done=done, own_socket=owned_socket):
+            owned_socket.settimeout(remaining(timeout[1]))
+            def watch(own_done=done, own_socket=owned_socket, own_admitted=admitted):
                 while not own_done.wait(.02):
-                    if cancelled():
+                    if (cancelled() or (busy_deadline is not None and not own_admitted.is_set()
+                                       and time.monotonic() >= busy_deadline)):
                         try:
                             own_socket.shutdown(socket.SHUT_RDWR)
                         except OSError:
@@ -185,23 +194,39 @@ def _open_stream(_url, *, json, timeout, headers, cancelled, **_kwargs):
             watcher.start()
             connection.request("POST", "/v1/audio/stream", json_module.dumps(json).encode(),
                                {"Content-Type": "application/json", **headers})
+            owned_socket.settimeout(remaining(timeout[1]))
             response = connection.getresponse()
+            if cancelled():
+                raise _SpeechCancelled()
             if response.status != 200:
                 # 固定服务明确busy表示尚未进入合成；只等旧请求finally释放，不重放已开始的生成。
                 length = response.headers.get("Content-Length", "")
                 if (response.status == 503 and response.headers.get_content_type() == "application/json"
                         and length.isdecimal() and 0 < int(length) <= 128):
-                    owned_socket.settimeout(min(timeout[1], .2))
+                    owned_socket.settimeout(remaining(min(timeout[1], .2)))
                     try:
                         retry_busy = json_module.loads(response.read(int(length))) == {"error": "busy"}
                     except (ValueError, OSError):
                         pass
-                if not retry_busy or time.monotonic() >= busy_deadline:
+                if not retry_busy:
                     raise RuntimeError("cosyvoice_stream_http_rejected")
+                if busy_deadline is None:
+                    busy_deadline = time.monotonic() + .4
+                remaining(timeout[1])
             else:
+                remaining(timeout[1])
+                admitted.set()
+                owned_socket.settimeout(timeout[1])
                 yield type("StreamResponse", (), {"raw": response, "headers": response.headers,
                             "raise_for_status": lambda self: None})()
                 return
+        except OSError:
+            if cancelled():
+                raise _SpeechCancelled() from None
+            if busy_deadline is not None and not admitted.is_set():
+                # socket定时器可略早于单调时钟deadline返回；仍是失败准入，不重试。
+                raise RuntimeError("cosyvoice_stream_http_rejected") from None
+            raise
         finally:
             done.set()
             if response is not None:

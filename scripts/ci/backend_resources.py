@@ -5,6 +5,9 @@ requests、numpy、PyYAML已经是dev依赖，不属于资源例外。
 """
 
 RESOURCE_GROUPS = (
+    ('tests.unit.development.test_voice_output_protocol_ws',
+     'owner-installed websockets runtime unavailable',
+     ('test_bilateral_handshake_true_wire_order_eos_alias_and_bounded_close',)),
     ('tests.unit.development.test_voice_interruption',
      'owner-installed pinned SDK unavailable',
      (

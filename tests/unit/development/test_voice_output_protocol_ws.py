@@ -405,6 +405,39 @@ async def case_coverage_changed():
   return wire.protocol_snapshot(u.conn)
  finally:await u.cleanup()
 
+async def case_eos_tail_interrupt():
+ rows=[]
+ for origin in ('formal_asr','explicit_abort','control_stop'):
+  u=await setup(timeout=1)
+  try:
+   await u.send.send_tts_message(u.conn,'start');await u.next()
+   await u.send._do_send_audio(u.conn,b'pending-tail',{'sentence_id':'old','packet_count':0})
+   assert await u.next()==b'pending-tail'
+   await u.send.send_tts_message(u.conn,'stop')
+   eos=json.loads(await u.next());assert eos['state']=='stop' and eos['output_epoch']==1
+   assert u.consumer.queue==[b'pending-tail']  # 普通EOS仍保留完整尾音。
+   assert not guard.state_for(u.conn).active and not u.conn.client_is_speaking
+   if origin=='formal_asr':await u.asr.startToChat(u.conn,'synthetic next input')
+   elif origin=='explicit_abort':await u.receive.handleAbortMessage(u.conn)
+   else:
+    from device_control import DeviceControl
+    control=DeviceControl('synthetic',response_aborter=u.receive.handleAbortMessage)
+    control._connection=lambda:u.conn
+    u.conn.loop=asyncio.get_running_loop()
+    result=await control.stop_speech()
+    assert result['state']=='stop_sent' and result['device_acknowledgement']=='unavailable'
+    assert (await control.stop_speech())['state']=='already_idle'
+   interrupt=json.loads(await u.next())
+   assert interrupt['state']=='interrupt' and interrupt['output_epoch']==1
+   assert u.consumer.queue==[]
+   if origin=='formal_asr':
+    assert json.loads(await u.next())['type']=='stt'
+    assert json.loads(await u.next())['output_epoch']==2
+   assert wire.protocol_snapshot(u.conn)['counts']['interrupt_sent']==1
+   rows.append({'origin':origin,'eos_preserved_tail':True,'interrupt_epoch':1})
+  finally:await u.cleanup()
+ return rows
+
 async def main():
  result={'handshake':await case_handshake(),'ordered':await case_order(),
          'timeout':await case_timeout(),'alias_eos':await case_alias_eos(),
@@ -413,7 +446,8 @@ async def main():
          'opus_pacing':await case_real_opus_pacing(),'cancelled_inflight':await case_cancelled_inflight(),
          'gate_timeout_coverage':await case_gate_timeout_and_coverage(),
          'coverage_changed':await case_coverage_changed(),
-         'implicit_start':await case_revoke_during_implicit_start()}
+         'implicit_start':await case_revoke_during_implicit_start(),
+         'eos_tail':await case_eos_tail_interrupt()}
  assert 'torch' not in sys.modules
  print(json.dumps(result))
 asyncio.run(main())

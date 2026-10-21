@@ -125,13 +125,19 @@ def test_revoked_turn_never_completes_after_abort_bool_reset(provider_class, con
 
 
 @pytest.mark.parametrize('phase',['waiting_memory_lock','rpc_after_claim'])
-def test_atomic_pending_claim_never_holds_audio_lock_while_waiting_memory_or_rpc(provider_class,config,monkeypatch,phase):
+@pytest.mark.parametrize('authority',['asr','wire'])
+def test_atomic_pending_claim_never_holds_audio_lock_while_waiting_memory_or_rpc(provider_class,config,monkeypatch,phase,authority):
     import sys
     monkeypatch.syspath_prepend(str(ROOT/'scripts/development/xiaozhi'))
     from voice_completion import completion_guard
     from voice_interruption import OutputLease
     provider=provider_class(config)
     conn=NS(sentence_id='synthetic',tts=NS(_longmemory_cosy_streaming_installed=True))
+    if authority=='wire':
+        import voice_output_protocol as wire
+        protocol=wire.OutputProtocol(conn,NS())
+        setattr(conn,wire.ATTRIBUTE,protocol)
+        with protocol.state_lock:protocol._reserve()
     lease=OutputLease(conn,None)
     key=uuid4().hex
     provider._pending_completions[key]={'turn_id':str(uuid4()),'retrieved_counts':None,'memory_protocol':2,
@@ -165,7 +171,10 @@ def test_atomic_pending_claim_never_holds_audio_lock_while_waiting_memory_or_rpc
     def complete():
         results.append(provider.record_completed_turn('合成回答',turn_key=key,completion_guard=completion_guard(lease)))
     def revoke():
-        lease.state.revoke('asr_handoff_revoked');revoked.set()
+        if authority=='wire':
+            with protocol.state_lock:protocol._reserve()
+        else:lease.state.revoke('asr_handoff_revoked')
+        revoked.set()
     worker=threading.Thread(target=complete)
     revoker=threading.Thread(target=revoke)
     held=phase=='waiting_memory_lock'

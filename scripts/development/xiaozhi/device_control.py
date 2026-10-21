@@ -12,6 +12,7 @@ import ipaddress
 from urllib.parse import urlsplit
 from uuid import uuid4
 from voice_interruption import snapshot as voice_interruption_snapshot
+from voice_output_protocol import protocol_snapshot
 
 
 STATUS_TOOL = "self.get_device_status"
@@ -320,12 +321,15 @@ class DeviceControl:
                   "user_session_active": False,
                   "natural_interruption": natural_interruption_diagnostics(),
                   "voice_interruption": voice_interruption_snapshot(None),
+                  "tts_interrupt": protocol_snapshot(None),
                   "allowed_volume": {"minimum": MIN_VOLUME, "maximum": MAX_VOLUME}}
         try:
             conn = self._connection()
             result["ready"] = True
             # 只投影当前明确连接的进程内阶段；不读取文件、不触发合成、不保留断线计数。
             result["voice_interruption"] = voice_interruption_snapshot(conn)
+            getter = getattr(conn, "_longmemory_tts_interrupt_snapshot", None)
+            result["tts_interrupt"] = getter() if callable(getter) else protocol_snapshot(conn)
             result["voice_mode"] = getattr(conn, "voice_mode", "pipeline")
             waiting = getattr(conn, "_longmemory_waiting", None)
             if waiting is not None:
@@ -546,10 +550,12 @@ class DeviceControl:
                         "device_acknowledgement": "unavailable" if active else "not_requested"}
             if getattr(conn, "tts", None) is None or getattr(conn, "loop", None) is None:
                 raise ControlError("stop_speech_unavailable")
+            protocol = getattr(conn, "_longmemory_tts_interrupt_wire", None)
             active = (
                 getattr(conn, "client_is_speaking", False)
                 or not conn.tts.tts_text_queue.empty()
                 or not conn.tts.tts_audio_queue.empty()
+                or (protocol is not None and protocol.has_interrupt_target())
             )
             operation_id = uuid4().hex
             if not active:
