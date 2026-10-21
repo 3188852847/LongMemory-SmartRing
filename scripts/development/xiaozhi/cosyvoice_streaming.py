@@ -24,6 +24,7 @@ from fast_voice_responses import fast_asset_for_text
 from cosyvoice_profiles import default_voice_active
 from voice_diagnostics import for_sentence
 from voice_interruption import OutputLease
+from cosyvoice_delivery import configured_mode, session_for
 
 
 STREAM_URL = "http://127.0.0.1:18770/v1/audio/stream"
@@ -461,12 +462,19 @@ def install_cosyvoice_streaming(tts, connection):
         preset_name = fast_asset_for_text(cleaned) if default_voice_active() else None
         preset = PRESET_ROOT / preset_name if preset_name else None
         delivered = False
+        handoff_started = False
         # 实测未分段长文存在欠载，自然段也有非零最大缺口，不能按字数推定安全。
         # 日用保持完整片段；只有隔离验收显式设置连接属性才启用增量候选。
         # 此开关不改变声线、语速、权重或60ms帧，也不由标点/字符数暗中打开。
-        mode = getattr(connection, "_longmemory_cosy_delivery_mode", "buffered")
-        if mode not in {"incremental", "buffered", "adaptive"}:
-            raise ValueError("cosyvoice_delivery_mode_invalid")
+        delivery = session_for(connection)
+        mode = delivery.select(configured_mode(connection))
+        if mode is None:
+            delivery.note("blocked")
+            if trace is not None:
+                trace.event("tts_failed")
+            # 未清理的旧读流或中途改模式，不能再发新请求；上游仍可处理LAST/收音。
+            connection.logger.bind(tag="cosyvoice-stream").warning("音频交付需要重连，当前片段未发起合成")
+            return None
         pcm_parts = []
         buffer = None
         timeline = None
@@ -478,10 +486,11 @@ def install_cosyvoice_streaming(tts, connection):
                 tts._longmemory_cosy_playout = previous
             timeline = previous[1]
         outcome = "failed"
+        reader_cleanup = "not_required"
 
         def deliver_opus(packet):
             """直到拿到完整 Opus 帧才宣布开始，避免空模型块造成假首包。"""
-            nonlocal delivered
+            nonlocal delivered, handoff_started
             check_current()
             if not delivered:
                 tts.tts_audio_queue.put((
@@ -492,6 +501,10 @@ def install_cosyvoice_streaming(tts, connection):
                 ))
             tagged = CosyVoicePacket(packet, sentence_id, cancelled)
             tagged._longmemory_output_lease = lease
+            # 回调可能已入队/写出后才抛错；不确定时也不能把整段回退重播。
+            if not handoff_started:
+                delivery.mark_handoff()
+                handoff_started = True
             opus_handler(tagged)
             if not delivered and lease.current():
                 lease.state.note("first_segment_callback_returned")
@@ -534,6 +547,7 @@ def install_cosyvoice_streaming(tts, connection):
                 if tail:
                     yield tail
 
+        delivery.begin()
         try:
             check_current()
             if preset is not None and preset.is_file():
@@ -543,6 +557,7 @@ def install_cosyvoice_streaming(tts, connection):
                     callback=deliver_opus, sample_rate=connection.sample_rate,
                     opus_encoder=tts.opus_encoder,
                 )
+                outcome = "preset"
                 return None
             if mode == "adaptive":
                 lease.state.producer("adaptive_buffer", "incremental", lease=lease)
@@ -552,6 +567,8 @@ def install_cosyvoice_streaming(tts, connection):
                 lease.state.producer(mode + "_pcm", mode, lease=lease)
                 pieces = source(cancelled)
             try:
+                reader_cleanup = "unconfirmed"
+                delivery.reader_started()
                 for pcm in pieces:
                     check_current()
                     if mode == "buffered":
@@ -572,25 +589,36 @@ def install_cosyvoice_streaming(tts, connection):
                 finally:
                     if buffer is not None:
                         buffer.close()
+                reader_cleanup = "confirmed"
         except _SpeechCancelled:
-            outcome = "cancelled"
+            outcome = "failed" if reader_cleanup == "unconfirmed" else "cancelled"
+            if reader_cleanup == "unconfirmed":
+                delivery.degrade("reader_cleanup_unconfirmed", blocked=True)
             if trace is not None:
                 trace.event("tts_cancelled")
             _reset_opus_encoder(tts.opus_encoder)
             return None
         except _ReaderCleanupTimeout:
+            outcome = "failed"
+            delivery.degrade("reader_cleanup_timeout", blocked=True)
             _reset_opus_encoder(tts.opus_encoder)
             connection.logger.bind(tag="cosyvoice-stream").warning("读流清理超时，本段停止且不并发回退")
             return None
         except Exception as error:
+            outcome = "failed"
             if trace is not None:
                 trace.event("tts_timeout" if isinstance(error, (requests.Timeout, TimeoutError)) else "tts_failed")
             # 解码、协议或发送失败时清除残留 PCM，避免污染回退或下一句话。
             _reset_opus_encoder(tts.opus_encoder)
+            if reader_cleanup == "unconfirmed":
+                delivery.degrade("reader_cleanup_unconfirmed", blocked=True)
+                connection.logger.bind(tag="cosyvoice-stream").warning("读流清理未确认，本段停止且不追加合成")
+                return None
             if cancelled():
                 outcome = "cancelled"
                 return None
-            if not delivered:
+            delivery.degrade("after_handoff" if handoff_started else "before_handoff")
+            if not handoff_started:
                 if trace is not None:
                     trace.event("tts_fallback")
                 connection.logger.bind(tag="cosyvoice-stream").warning(
@@ -606,8 +634,15 @@ def install_cosyvoice_streaming(tts, connection):
 
                 try:
                     outcome = "fallback"
-                    lease.state.producer("complete_wav_fallback", "full_wav", lease=lease)
-                    return original(text, opus_handler=fallback_packet)
+                    try:
+                        lease.state.producer("complete_wav_fallback", "full_wav", lease=lease)
+                        result = original(text, opus_handler=fallback_packet)
+                    except Exception:
+                        outcome = "failed"
+                        raise
+                    if cancelled():
+                        outcome = "cancelled"
+                    return result
                 finally:
                     if cancelled():
                         _reset_opus_encoder(tts.opus_encoder)
@@ -615,6 +650,7 @@ def install_cosyvoice_streaming(tts, connection):
                 f"分块通道在播放后中止：{type(error).__name__}"
             )
         finally:
+            delivery.note(outcome, handoff=handoff_started, cleanup=reader_cleanup)
             if buffer is not None:
                 report = {**buffer.snapshot(), **timeline.snapshot(), "outcome": outcome}
                 tracker = getattr(connection, "_longmemory_voice_latency", None)

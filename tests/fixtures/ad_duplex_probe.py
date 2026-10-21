@@ -47,6 +47,7 @@ async def scenario(config, voice, Encoder, Decoder, websockets):
     import cosyvoice_streaming as consumer
     import voice_interruption as guard
     import voice_output_protocol as wire
+    from cosyvoice_delivery import delivery_snapshot
     u = build()
     c, tts = u.conn, u.conn.tts
     mode, rate = config["mode"], config.get("rate", 16000)
@@ -168,6 +169,19 @@ async def scenario(config, voice, Encoder, Decoder, websockets):
     consumer.install_cosyvoice_streaming(tts, c)
     u.hello_alias = NS(sendAudioMessage=u.send.sendAudioMessage, send_tts_message=u.send.send_tts_message)
     u.listen_alias = NS(send_tts_message=u.send.send_tts_message)
+    v2 = None
+    if config.get("protocol_v2"):
+        # 只在本探针进程绑定固定上游发送模块，复用真实项目v2封装和固定AEC纯FFT。
+        handle_module = ModuleType("core.handle")
+        handle_module.sendAudioHandle = u.send
+        sys.modules["core.handle"] = handle_module
+        import direct_ws_v2 as v2
+        original_aec = load(connection_file, "_apply_aec", {"np": __import__("numpy"), "TAG": "test"}, "ConnectionHandler")
+        def apply_aec(conn, timestamp, pcm):
+            note("synthetic_server_aec_called")
+            return original_aec(conn, timestamp, pcm)
+        u.Connection._apply_aec = apply_aec
+        v2.install_direct_ws_v2(u.Connection)
     guard.install_voice_interruption(u.Connection, u.receive, u.asr, u.send, tts_base_module=u.ttsbase)
     wire.install_tts_interrupt_protocol(u.Connection, u.send, hello_module=u.hello_alias,
         listen_module=u.listen_alias, upstream_root=voice, send_timeout=1)
@@ -179,6 +193,13 @@ async def scenario(config, voice, Encoder, Decoder, websockets):
     state.revoke = revoke
     tts.handle_opus = MethodType(load("core/providers/tts/base.py", "handle_opus",
         {"SentenceType": u.send.SentenceType, "logger": silent, "TAG": "test"}, "TTSProviderBase"), tts)
+    produced = {}
+    original_opus = tts.handle_opus
+    def counted_opus(packet):
+        key = packet._longmemory_cosy_sentence_id
+        produced[key] = produced.get(key, 0) + 1
+        return original_opus(packet)
+    tts.handle_opus = counted_opus
     tts.conn = c
     player_method = load("core/providers/tts/base.py", "_audio_play_priority_thread",
         {"SentenceType": u.send.SentenceType, "asyncio": asyncio, "queue": queue, "logger": silent,
@@ -186,11 +207,13 @@ async def scenario(config, voice, Encoder, Decoder, websockets):
         "TTSProviderBase")
 
     data = struct.pack("<14400h", *[round(9000 * math.sin(2 * math.pi * 400 * i / 24000)) for i in range(14400)])
+    http_modes = []
     class HTTP(BaseHTTPRequestHandler):
         def log_message(self, *_):
             pass
         def do_POST(self):
             body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+            http_modes.append(body["delivery_mode"])
             self.send_response(200)
             self.send_header("Content-Type", "application/vnd.longmemory.wav-chunks")
             self.send_header("X-LongMemory-Audio-Stream", "2")
@@ -206,6 +229,8 @@ async def scenario(config, voice, Encoder, Decoder, websockets):
                     self.wfile.flush()
                     if body["delivery_mode"] == "incremental":
                         time.sleep(.04)
+                    if config.get("truncate_once") and len(http_modes) == 1:
+                        return  # 明确缺EOS的独立故障；不在真实模型上制造失败。
                 self.wfile.write(b"\0" * 4)
             except (BrokenPipeError, ConnectionResetError):
                 pass
@@ -214,10 +239,12 @@ async def scenario(config, voice, Encoder, Decoder, websockets):
     http_thread.start()
     consumer.STREAM_URL = f"http://127.0.0.1:{http.server_port}/v1/audio/stream"
     server = await websockets.serve(c.handle_connection, "127.0.0.1", 0, close_timeout=.1)
-    client = await websockets.connect(f"ws://127.0.0.1:{server.sockets[0].getsockname()[1]}", close_timeout=.1)
+    client = await websockets.connect(f"ws://127.0.0.1:{server.sockets[0].getsockname()[1]}", close_timeout=.1,
+                                     additional_headers={"Protocol-Version": "2"} if v2 else None)
     worker = player = receiver = production = None
     voiced, blocked = asyncio.Event(), asyncio.Event()
     decoded = Decoder(rate, 1)
+    echo_timestamp = [0]
     sent_audio = [0]
     try:
         await client.send(json.dumps({"type": "hello", "features": {wire.CAPABILITY: True}, "audio_params": {"sample_rate": rate}}))
@@ -235,17 +262,24 @@ async def scenario(config, voice, Encoder, Decoder, websockets):
             return await raw_send(value)
         p.raw.send = output
         async def receive_output():
+            nonlocal decoded
             try:
                 async for value in client:
                     if isinstance(value, bytes):
+                        if v2 is not None:
+                            echo_timestamp[0], value = v2.decode_v2_audio(value)
                         pcm = decoded.decode(value, rate * 60 // 1000)
                         samples = struct.unpack("<" + "h" * (len(pcm) // 2), pcm)
                         if sum(abs(v) >= 200 for v in samples) >= rate // 200:
                             if not voiced.is_set():
                                 note("voiced_output_received")
                             voiced.set()
-                    elif json.loads(value).get("state") == "interrupt":
-                        note("wire_interrupt_received")
+                    else:
+                        state = json.loads(value).get("state")
+                        if state in {"start", "interrupt"}:
+                            decoded = Decoder(rate, 1)
+                        if state == "interrupt":
+                            note("wire_interrupt_received")
             except websockets.ConnectionClosed:
                 pass
         receiver = asyncio.create_task(receive_output())
@@ -257,6 +291,9 @@ async def scenario(config, voice, Encoder, Decoder, websockets):
         production = asyncio.create_task(asyncio.to_thread(tts.to_tts_stream,
             "public-synthetic-playback", opus_handler=tts.handle_opus))
         await asyncio.wait_for(voiced.wait(), 3)
+        if config.get("truncate_once"):
+            await asyncio.wait_for(production, 3)
+            note("synthetic_failed_producer_returned")
         if config.get("slow_output"):
             await asyncio.wait_for(blocked.wait(), 2)
         input_encoder = Encoder(16000, 1, 60)
@@ -267,17 +304,24 @@ async def scenario(config, voice, Encoder, Decoder, websockets):
         input_encoder.close()
         for packet in input_packets:
             note("synthetic_mic_sent")
-            await client.send(packet)
+            await client.send(v2.encode_v2_audio(packet, echo_timestamp[0]) if v2 else packet)
             await asyncio.sleep(.004)
         if config.get("speech", True) and voiced_frames + 1 > 15:
             await asyncio.wait_for(finished.wait(), 2)
             await asyncio.sleep(.04)
         else:
             await asyncio.sleep(.15)
+        if config.get("reuse_after_fault"):
+            c.client_abort = False
+            c.sentence_id = tts.current_sentence_id = "candidate-new"
+            production = asyncio.create_task(asyncio.to_thread(tts.to_tts_stream,
+                "public-synthetic-buffered-recovery", opus_handler=tts.handle_opus))
+            await asyncio.wait_for(production, 3)
         result = dict(config, events=events, errors=errors, output_packets=sent_audio[0],
             wire=wire.protocol_snapshot(c), input_is_real_opus=True, output_is_real_opus=True,
             vad_model_executed=False, asr_model_executed=False, device_interruption_acknowledged=False,
-            continuity=reports)
+            continuity=reports, delivery=delivery_snapshot(c), http_modes=http_modes,
+            produced_packets=produced, v2_timestamps_assumed_echoed_last_received=bool(v2))
         return result
     finally:
         c.stop_event.set()

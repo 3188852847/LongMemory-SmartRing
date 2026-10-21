@@ -16,6 +16,7 @@ from cosyvoice_segments import (
 )
 from voice_response_policy import prepare_voice_dialogue
 from voice_waiting import WaitingPacket, AnswerPacket, begin_waiting, mark_answer_ready
+from cosyvoice_delivery import delivery_snapshot
 
 
 TIMING_FIELDS = (
