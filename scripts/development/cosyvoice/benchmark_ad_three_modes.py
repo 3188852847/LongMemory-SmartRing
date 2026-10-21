@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from collections import deque
 from contextlib import contextmanager
 from datetime import datetime, timezone
 import http.client
@@ -48,7 +49,9 @@ def plan():
                 startup_and_warmup_included_in_receipt_window=True,
                 launches_or_stops_services=False, automatic_mode_selection=False,
                 physical_playback_verified=False,
-                energy_gate=dict(contiguous_ms=5, absolute_pcm16_threshold=200))
+                energy_gate=dict(window_ms=5, pcm16_rms_threshold=200,
+                                 minimum_fraction_abs_at_least_threshold=.5,
+                                 definition="rolling_rms_and_sustained_sample_occupancy"))
 
 
 def validate_url(url):
@@ -190,17 +193,31 @@ def diagnostic_delta(before, after):
 
 
 class EnergyGate:
-    """跨解码帧累计连续5ms门限；不把分散的高幅样本凑成有效声音。"""
+    """连续5ms窗口RMS≥200且至少一半样本|幅值|≥200；跨帧保留窗口。
+
+    200/32768约为-44.3 dBFS。附加50%占有率排除单个满幅尖峰撑高RMS；
+    正常过零可保留，静音/单峰不能冒充持续声音。这仍不是首字或听感检测。
+    """
     def __init__(self):
-        self.run = 0
+        self.samples = deque()
+        self.sum_squares = 0
+        self.above_threshold = 0
         self.qualified = False
 
     def feed(self, pcm):
         if len(pcm) % 2:
             raise StopRun("unaligned_decoded_pcm")
         for (value,) in struct.iter_unpack("<h", pcm):
-            self.run = self.run + 1 if abs(value) >= 200 else 0
-            if self.run >= RATE // 200:
+            self.samples.append(value)
+            self.sum_squares += value * value
+            self.above_threshold += abs(value) >= 200
+            window = RATE // 200
+            if len(self.samples) > window:
+                old = self.samples.popleft()
+                self.sum_squares -= old * old
+                self.above_threshold -= abs(old) >= 200
+            if (len(self.samples) == window and self.sum_squares >= window * 200 ** 2
+                    and self.above_threshold * 2 >= window):
                 self.qualified = True
         return self.qualified
 

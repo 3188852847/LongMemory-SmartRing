@@ -5,6 +5,7 @@ import hashlib
 import importlib.util
 import io
 import json
+import math
 import os
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -251,9 +252,32 @@ def test_bad_wire_fails_without_retry_or_fallback(mutation, wire):
 
 def test_energy_requires_contiguous_5ms_across_frames():
     gate = driver.EnergyGate()
-    assert not gate.feed(struct.pack("<hh", 500, 0) * 120)
+    assert not gate.feed(struct.pack("<h", 32767) + b"\0\0" * 119)
+    gate = driver.EnergyGate()
     assert not gate.feed(struct.pack("<h", -200) * 60)
     assert gate.feed(struct.pack("<h", 200) * 60)
+
+
+def test_rms_gate_accepts_normal_zero_crossing_sine_across_frames():
+    # 400Hz峰值300的RMS约212，旧逐样本门每次过零都清空，必然误拒。
+    pcm = struct.pack("<120h", *(round(300 * math.sin(2 * math.pi * 400 * i / driver.RATE)) for i in range(120)))
+    gate = driver.EnergyGate()
+    assert not gate.feed(pcm[:82])
+    assert not gate.feed(pcm[82:210])
+    assert gate.feed(pcm[210:])
+
+
+@pytest.mark.parametrize("kind", ["silence", "isolated_full_scale_spike", "quiet_sine"])
+def test_rms_gate_rejects_silence_or_isolated_peak_or_below_threshold(kind):
+    samples = [0] * 1440
+    if kind == "isolated_full_scale_spike":
+        samples[711] = -32768
+    elif kind == "quiet_sine":
+        samples = [round(100 * math.sin(2 * math.pi * 400 * i / driver.RATE)) for i in range(1440)]
+    gate = driver.EnergyGate()
+    pcm = struct.pack("<1440h", *samples)
+    assert not gate.feed(pcm[:1424])
+    assert not gate.feed(pcm[1424:])
 
 
 def test_energy_cancel_joins_own_reader_resets_same_encoder_and_reuses(monkeypatch, wire):
@@ -435,7 +459,8 @@ VOICE_PYTHON = VOICE / ".venv/Scripts/python.exe"
 
 
 @pytest.mark.skipif(not VOICE_PYTHON.is_file(), reason="owner-installed CPU Opus environment unavailable")
-def test_real_http_framing_and_installed_cpu_opus_all_three_modes():
+@pytest.mark.parametrize("waveform", ["dc", "400hz_zero_crossing"])
+def test_real_http_framing_and_installed_cpu_opus_all_three_modes(waveform):
     """测试专用factory把固定目标转至自有随机端口；不打开18774或任何日用端口。"""
     calls = []
     class Handler(BaseHTTPRequestHandler):
@@ -450,7 +475,15 @@ def test_real_http_framing_and_installed_cpu_opus_all_three_modes():
             self.send_header("X-LongMemory-Audio-Stream", "2")
             self.end_headers()
             for samples in (720, 1800, 841):
-                value = wav(samples)
+                if waveform == "dc":
+                    value = wav(samples)
+                else:
+                    audio = io.BytesIO()
+                    with wave.open(audio, 'wb') as file:
+                        file.setnchannels(1); file.setsampwidth(2); file.setframerate(24000)
+                        file.writeframes(struct.pack(f'<{samples}h', *(
+                            round(5000 * math.sin(2 * math.pi * 400 * i / 24000)) for i in range(samples))))
+                    value = audio.getvalue()
                 self.wfile.write(struct.pack("!I", len(value)) + value)
                 self.wfile.flush()
             self.wfile.write(b"\0" * 4)

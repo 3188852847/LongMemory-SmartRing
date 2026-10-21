@@ -7811,6 +7811,57 @@
         "单worker",
         "根因边界"
       ]
+    },
+    {
+      "path": "docs/development/parallel/AD-three-mode-driver-20261021.md",
+      "title": "AD：当前声线三模式对照驱动准备",
+      "status": "draft",
+      "basis": "c74之后的独立窗口准备；原44项未排除过零门缺陷，AI审后修正，真实GPU未执行",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-21",
+        "scope": "三模式/取消/复用/预算与来源审查，AI能量门修正及75项CPU验证；无性能或物理播放结论",
+        "evidence": [
+          "scripts/development/cosyvoice/benchmark_ad_three_modes.py",
+          "tests/unit/development/test_ad_three_mode_driver.py",
+          "docs/development/parallel/AI-current-voice-window-20261021.md"
+        ]
+      },
+      "tags": ["AD", "三模式", "准备", "CPU验证"]
+    },
+    {
+      "path": "docs/development/parallel/AD-three-mode-preflight-20261021.md",
+      "title": "AD：正式三模式窗口预检交接",
+      "status": "draft",
+      "basis": "AD只读资源与CPU过零反例；固定原记录，不代表GPU或声线性能验收",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-21",
+        "scope": "AD单笔记录审查及AI正弦/真实CPU Opus测试，资源信息由AD/ROOT核对；GPU待新窗口",
+        "evidence": [
+          "docs/development/parallel/AD-three-mode-preflight-20261021.md",
+          "docs/development/parallel/AI-current-voice-window-20261021.md"
+        ]
+      },
+      "tags": ["AD", "预检", "能量门反例", "只读"]
+    },
+    {
+      "path": "docs/development/parallel/AI-current-voice-window-20261021.md",
+      "title": "AI：当前声线三模式窗口审查与启动交接",
+      "status": "draft",
+      "basis": "AD精确提交审查、RMS能量代理修正及独立单实例窗口管理；真实GPU/发布另验",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-21",
+        "scope": "75项CPU/真实自有Job与Opus验证，显式声线根/300秒整窗/15秒暖机/16次上限；未执行模型或停日用",
+        "evidence": [
+          "scripts/development/cosyvoice/run_ad_three_mode_window.py",
+          "tests/unit/development/test_ad_three_mode_window.py",
+          "scripts/development/cosyvoice/benchmark_ad_three_modes.py",
+          "docs/development/parallel/AI-current-voice-window-20261021.md"
+        ]
+      },
+      "tags": ["AI", "窗口管理", "显式声线", "CPU验证"]
     }
   ],
   "integration_sources": {

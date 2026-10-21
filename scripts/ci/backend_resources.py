@@ -5,6 +5,15 @@ requests、numpy、PyYAML已经是dev依赖，不属于资源例外。
 """
 
 RESOURCE_GROUPS = (
+    ('tests.unit.development.test_ad_three_mode_driver',
+     'owner-installed CPU Opus environment unavailable',
+     (
+         'test_real_http_framing_and_installed_cpu_opus_all_three_modes[dc]',
+         'test_real_http_framing_and_installed_cpu_opus_all_three_modes[400hz_zero_crossing]',
+     )),
+    ('tests.unit.development.test_ad_three_mode_window',
+     'Windows owned Job CPU process test',
+     ('test_real_job_cleans_only_own_cpu_process_and_descendant',)),
     ('tests.unit.development.test_voice_waiting_policy',
      'owner-installed fixed vendor unavailable',
      ('test_fixed_vendor_complete_wrapper_order_marks_only_actual_answer_send',)),
