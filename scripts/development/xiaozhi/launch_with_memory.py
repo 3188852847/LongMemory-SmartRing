@@ -283,6 +283,41 @@ def install_voice_output_revocation_policy(connection_class, receive_module, asr
     return result
 
 
+def install_voice_input_observation_policy(server_class, connection_class, asr_base_module,
+                                         receive_module, *, upstream_root):
+    """只读输入诊断在服务端实例已选定ASR、尚未接受连接时装配。
+
+    不导入/实例化任意ASR提供器。只接受固定快照已经加载的FunLocal实际类，
+    放在control包装的内部，使它最后接到现有连接包装；失败仍走原服务启动。
+    """
+    if getattr(server_class, "_longmemory_input_observation_bootstrap", False):
+        return
+    try:
+        from control_compatibility import verify_control_snapshot
+        verify_control_snapshot(upstream_root)
+    except Exception:
+        return  # 未核验的源码不安装诊断，不替换业务启动路径。
+    original_start = server_class.start
+
+    async def start(server, *args, **kwargs):
+        try:
+            provider_type = type(getattr(server, "_asr", None))
+            module = sys.modules.get("core.providers.asr.fun_local")
+            reviewed_type = getattr(module, "ASRProvider", None)
+            if (provider_type is reviewed_type
+                    and isinstance(reviewed_type, type)
+                    and issubclass(reviewed_type, asr_base_module.ASRProviderBase)):
+                from voice_input_observation import install_voice_input_observation
+                install_voice_input_observation(connection_class, asr_base_module, receive_module,
+                                                asr_provider_classes=(reviewed_type,))
+        except Exception:
+            pass  # 诊断异常不替代/重试业务，也不输出提供器或私有配置正文。
+        return await original_start(server, *args, **kwargs)
+
+    server_class.start = start
+    server_class._longmemory_input_observation_bootstrap = True
+
+
 def _completion_output_lease(connection):
     from voice_completion import output_lease
     return output_lease(connection)
@@ -537,6 +572,10 @@ def main():
         hello_module=helloHandle, listen_module=listenMessageHandler, upstream_root=root)
     if args.device_control:
         from core.websocket_server import WebSocketServer
+        # 服务端构造后可取得实际ASR类，无需提前导入模型；control的动态包装
+        # 先完成，再由其调用此诊断包装，最后才进入原WebSocket监听。
+        install_voice_input_observation_policy(WebSocketServer, ConnectionHandler, asr_base,
+                                              receive_audio_handle, upstream_root=root)
         from control_http import install_control_server
         install_control_server(WebSocketServer, ConnectionHandler)
     runpy.run_path(str(root / "app.py"), run_name="__main__")

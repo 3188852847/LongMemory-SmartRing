@@ -7899,6 +7899,36 @@
         ]
       },
       "tags": ["实机FAILED", "buffered恢复", "输入观测盲区", "草稿保全"]
+    },
+    {
+      "path": "docs/development/parallel/AD-barge-in-source-duplex-20261021.md",
+      "title": "AD：口令未显示后的发送侧核查与隔离全双工复现",
+      "status": "reference",
+      "basis": "固定SDK方法与真实自有HTTP/WS/CPU Opus的有界合成证据，VAD/ASR替身；非现场根因",
+      "review": {"state": "verified", "date": "2026-10-21",
+        "scope": "cdac0699单笔接入、AI独立10项通过；保留短段/背压分支与物理FAILED边界，不改阈值",
+        "evidence": ["docs/development/parallel/AI-input-observation-integration-20261021.md", "tests/fixtures/ad_duplex_probe.py", "tests/unit/development/test_ad_barge_in_duplex.py"]},
+      "tags": ["AD", "双工合成", "条件性分支", "根因未定"]
+    },
+    {
+      "path": "docs/development/parallel/AC-input-interruption-20261021.md",
+      "title": "AC：输入打断阶段观测",
+      "status": "draft",
+      "basis": "b66a5e7b只读连接计数与固定方法快照；无声学模型运行或端点行为修复",
+      "review": {"state": "verified", "date": "2026-10-21",
+        "scope": "AC固定交付审查及AI当前helper/预取/公共接线244项、实际3.10超时/异常传播；根因仍待实机",
+        "evidence": ["docs/development/parallel/AI-input-observation-integration-20261021.md", "scripts/development/xiaozhi/voice_input_observation.py", "tests/unit/development/test_voice_input_observation.py"]},
+      "tags": ["AC", "只读计数", "输入边界", "诊断准备"]
+    },
+    {
+      "path": "docs/development/parallel/AI-input-observation-integration-20261021.md",
+      "title": "AI：输入观测公共接线与诊断候选",
+      "status": "draft",
+      "basis": "AD/AC精确交付、当前ASR子类启动顺序与双端有限投影；仅buffered只读诊断候选",
+      "review": {"state": "verified", "date": "2026-10-21",
+        "scope": "244项联合/10项双工及精确资源守卫，15项固定源码指纹；不部署、不启用adaptive或持久化草稿",
+        "evidence": ["docs/development/parallel/AI-input-observation-integration-20261021.md", "scripts/development/xiaozhi/launch_with_memory.py", "scripts/development/xiaozhi/device_control.py", "src/longmemory/adapters/device_control/voice_input_observation.py"]},
+      "tags": ["AI", "公共接线", "有限投影", "实机待诊断"]
     }
   ],
   "integration_sources": {

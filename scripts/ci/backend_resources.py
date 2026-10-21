@@ -5,6 +5,23 @@ requests、numpy、PyYAML已经是dev依赖，不属于资源例外。
 """
 
 RESOURCE_GROUPS = (
+    ('tests.unit.development.test_voice_input_observation_wiring',
+     'owner-installed Python 3.10 input observer runtime unavailable',
+     ('test_actual_python310_timeout_is_classified_without_changing_original_exception',)),
+    ('tests.unit.development.test_ad_barge_in_duplex',
+     'owner-installed CPU Opus/WS unavailable',
+     (
+         'test_audio_reception_vad_asr_handoff_progress_while_real_output_is_voiced[buffered-16000]',
+         'test_audio_reception_vad_asr_handoff_progress_while_real_output_is_voiced[incremental-16000]',
+         'test_audio_reception_vad_asr_handoff_progress_while_real_output_is_voiced[adaptive-16000]',
+         'test_audio_reception_vad_asr_handoff_progress_while_real_output_is_voiced[adaptive-24000]',
+         'test_absent_subtitle_has_distinct_received_speech_and_asr_explanations[speech_false]',
+         'test_absent_subtitle_has_distinct_received_speech_and_asr_explanations[empty_text]',
+         'test_slow_outbound_abort_can_delay_asr_dispatch_without_starving_ws_receipt',
+         'test_short_endpoint_can_be_received_and_speech_true_but_skip_formal_asr[6]',
+         'test_short_endpoint_can_be_received_and_speech_true_but_skip_formal_asr[14]',
+         'test_sixteenth_frame_crosses_pinned_asr_endpoint_length_boundary',
+     )),
     ('tests.unit.development.test_ad_three_mode_driver',
      'owner-installed CPU Opus environment unavailable',
      (

@@ -155,6 +155,21 @@ def rig():
     return bridge, conn, socket
 
 
+def test_input_observation_status_is_live_optional_and_clears_on_detach(monkeypatch):
+    bridge, conn, socket = rig()
+    calls=[]
+    def get(current=None):
+        calls.append(current)
+        return {'version':1,'state':'no_connection' if current is None else 'observed',
+                'counts':None if current is None else {'queue_put':3}}
+    monkeypatch.setattr(control,'voice_input_observation_diagnostics',get)
+    assert bridge.status()['voice_input_observation']['counts']=={'queue_put':3}
+    bridge.detach(conn)
+    value=bridge.status()['voice_input_observation']
+    assert value['state']=='no_connection' and value['counts'] is None
+    assert calls[-1] is None
+
+
 def test_interruption_summary_uses_only_selected_live_connection_without_cached_counts():
     from voice_interruption import OutputLease, state_for
     bridge, conn, socket = rig()

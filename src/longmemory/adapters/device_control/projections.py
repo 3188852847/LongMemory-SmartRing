@@ -14,6 +14,7 @@ from .protocol import (
 )
 from .voice_interruption import voice_interruption
 from .tts_interrupt import tts_interrupt
+from .voice_input_observation import voice_input_observation
 
 
 def read_volume(data: dict) -> dict:
@@ -357,6 +358,8 @@ def device_status(data: dict) -> dict:
         result["voice_interruption"] = voice_interruption(data["voice_interruption"])
     if "tts_interrupt" in data:
         result["tts_interrupt"] = tts_interrupt(data["tts_interrupt"])
+    if "voice_input_observation" in data:
+        result["voice_input_observation"] = voice_input_observation(data["voice_input_observation"])
     if "reason" in data:
         result["reason"] = safe_reason(data["reason"])
     if "announcement_reason" in data:

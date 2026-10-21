@@ -194,10 +194,12 @@ def test_cloud_bootstrap_does_not_set_pipeline_style_or_import_asr(tmp_path, mon
 
 
 @pytest.mark.parametrize("mode", ["realtime", "original"])
-def test_pipeline_bootstrap_installs_input_timing_before_response_policy(tmp_path, monkeypatch, mode):
+@pytest.mark.parametrize("device_control", [False, True])
+def test_pipeline_bootstrap_installs_input_timing_before_response_policy(tmp_path, monkeypatch, mode, device_control):
     module = load_module(monkeypatch, XIAOZHI / "launch_with_memory.py")
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(sys, "argv", ["launch_with_memory.py", "--voice-latency-mode", mode])
+    monkeypatch.setattr(sys, "argv", ["launch_with_memory.py", "--voice-latency-mode", mode]
+                        + (["--device-control"] if device_control else []))
     calls = []
     connection_class = type("Connection", (), {})
     monkeypatch.setitem(sys.modules, "core.connection", SimpleNamespace(ConnectionHandler=connection_class))
@@ -231,6 +233,12 @@ def test_pipeline_bootstrap_installs_input_timing_before_response_policy(tmp_pat
     monkeypatch.setattr(module, "install_answer_completion", lambda *args: None)
     monkeypatch.setattr(module, "install_voice_output_revocation_policy", lambda *args: calls.append("revocation"))
     monkeypatch.setattr(module, "install_internal_end_prompt_boundary", lambda *args: None)
+    monkeypatch.setitem(sys.modules,"core.websocket_server",SimpleNamespace(WebSocketServer=object))
+    monkeypatch.setitem(sys.modules,"control_compatibility",SimpleNamespace(verify_control_snapshot=lambda _:None))
+    monkeypatch.setitem(sys.modules,"control_http",SimpleNamespace(
+        install_control_server=lambda *_:calls.append('control_bootstrap')))
+    monkeypatch.setattr(module,"install_voice_input_observation_policy",
+                        lambda *_a,**_k:calls.append('input_observation_bootstrap'))
     monkeypatch.setattr(module, "install_pipeline_latency_policy",
                         lambda *args, **kwargs: calls.append((
                             "policy", kwargs["mode"], kwargs["enable_asr_prefetch"], kwargs["enable_http_keepalive"])))
@@ -241,7 +249,8 @@ def test_pipeline_bootstrap_installs_input_timing_before_response_policy(tmp_pat
     finally:
         sys.path[:] = previous
     assert calls == ["input_timing", ("policy", mode, True, True),
-                     "persistent_session", "revocation", "wire", "run"]
+                     "persistent_session", "revocation", "wire"] + (
+                         ['input_observation_bootstrap','control_bootstrap'] if device_control else []) + ['run']
 
 
 @pytest.mark.parametrize("relative", ["launcher/voice.py", "xiaozhi/setup.py", "xiaozhi/launch_with_memory.py"])

@@ -128,6 +128,36 @@ def status_with_prefetch(snapshot, **extra):
             "user_session_active": False, "voice_asr_prefetch": snapshot, **extra}
 
 
+@pytest.mark.parametrize('state',['no_connection','not_observed','unavailable'])
+def test_optional_input_observation_missing_values_survive_bridge(tmp_path,state):
+    from longmemory.adapters.device_control.voice_input_observation import FIELDS,VALUE_KIND
+    value=dict.fromkeys(FIELDS);value.update(version=1,state=state,value_kind=VALUE_KIND)
+    client=client_for(tmp_path,status_with_prefetch({'version':1,'enabled':False},voice_input_observation=value))
+    result=asyncio.run(client.status())
+    assert result['voice_input_observation']==value
+    assert result['voice_input_observation']['endpoint_packet_count'] is None
+
+
+@pytest.mark.parametrize('bad',['private_field','count_bool','bad_flags','wrong_state','unknown_counter'])
+def test_bad_optional_input_observation_is_unavailable_without_breaking_business_status(tmp_path,bad):
+    from longmemory.adapters.device_control.voice_input_observation import FIELDS,COUNTERS,KINDS,FLAGS,VALUE_KIND
+    value=dict.fromkeys(FIELDS)
+    flags={name:False for name in FLAGS};flags['listen_mode']='auto'
+    value.update(version=1,state='observed',counts=dict.fromkeys(COUNTERS,0),inflight=dict.fromkeys(KINDS,0),
+                 current_flags=flags,counter_saturated=False,value_kind=VALUE_KIND)
+    if bad=='private_field':value['text']='PRIVATE-TRANSCRIPT'
+    elif bad=='count_bool':value['counts']['queue_put']=True
+    elif bad=='bad_flags':value['current_flags']['listen_mode']='PRIVATE-DEVICE'
+    elif bad=='wrong_state':value['state']='PRIVATE-CONTEXT'
+    else:value['counts']['PRIVATE-KEY']=1
+    client=client_for(tmp_path,status_with_prefetch({'version':1,'enabled':False},voice_input_observation=value))
+    result=asyncio.run(client.status())
+    assert result['ready'] is True
+    assert result['voice_input_observation']['state']=='unavailable'
+    assert result['voice_input_observation']['counts'] is None
+    assert 'PRIVATE' not in json.dumps(result)
+
+
 @pytest.mark.parametrize("snapshot", [{"version": 1, "enabled": False}, prefetch_snapshot(),
                                       {**prefetch_snapshot(), "latest_overlap_ms": None}])
 def test_status_accepts_strict_optional_asr_prefetch(tmp_path, snapshot):

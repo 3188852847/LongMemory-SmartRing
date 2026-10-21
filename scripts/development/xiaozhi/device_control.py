@@ -15,6 +15,35 @@ from voice_interruption import snapshot as voice_interruption_snapshot
 from voice_output_protocol import protocol_snapshot
 
 
+def voice_input_observation_diagnostics(connection=None):
+    """只读取当前连接的AC计数；缺测为null，不缓存断线对象或读取音频/文本。"""
+    fields = ("version", "state", "counts", "inflight", "queue_depth", "current_flags",
+              "last_handle_flags", "endpoint_packet_count", "endpoint_pcm_bytes",
+              "buffer_frames_before_receive", "formal_audio_frames", "formal_pcm_bytes",
+              "counter_saturated", "value_kind")
+    fallback = dict.fromkeys(fields)
+    fallback.update(version=1, state="no_connection" if connection is None else "not_observed",
+                    value_kind="connection_counters_not_audio_or_cpu_time")
+    try:
+        from voice_input_observation import voice_input_observation_snapshot
+        value = voice_input_observation_snapshot(connection)
+        if (not isinstance(value, dict) or set(value) != set(fields)
+                or type(value.get("version")) is not int or value.get("version") != 1
+                or value.get("state") not in {"no_connection", "not_observed", "observed", "closed", "unavailable"}
+                or (connection is None and value["state"] != "no_connection")
+                or len(json.dumps(value, allow_nan=False).encode("utf-8")) > 16 * 1024):
+            if connection is not None:
+                fallback["state"] = "unavailable"
+            return fallback
+        return value
+    except ImportError:
+        return fallback
+    except Exception:
+        if connection is not None:
+            fallback["state"] = "unavailable"
+        return fallback
+
+
 STATUS_TOOL = "self.get_device_status"
 VOLUME_TOOL = "self.audio_speaker.set_volume"
 BRIGHTNESS_TOOL = "self.screen.set_brightness"
@@ -321,6 +350,7 @@ class DeviceControl:
                   "user_session_active": False,
                   "natural_interruption": natural_interruption_diagnostics(),
                   "voice_interruption": voice_interruption_snapshot(None),
+                  "voice_input_observation": voice_input_observation_diagnostics(),
                   "tts_interrupt": protocol_snapshot(None),
                   "allowed_volume": {"minimum": MIN_VOLUME, "maximum": MAX_VOLUME}}
         try:
@@ -328,6 +358,7 @@ class DeviceControl:
             result["ready"] = True
             # 只投影当前明确连接的进程内阶段；不读取文件、不触发合成、不保留断线计数。
             result["voice_interruption"] = voice_interruption_snapshot(conn)
+            result["voice_input_observation"] = voice_input_observation_diagnostics(conn)
             getter = getattr(conn, "_longmemory_tts_interrupt_snapshot", None)
             result["tts_interrupt"] = getter() if callable(getter) else protocol_snapshot(conn)
             result["voice_mode"] = getattr(conn, "voice_mode", "pipeline")
