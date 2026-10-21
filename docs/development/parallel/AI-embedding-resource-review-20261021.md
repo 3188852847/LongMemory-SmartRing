@@ -30,7 +30,7 @@ CI 只新增 baseline/prepared 两个精确资源例外；模拟 SDK 路径缺�
 
 当前管理原语 SHA256 由 `fc9d53ea2b90be3d9a80846b21eec9b389f2dbe4393b51d8956f3013fcd103e8` 变为 **`1003fe901fa49bd2750242637b18744694f5bebdabfc3d06e0cf7a5eb262fdac`**。provider 仍为 `f425a3824f3771a16e7bd8df2b022376257c0d8f6673cd70c23d552a8943f717`，无需为了此候选修改提供器升级来源。
 
-本组合通过审查后冻结，按 ROOT 已授权的 `hy_management_receipt.py --managed-semantic`、已有 V 树 SDK/小智3.10/AB合成捕获，在新排他目录实跑必要219项，生成匹配新身份的实际 proof 与外围回执；此提交时尚未执行，结果另在下节追加。旧 d978… proof 不适配此新身份，不能复制或手改。ROOT 决定后续是否停机、备份及部署；AI 不操作共享配置、个人数据或设备。
+本组合通过审查后冻结，按 ROOT 已授权的 `hy_management_receipt.py --managed-semantic`、已有 V 树 SDK/小智3.10/AB合成捕获，在新排他目录实跑必要219项，生成匹配新身份的实际 proof 与外围回执；冻结时尚未执行，实际失败与复核结果见下节。旧 d978… proof 不适配此新身份，不能复制或手改。ROOT 决定后续是否停机、备份及部署；AI 不操作共享配置、个人数据或设备。
 
 ## 首次管理验证失败与有界复核
 
@@ -43,3 +43,22 @@ AB 的补验记录 `154977402f67493adeb064fc426554a6e55aea44` 已接为 `d2d27fa
 在新合成目录，用一个不允许 delete-share 的目标读句柄调用原 `_write`，实际复现同类 WinError5且保留tmp，证明这是该文件访问条件下的已有失败分支，**不是已证明本次发生了该种占用**。诊断回执为 `data/test-tmp/ai-embedding-resource-marker-failure-diagnostic-01.json`。此操作不接触失败原件或个人库，不改权限、不终止进程。
 
 定位后，在另一全新 pytest 目录仅验证对应单例：**1 passed，5.84秒**，报告 `ai-embedding-resource-marker-case-isolated-01.xml`。它不替代完整219项，也不改写首次失败或声称文件竞争已修复。本轮不扩大为持久化写入修复、不新增自动重试或放宽断言；保留上述限制后，以新的清洁文档 HEAD/新排他目录完整复核一次。若再次失败则停止签发并交 ROOT 决定独立故障范围。
+
+## 完整复核成功与实际证明
+
+第二次固定完整验证的清洁实测 HEAD 为 **`8c7a791691098a64080f20b7f365e4c41da0ecc1`**，tree `e79bdf0d2ef8348ea8c1b90833761e01e18214f7`。业务源码与首次失败时一致，仅多记录诊断的文档提交；未修持久化逻辑、改变权限或重试策略。本次 **219 passed、0 skipped、0 failed/error，467.40秒**，工具退出0，按最终 `1003fe…` 原语身份新生成七字段协议2证明。这是单次完整运行，不是将首次218通过与单例1通过拼接签发。
+
+排他输出为本 AI 树 **`data/test-tmp/ai-embedding-resource-managed-proof-20261021-02/`**。可交 ROOT 的候选文件为该目录 `management-verification.json`；外围结果为 `receipt.json`，不可混淆。没有复制旧 fc9d/d978 证明或写正式配置。
+
+| 原字节证据 | SHA256 |
+|---|---|
+| 新 `management-verification.json` | `875d1eb5f7750ddc3ef4a23a812997433bdb8182e22db7c64b44b4c4a266dcdc` |
+| 新 `receipt.json` | `e3ee764df65e3620040ecca4331b8d7cb57adc2e75112119fbbe5f2eaa496300` |
+| 新 `junit.xml` | `e99960cce823e507fb38abf80d1acbc949d3a6290e3fe57eaffb0ec519912d2c` |
+| 新 `pytest.log` | `0bc4a0cb0aae423f7d955881175634a5f6b69d3a8ff4ba706d4ceaa87a018ea8` |
+| 全部 longmemory/xiaozhi Python 文件名＋规范化字节 | `5925f73b045379a4db9d2ac698da1c803aca9ae15a7c0e87f1909a0b787040e1` |
+| 首次失败 `-01/receipt.json`（保留） | `90df4cf50b54cb02d1fca6a73c1737b57de94e1d449ac4fa2684126a7f4848bb` |
+
+AI 独立重算源码、原语、证明精确七字段、两个解释器、JUnit219项无跳过/失败、日志与回执摘要，均匹配；复核回执为 `data/test-tmp/ai-embedding-resource-proof-independent-review.json`。也检查首次 receipt 仍failed且没有proof。工具内与独立检查都在干净树完成，本次收尾只改本文及清单，不将新文档 HEAD 写进实测回执，不再重签。
+
+首次 WinError5 的实际持有者和触发原因仍未确认，复核成功不代表该既有原子替换问题已修复。ROOT 合入前应保留此边界并核对最终源码与上述实测身份一致；部署、真实首轮收益和设备体验仍未执行。当前日用98db及其已成功CI不因本离线候选改变。

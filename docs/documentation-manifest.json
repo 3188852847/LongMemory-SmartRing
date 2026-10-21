@@ -26,7 +26,7 @@
         "docs/development/parallel/AB-embedding-resource-warmup-20261021.md",
         "docs/development/parallel/AI-first-recall-observation-review-20261021.md"
       ],
-      "review": "verified 2026-10-21: 102项含显式3.10零跳过，独立单对首次583.168→134.505ms、准备成本前移；1003fe新原语身份，proof待必要219实跑，不部署"
+      "review": "verified 2026-10-21: 102项含显式3.10零跳过，独立单对首次583.168→134.505ms、准备成本前移；1003fe新原语身份；首轮WinError5未确认实际原因，保留失败；8c7a完整219零跳过后生成875d新proof并独立复核，不部署"
     },
     {
       "id": "launcher-running-timeout-test-sync",
@@ -1779,11 +1779,11 @@
       "path": "docs/development/parallel/AI-embedding-resource-review-20261021.md",
       "title": "AI：embedding 公开资源启动预备候选审查",
       "status": "draft",
-      "basis": "独立于98db日用发布的公开资源预备候选；新身份proof待生成，未部署",
+      "basis": "独立于98db日用发布的公开资源预备候选；新身份219项proof已生成，首轮WinError5保留且原因未定，未部署",
       "review": {
         "state": "verified",
         "date": "2026-10-21",
-        "scope": "3行业务差异、公开资源代码与版本、ready前边界；七回执重算/独立双进程/102项零跳过及精确CI例外；无日用收益结论",
+        "scope": "3行业务差异、版本与ready边界；七回执重算/独立双进程/102项零跳过；首次218通过1个WinError5失败保留，8c7a新目录完整219通过及1003fe新证明独立复核，未部署",
         "evidence": [
           "docs/development/parallel/AI-embedding-resource-review-20261021.md",
           "src/longmemory/methods/hy_memory/sdk_observation.py",
@@ -1805,7 +1805,7 @@
       "review": {
         "state": "verified",
         "date": "2026-10-21",
-        "scope": "3行业务差异、公开资源代码与版本、ready前边界；七回执重算/独立双进程/102项零跳过及精确CI例外；无日用收益结论",
+        "scope": "3行业务差异、版本与ready边界；七回执重算/独立双进程/102项零跳过；首次218通过1个WinError5失败保留，8c7a新目录完整219通过及1003fe新证明独立复核，未部署",
         "evidence": [
           "docs/development/parallel/AI-embedding-resource-review-20261021.md",
           "src/longmemory/methods/hy_memory/sdk_observation.py",
