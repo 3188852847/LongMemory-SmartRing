@@ -1,0 +1,196 @@
+{
+  "kind": "synthetic_contract_example_not_measurement",
+  "baseline_commit": "c74b88834683080d4dc4ee4b770f48707ff5b349",
+  "cases": [
+    {
+      "case": "old_client_new_server",
+      "request_headers": {
+        "X-Memory-Observe": "1"
+      },
+      "response_headers": {
+        "X-Memory-Observation": "{\"stages\":{\"api_prepare_ms\":{\"calls\":1,\"total_ms\":30.0},\"embed_rpc_ms\":{\"calls\":1,\"total_ms\":9.25},\"prepare_recall_ms\":{\"calls\":1,\"total_ms\":26.0},\"sdk_execute_ms\":{\"calls\":1,\"total_ms\":22.0},\"sdk_roundtrip_ms\":{\"calls\":1,\"total_ms\":24.0},\"sdk_search_ms\":{\"calls\":1,\"total_ms\":20.0},\"vdb_query_ms\":{\"calls\":1,\"total_ms\":6.0}},\"trace_id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"version\":1}"
+      },
+      "business_status": 200,
+      "business_body": {
+        "unchanged_business_result": true
+      },
+      "base_observation": {
+        "stages": {
+          "api_prepare_ms": {
+            "calls": 1,
+            "total_ms": 30.0
+          },
+          "embed_rpc_ms": {
+            "calls": 1,
+            "total_ms": 9.25
+          },
+          "prepare_recall_ms": {
+            "calls": 1,
+            "total_ms": 26.0
+          },
+          "sdk_execute_ms": {
+            "calls": 1,
+            "total_ms": 22.0
+          },
+          "sdk_roundtrip_ms": {
+            "calls": 1,
+            "total_ms": 24.0
+          },
+          "sdk_search_ms": {
+            "calls": 1,
+            "total_ms": 20.0
+          },
+          "vdb_query_ms": {
+            "calls": 1,
+            "total_ms": 6.0
+          }
+        },
+        "trace_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "version": 1
+      },
+      "detail_record": null
+    },
+    {
+      "case": "new_client_old_server",
+      "request_headers": {
+        "X-Memory-Observe": "1",
+        "X-Memory-Observe-Detail": "2"
+      },
+      "response_headers": {
+        "X-Memory-Observation": "{\"stages\":{\"api_prepare_ms\":{\"calls\":1,\"total_ms\":30.0},\"embed_rpc_ms\":{\"calls\":1,\"total_ms\":9.25},\"prepare_recall_ms\":{\"calls\":1,\"total_ms\":26.0},\"sdk_execute_ms\":{\"calls\":1,\"total_ms\":22.0},\"sdk_roundtrip_ms\":{\"calls\":1,\"total_ms\":24.0},\"sdk_search_ms\":{\"calls\":1,\"total_ms\":20.0},\"vdb_query_ms\":{\"calls\":1,\"total_ms\":6.0}},\"trace_id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"version\":1}"
+      },
+      "business_status": 200,
+      "business_body": {
+        "unchanged_business_result": true
+      },
+      "base_observation": {
+        "stages": {
+          "api_prepare_ms": {
+            "calls": 1,
+            "total_ms": 30.0
+          },
+          "embed_rpc_ms": {
+            "calls": 1,
+            "total_ms": 9.25
+          },
+          "prepare_recall_ms": {
+            "calls": 1,
+            "total_ms": 26.0
+          },
+          "sdk_execute_ms": {
+            "calls": 1,
+            "total_ms": 22.0
+          },
+          "sdk_roundtrip_ms": {
+            "calls": 1,
+            "total_ms": 24.0
+          },
+          "sdk_search_ms": {
+            "calls": 1,
+            "total_ms": 20.0
+          },
+          "vdb_query_ms": {
+            "calls": 1,
+            "total_ms": 6.0
+          }
+        },
+        "trace_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "version": 1
+      },
+      "detail_record": {
+        "version": 2,
+        "round_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "state": "unavailable",
+        "observation": null
+      }
+    },
+    {
+      "case": "new_client_new_server",
+      "request_headers": {
+        "X-Memory-Observe": "1",
+        "X-Memory-Observe-Detail": "2"
+      },
+      "response_headers": {
+        "X-Memory-Observation": "{\"stages\":{\"api_prepare_ms\":{\"calls\":1,\"total_ms\":30.0},\"embed_rpc_ms\":{\"calls\":1,\"total_ms\":9.25},\"prepare_recall_ms\":{\"calls\":1,\"total_ms\":26.0},\"sdk_execute_ms\":{\"calls\":1,\"total_ms\":22.0},\"sdk_roundtrip_ms\":{\"calls\":1,\"total_ms\":24.0},\"sdk_search_ms\":{\"calls\":1,\"total_ms\":20.0},\"vdb_query_ms\":{\"calls\":1,\"total_ms\":6.0}},\"trace_id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"version\":1}",
+        "X-Memory-Observation-Detail": "{\"stages\":{\"embed_bge_encode_ms\":{\"calls\":1,\"total_ms\":3.0},\"embed_client_get_ms\":{\"calls\":1,\"total_ms\":1.25},\"embed_gateway_lock_wait_ms\":{\"calls\":1,\"total_ms\":2.0},\"embed_gateway_ms\":{\"calls\":1,\"total_ms\":6.0},\"embed_http_headers_ms\":{\"calls\":1,\"total_ms\":7.0},\"vdb_query_backend_ms\":{\"calls\":1,\"total_ms\":4.5},\"vdb_query_pool_wait_ms\":{\"calls\":1,\"total_ms\":0.25}},\"trace_id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"version\":2}"
+      },
+      "business_status": 200,
+      "business_body": {
+        "unchanged_business_result": true
+      },
+      "base_observation": {
+        "stages": {
+          "api_prepare_ms": {
+            "calls": 1,
+            "total_ms": 30.0
+          },
+          "embed_rpc_ms": {
+            "calls": 1,
+            "total_ms": 9.25
+          },
+          "prepare_recall_ms": {
+            "calls": 1,
+            "total_ms": 26.0
+          },
+          "sdk_execute_ms": {
+            "calls": 1,
+            "total_ms": 22.0
+          },
+          "sdk_roundtrip_ms": {
+            "calls": 1,
+            "total_ms": 24.0
+          },
+          "sdk_search_ms": {
+            "calls": 1,
+            "total_ms": 20.0
+          },
+          "vdb_query_ms": {
+            "calls": 1,
+            "total_ms": 6.0
+          }
+        },
+        "trace_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "version": 1
+      },
+      "detail_record": {
+        "version": 2,
+        "round_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "state": "received",
+        "observation": {
+          "stages": {
+            "embed_bge_encode_ms": {
+              "calls": 1,
+              "total_ms": 3.0
+            },
+            "embed_client_get_ms": {
+              "calls": 1,
+              "total_ms": 1.25
+            },
+            "embed_gateway_lock_wait_ms": {
+              "calls": 1,
+              "total_ms": 2.0
+            },
+            "embed_gateway_ms": {
+              "calls": 1,
+              "total_ms": 6.0
+            },
+            "embed_http_headers_ms": {
+              "calls": 1,
+              "total_ms": 7.0
+            },
+            "vdb_query_backend_ms": {
+              "calls": 1,
+              "total_ms": 4.5
+            },
+            "vdb_query_pool_wait_ms": {
+              "calls": 1,
+              "total_ms": 0.25
+            }
+          },
+          "trace_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "version": 2
+        }
+      }
+    }
+  ]
+}
