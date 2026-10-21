@@ -500,3 +500,23 @@ AI独立核对AG已生成CPU小图report/probe/receipt/source-analysis四份原�
 
 
 主会话后续决定先推候选分支并以workflow_dispatch验收Quality，待AH生产会话修复/完整浏览器交付经AI审查后冻结最终候选；main和当前ready服务先保持。完整远端通过后，主会话才安排owned检查点、ff/准确dist部署和main推送。此为发布顺序决定，不是上述动作已发生或全部技术已启用；AE/AG本段提交与后续AH接入分开。
+
+## AH完整浏览器修复最终接入与候选放行
+
+主会话后续授权完成AH最终审查，顺序接入 `d3571b2ce5e6e85ce6fbc5a2e7f2134106f06300`→AI `7f6cb6b6`、`dfa0747c5fa81edc8c34bd0d3685e9b274b29af3`→AI `b7083ce0`、`a4be7cb1eb5dd0f9be4e2f6cca88edcf7368fa8f`→AI `5b116366573184c2304c46c443721b4350921847`，无冲突。AI新增端口保护另为 `c52825e9`，未交叉改AH冻结树。后续本次收尾仅编辑本AI记录与共享清单，业务/前端字节保持5b116366。
+
+生产改动仅ChatApi.bootstrap同页面模块内共用在途Promise：同源Cookie由浏览器共享，所有并发客户端取得该一次请求的CSRF；成功、HTTP错误、JSON错误或请求异常均经finally释放，旧Promise的清理不会清掉新的在途请求。不新增令牌持久存储、不缓存完成结果、不自动重试业务写请求。后端Host/Origin/Sec-Fetch-Site/CSRF、中立客户端错误、no-store和写请求same-origin保持；不同页面依次初始化时沿后端既有Cookie复用，不把同页面内存锁宣称为跨标签同时冷启动的协调。后者仍不覆盖，AH记录已有明确限制。确定性旧代码回归实际csrf_rejected与修后成功原始JSON均复核；未把远端首开禁用唯一归因于该竞态。
+
+测试前提差异分别核对：全站引擎身份、旧引擎业务失败矩阵与新增“准备档案”键盘步骤由显式合成夹具补齐；诊断主机每例经实际会话/Origin/CSRF后只重置本进程合成事件，不扩大生产容量100或删除日用日志。默认两个项目分别普通/诊断，观测专用fetch从当前请求origin生成；已有定向配置显式覆盖单项目，避免继承新增项目。真实SDK文件逐字节原文移至e2e-live，由需显式资源的原z-live配置保留，未用Fake替代真实SDK。无新增测试skip、重试、超时放宽或业务断言删除；普通项目的observability排除与专用项目的匹配成对，逐项收集证明不是漏跑。
+
+AI重算三份原收集JSON及哈希并逐项比较[143原用例映射](AH-ci-browser-collection-20261021.json)，134普通＋8诊断＋1独立真实SDK无遗漏重复；新增1冷会话用例后默认143项＝原142合成＋新增1，独立真实SDK本次仅收集未执行。AH最终350组件的JSON实际63文件/350 pass/0 pending，类型/构建原日志和提交/工具绑定一致。完整CI入口浏览器实际运行在d3571b2c：143收集、140 pass、0 fail/flaky/retry、3项原有Otto固定素材skip，237973ms；AI逐例核对结果和零retry。后续dfa聊天专用配置只改projects覆盖，另4/4 pass、10511ms，无诊断混入；不宣称dfa又重跑完整143。
+
+主会话指出日用端口范围后，AI在独立c52825e9增量中将普通与诊断配置共用的纯校验器移到browser_test_ports.mjs，拒绝8000/8003/8766/8767/8768/18000/18003/18767/18770；默认18777/18892、端口范围、互斥检查和既有超时不变。固定Node24.19.0仅运行原4项收集护栏＋新增2项端口护栏，**6/6通过**，配置语法检查通过；没有依赖安装/复制/联接，没有重跑AH完整node套件。公共清单旧真实SDK来源已改为e2e-live，映射中的original_file仍保留历史原路径。
+
+准确新产物为AH树 `data/test-tmp/ah-release-browser-dfa0747c-20261021/dist/`，45文件/1,839,032字节。AI逐文件检查相对路径、字节数、SHA-256、无额外/source-map文件和固定凭据/私有路径/fixture内容指纹；重算manifest导入图、完整264处本地引用及其归属，91张新截图逐一核摘要，五项构建输入及六项AH验收源码输入绑定均核实。实际完整/聊天测试的默认dist、预先冻结清单、新候选45项逐字节一致。上述为AI独立脚本检查，没有执行AH核验脚本后照抄结果；AI没有重跑浏览器或视觉宣称新功能验收。
+
+新规范运行摘要=`bcde5ee77a08fa513942c7f13ffe60885e7a3c4acfe237f5dac4975886679af1`，manifest=`5e94e8fea73e850d7335feac0fc3e3f190e67a3e761cdce08b07986b0b308b00`；release-binding=`09c37ca9968f4576203a8a9bfeaaff98245eb21bd4af790702f15b7947b1183f`，delivery-receipt=`27327ca4b80202b2f255533b9b35625e87e63ac81d2e4679ca12c74846024df9`。相对旧c5产物净增84字节，包含真实bootstrap修复，不能复用旧dist部署。AH构建源为dfa、前端tree=`a2d622edf976bf49325c09ee703a35d29f72f4af`；融合前端tree=`43c6c7282cc2466bd8d1922a04a2701418bd5cc2`，二者前端差异仅playwright.config.ts端口校验提取，生产src、五项构建输入、shared-assets tree逐字节/对象一致。AH原回执不改成AI新tree；AI另存 `data/test-tmp/ai-ah-release-review.json` 记录5b时独立等价核验，不冒称融合树重新构建。原有八层/provenance生产组件未变，相关完整浏览器仍通过；真实模型/设备另验。
+
+按主会话要求，在本树通过原入口 `python scripts/ci/backend_quality.py` 实际完整运行，**3593 passed / 200精确资源skip / 0失败 / 234.13s**，报告护栏返回成功。JUnit `data/test-tmp/ci/backend.xml` SHA-256=`40f58b19765331dea8bcca07662266028b65a204b9bf538e3c71e5ead30a33a6`；完整日志 `data/test-tmp/ai-ah-combined-backend-01.log` SHA-256=`9aa37e61afafb3fbf350f621ebbccd8bb9c94872049d75f559f5f488f81e71aa`。实际3793用例逐项无failure/error，本轮新增37项资源name/reason均精确匹配声明；没有用缺普通依赖跳过放行。本次完整入口未设置SDK资源路径，不能替代前段d871固定真实SDK13项；本机3593/200、远端旧3552/179、受控最小3550/181是不同条件，不混写。
+
+源码/产物审查未发现新增阻断项，可由主会话按既定候选分支调度远端Quality；本地成功不等于远端已绿。AE首轮SDK失败仍未定位且完整历史保留；跨标签同时冷启动不覆盖；3个Otto素材验收与1个独立真实SDK浏览器本轮未执行。候选仍保持提前回答双端默认关闭、buffered日用及原已选模型/声线；本会话未推送、部署、停服务、改个人数据或操作GPU/设备。主会话完整远端验收后再决定准确新dist切换。

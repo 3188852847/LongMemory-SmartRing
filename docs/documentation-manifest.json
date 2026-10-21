@@ -182,7 +182,17 @@
         "web/react-chat/src/features/memory/HySemantic*",
         "web/react-chat/e2e/hy-layer-data.spec.ts",
         "web/react-chat/src/pages/MemoryApp.test.tsx",
-        "web/react-chat/src/pages/RoundDisplayApp.test.tsx"
+        "web/react-chat/src/pages/RoundDisplayApp.test.tsx",
+        "web/react-chat/src/api/client.ts",
+        "web/react-chat/src/api/index.test.ts",
+        "web/react-chat/e2e/session-bootstrap.spec.ts",
+        "web/react-chat/playwright.config.ts",
+        "web/react-chat/chat-workspace.config.ts",
+        "scripts/ci/browser_quality.mjs",
+        "scripts/ci/browser_test_ports.mjs",
+        "scripts/ci/test_browser_quality.mjs",
+        "scripts/development/observability_browser.py",
+        "docs/development/parallel/AH-ci-browser-collection-20261021.json"
       ],
       "related": [
         "docs/development/parallel/AI-hy-advanced-low-latency-20261021.md"
@@ -193,7 +203,7 @@
         "L7",
         "低延迟"
       ],
-      "review": "verified 2026-10-21: AH测试前提修正仅两测试文件，AI复核63文件348项本地JSON和新64c17c8e源码绑定；45文件/264引用/8截图与原运行字节一致。远端失败未完整本地复现，新Quality待验，不重复browser或改生产UI"
+      "review": "verified 2026-10-21: AI独立审查d357/dfa/a4be并接入；同页面bootstrap并发共用在途请求，跨标签同时冷启动不覆盖。原143精确映射，AH组件350、完整浏览器140pass/3既有Otto skip、聊天4pass；AI核新45文件/264引用/91截图及AH a2d622→融合43c6c7仅配置差异。新bcde产物须替换旧c5，远端与生产尚未执行"
     },
     {
       "id": "hy-advanced-combination",
