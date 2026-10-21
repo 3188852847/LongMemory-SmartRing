@@ -1,0 +1,1083 @@
+{
+  "kind": "synthetic_resource_initialization_evidence_not_daily_latency",
+  "timestamp_utc": "2026-10-21T14:19:05.963908+00:00",
+  "base_commit": "e4d62aae3197adc8a392c04abed661ff9448f690",
+  "sdk_observation_source_sha256": "fb1d2c7d8a3a7ddc58b85851a12a18211e28c041190cfaf04c92f224a97335e8",
+  "isolation": "Original clean_environment, owned HOME/TEMP/state, network denial except random synthetic loopback, audit rejection of .env/local-config opens.",
+  "baseline_control": "Only bypass added public resource import during startup; restore real importlib before queries. No profiling in six timing comparisons.",
+  "query_path": "Fixed SDK search loop, EmbedService.embed, search role, distinct synthetic inputs with use_cache=False; fake 512D loopback response; no BGE/LLM.",
+  "first_call_median_ms": {
+    "baseline": 590.963,
+    "prepared": 129.162
+  },
+  "first_call_median_delta_ms": 461.801,
+  "startup_preparation_median_ms": {
+    "baseline": 1035.232,
+    "prepared": 1495.521
+  },
+  "limit": "Fresh-process synthetic causal control; not direct profiling of the owner request, not a claim about previous 4.6s. Profile rows are nested and non-additive.",
+  "cases": [
+    {
+      "kind": "synthetic_sdk_embedding_resource_probe",
+      "mode": "baseline",
+      "profile_enabled": true,
+      "versions": {
+        "hy-memory": "2.0.3",
+        "openai": "2.54.0",
+        "pydantic": "2.14.1",
+        "httpx": "0.28.1"
+      },
+      "preparation": {
+        "resources_loaded_before": false,
+        "wall_ms": 1025.714,
+        "files_unchanged": true,
+        "http_requests": {
+          "embedding": 0,
+          "other": 0
+        },
+        "resources_loaded_after": false,
+        "result": {
+          "prepared": true,
+          "import_ms": 570.148,
+          "segmenter_ms": 455.558
+        },
+        "client_cache_entries": 0,
+        "vector_cache_entries": 0
+      },
+      "counts": {
+        "embedding": 2,
+        "other": 0
+      },
+      "external_http_attempts": 0,
+      "local_gateway_requests": 2,
+      "samples": [
+        {
+          "total_ms": 781.546,
+          "base": {
+            "version": 1,
+            "trace_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "stages": {
+              "embedding_truncate_ms": {
+                "calls": 1,
+                "total_ms": 0.01
+              }
+            }
+          },
+          "detail": {
+            "version": 2,
+            "trace_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "stages": {
+              "embed_client_get_ms": {
+                "calls": 1,
+                "total_ms": 65.394
+              },
+              "embed_http_headers_ms": {
+                "calls": 1,
+                "total_ms": 50.848
+              }
+            }
+          },
+          "profile": [
+            {
+              "file": "base_events.py",
+              "line": 1922,
+              "name": "_run_once",
+              "calls": 32,
+              "self_ms": 0.25,
+              "cumulative_ms": 801.025
+            },
+            {
+              "file": "<frozen importlib._bootstrap>",
+              "line": 1349,
+              "name": "_find_and_load",
+              "calls": 612,
+              "self_ms": 3.01,
+              "cumulative_ms": 734.759
+            },
+            {
+              "file": "<frozen importlib._bootstrap>",
+              "line": 1304,
+              "name": "_find_and_load_unlocked",
+              "calls": 577,
+              "self_ms": 1.723,
+              "cumulative_ms": 734.594
+            },
+            {
+              "file": "<frozen importlib._bootstrap>",
+              "line": 480,
+              "name": "_call_with_frames_removed",
+              "calls": 1700,
+              "self_ms": 1.529,
+              "cumulative_ms": 733.729
+            },
+            {
+              "file": "<frozen importlib._bootstrap>",
+              "line": 911,
+              "name": "_load_unlocked",
+              "calls": 559,
+              "self_ms": 1.321,
+              "cumulative_ms": 733.587
+            },
+            {
+              "file": "<frozen importlib._bootstrap_external>",
+              "line": 993,
+              "name": "exec_module",
+              "calls": 557,
+              "self_ms": 1.097,
+              "cumulative_ms": 733.481
+            },
+            {
+              "file": "~",
+              "line": 0,
+              "name": "<built-in method builtins.exec>",
+              "calls": 652,
+              "self_ms": 7.044,
+              "cumulative_ms": 716.108
+            },
+            {
+              "file": "~",
+              "line": 0,
+              "name": "<built-in method builtins.__import__>",
+              "calls": 17,
+              "self_ms": 0.036,
+              "cumulative_ms": 668.577
+            },
+            {
+              "file": "functools.py",
+              "line": 982,
+              "name": "__get__",
+              "calls": 1986,
+              "self_ms": 1.713,
+              "cumulative_ms": 644.858
+            },
+            {
+              "file": "openai/_client.py",
+              "line": 905,
+              "name": "embeddings",
+              "calls": 1,
+              "self_ms": 0.009,
+              "cumulative_ms": 633.22
+            },
+            {
+              "file": "openai/resources/__init__.py",
+              "line": 1,
+              "name": "<module>",
+              "calls": 1,
+              "self_ms": 0.068,
+              "cumulative_ms": 632.399
+            },
+            {
+              "file": "<frozen importlib._bootstrap_external>",
+              "line": 1066,
+              "name": "get_code",
+              "calls": 557,
+              "self_ms": 2.768,
+              "cumulative_ms": 357.062
+            },
+            {
+              "file": "~",
+              "line": 0,
+              "name": "<built-in method builtins.compile>",
+              "calls": 2681,
+              "self_ms": 287.696,
+              "cumulative_ms": 287.696
+            },
+            {
+              "file": "openai/resources/admin/__init__.py",
+              "line": 1,
+              "name": "<module>",
+              "calls": 1,
+              "self_ms": 0.006,
+              "cumulative_ms": 279.728
+            },
+            {
+              "file": "openai/resources/admin/admin.py",
+              "line": 1,
+              "name": "<module>",
+              "calls": 1,
+              "self_ms": 0.01,
+              "cumulative_ms": 279.036
+            },
+            {
+              "file": "openai/resources/admin/organization/__init__.py",
+              "line": 1,
+              "name": "<module>",
+              "calls": 1,
+              "self_ms": 0.04,
+              "cumulative_ms": 278.45
+            },
+            {
+              "file": "<frozen importlib._bootstrap_external>",
+              "line": 1058,
+              "name": "source_to_code",
+              "calls": 557,
+              "self_ms": 0.501,
+              "cumulative_ms": 272.332
+            },
+            {
+              "file": "~",
+              "line": 0,
+              "name": "<built-in method builtins.__build_class__>",
+              "calls": 1624,
+              "self_ms": 8.593,
+              "cumulative_ms": 254.125
+            },
+            {
+              "file": "pydantic/_internal/_model_construction.py",
+              "line": 89,
+              "name": "__new__",
+              "calls": 648,
+              "self_ms": 9.322,
+              "cumulative_ms": 201.835
+            },
+            {
+              "file": "openai/resources/beta/__init__.py",
+              "line": 1,
+              "name": "<module>",
+              "calls": 1,
+              "self_ms": 0.011,
+              "cumulative_ms": 181.791
+            },
+            {
+              "file": "openai/resources/beta/beta.py",
+              "line": 1,
+              "name": "<module>",
+              "calls": 1,
+              "self_ms": 0.026,
+              "cumulative_ms": 180.887
+            },
+            {
+              "file": "pydantic/_internal/_model_construction.py",
+              "line": 528,
+              "name": "set_model_fields",
+              "calls": 648,
+              "self_ms": 1.749,
+              "cumulative_ms": 139.228
+            },
+            {
+              "file": "pydantic/_internal/_fields.py",
+              "line": 276,
+              "name": "collect_model_fields",
+              "calls": 648,
+              "self_ms": 13.24,
+              "cumulative_ms": 136.955
+            },
+            {
+              "file": "openai/resources/admin/organization/roles.py",
+              "line": 1,
+              "name": "<module>",
+              "calls": 1,
+              "self_ms": 0.024,
+              "cumulative_ms": 136.924
+            },
+            {
+              "file": "openai/types/admin/organization/__init__.py",
+              "line": 1,
+              "name": "<module>",
+              "calls": 1,
+              "self_ms": 0.205,
+              "cumulative_ms": 135.972
+            },
+            {
+              "file": "~",
+              "line": 0,
+              "name": "<method 'run' of '_contextvars.Context' objects>",
+              "calls": 58,
+              "self_ms": 0.09,
+              "cumulative_ms": 87.132
+            },
+            {
+              "file": "openai/resources/beta/realtime/__init__.py",
+              "line": 1,
+              "name": "<module>",
+              "calls": 1,
+              "self_ms": 0.006,
+              "cumulative_ms": 75.354
+            },
+            {
+              "file": "openai/resources/beta/realtime/realtime.py",
+              "line": 1,
+              "name": "<module>",
+              "calls": 1,
+              "self_ms": 0.046,
+              "cumulative_ms": 71.943
+            },
+            {
+              "file": "<frozen importlib._bootstrap_external>",
+              "line": 1187,
+              "name": "get_data",
+              "calls": 1114,
+              "self_ms": 1.465,
+              "cumulative_ms": 71.809
+            },
+            {
+              "file": "openai/resources/admin/organization/projects/__init__.py",
+              "line": 1,
+              "name": "<module>",
+              "calls": 1,
+              "self_ms": 0.028,
+              "cumulative_ms": 71.319
+            },
+            {
+              "file": "openai/resources/beta/realtime/sessions.py",
+              "line": 1,
+              "name": "<module>",
+              "calls": 1,
+              "self_ms": 0.025,
+              "cumulative_ms": 69.686
+            },
+            {
+              "file": "openai/types/beta/realtime/__init__.py",
+              "line": 1,
+              "name": "<module>",
+              "calls": 1,
+              "self_ms": 0.091,
+              "cumulative_ms": 69.014
+            },
+            {
+              "file": "sdk_observation.py",
+              "line": 48,
+              "name": "call",
+              "calls": 2,
+              "self_ms": 0.01,
+              "cumulative_ms": 65.386
+            },
+            {
+              "file": "hy_memory/core/embed_service.py",
+              "line": 346,
+              "name": "_get_client",
+              "calls": 1,
+              "self_ms": 0.019,
+              "cumulative_ms": 65.364
+            },
+            {
+              "file": "worker.py",
+              "line": 174,
+              "name": "__init__",
+              "calls": 1,
+              "self_ms": 0.011,
+              "cumulative_ms": 64.961
+            },
+            {
+              "file": "pydantic/_internal/_typing_extra.py",
+              "line": 235,
+              "name": "get_model_type_hints",
+              "calls": 648,
+              "self_ms": 6.658,
+              "cumulative_ms": 61.134
+            },
+            {
+              "file": "hy_memory/core/embed_service.py",
+              "line": 603,
+              "name": "embed",
+              "calls": 11,
+              "self_ms": 0.011,
+              "cumulative_ms": 55.784
+            },
+            {
+              "file": "hy_memory/core/embed_service.py",
+              "line": 740,
+              "name": "_embed_texts",
+              "calls": 11,
+              "self_ms": 0.007,
+              "cumulative_ms": 55.732
+            },
+            {
+              "file": "hy_memory/core/embed_service.py",
+              "line": 701,
+              "name": "_embed_texts_with_meta",
+              "calls": 11,
+              "self_ms": 0.025,
+              "cumulative_ms": 55.727
+            },
+            {
+              "file": "hy_memory/core/embed_service.py",
+              "line": 774,
+              "name": "_embed_openai",
+              "calls": 11,
+              "self_ms": 0.153,
+              "cumulative_ms": 55.711
+            },
+            {
+              "file": "hy_embedding_resource_probe.py",
+              "line": 99,
+              "name": "sample",
+              "calls": 9,
+              "self_ms": 0.007,
+              "cumulative_ms": 55.553
+            },
+            {
+              "file": "httpcore/__init__.py",
+              "line": 1,
+              "name": "<module>",
+              "calls": 1,
+              "self_ms": 0.045,
+              "cumulative_ms": 53.34
+            },
+            {
+              "file": "openai/resources/evals/__init__.py",
+              "line": 1,
+              "name": "<module>",
+              "calls": 1,
+              "self_ms": 0.008,
+              "cumulative_ms": 52.294
+            },
+            {
+              "file": "openai/_legacy_response.py",
+              "line": 379,
+              "name": "wrapped",
+              "calls": 10,
+              "self_ms": 0.007,
+              "cumulative_ms": 51.415
+            },
+            {
+              "file": "openai/resources/embeddings.py",
+              "line": 175,
+              "name": "create",
+              "calls": 10,
+              "self_ms": 0.013,
+              "cumulative_ms": 51.408
+            }
+          ]
+        },
+        {
+          "total_ms": 7.576,
+          "base": {
+            "version": 1,
+            "trace_id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "stages": {
+              "embedding_truncate_ms": {
+                "calls": 1,
+                "total_ms": 0.008
+              }
+            }
+          },
+          "detail": {
+            "version": 2,
+            "trace_id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "stages": {
+              "embed_client_get_ms": {
+                "calls": 1,
+                "total_ms": 0.012
+              },
+              "embed_http_headers_ms": {
+                "calls": 1,
+                "total_ms": 2.487
+              }
+            }
+          },
+          "profile": [
+            {
+              "file": "base_events.py",
+              "line": 1922,
+              "name": "_run_once",
+              "calls": 17,
+              "self_ms": 0.058,
+              "cumulative_ms": 10.196
+            },
+            {
+              "file": "events.py",
+              "line": 86,
+              "name": "_run",
+              "calls": 25,
+              "self_ms": 0.019,
+              "cumulative_ms": 8.755
+            },
+            {
+              "file": "~",
+              "line": 0,
+              "name": "<method 'run' of '_contextvars.Context' objects>",
+              "calls": 25,
+              "self_ms": 0.037,
+              "cumulative_ms": 8.731
+            },
+            {
+              "file": "hy_memory/core/embed_service.py",
+              "line": 603,
+              "name": "embed",
+              "calls": 9,
+              "self_ms": 0.004,
+              "cumulative_ms": 5.957
+            },
+            {
+              "file": "hy_memory/core/embed_service.py",
+              "line": 740,
+              "name": "_embed_texts",
+              "calls": 9,
+              "self_ms": 0.004,
+              "cumulative_ms": 5.953
+            },
+            {
+              "file": "hy_memory/core/embed_service.py",
+              "line": 701,
+              "name": "_embed_texts_with_meta",
+              "calls": 9,
+              "self_ms": 0.011,
+              "cumulative_ms": 5.949
+            },
+            {
+              "file": "hy_memory/core/embed_service.py",
+              "line": 774,
+              "name": "_embed_openai",
+              "calls": 9,
+              "self_ms": 0.039,
+              "cumulative_ms": 5.909
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "synthetic_sdk_embedding_resource_probe",
+      "mode": "baseline",
+      "profile_enabled": false,
+      "versions": {
+        "hy-memory": "2.0.3",
+        "openai": "2.54.0",
+        "pydantic": "2.14.1",
+        "httpx": "0.28.1"
+      },
+      "preparation": {
+        "resources_loaded_before": false,
+        "wall_ms": 1018.696,
+        "files_unchanged": true,
+        "http_requests": {
+          "embedding": 0,
+          "other": 0
+        },
+        "resources_loaded_after": false,
+        "result": {
+          "prepared": true,
+          "import_ms": 565.254,
+          "segmenter_ms": 453.435
+        },
+        "client_cache_entries": 0,
+        "vector_cache_entries": 0
+      },
+      "counts": {
+        "embedding": 2,
+        "other": 0
+      },
+      "external_http_attempts": 0,
+      "local_gateway_requests": 2,
+      "samples": [
+        {
+          "total_ms": 596.118,
+          "base": {
+            "version": 1,
+            "trace_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "stages": {
+              "embedding_truncate_ms": {
+                "calls": 1,
+                "total_ms": 0.004
+              }
+            }
+          },
+          "detail": {
+            "version": 2,
+            "trace_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "stages": {
+              "embed_client_get_ms": {
+                "calls": 1,
+                "total_ms": 57.803
+              },
+              "embed_http_headers_ms": {
+                "calls": 1,
+                "total_ms": 42.8
+              }
+            }
+          },
+          "profile": []
+        },
+        {
+          "total_ms": 2.96,
+          "base": {
+            "version": 1,
+            "trace_id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "stages": {
+              "embedding_truncate_ms": {
+                "calls": 1,
+                "total_ms": 0.004
+              }
+            }
+          },
+          "detail": {
+            "version": 2,
+            "trace_id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "stages": {
+              "embed_client_get_ms": {
+                "calls": 1,
+                "total_ms": 0.006
+              },
+              "embed_http_headers_ms": {
+                "calls": 1,
+                "total_ms": 1.51
+              }
+            }
+          },
+          "profile": []
+        }
+      ]
+    },
+    {
+      "kind": "synthetic_sdk_embedding_resource_probe",
+      "mode": "prepared",
+      "profile_enabled": false,
+      "versions": {
+        "hy-memory": "2.0.3",
+        "openai": "2.54.0",
+        "pydantic": "2.14.1",
+        "httpx": "0.28.1"
+      },
+      "preparation": {
+        "resources_loaded_before": false,
+        "wall_ms": 1495.521,
+        "files_unchanged": true,
+        "http_requests": {
+          "embedding": 0,
+          "other": 0
+        },
+        "resources_loaded_after": true,
+        "result": {
+          "prepared": true,
+          "import_ms": 1028.766,
+          "segmenter_ms": 466.749
+        },
+        "client_cache_entries": 0,
+        "vector_cache_entries": 0
+      },
+      "counts": {
+        "embedding": 2,
+        "other": 0
+      },
+      "external_http_attempts": 0,
+      "local_gateway_requests": 2,
+      "samples": [
+        {
+          "total_ms": 124.55,
+          "base": {
+            "version": 1,
+            "trace_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "stages": {
+              "embedding_truncate_ms": {
+                "calls": 1,
+                "total_ms": 0.004
+              }
+            }
+          },
+          "detail": {
+            "version": 2,
+            "trace_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "stages": {
+              "embed_client_get_ms": {
+                "calls": 1,
+                "total_ms": 57.706
+              },
+              "embed_http_headers_ms": {
+                "calls": 1,
+                "total_ms": 43.285
+              }
+            }
+          },
+          "profile": []
+        },
+        {
+          "total_ms": 2.967,
+          "base": {
+            "version": 1,
+            "trace_id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "stages": {
+              "embedding_truncate_ms": {
+                "calls": 1,
+                "total_ms": 0.003
+              }
+            }
+          },
+          "detail": {
+            "version": 2,
+            "trace_id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "stages": {
+              "embed_client_get_ms": {
+                "calls": 1,
+                "total_ms": 0.005
+              },
+              "embed_http_headers_ms": {
+                "calls": 1,
+                "total_ms": 1.252
+              }
+            }
+          },
+          "profile": []
+        }
+      ]
+    },
+    {
+      "kind": "synthetic_sdk_embedding_resource_probe",
+      "mode": "prepared",
+      "profile_enabled": false,
+      "versions": {
+        "hy-memory": "2.0.3",
+        "openai": "2.54.0",
+        "pydantic": "2.14.1",
+        "httpx": "0.28.1"
+      },
+      "preparation": {
+        "resources_loaded_before": false,
+        "wall_ms": 1520.325,
+        "files_unchanged": true,
+        "http_requests": {
+          "embedding": 0,
+          "other": 0
+        },
+        "resources_loaded_after": true,
+        "result": {
+          "prepared": true,
+          "import_ms": 1046.973,
+          "segmenter_ms": 473.346
+        },
+        "client_cache_entries": 0,
+        "vector_cache_entries": 0
+      },
+      "counts": {
+        "embedding": 2,
+        "other": 0
+      },
+      "external_http_attempts": 0,
+      "local_gateway_requests": 2,
+      "samples": [
+        {
+          "total_ms": 130.498,
+          "base": {
+            "version": 1,
+            "trace_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "stages": {
+              "embedding_truncate_ms": {
+                "calls": 1,
+                "total_ms": 0.004
+              }
+            }
+          },
+          "detail": {
+            "version": 2,
+            "trace_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "stages": {
+              "embed_client_get_ms": {
+                "calls": 1,
+                "total_ms": 58.849
+              },
+              "embed_http_headers_ms": {
+                "calls": 1,
+                "total_ms": 43.34
+              }
+            }
+          },
+          "profile": []
+        },
+        {
+          "total_ms": 2.783,
+          "base": {
+            "version": 1,
+            "trace_id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "stages": {
+              "embedding_truncate_ms": {
+                "calls": 1,
+                "total_ms": 0.003
+              }
+            }
+          },
+          "detail": {
+            "version": 2,
+            "trace_id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "stages": {
+              "embed_client_get_ms": {
+                "calls": 1,
+                "total_ms": 0.004
+              },
+              "embed_http_headers_ms": {
+                "calls": 1,
+                "total_ms": 1.371
+              }
+            }
+          },
+          "profile": []
+        }
+      ]
+    },
+    {
+      "kind": "synthetic_sdk_embedding_resource_probe",
+      "mode": "baseline",
+      "profile_enabled": false,
+      "versions": {
+        "hy-memory": "2.0.3",
+        "openai": "2.54.0",
+        "pydantic": "2.14.1",
+        "httpx": "0.28.1"
+      },
+      "preparation": {
+        "resources_loaded_before": false,
+        "wall_ms": 1035.232,
+        "files_unchanged": true,
+        "http_requests": {
+          "embedding": 0,
+          "other": 0
+        },
+        "resources_loaded_after": false,
+        "result": {
+          "prepared": true,
+          "import_ms": 582.086,
+          "segmenter_ms": 453.14
+        },
+        "client_cache_entries": 0,
+        "vector_cache_entries": 0
+      },
+      "counts": {
+        "embedding": 2,
+        "other": 0
+      },
+      "external_http_attempts": 0,
+      "local_gateway_requests": 2,
+      "samples": [
+        {
+          "total_ms": 588.962,
+          "base": {
+            "version": 1,
+            "trace_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "stages": {
+              "embedding_truncate_ms": {
+                "calls": 1,
+                "total_ms": 0.004
+              }
+            }
+          },
+          "detail": {
+            "version": 2,
+            "trace_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "stages": {
+              "embed_client_get_ms": {
+                "calls": 1,
+                "total_ms": 59.03
+              },
+              "embed_http_headers_ms": {
+                "calls": 1,
+                "total_ms": 42.558
+              }
+            }
+          },
+          "profile": []
+        },
+        {
+          "total_ms": 2.744,
+          "base": {
+            "version": 1,
+            "trace_id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "stages": {
+              "embedding_truncate_ms": {
+                "calls": 1,
+                "total_ms": 0.003
+              }
+            }
+          },
+          "detail": {
+            "version": 2,
+            "trace_id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "stages": {
+              "embed_client_get_ms": {
+                "calls": 1,
+                "total_ms": 0.004
+              },
+              "embed_http_headers_ms": {
+                "calls": 1,
+                "total_ms": 1.35
+              }
+            }
+          },
+          "profile": []
+        }
+      ]
+    },
+    {
+      "kind": "synthetic_sdk_embedding_resource_probe",
+      "mode": "baseline",
+      "profile_enabled": false,
+      "versions": {
+        "hy-memory": "2.0.3",
+        "openai": "2.54.0",
+        "pydantic": "2.14.1",
+        "httpx": "0.28.1"
+      },
+      "preparation": {
+        "resources_loaded_before": false,
+        "wall_ms": 1041.555,
+        "files_unchanged": true,
+        "http_requests": {
+          "embedding": 0,
+          "other": 0
+        },
+        "resources_loaded_after": false,
+        "result": {
+          "prepared": true,
+          "import_ms": 576.773,
+          "segmenter_ms": 464.776
+        },
+        "client_cache_entries": 0,
+        "vector_cache_entries": 0
+      },
+      "counts": {
+        "embedding": 2,
+        "other": 0
+      },
+      "external_http_attempts": 0,
+      "local_gateway_requests": 2,
+      "samples": [
+        {
+          "total_ms": 590.963,
+          "base": {
+            "version": 1,
+            "trace_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "stages": {
+              "embedding_truncate_ms": {
+                "calls": 1,
+                "total_ms": 0.004
+              }
+            }
+          },
+          "detail": {
+            "version": 2,
+            "trace_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "stages": {
+              "embed_client_get_ms": {
+                "calls": 1,
+                "total_ms": 59.23
+              },
+              "embed_http_headers_ms": {
+                "calls": 1,
+                "total_ms": 44.506
+              }
+            }
+          },
+          "profile": []
+        },
+        {
+          "total_ms": 2.795,
+          "base": {
+            "version": 1,
+            "trace_id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "stages": {
+              "embedding_truncate_ms": {
+                "calls": 1,
+                "total_ms": 0.003
+              }
+            }
+          },
+          "detail": {
+            "version": 2,
+            "trace_id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "stages": {
+              "embed_client_get_ms": {
+                "calls": 1,
+                "total_ms": 0.004
+              },
+              "embed_http_headers_ms": {
+                "calls": 1,
+                "total_ms": 1.323
+              }
+            }
+          },
+          "profile": []
+        }
+      ]
+    },
+    {
+      "kind": "synthetic_sdk_embedding_resource_probe",
+      "mode": "prepared",
+      "profile_enabled": false,
+      "versions": {
+        "hy-memory": "2.0.3",
+        "openai": "2.54.0",
+        "pydantic": "2.14.1",
+        "httpx": "0.28.1"
+      },
+      "preparation": {
+        "resources_loaded_before": false,
+        "wall_ms": 1474.552,
+        "files_unchanged": true,
+        "http_requests": {
+          "embedding": 0,
+          "other": 0
+        },
+        "resources_loaded_after": true,
+        "result": {
+          "prepared": true,
+          "import_ms": 1015.581,
+          "segmenter_ms": 458.964
+        },
+        "client_cache_entries": 0,
+        "vector_cache_entries": 0
+      },
+      "counts": {
+        "embedding": 2,
+        "other": 0
+      },
+      "external_http_attempts": 0,
+      "local_gateway_requests": 2,
+      "samples": [
+        {
+          "total_ms": 129.162,
+          "base": {
+            "version": 1,
+            "trace_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "stages": {
+              "embedding_truncate_ms": {
+                "calls": 1,
+                "total_ms": 0.004
+              }
+            }
+          },
+          "detail": {
+            "version": 2,
+            "trace_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "stages": {
+              "embed_client_get_ms": {
+                "calls": 1,
+                "total_ms": 57.987
+              },
+              "embed_http_headers_ms": {
+                "calls": 1,
+                "total_ms": 43.874
+              }
+            }
+          },
+          "profile": []
+        },
+        {
+          "total_ms": 2.834,
+          "base": {
+            "version": 1,
+            "trace_id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "stages": {
+              "embedding_truncate_ms": {
+                "calls": 1,
+                "total_ms": 0.003
+              }
+            }
+          },
+          "detail": {
+            "version": 2,
+            "trace_id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "stages": {
+              "embed_client_get_ms": {
+                "calls": 1,
+                "total_ms": 0.004
+              },
+              "embed_http_headers_ms": {
+                "calls": 1,
+                "total_ms": 1.372
+              }
+            }
+          },
+          "profile": []
+        }
+      ]
+    }
+  ]
+}

@@ -138,6 +138,9 @@ class SDKObservation:
             # 原首次向量请求会导入同一SDK依赖；导入不建立HTTP请求。
             # openai模块还会延迟导出客户端类；只解析公开类，不实例化或发请求。
             getattr(importlib.import_module('openai'), 'AsyncOpenAI')
+            # 首次client.embeddings还会导入整个resources包及其Pydantic模型。
+            # 提前解析同一公开资源类；不创建client/请求，不触碰SDK业务存储。
+            getattr(importlib.import_module('openai.resources.embeddings'), 'AsyncEmbeddings')
             imported = perf_counter()
             from hy_memory.pipelines import reader_base
             # 固定本地中文分词函数，仅初始化jieba及其进程内LRU；无记忆存储入口。

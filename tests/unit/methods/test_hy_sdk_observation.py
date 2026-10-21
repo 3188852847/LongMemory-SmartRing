@@ -21,12 +21,16 @@ def test_local_preparation_resolves_public_class_and_segments_only_fixed_non_eve
     calls = []
     class Client:
         def __init__(self, **kwargs): pytest.fail('must not construct a model client')
-    class OpenAI:
+    class PublicModule:
+        def __init__(self,expected):self.expected=expected
         def __getattr__(self, name):
             calls.append(name)
-            assert name == 'AsyncOpenAI'
+            assert name == self.expected
             return Client
-    monkeypatch.setattr(module.importlib, 'import_module', lambda name: OpenAI() if name == 'openai' else pytest.fail(name))
+    def import_public(name):
+        calls.append(name)
+        return PublicModule({'openai':'AsyncOpenAI','openai.resources.embeddings':'AsyncEmbeddings'}[name])
+    monkeypatch.setattr(module.importlib, 'import_module', import_public)
     pipelines = ModuleType('hy_memory.pipelines')
     pipelines.reader_base = SimpleNamespace(lemmatize_for_bm25=lambda text: calls.append(text))
     monkeypatch.setitem(sys.modules, 'hy_memory', ModuleType('hy_memory'))
@@ -36,7 +40,7 @@ def test_local_preparation_resolves_public_class_and_segments_only_fixed_non_eve
     observer = object.__new__(module.SDKObservation)
     observer.applied = True
     assert observer.prepare_local_backends() == {'prepared': True, 'import_ms': 400.0, 'segmenter_ms': 600.0}
-    assert calls == ['AsyncOpenAI', '初始化']
+    assert calls == ['openai','AsyncOpenAI','openai.resources.embeddings','AsyncEmbeddings','初始化']
 
 
 def test_failed_local_preparation_has_fixed_diagnostics_and_no_business_success(monkeypatch):
@@ -45,6 +49,18 @@ def test_failed_local_preparation_has_fixed_diagnostics_and_no_business_success(
     observer = object.__new__(module.SDKObservation)
     observer.applied = True
     assert observer.prepare_local_backends() == {'prepared': False, 'import_ms': 0.0, 'segmenter_ms': 0.0}
+
+
+def test_resource_import_failure_keeps_original_preparation_failure_contract(monkeypatch):
+    calls=[]
+    def import_public(name):
+        calls.append(name)
+        if name=='openai':return SimpleNamespace(AsyncOpenAI=object)
+        raise ImportError('synthetic private import failure')
+    monkeypatch.setattr(module.importlib,'import_module',import_public)
+    observer=object.__new__(module.SDKObservation);observer.applied=True
+    assert observer.prepare_local_backends()=={'prepared':False,'import_ms':0.0,'segmenter_ms':0.0}
+    assert calls==['openai','openai.resources.embeddings']
 
 
 def test_sync_and_async_wrappers_preserve_single_call_result_and_inactive_behavior():
