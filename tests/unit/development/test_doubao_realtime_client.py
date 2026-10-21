@@ -6,6 +6,7 @@ import importlib
 import json
 from pathlib import Path
 import sys
+import time
 
 import pytest
 
@@ -28,7 +29,8 @@ class FakeSocket:
     async def send(self, frame):
         payload = json.loads(frame)
         self.sent.append(payload)
-        self.times.append(asyncio.get_running_loop().time())
+        # 与生产节拍使用同一高精度单调时钟；Windows loop.time可能只有15.6ms粒度。
+        self.times.append(time.perf_counter())
         event_type = payload["type"]
         if event_type == "session.create" and self.auto_session:
             self.feed({"type": "session.created", "session": {"id": "synthetic-session"}})
