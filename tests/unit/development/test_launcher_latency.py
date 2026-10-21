@@ -57,14 +57,32 @@ def options(tmp_path, modules):
 @pytest.mark.parametrize("mode", ["realtime", "original"])
 def test_choice_roundtrip_and_legacy_default(tmp_path, modules, mode):
     path = tmp_path / "preferences.json"
-    path.write_text('{"version": 5, "voice": true}', encoding="utf-8")
-    assert modules.preferences.load_preferences(path)["voice_latency_mode"] == "realtime"
-    modules.preferences.save_preferences(path, {"voice_latency_mode": mode})
-    assert modules.preferences.load_preferences(path)["voice_latency_mode"] == mode
-    assert json.loads(path.read_text(encoding="utf-8"))["version"] == 7
-    with pytest.raises(ValueError, match="voice_latency_mode"):
-        modules.preferences.save_preferences(path, {"voice_latency_mode": "unknown"})
-    assert modules.preferences.load_preferences(path)["voice_latency_mode"] == mode
+    # 协议8新增声音交付偏好；原响应策略须跨旧文件迁移和两类设置编辑保留。
+    for legacy_version in (5, 7):
+        path.write_text(json.dumps({"version": legacy_version, "voice": True}), encoding="utf-8")
+        original = path.read_bytes()
+        loaded = modules.preferences.load_preferences(path)
+        assert loaded["voice_latency_mode"] == "realtime"
+        assert loaded["cosy_delivery_mode"] == "buffered" and loaded["voice"]
+        assert path.read_bytes() == original
+
+        modules.preferences.save_preferences(path, {**loaded, "voice_latency_mode": mode})
+        written = json.loads(path.read_text(encoding="utf-8"))
+        assert written["version"] == modules.preferences.PREFERENCES_VERSION == 8
+        assert written["voice_latency_mode"] == mode and written["cosy_delivery_mode"] == "buffered"
+        reopened = modules.preferences.load_preferences(path)
+        assert reopened["voice_latency_mode"] == mode and reopened["voice"]
+
+        modules.preferences.save_preferences(path, {**reopened, "cosy_delivery_mode": "adaptive"})
+        reopened = modules.preferences.load_preferences(path)
+        assert reopened["cosy_delivery_mode"] == "adaptive" and reopened["voice_latency_mode"] == mode
+        modules.preferences.save_preferences(path, {**reopened, "voice_latency_mode": mode})
+        assert modules.preferences.load_preferences(path)["cosy_delivery_mode"] == "adaptive"
+        before_invalid = path.read_bytes()
+        with pytest.raises(ValueError, match="voice_latency_mode"):
+            modules.preferences.save_preferences(path, {**reopened, "voice_latency_mode": "unknown"})
+        assert path.read_bytes() == before_invalid
+        assert modules.preferences.load_preferences(path)["voice_latency_mode"] == mode
 
 
 @pytest.mark.parametrize("mode", ["realtime", "original"])
