@@ -34,6 +34,7 @@ RESOURCE_GROUPS = (
      (
          'test_revoked_turn_never_completes_after_abort_bool_reset[queued_before_prepare]',
          'test_revoked_turn_never_completes_after_abort_bool_reset[after_prepare]',
+         'test_revoked_turn_never_completes_after_abort_bool_reset[after_outer_check]',
      )),
     ('tests.unit.development.test_voice_proposal_adapter',
      'explicit existing native repository required; never download',

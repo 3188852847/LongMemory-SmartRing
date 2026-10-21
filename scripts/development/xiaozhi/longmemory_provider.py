@@ -15,6 +15,7 @@ import re
 import subprocess
 import threading
 from contextvars import ContextVar
+from contextlib import nullcontext
 from time import perf_counter
 from uuid import uuid4
 from urllib import error as urlerror
@@ -77,6 +78,7 @@ def _emit_request_timing(record, stage, status, finished):
 
 
 class MemoryProvider(MemoryProviderBase):
+    completion_guard_protocol = 1
     def __init__(self, config, summary_memory=None):
         super().__init__(config)
         self.allowed_device_id = str(config.get("allowed_device_id", "")).lower()
@@ -410,18 +412,24 @@ class MemoryProvider(MemoryProviderBase):
         with self._lock:
             return self._pending_completions.get(key, {}).get("fixed_reply")
 
-    def record_completed_turn(self, answer: str, *, turn_key=None) -> bool:
+    def record_completed_turn(self, answer: str, *, turn_key=None, completion_guard=None) -> bool:
         """至多回传一次最终文本；失败不重试，避免重复或错配回答。"""
 
         if not isinstance(answer, str) or not answer.strip() or len(answer) > 16000:
             return False
         with self._lock:
-            if turn_key is None:
-                pending = self._pending_completion
-                self._pending_completion = None
-            else:
-                pending = self._pending_completions.pop(turn_key, None)
+            # 先等Memory锁，再短暂进入音频撤权锁；等待其他RPC时绝不占住音频锁。
+            # 资格检查与消费本轮pending为同一次原子领取，外层旧布尔检查不能替代它。
+            with completion_guard if completion_guard is not None else nullcontext(True) as permitted:
+                if turn_key is None:
+                    pending = self._pending_completion
+                    self._pending_completion = None
+                else:
+                    pending = self._pending_completions.pop(turn_key, None)
         if pending is None:
+            return False
+        if permitted is not True:
+            self._cancel_pending_completion(pending, "cancelled")
             return False
         source_url = os.environ.get("LONGMEMORY_RUNTIME_URL", "")
         token = os.environ.get("LONGMEMORY_RUNTIME_TOKEN", "")
@@ -475,6 +483,10 @@ class MemoryProvider(MemoryProviderBase):
     def cancel_turn(self, turn_key, reason="cancelled"):
         with self._lock:
             pending = self._pending_completions.pop(turn_key, None)
+        return self._cancel_pending_completion(pending, reason)
+
+    def _cancel_pending_completion(self, pending, reason):
+        # 原子领取结束后才做网络I/O，既不重试，也不回滚已经认领/提交的另一条回执。
         if pending is None or pending.get("memory_protocol") != 2:
             return False
         source = urlsplit(os.environ.get("LONGMEMORY_RUNTIME_URL", ""))

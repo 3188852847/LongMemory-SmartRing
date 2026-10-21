@@ -373,7 +373,15 @@ def install_answer_completion(connection_class):
                     if owned and (revoked or record["superseded"] or getattr(connection, "client_abort", False)):
                         memory.cancel_turn(turn_key, "superseded" if record["superseded"] else "cancelled")
                     elif owned:
-                        memory.record_completed_turn("\n".join(answers), turn_key=turn_key)
+                        if lease is None:
+                            memory.record_completed_turn("\n".join(answers), turn_key=turn_key)
+                        elif type(getattr(memory, "completion_guard_protocol", None)) is int and memory.completion_guard_protocol == 1:
+                            from voice_completion import completion_guard
+                            memory.record_completed_turn("\n".join(answers), turn_key=turn_key,
+                                completion_guard=completion_guard(lease))
+                        else:
+                            # 未声明原子领取支持时不冒充受保护完成；真实MemoryProvider与此处同批部署。
+                            memory.cancel_turn(turn_key, "cancelled")
                     elif not revoked:
                         memory.record_completed_turn("\n".join(answers))
                 except Exception:
