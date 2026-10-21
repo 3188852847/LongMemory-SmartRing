@@ -284,6 +284,43 @@ def test_update_memory_only_replaces_known_legacy_provider(tmp_path, monkeypatch
     assert base.read_text(encoding='utf-8') == 'unchanged'
 
 
+@pytest.mark.parametrize('newline,digest', [
+    ('lf', '260ebfe1024abdcaa330ebae685183a48f7bb106c805118e8403820bddbd2056'),
+    ('crlf', '25c39c77bd99b61a20f0be694b996933baec405945296c3cee0f7033056eee5a'),
+])
+def test_real_4c_provider_upgrade_is_exact_opt_in_and_current_is_idempotent(tmp_path, newline, digest):
+    """冻结公开旧字节让浅克隆CI也能覆盖真实发布升级，不借用户运行目录。"""
+    import hashlib
+    import os
+    old = (SCRIPT.parents[3] / 'tests/fixtures/xiaozhi_provider_4c64216e.py.txt').read_bytes()
+    assert hashlib.sha256(old).hexdigest() == '260ebfe1024abdcaa330ebae685183a48f7bb106c805118e8403820bddbd2056'
+    if newline == 'crlf':
+        old = old.replace(b'\n', b'\r\n')
+    assert hashlib.sha256(old).hexdigest() == digest
+    base = tmp_path / 'core/providers/memory/base.py'
+    base.parent.mkdir(parents=True)
+    base.write_bytes(b'unchanged base')
+    target = base.parent / 'longmemory/longmemory.py'
+    target.parent.mkdir()
+    target.write_bytes(old)
+    with pytest.raises(setup.SetupError, match='未覆盖'):
+        setup.install_memory_provider(tmp_path)
+    assert target.read_bytes() == old
+    assert setup.install_memory_provider(tmp_path, allow_known_update=True) == target
+    current = (SCRIPT.parent / 'longmemory_provider.py').read_bytes()
+    assert target.read_bytes() == current
+    # 固定过去的mtime，证明当前文件不会因幂等检查再次被写入。
+    os.utime(target, ns=(1700000000000000000, 1700000000000000000))
+    before = target.stat().st_mtime_ns
+    assert setup.install_memory_provider(tmp_path, allow_known_update=True) == target
+    assert target.stat().st_mtime_ns == before and target.read_bytes() == current
+    modified = old + b'\n# synthetic owner modification\n'
+    target.write_bytes(modified)
+    with pytest.raises(setup.SetupError, match='未覆盖'):
+        setup.install_memory_provider(tmp_path, allow_known_update=True)
+    assert target.read_bytes() == modified and base.read_bytes() == b'unchanged base'
+
+
 def test_published_shared_runtime_provider_is_a_known_upgrade_source():
     """固定实机曾安装的发布版身份，避免以后误删受控升级路径。"""
     assert (
