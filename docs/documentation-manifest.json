@@ -1554,6 +1554,39 @@
           "docs/development/parallel/AH-memory-flow-ci-20261021.md"
         ]
       }
+    },
+    {
+      "id": "firmware-otto0016-owner-acceptance",
+      "scope": "0016仅活动应用的本轮更新/保护/所有者三项验收；不扩展未来写入或长期性能",
+      "authority": "docs/development/parallel/K-otto0016-flash-20261021.md",
+      "sources": [
+        "firmware/smartring_plus/patches/0016-*.patch",
+        "scripts/development/otto_firmware/audit_0016_source.py",
+        "tests/unit/firmware/tts_interrupt_native.cpp.in"
+      ],
+      "related": [
+        "docs/development/parallel/AI-hy-advanced-low-latency-20261021.md",
+        "docs/development/parallel/AH-round-subtitles-20261021.md",
+        "docs/development/parallel/AD-tts-interrupt-v1-20261021.md"
+      ],
+      "tags": [
+        "0016",
+        "新备份",
+        "COM3",
+        "保护范围",
+        "所有者验收"
+      ],
+      "review": {
+        "state": "verified",
+        "date": "2026-10-21",
+        "scope": "K最终公开文档原件/脱敏/范围算术；ROOT报告保存字节独立复核和当前协议观测；所有者三项有限体验通过，AI未读私有证据或操作设备",
+        "evidence": [
+          "docs/development/parallel/K-otto0016-flash-20261021.md",
+          "docs/development/parallel/AI-hy-advanced-low-latency-20261021.md",
+          "firmware/smartring_plus/patches/0016-round-subtitle-safe-area.patch",
+          "firmware/smartring_plus/patches/0016-tts-interrupt-v1.patch"
+        ]
+      }
     }
   ],
   "old_path_rules": [
@@ -7282,7 +7315,7 @@
       "review": {
         "state": "verified",
         "date": "2026-10-21",
-        "scope": "隔离永久音频撤权、原子完成领取、双向wire修订4及0016联合源码/合成验证；原完整后端失败及发布/实机未验边界保留；保留360精确远程Quality失败，复现并补bootstrap测试契约，53项定向与精确CI资源护栏通过，不改生产或浏览器；接入并核对AH导航有界诊断、143收集及同字节运行时，保留未知原因和ROOT新稳定恢复报告；保留f159远程通过后启动exit3的ROOT报告，核验4c原件并登记受控升级窄修及43项/真实3.10验证，未自行恢复服务；据ROOT保留5c恢复ready与main两次失败，接入AD/AH测试窄修、核对350原件与新构建，产品和固件不变",
+        "scope": "隔离永久音频撤权、原子完成领取、双向wire修订4及0016联合源码/合成验证；原完整后端失败及发布/实机未验边界保留；保留360精确远程Quality失败，复现并补bootstrap测试契约，53项定向与精确CI资源护栏通过，不改生产或浏览器；接入并核对AH导航有界诊断、143收集及同字节运行时，保留未知原因和ROOT新稳定恢复报告；保留f159远程通过后启动exit3的ROOT报告，核验4c原件并登记受控升级窄修及43项/真实3.10验证，未自行恢复服务；据ROOT保留5c恢复ready与main两次失败，接入AD/AH测试窄修、核对350原件与新构建，产品和固件不变；仅接K本次0016两笔文档，保留ROOT保存字节/协议快照和所有者三项有限通过，物理ACK仍false；历史失败不改写",
         "evidence": [
           "docs/development/parallel/AI-hy-advanced-low-latency-20261021.md",
           "docs/development/parallel/AD-tts-interrupt-v1-20261021.md",
@@ -7291,7 +7324,8 @@
           "tests/integration/memory_pipeline/test_voice_completion_revocation.py",
           "firmware/smartring_plus/experiments/0016-round-subtitle-interrupt.json",
           "tests/unit/development/test_launcher_latency.py",
-          "tests/unit/development/test_xiaozhi_setup.py"
+          "tests/unit/development/test_xiaozhi_setup.py",
+          "docs/development/parallel/K-otto0016-flash-20261021.md"
         ]
       },
       "tags": [
@@ -7644,6 +7678,30 @@
         "测试测量",
         "隔离",
         "根因边界"
+      ]
+    },
+    {
+      "path": "docs/development/parallel/K-otto0016-flash-20261021.md",
+      "title": "K：0016活动应用更新与所有者有限验收",
+      "status": "current",
+      "basis": "K b654/319单目标机械核验及所有者三项全部正常；后续新写入须新授权，不改历史失败",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-21",
+        "scope": "K最终公开文档原件/脱敏/范围算术；ROOT报告保存字节独立复核和当前协议观测；所有者三项有限体验通过，AI未读私有证据或操作设备",
+        "evidence": [
+          "docs/development/parallel/K-otto0016-flash-20261021.md",
+          "docs/development/parallel/AI-hy-advanced-low-latency-20261021.md",
+          "firmware/smartring_plus/patches/0016-round-subtitle-safe-area.patch",
+          "firmware/smartring_plus/patches/0016-tts-interrupt-v1.patch"
+        ]
+      },
+      "tags": [
+        "0016",
+        "固件",
+        "活动应用",
+        "保护核验",
+        "有限实机验收"
       ]
     }
   ],
