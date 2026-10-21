@@ -13,6 +13,19 @@
   },
   "topics": [
     {
+      "id": "launcher-running-timeout-test-sync",
+      "scope": "启动器running请求结果未知测试的同步与CI39611928357失败；不改变业务超时",
+      "authority": "docs/development/parallel/AI-launcher-control-ci-20261021.md",
+      "sources": [
+        "tests/unit/development/test_launcher_control.py"
+      ],
+      "related": [
+        "docs/development/continuous-integration.md",
+        "docs/development/launcher-contract.md"
+      ],
+      "review": "verified 2026-10-21: 两种受控调度说明原测试前提与客户端期限混入；真实服务端分支+显式dispatch进入/逻辑等待到期；26相关通过，三错误变体被拒绝，远程待ROOT推送"
+    },
+    {
       "id": "voice-input-signal-diagnostic-endpoint",
       "scope": "GET /api/voice-input-signal的有限只读摘要与原状态独立预算；非实机根因",
       "authority": "docs/development/parallel/AI-signal-diagnostic-integration-20261021.md",
@@ -1746,6 +1759,28 @@
     }
   ],
   "documents": [
+    {
+      "path": "docs/development/parallel/AI-launcher-control-ci-20261021.md",
+      "title": "AI：启动器已运行请求超时测试的同步修正",
+      "status": "reference",
+      "basis": "远程唯一CI失败与两个受控时序复现；只修测试同步，生产逻辑不变",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-21",
+        "scope": "原模块五项、受控排队/传输超时、修后26项相关及三错误变体拒绝；未重跑远程CI或管理proof",
+        "evidence": [
+          "docs/development/parallel/AI-launcher-control-ci-20261021.md",
+          "tests/unit/development/test_launcher_control.py",
+          "scripts/development/launcher/control.py"
+        ]
+      },
+      "tags": [
+        "CI",
+        "启动器控制",
+        "同步前提",
+        "测试修正"
+      ]
+    },
     {
       "path": "docs/development/parallel/AI-signal-diagnostic-integration-20261021.md",
       "title": "AI：输入数值诊断与首次检索观测组合",
