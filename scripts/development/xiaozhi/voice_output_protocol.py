@@ -32,6 +32,35 @@ class OutputUnavailable(ConnectionError):
     pass
 
 
+class _PacketLease:
+    """叠加包原有取消条件，保留输出租约的全部身份/轮次检查。"""
+    def __init__(self, original, cancelled, receipt=None):
+        self.original, self.cancelled, self.receipt = original, cancelled, receipt
+
+    def __getattr__(self, name):
+        return getattr(self.original, name)
+
+    @property
+    def wire_turn(self):
+        return self.original.wire_turn
+
+    @wire_turn.setter
+    def wire_turn(self, value):
+        self.original.wire_turn = value
+
+    def current(self):
+        if not self.original.current():
+            return False
+        try:
+            return not self.cancelled()
+        except Exception:
+            return False  # 包检查异常也按失效处理，不能因此放行旧音频。
+
+    def mark_sent(self):
+        if self.receipt is not None:
+            self.receipt.confirm()
+
+
 class Turn:
     def __init__(self, protocol, epoch):
         self.protocol, self.epoch = protocol, epoch
@@ -180,17 +209,21 @@ class OutputProtocol:
     @contextmanager
     def scope(self, lease=None, *, kind="message"):
         prior = _OWNER.get()
-        if prior is not None and prior.protocol is self:
+        prior = prior if prior is not None and prior.protocol is self else None
+        if prior is not None and kind != "packet":
             yield
             return
         valid = lease is not None and lease.current()
         with self.state_lock:
-            turn = None if kind == "start" else (getattr(lease, "wire_turn", None) if lease is not None else self.turn)
+            turn = prior.turn if prior is not None else (None if kind == "start" else (
+                getattr(lease, "wire_turn", None) if lease is not None else self.turn))
             if (self.negotiated and kind in {"message", "packet"} and turn is None
                     and valid):
                 turn = self._reserve()  # 无显式start的绑定/公告路径也先补一条start。
                 lease.wire_turn = turn
             owner = Owner(self, turn, lease)
+            if prior is not None:
+                owner.revocation, owner.input = prior.revocation, prior.input
             token = _OWNER.set(owner)
         try:
             yield
@@ -233,7 +266,7 @@ class OutputProtocol:
             state.closed = True
         await self._fail("connection_closed", close_code=kwargs.get("code", args[0] if args else 1000))
 
-    async def _write(self, value):
+    async def _write(self, value, on_sent=None):
         if self.closed:
             raise OutputUnavailable("tts_output_closed")
         task = asyncio.create_task(self.raw.send(value))
@@ -241,7 +274,9 @@ class OutputProtocol:
         def finished(done):
             self.writes.discard(done)
             if not done.cancelled():
-                done.exception()  # 连接已关闭的收尾也要消费异常，不产生未回收任务告警。
+                error = done.exception()  # 连接收尾也消费异常，不产生未回收任务告警。
+                if error is None and on_sent is not None:
+                    on_sent()
         task.add_done_callback(finished)
         # caller取消（原生rate.reset）不能让尚在await的旧写出越过interrupt。
         cancelled = False
@@ -306,6 +341,7 @@ class OutputProtocol:
             lease = guard.current_output_lease(self.connection)
             owner = Owner(self, None if is_start else (
                 getattr(lease, "wire_turn", None) if lease is not None else self.turn), None if is_start else lease)
+        on_sent = getattr(owner.lease, "mark_sent", None) if binary else None
         # 在等待gate前固定来源；绝不能进门后改用“现在的新轮”。
         if self.negotiated and is_start and owner.current():
             with self.state_lock:
@@ -348,7 +384,7 @@ class OutputProtocol:
                     self.counts["hello_confirmed"] += 1
                 return None
             if not self.negotiated:
-                return await self._write(value)
+                return await self._write(value, on_sent=on_sent)
             if not self.eligible():
                 await self._fail("mode_changed")
                 raise OutputUnavailable("tts_mode_changed")
@@ -385,7 +421,7 @@ class OutputProtocol:
                     self.counts["stale_dropped"] += 1
                     raise StaleOutput()
                 if binary:
-                    await self._write(value)
+                    await self._write(value, on_sent=on_sent)
                     self.counts["audio_sent"] += 1
                 else:
                     copy = dict(item)
@@ -446,10 +482,14 @@ def install_tts_interrupt_protocol(connection_class, send_module, *, hello_modul
     original_packet = send_module._do_send_audio
     async def packet(connection, value, flow):
         p = getattr(connection, ATTRIBUTE, None)
-        if p is None or not p.negotiated:
+        if p is None:
             return await original_packet(connection, value, flow)
         lease = (guard.current_output_lease(connection) or getattr(value, "_longmemory_output_lease", None)
                  or guard.OutputLease(connection, flow.get("sentence_id")))
+        cancelled = getattr(value, "_longmemory_cosy_cancelled", None)
+        receipt = getattr(value, "_longmemory_send_receipt", None)
+        if callable(cancelled) or receipt is not None:
+            lease = _PacketLease(lease, cancelled if callable(cancelled) else lambda: False, receipt)
         try:
             with p.scope(lease, kind="packet"):
                 return await original_packet(connection, value, flow)

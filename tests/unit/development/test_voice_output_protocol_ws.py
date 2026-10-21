@@ -51,7 +51,7 @@ class Consumer:
   elif epoch==self.epoch and state=='interrupt':self.open=False;self.queue=[]
   elif epoch==self.epoch and state=='stop':self.open=False
 
-async def setup(cap=True,mode='pipeline',mqtt=False,timeout=.3,local_cosy=True,bridge=False):
+async def setup(cap=True,mode='pipeline',mqtt=False,timeout=.3,local_cosy=True,bridge=False,observed=False):
  u=build();c=u.conn
  c.config={'xiaozhi':{'type':'hello','transport':'websocket','audio_params':{'sample_rate':16000},
     'features':{wire.CAPABILITY:True}},'selected_module':{'TTS':'CustomTTS'},
@@ -77,6 +77,11 @@ async def setup(cap=True,mode='pipeline',mqtt=False,timeout=.3,local_cosy=True,b
  u.Connection.handle_connection=load_method('core/connection.py','handle_connection',namespace,'ConnectionHandler')
  u.hello_alias=NS(sendAudioMessage=u.send.sendAudioMessage,send_tts_message=u.send.send_tts_message)
  u.listen_alias=NS(send_tts_message=u.send.send_tts_message)
+ if observed:
+  import voice_latency,voice_waiting
+  u.ttsbase.sendAudioMessage=voice_latency.observed_audio_sender(u.ttsbase.sendAudioMessage)
+  u.send._do_send_audio=voice_latency.observed_cosy_packet_sender(u.send._do_send_audio)
+  voice_waiting.install_waiting_sender(u.send)
  guard.install_voice_interruption(u.Connection,u.receive,u.asr,u.send,tts_base_module=u.ttsbase)
  wire.install_tts_interrupt_protocol(u.Connection,u.send,hello_module=u.hello_alias,
   listen_module=u.listen_alias,upstream_root=voice,send_timeout=timeout)
@@ -225,7 +230,7 @@ async def case_paths():
  u=await setup(timeout=1)
  try:
   await u.send.send_tts_message(u.conn,'start');await u.next()
-  waiting=u.conn._longmemory_waiting=WaitingTurn(u.conn,'model',packets=(b'cue',))
+  waiting=u.conn._longmemory_waiting=WaitingTurn(u.conn,'model',delay=0,packets=(b'cue',))
   await u.ttsbase.sendAudioMessage(u.conn,'middle',[WaitingPacket(b'cue',waiting)],None,'old')
   assert await u.next()==b'cue'
   await u.hello_alias.sendAudioMessage(u.conn,'first',[AnswerPacket(b'preset',waiting)],'synthetic subtitle','old')
@@ -438,6 +443,107 @@ async def case_eos_tail_interrupt():
   finally:await u.cleanup()
  return rows
 
+async def case_observed_answer_and_waiting_gate():
+ import voice_latency,voice_waiting
+ u=await setup(timeout=1,observed=True)
+ try:
+  c=u.conn;p=getattr(c,wire.ATTRIBUTE)
+  tracker=c._longmemory_voice_latency=voice_latency.VoiceLatencyTracker(c)
+  tracker.begin();c.sentence_id=c.tts.current_sentence_id='observed';tracker.bind_sentence()
+  state=c._longmemory_waiting=voice_waiting.WaitingTurn(c,'model',delay=0,packets=(b'cue',))
+  await u.send.send_tts_message(c,'start');await u.next()
+  raw=p.raw.send;entered,release=asyncio.Event(),asyncio.Event()
+  blocker_text=json.dumps({'type':'synthetic_blocker'})
+  async def blocked(value):
+   if value==blocker_text:entered.set();await release.wait()
+   return await raw(value)
+  p.raw.send=blocked
+  blocker=asyncio.create_task(c.websocket.send(blocker_text));await entered.wait()
+  cue=asyncio.create_task(u.ttsbase.sendAudioMessage(c,'middle',voice_waiting.WaitingPacket(b'late-cue',state),None,c.sentence_id))
+  for _ in range(20):
+   if state.budget.inflight is not None:break
+   await asyncio.sleep(0)
+  assert state.budget.inflight is not None
+  voice_waiting.mark_answer_ready(c)
+  answer=asyncio.create_task(u.ttsbase.sendAudioMessage(c,'middle',voice_waiting.AnswerPacket(b'observed-answer',state),None,c.sentence_id))
+  release.set();await asyncio.gather(blocker,cue,answer)
+  assert await u.next()==blocker_text
+  assert await u.next()==b'observed-answer'
+  assert b'late-cue' not in u.trace
+  assert state.budget.last_sent_at is None
+  assert tracker.snapshot()['timings_ms']['first_audio_sent_ms'] is not None
+  assert state.first_feedback_ms is None and state.first_answer_ms is not None
+  return {'answer_timing_present':True,'waiting_consumed_cooldown':False,'physical_playback_verified':False}
+ finally:await u.cleanup()
+
+async def case_observed_actual_send_receipts():
+ import voice_latency,voice_waiting
+ results=[]
+ for cap in (False,True):
+  u=await setup(cap,observed=True,timeout=1)
+  try:
+   c=u.conn;tracker=c._longmemory_voice_latency=voice_latency.VoiceLatencyTracker(c)
+   tracker.begin();c.sentence_id=c.tts.current_sentence_id='receipt';tracker.bind_sentence()
+   state=c._longmemory_waiting=voice_waiting.WaitingTurn(c,'model',delay=0,packets=(b'cue',))
+   await u.send.send_tts_message(c,'start');await u.next()
+   cue=voice_waiting.WaitingPacket(b'receipt-cue',state)
+   await u.ttsbase.sendAudioMessage(c,'middle',cue,None,c.sentence_id)
+   assert await u.next()==b'receipt-cue'
+   assert cue._longmemory_send_receipt.sent_at is not None and state.budget.last_sent_at is not None
+   assert tracker.snapshot()['timings_ms']['first_audio_sent_ms'] is None
+   voice_waiting.mark_answer_ready(c)
+   answer=voice_waiting.AnswerPacket(b'receipt-answer',state)
+   await u.ttsbase.sendAudioMessage(c,'middle',answer,None,c.sentence_id)
+   assert await u.next()==b'receipt-answer'
+   assert answer._longmemory_send_receipt.sent_at is not None
+   assert tracker.snapshot()['timings_ms']['first_audio_sent_ms'] is not None
+   # marker仅为进程内属性；线上接收的字节与原缓存/答案完全相同。
+   results.append({'negotiated':cap,'answer_marked':True,'cue_separate':True})
+  finally:await u.cleanup()
+ return results
+
+async def case_observed_receipt_cancel_and_failure():
+ import voice_latency,voice_waiting
+ u=await setup(observed=True,timeout=1)
+ try:
+  c=u.conn;p=getattr(c,wire.ATTRIBUTE)
+  tracker=c._longmemory_voice_latency=voice_latency.VoiceLatencyTracker(c)
+  tracker.begin();c.sentence_id=c.tts.current_sentence_id='cancel-return';tracker.bind_sentence()
+  state=c._longmemory_waiting=voice_waiting.WaitingTurn(c,'model',delay=0,packets=(b'cue',))
+  await u.send.send_tts_message(c,'start');await u.next()
+  raw=p.raw.send
+  async def sent_then_cancel(value):
+   result=await raw(value)
+   if value==b'sent-before-cancel':state.cancel()
+   return result
+  p.raw.send=sent_then_cancel
+  cue=voice_waiting.WaitingPacket(b'sent-before-cancel',state)
+  await u.ttsbase.sendAudioMessage(c,'middle',cue,None,c.sentence_id)
+  assert await u.next()==b'sent-before-cancel'
+  assert state.closed and cue._longmemory_send_receipt.sent_at is not None
+  assert state.budget.last_sent_at is not None and state.first_feedback_ms is not None
+  assert tracker.snapshot()['timings_ms']['first_audio_sent_ms'] is None
+ finally:await u.cleanup()
+ u=await setup(observed=True,timeout=1)
+ try:
+  c=u.conn;p=getattr(c,wire.ATTRIBUTE)
+  tracker=c._longmemory_voice_latency=voice_latency.VoiceLatencyTracker(c)
+  tracker.begin();c.sentence_id=c.tts.current_sentence_id='failed';tracker.bind_sentence()
+  state=c._longmemory_waiting=voice_waiting.WaitingTurn(c,'model',delay=0,packets=(b'cue',))
+  await u.send.send_tts_message(c,'start');await u.next()
+  async def fail(value):raise RuntimeError('synthetic_transport_failure')
+  p.raw.send=fail
+  answer=voice_waiting.AnswerPacket(b'never-sent',state)
+  try:await u.ttsbase.sendAudioMessage(c,'middle',answer,None,c.sentence_id)
+  except RuntimeError:pass
+  else:raise AssertionError('transport failure hidden')
+  await asyncio.wait_for(u.client.wait_closed(),1)
+  assert answer._longmemory_send_receipt.sent_at is None
+  assert tracker.snapshot()['timings_ms']['first_audio_sent_ms'] is None
+  assert b'never-sent' not in u.trace
+  return {'sent_then_cancel_consumed':True,'failed_answer_not_marked':True}
+ finally:await u.cleanup()
+
 async def main():
  result={'handshake':await case_handshake(),'ordered':await case_order(),
          'timeout':await case_timeout(),'alias_eos':await case_alias_eos(),
@@ -447,7 +553,10 @@ async def main():
          'gate_timeout_coverage':await case_gate_timeout_and_coverage(),
          'coverage_changed':await case_coverage_changed(),
          'implicit_start':await case_revoke_during_implicit_start(),
-         'eos_tail':await case_eos_tail_interrupt()}
+         'eos_tail':await case_eos_tail_interrupt(),
+         'observed_gate':await case_observed_answer_and_waiting_gate(),
+         'send_receipts':await case_observed_actual_send_receipts(),
+         'receipt_cancel_failure':await case_observed_receipt_cancel_and_failure()}
  assert 'torch' not in sys.modules
  print(json.dumps(result))
 asyncio.run(main())

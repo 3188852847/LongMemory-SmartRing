@@ -229,28 +229,30 @@ def test_memory_waiting_starts_before_query_and_reuses_one_timer(monkeypatch,tmp
     c,now=connection(monkeypatch,tmp_path)
     async def query(text):
         assert len(Timer.created)==1
-        now[0]=1.0;Timer.created[0].fire()
+        now[0]=3.0;Timer.created[0].fire()
         assert c.tts.tts_audio_queue.qsize()==1
-        now[0]=1.5;return 'synthetic evidence'
+        now[0]=3.5;return 'synthetic evidence'
     c.memory=NS(query_memory=query)
     latency._observe_memory_waiting(c)
     assert asyncio.run(c.memory.query_memory('synthetic question'))=='synthetic evidence'
     old=c._longmemory_waiting
     w.begin_waiting(c,[]);Timer.created[0].fire()
     assert c._longmemory_waiting is old and len(Timer.created)==1 and c.tts.tts_audio_queue.qsize()==1
-    assert c._longmemory_voice_latency.stage_snapshot()['timings_ms']['memory_returned_ms']==1500
-    assert c._longmemory_voice_latency.snapshot()['timings_ms']['memory_ready_ms']==1500
+    assert c._longmemory_voice_latency.stage_snapshot()['timings_ms']['memory_returned_ms']==3500
+    assert c._longmemory_voice_latency.snapshot()['timings_ms']['memory_ready_ms']==3500
 
 
 @pytest.mark.parametrize('phase',['memory','model','tts'])
 def test_slow_phase_gets_feedback_but_never_fakes_answer_timing(monkeypatch,tmp_path,phase):
     c,now=connection(monkeypatch,tmp_path)
     sent=[]
-    async def sender(conn,packet,flow):sent.append(bytes(packet))
+    async def sender(conn,packet,flow):
+        sent.append(bytes(packet));w.record_packet_sent(packet)
+        flow['packet_count']=flow.get('packet_count',0)+1
     module=NS(_do_send_audio=sender);w.install_waiting_sender(module)
     def advance(stage):
-        now[0]+=1.0 if phase==stage else 0.1
-        if now[0]>=0.9:Timer.created[0].fire()
+        now[0]+=3.0 if phase==stage else 0.1
+        if now[0]>=3.0:Timer.created[0].fire()
     def send_feedback():
         if not c.tts.tts_audio_queue.empty():
             packet=c.tts.tts_audio_queue.get_nowait()[1][0]
@@ -264,13 +266,13 @@ def test_slow_phase_gets_feedback_but_never_fakes_answer_timing(monkeypatch,tmp_
     list(latency._observe_generator(c,iter(['synthetic output']),state))
     c._longmemory_voice_latency.begin_tts_segment(sentence_id=c.sentence_id)
     advance('tts');send_feedback()
-    assert state.first_feedback_ms=={'memory':1000,'model':1100,'tts':1200}[phase]
+    assert state.first_feedback_ms=={'memory':3000,'model':3100,'tts':3200}[phase]
     assert state.first_answer_ms is None
     assert c._longmemory_voice_latency.snapshot()['timings_ms']['first_audio_sent_ms'] is None
     w.mark_answer_ready(c)
     asyncio.run(module._do_send_audio(c,w.AnswerPacket(b'answer',state),{}))
-    assert state.first_answer_ms==1200
-    assert c._longmemory_voice_latency.snapshot()['timings_ms']['first_audio_sent_ms']==1200
+    assert state.first_answer_ms==3200
+    assert c._longmemory_voice_latency.snapshot()['timings_ms']['first_audio_sent_ms']==3200
 
 
 def test_memory_failure_cancels_waiting_without_changing_error_or_archival_semantics(monkeypatch,tmp_path):
@@ -301,6 +303,7 @@ def test_fast_answer_cancel_missing_cache_and_voice_switch(monkeypatch,tmp_path)
     assert c.tts.tts_audio_queue.empty()
     c.sentence_id='next';w.begin_waiting(c,None)
     monkeypatch.setattr(w,'_voice_context',lambda:{'identity':'b'*64,'default':False})
+    now[0]=3.0
     Timer.created[-1].fire()
     assert c._longmemory_waiting.cue_state=='unavailable' and c.tts.tts_audio_queue.empty()
     c.sentence_id='third';w.begin_waiting(c,None);Timer.created[-1].fire()

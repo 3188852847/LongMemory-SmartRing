@@ -199,9 +199,19 @@ class _StaleControl(Exception):
 
 class _ControlPacket(bytes):
     def __new__(cls, value, lease):
-        packet = super().__new__(cls, value)
+        # 只叠加撤权元数据，不抹去答案/等待类别；下游过滤和首包计时仍需它。
+        if isinstance(value, AnswerPacket):
+            packet = AnswerPacket(value, value.state)
+        elif isinstance(value, WaitingPacket):
+            packet = WaitingPacket(value, value.state)
+        else:
+            packet = super().__new__(cls, value)
+        original_cancelled = getattr(value, "_longmemory_cosy_cancelled", None)
         packet._longmemory_cosy_sentence_id = lease.sentence_id
-        packet._longmemory_cosy_cancelled = lambda: not lease.current()
+        packet._longmemory_cosy_cancelled = lambda: (not lease.current()
+            or (callable(original_cancelled) and original_cancelled()))
+        packet._longmemory_output_lease = getattr(value, "_longmemory_output_lease", lease)
+        packet._longmemory_send_receipt = getattr(value, "_longmemory_send_receipt", None)
         return packet
 
 
@@ -352,9 +362,13 @@ def install_voice_interruption(connection_class, receive_module, asr_base_module
             state.note("stale_packet_dropped", record=False)
             return None
         before = flow_control.get("packet_count", 0)
+        receipt = getattr(packet, "_longmemory_send_receipt", None)
+        previously_sent = receipt is not None and receipt.sent_at is not None
         send_epoch = state.epoch
         result = await original_packet(connection, packet, flow_control)
-        if flow_control.get("packet_count", 0) > before:
+        confirmed = (receipt.sent_at is not None and not previously_sent) if receipt is not None else (
+            flow_control.get("packet_count", 0) > before)
+        if confirmed:
             with state.lock:
                 if send_epoch != state.epoch or revoked_sentence(connection, flow_control.get("sentence_id")):
                     state.note("inflight_old_send_returned")

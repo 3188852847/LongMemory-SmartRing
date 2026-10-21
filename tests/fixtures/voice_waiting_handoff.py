@@ -35,6 +35,8 @@ def run_case(*,after,frames=35,answer_ready_ms=120):
     module=ModuleType('synthetic_sender')
     async def send(conn,packet,flow):
         sent.append((round(now[0]*1000),bytes(packet)))
+        confirm=getattr(adapter,'record_packet_sent',None)
+        if callable(confirm):confirm(packet)
         flow['packet_count']+=1
     def start(conn,controller,flow):
         async def deliver(packet):await module._do_send_audio(conn,packet,flow)
@@ -51,7 +53,8 @@ def run_case(*,after,frames=35,answer_ready_ms=120):
     try:
         conn=NS(sentence_id='synthetic',client_abort=False,stop_event=threading.Event(),
             _longmemory_voice_latency=NS(mark=lambda *a,**kw:None))
-        state=adapter.WaitingTurn(conn,'model',packets=(b'cue',))
+        # 本夹具只测已排队尾包的调度交接，显式跳过产品静默阈值。
+        state=adapter.WaitingTurn(conn,'model',delay=0,packets=(b'cue',))
         holder['state']=state;conn._longmemory_waiting=state
         adapter.install_waiting_sender(module)
         controller=namespace['AudioRateController'](60)

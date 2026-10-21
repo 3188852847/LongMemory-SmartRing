@@ -12,6 +12,53 @@ from uuid import uuid4
 ASSET_ROOT = Path(__file__).resolve().parents[3] / "assets/audio/voice-waiting/cosyvoice3"
 PHRASES = {"model": "稍等。", "web": "稍等。"}
 CACHE_ROOT = Path(__file__).resolve().parents[3] / "local/runtime/voice-waiting/cosyvoice3"
+WAITING_DELAY_SECONDS = 3.0
+WAITING_COOLDOWN_SECONDS = 90.0
+_BUDGET_LOCK = threading.Lock()
+
+
+class _CueBudget:
+    """连接内仅在提示首包真实发送返回后计冷却；预留不是消费。"""
+    def __init__(self):
+        self.lock = threading.RLock()
+        self.last_sent_at = self.last_token = self.inflight = None
+
+    def eligible(self, state):
+        with self.lock:
+            if self.last_token is state.cue_token:
+                return True  # 同一次提示的尾帧，不再次消耗名额。
+            return ((self.inflight is None or self.inflight is state.cue_token) and (self.last_sent_at is None
+                or time.perf_counter() - self.last_sent_at >= WAITING_COOLDOWN_SECONDS))
+
+    def claim(self, state):
+        with self.lock:
+            if self.last_token is state.cue_token:
+                return True
+            if self.inflight is not None or not self.eligible(state):
+                return False
+            self.inflight = state.cue_token
+            return True
+
+    def commit(self, state, sent_at):
+        with self.lock:
+            if self.last_sent_at is None or sent_at >= self.last_sent_at:
+                self.last_sent_at, self.last_token = sent_at, state.cue_token
+            if self.inflight is state.cue_token:
+                self.inflight = None
+
+    def release(self, state):
+        with self.lock:
+            if self.inflight is state.cue_token:
+                self.inflight = None
+
+
+def _cue_budget(connection):
+    with _BUDGET_LOCK:
+        value = getattr(connection, "_longmemory_waiting_budget", None)
+        if value is None:
+            value = _CueBudget()
+            connection._longmemory_waiting_budget = value
+        return value
 
 
 def _voice_context():
@@ -136,11 +183,50 @@ class WaitingPacket(bytes):
     def __new__(cls, value, state):
         packet = super().__new__(cls, value)
         packet.state = state
+        answer = issubclass(cls, AnswerPacket)
+        packet._longmemory_cosy_cancelled = lambda: (not state.current()
+            or (not answer and (state.answer_ready or not state.cue_current() or not state.budget.eligible(state))))
+        packet._longmemory_send_receipt = _SendReceipt(state, answer)
         return packet
 
 
 class AnswerPacket(WaitingPacket):
     """真正回答的包也绑定话轮，不能把提示或停止提示音算作答案首包。"""
+
+
+class _SendReceipt:
+    """一包一个进程内事实标记，由真实socket.send成功返回确认，不使用共享计数推断。"""
+    def __init__(self, state, answer):
+        self.state, self.answer = state, answer
+        self.sent_at = None
+        self.lock = threading.Lock()
+
+    def confirm(self):
+        with self.lock:
+            if self.sent_at is not None:
+                return
+            self.sent_at = time.perf_counter()
+        state = self.state
+        with state.lock:
+            elapsed = round((self.sent_at - state.started) * 1000)
+            if self.answer:
+                if state.first_answer_ms is None:
+                    state.first_answer_ms = elapsed
+                    tracker = getattr(state.connection, "_longmemory_voice_latency", None)
+                    if tracker is not None:
+                        tracker.mark("first_audio_sent_ms", sentence_id=state.sentence_id)
+            elif state.first_feedback_ms is None:
+                # 已发送事实不能因返回瞬间取消而撤回；后续新轮仍须遵守冷却。
+                state.first_feedback_ms = elapsed
+                state.cue_state = "sent"
+                state.budget.commit(state, self.sent_at)
+
+
+def record_packet_sent(packet):
+    """仅供实际传输边界或合成传输替身调用；不改变音频字节。"""
+    receipt = getattr(packet, "_longmemory_send_receipt", None)
+    if receipt is not None:
+        receipt.confirm()
 
 
 def load_packets(kind, sample_rate):
@@ -154,11 +240,14 @@ def load_packets(kind, sample_rate):
 
 
 class WaitingTurn:
-    def __init__(self, connection, kind, *, delay=0.9, packets=None):
+    def __init__(self, connection, kind, *, delay=WAITING_DELAY_SECONDS, packets=None):
         self.connection, self.kind = connection, kind
         self.sentence_id = connection.sentence_id
         current = getattr(getattr(connection, "_longmemory_voice_latency", None), "current", None)
         self.started = current["started"] if current else time.perf_counter()
+        self.cue_deadline = self.started + delay
+        self.cue_token = object()
+        self.budget = _cue_budget(connection)
         self.status = "querying" if kind == "web" else "answering"
         self.query_ms = None
         self.first_feedback_ms = None
@@ -171,7 +260,7 @@ class WaitingTurn:
         self.voice_identity = context['identity'] if context else None
         self.profile_bound = packets is None
         self.packets = load_packets(kind, connection.sample_rate) if packets is None else packets
-        self.timer = threading.Timer(delay, self.enqueue)
+        self.timer = threading.Timer(max(0, self.cue_deadline - time.perf_counter()), self.enqueue)
         self.timer.daemon = True
 
     def current(self):
@@ -181,8 +270,12 @@ class WaitingTurn:
                 and getattr(self.connection, "_longmemory_waiting", None) is self)
 
     def cancel(self):
-        self.closed = True
-        self.timer.cancel()
+        with self.lock:
+            self.closed = True
+            self.timer.cancel()
+            self.budget.release(self)
+            if self.first_feedback_ms is None:
+                self.cue_state = "skipped"
 
     def cue_current(self):
         if not self.profile_bound:
@@ -197,7 +290,12 @@ class WaitingTurn:
     def _enqueue_once(self):
         if self.cue_state != 'pending':
             return
+        if time.perf_counter() < self.cue_deadline:
+            return
         if not self.current() or self.answer_ready:
+            self.cue_state = "skipped"
+            return
+        if not self.budget.eligible(self):
             self.cue_state = "skipped"
             return
         if not self.packets or not self.cue_current():
@@ -213,9 +311,10 @@ class WaitingTurn:
              None, self.sentence_id))
 
     def snapshot(self):
-        return {"version": 1, "kind": self.kind, "status": self.status,
-                "cue_state": self.cue_state, "query_ms": self.query_ms,
-                "first_feedback_ms": self.first_feedback_ms, "first_answer_ms": self.first_answer_ms}
+        with self.lock:
+            return {"version": 1, "kind": self.kind, "status": self.status,
+                    "cue_state": self.cue_state, "query_ms": self.query_ms,
+                    "first_feedback_ms": self.first_feedback_ms, "first_answer_ms": self.first_answer_ms}
 
 
 def begin_waiting(connection, dialogue):
@@ -241,7 +340,7 @@ def mark_answer_ready(connection):
         with state.lock:
             state.answer_ready = True
             state.timer.cancel()
-            if state.cue_state == "pending":
+            if state.cue_state in {"pending", "queued"} and state.first_feedback_ms is None:
                 state.cue_state = "skipped"
 
 
@@ -255,7 +354,9 @@ def install_waiting_sender(send_module):
         if not isinstance(packet, WaitingPacket) or isinstance(packet, AnswerPacket):
             return False
         state = packet.state
-        if state.current() and not state.answer_ready and state.cue_current():
+        if (state.current() and not state.answer_ready and state.cue_current()
+                and time.perf_counter() >= state.cue_deadline
+                and state.budget.eligible(state)):
             return False
         if state.first_feedback_ms is None:
             state.cue_state = 'skipped'
@@ -293,18 +394,19 @@ def install_waiting_sender(send_module):
                 if waiting and state.first_feedback_ms is None:
                     state.cue_state = "skipped"
                 return
-        # 真实答案优先：即使提示已开始，也废弃尚未发送的尾包，不挡住答案首包。
-        result = await original(connection, packet, flow_control)
-        if tagged and state.current():
-            field = "first_feedback_ms" if waiting else "first_answer_ms"
-            if getattr(state, field) is None:
-                setattr(state, field, round((time.perf_counter() - state.started) * 1000))
-            if waiting:
-                state.cue_state = "sent"
-            else:
-                tracker = getattr(connection, "_longmemory_voice_latency", None)
-                if tracker is not None:
-                    tracker.mark("first_audio_sent_ms", sentence_id=state.sentence_id)
+        claimed = False
+        if waiting:
+            with state.lock:
+                if discard(packet) or not state.budget.claim(state):
+                    return None
+                claimed = True
+        try:
+            # 不持有线程锁跨await，也不让等待提示占据答案的调度槽。
+            result = await original(connection, packet, flow_control)
+        finally:
+            if claimed:
+                with state.lock:
+                    state.budget.release(state)
         return result
 
     send_module._do_send_audio = send
