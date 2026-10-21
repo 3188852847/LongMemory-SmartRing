@@ -610,3 +610,13 @@ AI按实际最终源重新生成消费者v4和字幕夹具，逐字比较AH已�
 最后复核又将wire.close的closed写入纳入音频短锁，且未绑定首个wire turn的租约也检查protocol.closed；关闭同样不能穿过完成领取。新增真实provider的close前领取/已领取RPC两种屏障验证，连同固定原生ASR三阶段、真实WS、executor及永久撤权共 **26通过/8.46s**，`ai-wire-close-completion-01.xml`；没有改web tree或固件镜像。文档接力最终以共享manifest窄范围strict检查记录为准。
 
 未解决的发布/体验事项：ROOT精确最终候选远程Quality、新0016活动应用写入许可与K专属执行、owner真实字幕/声音/打断/多轮复验。当前没有发现仍阻断隔离候选提交的代码缺陷；上述本地完整后端失败原因、真实模型和设备边界均保留，不按已验收归档。
+
+## 360远程Quality失败后的bootstrap测试接力
+
+ROOT随后报告精确 `360eab8e03b0c38ad6ad73fa104534bd59eef8ab` 的远程Quality `39530302377` **FAILED**：后端3640通过/236资源skip/2失败，均为 `test_launcher_latency.py::test_pipeline_bootstrap_installs_input_timing_before_response_policy[realtime/original]`。失败发生在正式main新增导入helloHandle时，合成core.handle只提供旧模块，未同步wire安装契约。ROOT原始日志保存在主项目检查点 `local/archive/hy-advanced-release/20261021T020149Z-360eab8e-acbb73/quality-backend-failure.log`；以上为ROOT报告，AI没有执行远程下载或改写该日志。浏览器另有1失败/139通过/3既有skip，由ROOT交AH独立处理，本次不改浏览器文件。
+
+AI在干净360隔离树先独立运行这两个参数，实际复现相同ImportError：`data/test-tmp/ai-360-bootstrap-reproduction-01.xml`，2失败，SHA256 `4a7477fb54f987a04a0e54bbaee6d2042701eb7ccb95226069414063a5628eda`。确认测试前提漏接后，只更新该fixture：提供helloHandle、listenMessageHandler和协议安装器替身；断言接收当前Connection类、实际send模块、hello/listen身份及本次上游路径，并将wire调用纳入永久撤权之后、app之前的完整顺序断言。没有在生产增加try/except绕过安装器，没有新增skip、timeout或资源例外。
+
+修后运行完整launcher_latency、voice_proposal_bootstrap、advanced_voice_bootstrap、固定上游真实WebSocket测试以及CI报告护栏：**53通过/0skip，7 subtests通过，9.18s**，JUnit `data/test-tmp/ai-360-bootstrap-repair-01.xml` SHA256 `239c27eee1596b406339ce42744b6479e0d2425d0e190a52b467674550c82193`，audit_report返回(53,0)。固定源码验证仍用已装Python3.10及 `eb4b28c59ed7ed885258498cf757ce14352d620e` 的实际文件指纹、提取函数和真实随机环回WS；配置/其余模块为合成替身，不称启动了完整日用服务或模型。
+
+`backend_resources.py`相对360逐字未变，精确资源报告再次审计返回(25,20)，7项CI护栏通过；没有用新跳过掩盖fixture失败。本轮不重跑全量后端充绿，既有本地entry.tcl失败/单例复现通过及360远程失败全部保留。生产语音源码、整个web tree `2d06c0dd5081eab580618cfbca6978477f5d0d60`、0016补丁/镜像均未变；仍由ROOT处理浏览器交付、精确新候选远程Quality及后续授权，不推送/合main/停服务/碰设备。

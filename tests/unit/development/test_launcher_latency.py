@@ -203,7 +203,16 @@ def test_pipeline_bootstrap_installs_input_timing_before_response_policy(tmp_pat
     monkeypatch.setitem(sys.modules, "core.connection", SimpleNamespace(ConnectionHandler=connection_class))
     monkeypatch.setitem(sys.modules, "direct_ws_v2", SimpleNamespace(install_direct_ws_v2=lambda _: None))
     receive_audio = SimpleNamespace()
-    handle = SimpleNamespace(receiveAudioHandle=receive_audio, sendAudioHandle=SimpleNamespace())
+    send_audio, hello, listen = SimpleNamespace(), SimpleNamespace(), SimpleNamespace()
+    handle = SimpleNamespace(receiveAudioHandle=receive_audio, sendAudioHandle=send_audio, helloHandle=hello)
+    monkeypatch.setitem(sys.modules, "core.handle.textHandler", SimpleNamespace(listenMessageHandler=listen))
+    def install_wire(cls, sender, *, hello_module, listen_module, upstream_root):
+        # 使用本次main真实导入的模块身份，不能只补名字后让安装器悄悄不执行。
+        assert cls is connection_class and sender is send_audio
+        assert hello_module is hello and listen_module is listen and upstream_root == tmp_path
+        calls.append("wire")
+    monkeypatch.setitem(sys.modules, "voice_output_protocol", SimpleNamespace(
+        install_tts_interrupt_protocol=install_wire))
     monkeypatch.setitem(sys.modules, "voice_waiting", SimpleNamespace(install_waiting_sender=lambda _: None))
     monkeypatch.setitem(sys.modules, "core", SimpleNamespace(handle=handle))
     monkeypatch.setitem(sys.modules, "core.handle", handle)
@@ -232,7 +241,7 @@ def test_pipeline_bootstrap_installs_input_timing_before_response_policy(tmp_pat
     finally:
         sys.path[:] = previous
     assert calls == ["input_timing", ("policy", mode, True, True),
-                     "persistent_session", "revocation", "run"]
+                     "persistent_session", "revocation", "wire", "run"]
 
 
 @pytest.mark.parametrize("relative", ["launcher/voice.py", "xiaozhi/setup.py", "xiaozhi/launch_with_memory.py"])

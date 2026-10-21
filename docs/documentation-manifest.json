@@ -1453,7 +1453,8 @@
         "scripts/development/otto_firmware/audit_0016_source.py",
         "scripts/development/otto_firmware/prepare_subtitle_layout.py",
         "tests/unit/firmware/prepare_*native.py",
-        "tests/unit/firmware/tts_interrupt_native.cpp.in"
+        "tests/unit/firmware/tts_interrupt_native.cpp.in",
+        "tests/unit/development/test_launcher_latency.py"
       ],
       "related": [
         "docs/development/parallel/AI-hy-advanced-low-latency-20261021.md",
@@ -7213,14 +7214,15 @@
       "review": {
         "state": "verified",
         "date": "2026-10-21",
-        "scope": "隔离永久音频撤权、原子完成领取、双向wire修订4及0016联合源码/合成验证；原完整后端失败及发布/实机未验边界保留",
+        "scope": "隔离永久音频撤权、原子完成领取、双向wire修订4及0016联合源码/合成验证；原完整后端失败及发布/实机未验边界保留；保留360精确远程Quality失败，复现并补bootstrap测试契约，53项定向与精确CI资源护栏通过，不改生产或浏览器",
         "evidence": [
           "docs/development/parallel/AI-hy-advanced-low-latency-20261021.md",
           "docs/development/parallel/AD-tts-interrupt-v1-20261021.md",
           "scripts/development/xiaozhi/voice_output_protocol.py",
           "tests/unit/development/test_voice_output_protocol_ws.py",
           "tests/integration/memory_pipeline/test_voice_completion_revocation.py",
-          "firmware/smartring_plus/experiments/0016-round-subtitle-interrupt.json"
+          "firmware/smartring_plus/experiments/0016-round-subtitle-interrupt.json",
+          "tests/unit/development/test_launcher_latency.py"
         ]
       },
       "tags": [
