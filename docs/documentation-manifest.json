@@ -1463,7 +1463,8 @@
         "docs/development/parallel/AH-ci-visibility-20261021.md",
         "docs/development/parallel/AH-round-subtitles-20261021.md",
         "docs/development/parallel/AD-voice-interruption-summary-v1-20261021.md",
-        "docs/development/parallel/AH-final-interface-20261021.md"
+        "docs/development/parallel/AH-final-interface-20261021.md",
+        "docs/development/parallel/AH-console-navigation-20261021.md"
       ],
       "tags": [
         "字幕",
@@ -1484,6 +1485,37 @@
           "tests/unit/development/test_voice_output_protocol_ws.py",
           "tests/integration/memory_pipeline/test_voice_completion_revocation.py",
           "firmware/smartring_plus/experiments/0016-round-subtitle-interrupt.json"
+        ]
+      }
+    },
+    {
+      "id": "console-device-navigation-diagnosis",
+      "scope": "360导航失败未知原因的有界诊断与固定e2e接力；不把后续通过视为治愈",
+      "authority": "docs/development/parallel/AH-console-navigation-20261021.md",
+      "sources": [
+        "web/react-chat/e2e/console.spec.ts",
+        "web/react-chat/playwright.config.ts",
+        "scripts/ci/browser_quality.mjs",
+        "scripts/ci/test_browser_quality.mjs"
+      ],
+      "related": [
+        "docs/development/parallel/AI-hy-advanced-low-latency-20261021.md",
+        "docs/development/parallel/AH-final-interface-20261021.md"
+      ],
+      "tags": [
+        "CI",
+        "导航",
+        "5秒",
+        "零重试"
+      ],
+      "review": {
+        "state": "verified",
+        "date": "2026-10-21",
+        "scope": "63ef精确step/原断言及预算、AH八组原始报告和运行时同字节；AI没有重跑浏览器",
+        "evidence": [
+          "docs/development/parallel/AI-hy-advanced-low-latency-20261021.md",
+          "docs/development/parallel/AH-console-navigation-20261021.md",
+          "web/react-chat/e2e/console.spec.ts"
         ]
       }
     }
@@ -7214,7 +7246,7 @@
       "review": {
         "state": "verified",
         "date": "2026-10-21",
-        "scope": "隔离永久音频撤权、原子完成领取、双向wire修订4及0016联合源码/合成验证；原完整后端失败及发布/实机未验边界保留；保留360精确远程Quality失败，复现并补bootstrap测试契约，53项定向与精确CI资源护栏通过，不改生产或浏览器",
+        "scope": "隔离永久音频撤权、原子完成领取、双向wire修订4及0016联合源码/合成验证；原完整后端失败及发布/实机未验边界保留；保留360精确远程Quality失败，复现并补bootstrap测试契约，53项定向与精确CI资源护栏通过，不改生产或浏览器；接入并核对AH导航有界诊断、143收集及同字节运行时，保留未知原因和ROOT新稳定恢复报告",
         "evidence": [
           "docs/development/parallel/AI-hy-advanced-low-latency-20261021.md",
           "docs/development/parallel/AD-tts-interrupt-v1-20261021.md",
@@ -7509,6 +7541,28 @@
         "前端",
         "产物绑定",
         "隔离"
+      ]
+    },
+    {
+      "path": "docs/development/parallel/AH-console-navigation-20261021.md",
+      "title": "AH：360设备页导航失败的有界诊断接力",
+      "status": "draft",
+      "basis": "AH冻结诊断代码/原始报告及AI独立源码/类型/产物核查；360导航原因未知，未宣称治愈或新候选远程通过",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-21",
+        "scope": "63ef精确step/原断言及预算、AH八组原始报告和运行时同字节；AI没有重跑浏览器",
+        "evidence": [
+          "docs/development/parallel/AI-hy-advanced-low-latency-20261021.md",
+          "docs/development/parallel/AH-console-navigation-20261021.md",
+          "web/react-chat/e2e/console.spec.ts"
+        ]
+      },
+      "tags": [
+        "CI",
+        "导航诊断",
+        "隔离",
+        "未知原因"
       ]
     }
   ],

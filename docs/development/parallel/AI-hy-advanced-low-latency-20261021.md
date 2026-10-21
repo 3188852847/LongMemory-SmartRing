@@ -620,3 +620,15 @@ AI在干净360隔离树先独立运行这两个参数，实际复现相同Import
 修后运行完整launcher_latency、voice_proposal_bootstrap、advanced_voice_bootstrap、固定上游真实WebSocket测试以及CI报告护栏：**53通过/0skip，7 subtests通过，9.18s**，JUnit `data/test-tmp/ai-360-bootstrap-repair-01.xml` SHA256 `239c27eee1596b406339ce42744b6479e0d2425d0e190a52b467674550c82193`，audit_report返回(53,0)。固定源码验证仍用已装Python3.10及 `eb4b28c59ed7ed885258498cf757ce14352d620e` 的实际文件指纹、提取函数和真实随机环回WS；配置/其余模块为合成替身，不称启动了完整日用服务或模型。
 
 `backend_resources.py`相对360逐字未变，精确资源报告再次审计返回(25,20)，7项CI护栏通过；没有用新跳过掩盖fixture失败。本轮不重跑全量后端充绿，既有本地entry.tcl失败/单例复现通过及360远程失败全部保留。生产语音源码、整个web tree `2d06c0dd5081eab580618cfbca6978477f5d0d60`、0016补丁/镜像均未变；仍由ROOT处理浏览器交付、精确新候选远程Quality及后续授权，不推送/合main/停服务/碰设备。
+
+## AH导航诊断接入后的新候选
+
+191622交付后，ROOT授权接入AH代码 `63ef0853902722c99f2111e38f797b5a1ee90132`（AI接为3153e8eb）及[验证记录](AH-console-navigation-20261021.md) `87245576628f89f9d616b8720b9e20f002a738c1`（AI接为4581a005）。只增加console.spec.ts中“文字聊天进入设备状态”步骤的失败诊断：原点击、heading断言、5秒expect、30秒test和零retry保留。dialog明确dismiss保持原默认；事件/文本/heading限量，求值不可用或750ms超时仍抛原异常，finally解除监听，不记录凭据或请求正文。没有基于未证实原因修改产品或增加成功重试。
+
+AI机械还原诊断step后，与191622原测试全文逐字一致；当前web tree **`030ef1f193481e0663e154ae3142cb31bcce00f3`** 与AH固定交付一致。产品src tree仍为 `ce5488c6ae914047af0673cf945549dd7273319c`；相对191622唯一前端差异是该e2e文件。既有ba37/097类型构建绑定没有被改写为新web tree证明，本轮另核AH精确63ef构建：45文件/1,839,032字节逐文件等于ba37及bcde运行时，manifest仍5e94e8fe。新binding SHA256 `4aa2d3d78569168bbc3ea159f5b9e611940bc916b5a98c0fe93ef042aa1ffef4`，无需重新部署前端运行时；固件补丁、0016应用及生产语音源码不变。
+
+AI逐项核对AH八组原始results.json/run.log与绑定摘要：原完整目标1通过、4倍CPU降速1通过、原前四个chat-workspace场景加完整目标的**前五项顺序5/5通过**；初版诊断console四项4/4，最终保护补强后精确完整目标1/1通过，不把前者冒称最终源码全量重跑。三组明确注入的受控失败均返回1、保留原5000ms heading异常：草稿阻止离页时URL仍为chat-react且有confirm；chunk 503时URL为device且有router error；辅助evaluate挂起时为snapshot_timeout。前两项在最终关闭/求值保护前执行，最终版本验证了求值超时和正常完整目标。它们只证明诊断分支有效，**不证明360远程失败属于任何一种，也不证明未知问题已治愈**。即使下一候选Quality通过，也仅记录该次实际结果。
+
+AI另以固定Node24.19.0、已装编译器和只读Playwright声明独立严格检查当前e2e文件，退出0；未安装/联接依赖。首次自建临时配置误请求未安装且该文件不需要的Node环境类型，纠正为该文件实际DOM/Playwright类型后通过，没有修改产品tsconfig或测试源码来掩盖错误。当前CI收集护栏对AH原件再次确认13份spec/143项、两个project均retry0；6项浏览器护栏、7项后端报告护栏（及7 subtests）通过，后端资源清单未变。AI未额外执行浏览器或350项组件，不冒称自身重跑AH场景。独立核查结果保存在本树 ignored `data/test-tmp/ai-63ef-console-review.json`、ai-63ef-collection-review.json和ai-63ef-resource-guard-01.xml。
+
+ROOT最新运行报告另单列：恢复额度时原9680进程已不存在，七个项目端口未监听，退出原因未知，ROOT没有先行停止它。全部服务退出状态取得新一致备份95文件/14,979,159字节，检查点 `local/archive/hy-advanced-release/20261021T082805Z-stable-restoration-ef3a9a/`，随后正式入口仅恢复原4c buffered，launcher56068，control_created UTC `2026-10-21T08:28:34.978068`；controller、TTS及selected_voice_warm ready，stream active0/generationfalse/restartfalse，62个配置和dist文件逐字保持，账本53complete/1unknown。证据为ROOT检查点restoration-health.json/stopped-backup.json。以上是ROOT报告，不是AI新测生产；未恢复旧数据库、未烧录、未操作Docker，360和191622均未部署。候选仍待ROOT精确远程Quality及后续授权/owner实机复验，不按体验通过收尾。
