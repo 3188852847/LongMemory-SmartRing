@@ -45,10 +45,14 @@
 
 单元覆盖公开类只解析不构造、原计时/结果结构、导入失败原回退、未知SDK不导入。真实SDK集成覆盖baseline/prepared的预备文件摘要、空缓存、零请求及两次query行为和既有详情键；没有写脆弱的绝对耗时断言。
 
-最终相关回归 **130 passed / 1 skipped，38.34秒**，包含SDK观测/基础与v2契约、新旧协商、预备baseline/prepared、原回环网关、固定SDK执行器取消以及轮次持久化回归。跳过项为需要同时显式提供Hy与小智voice解释器的跨Python薄桥，不使用Hy解释器冒充。源码导入明确指向本AB树。
+初轮相关回归 **130 passed / 1 skipped，38.34秒**，包含SDK观测/基础与v2契约、新旧协商、预备baseline/prepared、原回环网关、固定SDK执行器取消以及轮次持久化回归。当时跳过项为未显式提供小智voice解释器的跨Python薄桥，源码导入明确指向本AB树。
+
+ROOT随后提供主仓既有小智3.10.20解释器：`local/runtime/xiaozhi-esp32-server/main/xiaozhi-server/.venv/Scripts/python.exe`，实际SHA256核对为 `8ce49d96ecba2dfd13b3cc99b5d8a18f6c0ad82bacf0df2f5d17a3df6a9cd203`，与给定身份相同。按用例入口设置正式 `LONGMEMORY_TEST_XIAOZHI_PYTHON` 和既有 `LONGMEMORY_TEST_HY_PYTHON`，**只补跑** `tests/integration/test_hy_roundscreen_sdk.py::test_python310_real_provider_to_http312_and_real_hy_sdk`：**1 passed，4.36秒**。该项验证3.10真实provider→随机回环3.12 API→真实Hy SDK合成存储的归档、记忆与完成回执，外部HTTP尝试0；没有启动小智日用服务或模型。原130组未重复运行，原跳过现已补齐；不能把两条命令写成一次131项运行。
 
 新增/变更仅本准备函数、其单元测试、独立探针、两模式集成测试、数值证据及本记录。SDK安装文件、provider、worker路由、API、v1/v2键、SDK入口与query时间语义均未改。共享documentation-manifest仍由ROOT维护，AB另交候选检查清单。
 
 本隔离树管理RPC组合身份变为 `1003fe901fa49bd2750242637b18744694f5bebdabfc3d06e0cf7a5eb262fdac`；sdk_observation.py原始字节SHA256 `fb1d2c7d8a3a7ddc58b85851a12a18211e28c041190cfaf04c92f224a97335e8`。provider仍为 `f425a3824f3771a16e7bd8df2b022376257c0d8f6673cd70c23d552a8943f717`。未修改或重签生产proof；AI合入其最终源码后必须重算组合身份，不能直接套本树指纹。回退即撤销新增公开资源解析行，原首轮行为恢复。
+
+精确候选运行时代码提交为 `f04d24f01c6f60dbace902d4f6f02e1a312b73e5`；补充交接只改本文，不改变源码或实验回执。基线e4的组合摘要独立从Git原字节重算为 `fc9d53ea2b90be3d9a80846b21eec9b389f2dbe4393b51d8956f3013fcd103e8`。assembly.management_primitives_identity包含sdk_observation.py，管理验证逐字比较rpc_source_sha256，所以**本候选必须新管理proof，旧proof不能复用**。证明结构、SDK版本、管理权限/业务行为及v1/v2协议均未改；不增加绕过开关、不自动签名或写生产证明。AI应以其整合后的完整源码重算、核对既有管理/语义验收条件，再由ROOT安排生效。本候选本身无需替换provider、修改其升级白名单或私有配置。
 
 本分支不合main、不推送、不部署、不向其他会话发消息。最终仍需AI审查，由ROOT安排原范围内生效核对与真实首轮/后续轮比较；本次不申请或执行额外模型窗口。
