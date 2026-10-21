@@ -31,3 +31,15 @@ CI 只新增 baseline/prepared 两个精确资源例外；模拟 SDK 路径缺�
 当前管理原语 SHA256 由 `fc9d53ea2b90be3d9a80846b21eec9b389f2dbe4393b51d8956f3013fcd103e8` 变为 **`1003fe901fa49bd2750242637b18744694f5bebdabfc3d06e0cf7a5eb262fdac`**。provider 仍为 `f425a3824f3771a16e7bd8df2b022376257c0d8f6673cd70c23d552a8943f717`，无需为了此候选修改提供器升级来源。
 
 本组合通过审查后冻结，按 ROOT 已授权的 `hy_management_receipt.py --managed-semantic`、已有 V 树 SDK/小智3.10/AB合成捕获，在新排他目录实跑必要219项，生成匹配新身份的实际 proof 与外围回执；此提交时尚未执行，结果另在下节追加。旧 d978… proof 不适配此新身份，不能复制或手改。ROOT 决定后续是否停机、备份及部署；AI 不操作共享配置、个人数据或设备。
+
+## 首次管理验证失败与有界复核
+
+AB 的补验记录 `154977402f67493adeb064fc426554a6e55aea44` 已接为 `d2d27fa6cfad8d69e2ff3195354b06fa2442255f`：保留原130通过/1项因缺voice参数跳过，另记录真实3.10.20匹配解释器单跑1通过，不合写为一次131项运行。
+
+首次工具实测该清洁 HEAD，输出目录 `data/test-tmp/ai-embedding-resource-managed-proof-20261021-01/`。结果 **218 passed / 1 failed，451.66秒**，工具正常拒绝签发，receipt status=failed/error=management_pytest_failed，**没有生成 management-verification.json**。原失败目录、临时标记和回执均保留。
+
+唯一失败为 `test_hy_daily_lifecycle.py::test_daily_requested_profile_injection_without_scope_fails_and_closes_owned_gateway`。它在原 `HyState.ready → _write → Path.replace` 将合成 `hy-state.tmp` 替换为 `hy-state.json` 时收到 PermissionError/WinError5，未到预期 `profile_injection_scope_unproven` 判断。assembly.py 与98db日用代码完全相同。失败两路径长度155/154、文件非只读；事后 Restart Manager 仅查询这两个合成文件，无当前持有者，不能倒推失败时的占用者或归因防病毒软件。
+
+在新合成目录，用一个不允许 delete-share 的目标读句柄调用原 `_write`，实际复现同类 WinError5且保留tmp，证明这是该文件访问条件下的已有失败分支，**不是已证明本次发生了该种占用**。诊断回执为 `data/test-tmp/ai-embedding-resource-marker-failure-diagnostic-01.json`。此操作不接触失败原件或个人库，不改权限、不终止进程。
+
+定位后，在另一全新 pytest 目录仅验证对应单例：**1 passed，5.84秒**，报告 `ai-embedding-resource-marker-case-isolated-01.xml`。它不替代完整219项，也不改写首次失败或声称文件竞争已修复。本轮不扩大为持久化写入修复、不新增自动重试或放宽断言；保留上述限制后，以新的清洁文档 HEAD/新排他目录完整复核一次。若再次失败则停止签发并交 ROOT 决定独立故障范围。
