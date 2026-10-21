@@ -17,7 +17,8 @@ def connection():
     conn = NS(sentence_id="turn", stop_event=threading.Event(), client_abort=False,
               sample_rate=16000, tts=NS(tts_audio_queue=__import__('queue').Queue()),
               _longmemory_voice_latency=NS(mark=lambda *a, **k: None))
-    conn._longmemory_waiting = waiting.WaitingTurn(conn, "model", packets=(b'one', b'two'))
+    # 本文件隔离原子入队/分类/取消；3秒产品边界由waiting policy专项验证。
+    conn._longmemory_waiting = waiting.WaitingTurn(conn, "model", delay=0, packets=(b'one', b'two'))
     return conn
 
 
@@ -39,10 +40,15 @@ def test_waiting_sentence_is_atomic_and_never_counts_as_answer(monkeypatch):
     assert not marks
     asyncio.run(sender(c, sentence_type, waiting.AnswerPacket(b"answer", state), None, sentence_id))
     assert not marks  # 入流控队列不等于 socket 已发送。
-    module = NS(_do_send_audio=original)
+    sent = []
+    async def transport(conn, packet, flow):
+        sent.append(bytes(packet))
+        waiting.record_packet_sent(packet)  # 合成传输成功点；上层original仍只模拟入队。
+    module = NS(_do_send_audio=transport)
     waiting.install_waiting_sender(module)
     asyncio.run(module._do_send_audio(c, waiting.AnswerPacket(b"answer", state), {}))
     assert marks == [("first_audio_sent_ms",)]
+    assert sent == [b"answer"]
 
 
 def delta(arguments, name="web_search", ident="call-one", index=0):
@@ -347,7 +353,7 @@ def test_abort_rejects_all_remaining_cue_packets_and_new_turn_cannot_reuse():
     waiting.install_waiting_sender(module)
     asyncio.run(module._do_send_audio(c, waiting.WaitingPacket(b"old", state), {}))
     c.client_abort = False
-    c._longmemory_waiting = waiting.WaitingTurn(c, "model", packets=())
+    c._longmemory_waiting = waiting.WaitingTurn(c, "model", delay=0, packets=())
     asyncio.run(module._do_send_audio(c, waiting.WaitingPacket(b"old", state), {}))
 
 
@@ -364,7 +370,9 @@ def test_real_sender_separates_cue_answer_and_rejects_late_packets():
     c = connection()
     state = c._longmemory_waiting
     sent = []
-    async def original(conn, packet, flow): sent.append(bytes(packet))
+    async def original(conn, packet, flow):
+        sent.append(bytes(packet))
+        waiting.record_packet_sent(packet)
     module = NS(_do_send_audio=original)
     waiting.install_waiting_sender(module)
     asyncio.run(module._do_send_audio(c, waiting.WaitingPacket(b"cue", state), {}))

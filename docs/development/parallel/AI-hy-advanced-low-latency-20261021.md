@@ -710,3 +710,9 @@ AI独立审查又复现legacy缺口：同样堵门后让答案就绪，b74下leg
 新增固定vendor测试沿原fixture的缺资源skip，AI补精确用例名及原因到backend_resources，无模块通配或纯合成例外。模拟固定源码/专属解释器缺失后 **42通过/21精确skip/0.98s**，`ai-waiting-resource-01.xml` 的audit_report返回(42,21)；正常联合回归无skip。三包类别和首包标记不进入JSON/二进制，原只读状态格式/16KiB上限不变；物理播放ACK仍false。本轮无web/dist/固件改动，未推送、合main、部署或操作共享服务。
 
 ROOT提供的12个audio_ready为1.662–5.227秒、中位3.355秒；11个模型首输出203–705ms、中位358ms，memory中位42ms但有5218ms异常。AI未读取私人日志，这些是不同问题/取消混合的软件阶段样本，缺完整可比基线，不能给耳朵首声或提速百分比。本修复降低提示频率并恢复发送观测完整性，未缩短模型/TTS计算；候选仍待ROOT受控部署、精确远程Quality及必要后续体验观察。原44d7成功和0016有限实机验收保持原范围，不冒充本轮新策略已听验。
+
+### fa6远程失败后的web-search测试前提接力
+
+ROOT报告main fa6的Quality `39588478748` completed FAILURE：frontend/build/browser成功，backend 3657通过/237精确skip/2失败，393.35s；原日志保存在其voice-waiting检查点quality-failure.log/json。AI在隔离树复现同样两项失败（`ai-waiting-web-fixture-reproduction-01.xml`，2失败）：test_voice_web_search的原子性测试仍手动立即enqueue却未等待新3s期限；发送分类测试的下游替身只append而未确认当前包的传输事实。不是已定位的生产回归或flaky结论。
+
+本次仅修该测试：合成原子性/分类/取消fixture显式delay=0；真实传输边界的替身在append成功后调用record_packet_sent。上层original仍只模拟入队，原“入队不算发送”及全部业务/取消/答案分类断言保留，另核对实际模拟发送内容。生产3s/90s和逐包事实约定均不变，无新增skip/超时/依赖。完整test_voice_web_search及waiting policy/cache/handoff/voice_latency共 **102通过/0skip/2.02s**，`ai-waiting-web-fixture-repair-01.xml`；未重复171或前端套件，未读取日用数据或操作服务。ROOT后续按test-only提交安排CI，当前3172运行状态与性能诊断由原会话继续，本记录不改写fa6远程失败或宣称整体延迟下降。
