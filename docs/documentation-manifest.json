@@ -203,7 +203,7 @@
         "L7",
         "低延迟"
       ],
-      "review": "verified 2026-10-21: AI核AH350组件/140浏览器通过与3素材skip、4聊天及新45文件/264引用/91截图，AH a2d622与融合43c6c7仅配置差异；ROOT随后报告944候选全绿并部署bcde新产物。会话共用只覆盖同页面，跨标签冷启动不覆盖；真实体验待验，非AI生产实测"
+      "review": "verified 2026-10-21: AI核AH350组件/140浏览器通过与3素材skip、4聊天及新45文件/264引用/91截图，AH a2d622与融合43c6c7仅配置差异；ROOT随后报告944候选全绿并部署bcde新产物。会话共用只覆盖同页面，跨标签冷启动不覆盖；ROOT随后报告所有者字幕遮挡/无法打断，本次实机FAILED待修；main两组件5s超时待AH定位，非AI生产实测"
     },
     {
       "id": "hy-advanced-combination",
@@ -262,7 +262,7 @@
         "L7",
         "低延迟"
       ],
-      "review": "verified 2026-10-21: AI公共源码/隔离证据核对，另按ROOT报告追加944候选Quality39518824436全绿、main合入及bcde部署ready；AI未操作/亲测生产。host/voice候选0、SmartTurnoff；adaptive仅本次环境请求，实际模式/实机待验，SDK首错/跨标签/TRT无engine限制保留；ROOT最新补充main自动Quality39520018676前端failure/后端运行中，原因待查，不记main全绿"
+      "review": "verified 2026-10-21: AI公共源码/隔离证据及ROOT报告分开记录；944候选Quality39518824436全绿与部署ready保留，但所有者字幕遮挡/无法打断使本次adaptive实机FAILED待修。ROOT恢复buffered进行中，不还原真实会话个人库；main39520018676前端两项组件5s超时待查，不放宽/充绿。host/voice候选0、SmartTurnoff、SDK首错/跨标签/TRT无engine限制保留，暂停新增特性/AG试验，不归档待修会话"
     },
     {
       "id": "owned-voice-system-instruction-placement",
@@ -7144,11 +7144,11 @@
       "path": "docs/development/parallel/AI-hy-advanced-low-latency-20261021.md",
       "title": "AI：L6/L7与低延迟组合审查",
       "status": "draft",
-      "basis": "本轮公共源码/隔离审查与ROOT发布报告分别记录；部署ready不表示全部技术启用或实机验收",
+      "basis": "公共源码/隔离审查与ROOT报告分别记录；所有者反馈本次adaptive实机FAILED待修，部署ready不抵消体验失败",
       "review": {
         "state": "verified",
         "date": "2026-10-21",
-        "scope": "AI核对公共源码及隔离证据，并据ROOT报告维护944发布状态；未访问私有检查点或亲测生产，实机与后续实验待验",
+        "scope": "AI核对公共源码及隔离证据，并据ROOT报告更正实机FAILED/恢复buffered进行中与main组件超时待查；未亲测或操作生产，不按已验收归档",
         "evidence": [
           "docs/development/parallel/AI-hy-advanced-low-latency-20261021.md"
         ]
@@ -7164,11 +7164,11 @@
       "path": "docs/adr/0201-composed-runtime-write-gates-and-observation.md",
       "title": "ADR-0201：L6/L7与低延迟组合审查",
       "status": "draft",
-      "basis": "本轮公共源码/隔离审查与ROOT发布报告分别记录；部署ready不表示全部技术启用或实机验收",
+      "basis": "公共源码/隔离审查与ROOT报告分别记录；所有者反馈本次adaptive实机FAILED待修，部署ready不抵消体验失败",
       "review": {
         "state": "verified",
         "date": "2026-10-21",
-        "scope": "AI核对公共源码及隔离证据，并据ROOT报告维护944发布状态；未访问私有检查点或亲测生产，实机与后续实验待验",
+        "scope": "AI核对公共源码及隔离证据，并据ROOT报告更正实机FAILED/恢复buffered进行中与main组件超时待查；未亲测或操作生产，不按已验收归档",
         "evidence": [
           "docs/development/parallel/AI-hy-advanced-low-latency-20261021.md"
         ]
