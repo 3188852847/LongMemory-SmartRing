@@ -12,6 +12,7 @@ from .protocol import (
     voice_prediction_shadow,
     volume_value,
 )
+from .voice_interruption import voice_interruption
 
 
 def read_volume(data: dict) -> dict:
@@ -351,6 +352,8 @@ def device_status(data: dict) -> dict:
         if type(mode) is not str or mode not in {"realtime", "original"}:
             raise BridgeError("bridge_invalid_response", 502)
         result["voice_latency_mode"] = mode
+    if "voice_interruption" in data:
+        result["voice_interruption"] = voice_interruption(data["voice_interruption"])
     if "reason" in data:
         result["reason"] = safe_reason(data["reason"])
     if "announcement_reason" in data:

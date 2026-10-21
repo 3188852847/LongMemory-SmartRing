@@ -221,7 +221,7 @@ async def begin(h):
     ticket = getattr(h.connection, h.prefetch._STATE).ticket
     await ticket.task
     state = vars(h.connection).get("_longmemory_proposal_adapter_state")
-    if state.current is not None:
+    if state is not None and state.current is not None:
         await state.current.task
     return ticket
 

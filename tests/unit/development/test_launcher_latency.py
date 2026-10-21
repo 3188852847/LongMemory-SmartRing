@@ -220,6 +220,7 @@ def test_pipeline_bootstrap_installs_input_timing_before_response_policy(tmp_pat
     monkeypatch.setitem(sys.modules, "core.providers.asr", SimpleNamespace(base=object))
     monkeypatch.setattr(module, "isolate_memory_initialization", lambda *args: None)
     monkeypatch.setattr(module, "install_answer_completion", lambda *args: None)
+    monkeypatch.setattr(module, "install_voice_output_revocation_policy", lambda *args: calls.append("revocation"))
     monkeypatch.setattr(module, "install_internal_end_prompt_boundary", lambda *args: None)
     monkeypatch.setattr(module, "install_pipeline_latency_policy",
                         lambda *args, **kwargs: calls.append((
@@ -231,7 +232,7 @@ def test_pipeline_bootstrap_installs_input_timing_before_response_policy(tmp_pat
     finally:
         sys.path[:] = previous
     assert calls == ["input_timing", ("policy", mode, True, True),
-                     "persistent_session", "run"]
+                     "persistent_session", "revocation", "run"]
 
 
 @pytest.mark.parametrize("relative", ["launcher/voice.py", "xiaozhi/setup.py", "xiaozhi/launch_with_memory.py"])

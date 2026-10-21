@@ -134,6 +134,7 @@ def test_formal_main_adapter_wraps_all_chat_paths_before_connections_are_created
     monkeypatch.setattr(launch, 'install_voice_proposal_policy', adapter)
     monkeypatch.setattr(launch, 'install_answer_completion', lambda *_a: calls.append('completion'))
     monkeypatch.setattr(launch, 'install_internal_end_prompt_boundary', lambda *_a: None)
+    monkeypatch.setattr(launch, 'install_voice_output_revocation_policy', lambda *_a: calls.append('revocation'))
     monkeypatch.setattr(launch.runpy, 'run_path', lambda *_a, **_k: calls.append('run'))
     launch.main()
-    assert calls == ['input', 'prefetch', 'turn', 'observer', 'completion', *(['adapter'] if enable != 'off' else []), 'run']
+    assert calls == ['input', 'prefetch', 'turn', 'observer', 'completion', *(['adapter'] if enable != 'off' else []), 'revocation', 'run']

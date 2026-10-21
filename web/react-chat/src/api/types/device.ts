@@ -1,4 +1,16 @@
-export interface DeviceStatus {connection_count:number;ready:boolean;read_volume_supported:boolean;set_volume_supported:boolean;read_status_supported:boolean;set_brightness_supported:boolean;set_theme_supported:boolean;aec_advertised?:boolean;stop_speech_supported?:boolean;allowed_volume?:{minimum:number;maximum:number};natural_interruption?:NaturalInterruptionDiagnostic;voice_latency?:VoiceLatency;voice_prediction_shadow?:VoicePredictionShadow;voice_asr_prefetch?:VoiceAsrPrefetch;voice_latency_mode?:'realtime'|'original';voice_feedback?:VoiceFeedback}
+export interface DeviceStatus {connection_count:number;ready:boolean;read_volume_supported:boolean;set_volume_supported:boolean;read_status_supported:boolean;set_brightness_supported:boolean;set_theme_supported:boolean;aec_advertised?:boolean;stop_speech_supported?:boolean;allowed_volume?:{minimum:number;maximum:number};natural_interruption?:NaturalInterruptionDiagnostic;voice_latency?:VoiceLatency;voice_prediction_shadow?:VoicePredictionShadow;voice_asr_prefetch?:VoiceAsrPrefetch;voice_latency_mode?:'realtime'|'original';voice_feedback?:VoiceFeedback;voice_interruption?:VoiceInterruptionSummary}
+export type VoiceInterruptionCounter = 'asr_handoff'|'asr_handoff_revoked'|'upstream_abort_revoked'|'queues_cleared'|'abort_call_returned'|'connection_closed'|'tts_started'|'tts_returned'|'first_segment_callback_returned'|'first_answer_send_returned'|'answer_send_returned'|'cue_send_returned'|'stale_packet_dropped'|'inflight_old_send_returned'|'stale_message_dropped'|'stale_stop_dropped'|'normal_stop_returned'|'producer_adaptive_buffer'|'producer_incremental_pcm'|'producer_buffered_pcm'|'producer_preset'|'producer_complete_wav_fallback';
+// 配置、实际客户端生产分支与发送返回分开；以下字段不证明设备播放或打断成功。
+export interface VoiceInterruptionSummary {
+  version:1;enabled:boolean;connection_present:boolean;installed:boolean;
+  status:'no_connection'|'not_installed'|'idle_no_samples'|'observed';epoch:number|null;
+  active_output:boolean;active_tts_calls:number;closed:boolean;
+  configuration:{delivery_mode:'buffered'|'incremental'|'adaptive'|'unknown'|null;value_kind:'configuration'};
+  observed:{value_kind:'observed_client_branch';producer_path:'adaptive_buffer'|'incremental_pcm'|'buffered_pcm'|'preset'|'complete_wav_fallback';request_delivery_mode:'incremental'|'buffered'|'full_wav'|null;v2_transport_confirmed:boolean;server_model_delivery_mode:'unconfirmed';server_reply_cache_hit:'unconfirmed'}|null;
+  counts:Record<VoiceInterruptionCounter,number>;
+  last_stage:{event:VoiceInterruptionCounter;at_ms:number;epoch:number}|null;
+  device_playback_acknowledged:false;
+}
 export interface VoiceFeedback {version:1;kind:'model'|'web';status:'querying'|'answering'|'query_ready'|'query_failed';cue_state:'pending'|'queued'|'sent'|'skipped'|'unavailable';query_ms:number|null;first_feedback_ms:number|null;first_answer_ms:number|null}
 export type VoiceAsrPrefetch = {version:1;enabled:false}|{
   version:1;enabled:true;started:number;reused:number;invalidated:number;skipped_busy:number;failed:number;fallback:number;

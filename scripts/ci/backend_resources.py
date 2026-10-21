@@ -5,6 +5,36 @@ requests、numpy、PyYAML已经是dev依赖，不属于资源例外。
 """
 
 RESOURCE_GROUPS = (
+    ('tests.unit.development.test_voice_interruption',
+     'owner-installed pinned SDK unavailable',
+     (
+         'test_recognized_handoff_revokes_before_intent_with_stale_speaking_flag',
+         'test_native_vad_revokes_before_asr_recognition_and_keeps_existing_early_path',
+         'test_handoff_preserves_non_candidate_paths[manual]',
+         'test_handoff_preserves_non_candidate_paths[binding]',
+         'test_handoff_preserves_non_candidate_paths[no_output]',
+         'test_handoff_preserves_non_candidate_paths[other_tts]',
+         'test_handoff_preserves_non_candidate_paths[empty]',
+         'test_delayed_old_stop_cannot_stop_new_round_even_before_uuid_changes',
+         'test_old_message_suspended_before_last_stop_keeps_original_epoch',
+         'test_final_sender_rejects_old_queued_and_late_tuple_but_sends_new',
+         'test_inflight_socket_return_is_not_counted_as_new_first_answer',
+         'test_cancelled_stop_joins_its_owned_wait_task',
+     )),
+    ('tests.unit.development.test_voice_interruption_opus',
+     'owner-installed voice interpreter unavailable',
+     (
+         'test_voiced_opus_then_formal_handoff_does_not_revive_old_audio_and_next_round_is_complete[16000-adaptive]',
+         'test_voiced_opus_then_formal_handoff_does_not_revive_old_audio_and_next_round_is_complete[16000-buffered]',
+         'test_voiced_opus_then_formal_handoff_does_not_revive_old_audio_and_next_round_is_complete[24000-adaptive]',
+         'test_voiced_opus_then_formal_handoff_does_not_revive_old_audio_and_next_round_is_complete[24000-buffered]',
+     )),
+    ('tests.integration.memory_pipeline.test_voice_completion_revocation',
+     'explicit existing native repository required; never download',
+     (
+         'test_revoked_turn_never_completes_after_abort_bool_reset[queued_before_prepare]',
+         'test_revoked_turn_never_completes_after_abort_bool_reset[after_prepare]',
+     )),
     ('tests.unit.development.test_voice_proposal_adapter',
      'explicit existing native repository required; never download',
      (

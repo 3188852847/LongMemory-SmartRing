@@ -271,6 +271,23 @@ def isolate_memory_initialization(connection_class, provider_class):
     connection_class._initialize_memory = initialize
 
 
+def install_voice_output_revocation_policy(connection_class, receive_module, asr_base_module):
+    """普通回答也安装永久撤权；不依赖候选开关，不声明设备flush已协商。"""
+    from core.handle import sendAudioHandle
+    from core.providers.tts import base as tts_base
+    from voice_interruption import install_voice_interruption
+    result = install_voice_interruption(connection_class, receive_module, asr_base_module,
+        sendAudioHandle, tts_base_module=tts_base)
+    from voice_completion import install_completion_handoff
+    install_completion_handoff(receive_module, asr_base_module)
+    return result
+
+
+def _completion_output_lease(connection):
+    from voice_completion import output_lease
+    return output_lease(connection)
+
+
 def install_answer_completion(connection_class):
     """在顶层回答完成后归档实际助手文本，不侵入厂商源码。"""
 
@@ -281,11 +298,14 @@ def install_answer_completion(connection_class):
     capture_lock = Lock()
 
     def chat(connection, query, depth=0):
+        output_lease = _completion_output_lease(connection)
+        if depth == 0 and output_lease is not None and not output_lease.current():
+            return None  # 已排队但未开始的旧工作不再执行正式prepare。
         before = len(connection.dialogue.dialogue)
         memory = connection.memory
         owned = depth == 0 and callable(getattr(memory, "begin_turn", None))
         turn_key, token = memory.begin_turn() if owned else (None, None)
-        record = {"answers": [], "superseded": False}
+        record = {"answers": [], "superseded": False, "output_lease": output_lease}
         capture_token = None
         if owned:
             with capture_lock:
@@ -299,6 +319,15 @@ def install_answer_completion(connection_class):
 
                     def capture_put(message):
                         current = capture.get()
+                        lease = current.get("output_lease") if current is not None else None
+                        if lease is not None and getattr(message, "role", None) == "assistant":
+                            # 与音频撤权共用同一锁，不能在检查后被撤权，再把旧助手文本写入历史。
+                            with lease.state.lock:
+                                if not lease.current():
+                                    return None
+                                if isinstance(getattr(message, "content", None), str) and message.content.strip():
+                                    current["answers"].append(message.content)
+                                return put(message)
                         if (current is not None and getattr(message, "role", None) == "assistant"
                                 and isinstance(getattr(message, "content", None), str) and message.content.strip()):
                             current["answers"].append(message.content)
@@ -331,6 +360,8 @@ def install_answer_completion(connection_class):
         # 必须是“本次顶层调用新增了助手文本”，不能依赖厂商内部返回值。
         if (depth == 0 and query
                 and callable(getattr(memory, "record_completed_turn", None))):
+            lease = record["output_lease"]
+            revoked = lease is not None and not lease.current()
             answers = record["answers"] if owned else [
                 item.content for item in connection.dialogue.dialogue[before:]
                 if getattr(item, "role", None) == "assistant"
@@ -339,11 +370,11 @@ def install_answer_completion(connection_class):
             ]
             if answers:
                 try:
-                    if owned and (record["superseded"] or getattr(connection, "client_abort", False)):
+                    if owned and (revoked or record["superseded"] or getattr(connection, "client_abort", False)):
                         memory.cancel_turn(turn_key, "superseded" if record["superseded"] else "cancelled")
                     elif owned:
                         memory.record_completed_turn("\n".join(answers), turn_key=turn_key)
-                    else:
+                    elif not revoked:
                         memory.record_completed_turn("\n".join(answers))
                 except Exception:
                     # 语音回答已经进入播放队列，归档失败不能伪装成聊天失败；
@@ -353,7 +384,7 @@ def install_answer_completion(connection_class):
                     )
             elif owned:
                 try:
-                    memory.cancel_turn(turn_key, "cancelled" if getattr(connection, "client_abort", False) else "chat_failed")
+                    memory.cancel_turn(turn_key, "cancelled" if revoked or getattr(connection, "client_abort", False) else "chat_failed")
                 except Exception:
                     connection.logger.bind(tag="LongMemory").error("未完成回答状态回执失败；不会自动重试")
         return result
@@ -488,6 +519,8 @@ def main():
     install_voice_prediction_shadow(ConnectionHandler)
     install_internal_end_prompt_boundary(receive_audio_handle)
     install_persistent_device_session(ConnectionHandler, receive_audio_handle)
+    # 所有既有ASR/等待音/AE等包装完成后装配，保留各自别名；普通candidate OFF也有效。
+    install_voice_output_revocation_policy(ConnectionHandler, receive_audio_handle, asr_base)
     if args.device_control:
         from core.websocket_server import WebSocketServer
         from control_http import install_control_server
