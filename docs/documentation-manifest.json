@@ -7850,7 +7850,7 @@
       "path": "docs/development/parallel/AI-current-voice-window-20261021.md",
       "title": "AI：当前声线三模式窗口审查与启动交接",
       "status": "draft",
-      "basis": "AD精确提交审查、RMS修正及窗口01真实当前声线验证；技术放行受控adaptive，物理体验/正式恢复另验",
+      "basis": "窗口01隔离技术结果保持；后续adaptive实机打断FAILED，ROOT已回buffered，暂停持久化推广",
       "review": {
         "state": "verified",
         "date": "2026-10-21",
@@ -7880,6 +7880,25 @@
         ]
       },
       "tags": ["AD", "真实窗口", "受控adaptive", "物理体验待验"]
+    },
+    {
+      "path": "docs/development/parallel/AI-adaptive-physical-failure-20261021.md",
+      "title": "AI：adaptive实机打断失败与buffered恢复接力",
+      "status": "reference",
+      "basis": "ROOT转达所有者拒收与脱敏阶段/当前备份恢复报告；隔离技术通过不覆盖物理FAILED",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-21",
+        "scope": "反馈/端点观测盲区和固定源码线程边界核对；ROOT已恢复buffered60820，根因未定，持久化草稿独立保全未发布",
+        "evidence": [
+          "docs/development/parallel/AI-adaptive-physical-failure-20261021.md",
+          "docs/development/parallel/AI-current-voice-window-20261021.md",
+          "docs/development/parallel/AD-three-mode-results-20261021.md",
+          "scripts/development/xiaozhi/voice_interruption.py",
+          "scripts/development/xiaozhi/cosyvoice_streaming.py"
+        ]
+      },
+      "tags": ["实机FAILED", "buffered恢复", "输入观测盲区", "草稿保全"]
     }
   ],
   "integration_sources": {

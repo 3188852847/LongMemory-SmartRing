@@ -119,3 +119,6 @@ AF收尾仅接08bdc53e9b406ded069de3cfcec901bf04fb29ad为fad8168a，内容只追
 AI重新核对六组AF原提交与c74对应提交的稳定patch-id均相同，并核对c74宿主SHA256与其记录一致。
 AF六项软件已合入且无待处理实现；学校实际缓存仍unknown，六次额度已用尽，没有新请求或学校命中证明。
 归档由ROOT在本次收尾文档合入后执行，不删除工作树/证据；没有合入AB/AC/AE/AG新实现。
+
+后续所有者拒收adaptive实机打断，ROOT已恢复buffered/launcher60820；本窗口的隔离结果不改写，
+技术试用不能扩为物理验收通过。当前事实与暂停持久化状态见[失败及恢复接力](AI-adaptive-physical-failure-20261021.md)。
