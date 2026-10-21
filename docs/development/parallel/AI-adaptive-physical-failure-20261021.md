@@ -27,9 +27,13 @@
 | 12:21:08那轮tts_cancelled于12:21:15.053，新ASR于12:21:15.668进入 | 存在成功取消及新轮输入路径，不能声称所有打断均失败 |
 | 最新轮12:21:27.924 asr_entered到handoff约2ms，12:21:30.353首包；持续TTS至12:22:16.206 cancelled、16.391 tts_cancelled | 期间没有新的asr_entered或chat_entered观测；仍不能据此推断没有上行音频或ASR内部从未调用 |
 
-现有asr_entered观测在正式端点speech_to_text才建立，不覆盖WebSocket收包、音频解码、ASR队列、
-VAD判定及更早的识别准入。因此所有者的“没识别出来”是体验事实，尚未区分没有触发识别、内部调用后空结果、
+ROOT进一步核对、AI按voice_input_latency.py独立确认：现有asr_entered在handle_voice_stop入口建立，
+不等于模型speech_to_text已经调用，也不覆盖WebSocket收包、音频解码、ASR队列和VAD判定。
+此前将其称作speech_to_text端点不准确，以本段源码位置为准。因此所有者的“没识别出来”是体验事实，尚未区分没有触发识别、内部调用后空结果、
 输入排队或没有新音频等具体阶段；不能补写成每次ASR调用失败。
+
+natural_interruption_diagnostics现已提供AEC/listen/timestamp能力，但ROOT此前连接瞬间保存的投影遗漏了
+natural_interruption；断线后不能还原当时字段，不能用当前离线false推断当时client_aec或能力为false。
 
 ROOT已保全失败后的当前95文件新备份，共15,904,574字节，退出launcher42544所属22个实例；
 **没有恢复旧个人库**。随后从正式入口恢复buffered，新launcher60820已ready，选中声线warm，active_requests=0，
@@ -49,7 +53,10 @@ AI核对固定上游与项目适配代码，尚未取得adaptive锁住收音的�
   未到交接时旧输出可能继续，但目前不能确定失败落在哪一前置条件。
 
 ROOT路由：AC核查收包→解码→队列消费→VAD→ASR调用→空/非空结果，并核对实际listen mode、client_aec与唤醒忽略状态；
-AD核查增量合成/发送与同连接输入调度的并发、清理和资源边界。AI做独立组合审查，等待其精确交付，
+AD核查增量合成/发送与同连接输入调度的并发、清理和资源边界。AC独占新增只读输入计数helper及voice_input_latency.py窄改，
+AD拥有audio/voice_latency.py，AI独占公共launch及device_control.py getter接线，等AC明确接口后再接入，不重复实现。
+若合成不能复现现场根因，先准备最小前半链观测，再由ROOT安排一次带诊断实机，不盲猜阈值。
+AI做独立组合审查，等待其精确交付，
 不直接修改AD/AC文件、不自开模型或重复实机试验。后续修复仍需所有者实机复验，不能只重跑离线取消。
 
 ## 持久化草稿保全
