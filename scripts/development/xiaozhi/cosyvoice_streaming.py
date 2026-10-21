@@ -624,17 +624,23 @@ def install_cosyvoice_streaming(tts, connection):
                 connection.logger.bind(tag="cosyvoice-stream").warning(
                     f"分块通道在首个音频前失败，回退完整 WAV：{type(error).__name__}"
                 )
+                fallback_delivery_failed = False
                 def fallback_packet(packet):
-                    nonlocal handoff_started
+                    nonlocal handoff_started, fallback_delivery_failed
                     # 完整 WAV 请求期间也可能开始新话轮。这里丢弃而不抛取消信号，
                     # 否则上游兼容方法可能把正常打断当成合成失败并重试多次。
-                    if not cancelled():
+                    if not cancelled() and not fallback_delivery_failed:
                         tagged = CosyVoicePacket(packet, sentence_id, cancelled)
                         tagged._longmemory_output_lease = lease
                         if not handoff_started:
                             delivery.mark_handoff()
                             handoff_started = True
-                        opus_handler(tagged)
+                        try:
+                            opus_handler(tagged)
+                        except Exception:
+                            # 固定上游把回调异常也当成可重试合成；交付可能开始后
+                            # 必须吞掉该重试信号、丢弃尾回调，再由本层记录失败。
+                            fallback_delivery_failed = True
 
                 try:
                     outcome = "fallback"
@@ -648,6 +654,11 @@ def install_cosyvoice_streaming(tts, connection):
                         raise
                     if cancelled():
                         outcome = "cancelled"
+                    elif fallback_delivery_failed:
+                        outcome = "failed"
+                        delivery.degrade("after_handoff")
+                        _reset_opus_encoder(tts.opus_encoder)
+                        connection.logger.bind(tag="cosyvoice-stream").warning("完整音频回退交付失败，未重播本段")
                     return result
                 finally:
                     if cancelled():

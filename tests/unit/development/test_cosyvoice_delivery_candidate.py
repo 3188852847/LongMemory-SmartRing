@@ -138,6 +138,34 @@ def test_uncertain_reader_cleanup_blocks_future_requests_even_for_new_sentence(c
     assert snap["outcomes"]["failed"] == 1 and snap["outcomes"]["completed"] == 0
 
 
+def test_fallback_callback_failure_cannot_make_sdk_retry_already_queued_audio(cancellable_stream, monkeypatch):
+    state = cancellable_stream
+    quiet(state)
+    attempts = []
+    def failed(*_a, **_k):
+        raise OSError("synthetic stream unavailable")
+    def upstream_retry(_text, *, opus_handler):
+        # 固定SDK的Exception重试语义；不运行实际HTTP。
+        for _ in range(5):
+            attempts.append(True)
+            try:
+                opus_handler(b"possibly-queued")
+                opus_handler(b"tail")
+                break
+            except Exception:
+                continue
+    state.fallback = upstream_retry
+    monkeypatch.setattr(streaming, "_open_stream", failed)
+    def uncertain(packet):
+        state.packets.append(packet)
+        raise OSError("synthetic delivery error after queue")
+    state.tts.to_tts_stream("public", opus_handler=uncertain)
+    assert attempts == [True] and state.packets == [b"possibly-queued"]
+    snap = delivery_snapshot(state.connection)
+    assert snap["last_outcome"] == "failed" and snap["failure_code"] == "after_handoff"
+    assert snap["outcomes"]["completed"] == snap["outcomes"]["fallback"] == 0
+
+
 def test_cleanup_error_during_cancel_still_blocks_future_synthesis(cancellable_stream, monkeypatch):
     state = cancellable_stream
     quiet(state)
