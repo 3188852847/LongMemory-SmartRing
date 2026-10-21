@@ -36,3 +36,6 @@ firmware/smartring_plus/patches/0016-round-subtitle-safe-area.patch text eol=lf
 firmware/smartring_plus/patches/0016-tts-interrupt-v1.patch text eol=lf
 scripts/development/otto_firmware/otto_state.h text eol=lf
 tests/fixtures/xiaozhi_provider_4c64216e.py.txt text eol=lf
+tests/fixtures/xiaozhi_provider_c74.py.txt text eol=lf
+tests/fixtures/hy_process_client_c74.py.txt text eol=lf
+tests/fixtures/hy_observation_c74.py.txt text eol=lf

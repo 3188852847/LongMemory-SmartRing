@@ -196,7 +196,11 @@ RESOURCE_GROUPS = (
      'isolated SDK missing',
      (
          'test_sdk_local_gateway_has_shared_budget_and_embedding_scope',
+         'test_first_recall_v2_real_sdk_owned_executor_and_local_fake_encoder',
      )),
+    ('tests.integration.test_first_recall_sdk_executor',
+     'isolated SDK missing',
+     ('test_fixed_sdk_original_vdb_executor_preserves_results_errors_and_cancel',)),
     ('tests.integration.test_hy_memory_management_rpc',
      'owner-installed SDK required',
      (

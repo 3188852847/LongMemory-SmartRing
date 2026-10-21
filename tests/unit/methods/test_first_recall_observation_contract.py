@@ -3,11 +3,11 @@
 from copy import deepcopy
 import asyncio
 import ast
+import hashlib
 import importlib.util
 import json
 import math
 from pathlib import Path
-import subprocess
 
 import pytest
 
@@ -32,13 +32,11 @@ def test_three_way_matrix_keeps_v1_byte_for_byte_and_details_explicit():
 
 
 def test_existing_c74_v1_parser_rejects_new_stage_and_accepts_all_base_examples():
-    # 对照不可变Git源码，避免用当前未提交草稿冒充旧解析器。
-    result=subprocess.run(['git','show',contract.BASELINE+':src/longmemory/methods/hy_memory/observation.py'],
-        cwd=ROOT,capture_output=True,check=False)
-    if result.returncode:
-        pytest.skip('immutable local baseline object unavailable; no fetch')
+    # 固定c74公开源码及摘要；浅克隆也必须执行旧版解析兼容检查。
+    source=(ROOT/'tests/fixtures/hy_observation_c74.py.txt').read_bytes()
+    assert hashlib.sha256(source).hexdigest()=='7129844923491ef62e6eadb11a02cbeaaf5969ed48bd0fbfd816dac9bacf90da'
     namespace={}
-    exec(compile(result.stdout,'<c74-v1-observation>','exec'),namespace)
+    exec(compile(source,'<c74-v1-observation>','exec'),namespace)
     assert namespace['STAGES']==contract.BASE_STAGES
     for row in contract.examples()['cases']:
         base=row['base_observation']
@@ -46,7 +44,8 @@ def test_existing_c74_v1_parser_rejects_new_stage_and_accepts_all_base_examples(
     invalid=deepcopy(contract.examples()['cases'][0]['base_observation'])
     invalid['stages']['embed_client_get_ms']={'calls':1,'total_ms':1.0}
     assert not namespace['valid_snapshot'](invalid,invalid['trace_id'])
-    source=subprocess.check_output(['git','show',contract.BASELINE+':scripts/development/xiaozhi/longmemory_provider.py'],cwd=ROOT)
+    source=(ROOT/'tests/fixtures/xiaozhi_provider_c74.py.txt').read_bytes()
+    assert hashlib.sha256(source).hexdigest()=='7241a12e6fe9d8c250245cf781167555c7df53375ef643bc02ebcaf1a18240e9'
     tree=ast.parse(source)
     stages=next(item for item in tree.body if isinstance(item,ast.Assign)
         and any(isinstance(target,ast.Name) and target.id=='_OBSERVATION_STAGES' for target in item.targets))

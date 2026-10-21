@@ -34,6 +34,8 @@ CUSTOM_TTS_URLS = {
     "cosyvoice3": "http://127.0.0.1:18770/v1/audio/speech",
 }
 LEGACY_MEMORY_PROVIDER_SHA256 = {
+    # ROOT 已核对并批准的 c74 日用版；仅此原始 LF 字节允许显式升级到 v2 观测版。
+    "7241a12e6fe9d8c250245cf781167555c7df53375ef643bc02ebcaf1a18240e9",
     # 4c64216e 已发布提供器的固定Git blob；两项仅为同一原件的LF/CRLF字节形式。
     "260ebfe1024abdcaa330ebae685183a48f7bb106c805118e8403820bddbd2056",
     "25c39c77bd99b61a20f0be694b996933baec405945296c3cee0f7033056eee5a",

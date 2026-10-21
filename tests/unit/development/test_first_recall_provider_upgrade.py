@@ -1,10 +1,9 @@
-"""实际安装器的合成副本接力；不修改生产白名单或共享provider。"""
+"""实际安装器的精确升级许可；只操作合成目标，不访问共享provider。"""
 
 import hashlib
 import importlib.util
 import os
 from pathlib import Path
-import subprocess
 
 import pytest
 
@@ -18,14 +17,9 @@ def test_approved_7241_upgrade_exact_bytes_idempotent_and_unknown_rejected(tmp_p
     monkeypatch.syspath_prepend(str(script.parent))
     spec=importlib.util.spec_from_file_location('synthetic_v2_setup',script)
     setup=importlib.util.module_from_spec(spec);spec.loader.exec_module(setup)
-    result=subprocess.run(['git','show','c74b88834683080d4dc4ee4b770f48707ff5b349:scripts/development/xiaozhi/longmemory_provider.py'],
-        cwd=ROOT,capture_output=True)
-    if result.returncode:pytest.skip('immutable baseline unavailable; no fetch')
-    old=result.stdout
+    old=(ROOT/'tests/fixtures/xiaozhi_provider_c74.py.txt').read_bytes()
     assert hashlib.sha256(old).hexdigest()==OLD
-    original_allowlist=set(setup.LEGACY_MEMORY_PROVIDER_SHA256)
-    # 临时模块内存集合只模拟AI后续审查的升级许可，绝不修改setup.py。
-    monkeypatch.setattr(setup,'LEGACY_MEMORY_PROVIDER_SHA256',original_allowlist|{OLD})
+    assert OLD in setup.LEGACY_MEMORY_PROVIDER_SHA256
     base=tmp_path/'core/providers/memory/base.py';base.parent.mkdir(parents=True)
     base.write_bytes(b'synthetic untouched base')
     target=base.parent/'longmemory/longmemory.py';target.parent.mkdir();target.write_bytes(old)
@@ -37,6 +31,9 @@ def test_approved_7241_upgrade_exact_bytes_idempotent_and_unknown_rejected(tmp_p
     os.utime(target,ns=(1700000000000000000,1700000000000000000))
     assert setup.install_memory_provider(tmp_path,allow_known_update=True)==target
     assert target.stat().st_mtime_ns==1700000000000000000
-    unknown=b'# synthetic owner modification\n';target.write_bytes(unknown)
-    with pytest.raises(setup.SetupError):setup.install_memory_provider(tmp_path,allow_known_update=True)
-    assert target.read_bytes()==unknown and base.read_bytes()==b'synthetic untouched base'
+    # 换行转换和旧版追加注释都不是获批原字节；不得扩成相似内容匹配。
+    for unknown in (b'# synthetic owner modification\n',old+b'# owner edit\n',
+                    old.replace(b'\n',b'\r\n')):
+        target.write_bytes(unknown)
+        with pytest.raises(setup.SetupError):setup.install_memory_provider(tmp_path,allow_known_update=True)
+        assert target.read_bytes()==unknown and base.read_bytes()==b'synthetic untouched base'

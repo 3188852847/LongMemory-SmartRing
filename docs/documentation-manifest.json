@@ -13,6 +13,35 @@
   },
   "topics": [
     {
+      "id": "first-recall-detail-observation-v2",
+      "scope": "首次检索分离v2详情协议、精确provider升级及软件验证；真实日用首轮归因未完成",
+      "authority": "docs/development/parallel/AI-first-recall-observation-review-20261021.md",
+      "sources": [
+        "src/longmemory/methods/hy_memory/observation.py",
+        "src/longmemory/methods/hy_memory/sdk_observation.py",
+        "src/longmemory/methods/hy_memory/process_client.py",
+        "src/longmemory/methods/hy_memory/worker.py",
+        "src/longmemory/methods/hy_memory/model_gateway.py",
+        "src/longmemory/entrypoints/api/routes/memory_runtime.py",
+        "scripts/development/xiaozhi/longmemory_provider.py",
+        "scripts/development/xiaozhi/setup.py",
+        "tests/unit/methods/test_first_recall_observation_contract.py",
+        "tests/unit/methods/test_first_recall_observation_runtime.py",
+        "tests/unit/entrypoints/test_first_recall_observation_api.py",
+        "tests/unit/development/test_first_recall_provider_upgrade.py",
+        "tests/unit/development/test_memory_request_timing.py",
+        "tests/integration/test_first_recall_sdk_executor.py",
+        "tests/integration/test_first_recall_gateway_negotiation.py",
+        "tests/integration/test_hy_memory_gateway.py"
+      ],
+      "related": [
+        "docs/adr/0202-first-recall-observation-negotiation.md",
+        "docs/development/parallel/AB-first-recall-observation-design-20261021.md",
+        "docs/development/parallel/AB-first-recall-observation-implementation-20261021.md"
+      ],
+      "review": "verified 2026-10-21: AI定向196/跨3.10及混合版本86加7子测试/进程33通过；资源模拟33通过3精确skip，不加总重叠组。不部署，不复用旧proof，无真实BGE首轮采样或根因结论"
+    },
+    {
       "id": "hy-managed-semantic-derivation",
       "scope": "真实受管L6/L7任务与原生无写候选快照；不替代最终整合/生产证明",
       "authority": "docs/development/parallel/AB-hy-l6-l7-20261021.md",
@@ -1695,6 +1724,94 @@
     }
   ],
   "documents": [
+    {
+      "path": "docs/development/parallel/AI-first-recall-observation-review-20261021.md",
+      "title": "AI：首次检索 v2 观测审查与部署候选",
+      "status": "draft",
+      "basis": "AB既定v2接入与精确升级接力；待ROOT合入及真实日用首轮观测",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-21",
+        "scope": "核对v1/v2边界、固定SDK执行器/真实薄桥、精确升级与CI资源守卫；不部署、不认定实机根因或提速",
+        "evidence": [
+          "docs/development/parallel/AI-first-recall-observation-review-20261021.md",
+          "tests/unit/methods/test_first_recall_observation_runtime.py",
+          "tests/unit/development/test_first_recall_provider_upgrade.py"
+        ]
+      },
+      "tags": [
+        "首次检索",
+        "v2观测",
+        "协商",
+        "部署候选"
+      ]
+    },
+    {
+      "path": "docs/adr/0202-first-recall-observation-negotiation.md",
+      "title": "ADR-0202：首次检索观测协商",
+      "status": "current",
+      "basis": "ROOT批准的分离v2协议；基础v1不扩键，详情显式协商",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-21",
+        "scope": "核对v1/v2边界、固定SDK执行器/真实薄桥、精确升级与CI资源守卫；不部署、不认定实机根因或提速",
+        "evidence": [
+          "docs/development/parallel/AI-first-recall-observation-review-20261021.md",
+          "tests/unit/methods/test_first_recall_observation_runtime.py",
+          "tests/unit/development/test_first_recall_provider_upgrade.py"
+        ]
+      },
+      "tags": [
+        "首次检索",
+        "v2观测",
+        "协商",
+        "部署候选"
+      ]
+    },
+    {
+      "path": "docs/development/parallel/AB-first-recall-observation-design-20261021.md",
+      "title": "AB：首次检索观测协商设计",
+      "status": "reference",
+      "basis": "设计冻结与混合版本合成案例；实现和AI独立验证另记",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-21",
+        "scope": "核对v1/v2边界、固定SDK执行器/真实薄桥、精确升级与CI资源守卫；不部署、不认定实机根因或提速",
+        "evidence": [
+          "docs/development/parallel/AI-first-recall-observation-review-20261021.md",
+          "tests/unit/methods/test_first_recall_observation_runtime.py",
+          "tests/unit/development/test_first_recall_provider_upgrade.py"
+        ]
+      },
+      "tags": [
+        "首次检索",
+        "v2观测",
+        "协商",
+        "部署候选"
+      ]
+    },
+    {
+      "path": "docs/development/parallel/AB-first-recall-observation-implementation-20261021.md",
+      "title": "AB：首次检索v2观测最小实现",
+      "status": "reference",
+      "basis": "AB交付阶段软件/开销证据；当时未登记生产7241升级许可，AI后续已接力",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-21",
+        "scope": "核对v1/v2边界、固定SDK执行器/真实薄桥、精确升级与CI资源守卫；不部署、不认定实机根因或提速",
+        "evidence": [
+          "docs/development/parallel/AI-first-recall-observation-review-20261021.md",
+          "tests/unit/methods/test_first_recall_observation_runtime.py",
+          "tests/unit/development/test_first_recall_provider_upgrade.py"
+        ]
+      },
+      "tags": [
+        "首次检索",
+        "v2观测",
+        "协商",
+        "部署候选"
+      ]
+    },
     {
       "path": "docs/development/parallel/V-system-message-order-20261020.md",
       "title": "V：圆屏公共system约束顺序修复候选",

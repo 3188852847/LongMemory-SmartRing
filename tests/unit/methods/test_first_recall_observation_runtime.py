@@ -7,7 +7,6 @@ import io
 import json
 from pathlib import Path
 import sys
-import subprocess
 from threading import Event,RLock
 from types import SimpleNamespace as NS
 
@@ -243,13 +242,13 @@ def test_request_limit_drops_only_optional_detail_flag(monkeypatch):
 
 def test_immutable_c74_parent_accepts_new_worker_and_keeps_v1(tmp_path):
     root=Path(__file__).resolve().parents[3]
-    source=subprocess.run(['git','show','c74b88834683080d4dc4ee4b770f48707ff5b349:src/longmemory/methods/hy_memory/process_client.py'],
-        cwd=root,capture_output=True)
-    if source.returncode:pytest.skip('immutable baseline unavailable; no fetch')
+    import hashlib
+    source=(root/'tests/fixtures/hy_process_client_c74.py.txt').read_bytes()
+    assert hashlib.sha256(source).hexdigest()=='4fc37e796571050ce0a3829303f24899339ff136608fba3550a323c9ec1d5c6d'
     namespace={'__name__':'longmemory.methods.hy_memory._c74_parent',
         '__package__':'longmemory.methods.hy_memory',
         '__file__':str(root/'src/longmemory/methods/hy_memory/process_client.py')}
-    exec(compile(source.stdout,'<immutable-c74-parent>','exec'),namespace)
+    exec(compile(source,'<immutable-c74-parent>','exec'),namespace)
     script='import sys;sys.path.insert(0,'+repr(str(root/'src'))+')\n'+'''
 from types import SimpleNamespace as NS
 from longmemory.methods.hy_memory.worker import main
