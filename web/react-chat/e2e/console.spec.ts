@@ -1,4 +1,5 @@
 import {expect, test} from '@playwright/test';
+import type {ConsoleMessage, Dialog, Request, Response} from '@playwright/test';
 
 test('文字聊天可保存并在刷新后恢复，React 页面可统一导航', async ({page, baseURL}) => {
   const external:string[] = [];
@@ -49,8 +50,52 @@ test('文字聊天可保存并在刷新后恢复，React 页面可统一导航',
     '本轮没有生成 L1 长期事实；原始对话 L0 仍保留用于审计。', {exact:true},
   )).toBeVisible();
 
-  await page.getByRole('link', {name:'设备状态'}).click();
-  await expect(page.getByRole('heading', {name:'设备与状态'})).toBeVisible();
+  await test.step('从文字聊天进入设备状态', async () => {
+    const before = {url:page.url(),href:await page.getByRole('link', {name:'设备状态'}).getAttribute('href')};
+    const dialogs:Array<{type:string;message:string}> = [];
+    const network:Array<{path:string;method:string;status?:number;error?:string}> = [];
+    const consoleErrors:string[] = [], pageErrors:string[] = [];
+    const pathOf = (url:string) => {try {return new URL(url).pathname;} catch {return 'unavailable';}};
+    // 只在这个导航步骤收集限量元数据，失败后写进CI日志；不读取凭据或请求正文。
+    const onDialog = async (dialog:Dialog) => {
+      if (dialogs.length < 6) dialogs.push({type:dialog.type(),message:dialog.message().slice(0,160)});
+      await dialog.dismiss().catch(() => undefined); // 保持原默认dismiss；页面关闭时不另抛异步异常。
+    };
+    const onResponse = (response:Response) => {
+      if (response.status() >= 400 && network.length < 8) network.push({path:pathOf(response.url()),method:response.request().method(),status:response.status()});
+    };
+    const onRequestFailed = (request:Request) => {
+      if (network.length < 8) network.push({path:pathOf(request.url()),method:request.method(),error:request.failure()?.errorText?.slice(0,160)});
+    };
+    const onConsole = (message:ConsoleMessage) => {if (message.type() === 'error' && consoleErrors.length < 6) consoleErrors.push(message.text().slice(0,240));};
+    const onPageError = (error:Error) => {if (pageErrors.length < 6) pageErrors.push(error.message.slice(0,240));};
+    page.on('dialog',onDialog);page.on('response',onResponse);page.on('requestfailed',onRequestFailed);page.on('console',onConsole);page.on('pageerror',onPageError);
+    try {
+      await page.getByRole('link', {name:'设备状态'}).click();
+      await expect(page.getByRole('heading', {name:'设备与状态'})).toBeVisible();
+    } catch (error) {
+      try {
+        let timer:ReturnType<typeof setTimeout>|undefined;
+        const snapshot = await Promise.race([
+          page.evaluate(() => ({
+            url:location.href,title:document.title,
+            visibleHeadings:Array.from(document.querySelectorAll('h1,h2,h3,[role="heading"]'))
+              .filter(node => node.getClientRects().length > 0 && getComputedStyle(node).visibility !== 'hidden')
+              .slice(0,12).map(node => node.textContent?.trim().slice(0,120)),
+            loading:document.querySelector('.page-loading')?.textContent?.trim().slice(0,120) ?? null,
+            routeError:document.body.textContent?.includes('Unexpected Application Error!') ?? false,
+            chatDraftPresent:Boolean(document.querySelector('textarea[name="message"]')),
+            chatDraftEmpty:(document.querySelector('textarea[name="message"]') as HTMLTextAreaElement|null)?.value === '',
+          })).catch(() => ({unavailable:true})),
+          new Promise(resolve => {timer=setTimeout(() => resolve({unavailable:true,reason:'snapshot_timeout'}),750);}),
+        ]).finally(() => clearTimeout(timer));
+        console.error('[console-device-navigation-failure]',JSON.stringify({before,url:page.url(),snapshot,dialogs,network,consoleErrors,pageErrors}));
+      } catch { /* 诊断不可用也保留下面的原始断言异常。 */ }
+      throw error;
+    } finally {
+      page.off('dialog',onDialog);page.off('response',onResponse);page.off('requestfailed',onRequestFailed);page.off('console',onConsole);page.off('pageerror',onPageError);
+    }
+  });
   await page.getByRole('link', {name:'圆屏预览'}).click();
   await expect(page.getByRole('heading', {name:'圆屏状态预览'})).toBeVisible();
   await expect(page.getByRole('region', {name:'圆屏模拟画布'})).toBeVisible();
