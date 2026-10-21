@@ -93,21 +93,25 @@ describe('每日记忆回顾',()=>{
 
     const client=new QueryClient({defaultOptions:{queries:{retry:false}}});
     render(<QueryClientProvider client={client}><MemoryRouter><KnownMemoryEngine kind="legacy"><MemoryApp/></KnownMemoryEngine></MemoryRouter></QueryClientProvider>);
-    const tasks=within(await screen.findByRole('navigation',{name:'记忆工作区任务'}));
+    // 按已命名的原生nav等待挂载，再核对角色与真实CSS，减少初次全屏角色/名称查询。
+    const taskNavigation=await screen.findByLabelText('记忆工作区任务',{selector:'nav'});
+    expect(taskNavigation.getAttribute('role')??'navigation').toBe('navigation');
+    expect(isInaccessible(taskNavigation)).toBe(false);
+    const tasks=within(taskNavigation);
     fireEvent.click(tasks.getByRole('button',{name:'每日回顾'}));
     const daily=within(screen.getByRole('region',{name:'每日回顾'}));
     expect(await screen.findByText(/每日记忆回顾/)).toBeTruthy();
     expect((await screen.findAllByText('用户喜欢乌龙茶。')).length).toBeGreaterThanOrEqual(2);
-    expect(screen.getByText('新增 1')).toBeTruthy();
-    expect(screen.getByText(/当天归档 L0：用户 3 条，助手 3 条/)).toBeTruthy();
-    expect(screen.getByText(/其中 1 条用户原话没有形成 L1/)).toBeTruthy();
-    expect(screen.getByText('删除 1')).toBeTruthy();
-    expect(screen.getByText('没想起 1')).toBeTruthy();
-    fireEvent.click(screen.getByText(/回看当前判断/));
-    expect(screen.getByRole('link',{name:'查看回答与证据'}).getAttribute('href')).toBe('/chat-react?chat_id=chat-1&request_id=request-1');
-    fireEvent.click(screen.getByText(/查看删除审计/));
-    expect(screen.getByText('deleted-memory-1')).toBeTruthy();
-    expect(screen.getByText(/不保留被删正文/)).toBeTruthy();
+    expect(daily.getByText('新增 1')).toBeTruthy();
+    expect(daily.getByText(/当天归档 L0：用户 3 条，助手 3 条/)).toBeTruthy();
+    expect(daily.getByText(/其中 1 条用户原话没有形成 L1/)).toBeTruthy();
+    expect(daily.getByText('删除 1')).toBeTruthy();
+    expect(daily.getByText('没想起 1')).toBeTruthy();
+    fireEvent.click(daily.getByText(/回看当前判断/));
+    expect(daily.getByRole('link',{name:'查看回答与证据'}).getAttribute('href')).toBe('/chat-react?chat_id=chat-1&request_id=request-1');
+    fireEvent.click(daily.getByText(/查看删除审计/));
+    expect(daily.getByText('deleted-memory-1')).toBeTruthy();
+    expect(daily.getByText(/不保留被删正文/)).toBeTruthy();
     fireEvent.click(daily.getByRole('button',{name:'核对当天未形成 L1 的原话'}));
     await waitFor(()=>expect(screen.getByText('我最近开始晨跑。')).toBeTruthy());
     const today=new Date();
@@ -118,10 +122,10 @@ describe('每日记忆回顾',()=>{
     const dailyItem=within(daily.getByText(item.content).closest('li')!);
     // 工作流断言直接定位本条可见文案的原生按钮，避免jsdom反复计算整条祖先样式。
     const correctionText=dailyItem.getByText('直接纠正',{exact:true});
-    // 对实际文案检查一次CSS/祖先可访问性，保留getByRole原先的隐藏过滤语义。
-    expect(isInaccessible(correctionText)).toBe(false);
     const correctionButton=correctionText.closest('button')!;
     expect(correctionButton).not.toBeNull();
+    expect(correctionButton.getAttribute('role')??'button').toBe('button');
+    expect(isInaccessible(correctionText)).toBe(false);
     expect(correctionButton.closest('[hidden],[aria-hidden="true"]')).toBeNull();
     await waitFor(()=>expect(correctionButton.hasAttribute('disabled')).toBe(false));
     fireEvent.click(correctionButton);
