@@ -143,29 +143,36 @@ describe('圆屏状态协议与模拟器', () => {
 
   test('切换皮肤显示等待回读，编辑草稿与实机观察仍独立',async()=>{
     const {request,queryClient,setWallpaperStatus}=mountSkinWorkspace('/display-preview?tab=device');
+    const button=(scope:ReturnType<typeof within>,name:string)=>{
+      const target=scope.getByText(name,{exact:true}).closest('button');
+      expect(target).not.toBeNull();
+      expect(target!.getAttribute('role')??'button').toBe('button');
+      expect(target!.closest('[hidden],[aria-hidden="true"]')).toBeNull();
+      return target!;
+    };
     const tabs=within(screen.getByRole('tablist'));
     const device=within(screen.getByRole('tabpanel',{name:'实机验证'}));
     await device.findByText('动态壁纸');
     await waitFor(()=>expect(queryClient.getQueryState(['round-skins'])?.status).toBe('success'));
-    const useSkinDisplay=device.getByRole('button',{name:'切换为皮肤显示（会重启）'});
+    const useSkinDisplay=button(device,'切换为皮肤显示（会重启）');
     fireEvent.click(useSkinDisplay);
     await waitFor(()=>expect(request).toHaveBeenCalledWith('/api/round-wallpapers/deactivate','POST'));
     expect(await screen.findByText('切换指令已发送，正在等待圆屏重连')).toBeTruthy();
-    const reconnecting=device.getByRole('button', {name:'等待圆屏重连'});
+    const reconnecting=button(device,'等待圆屏重连');
     expect(reconnecting.classList.contains('ant-btn-loading')).toBe(false);
     fireEvent.click(tabs.getByRole('tab', {name:'皮肤'}));
     const skin=within(screen.getByRole('tabpanel',{name:'皮肤'}));
-    const edit = skin.getByRole('button', {name:'从当前皮肤开始编辑'}) as HTMLButtonElement;
+    const edit = button(skin,'从当前皮肤开始编辑');
     await waitFor(() => expect(edit.disabled).toBe(false));
     fireEvent.click(edit);
     const editor=within(skin.getByRole('region', {name:'本机自定义皮肤编辑器'}));
     expect(editor.getByLabelText('皮肤颜色：聆听')).toBeTruthy();
-    expect(editor.getByRole('button', {name:'保存为“我的自定义皮肤”'})).toBeTruthy();
+    expect(button(editor,'保存为“我的自定义皮肤”')).toBeTruthy();
 
     fireEvent.change(editor.getByLabelText('皮肤颜色：聆听'), {target:{value:'#123456'}});
     expect((editor.getByLabelText('皮肤颜色：聆听') as HTMLInputElement).value).toBe('#123456');
     fireEvent.click(tabs.getByRole('tab', {name:'实机验证'}));
-    expect((device.getByRole('button', {name:'应用到真机'}) as HTMLButtonElement).disabled).toBe(true);
+    expect(button(device,'应用到真机').disabled).toBe(true);
     const skinModeStatus={
       wallpaper_api:1,active_valid:false,active_slot:'',active_wallpaper_id:'',
       active_sha256:'',active_size_bytes:0,rollback_available:true,
@@ -177,7 +184,7 @@ describe('圆屏状态协议与模拟器', () => {
     expect(screen.getByText('与当前预览不同')).toBeTruthy();
     fireEvent.click(tabs.getByRole('tab', {name:'皮肤'}));
     expect((editor.getByLabelText('皮肤颜色：聆听') as HTMLInputElement).value).toBe('#123456');
-    fireEvent.click(editor.getByRole('button', {name:'取消编辑'}));
+    fireEvent.click(button(editor,'取消编辑'));
     fireEvent.click(tabs.getByRole('tab', {name:'实机验证'}));
     expect(screen.getByText('与当前预览一致')).toBeTruthy();
     fireEvent.click(device.getByRole('checkbox',{name:'待机'}));

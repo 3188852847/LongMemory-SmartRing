@@ -115,7 +115,10 @@ describe('每日记忆回顾',()=>{
     fireEvent.click(within(screen.getByRole('region',{name:'浏览记忆'})).getByRole('tab',{name:'事实记忆（L1） · 1'}));
     fireEvent.click(tasks.getByRole('button',{name:'每日回顾'}));
     const dailyItem=within(daily.getByText(item.content).closest('li')!);
-    const correctionButton=dailyItem.getByRole('button',{name:'直接纠正'});
+    // 工作流断言直接定位本条可见文案的原生按钮，避免jsdom反复计算整条祖先样式。
+    const correctionButton=dailyItem.getByText('直接纠正',{exact:true}).closest('button')!;
+    expect(correctionButton).not.toBeNull();
+    expect(correctionButton.closest('[hidden],[aria-hidden="true"]')).toBeNull();
     await waitFor(()=>expect(correctionButton.hasAttribute('disabled')).toBe(false));
     fireEvent.click(correctionButton);
     const correctionTitle=await screen.findByText('纠正 L1');
