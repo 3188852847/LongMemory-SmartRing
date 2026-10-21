@@ -5,6 +5,13 @@ requests、numpy、PyYAML已经是dev依赖，不属于资源例外。
 """
 
 RESOURCE_GROUPS = (
+    ('tests.unit.development.test_ad_aec_reference_probe',
+     'owner-installed CPU numpy/Opus runtime unavailable',
+     ('test_missing_or_single_reference_bypasses_without_changing_pcm',
+      'test_expected_echo_suppression_does_not_prove_double_talk_safety',
+      'test_nonoverlap_near_component_is_also_windowed',
+      'test_raw_reference_age_is_not_a_rejection_gate_in_pinned_algorithm',
+      'test_reference_decodes_to_same_pcm_format_from_both_opus_encoding_rates',)),
     ('tests.unit.development.test_voice_input_observation_wiring',
      'owner-installed Python 3.10 input observer runtime unavailable',
      ('test_actual_python310_timeout_is_classified_without_changing_original_exception',)),

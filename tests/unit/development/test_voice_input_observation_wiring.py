@@ -87,8 +87,13 @@ def test_bootstrap_uses_loaded_actual_provider_after_control_wrappers_before_acc
         assert cls is Connection and base_module is base and receiver is receive
         assert asr_provider_classes == (Provider,)
         assert Connection.latest_wrapper=='control'
+        Connection.input_ready=True
         calls.append('probe')
+    def signal(cls):
+        assert cls is Connection and cls.input_ready and cls.latest_wrapper=='control'
+        calls.append('signal')
     monkeypatch.setitem(sys.modules,'voice_input_observation',SimpleNamespace(install_voice_input_observation=install))
+    monkeypatch.setitem(sys.modules,'voice_vad_signal_observation',SimpleNamespace(install_voice_vad_signal_observation=signal))
     launch.install_voice_input_observation_policy(Server,Connection,base,receive,upstream_root=tmp_path)
     first=Server.start
     launch.install_voice_input_observation_policy(Server,Connection,base,receive,upstream_root=tmp_path)
@@ -98,10 +103,10 @@ def test_bootstrap_uses_loaded_actual_provider_after_control_wrappers_before_acc
         Connection.latest_wrapper='control';calls.append('control');return await original(server)
     Server.start=control
     assert asyncio.run(Server().start())=='business-result'
-    assert calls==[('fingerprint',tmp_path),'control','probe','accept']
+    assert calls==[('fingerprint',tmp_path),'control','probe','signal','accept']
 
 
-@pytest.mark.parametrize('failure',['unknown_fingerprint','unknown_provider','installer_exception'])
+@pytest.mark.parametrize('failure',['unknown_fingerprint','unknown_provider','installer_exception','signal_installer_exception'])
 def test_unreviewed_or_failed_diagnostic_keeps_original_business_start(monkeypatch,tmp_path,failure):
     calls=[]
     class Base:pass
@@ -114,14 +119,20 @@ def test_unreviewed_or_failed_diagnostic_keeps_original_business_start(monkeypat
     def verify(_):
         if failure=='unknown_fingerprint':raise ValueError('changed')
     def install(*_args,**_kwargs):
-        calls.append('probe');raise RuntimeError('PRIVATE')
+        calls.append('probe')
+        if failure=='installer_exception':raise RuntimeError('PRIVATE')
+    def signal(*_args):
+        calls.append('signal');raise RuntimeError('PRIVATE')
     monkeypatch.setitem(sys.modules,'control_compatibility',SimpleNamespace(verify_control_snapshot=verify))
     monkeypatch.setitem(sys.modules,'core.providers.asr.fun_local',SimpleNamespace(ASRProvider=Provider))
     monkeypatch.setitem(sys.modules,'voice_input_observation',SimpleNamespace(install_voice_input_observation=install))
+    monkeypatch.setitem(sys.modules,'voice_vad_signal_observation',SimpleNamespace(install_voice_vad_signal_observation=signal))
     launch.install_voice_input_observation_policy(Server,Connection,SimpleNamespace(ASRProviderBase=Base),
                                                  object(),upstream_root=tmp_path)
     assert asyncio.run(Server().start())==17
-    assert calls == (['probe','business'] if failure=='installer_exception' else ['business'])
+    expected={'installer_exception':['probe','business'],
+              'signal_installer_exception':['probe','signal','business']}
+    assert calls == expected.get(failure,['business'])
 
 
 def test_real_ac_helper_bootstrap_prefetch_alias_and_public_projection(monkeypatch,tmp_path):

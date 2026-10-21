@@ -310,6 +310,9 @@ def install_voice_input_observation_policy(server_class, connection_class, asr_b
                 from voice_input_observation import install_voice_input_observation
                 install_voice_input_observation(connection_class, asr_base_module, receive_module,
                                                 asr_provider_classes=(reviewed_type,))
+                # 信号观测接到最终解码/AEC及输入代理外层；安装失败保留原服务启动。
+                from voice_vad_signal_observation import install_voice_vad_signal_observation
+                install_voice_vad_signal_observation(connection_class)
         except Exception:
             pass  # 诊断异常不替代/重试业务，也不输出提供器或私有配置正文。
         return await original_start(server, *args, **kwargs)

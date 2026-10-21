@@ -13,6 +13,28 @@
   },
   "topics": [
     {
+      "id": "voice-input-signal-diagnostic-endpoint",
+      "scope": "GET /api/voice-input-signal的有限只读摘要与原状态独立预算；非实机根因",
+      "authority": "docs/development/parallel/AI-signal-diagnostic-integration-20261021.md",
+      "sources": [
+        "scripts/development/xiaozhi/voice_vad_signal_observation.py",
+        "scripts/development/xiaozhi/voice_signal_diagnostics.py",
+        "scripts/development/xiaozhi/launch_with_memory.py",
+        "scripts/development/xiaozhi/control_http.py",
+        "scripts/development/xiaozhi/device_control.py",
+        "tests/unit/development/test_voice_signal_endpoint.py",
+        "tests/fixtures/ai_signal_device_status_boundary.py",
+        "tests/fixtures/ad_aec_reference_probe.py",
+        "tests/unit/development/test_ad_aec_reference_probe.py"
+      ],
+      "related": [
+        "docs/development/parallel/AC-vad-signal-20261021.md",
+        "docs/development/parallel/AD-aec-playback-input-20261021.md",
+        "docs/development/parallel/AI-first-recall-observation-review-20261021.md"
+      ],
+      "review": "verified 2026-10-21: 同服务/同鉴权独立端点，原最大状态15519/新摘要5243字节分别读取；不增16384上限，不改8767，管理proof待新冻结源码实跑"
+    },
+    {
       "id": "first-recall-detail-observation-v2",
       "scope": "首次检索分离v2详情协议、精确provider升级及软件验证；真实日用首轮归因未完成",
       "authority": "docs/development/parallel/AI-first-recall-observation-review-20261021.md",
@@ -1724,6 +1746,69 @@
     }
   ],
   "documents": [
+    {
+      "path": "docs/development/parallel/AI-signal-diagnostic-integration-20261021.md",
+      "title": "AI：输入数值诊断与首次检索观测组合",
+      "status": "draft",
+      "basis": "独立只读端点及清洁组合候选；管理proof和实机待完成",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-21",
+        "scope": "正式AC/AD固定提交、209项联合/AD五项/精确资源模拟及HTTP整包边界；未部署、未确认根因",
+        "evidence": [
+          "docs/development/parallel/AI-signal-diagnostic-integration-20261021.md",
+          "tests/unit/development/test_voice_signal_endpoint.py",
+          "tests/unit/development/test_ad_aec_reference_probe.py"
+        ]
+      },
+      "tags": [
+        "输入诊断",
+        "只读端点",
+        "实机待采样"
+      ]
+    },
+    {
+      "path": "docs/development/parallel/AC-vad-signal-20261021.md",
+      "title": "AC：播放期输入信号的最小数值观测",
+      "status": "reference",
+      "basis": "7dfcfca固定21计数和三组数值摘要；AI接线/原模型实测与实机范围分开",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-21",
+        "scope": "正式AC/AD固定提交、209项联合/AD五项/精确资源模拟及HTTP整包边界；未部署、未确认根因",
+        "evidence": [
+          "docs/development/parallel/AI-signal-diagnostic-integration-20261021.md",
+          "tests/unit/development/test_voice_signal_endpoint.py",
+          "tests/unit/development/test_ad_aec_reference_probe.py"
+        ]
+      },
+      "tags": [
+        "输入诊断",
+        "只读端点",
+        "实机待采样"
+      ]
+    },
+    {
+      "path": "docs/development/parallel/AD-aec-playback-input-20261021.md",
+      "title": "AD：播放期输入与固定服务端AEC合成核查",
+      "status": "reference",
+      "basis": "fee5eece合成算法性质，AI五项独立通过；不是现场根因",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-21",
+        "scope": "正式AC/AD固定提交、209项联合/AD五项/精确资源模拟及HTTP整包边界；未部署、未确认根因",
+        "evidence": [
+          "docs/development/parallel/AI-signal-diagnostic-integration-20261021.md",
+          "tests/unit/development/test_voice_signal_endpoint.py",
+          "tests/unit/development/test_ad_aec_reference_probe.py"
+        ]
+      },
+      "tags": [
+        "输入诊断",
+        "只读端点",
+        "实机待采样"
+      ]
+    },
     {
       "path": "docs/development/parallel/AI-first-recall-observation-review-20261021.md",
       "title": "AI：首次检索 v2 观测审查与部署候选",

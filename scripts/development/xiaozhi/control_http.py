@@ -119,6 +119,9 @@ def create_app(control, token, port=PORT):
     async def read_volume(request):
         return web.json_response(await control.read_volume())
 
+    async def voice_input_signal(request):
+        return web.json_response(control.voice_input_signal())
+
     async def read_status(request):
         return web.json_response(await control.read_status())
 
@@ -214,6 +217,7 @@ def create_app(control, token, port=PORT):
     app = web.Application(middlewares=[guard], client_max_size=1024)
     app.router.add_post('/api/network-maintenance', network_maintenance)
     app.router.add_get("/api/device", status, allow_head=False)
+    app.router.add_get("/api/voice-input-signal", voice_input_signal, allow_head=False)
     app.router.add_get("/api/device/volume", read_volume, allow_head=False)
     app.router.add_post("/api/device/volume", set_volume)
     app.router.add_get("/api/device/status", read_status, allow_head=False)
