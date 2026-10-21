@@ -1521,6 +1521,39 @@
           "web/react-chat/e2e/console.spec.ts"
         ]
       }
+    },
+    {
+      "id": "ci-clock-and-daily-query-evidence",
+      "scope": "f159节拍/5c组件失败后的测试观测和整段查询修正；各次远程结果分别保留",
+      "authority": "docs/development/parallel/AI-hy-advanced-low-latency-20261021.md",
+      "sources": [
+        "tests/unit/development/test_doubao_realtime_client.py",
+        "scripts/development/xiaozhi/doubao_realtime/client.py",
+        "web/react-chat/src/pages/MemoryApp.test.tsx",
+        "web/react-chat/vite.config.ts",
+        "scripts/ci/backend_resources.py"
+      ],
+      "related": [
+        "docs/development/parallel/AD-doubao-clock-20261021.md",
+        "docs/development/parallel/AH-memory-flow-ci-20261021.md"
+      ],
+      "tags": [
+        "CI",
+        "节拍",
+        "每日回顾",
+        "CSS",
+        "profile"
+      ],
+      "review": {
+        "state": "verified",
+        "date": "2026-10-21",
+        "scope": "AD/AH冻结接力、26项联合验证、350报告和45文件新构建核对；不保证未执行的远程通过",
+        "evidence": [
+          "docs/development/parallel/AI-hy-advanced-low-latency-20261021.md",
+          "docs/development/parallel/AD-doubao-clock-20261021.md",
+          "docs/development/parallel/AH-memory-flow-ci-20261021.md"
+        ]
+      }
     }
   ],
   "old_path_rules": [
@@ -7249,7 +7282,7 @@
       "review": {
         "state": "verified",
         "date": "2026-10-21",
-        "scope": "隔离永久音频撤权、原子完成领取、双向wire修订4及0016联合源码/合成验证；原完整后端失败及发布/实机未验边界保留；保留360精确远程Quality失败，复现并补bootstrap测试契约，53项定向与精确CI资源护栏通过，不改生产或浏览器；接入并核对AH导航有界诊断、143收集及同字节运行时，保留未知原因和ROOT新稳定恢复报告；保留f159远程通过后启动exit3的ROOT报告，核验4c原件并登记受控升级窄修及43项/真实3.10验证，未自行恢复服务",
+        "scope": "隔离永久音频撤权、原子完成领取、双向wire修订4及0016联合源码/合成验证；原完整后端失败及发布/实机未验边界保留；保留360精确远程Quality失败，复现并补bootstrap测试契约，53项定向与精确CI资源护栏通过，不改生产或浏览器；接入并核对AH导航有界诊断、143收集及同字节运行时，保留未知原因和ROOT新稳定恢复报告；保留f159远程通过后启动exit3的ROOT报告，核验4c原件并登记受控升级窄修及43项/真实3.10验证，未自行恢复服务；据ROOT保留5c恢复ready与main两次失败，接入AD/AH测试窄修、核对350原件与新构建，产品和固件不变",
         "evidence": [
           "docs/development/parallel/AI-hy-advanced-low-latency-20261021.md",
           "docs/development/parallel/AD-tts-interrupt-v1-20261021.md",
@@ -7567,6 +7600,50 @@
         "导航诊断",
         "隔离",
         "未知原因"
+      ]
+    },
+    {
+      "path": "docs/development/parallel/AD-doubao-clock-20261021.md",
+      "title": "AD：Doubao四包节拍观测时钟修复",
+      "status": "draft",
+      "basis": "测试测量/查询窄修与原始证据；产品代码/阈值/调度不变，远程原因仍有限制",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-21",
+        "scope": "冻结差异、13个测试函数AST及26项联合验证；相位探针由AD执行，不认定远程唯一原因",
+        "evidence": [
+          "docs/development/parallel/AD-doubao-clock-20261021.md",
+          "docs/development/parallel/AI-hy-advanced-low-latency-20261021.md",
+          "tests/unit/development/test_doubao_realtime_client.py"
+        ]
+      },
+      "tags": [
+        "CI",
+        "测试测量",
+        "隔离",
+        "根因边界"
+      ]
+    },
+    {
+      "path": "docs/development/parallel/AH-memory-flow-ci-20261021.md",
+      "title": "AH：5c每日回顾整段查询窄修",
+      "status": "draft",
+      "basis": "测试测量/查询窄修与原始证据；产品代码/阈值/调度不变，远程原因仍有限制",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-21",
+        "scope": "冻结查询角色/CSS和业务语义、AH350原件/新构建绑定及受控失败记录；AI未重复UI执行",
+        "evidence": [
+          "docs/development/parallel/AH-memory-flow-ci-20261021.md",
+          "docs/development/parallel/AI-hy-advanced-low-latency-20261021.md",
+          "web/react-chat/src/pages/MemoryApp.test.tsx"
+        ]
+      },
+      "tags": [
+        "CI",
+        "测试测量",
+        "隔离",
+        "根因边界"
       ]
     }
   ],

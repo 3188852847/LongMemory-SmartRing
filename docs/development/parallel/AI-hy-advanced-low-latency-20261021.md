@@ -644,3 +644,19 @@ AI独立从Git `4c64216e0acde18ff45448ac8fd0df3d7df54389:scripts/development/xia
 回归使用公开旧原件 [固定fixture](../../../tests/fixtures/xiaozhi_provider_4c64216e.py.txt)，不是个人恢复包或运行目录副本；LF属性保证浅克隆/Windows CI也可复现。合成临时目标覆盖两种换行的默认拒绝、显式升级到当前完整字节、当前版mtime不变的幂等、旧原件追加用户修改后的拒绝，base文件不变。主3.12下完整test_xiaozhi_setup **43通过/0skip/0.28s**，报告 `data/test-tmp/ai-provider-upgrade-4c-02.xml`；首次单文件调用因既有测试加载路径缺config_paths而收集失败，保留01原件，随后仅对子进程显式指定本树src/xiaozhi路径，没有改全局环境。
 
 实际声音Python **3.10.20** 另在自身合成TemporaryDirectory执行相同真实旧LF/CRLF升级、当前版不重写、任意unknown和用户追加修改拒绝，并编译旧/当前提供器，全部通过，未导入torch；结果 `data/test-tmp/ai-provider-upgrade-python310-01.json`。没有新依赖、下载、skip或CI资源例外，没有改web/src、固件或私有消费目标；旧运行时提供器的实际升级及重启只能由ROOT受控接力。本地窄回归不冒称新提交远程Quality已通过，服务恢复和owner体验另记。
+
+## 5c日用恢复报告与同轮CI测试修正
+
+ROOT后续报告main已快进并普通推送5c，failed launcher46268退出后，经正式入口创建launcher10344，control_created UTC `2026-10-21T09:23:05`；controller、TTS及selected_voice_warm ready，stream active0/generationfalse/restartfalse。62份配置/dist文件逐字保持，运行目录提供器已从260ebfe1受控升级至7241a12e并与源码逐字一致；公共8767/api/device为HTTP200，两个新增摘要no_connection、物理ackfalse，账本53complete/1unknown。ROOT取得94文件/15,006,865字节的新一致备份，检查点 `local/archive/hy-advanced-release/20261021T092143Z-5c5f6fa4-732b85/`，runtime-health.json记录实际恢复；没有恢复旧DB、操作Docker或在该恢复阶段刷固件。以上仅为ROOT执行报告，AI未操作生产或检查个人数据。
+
+远程结果继续分开：f159候选 `39572671724` 全轮成功保留；f159 main自动 `39574569518` 为backend 1失败/3641通过/236skip，frontend/browser成功，唯一失败是Doubao四包观测跨度47ms未达55ms。5c main `39576502051` 的backend全部成功，但组件为349通过/1个MemoryApp旧追加式纠正流程5s超时；不能将两次main失败借候选成功改写为绿。
+
+AD固定交付 [观测时钟记录](AD-doubao-clock-20261021.md) `94c4207a73b9f6814eadc7e73e89a416d6416939`，AI接为7e4ef4e7。生产默认节拍已用perf_counter，测试FakeSocket却用可能粗粒度的loop.time；本次仅将测试观测改为perf_counter。AI核对13个测试函数AST与5c相同，55ms、四包/640字节/补零/会话契约及所有虚拟时钟断言保留，生产client同字节。AD的本机QPC/loop相位探针支持修正测量前提；24组真实四包未复现失败，不能称远程47ms唯一原因已经确认。
+
+AH代码 `b806fdc66253214ae56e2fd3ff33fbb7b9ec5bfb` 接为fd2e2223，[完整记录](AH-memory-flow-ci-20261021.md) `4164711376859e65a2b0d0447aa1ea19d2f0da81` 接为edeedc84。仅收窄MemoryApp.test.tsx的完整旧流程查询：命名nav等待挂载后核对原生navigation角色及真实isInaccessible，再将摘要/反馈/删除审计定位到每日回顾区域；原纠正按钮仍核对角色、CSS/祖先隐藏和disabled。没有改产品、fixture响应、业务断言、5s、worker或retry。完整原2 worker、无限制CPU的350/350和typecheck是AH实际执行，AI独立核对原始full-final.json SHA `05327c857a0a89843f28908a6e8b3a0c65410565b5e90797bf9373fa1a330eea`，目标2227.0909ms；未在AI重复350，也不保证远程任何负载下都低于5s。
+
+AI在两项接入后仅做必要联合验证：Doubao19项与CI报告护栏7项共 **26通过/0skip/1.09s，7 subtests通过**，报告 `data/test-tmp/ai-ad-ah-ci-combined-01.xml`。新web tree为 `b10d606b0860e7a6d8528c738011375082db6eb5`；src目录含测试文件，因此整棵src tree随测试变化，不能笼统称src树不变。精确差异仅MemoryApp.test.tsx；全部产品源文件、依赖/锁/构建配置、语音源码、共享assets和冻结固件均与5c一致。AI再逐项核对AH精确b806新构建绑定SHA `dcd6ff2dc29bb1a93305a40b909fdacf2c32e1ea496c784e4ae4f374eadc49b7`、共同web tree及45文件，为1,839,032字节、bcde规范摘要；0016应用仍4,011,456字节、SHA caca8cbf，无需因测试增量重新部署前端或替换镜像。独立核对在ai-ad-ah-same-round-review-02.json。
+
+AH整段profile确认多处查询与真实样式计算成本；受控单逻辑CPU下2 worker的两条流程均超过5s，1 worker通过，原失败保留。AI核对对应原始结果的失败/通过和时长；这只证明该受控资源条件足以造成同类超时，没有取得5c runner实际资源现场，原原因仍未完全定位。普通1/2 worker接近、最终窄修profile也有波动，不能据此承诺固定提速或擅自改变调度。本轮没有新browser或完整远程Quality结果，旧失败与候选成功各自保留。
+
+本轮ROOT另报告K已取得新备份/写前同句柄核验，正在执行已获新授权的0016活动应用写入；完成与体验以K/ROOT后续证据为准，AI不操作串口或设备。上述CI测试修正不等于设备体验或未知远程原因已解决；最终候选远程结果和正式合入由ROOT安排。
