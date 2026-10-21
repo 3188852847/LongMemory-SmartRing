@@ -103,6 +103,19 @@ def host(panel, tmp_path):
     server.server_close()
 
 
+def test_cosy_hidden_preference_survives_web_edits_and_controller_reopen(panel):
+    save_preferences(panel.paths['launcher'], {**panel.settings(), 'cosy_delivery_mode': 'adaptive'})
+    panel.update_settings({'role': 'plain_v1'}, panel.revision())
+    assert panel.settings()['cosy_delivery_mode'] == 'adaptive'
+    assert panel._options().cosy_delivery_mode == 'adaptive'
+    reopened = controller.LauncherController(panel.root, manager=FakeManager())
+    try:
+        assert reopened._options().cosy_delivery_mode == 'adaptive'
+        assert reopened.settings()['role'] == 'plain_v1'
+    finally:
+        reopened.events.close()
+
+
 def request(host, method, path, body=None, *, token=True, headers=None):
     client = http.client.HTTPConnection('127.0.0.1', host.server_port, timeout=5)
     fields = {'Authorization': 'Bearer ' + host.token} if token else {}

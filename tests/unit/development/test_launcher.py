@@ -753,6 +753,60 @@ def test_manager_gives_console_and_voice_one_ephemeral_runtime_identity(options,
         manager.stop()
 
 
+@pytest.mark.parametrize('preference,override,voice,mode,backend,expected', [
+    ('adaptive', None, True, 'pipeline', 'cosyvoice3', 'adaptive'),
+    ('buffered', 'incremental', True, 'pipeline', 'cosyvoice3', 'incremental'),
+    ('adaptive', 'buffered', True, 'pipeline', 'cosyvoice3', 'buffered'),
+    ('buffered', None, True, 'pipeline', 'cosyvoice3', 'buffered'),
+    ('adaptive', 'adaptive', False, 'pipeline', 'cosyvoice3', None),
+    ('adaptive', 'adaptive', True, 'pipeline', 'edge', None),
+    ('adaptive', 'adaptive', True, 'doubao_realtime', 'cosyvoice3', None),
+])
+def test_cosy_preference_and_override_reach_only_applicable_voice_child(
+        options, monkeypatch, preference, override, voice, mode, backend, expected):
+    captured = {}
+    class Owned:
+        def __init__(self, command, cwd, env):captured[command[0]] = dict(env)
+        def stop(self):pass
+    monkeypatch.delenv('LONGMEMORY_COSY_DELIVERY_MODE', raising=False)
+    if override is not None:monkeypatch.setenv('LONGMEMORY_COSY_DELIVERY_MODE', override)
+    monkeypatch.setenv('LONGMEMORY_VOICE_PREEMPTIVE_ENABLED', '0')
+    environment_before = dict(os.environ)
+    commands = [(name, [name], options.root) for name in ('console', 'cosyvoice3', 'voice')]
+    monkeypatch.setattr(runtime, 'build_commands', lambda _: commands)
+    monkeypatch.setattr(runtime, 'require_free', lambda *_: None)
+    monkeypatch.setattr(runtime, 'require_no_listener', lambda *_: None)
+    monkeypatch.setattr(runtime, 'OwnedService', Owned)
+    monkeypatch.setitem(sys.modules, 'network', SimpleNamespace(config_action=lambda *_a, **_k: {'changed': False, 'digest': 'synthetic'}))
+    for name in ('tts', 'model', 'memory', 'vad'):
+        monkeypatch.setitem(sys.modules, name, SimpleNamespace(config_action=lambda *_a, **_k: {'config_matches': True}))
+    selected = replace(options, voice=voice, voice_mode=mode, tts_backend=backend,
+                       cosy_delivery_mode=preference)
+    manager = runtime.Manager()
+    try:
+        manager.start(selected)
+        assert captured['voice'].get('LONGMEMORY_COSY_DELIVERY_MODE') == expected
+        assert manager.cosy_startup_mode == expected
+        assert manager.cosy_startup_source == (('environment' if override is not None else 'preference') if expected else None)
+        assert 'LONGMEMORY_COSY_DELIVERY_MODE' not in captured['console']
+        assert 'LONGMEMORY_COSY_DELIVERY_MODE' not in captured['cosyvoice3']
+        assert all(value['LONGMEMORY_VOICE_PREEMPTIVE_ENABLED'] == '0' for value in captured.values())
+        assert os.environ == environment_before
+    finally:
+        manager.stop()
+
+
+
+@pytest.mark.parametrize('override', ['', 'typo'])
+def test_invalid_cosy_environment_override_stops_before_preflight_or_config(options, monkeypatch, override):
+    monkeypatch.setenv('LONGMEMORY_COSY_DELIVERY_MODE', override)
+    monkeypatch.setattr(runtime, 'build_commands', lambda *_: pytest.fail('invalid override reached side effects'))
+    manager = runtime.Manager()
+    with pytest.raises(ValueError, match='覆盖值'):
+        manager.start(replace(options, voice=True, tts_backend='cosyvoice3'))
+    assert not manager.services and manager.options is None
+
+
 def test_manager_syncs_selected_voice_model_and_memory_after_ports_are_free(options, monkeypatch):
     from types import SimpleNamespace
 

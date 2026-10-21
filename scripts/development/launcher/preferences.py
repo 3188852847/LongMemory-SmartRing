@@ -6,7 +6,7 @@ from pathlib import Path
 from voice_ports import validate_voice_ports
 
 
-PREFERENCES_VERSION = 7
+PREFERENCES_VERSION = 8
 RISK_ACK_VERSION = "campus-http-v1"
 # 只影响当前本机启动面板，不写入偏好文件，也不改变服务端安全默认。
 DEFAULT_SESSION_ALLOW_MEMORY_DELETE = True
@@ -15,6 +15,7 @@ DEFAULTS = {
     "voice": False,
     "voice_mode": "pipeline",
     "voice_latency_mode": "realtime",
+    "cosy_delivery_mode": "buffered",
     "start_page": "chat",
     "database": "",
     "voice_root": "",
@@ -41,6 +42,7 @@ DEFAULTS = {
 _CHOICES = {
     "voice_mode": {"pipeline", "doubao_realtime"},
     "voice_latency_mode": {"realtime", "original"},
+    "cosy_delivery_mode": {"buffered", "incremental", "adaptive"},
     "start_page": {"overview", "chat", "device", "memories", "settings"},
     "role": {"elysia_v1", "plain_v1"},
     "memory_extraction": {"rules", "llm"},
@@ -70,8 +72,9 @@ def load_preferences(path: Path) -> dict:
     if isinstance(raw.get("l2_sufficiency_shadow"), bool):
         result["l2_sufficiency_shadow"] = raw["l2_sufficiency_shadow"]
     for field, allowed in _CHOICES.items():
-        if raw.get(field) in allowed:
-            result[field] = raw[field]
+        value = raw.get(field)
+        if isinstance(value, str) and value in allowed:
+            result[field] = value
     for field in _PATH_FIELDS:
         value = raw.get(field)
         if isinstance(value, str) and len(value) <= 2048:
@@ -101,6 +104,7 @@ def save_preferences(path: Path, values: dict) -> None:
         "voice": bool(values.get("voice", False)),
         "voice_mode": values.get("voice_mode", DEFAULTS["voice_mode"]),
         "voice_latency_mode": values.get("voice_latency_mode", DEFAULTS["voice_latency_mode"]),
+        "cosy_delivery_mode": values.get("cosy_delivery_mode", DEFAULTS["cosy_delivery_mode"]),
         "start_page": values.get("start_page", DEFAULTS["start_page"]),
         "database": str(values.get("database", ""))[:2048],
         "voice_root": str(values.get("voice_root", ""))[:2048],
@@ -132,7 +136,7 @@ def save_preferences(path: Path, values: dict) -> None:
         ),
     }
     for field, allowed in _CHOICES.items():
-        if body[field] not in allowed:
+        if not isinstance(body[field], str) or body[field] not in allowed:
             raise ValueError(f"launcher_preference_{field}_invalid")
     validate_voice_ports(body['voice_ws_port'], body['voice_http_port'])
     path.parent.mkdir(parents=True, exist_ok=True)

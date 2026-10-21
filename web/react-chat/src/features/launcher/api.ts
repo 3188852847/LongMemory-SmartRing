@@ -1,6 +1,22 @@
+export type CosyDeliveryMode = 'buffered' | 'incremental' | 'adaptive';
+export type CosyDeliveryObservation = {
+  version: 1; state: 'no_connection' | 'not_observed' | 'configured' | 'buffered_fallback' | 'restart_required' | 'invalid_configuration' | 'unavailable';
+  effective_mode: CosyDeliveryMode | null;
+  failure_code?: 'before_handoff' | 'after_handoff' | 'reader_cleanup_timeout' | 'reader_cleanup_unconfirmed' | 'configuration_changed' | null;
+  restart_required: boolean; physical_playback_verified: false;
+  last_outcome?: 'completed' | 'cancelled' | 'failed' | 'fallback' | 'preset' | 'blocked' | null;
+  handoff_started?: boolean; next_segment_allowed?: boolean;
+};
+export type CosyDeliveryStatus = {
+  version: 1; next_start_mode: CosyDeliveryMode | null;
+  next_start_source: 'environment' | 'preference' | null; selection_valid: boolean;
+  startup_mode: CosyDeliveryMode | null; startup_source: 'environment' | 'preference' | null;
+  observation: CosyDeliveryObservation | null; restart_required: boolean;
+};
 export type LauncherSettings = {
   voice: boolean; model_profile: string; voice_model_profile: string;
   voice_mode: string; voice_latency_mode: string; memory_extraction: string;
+  cosy_delivery_mode?: CosyDeliveryMode;
   memory_retrieval: string; memory_backend: string; vad_profile: string;
   start_page: string; lan_ip: string; http_risk_ack: boolean; tts_backend: string;
   voice_ws_port?: number; voice_http_port?: number; network_auto?: boolean;
@@ -12,6 +28,7 @@ export type LauncherSnapshot = {
   console_url: string | null; settings: LauncherSettings; settings_revision: string;
   can_start: boolean; can_stop: boolean;
   network?: {state: string; message: string; address?: string};
+  cosy_delivery?: CosyDeliveryStatus;
 };
 export type LauncherAction = 'start' | 'stop' | 'open_console' | 'shutdown';
 

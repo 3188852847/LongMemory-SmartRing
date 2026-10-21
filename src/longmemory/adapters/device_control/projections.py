@@ -15,6 +15,7 @@ from .protocol import (
 from .voice_interruption import voice_interruption
 from .tts_interrupt import tts_interrupt
 from .voice_input_observation import voice_input_observation
+from .cosy_delivery import cosy_delivery
 
 
 def read_volume(data: dict) -> dict:
@@ -360,6 +361,8 @@ def device_status(data: dict) -> dict:
         result["tts_interrupt"] = tts_interrupt(data["tts_interrupt"])
     if "voice_input_observation" in data:
         result["voice_input_observation"] = voice_input_observation(data["voice_input_observation"])
+    if 'cosy_delivery' in data:
+        result['cosy_delivery'] = cosy_delivery(data['cosy_delivery'])
     if "reason" in data:
         result["reason"] = safe_reason(data["reason"])
     if "announcement_reason" in data:

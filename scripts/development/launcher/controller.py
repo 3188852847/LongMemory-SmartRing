@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import ipaddress
+import os
 import json
 from pathlib import Path
 import queue
@@ -27,6 +28,7 @@ from view_model import (
 from events import LauncherEvents
 from voice_ports import validate_voice_ports
 from network_watch import NetworkWatch, NetworkSelectionError
+from cosy_status import launcher_summary as cosy_delivery_summary
 
 
 class ControllerError(ValueError):
@@ -120,6 +122,7 @@ class LauncherController:
                 'console_url': (console_url(self.manager.options.port, settings['start_page'])
                                 if self.state == 'ready' and self.manager.options else None),
                 'settings': settings, 'settings_revision': revision,
+                'cosy_delivery': cosy_delivery_summary(self.manager, settings, os.environ),
                 'shutdown_complete': self.shutdown_requested.is_set(),
                 'can_start': self.state in {'stopped', 'failed'} and not self.manager.services and not self.shutdown_requested.is_set(),
                 'can_stop': self.state in {'starting', 'ready', 'failed'} and bool(self.manager.services),
@@ -208,6 +211,7 @@ class LauncherController:
         return Options(root=self.root, database=Path(values['database']),
                        voice_root=Path(values['voice_root']), voice=values['voice'],
                        voice_mode=values['voice_mode'], voice_latency_mode=values['voice_latency_mode'],
+                       cosy_delivery_mode=values['cosy_delivery_mode'],
                        lan_ip=values['lan_ip'], role=values['role'], consent=values['http_risk_ack'],
                        voice_ws_port=values['voice_ws_port'], voice_http_port=values['voice_http_port'],
                        memory_extraction=values['memory_extraction'], memory_retrieval=values['memory_retrieval'],

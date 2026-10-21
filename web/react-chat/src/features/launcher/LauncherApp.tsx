@@ -10,6 +10,14 @@ import {LauncherApi, LauncherError, type LauncherAction, type LauncherSettings, 
 const stateText = {stopped: '等待开启', starting: '正在连接', ready: '服务已就绪', stopping: '正在停止', failed: '需要处理'};
 const stateTone = {stopped: 'quiet', starting: 'busy', ready: 'good', stopping: 'busy', failed: 'bad'} as const;
 const models = [{value: 'official', label: '官方 DeepSeek'}, {value: 'campus', label: '学校模型'}];
+const cosyModes = {buffered: '缓冲播放', incremental: '分段播放', adaptive: '自适应缓冲'};
+const cosyFailures = {
+  before_handoff: '语音交付前失败，后续片段改为缓冲播放。',
+  after_handoff: '语音交付后失败，后续片段改为缓冲播放；已交付内容不会重播。',
+  reader_cleanup_timeout: '声音任务尚未确认结束，请先重新连接圆屏，再确认声音服务就绪。',
+  reader_cleanup_unconfirmed: '声音任务尚未确认结束，请先重新连接圆屏，再确认声音服务就绪。',
+  configuration_changed: '当前连接的设置已变化，请停止并重新启动服务。',
+};
 const fields: Array<{key: keyof LauncherSettings; label: string; options: Array<{value: string; label: string}>}> = [
   {key: 'model_profile', label: '文字模型', options: models},
   {key: 'voice_model_profile', label: '圆屏模型', options: models},
@@ -18,13 +26,14 @@ const fields: Array<{key: keyof LauncherSettings; label: string; options: Array<
   {key: 'memory_backend', label: '记忆系统', options: [{value: 'hy_memory', label: 'Hy-Memory（新库，主动交流暂停）'}, {value: 'longmemory', label: '原智慧圆屏长期记忆'}, {value: 'xiaozhi_local', label: '小智本地记忆'}, {value: 'none', label: '不启用记忆'}]},
   {key: 'voice_mode', label: '语音链路', options: [{value: 'pipeline', label: '本地语音链路'}, {value: 'doubao_realtime', label: '豆包实时语音（备用）'}]},
   {key: 'voice_latency_mode', label: '语音响应', options: [{value: 'realtime', label: '实时优先'}, {value: 'original', label: '原策略（对照）'}]},
+  {key: 'cosy_delivery_mode', label: '声音交付方式', options: [{value: 'buffered', label: '缓冲播放（默认）'}, {value: 'incremental', label: '分段播放（候选）'}, {value: 'adaptive', label: '自适应缓冲（候选）'}]},
   {key: 'vad_profile', label: '聆听环境', options: [{value: 'normal', label: '正常环境'}, {value: 'noisy', label: '嘈杂环境'}, {value: 'close_talk', label: '近距离说话'}]},
   {key: 'start_page', label: '进入网页时打开', options: [{value: 'chat', label: '文字聊天'}, {value: 'overview', label: '系统总览'}, {value: 'device', label: '设备状态'}, {value: 'memories', label: '记忆'}, {value: 'settings', label: '设置中心'}]},
 ];
 const settingsGroups = [
   {value: 'daily', label: '常用', keys: ['model_profile', 'voice_model_profile']},
   {value: 'memory', label: '记忆', keys: ['memory_extraction', 'memory_retrieval', 'memory_backend']},
-  {value: 'voice', label: '语音', keys: ['voice_mode', 'voice_latency_mode', 'vad_profile']},
+  {value: 'voice', label: '语音', keys: ['voice_mode', 'voice_latency_mode', 'cosy_delivery_mode', 'vad_profile']},
   {value: 'display', label: '显示', keys: ['start_page']},
 ];
 
@@ -114,6 +123,9 @@ export function LauncherApp({api, pollMs = 1200}: {api: LauncherApi; pollMs?: nu
   const tone = snapshot ? stateTone[snapshot.state] : 'quiet';
   const needsConsent = draft?.model_profile === 'campus' || (draft?.voice && draft.voice_mode === 'pipeline' && draft.voice_model_profile === 'campus');
   const coreState = closed ? 'stopped' : exiting ? 'stopping' : snapshot?.state ?? 'unknown';
+  const cosy = snapshot?.cosy_delivery;
+  const observed = cosy?.observation;
+  const observedMode = observed && ['configured', 'buffered_fallback'].includes(observed.state) ? observed.effective_mode : null;
 
   useEffect(() => {
     if (exiting && snapshot?.shutdown_complete) setClosed(true);
@@ -160,6 +172,13 @@ export function LauncherApp({api, pollMs = 1200}: {api: LauncherApi; pollMs?: nu
       <SciFiSurface className="launcher-services">
         <div className="launcher-services-heading"><h2>连接状态</h2><span>来自本机服务</span></div>
         <ul>{snapshot?.services.map(service => <li key={service.id}><span className="service-label">{service.label}</span><StatusIndicator tone={service.tone === 'idle' ? 'quiet' : service.tone === 'error' ? 'bad' : service.tone ?? 'quiet'}>{service.state}</StatusIndicator></li>) ?? <li><span className="service-label">本机启动服务</span><StatusIndicator>正在检查</StatusIndicator></li>}</ul>
+        {cosy && snapshot && (cosy.startup_mode || (snapshot.settings.tts_backend === 'cosyvoice3' && snapshot.settings.voice_mode === 'pipeline')) && <div className="launcher-state-detail" aria-label="声音交付状态" role="status" aria-atomic="true">
+          <p>下次启动：{!cosy.selection_valid ? '覆盖值无效' : cosy.next_start_mode ? cosyModes[cosy.next_start_mode] : '本模式未启用'}{cosy.next_start_source === 'environment' && '（维护环境覆盖）'}。{cosy.startup_mode && <>本次启动设置：{cosyModes[cosy.startup_mode]}{cosy.startup_source === 'environment' && '（维护环境覆盖）'}。</>}</p>
+          {cosy.startup_mode && <p>当前连接策略：<StatusIndicator tone={observed?.restart_required || observed?.state === 'buffered_fallback' ? 'warning' : 'quiet'}>{observedMode ? cosyModes[observedMode] : observed?.state === 'no_connection' ? '圆屏未连接' : '待确认'}</StatusIndicator>。{observed?.failure_code && cosyFailures[observed.failure_code]}</p>}
+          {!cosy.selection_valid && <p>维护环境的模式覆盖无效，下次启动将拒绝执行，请先核对维护设置。</p>}
+          {cosy.selection_valid && cosy.startup_mode && cosy.next_start_mode !== cosy.startup_mode && <p>已保存，下次停止并重新启动服务后生效。</p>}
+          {observed?.restart_required && !observed.failure_code && <p>当前声音任务需停止并重新启动后才能继续。</p>}
+        </div>}
       </SciFiSurface>
     </main>
     <footer className="launcher-footer"><span>关闭此页面，服务仍会继续运行。</span><Button type="text" disabled={!snapshot || busy || closed} onClick={() => setConfirmation('shutdown')}>停止服务并退出面板</Button></footer>
@@ -171,7 +190,8 @@ export function LauncherApp({api, pollMs = 1200}: {api: LauncherApi; pollMs?: nu
       {draft && <div className="launcher-settings-form">
         <TransitionSurface identity={settingsGroup}>
           {settingsGroup === 'daily' && <div className="launcher-switch-row"><label htmlFor="launcher-voice">连接圆屏语音</label><Switch id="launcher-voice" checked={draft.voice} disabled={settingsLocked} onChange={voice => setDraft({...draft, voice})}/></div>}
-          {fields.filter(field => settingsGroups.find(group => group.value === settingsGroup)?.keys.includes(field.key)).map(field => <div className="launcher-field" key={field.key}><label htmlFor={`launcher-${field.key}`}>{field.label}</label><Select id={`launcher-${field.key}`} options={field.options} value={String(draft[field.key])} disabled={settingsLocked || (draft.memory_backend === 'hy_memory' && ['memory_extraction', 'memory_retrieval'].includes(field.key))} onChange={value => setDraft({...draft, [field.key]: value})}/></div>)}
+          {fields.filter(field => settingsGroups.find(group => group.value === settingsGroup)?.keys.includes(field.key)).map(field => <div className="launcher-field" key={field.key}><label htmlFor={`launcher-${field.key}`}>{field.label}</label><Select id={`launcher-${field.key}`} options={field.options} value={String(draft[field.key] ?? (field.key === 'cosy_delivery_mode' ? 'buffered' : ''))} disabled={settingsLocked || (draft.memory_backend === 'hy_memory' && ['memory_extraction', 'memory_retrieval'].includes(field.key)) || (field.key === 'cosy_delivery_mode' && (draft.voice_mode !== 'pipeline' || draft.tts_backend !== 'cosyvoice3'))} onChange={value => setDraft({...draft, [field.key]: value})}/></div>)}
+          {settingsGroup === 'voice' && <p>声音交付方式仅用于本地链路的 CosyVoice 3，不改变声线。缓冲播放为默认，另两种方式仍在验证。保存后需停止服务并重新启动，不会在说话中途切换。</p>}
           {settingsGroup === 'memory' && draft.memory_backend === 'hy_memory' && <Alert type="info" showIcon title="Hy 使用独立的新记忆库和模型设置。旧提取/召回选项暂不生效，旧主动交流暂停；保存后需重启并核对实际后端。"/>}
           {settingsGroup === 'daily' && <div className="launcher-field"><label htmlFor="launcher-ip">电脑局域网 IP</label><Input id="launcher-ip" value={draft.lan_ip} placeholder="填写圆屏可访问的电脑 IPv4 地址" maxLength={64} disabled={settingsLocked} onChange={event => setDraft({...draft, lan_ip: event.target.value})}/></div>}
           {settingsGroup === 'daily' && <><div className="launcher-switch-row"><label htmlFor="launcher-network-auto">自动跟踪电脑 IP</label><Switch id="launcher-network-auto" checked={draft.network_auto ?? false} disabled={settingsLocked} onChange={network_auto => setDraft({...draft, network_auto})}/></div><p>只跟踪已确认的物理网卡。多网卡有歧义时会等待；运行中的聊天和设备连接未结束时不会自动重开。圆屏保存的旧连接地址仍需在设备配网页更新。</p>

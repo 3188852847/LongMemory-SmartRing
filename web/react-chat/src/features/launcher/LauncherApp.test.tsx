@@ -17,6 +17,66 @@ function fake(snapshot = stopped) {
   return {api, request};
 }
 
+describe('Cosy声音交付选择与连接事实分开显示', () => {
+  test('只保存显式选择，不触发启动或热切换', async () => {
+    const value: LauncherSnapshot = {...stopped, settings: {...stopped.settings, voice: true, cosy_delivery_mode: 'buffered'}};
+    const {api, request} = fake(value); render(<LauncherApp api={api}/>);
+    fireEvent.click(await screen.findByRole('button', {name: /启动设置/}));
+    fireEvent.click(screen.getByText('语音', {exact: true}));
+    fireEvent.mouseDown(screen.getByLabelText('声音交付方式'));
+    fireEvent.click(await screen.findByText('分段播放（候选）', {selector: '.ant-select-item-option-content'}));
+    expect(request.mock.calls.every(call => call[0] === 'status')).toBe(true);
+    fireEvent.click(screen.getByRole('button', {name: '保存设置'}));
+    await waitFor(() => expect(request).toHaveBeenCalledWith('settings', {settings: {cosy_delivery_mode: 'incremental'}, expected_revision: 'rev-1'}));
+    expect(request.mock.calls.some(call => call[0] === 'actions')).toBe(false);
+  });
+
+  test('准备值和启动值不冒充实际连接，运行中模式控件禁用', async () => {
+    const value: LauncherSnapshot = {...stopped, state: 'ready', can_start: false, can_stop: true,
+      settings: {...stopped.settings, voice: true, cosy_delivery_mode: 'adaptive'},
+      cosy_delivery: {version: 1, next_start_mode: 'adaptive', next_start_source: 'preference', selection_valid: true,
+        startup_mode: 'incremental', startup_source: 'preference', restart_required: true,
+        observation: {version: 1, state: 'not_observed', effective_mode: 'incremental', restart_required: false, physical_playback_verified: false}}};
+    const {api, request} = fake(value); render(<LauncherApp api={api}/>);
+    const status = await screen.findByLabelText('声音交付状态');
+    expect(status.textContent).toContain('下次启动：自适应缓冲');
+    expect(status.textContent).toContain('本次启动设置：分段播放');
+    expect(status.textContent).toContain('当前连接策略：待确认');
+    expect(status.textContent).toContain('停止并重新启动');
+    fireEvent.click(screen.getByRole('button', {name: /启动设置/}));
+    fireEvent.click(screen.getByText('语音', {exact: true}));
+    expect((screen.getByLabelText('声音交付方式') as HTMLInputElement).disabled).toBe(true);
+    expect(request.mock.calls.every(call => call[0] === 'status')).toBe(true);
+  });
+
+  test('维护覆盖与连接内回退可见，但不声称播放验收或后台模型已空闲', async () => {
+    const value: LauncherSnapshot = {...stopped, state: 'ready', settings: {...stopped.settings, voice: true, cosy_delivery_mode: 'adaptive'},
+      cosy_delivery: {version: 1, next_start_mode: 'incremental', next_start_source: 'environment', selection_valid: true,
+        startup_mode: 'incremental', startup_source: 'environment', restart_required: false,
+        observation: {version: 1, state: 'buffered_fallback', effective_mode: 'buffered', failure_code: 'after_handoff',
+          last_outcome: 'failed', handoff_started: true, next_segment_allowed: true, restart_required: false, physical_playback_verified: false}}};
+    const {api} = fake(value); render(<LauncherApp api={api}/>);
+    const status = await screen.findByLabelText('声音交付状态');
+    expect(status.textContent).toContain('维护环境覆盖');
+    expect(status.textContent).toContain('当前连接策略：缓冲播放');
+    expect(status.textContent).toContain('已交付内容不会重播');
+    expect(status.textContent).not.toMatch(/验收通过|模型已空闲|播放成功/);
+  });
+
+  test('清理未确认显示需重连，禁止把null模式显示为已恢复', async () => {
+    const value: LauncherSnapshot = {...stopped, state: 'ready', settings: {...stopped.settings, voice: true},
+      cosy_delivery: {version: 1, next_start_mode: 'incremental', next_start_source: 'preference', selection_valid: true,
+        startup_mode: 'incremental', startup_source: 'preference', restart_required: true,
+        observation: {version: 1, state: 'restart_required', effective_mode: null, failure_code: 'reader_cleanup_unconfirmed',
+          next_segment_allowed: false, restart_required: true, physical_playback_verified: false}}};
+    const {api} = fake(value); render(<LauncherApp api={api}/>);
+    const status = await screen.findByLabelText('声音交付状态');
+    expect(status.textContent).toContain('当前连接策略：待确认');
+    expect(status.textContent).toContain('重新连接圆屏');
+    expect(status.textContent).not.toContain('已恢复');
+  });
+});
+
 test('独立端口与自动跟踪只有保存时写入，状态读取不触发服务动作', async () => {
   const {api, request} = fake(); render(<LauncherApp api={api}/>);
   fireEvent.click(await screen.findByRole('button', {name: /启动设置/}));

@@ -2,6 +2,7 @@
 
 import importlib.util
 from pathlib import Path
+import sys
 
 import pytest
 
@@ -12,7 +13,11 @@ PATH = (
 )
 spec = importlib.util.spec_from_file_location("launcher_preferences_test", PATH)
 preferences = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(preferences)
+sys.path.insert(0, str(PATH.parent))
+try:
+    spec.loader.exec_module(preferences)
+finally:
+    sys.path.pop(0)
 
 
 def test_preferences_roundtrip_and_never_persist_delete_permission(tmp_path):
@@ -57,6 +62,69 @@ def test_local_launcher_delete_default_is_explicit_but_not_persisted():
 def test_fresh_launcher_uses_daily_cosyvoice_default(tmp_path):
     assert preferences.DEFAULTS["tts_backend"] == "cosyvoice3"
     assert preferences.load_tts_backend(tmp_path / "missing-selection.json") == "cosyvoice3"
+
+
+@pytest.mark.parametrize('mode', ['buffered', 'incremental', 'adaptive'])
+def test_cosy_mode_persists_and_reopens_without_changing_other_voice_settings(tmp_path, mode):
+    path = tmp_path/'launcher.json'
+    original = {**preferences.DEFAULTS, 'voice': True, 'cosy_delivery_mode': mode,
+                'voice_latency_mode': 'original', 'tts_backend': 'cosyvoice3'}
+    preferences.save_preferences(path, original)
+    reopened = preferences.load_preferences(path)
+    assert reopened['cosy_delivery_mode'] == mode
+    assert reopened['voice'] and reopened['voice_latency_mode'] == 'original'
+    assert reopened['tts_backend'] == 'cosyvoice3'
+
+
+@pytest.mark.parametrize('bad', ['unknown', '', None, [], {}, True, 1])
+def test_bad_optional_cosy_mode_loads_buffered_and_save_rejects_before_overwrite(tmp_path, bad):
+    import json
+    path = tmp_path/'launcher.json'
+    path.write_text(json.dumps({'version': 7, 'cosy_delivery_mode': bad, 'role': 'plain_v1'}), 'utf-8')
+    before = path.read_bytes()
+    assert preferences.load_preferences(path)['cosy_delivery_mode'] == 'buffered'
+    with pytest.raises(ValueError, match='cosy_delivery_mode_invalid'):
+        preferences.save_preferences(path, {'cosy_delivery_mode': bad})
+    assert path.read_bytes() == before
+
+
+def test_version7_missing_cosy_field_keeps_old_defaults_and_original_bytes(tmp_path):
+    path = tmp_path/'launcher.json'
+    path.write_text('{"version":7,"voice_latency_mode":"original","tts_backend":"edge"}', 'utf-8')
+    before = path.read_bytes()
+    loaded = preferences.load_preferences(path)
+    assert loaded['cosy_delivery_mode'] == 'buffered'
+    assert loaded['voice_latency_mode'] == 'original' and loaded['tts_backend'] == 'edge'
+    assert path.read_bytes() == before
+
+
+def test_actual_tk_save_callback_preserves_current_hidden_mode_without_opening_tk(tmp_path):
+    import ast
+    from types import SimpleNamespace
+    # 执行实际嵌套保存回调，以合成控件替代GUI；不创建Tk窗口或读取本机偏好。
+    app = PATH.with_name('app.py')
+    tree = ast.parse(app.read_text('utf-8'))
+    callback = next(n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == 'current_preferences')
+    path = tmp_path/'launcher.json'
+    values = {**preferences.DEFAULTS, 'cosy_delivery_mode': 'adaptive'}
+    preferences.save_preferences(path, values)
+    namespace = dict(load_preferences=preferences.load_preferences, choice_path=path,
+                     saved=dict(preferences.DEFAULTS), start_page_labels={'chat': 'chat'})
+    for name in ('voice', 'memory_consolidation', 'l1_sufficiency_shadow', 'l2_sufficiency_shadow', 'consent'):
+        namespace[name] = SimpleNamespace(get=lambda: False)
+    for name in ('database', 'server', 'ip', 'embedding_model', 'sanotts_source'):
+        namespace[name] = SimpleNamespace(get=lambda: '')
+    namespace['start_page'] = SimpleNamespace(get=lambda: 'chat')
+    choices = dict(selected_voice_mode='pipeline', selected_voice_latency_mode='realtime',
+                   selected_role='elysia_v1', selected_extraction='rules', selected_retrieval='keyword',
+                   selected_tts='cosyvoice3', selected_vad_profile='normal')
+    for name, value in choices.items():
+        namespace[name] = lambda value=value: value
+    exec(compile(ast.Module(body=[callback], type_ignores=[]), str(app), 'exec'), namespace)
+    current = namespace['current_preferences']()
+    assert current['cosy_delivery_mode'] == 'adaptive'
+    preferences.save_preferences(path, current)
+    assert preferences.load_preferences(path)['cosy_delivery_mode'] == 'adaptive'
 
 
 def test_legacy_ip_only_file_and_broken_file_are_safe(tmp_path):

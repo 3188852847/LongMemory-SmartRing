@@ -17,6 +17,7 @@ import time
 
 from winjob import Job
 from voice_ports import validate_voice_ports, port_arguments
+from cosy_status import selection as cosy_selection, project_observation as project_cosy_observation
 
 ROOT = Path(__file__).resolve().parents[3]
 # 项目专用运行资源随项目保存；不依赖重装前的机器绝对路径。
@@ -96,6 +97,17 @@ class Options:
     voice_model_profile: str = "campus"
     memory_backend: str = "longmemory"
     ffmpeg_dir: Path | None = None
+    cosy_delivery_mode: str = "buffered"
+
+
+def selected_cosy_delivery_mode(options, environment):
+    """只为正式Cosy语音子进程选择：显式会话覆盖优先，其次本地偏好。
+
+    其他后端/文字/豆包不继承这个专属开关；直接高级入口的CLI语义保持原样。
+    """
+    value, _ = cosy_selection(voice=options.voice, voice_mode=options.voice_mode,
+        tts_backend=options.tts_backend, saved_mode=options.cosy_delivery_mode, environment=environment)
+    return value or "buffered"
 
 
 class AddressBindingError(ValueError):
@@ -154,6 +166,8 @@ def build_commands(options, uv=None):
         raise ValueError("未知圆屏语音模式。")
     if options.voice_latency_mode not in {"realtime", "original"}:
         raise ValueError("未知圆屏响应策略。")
+    if type(options.cosy_delivery_mode) is not str or options.cosy_delivery_mode not in {"buffered", "incremental", "adaptive"}:
+        raise ValueError("未知声音交付策略。")
     if options.memory_backend not in {"longmemory", "hy_memory", "xiaozhi_local", "none"}:
         raise ValueError("未知圆屏记忆后端。")
     if (options.model_profile == "campus" or
@@ -357,6 +371,10 @@ class Manager:
         self.runtime_token = None
         self._binding_next_check = 0
         self._binding_ready = False
+        self.cosy_startup_mode = None
+        self.cosy_startup_source = None
+        self._cosy_delivery_observation = None
+        self._cosy_delivery_observed_at = None
 
     def _service_state(self, name, *, ready=False):
         """只报告启动器拥有的进程事实，不把“进程活着”冒充业务就绪。"""
@@ -427,6 +445,11 @@ class Manager:
     def start(self, options):
         if self.services:
             raise ValueError("已有受管服务，请先停止再更换模式。")
+        # 在配置同步和任何进程启动之前拒绝无效显式覆盖。
+        cosy_startup_mode, cosy_startup_source = cosy_selection(
+            voice=options.voice, voice_mode=options.voice_mode, tts_backend=options.tts_backend,
+            saved_mode=options.cosy_delivery_mode, environment=os.environ)
+        cosy_delivery_mode = cosy_startup_mode or "buffered"
         commands = build_commands(options)
         require_free("127.0.0.1", options.port)
         if options.voice:
@@ -518,6 +541,8 @@ class Manager:
                         apply=True, expected_digest=vad_checked["digest"],
                     )
         self.options = options
+        self.cosy_startup_mode, self.cosy_startup_source = cosy_startup_mode, cosy_startup_source
+        self._cosy_delivery_observation = self._cosy_delivery_observed_at = None
         self._binding_next_check = 0
         self._binding_ready = False
         self.instance = secrets.token_hex(24)
@@ -526,6 +551,7 @@ class Manager:
         runtime_token = secrets.token_hex(32)
         self.runtime_token = runtime_token
         env = os.environ.copy()
+        env.pop("LONGMEMORY_COSY_DELIVERY_MODE", None)
         env.update(
             PYTHONUTF8="1",
             LONGMEMORY_LAUNCHER_INSTANCE=self.instance,
@@ -539,6 +565,9 @@ class Manager:
         try:
             for name, command, cwd in commands:
                 child_env = env
+                if (name == "voice" and options.voice and options.voice_mode == "pipeline"
+                        and options.tts_backend == "cosyvoice3"):
+                    child_env = {**env, "LONGMEMORY_COSY_DELIVERY_MODE": cosy_delivery_mode}
                 if name == "voice" and options.voice_mode == "doubao_realtime":
                     # 云端备用入口不领取个人记忆内部接口凭据。
                     child_env = {key: value for key, value in env.items() if key not in {
@@ -635,6 +664,7 @@ class Manager:
 
     def voice_bridge_ready(self):
         """验权读取本机桥状态；只证明语音控制面已监听，不要求圆屏在线。"""
+        self._cosy_delivery_observation = self._cosy_delivery_observed_at = None
         if (self.options is None or not self.options.voice
                 or "voice" not in self.services
                 or self.services["voice"].process.poll() is not None):
@@ -663,6 +693,9 @@ class Manager:
             )
             if not valid:
                 return False
+            if self.options.voice_mode == 'pipeline' and self.options.tts_backend == 'cosyvoice3':
+                self._cosy_delivery_observation = project_cosy_observation(body.get('cosy_delivery'))
+                self._cosy_delivery_observed_at = time.monotonic()
             # 控制面就绪之外，还核对本次选中的两个LAN监听；不向模型或圆屏发命令。
             now = time.monotonic()
             if now < self._binding_next_check:
@@ -697,6 +730,14 @@ class Manager:
         finally:
             conn.close()
 
+    def current_cosy_delivery(self):
+        """只读最近一次既有控制面采样，不在网页轮询线程另发HTTP。"""
+        service = self.services.get('voice')
+        if (self._cosy_delivery_observed_at is None or time.monotonic() - self._cosy_delivery_observed_at > 2
+                or service is None or getattr(service, 'process', None) is None or service.process.poll() is not None):
+            return None
+        return project_cosy_observation(self._cosy_delivery_observation)
+
     def voxcpm_ready(self):
         """保留旧调用方名称；实际按当前本地 TTS 后端检查。"""
         return self.local_tts_ready()
@@ -712,4 +753,6 @@ class Manager:
         if errors:
             raise RuntimeError("停止未完全确认，请勿重复启动。")
         self.services.clear()
+        self.cosy_startup_mode = self.cosy_startup_source = None
+        self._cosy_delivery_observation = self._cosy_delivery_observed_at = None
         self.publish_status("stopped")

@@ -9,10 +9,21 @@ import json
 import re
 import time
 import ipaddress
+import sys
 from urllib.parse import urlsplit
 from uuid import uuid4
 from voice_interruption import snapshot as voice_interruption_snapshot
 from voice_output_protocol import protocol_snapshot
+from cosy_delivery_contract import project_observation as project_cosy_delivery
+
+
+def cosy_delivery_diagnostics(connection=None):
+    """只调用已加载的AD只读getter；不为状态读取导入语音栈或创建会话。"""
+    try:
+        getter = getattr(sys.modules.get('voice_latency'), 'delivery_snapshot', None)
+        return project_cosy_delivery(getter(connection)) if callable(getter) else None
+    except Exception:
+        return None
 
 
 def voice_input_observation_diagnostics(connection=None):
@@ -427,6 +438,13 @@ class DeviceControl:
             result["voice_latency"] = self.last_voice_latency
         if self.last_voice_prediction_shadow is not None:
             result["voice_prediction_shadow"] = self.last_voice_prediction_shadow
+        # 单独的有限旁路；无AD/缺测不填充成实际模式，不缓存已断开的旧连接。
+        live = next(iter(self.connections.values()), None) if len(self.connections) == 1 else None
+        if live is not None and getattr(getattr(getattr(live, 'websocket', None), 'state', None), 'name', None) != 'OPEN':
+            live = None
+        delivery = cosy_delivery_diagnostics(live) if len(self.connections) <= 1 else None
+        if delivery is not None:
+            result['cosy_delivery'] = delivery
         return result
 
     def voice_input_signal(self):

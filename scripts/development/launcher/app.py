@@ -489,6 +489,8 @@ def main():
             "voice": voice.get(),
             "voice_mode": selected_voice_mode(),
             "voice_latency_mode": selected_voice_latency_mode(),
+            # 隐藏维护偏好按磁盘当前值保留，不让兼容面板保存别项时清掉它。
+            "cosy_delivery_mode": load_preferences(choice_path)["cosy_delivery_mode"],
             "start_page": start_page_labels[start_page.get()],
             "database": database.get().strip(),
             "voice_root": server.get().strip(),
@@ -1150,6 +1152,7 @@ def main():
             options = Options(database=Path(database.get()), voice=voice.get(), voice_root=Path(server.get()),
                               voice_mode=selected_voice_mode(),
                               voice_latency_mode=selected_voice_latency_mode(),
+                              cosy_delivery_mode=load_preferences(choice_path)["cosy_delivery_mode"],
                               lan_ip=ip.get().strip(), role=selected_role(), consent=consent.get(),
                               voice_ws_port=saved['voice_ws_port'], voice_http_port=saved['voice_http_port'],
                               tts_backend=selected_tts(),
