@@ -7,6 +7,7 @@
 import asyncio
 from collections import Counter, deque
 from contextvars import ContextVar
+from contextlib import nullcontext
 import inspect
 import threading
 import time
@@ -83,6 +84,9 @@ class OutputState:
                 if sentence is not None and sentence not in self.revoked:
                     self.revoked.append(sentence)
             self.note(reason)
+            protocol = getattr(self.connection, "_longmemory_tts_interrupt_wire", None)
+            if protocol is not None:
+                protocol.revoke(reason)
         cancel = getattr(waiting, "cancel", None)
         if callable(cancel):
             cancel()  # timer/已排队提示也永久失效，不能随client_abort=False复活。
@@ -149,14 +153,18 @@ class OutputLease:
                 self.state.note("tts_started")
             else:
                 self.producing = False
+        protocol = getattr(connection, "_longmemory_tts_interrupt_wire", None)
+        self.wire_turn = protocol.capture_turn() if protocol is not None else None
 
     def current(self):
         state = self.state
         with state.lock:
             current = getattr(state.connection, "sentence_id", self.sentence_id)
+            wire_turn = getattr(self, "wire_turn", None)
             return (not state.closed and self.epoch == state.epoch
                     and self.sentence_id not in state.revoked
-                    and (self.sentence_id is None or self.sentence_id == current))
+                    and (self.sentence_id is None or self.sentence_id == current)
+                    and (wire_turn is None or wire_turn.identity_current()))
 
     def release(self):
         with self.state.lock:
@@ -173,6 +181,14 @@ def revoked_sentence(connection, sentence_id):
         return False
     with state.lock:
         return sentence_id in state.revoked
+
+
+def current_output_lease(connection):
+    lease = _CONTROL.get() or _MESSAGE.get()
+    if lease is not None and lease.state.connection is connection:
+        return lease
+    protocol = getattr(connection, "_longmemory_tts_interrupt_wire", None)
+    return protocol.current_lease() if protocol is not None else None
 
 
 class _StaleControl(Exception):
@@ -220,7 +236,18 @@ def install_voice_interruption(connection_class, receive_module, asr_base_module
                 return await original(connection, text)
             handoff_token = _HANDOFF.set(connection)
             try:
-                return await handoff_once(connection, text)
+                protocol = getattr(connection, "_longmemory_tts_interrupt_wire", None)
+                eligible = (protocol is not None and supported(connection) and isinstance(text, str)
+                    and text.strip() and not getattr(connection, "need_bind", False)
+                    and getattr(connection, "client_listen_mode", None) != "manual"
+                    and not getattr(connection, "calling", False))
+                with protocol.input_scope() if eligible else nullcontext():
+                    try:
+                        return await handoff_once(connection, text)
+                    except Exception as error:
+                        if protocol is not None and protocol.is_stale_error(error):
+                            return None
+                        raise
             finally:
                 _HANDOFF.reset(handoff_token)
         async def handoff_once(connection, text):
@@ -257,7 +284,7 @@ def install_voice_interruption(connection_class, receive_module, asr_base_module
     original_packet = send_module._do_send_audio
 
     async def wait_completion(connection):
-        lease = _CONTROL.get()
+        lease = current_output_lease(connection)
         if lease is None:
             return await original_wait(connection)
         task = asyncio.create_task(original_wait(connection))

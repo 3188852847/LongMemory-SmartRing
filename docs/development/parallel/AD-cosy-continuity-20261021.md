@@ -605,3 +605,28 @@ realtime已运行输入处理器时不会顺带ResetDecoder；AutoStop会等待�
 防止旧连接epoch1误配新连接epoch1。EOS等待须随身份失效取消，旧finally不减新计数或关新门。
 线上JSON/能力名v1不变，候选文档标题明确修订3；没有实施固件、服务端新协议或串口操作，
 没有新增运行/实机通过声明。交由主会话转AI最终冻结，再统一安排AH实现。
+
+### 显式WS打断服务端候选实现（2026-10-21）
+
+主会话以修订3作为双方离线实施基线，新增授权AD继续服务端实现与真实环回WS合同验证；
+本阶段没有修改0015/0016消费者源码、启动器、controls/UI、日用服务、个人数据、模型、GPU或串口。
+安装与getter精确合同见[独立服务端交付](AD-tts-interrupt-server-20261021.md)，
+保留摘要v1形状，由AI最终组合新增可选协议摘要。后装未知发送包装会失去覆盖证据并关闭连接，
+不得为通过状态检查把cap确认条件放宽。
+
+新增SocketProxy将当前连接实际ws.send统一串行，双向hello只在固定源和完整已装包装核对后确认。
+正常EOS不清设备队列；撤权捕获旧wire轮次，已在途写出先完成或有界关闭，后续interrupt先于新start；
+门内二核、旧消息/输入/别名和close均保留不可复活身份，补start期间的await也重核。
+二进制头不修改，无归属v1 binary拒绝；无确认的0015、非pipeline、MQTT等沿legacy并保持无设备回执。
+
+真实127.0.0.1随机端口WebSocket＋固定SDK AST，无模型/ASR/VAD。测试覆盖握手兼容、旧/新消费者
+CPU合同预言机、暂停真实raw.send时打断/取消、等待锁取消、有界send/gate失败、close、晚EOS别名、
+等待/答案/停止提示音、旧intent延迟、重复hello、epoch耗尽、覆盖失效和补start时撤权。
+真实Opus有声后交接，旧帧在interrupt后0；新轮20帧完整解码，接收跨度一次834.335ms，
+是环回接收与原生60ms调度证据，不是硬件播放。预言机不等于AH固件执行，active任务/UI/跨连接
+generation仍需AH/AI对实际消费者联合验收。
+
+扩大回归收尾发现旧HTTP取消后服务端生成锁释放竞争，保留首次154 passed/1 failed实际记录；
+取证显示新请求阶段busy、未进合成。修复只允许精确503 busy最多400ms等待，其他错误不重放，
+专项9 passed；扩大回归160 passed，文档工具自身14 passed。文档strict因AD文档未登记共享清单
+报unknown-selection，未修改共享清单/冒称已通过。此软件候选尚未部署或owner实机验收。

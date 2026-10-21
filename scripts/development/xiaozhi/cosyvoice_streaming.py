@@ -161,38 +161,60 @@ def _open_stream(_url, *, json, timeout, headers, cancelled, **_kwargs):
             or target.path != '/v1/audio/stream' or target.query or target.fragment
             or target.username is not None or target.password is not None):
         raise ValueError('cosyvoice_stream_loopback_required')
-    connection = http.client.HTTPConnection("127.0.0.1", target.port, timeout=timeout[0])
-    done = threading.Event()
-    watcher = None
-    response = None
-    try:
-        connection.connect()
-        owned_socket = connection.sock
-        owned_socket.settimeout(timeout[1])
-        def watch():
-            while not done.wait(.02):
-                if cancelled():
+    busy_deadline = time.monotonic() + .4
+    while True:
+        if cancelled():
+            raise _SpeechCancelled()
+        connection = http.client.HTTPConnection("127.0.0.1", target.port, timeout=timeout[0])
+        done = threading.Event()
+        watcher = response = None
+        retry_busy = False
+        try:
+            connection.connect()
+            owned_socket = connection.sock
+            owned_socket.settimeout(timeout[1])
+            def watch(own_done=done, own_socket=owned_socket):
+                while not own_done.wait(.02):
+                    if cancelled():
+                        try:
+                            own_socket.shutdown(socket.SHUT_RDWR)
+                        except OSError:
+                            pass
+                        return
+            watcher = threading.Thread(target=watch, name="cosyvoice-http-cancel", daemon=True)
+            watcher.start()
+            connection.request("POST", "/v1/audio/stream", json_module.dumps(json).encode(),
+                               {"Content-Type": "application/json", **headers})
+            response = connection.getresponse()
+            if response.status != 200:
+                # 固定服务明确busy表示尚未进入合成；只等旧请求finally释放，不重放已开始的生成。
+                length = response.headers.get("Content-Length", "")
+                if (response.status == 503 and response.headers.get_content_type() == "application/json"
+                        and length.isdecimal() and 0 < int(length) <= 128):
+                    owned_socket.settimeout(min(timeout[1], .2))
                     try:
-                        owned_socket.shutdown(socket.SHUT_RDWR)
-                    except OSError:
+                        retry_busy = json_module.loads(response.read(int(length))) == {"error": "busy"}
+                    except (ValueError, OSError):
                         pass
-                    return
-        watcher = threading.Thread(target=watch, name="cosyvoice-http-cancel", daemon=True)
-        watcher.start()
-        connection.request("POST", "/v1/audio/stream", json_module.dumps(json).encode(),
-                           {"Content-Type": "application/json", **headers})
-        response = connection.getresponse()
-        if response.status != 200:
-            raise RuntimeError("cosyvoice_stream_http_rejected")
-        yield type("StreamResponse", (), {"raw": response, "headers": response.headers,
-                    "raise_for_status": lambda self: None})()
-    finally:
-        done.set()
-        if response is not None:
-            response.close()
-        connection.close()
-        if watcher is not None:
-            watcher.join(timeout=.2)
+                if not retry_busy or time.monotonic() >= busy_deadline:
+                    raise RuntimeError("cosyvoice_stream_http_rejected")
+            else:
+                yield type("StreamResponse", (), {"raw": response, "headers": response.headers,
+                            "raise_for_status": lambda self: None})()
+                return
+        finally:
+            done.set()
+            if response is not None:
+                response.close()
+            connection.close()
+            if watcher is not None:
+                watcher.join(timeout=.2)
+        # 只在无生成的显式busy上等待；每20ms检查本轮永久撤权。
+        until = min(busy_deadline, time.monotonic() + .02)
+        while time.monotonic() < until:
+            if cancelled():
+                raise _SpeechCancelled()
+            time.sleep(min(.005, max(0, until - time.monotonic())))
 
 
 def _reset_opus_encoder(opus_encoder) -> None:
@@ -443,7 +465,9 @@ def install_cosyvoice_streaming(tts, connection):
                     original_text,
                     sentence_id,
                 ))
-            opus_handler(CosyVoicePacket(packet, sentence_id, cancelled))
+            tagged = CosyVoicePacket(packet, sentence_id, cancelled)
+            tagged._longmemory_output_lease = lease
+            opus_handler(tagged)
             if not delivered and lease.current():
                 lease.state.note("first_segment_callback_returned")
             delivered = True
@@ -551,7 +575,9 @@ def install_cosyvoice_streaming(tts, connection):
                     # 完整 WAV 请求期间也可能开始新话轮。这里丢弃而不抛取消信号，
                     # 否则上游兼容方法可能把正常打断当成合成失败并重试多次。
                     if not cancelled():
-                        opus_handler(CosyVoicePacket(packet, sentence_id, cancelled))
+                        tagged = CosyVoicePacket(packet, sentence_id, cancelled)
+                        tagged._longmemory_output_lease = lease
+                        opus_handler(tagged)
 
                 try:
                     outcome = "fallback"

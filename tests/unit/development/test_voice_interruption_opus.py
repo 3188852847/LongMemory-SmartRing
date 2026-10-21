@@ -115,7 +115,9 @@ def test_voiced_opus_then_formal_handoff_does_not_revive_old_audio_and_next_roun
         result = subprocess.run([str(PYTHON), "-B", "-X", "utf8", "-c", DRIVER],
             input=json.dumps(config).encode(), capture_output=True, cwd=ROOT, timeout=18,
             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
-        assert result.returncode == 0, result.stderr.decode("utf-8", errors="replace")[-3500:]
+        stages = [list(row["stages"]) for row in server.speech_requests.values()]
+        assert result.returncode == 0, (result.stderr.decode("utf-8", errors="replace")[-6000:]
+                                       + "\nsynthetic_http_stages=" + json.dumps(stages))
         report = json.loads(result.stdout)
     finally:
         server.shutdown()
