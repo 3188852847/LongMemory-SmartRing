@@ -10,6 +10,8 @@
 
 AC 用原次解码、AEC、VAD、推理结果做有限摘要，没有新增推理、线程或定时采样。`decode_return` 可能已包含直连 v2 的 AEC，服务器 AEC 前后应看 `aec_input/aec_output`。声明 true 不能证明实际非零时间戳、有效参考匹配或声学效果；AD 合成近端衰减及旧参考结果不证明现场根因。
 
+采样解释补充：`inference_return` 在原 run 返回且观测成功读到合法概率后才计数；原 run 已返回但 feed/结果解析失败时，会记 `inference_observation_error`，不能将前者直接当成原 run 成功总次数。`probability_invalid` 也不会进入该成功概率计数。未导出 `inference_begin`，不按不存在的字段推断调用次数。
+
 ## 独立端点与体积决定
 
 所有者明确选择独立只读诊断端点，ROOT 同时确认路径 **GET `/api/voice-input-signal`**。它复用 [原 control_http](../../../scripts/development/xiaozhi/control_http.py) 的 8766 回环服务、Bearer、Host/Origin/Sec-Fetch 检查、异常处理及 no-store 响应。没有新端口、UI 或 8767 投影字段；原 `/api/device` 和网页客户端 16384 字节上限不变。
@@ -35,6 +37,24 @@ AC 用原次解码、AEC、VAD、推理结果做有限摘要，没有新增推�
 
 AB 改变了受管记忆原语摘要，当前为 `fc9d53ea2b90be3d9a80846b21eec9b389f2dbe4393b51d8956f3013fcd103e8`。新 provider 原字节仍为 31326 字节、SHA256 `f425a3824f3771a16e7bd8df2b022376257c0d8f6673cd70c23d552a8943f717`；仅允许已批准 `7241…` 精确旧版的显式升级。
 
-ROOT 已授权在本组合清洁源码冻结后，用 `tests/fixtures/hy_management_receipt.py --managed-semantic`、已有 V 树 SDK、既有小智 3.10、AB 已捕获合成输入，在本树全新 ignored 目录生成实际管理证明及外围回执。此时尚未执行，完成结果另在本文追加，不手改旧 proof、不访问日用个人库或模型。工具要求真实固定 SDK 验证零跳过、源 HEAD/源码/解释器前后一致，并由 Windows Job 管理测试后代。
+ROOT 已授权在本组合清洁源码冻结后，用 `tests/fixtures/hy_management_receipt.py --managed-semantic`、已有 V 树 SDK、既有小智 3.10、AB 已捕获合成输入，在本树全新 ignored 目录生成实际管理证明及外围回执。冻结提交时该项待执行，现已按下节完成，不手改旧 proof、不访问日用个人库或模型。工具要求真实固定 SDK 验证零跳过、源 HEAD/源码/解释器前后一致，并由 Windows Job 管理测试后代。
 
 ROOT 负责最终停机与一致备份、合入、精确 provider 升级、复制匹配 proof 和正式启动；AI 不推送、不操作日用/私有配置/个人库/设备。保持 buffered 及既有关闭设置，不混入 AG GPU、AE 双模型或持久化草稿。上线后由 ROOT 受控读取两端点和 AB 同轮基础/详情，所有者尽量一次真实对话采样；仍需真实视觉、声音和打断反馈。
+
+## 最终源码对应的实际管理证明
+
+组合业务冻结提交 **`3299e358cda6e3db8fac8e7d743c163dc6b33dea`**，Git tree `3c3bc3514cb3e04a382cfaf5310cbcdd0da446a4`；本次工具执行前后要求源码清洁且身份不变。固定受管语义验证 **219 passed、0 skipped、0 failure/error，438.71 秒**，正常退出0。包括真实 SDK 管理/重启、来源派生失效、只读意图、后台准入与跨 Python/HTTP 路径；不是重新执行旧大回归来代替本次身份验证。
+
+所有新证据在本 AI 树排他目录 **`data/test-tmp/ai-signal-managed-proof-20261021-01/`**，未写正式配置。ROOT 部署可用该目录的 `management-verification.json`，外围审计用 `receipt.json`，二者不可混淆。证明为工具根据真实检查结果新生成的七字段协议2候选，不是密码学签名，不修改或覆盖旧证明。
+
+| 原字节证据 | SHA256 |
+|---|---|
+| `management-verification.json` | `d9787e30fdeb49fb6f2dc3d5c062b0d3a73e4223e1df66302cca1ffb3082ca4b` |
+| `receipt.json` | `0ad22195ef47d6333e328409c580f8db5c655abb2a6cad7c69c0f25a0a9bb77c` |
+| `junit.xml` | `bbbd840c85792f68212261e5100bf115dc59c8f7eb1be55857c1eec0166485c8` |
+| `pytest.log` | `42dd92b64eab76b68bd8b5f636b960bf84281fe0cd9da6a21767a07a8c679cb0` |
+| 全部 `src/longmemory` 与 `scripts/development/xiaozhi` Python 文件名＋规范化字节 | `d3908f19053e17e440107ce7127c6effe41e65c4bf785353c7b699d7af938e4b` |
+
+AI 独立复核七字段 proof 的精确内容、219 个 JUnit case 零跳过/失败、日志摘要、两套解释器摘要、最终管理原语摘要和全源码摘要，均匹配；复核回执在同树 `data/test-tmp/ai-signal-managed-proof-independent-review.json`。SDK 解释器 SHA256 为 `560b9ef7d856608ab8da02ded2dc8a1951ad1f424c382c0ec6a698874165a18e`，小智解释器为 `8ce49d96ecba2dfd13b3cc99b5d8a18f6c0ad82bacf0df2f5d17a3df6a9cd203`。
+
+此后仅追加本文与清单，不改变 `src/scripts/tests/web`。ROOT 合入后仍须核对最终源码与上述身份，保留回执实测 source HEAD，不将文档收尾或主仓新提交号伪写进旧回执。当前没有部署、真实 BGE 首次分段、设备信号采样或打断成功证据，实机失败状态不因此改变。

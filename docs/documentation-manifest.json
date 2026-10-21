@@ -32,7 +32,7 @@
         "docs/development/parallel/AD-aec-playback-input-20261021.md",
         "docs/development/parallel/AI-first-recall-observation-review-20261021.md"
       ],
-      "review": "verified 2026-10-21: 同服务/同鉴权独立端点，原最大状态15519/新摘要5243字节分别读取；不增16384上限，不改8767，管理proof待新冻结源码实跑"
+      "review": "verified 2026-10-21: 同服务/同鉴权独立端点，原最大状态15519/新摘要5243字节分别读取；不增16384上限，不改8767；3299e358固定管理219项零跳过，匹配fc9d53身份的新证明已生成并独立复核，未部署"
     },
     {
       "id": "first-recall-detail-observation-v2",
@@ -1750,11 +1750,11 @@
       "path": "docs/development/parallel/AI-signal-diagnostic-integration-20261021.md",
       "title": "AI：输入数值诊断与首次检索观测组合",
       "status": "draft",
-      "basis": "独立只读端点及清洁组合候选；管理proof和实机待完成",
+      "basis": "独立只读端点及清洁组合候选；219项实际管理proof已生成，实机待采样",
       "review": {
         "state": "verified",
         "date": "2026-10-21",
-        "scope": "正式AC/AD固定提交、209项联合/AD五项/精确资源模拟及HTTP整包边界；未部署、未确认根因",
+        "scope": "正式AC/AD固定提交、209项联合/AD五项/精确资源模拟及HTTP整包边界；3299e358实际管理219项零跳过，原字节证明独立复核；未部署、未确认根因",
         "evidence": [
           "docs/development/parallel/AI-signal-diagnostic-integration-20261021.md",
           "tests/unit/development/test_voice_signal_endpoint.py",
@@ -1775,7 +1775,7 @@
       "review": {
         "state": "verified",
         "date": "2026-10-21",
-        "scope": "正式AC/AD固定提交、209项联合/AD五项/精确资源模拟及HTTP整包边界；未部署、未确认根因",
+        "scope": "正式AC/AD固定提交、209项联合/AD五项/精确资源模拟及HTTP整包边界；3299e358实际管理219项零跳过，原字节证明独立复核；未部署、未确认根因",
         "evidence": [
           "docs/development/parallel/AI-signal-diagnostic-integration-20261021.md",
           "tests/unit/development/test_voice_signal_endpoint.py",
@@ -1796,7 +1796,7 @@
       "review": {
         "state": "verified",
         "date": "2026-10-21",
-        "scope": "正式AC/AD固定提交、209项联合/AD五项/精确资源模拟及HTTP整包边界；未部署、未确认根因",
+        "scope": "正式AC/AD固定提交、209项联合/AD五项/精确资源模拟及HTTP整包边界；3299e358实际管理219项零跳过，原字节证明独立复核；未部署、未确认根因",
         "evidence": [
           "docs/development/parallel/AI-signal-diagnostic-integration-20261021.md",
           "tests/unit/development/test_voice_signal_endpoint.py",
