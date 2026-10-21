@@ -659,6 +659,13 @@ def install_cosyvoice_streaming(tts, connection):
                         delivery.degrade("after_handoff")
                         _reset_opus_encoder(tts.opus_encoder)
                         connection.logger.bind(tag="cosyvoice-stream").warning("完整音频回退交付失败，未重播本段")
+                    elif not handoff_started:
+                        # 固定上游耗尽生成/解码重试也会直接返回None；没有任何
+                        # 音频回调就不能把方法返回记成回退成功。
+                        outcome = "failed"
+                        delivery.degrade("before_handoff")
+                        _reset_opus_encoder(tts.opus_encoder)
+                        connection.logger.bind(tag="cosyvoice-stream").warning("完整音频回退未交付音频")
                     return result
                 finally:
                     if cancelled():
