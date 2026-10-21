@@ -12,6 +12,7 @@ import pytest
 
 
 SCRIPT = Path(__file__).resolve().parents[3] / "scripts/development/xiaozhi/device_control.py"
+sys.path.insert(0, str(SCRIPT.parent))
 spec = importlib.util.spec_from_file_location("device_control_tested", SCRIPT)
 control = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(control)
@@ -152,6 +153,31 @@ def rig():
     bridge = control.DeviceControl("aa:bb:cc:dd:ee:ff", timeout=0.02)
     bridge.attach(conn, "AA:BB:CC:DD:EE:FF")
     return bridge, conn, socket
+
+
+def test_interruption_summary_uses_only_selected_live_connection_without_cached_counts():
+    from voice_interruption import OutputLease, state_for
+    bridge, conn, socket = rig()
+    conn.tts = SimpleNamespace(_longmemory_cosy_streaming_installed=True)
+    conn.sentence_id = "private-synthetic-turn"
+    conn._longmemory_cosy_delivery_mode = "buffered"
+    conn._longmemory_audio_revocation_installed = True
+    OutputLease(conn, conn.sentence_id, producing=True).release()
+    state_for(conn).note("first_answer_send_returned")
+    value = bridge.status()["voice_interruption"]
+    assert value["status"] == "observed"
+    assert value["configuration"]["delivery_mode"] == "buffered"
+    assert value["observed"] is None
+    assert value["counts"]["first_answer_send_returned"] == 1
+    assert "private-synthetic-turn" not in json.dumps(value)
+    socket.state.name = "CLOSED"
+    assert bridge.status()["voice_interruption"]["status"] == "no_connection"
+    socket.state.name = "OPEN"
+    bridge.detach(conn)
+    cleared = bridge.status()["voice_interruption"]
+    assert cleared["status"] == "no_connection"
+    assert cleared["observed"] is None
+    assert not any(cleared["counts"].values())
 
 
 def test_realtime_control_can_stop_without_tts_and_never_advertises_announcements():

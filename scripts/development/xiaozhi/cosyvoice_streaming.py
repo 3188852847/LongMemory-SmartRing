@@ -23,6 +23,7 @@ import requests
 from fast_voice_responses import fast_asset_for_text
 from cosyvoice_profiles import default_voice_active
 from voice_diagnostics import for_sentence
+from voice_interruption import OutputLease
 
 
 STREAM_URL = "http://127.0.0.1:18770/v1/audio/stream"
@@ -386,7 +387,7 @@ def install_cosyvoice_streaming(tts, connection):
 
     encoder_lock = threading.Lock()
 
-    def stream(text, opus_handler, sentence_id):
+    def stream(text, opus_handler, sentence_id, lease):
         original_text = text
         trace = for_sentence(connection, sentence_id)
 
@@ -394,7 +395,7 @@ def install_cosyvoice_streaming(tts, connection):
             # 新 chat 会重新清空 client_abort；捕获的旧话轮身份仍必须永久失效。
             current = getattr(connection, "sentence_id", sentence_id)
             return (
-                connection.client_abort or tts.tts_stop_request
+                not lease.current() or connection.client_abort or tts.tts_stop_request
                 or (getattr(connection, 'stop_event', None) is not None
                     and connection.stop_event.is_set())
                 or (sentence_id is not None and current != sentence_id)
@@ -424,8 +425,9 @@ def install_cosyvoice_streaming(tts, connection):
         timeline = None
         if mode == "adaptive":
             previous = getattr(tts, "_longmemory_cosy_playout", None)
-            if previous is None or previous[0] != sentence_id:
-                previous = (sentence_id, PlaybackTimeline())
+            lease_key = (sentence_id, lease.epoch)
+            if previous is None or previous[0] != lease_key:
+                previous = (lease_key, PlaybackTimeline())
                 tts._longmemory_cosy_playout = previous
             timeline = previous[1]
         outcome = "failed"
@@ -442,6 +444,8 @@ def install_cosyvoice_streaming(tts, connection):
                     sentence_id,
                 ))
             opus_handler(CosyVoicePacket(packet, sentence_id, cancelled))
+            if not delivered and lease.current():
+                lease.state.note("first_segment_callback_returned")
             delivered = True
             if timeline is not None:
                 timeline.packet()
@@ -462,6 +466,9 @@ def install_cosyvoice_streaming(tts, connection):
                     raise ValueError("cosyvoice_stream_content_type_invalid")
                 if response.headers.get("X-LongMemory-Audio-Stream") != "2":
                     raise ValueError("cosyvoice_incremental_contract_missing")
+                with lease.state.lock:
+                    if lease.current() and lease.state.observed is not None:
+                        lease.state.observed["v2_transport_confirmed"] = True
                 decoder = ContinuousPCM(connection.sample_rate)
                 for wav in iter_wav_chunks(response.raw, require_end=True):
                     if is_cancelled():
@@ -481,6 +488,7 @@ def install_cosyvoice_streaming(tts, connection):
         try:
             check_current()
             if preset is not None and preset.is_file():
+                lease.state.producer("preset", lease=lease)
                 audio_bytes_to_data_stream(
                     preset.read_bytes(), file_type="wav", is_opus=True,
                     callback=deliver_opus, sample_rate=connection.sample_rate,
@@ -488,9 +496,11 @@ def install_cosyvoice_streaming(tts, connection):
                 )
                 return None
             if mode == "adaptive":
+                lease.state.producer("adaptive_buffer", "incremental", lease=lease)
                 buffer = AdaptivePCMBuffer(source, connection.sample_rate, cancelled, timeline)
                 pieces = iter(buffer)
             else:
+                lease.state.producer(mode + "_pcm", mode, lease=lease)
                 pieces = source(cancelled)
             try:
                 for pcm in pieces:
@@ -545,6 +555,7 @@ def install_cosyvoice_streaming(tts, connection):
 
                 try:
                     outcome = "fallback"
+                    lease.state.producer("complete_wav_fallback", "full_wav", lease=lease)
                     return original(text, opus_handler=fallback_packet)
                 finally:
                     if cancelled():
@@ -564,17 +575,21 @@ def install_cosyvoice_streaming(tts, connection):
     def serialized_stream(text, opus_handler=None):
         # 捕获排队前身份；旧调用的finally/reset不得清空新轮编码器或吞掉新轮音频。
         sentence_id = getattr(tts, "current_sentence_id", None)
-        while not encoder_lock.acquire(timeout=.02):
-            if (sentence_id != getattr(tts, "current_sentence_id", None)
-                    or sentence_id != getattr(connection, "sentence_id", sentence_id)
-                    or connection.client_abort or tts.tts_stop_request):
-                return None
+        lease = OutputLease(connection, sentence_id, producing=True)
+        acquired = False
         try:
-            if sentence_id != getattr(tts, "current_sentence_id", None):
+            while not encoder_lock.acquire(timeout=.02):
+                if (not lease.current() or sentence_id != getattr(tts, "current_sentence_id", None)
+                        or connection.client_abort or tts.tts_stop_request):
+                    return None
+            acquired = True
+            if not lease.current() or sentence_id != getattr(tts, "current_sentence_id", None):
                 return None
-            return stream(text, opus_handler, sentence_id)
+            return stream(text, opus_handler, sentence_id, lease)
         finally:
-            encoder_lock.release()
+            if acquired:
+                encoder_lock.release()
+            lease.release()
 
     tts.to_tts_stream = serialized_stream
     tts._longmemory_cosy_streaming_installed = True

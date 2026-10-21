@@ -234,7 +234,8 @@ def test_stale_turn_is_rejected_before_http_even_when_abort_was_reset(cancellabl
     state.tts.to_tts_stream("旧片段", opus_handler=state.packets.append)
     assert state.requests == 0
     assert state.packets == state.queued == []
-    assert state.resets == 1
+    # 排队前即已失效的调用不得重置当前轮共用的编码器。
+    assert state.resets == 0
 
 
 def test_abort_during_wav_decode_never_starts_playback(cancellable_stream, monkeypatch):
@@ -311,6 +312,28 @@ def test_new_turn_during_full_wav_fallback_discards_audio_without_retry(cancella
     assert fallback_calls == ["旧片段"]
     assert state.packets == []
     assert state.resets == 2
+
+
+def test_asr_revocation_survives_abort_boolean_reset_before_new_sentence_id(cancellable_stream):
+    from voice_interruption import state_for
+    state = cancellable_stream
+    class Encoder:
+        def encode_pcm_to_opus_stream(self, pcm, *, end_of_stream, callback):
+            if pcm:
+                callback(b"first")
+                callback(b"late-old")
+        def reset_state(self):
+            state.resets += 1
+    state.tts.opus_encoder = Encoder()
+    def packet(value):
+        state.packets.append(value)
+        if value == b"first":
+            state.connection.client_abort = True
+            state_for(state.connection).revoke("asr_handoff_revoked")
+            # 固定上游正式ASR交接会复位此布尔，chat线程尚未生成下一sentence_id。
+            state.connection.client_abort = False
+    state.tts.to_tts_stream("合成旧轮", opus_handler=packet)
+    assert state.packets == [b"first"]
 
 
 def test_adaptive_old_cleanup_cannot_reset_concurrently_started_new_turn(cancellable_stream):

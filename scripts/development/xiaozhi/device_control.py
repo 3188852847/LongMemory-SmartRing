@@ -11,6 +11,7 @@ import time
 import ipaddress
 from urllib.parse import urlsplit
 from uuid import uuid4
+from voice_interruption import snapshot as voice_interruption_snapshot
 
 
 STATUS_TOOL = "self.get_device_status"
@@ -318,10 +319,13 @@ class DeviceControl:
                   "stop_speech_supported": False,
                   "user_session_active": False,
                   "natural_interruption": natural_interruption_diagnostics(),
+                  "voice_interruption": voice_interruption_snapshot(None),
                   "allowed_volume": {"minimum": MIN_VOLUME, "maximum": MAX_VOLUME}}
         try:
             conn = self._connection()
             result["ready"] = True
+            # 只投影当前明确连接的进程内阶段；不读取文件、不触发合成、不保留断线计数。
+            result["voice_interruption"] = voice_interruption_snapshot(conn)
             result["voice_mode"] = getattr(conn, "voice_mode", "pipeline")
             waiting = getattr(conn, "_longmemory_waiting", None)
             if waiting is not None:

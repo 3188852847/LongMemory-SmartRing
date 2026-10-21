@@ -544,3 +544,54 @@ adaptive候选组合/有界人工验收；目前不建议改日用全局默认�
 脚本自检覆盖快速批量到达的FIFO排队、供给空洞与已存在
 队列/预缓冲三种手算样例；并将12曲线重算缺口与原值逐条核对、重构原200门包索引。
 这只是CPU诊断证据，不改已有75项业务测试或原始GPU测量身份。
+
+### owner拒收后的CPU取消保护与只读状态（2026-10-21）
+
+主会话传达owner实机拒收adaptive：字幕遮挡且识别到新输入后旧声音继续。拒收事实优先；
+原GPU/CPU证据不改写为owner通过。主会话已回到日用buffered；AD未操作服务、配置、个人库、
+GPU、Docker、固件或串口。仅只读主会话指定的拒收时序元数据；没有VAD/abort轨迹，
+不能从就绪标志或ASR预取成功推断实际故障原因。
+
+已在未接新保护的流式消费代码重现：首次callback中撤权后，先复位client_abort但保持旧sentence_id，
+后续old帧仍交付；新增测试先FAIL（first/late-old两个包），加保护后只交付first，PASS。
+另检查固定SDK发现正常LAST的等待与新UUID创建之前存在旧stop竞争窗口。该二者是可重现软件缺口，
+不宣称它们就是owner唯一根因。
+
+本阶段代码：
+
+- 新增 `voice_interruption.py`，进程内不可复活的输出租约、正式ASR末道撤权、原clear_queues提前钩子、
+  等待提示永久取消；保留原生VAD/AEC最早打断，不按特定口令识别，不依赖AE或SmartTurn。
+- 输出租约在等待共享Opus锁之前固定；旧请求不再碰新轮编码器，延迟旧调用也不能重新以旧UUID开流。
+  旧消息跨await保留原代次，原LAST等待被撤权后退出，不能停新轮队列/清新speaking。
+- 最终发送仍检验旧消息、流控句子及永久关闭的等待状态；在await中的旧发送返回单列，
+  不把它计入新轮首包。TTS原生流程、切段、声线、subtitle、默认buffered与锁文件不变。
+- `device_control.status`仅新增当前明确连接的 `voice_interruption` 只读字段；无缓存历史回放。
+  无模型或文件读取。固定计数+最后阶段，无文本、音频、设备ID、UUID、路径或事件列表。
+  配置、客户端实际分支、callback、网络发送返回分别标注；服务内部模型流模式/缓存命中保持unconfirmed，
+  设备播放回执始终false。精确schema/安装点见
+  [摘要合同](AD-voice-interruption-summary-v1-20261021.md)，供AI集成投影与UI。
+
+CPU验证：固定SDK `eb4b28c59ed7ed885258498cf757ce14352d620e` 的真实收音/startToChat/abort/
+发送/流控/清队列方法经AST提取注入合成对象，不导入上游模型。覆盖原生VAD早于ASR、
+stale speaking=false、布尔复位而UUID未变、原有不同/嵌套包装只执行一次、manual/绑定/非Cosy/空输入、
+旧LAST等待、旧消息跨await、最终旧包/迟到tuple、新轮完整发送、在途旧发送返回、取消等待任务清理。
+
+随机环回HTTP+连续FIR+真实Opus+固定上游调度覆盖buffered/adaptive × 16/24kHz四种组合。
+解码首帧至少5ms样本满足abs≥200后，调用固定startToChat正式交接；旧生产在abort布尔已复位、
+UUID尚未变时退出，stop之后旧应用发送均0；同一编码器新轮20帧/1.2秒完整解码，各帧均达能量代理门。
+这里的“有声”是合成PCM代理，不是ASR/VAD识别或ESP扬声器实测。GPU/torch未加载。
+
+扩大回归154 passed（含真实Opus和旧HTTP/FIR取消），1.2秒新轮不是模型性能结果；
+后续独立运行device_control/新保护84 passed。独立运行暴露的测试模块路径缺失已补充显式AD脚本目录，
+避免依赖其他测试先改sys.path；未修改行为断言掩盖故障。
+旧stale-turn测试的encoder reset期望从1改0：既已失效的调用必须在进入共享编码器之前拒绝，
+因此不得清新轮编码器，这是行为修复而非降低取消覆盖。
+
+另按主会话要求只读配对0015消费者，确认标准tts.stop与本地AbortSpeaking都没有即时清所有旧音频的合同。
+realtime已运行输入处理器时不会顺带ResetDecoder；AutoStop会等待播放耗尽；解码出队后还有重新入队窗口。
+因此服务端保护通过仍不能宣称owner真正打断问题修复。独立消费者合同候选已提交 `5584cfe7`：
+[显式interrupt v1](AD-tts-interrupt-v1-20261021.md)，能力协商+有界output_epoch+同一发送门+设备generation屏障。
+尚未装配此协议，不编辑外部固件；由主会话统一确认AH/AI范围。正常EOS不得清队列截尾。
+
+当前交付仅为AD候选与CPU证据。启动器安装、3.12状态严格投影/前端、设备消费者新协议、
+最终整合和真实声音/打断验收尚未完成；不得开启第二个旧GPU收据窗口或据此自动恢复adaptive。
