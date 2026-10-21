@@ -30,3 +30,20 @@ CPU回放没有声学模型、服务器真实请求或物理播放。handoff只�
 资源清单只新增完整WAV八个参数化精确用例（原因 `owner-installed CPU WAV/Opus environment unavailable`）及增量双工三个精确用例（原因 `owner-installed CPU Opus/WS unavailable`）。收集得到11项与声明逐字一致；缺资源模拟为14 passed、11 skipped（0.33秒），`audit_report=(14,11)`，报告 `data/test-tmp/ai-cosy-resource-missing-02.xml` 与 `ai-cosy-resource-audit-02.json`。这是模拟，本机实际资源可用；首轮临时脚本按模块名匹配失误、收集即断言失败，无测试执行，保留 `-01`，未改生产测试绕过。
 
 最终AD＋投影预检63 passed（7.16秒），其中包含实际固定上游WAV/CPU Opus及v2双工三个新用例；报告 `ai-cosy-final-ad-preflight-01.xml`。新增鉴权桥实际读路径测试核对单次原GET捕获、只读快照无新请求、坏旁路/其他引擎/坏状态清缓存。五份受影响文档严格检查无告警；这些预检发生在最终源码冻结之前，最终清洁HEAD检查另列。
+
+
+## 最终清洁组合验证
+
+被测源码冻结 **`f751d3dcd885bb4256c507aee67a8786327658f6`**，Git tree `482a4732d6dd39712dbe1aa69096ce6a228cbdd1`。原发布 `b2180634` 已是祖先；合并只冲突资源清单和文档清单的新增段，保留双方记录后与合并前 `22a4f090` 文件树完全一致，没有额外源码变化。
+
+在此精确HEAD且前后clean，后端十二文件 **416 passed、1 skipped、7 subtests passed，18.41秒**，报告 `data/test-tmp/ai-cosy-combined-clean-head-01.xml`，`audit_report=(416,1)`。唯一实际跳过为本机目录符号链接权限不足，按已有精确条目登记；完整WAV八项和双工三项均实际执行。报告SHA256 `1f4fe0d86cc65978703919c17ec6fddee944ccfc01ffa05e914bb66349be7b3c`。预冻结18.05秒同数报告单独保留，不相加为新用例。
+
+独立运行 [固定源夹具](../../../tests/fixtures/ad_full_wav_fallback_probe.py) 的新回执为同树 **`data/test-tmp/ai-ad-full-wav-fallback-clean-combined-03.json`**，SHA256 **`a98cee7858aad70bdfb0847893c576ca2be94ed7bf2062d20c2fb7582b5d2024`**。内含checkout_head=f751d3dc完整值、checkout_dirty=false及被测consumer原字节SHA256 **`dc32e2e7da288d652a148bbc039244e83aabbff5f7c4ccfcf82ba06c0fa13d18`**。固定上游仍为 `eb4b28c59ed7ed885258498cf757ce14352d620e`；真实WAV转换/CPU Opus，无网络、Torch、模型或音频落盘。
+
+正常回退一次合成替身调用、三包、解码4320样本；首回调抛错一次/一包，failed/after_handoff，无重播。三个取消场景丢尾且不重试；空返回、生成抛错、坏WAV各保留原上游5次交付前重试、零包、failed/before_handoff。这些调用数不是模型/HTTP调用。没有把后续完成抹掉既有failed，未声称服务端已空闲或设备已播放。
+
+独立审查回执 **`data/test-tmp/ai-cosy-clean-head-independent-review-01.json`** 核对源码归属、JUnit零失败、精确资源审计、原证明原字节及实际Python3.10.20导入共同投影/AD getter/启动状态，no_connection正确、无Torch。全 `src/longmemory`＋`scripts/development/xiaozhi` Python路径及规范化字节摘要现为 **`4bd3aec25205c76c3cfd52610d9645d21056e8ab93a82c4229ffa5d462cf2f56`**；本次新增投影与AD修复以及b218路径修复使它不同于旧证明外围回执。
+
+管理原语15文件摘要仍为 **`1003fe901fa49bd2750242637b18744694f5bebdabfc3d06e0cf7a5eb262fdac`**，已核对本树 `data/test-tmp/ai-embedding-resource-managed-proof-20261021-02/management-verification.json` 原字节SHA256 **`875d1eb5f7750ddc3ef4a23a812997433bdb8182e22db7c64b44b4c4a266dcdc`** 及其rpc_source_sha256仍匹配。不改旧219项实测HEAD或完整源码摘要，不因外围变化重跑不受影响管理大组，也不将旧证明冒充本次UI/音频验收。
+
+此后仅文档收尾，`src/scripts/tests/web` 与 f751d3dc 无差异。ROOT获得最终分支/HEAD后自行审查并推送候选、对该精确SHA运行既有workflow_dispatch；不要先快进主仓再拿b218已通过的Quality39625722258代替。新四项组件和一个合成主机浏览器模式保存用例、TypeScript构建与完整浏览器仍待该次CI。真实声音、连续性和插话仍由所有者另验，本轮未部署或动日用。
