@@ -7766,6 +7766,51 @@
         "逐包观测",
         "legacy"
       ]
+    },
+    {
+      "path": "docs/development/parallel/AD-buffered-diagnosis-20261021.md",
+      "title": "AD：buffered首段延迟有界诊断",
+      "status": "draft",
+      "basis": "fa6固定源码的只读诊断及ROOT提供的阶段计时；无新推理、部署或性能收益证明",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-21",
+        "scope": "单笔文档接力及项目源码两处整段屏障核对；上游固定源码和旧对照由AD报告，未来GPU窗口仅为未授权提案",
+        "evidence": [
+          "docs/development/parallel/AD-buffered-diagnosis-20261021.md",
+          "docs/development/parallel/AI-hy-advanced-low-latency-20261021.md",
+          "scripts/development/cosyvoice/service.py",
+          "scripts/development/xiaozhi/cosyvoice_streaming.py"
+        ]
+      },
+      "tags": [
+        "只读诊断",
+        "buffered",
+        "TTS",
+        "未执行提案"
+      ]
+    },
+    {
+      "path": "docs/development/parallel/AH-quality-single-worker-20261021.md",
+      "title": "AH：Quality组件单worker调度",
+      "status": "draft",
+      "basis": "0c64远程组件超时后的授权调度修正；保留5秒、全部测试及原失败，不认定唯一原因",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-21",
+        "scope": "AH单笔提交、工作流两行差异与YAML语义、350项原始报告核对；AI未重复UI执行，精确远程Quality待ROOT安排",
+        "evidence": [
+          "docs/development/parallel/AH-quality-single-worker-20261021.md",
+          "docs/development/parallel/AI-hy-advanced-low-latency-20261021.md",
+          ".github/workflows/quality.yml"
+        ]
+      },
+      "tags": [
+        "CI",
+        "调度",
+        "单worker",
+        "根因边界"
+      ]
     }
   ],
   "integration_sources": {

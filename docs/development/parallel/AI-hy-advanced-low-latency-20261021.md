@@ -716,3 +716,15 @@ ROOT提供的12个audio_ready为1.662–5.227秒、中位3.355秒；11个模型�
 ROOT报告main fa6的Quality `39588478748` completed FAILURE：frontend/build/browser成功，backend 3657通过/237精确skip/2失败，393.35s；原日志保存在其voice-waiting检查点quality-failure.log/json。AI在隔离树复现同样两项失败（`ai-waiting-web-fixture-reproduction-01.xml`，2失败）：test_voice_web_search的原子性测试仍手动立即enqueue却未等待新3s期限；发送分类测试的下游替身只append而未确认当前包的传输事实。不是已定位的生产回归或flaky结论。
 
 本次仅修该测试：合成原子性/分类/取消fixture显式delay=0；真实传输边界的替身在append成功后调用record_packet_sent。上层original仍只模拟入队，原“入队不算发送”及全部业务/取消/答案分类断言保留，另核对实际模拟发送内容。生产3s/90s和逐包事实约定均不变，无新增skip/超时/依赖。完整test_voice_web_search及waiting policy/cache/handoff/voice_latency共 **102通过/0skip/2.02s**，`ai-waiting-web-fixture-repair-01.xml`；未重复171或前端套件，未读取日用数据或操作服务。ROOT后续按test-only提交安排CI，当前3172运行状态与性能诊断由原会话继续，本记录不改写fa6远程失败或宣称整体延迟下降。
+
+### 0c64远程结果与只读性能诊断接力
+
+ROOT报告已将0c64测试修正合入并正常推送，日用3172未重启，运行代码仍为fa6。精确main Quality `39589950994` 后端成功，3659通过/237精确skip/240.08s；前端组件349通过/1失败，仍为MemoryApp.test.tsx:78原5s超时，后续步骤以该次实际作业结果为准。该文件与44d7/fa6同字节，fa6前端全过；本次没有产品源码增量，不能将此前成功改写为本次全绿，也未确认远程超时的唯一原因。原始证据由ROOT保存在voice-waiting检查点quality-0c-full.log/json。
+
+AD仅取单笔 `ae7502d05ef293b6d0a2545dcc57da107bc58487`，接为cb4d1d6a；[buffered诊断](AD-buffered-diagnosis-20261021.md)与原件相同。AI只读核对本项目service.py的v2 delivery_mode映射及stream_chunks耗尽后发布、客户端完整PCM段末编码；未读取私有日志或执行模型。AD报告的固定上游源码/旧同文本对照分别保留来源：旧adaptive首帧约早0.2～0.35秒但总生成更慢，不是当前声线与代码的收益证明；新有界GPU窗口仅为提案，尚未批准或执行。
+
+ROOT转达AB只读诊断：BGE、SDK和reader在启动时已初始化，不能仅凭5.4秒就认定冷启动；严格preset已提前判定，但仍等待一体query，其同时负责预算覆盖、turn_id、归档与回执，不能直接删除。未来可评估终端适配层的prepare-without-recall并保留这些职责，本轮无实现。所有者“没有稍等了，但感觉延迟更严重”只支持提示频率改善；三条答案首包5444/4691/4582ms与就绪仅差4～5ms，没有整体下降证据，声音/打断本次未获单独新验收，不扩写0016既有有限验收。
+
+AH单笔 `2db4e7f23acca665104e85407574c8cff03ea6b7` 接为b2cf7fb6，新增[调度记录](AH-quality-single-worker-20261021.md)。AI独立核对仅工作流组件maxWorkers从2改1、旁边15秒误注释改5秒；将命令还原后YAML完整语义与0c64一致，全部产品/测试/锁/CI脚本同字节。AH完整63文件350通过/0失败/0跳过，目标2507.6343ms；AI核对原始components-final.json SHA256 `ea9055564a558fb10e2754abbfb9461275560df340e5774e24c80aa3910824eb`及所有suite路径属AH，未重跑组件。固定Node24.19.0/pnpm11.19.0和本命令关闭隐式依赖同步的前提见AH记录，首次预检中止也如实保留。
+
+本次仅文档与CI调度，依据既有受控CPU竞争实证降低争用；不抬5s、不加retry、不删350项或真实CSS检查，不承诺新远程必过。两份新记录登记清单并执行窄范围strict，AI独立结构核对留本树ignored `data/test-tmp/ai-docs-ci-scheduling-review.json`；没有新增性能代码、真实推理、日用/数据/配置/设备操作，也没有重复171/350或全后端。最终精确main Quality、合入和推送由ROOT接力；产品运行与0016无需因本次差异重新部署。
