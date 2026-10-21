@@ -5182,7 +5182,7 @@
       "review": {
         "state": "verified",
         "date": "2026-10-20",
-        "scope": "X仅核对新增平台圆屏/可信装配段落与引用，未重验整篇历史结论；2026-10-20仅核对独立端口/自动IP候选04f92df+8b347be及受控副本保护、393/1 Tk组合失败与隔离43通过；未部署或验收设备/双设备共存，其余全篇核对不扩张",
+        "scope": "X仅核对新增平台圆屏/可信装配段落与引用，未重验整篇历史结论；2026-10-20仅核对独立端口/自动IP候选04f92df+8b347be及受控副本保护、393/1 Tk组合失败与隔离43通过；未部署或验收设备/双设备共存，其余全篇核对不扩张；2026-10-21仅增Cosy候选协议8/三层状态/512字节与重启语义，前端CI待ROOT",
         "evidence": [
           "docs/development/parallel/X-hy-roundscreen-20261019.md",
           "docs/guides/Hy-Memory圆屏与日用装配-20261019.md",
@@ -8243,6 +8243,88 @@
         ]
       },
       "tags": ["AB", "CI", "诊断", "路径归属"]
+    },
+    {
+      "path": "docs/development/parallel/AD-incremental-candidate-20261021.md",
+      "title": "AD：连续增量候选与连接回退",
+      "status": "draft",
+      "basis": "ROOT授权隔离候选；不部署，日用buffered与物理验收边界保持",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-21",
+        "scope": "AI核对27dd/afdb/84/e31与固定13字段；AD原CPU结果保持，真机未验收",
+        "evidence": [
+          "scripts/development/xiaozhi/cosyvoice_delivery.py",
+          "tests/unit/development/test_ad_incremental_candidate_duplex.py"
+        ]
+      },
+      "tags": [
+        "CosyVoice",
+        "候选",
+        "只读状态"
+      ]
+    },
+    {
+      "path": "docs/development/parallel/AD-full-wav-fallback-fix-20261021.md",
+      "title": "AD：固定完整WAV回退修复",
+      "status": "draft",
+      "basis": "ROOT授权隔离候选；不部署，日用buffered与物理验收边界保持",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-21",
+        "scope": "AI核对4ca无回调失败分支及固定SDK真实WAV/CPU Opus八场景，组合清洁HEAD回执另列",
+        "evidence": [
+          "scripts/development/xiaozhi/cosyvoice_streaming.py",
+          "tests/unit/development/test_ad_full_wav_fallback.py"
+        ]
+      },
+      "tags": [
+        "CosyVoice",
+        "候选",
+        "只读状态"
+      ]
+    },
+    {
+      "path": "docs/adr/0203-cosy-delivery-startup-preference.md",
+      "title": "ADR-0203：Cosy启动偏好与连接事实分离",
+      "status": "draft",
+      "basis": "ROOT授权隔离候选；不部署，日用buffered与物理验收边界保持",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-21",
+        "scope": "协议8兼容、一次启动选择、只读有限投影和失败语义；前端CI/物理体验待验",
+        "evidence": [
+          "scripts/development/launcher/preferences.py",
+          "scripts/development/launcher/runtime.py",
+          "scripts/development/xiaozhi/cosy_delivery_contract.py"
+        ]
+      },
+      "tags": [
+        "CosyVoice",
+        "候选",
+        "只读状态"
+      ]
+    },
+    {
+      "path": "docs/development/parallel/AI-cosy-mode-handoff-20261021.md",
+      "title": "AI：Cosy模式偏好与连接状态候选接力",
+      "status": "draft",
+      "basis": "ROOT授权隔离候选；不部署，日用buffered与物理验收边界保持",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-21",
+        "scope": "精确AD链与发布b218、stash保全、版本化复现和有限契约；最终检查追加本记录",
+        "evidence": [
+          "tests/unit/development/test_cosy_mode_handoff.py",
+          "scripts/ci/backend_resources.py",
+          "web/react-chat/src/features/launcher/LauncherApp.test.tsx"
+        ]
+      },
+      "tags": [
+        "CosyVoice",
+        "候选",
+        "只读状态"
+      ]
     }
   ],
   "integration_sources": {

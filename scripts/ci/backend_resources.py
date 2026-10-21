@@ -5,6 +5,21 @@ requests、numpy、PyYAML已经是dev依赖，不属于资源例外。
 """
 
 RESOURCE_GROUPS = (
+    ('tests.unit.development.test_ad_full_wav_fallback',
+     'owner-installed CPU WAV/Opus environment unavailable',
+     ('test_fixed_sdk_normal_fallback_reports_handoff',
+      'test_fixed_sdk_callback_error_never_retries_already_queued_audio',
+      'test_fixed_sdk_cancellation_drops_tail_without_retry[cancel_before_callback-0]',
+      'test_fixed_sdk_cancellation_drops_tail_without_retry[cancel_after_first-1]',
+      'test_fixed_sdk_cancellation_drops_tail_without_retry[cancel_after_first_raises-1]',
+      'test_fixed_sdk_pre_delivery_exhaustion_is_not_fallback_success[synthesis_returns_empty]',
+      'test_fixed_sdk_pre_delivery_exhaustion_is_not_fallback_success[synthesis_raises]',
+      'test_fixed_sdk_pre_delivery_exhaustion_is_not_fallback_success[invalid_wav]',)),
+    ('tests.unit.development.test_ad_incremental_candidate_duplex',
+     'owner-installed CPU Opus/WS unavailable',
+     ('test_adaptive_v2_duplex_barge_in_retains_mode_and_cleans_reader',
+      'test_v2_incomplete_stream_does_not_replay_and_next_turn_is_buffered_complete[incremental]',
+      'test_v2_incomplete_stream_does_not_replay_and_next_turn_is_buffered_complete[adaptive]',)),
     ('tests.unit.infrastructure.test_diagnostics',
      'directory symlink privilege unavailable',
      ('test_real_directory_link_outside_root_is_refused[symlink]',)),

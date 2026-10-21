@@ -137,3 +137,44 @@ def test_complete_device_maximum_with_saturated_ad_snapshot_keeps_existing_16k_l
         assert result['voice_input_observation']==old['voice_input_observation']
         assert result['voice_latency']==old['voice_latency']
         assert result['cosy_delivery']==value['cosy_delivery']
+
+
+def test_existing_authenticated_bridge_read_captures_and_invalidates_optional_mode(modules, monkeypatch, tmp_path):
+    _, ad, runtime, _ = modules
+    manager = runtime.Manager()
+    manager.options = NS(root=tmp_path, voice=True, voice_mode='pipeline', tts_backend='cosyvoice3')
+    manager.services = {'voice': NS(process=NS(poll=lambda: None))}
+    manager._binding_next_check = 20
+    manager._binding_ready = True
+    monkeypatch.setattr(runtime.time, 'monotonic', lambda: 10)
+    token = tmp_path / 'data/control/device-control.token'
+    token.parent.mkdir(parents=True)
+    token.write_text('a' * 64, encoding='ascii')
+    body = dict(connection_count=1, ready=True, cosy_delivery=observation(ad))
+    calls = []
+    class Connection:
+        def request(self, method, path, headers):
+            assert method == 'GET' and path == '/api/device'
+            assert headers['Authorization'] == 'Bearer ' + 'a' * 64
+            calls.append(path)
+        def getresponse(self):
+            return NS(status=200, read=lambda _: json.dumps(body).encode())
+        def close(self):
+            pass
+    monkeypatch.setattr(runtime.http.client, 'HTTPConnection', lambda *_, **__: Connection())
+    assert manager.voice_bridge_ready()
+    assert manager.current_cosy_delivery()['failure_code'] == 'after_handoff'
+    assert len(calls) == 1
+    manager.current_cosy_delivery()
+    assert len(calls) == 1
+    body['cosy_delivery'] = {'private': 'PRIVATE'}
+    assert manager.voice_bridge_ready()
+    assert manager.current_cosy_delivery() is None
+    body['cosy_delivery'] = observation(ad)
+    manager.options.tts_backend = 'edge'
+    assert manager.voice_bridge_ready()
+    assert manager.current_cosy_delivery() is None
+    manager.options.tts_backend = 'cosyvoice3'
+    body['ready'] = 'invalid'
+    assert not manager.voice_bridge_ready()
+    assert manager.current_cosy_delivery() is None

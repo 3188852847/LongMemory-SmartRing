@@ -40,3 +40,13 @@ HTTP 响应带服务端生成的 `X-Request-Id`。`data/logs/launcher-events.jso
 纯 Python 替身验证授权、非法请求、设置冲突、单实例与进程所有权；真实 HTTP 主机加 React 构建验证浏览器操作、窄屏和减少动画。合成测试不加载模型、不操作真实圆屏、不写个人库。正式启动器切换、声音听感和设备重连须单独验收。
 
 这属于 D 契约与可观测性的启动器切片；不代表全系统指标、追踪或监控平台已完成。
+
+## CosyVoice 交付模式候选（2026-10-21）
+
+设置协议8增加 `cosy_delivery_mode`：`buffered`（默认）、`incremental`、`adaptive`。旧文件缺项或非法值读取为 buffered，不在读取时改写磁盘；保存拒绝非法类型和枚举。只有本地 pipeline＋CosyVoice 3 的语音子进程接收该值。显式维护环境 `LONGMEMORY_COSY_DELIVERY_MODE` 优先，在本次启动前解析一次，不能静默覆盖已保存偏好。其他服务子进程清除该变量。
+
+`GET /api/launcher/status` 的可选 `cosy_delivery` 分别提供下次启动选择与来源、本次启动值与来源、最近连接观测和重启提示。连接摘要只复用原控制面检查，不从页面轮询新增请求；超过2秒或本次语音进程退出即未知。无连接、旧版缺字段或无已观测片段均不宣称实际策略。保存设置不会热切换；运行中沿用既有设置锁定，须停止后重新启动。
+
+原 `/api/device` 可选增加固定13字段交付摘要，上限512字节；既有15519字节合法最大样本加饱和摘要仍小于16384，保留原明细和原客户端限制。它与 AC 的独立 `GET /api/voice-input-signal` 端点互不替代。清理未确认时实际模式为 null、禁止追加并要求重连；回退不写偏好、不重播已开始交付片段。`handoff_started` 只说明回调开始，`reader_cleanup=confirmed` 只说明客户端流退出，都不证明设备播放或服务端空闲；新段仍需串行准入和声音健康检查。
+
+候选行为与验证边界见 [ADR-0203](../adr/0203-cosy-delivery-startup-preference.md)及 [AI接力](parallel/AI-cosy-mode-handoff-20261021.md)。前端组件、类型构建和浏览器等待 ROOT 在冻结精确提交运行既有远程 CI；本机无工作树前端依赖，未安装或借用共享依赖。

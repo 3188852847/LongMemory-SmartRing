@@ -177,3 +177,24 @@ test('装饰无输入焦点，循环只改变合成属性并记录浏览器帧�
   // 帧时间记录实际机器结果，不使用无来源的 FPS 或跨机器硬阈值。
   if (process.env.LAUNCHER_SCREENSHOT_DIR) await writeFile(resolve(process.env.LAUNCHER_SCREENSHOT_DIR, 'motion-performance.json'), JSON.stringify(report, null, 2));
 });
+
+
+test('Cosy交付方式显式保存后重新打开仍保留，不启动服务', async ({page}) => {
+  const actions: string[] = [];
+  page.on('request', request => {
+    if (request.method() === 'POST' && request.url().endsWith('/api/launcher/actions')) actions.push(request.postData() ?? '');
+  });
+  await page.goto(`${origin}/#token=${token}`);
+  await page.getByRole('button', {name: /启动设置/}).click();
+  await page.getByText('语音', {exact: true}).click();
+  await expect(page.getByLabel('声音交付方式')).toBeEnabled();
+  await page.getByLabel('声音交付方式').click();
+  await page.locator('.ant-select-item-option-content').filter({hasText: /^分段播放（候选）$/}).click();
+  await page.getByRole('button', {name: '保存设置'}).click();
+  await expect(page.getByRole('dialog')).not.toBeVisible();
+  await page.goto(`${origin}/#token=${token}`);
+  await page.getByRole('button', {name: /启动设置/}).click();
+  await page.getByText('语音', {exact: true}).click();
+  await expect(page.locator('.launcher-field').filter({has: page.getByLabel('声音交付方式')})).toContainText('分段播放（候选）');
+  expect(actions).toEqual([]);
+});

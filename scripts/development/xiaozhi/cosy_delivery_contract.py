@@ -61,4 +61,3 @@ def project_observation(value):
         return {**value, 'outcomes': dict(value['outcomes'])}
     except Exception:
         return None
-
