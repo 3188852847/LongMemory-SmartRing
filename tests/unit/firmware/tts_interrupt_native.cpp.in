@@ -291,8 +291,16 @@ void eos_callback_then_interrupt() {
     assert(!app.tts_accepting_&&app.protocol_value.closed==1);
     std::cout<<"PASS queued EOS callback -> explicit same-epoch interrupt -> new start preserves new first frame; exhaustion closes channel\n";
 }
+void superseded_pending_ui() {
+    Application app;app.OnLocalChannelOpening(1);app.Json(1,R"({"type":"hello","features":{"tts_interrupt_v1":true}})");
+    app.Json(1,R"({"type":"tts","state":"start","output_epoch":1})");auto old=app.tts_output_identity_;app.Receive(packet({},4,1));
+    app.Json(1,R"({"type":"tts","state":"start","output_epoch":2})");auto next=app.tts_output_identity_;app.Receive(packet({},6,1));
+    assert(app.audio_service_.Queued()==1);app.OnOutputDrained(old);app.Run();
+    assert(app.tts_output_identity_==next&&app.tts_accepting_&&app.audio_service_.Queued()==1&&app.GetDeviceState()==kDeviceStateSpeaking);
+    std::cout<<"PASS delayed old Speaking and EOS cannot clear a superseding start's first frame\n";
+}
 #if CONFIG_BOARD_TYPE_VIEWE_SMARTRING_PLUS
-int main() {eos_decode();eos_output();stale_tasks(false);stale_tasks(true);legacy_reconnect(false);legacy_reconnect(true);interrupt_inflight();decode_error();decoder_barrier_and_waiter();output_error();channel_generation();application_controls();negotiation();eos_callback_then_interrupt();std::cout<<"ALL CONSUMER CONTRACT CASES PASSED\n";}
+int main() {eos_decode();eos_output();stale_tasks(false);stale_tasks(true);legacy_reconnect(false);legacy_reconnect(true);interrupt_inflight();decode_error();decoder_barrier_and_waiter();output_error();channel_generation();application_controls();negotiation();eos_callback_then_interrupt();superseded_pending_ui();std::cout<<"ALL CONSUMER CONTRACT CASES PASSED\n";}
 #else
 int main() {Application app;app.OnLocalChannelOpening(1);app.Json(1,R"({"type":"hello","features":{"tts_interrupt_v1":true}})");assert(!app.tts_interrupt_v1_);app.Json(1,R"({"type":"tts","state":"start"})");app.Run();app.Receive(packet({},3,1));assert(app.audio_service_.Queued()==1);std::cout<<"PASS server-only true cannot activate undeclared client; legacy audio preserved\n";}
 #endif

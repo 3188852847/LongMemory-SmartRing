@@ -140,11 +140,10 @@
   "build_log_sha256": "a5ad3ead73ace5b112fe878effbc2de8a6546e96aa9db06d5cbf0be52b78a56a",
   "source_audit_sha256": "7d760a906cf503572407dc3da6007e7234ab3b2bca662bf62e27b462370214b9",
   "consumer_native_source_binding_sha256": "9f667abe1db2409a42468c2dba14d6423017bbd3cd1ad842652ae5729d624a81",
-  "consumer_native_log_sha256": "d643a5a90b7d0202a8f3defb91795640e86efa3cc42424d0e871d5f7c207416f",
+  "consumer_native_log_sha256": "b61a7f47aad77e524f3dbfca12fce1360907bd025f9394a2ccaa49fd3b477918",
   "undeclared_client_log_sha256": "5ce09a4fc0453a8f89c3e45ea8850c9a25022d1beb02e740387e7b8cdb4b7d77",
   "caption_native_log_sha256": "95cda431d26cb63bf7d176265eb3219c6034a077dd37bc3caec98a819f2d866d",
   "server_contract_revision3": "2b8242e5",
-  "server_candidate_reviewed": "ff6ef6e6615017b14f1c91192a341e1b08410560",
   "post_eos_interrupt_clarification": "ROOT: EOS alone drains naturally; later explicit same-epoch interrupt may revoke undrained tail; server integration revision pending AI",
   "wire_binary_changed": false,
   "personal_or_config_or_assets_written": false,
@@ -156,5 +155,8 @@
     "LVGL/font native rendering does not prove device GIF or audio experience",
     "OutputData completion does not prove hardware/DMA/acoustic silence",
     "generated full-flash commands are not execution instructions or permission"
-  ]
+  ],
+  "server_handoff_reference": "ff6ef6e6615017b14f1c91192a341e1b08410560",
+  "independent_second_build_of_final_source": false,
+  "image_info_log_sha256": "788048ad9c072bff008680e2bf596ed30ca596afa808b947adeb6685151e8e95"
 }
