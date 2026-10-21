@@ -1,0 +1,1222 @@
+--- a/main/application.cc
++++ b/main/application.cc
+@@ -11,6 +11,7 @@
+ #include "settings.h"
+ 
+ #include <cstring>
++#include <cmath>
+ #include <esp_log.h>
+ #include <cJSON.h>
+ #include <driver/gpio.h>
+@@ -82,6 +83,9 @@
+     };
+     callbacks.on_vad_change = [this](bool speaking) {
+         xEventGroupSetBits(event_group_, MAIN_EVENT_VAD_CHANGE);
++    };
++    callbacks.on_output_drained = [this](const AudioOutputIdentity& identity) {
++        OnOutputDrained(identity);
+     };
+     audio_service_.SetCallbacks(callbacks);
+ 
+@@ -496,11 +500,22 @@
+     });
+     
+     protocol_->OnIncomingAudio([this](std::unique_ptr<AudioStreamPacket> packet) {
+-        if (GetDeviceState() == kDeviceStateSpeaking) {
++        std::lock_guard<std::recursive_mutex> lock(tts_output_mutex_);
++        if (packet->channel_generation && packet->channel_generation != tts_channel_generation_) return;
++        if (packet->channel_generation && !tts_hello_seen_) return;
++        if (tts_interrupt_v1_) {
++            if (!tts_accepting_ || tts_revoked_ || !audio_service_.IsCurrentOutput(tts_output_identity_)) return;
++            packet->output_identity = tts_output_identity_;
+             audio_service_.PushPacketToDecodeQueue(std::move(packet));
+-        }
+-    });
+-    
++        } else if (GetDeviceState() == kDeviceStateSpeaking) {
++            audio_service_.PushPacketToDecodeQueue(std::move(packet));
++        }
++    });
++    protocol_->OnLocalChannelOpening([this](uint64_t generation) { OnLocalChannelOpening(generation); });
++    protocol_->OnLocalChannelOpened([this](uint64_t generation) { OnLocalChannelOpened(generation); });
++    protocol_->OnLocalChannelClosed([this](uint64_t generation) { OnLocalChannelClosed(generation); });
++    protocol_->OnLocalChannelJson([this](uint64_t generation, const cJSON* root) { OnLocalChannelJson(generation, root); });
++
+     protocol_->OnAudioChannelOpened([this, codec, &board]() {
+         board.SetPowerSaveLevel(PowerSaveLevel::PERFORMANCE);
+         if (protocol_->server_sample_rate() != codec->output_sample_rate()) {
+@@ -518,115 +533,274 @@
+         });
+     });
+     
+-    protocol_->OnIncomingJson([this, display](const cJSON* root) {
+-        // Parse JSON data
+-        auto type = cJSON_GetObjectItem(root, "type");
+-        if (strcmp(type->valuestring, "tts") == 0) {
+-            auto state = cJSON_GetObjectItem(root, "state");
+-            if (strcmp(state->valuestring, "start") == 0) {
+-                Schedule([this]() {
+-                    aborted_ = false;
+-                    SetDeviceState(kDeviceStateSpeaking);
+-                });
+-            } else if (strcmp(state->valuestring, "stop") == 0) {
+-                Schedule([this]() {
+-                    if (GetDeviceState() == kDeviceStateSpeaking) {
+-                        if (listening_mode_ == kListeningModeManualStop) {
+-                            SetDeviceState(kDeviceStateIdle);
+-                        } else {
+-                            SetDeviceState(kDeviceStateListening);
+-                        }
++    protocol_->OnIncomingJson([this](const cJSON* root) { HandleProtocolJson(0, root); });
++
++    protocol_->Start();
++}
++
++// 接收路径先同步提交音频门；UI任务仅应用捕获身份，不能重新标记旧工作。
++void Application::OnLocalChannelOpening(uint64_t generation) {
++    std::lock_guard<std::recursive_mutex> lock(tts_output_mutex_);
++    audio_service_.InvalidateOutputChannel(tts_channel_generation_);
++    audio_service_.SetOutputChannel(generation);
++    audio_service_.SetManagedOutput(false);
++    tts_channel_generation_ = generation;
++    tts_last_epoch_ = 0;
++    tts_hello_seen_ = tts_interrupt_v1_ = tts_accepting_ = tts_revoked_ = tts_ui_pending_ = false;
++    tts_output_identity_ = {};
++}
++
++void Application::OnLocalChannelOpened(uint64_t generation) {
++    std::lock_guard<std::recursive_mutex> lock(tts_output_mutex_);
++    if (generation != tts_channel_generation_) return;
++    auto& board = Board::GetInstance();
++    board.SetPowerSaveLevel(PowerSaveLevel::PERFORMANCE);
++    if (protocol_->server_sample_rate() != board.GetAudioCodec()->output_sample_rate())
++        ESP_LOGW(TAG, "Server sample rate differs from codec output; resampling enabled");
++}
++
++void Application::OnLocalChannelClosed(uint64_t generation) {
++    std::lock_guard<std::recursive_mutex> lock(tts_output_mutex_);
++    if (generation != tts_channel_generation_) return;
++    audio_service_.InvalidateOutputChannel(generation);
++    audio_service_.SetOutputChannel(0);
++    audio_service_.SetManagedOutput(false);
++    tts_channel_generation_ = 0;
++    tts_closed_generation_ = generation;
++    tts_hello_seen_ = tts_interrupt_v1_ = tts_accepting_ = tts_revoked_ = tts_ui_pending_ = false;
++    tts_output_identity_ = {};
++    Board::GetInstance().SetPowerSaveLevel(PowerSaveLevel::LOW_POWER);
++    Schedule([this, generation]() {
++        std::lock_guard<std::recursive_mutex> lock(tts_output_mutex_);
++        if (tts_channel_generation_ || tts_closed_generation_ != generation) return;
++        Board::GetInstance().GetDisplay()->SetChatMessage("system", "");
++        SetDeviceState(kDeviceStateIdle);
++    });
++}
++
++void Application::OnLocalChannelJson(uint64_t generation, const cJSON* root) {
++    std::lock_guard<std::recursive_mutex> lock(tts_output_mutex_);
++    if (generation != tts_channel_generation_) return;
++    auto type = cJSON_GetObjectItem(root, "type");
++    if (!cJSON_IsString(type)) return;
++    if (strcmp(type->valuestring, "hello") == 0) {
++        if (tts_hello_seen_) return;
++        tts_hello_seen_ = true;
++#if CONFIG_BOARD_TYPE_VIEWE_SMARTRING_PLUS
++        // 仅本板客户端声明能力，且服务器返回严格布尔true时启用。
++        auto features = cJSON_GetObjectItem(root, "features");
++        tts_interrupt_v1_ = cJSON_IsObject(features) && cJSON_IsTrue(cJSON_GetObjectItem(features, "tts_interrupt_v1"));
++#endif
++        audio_service_.SetManagedOutput(tts_interrupt_v1_);
++        return;
++    }
++    if (!tts_hello_seen_) return;
++    HandleProtocolJson(generation, root);
++}
++
++void Application::ScheduleOnChannel(uint64_t generation, std::function<void()>&& callback) {
++    Schedule([this, generation, callback = std::move(callback)]() {
++        std::lock_guard<std::recursive_mutex> lock(tts_output_mutex_);
++        if (generation && generation != tts_channel_generation_) return;
++        callback();
++    });
++}
++
++void Application::ScheduleOnOutput(const AudioOutputIdentity& identity, std::function<void()>&& callback, bool revoked) {
++    Schedule([this, identity, revoked, callback = std::move(callback)]() {
++        std::lock_guard<std::recursive_mutex> lock(tts_output_mutex_);
++        if (!tts_interrupt_v1_ || identity.channel_generation != tts_channel_generation_ || identity != tts_output_identity_) return;
++        if (revoked ? (!tts_revoked_ || audio_service_.OutputFenceIdentity() != identity) :
++                      (tts_revoked_ || !audio_service_.IsCurrentOutput(identity))) return;
++        callback(); // 核对与状态/显示副作用共用同一屏障。
++    });
++}
++
++void Application::ApplyOutputStopped() {
++    SetDeviceState(listening_mode_ == kListeningModeManualStop ? kDeviceStateIdle : kDeviceStateListening);
++}
++
++void Application::OnOutputDrained(const AudioOutputIdentity& identity) {
++    ScheduleOnOutput(identity, [this]() {
++        tts_ui_pending_ = false;
++        ApplyOutputStopped();
++    });
++}
++
++void Application::CloseOutputChannelSoon() {
++    tts_accepting_ = false;
++    const auto channel = tts_channel_generation_;
++    Schedule([this, channel]() {
++        { std::lock_guard<std::recursive_mutex> lock(tts_output_mutex_);
++          if (channel != tts_channel_generation_) return; }
++        // 不持应用屏障join socket；main loop中的创建/关闭按任务顺序执行。
++        protocol_->CloseAudioChannel();
++    });
++}
++
++void Application::HandleManagedTts(const cJSON* root) {
++    // cJSON bool并非number；仍显式拒绝非有限数、小数、零和越界值。
++    auto epoch_json = cJSON_GetObjectItem(root, "output_epoch");
++    auto state = cJSON_GetObjectItem(root, "state");
++    if (!cJSON_IsString(state) || !cJSON_IsNumber(epoch_json) || !std::isfinite(epoch_json->valuedouble) ||
++        epoch_json->valuedouble < 1 || epoch_json->valuedouble > INT32_MAX ||
++        std::floor(epoch_json->valuedouble) != epoch_json->valuedouble) return;
++    uint32_t epoch = static_cast<uint32_t>(epoch_json->valuedouble);
++    if (strcmp(state->valuestring, "start") == 0) {
++        if (epoch <= tts_last_epoch_) return; // 重复start不能复活被撤权的同一轮。
++        auto identity = audio_service_.BeginOutput(tts_channel_generation_, epoch);
++        if (!identity.tagged()) {
++            CloseOutputChannelSoon();
++            return;
++        }
++        tts_last_epoch_ = epoch;
++        tts_output_identity_ = identity;
++        tts_accepting_ = true;
++        tts_revoked_ = false;
++        tts_ui_pending_ = true;
++        ScheduleOnOutput(identity, [this]() {
++            tts_ui_pending_ = false;
++            aborted_ = false;
++            SetDeviceState(kDeviceStateSpeaking);
++        });
++        return;
++    }
++    if (epoch != tts_last_epoch_ || tts_revoked_ || !audio_service_.IsCurrentOutput(tts_output_identity_)) return;
++    if (strcmp(state->valuestring, "sentence_start") == 0) {
++        auto text = cJSON_GetObjectItem(root, "text");
++        if (tts_accepting_ && cJSON_IsString(text)) {
++            ScheduleOnOutput(tts_output_identity_, [message = std::string(text->valuestring)]() {
++                Board::GetInstance().GetDisplay()->SetChatMessage("assistant", message.c_str());
++            });
++        }
++    } else if (strcmp(state->valuestring, "stop") == 0) {
++        tts_accepting_ = false;
++        audio_service_.EndOutput(tts_output_identity_); // EOS保持代次，活动decode/output也必须排空。
++    } else if (strcmp(state->valuestring, "interrupt") == 0) {
++        if (!audio_service_.InterruptOutput(tts_output_identity_)) return;
++        tts_output_identity_ = audio_service_.OutputFenceIdentity();
++        if (!tts_output_identity_.tagged()) { CloseOutputChannelSoon(); return; }
++        tts_accepting_ = false;
++        tts_revoked_ = tts_ui_pending_ = true;
++        ScheduleOnOutput(tts_output_identity_, [this]() {
++            tts_ui_pending_ = false;
++            show_interrupted_on_listening_ = true;
++            ApplyOutputStopped();
++        }, true);
++    }
++}
++
++void Application::HandleProtocolJson(uint64_t generation, const cJSON* root) {
++    std::lock_guard<std::recursive_mutex> lock(tts_output_mutex_);
++    if (generation && generation != tts_channel_generation_) return;
++    auto display = Board::GetInstance().GetDisplay();
++    auto type = cJSON_GetObjectItem(root, "type");
++    if (!cJSON_IsString(type) || strcmp(type->valuestring, "hello") == 0) return;
++    if (tts_interrupt_v1_ && strcmp(type->valuestring, "tts") == 0) { HandleManagedTts(root); return; }
++    if (strcmp(type->valuestring, "tts") == 0) {
++        auto state = cJSON_GetObjectItem(root, "state");
++        if (!cJSON_IsString(state)) return;
++        if (strcmp(state->valuestring, "start") == 0) {
++            ScheduleOnChannel(generation, [this]() {
++                aborted_ = false;
++                SetDeviceState(kDeviceStateSpeaking);
++            });
++        } else if (strcmp(state->valuestring, "stop") == 0) {
++            ScheduleOnChannel(generation, [this]() {
++                if (GetDeviceState() == kDeviceStateSpeaking) {
++                    if (listening_mode_ == kListeningModeManualStop) {
++                        SetDeviceState(kDeviceStateIdle);
++                    } else {
++                        SetDeviceState(kDeviceStateListening);
+                     }
+-                });
+-            } else if (strcmp(state->valuestring, "sentence_start") == 0) {
+-                auto text = cJSON_GetObjectItem(root, "text");
+-                if (cJSON_IsString(text)) {
+-                    ESP_LOGI(TAG, "<< %s", text->valuestring);
+-                    Schedule([display, message = std::string(text->valuestring)]() {
+-                        display->SetChatMessage("assistant", message.c_str());
+-                    });
+                 }
+-            }
+-        } else if (strcmp(type->valuestring, "stt") == 0) {
++            });
++        } else if (strcmp(state->valuestring, "sentence_start") == 0) {
+             auto text = cJSON_GetObjectItem(root, "text");
+             if (cJSON_IsString(text)) {
+-                ESP_LOGI(TAG, ">> %s", text->valuestring);
+-                Schedule([this, display, message = std::string(text->valuestring)]() {
++                ESP_LOGI(TAG, "<< %s", text->valuestring);
++                ScheduleOnChannel(generation, [display, message = std::string(text->valuestring)]() {
++                    display->SetChatMessage("assistant", message.c_str());
++                });
++            }
++        }
++    } else if (strcmp(type->valuestring, "stt") == 0) {
++        auto text = cJSON_GetObjectItem(root, "text");
++        if (cJSON_IsString(text)) {
++            ESP_LOGI(TAG, ">> %s", text->valuestring);
++            ScheduleOnChannel(generation, [this, display, message = std::string(text->valuestring)]() {
+ #if CONFIG_BOARD_TYPE_VIEWE_SMARTRING_PLUS
+-                    if (GetDeviceState() != kDeviceStateListening) return;
++                if (GetDeviceState() != kDeviceStateListening) return;
+ #endif
+-                    display->SetChatMessage("user", message.c_str());
++                display->SetChatMessage("user", message.c_str());
+ #if CONFIG_BOARD_TYPE_VIEWE_SMARTRING_PLUS
+-                    // STT 正文证明本轮有效输入已经识别完成，而 TTS 尚未开始。
+-                    // 这里只更新圆屏表现，不伪造新的设备/音频状态；后续 tts.start
+-                    // 仍由既有状态机切换到 speaking。
+-                    display->SetStatus("思考中...");
+-                    display->SetEmotion("thinking");
++                // STT 正文证明本轮有效输入已经识别完成，而 TTS 尚未开始。
++                // 这里只更新圆屏表现，不伪造新的设备/音频状态；后续 tts.start
++                // 仍由既有状态机切换到 speaking。
++                display->SetStatus("思考中...");
++                display->SetEmotion("thinking");
+ #endif
+-                });
+-            }
+-        } else if (strcmp(type->valuestring, "llm") == 0) {
+-            auto emotion = cJSON_GetObjectItem(root, "emotion");
+-            if (cJSON_IsString(emotion)) {
+-                Schedule([display, emotion_str = std::string(emotion->valuestring)]() {
+-                    display->SetServerEmotion(emotion_str.c_str());
+-                });
+-            }
+-        } else if (strcmp(type->valuestring, "mcp") == 0) {
+-            auto payload = cJSON_GetObjectItem(root, "payload");
+-            if (cJSON_IsObject(payload)) {
+-                McpServer::GetInstance().ParseMessage(payload);
+-            }
+-        } else if (strcmp(type->valuestring, "session") == 0) {
+-            auto state = cJSON_GetObjectItem(root, "state");
+-            if (cJSON_IsString(state) && strcmp(state->valuestring, "idle") == 0) {
+-                Schedule([this]() {
+-                    if (GetDeviceState() == kDeviceStateListening) {
+-                        protocol_->SendStopListening();
+-                        SetDeviceState(kDeviceStateIdle);
+-                    }
+-                });
+-            }
+-        } else if (strcmp(type->valuestring, "system") == 0) {
+-            auto command = cJSON_GetObjectItem(root, "command");
+-            if (cJSON_IsString(command)) {
+-                ESP_LOGI(TAG, "System command: %s", command->valuestring);
+-                if (strcmp(command->valuestring, "reboot") == 0) {
+-                    // Do a reboot if user requests a OTA update
+-                    Schedule([this]() {
+-                        Reboot();
+-                    });
+-                } else {
+-                    ESP_LOGW(TAG, "Unknown system command: %s", command->valuestring);
++            });
++        }
++    } else if (strcmp(type->valuestring, "llm") == 0) {
++        auto emotion = cJSON_GetObjectItem(root, "emotion");
++        if (cJSON_IsString(emotion)) {
++            ScheduleOnChannel(generation, [display, emotion_str = std::string(emotion->valuestring)]() {
++                display->SetServerEmotion(emotion_str.c_str());
++            });
++        }
++    } else if (strcmp(type->valuestring, "mcp") == 0) {
++        auto payload = cJSON_GetObjectItem(root, "payload");
++        if (cJSON_IsObject(payload)) {
++            McpServer::GetInstance().ParseMessage(payload);
++        }
++    } else if (strcmp(type->valuestring, "session") == 0) {
++        auto state = cJSON_GetObjectItem(root, "state");
++        if (cJSON_IsString(state) && strcmp(state->valuestring, "idle") == 0) {
++            ScheduleOnChannel(generation, [this]() {
++                if (GetDeviceState() == kDeviceStateListening) {
++                    protocol_->SendStopListening();
++                    SetDeviceState(kDeviceStateIdle);
+                 }
+-            }
+-        } else if (strcmp(type->valuestring, "alert") == 0) {
+-            auto status = cJSON_GetObjectItem(root, "status");
+-            auto message = cJSON_GetObjectItem(root, "message");
+-            auto emotion = cJSON_GetObjectItem(root, "emotion");
+-            if (cJSON_IsString(status) && cJSON_IsString(message) && cJSON_IsString(emotion)) {
+-                Alert(status->valuestring, message->valuestring, emotion->valuestring, Lang::Sounds::OGG_VIBRATION);
+-            } else {
+-                ESP_LOGW(TAG, "Alert command requires status, message and emotion");
+-            }
+-#if CONFIG_RECEIVE_CUSTOM_MESSAGE
+-        } else if (strcmp(type->valuestring, "custom") == 0) {
+-            auto payload = cJSON_GetObjectItem(root, "payload");
+-            ESP_LOGI(TAG, "Received custom message: %s", cJSON_PrintUnformatted(root));
+-            if (cJSON_IsObject(payload)) {
+-                Schedule([this, display, payload_str = std::string(cJSON_PrintUnformatted(payload))]() {
+-                    display->SetChatMessage("system", payload_str.c_str());
++            });
++        }
++    } else if (strcmp(type->valuestring, "system") == 0) {
++        auto command = cJSON_GetObjectItem(root, "command");
++        if (cJSON_IsString(command)) {
++            ESP_LOGI(TAG, "System command: %s", command->valuestring);
++            if (strcmp(command->valuestring, "reboot") == 0) {
++                // Do a reboot if user requests a OTA update
++                ScheduleOnChannel(generation, [this]() {
++                    Reboot();
+                 });
+             } else {
+-                ESP_LOGW(TAG, "Invalid custom message format: missing payload");
+-            }
++                ESP_LOGW(TAG, "Unknown system command: %s", command->valuestring);
++            }
++        }
++    } else if (strcmp(type->valuestring, "alert") == 0) {
++        auto status = cJSON_GetObjectItem(root, "status");
++        auto message = cJSON_GetObjectItem(root, "message");
++        auto emotion = cJSON_GetObjectItem(root, "emotion");
++        if (cJSON_IsString(status) && cJSON_IsString(message) && cJSON_IsString(emotion)) {
++            Alert(status->valuestring, message->valuestring, emotion->valuestring, Lang::Sounds::OGG_VIBRATION);
++        } else {
++            ESP_LOGW(TAG, "Alert command requires status, message and emotion");
++        }
++#if CONFIG_RECEIVE_CUSTOM_MESSAGE
++    } else if (strcmp(type->valuestring, "custom") == 0) {
++        auto payload = cJSON_GetObjectItem(root, "payload");
++        ESP_LOGI(TAG, "Received custom message: %s", cJSON_PrintUnformatted(root));
++        if (cJSON_IsObject(payload)) {
++            ScheduleOnChannel(generation, [this, display, payload_str = std::string(cJSON_PrintUnformatted(payload))]() {
++                display->SetChatMessage("system", payload_str.c_str());
++            });
++        } else {
++            ESP_LOGW(TAG, "Invalid custom message format: missing payload");
++        }
+ #endif
+-        } else {
+-            ESP_LOGW(TAG, "Unknown message type: %s", type->valuestring);
+-        }
+-    });
+-    
+-    protocol_->Start();
++    } else {
++        ESP_LOGW(TAG, "Unknown message type: %s", type->valuestring);
++    }
+ }
+ 
+ void Application::ShowActivationCode(const std::string& code, const std::string& message) {
+@@ -883,6 +1057,8 @@
+ }
+ 
+ void Application::HandleStateChangedEvent() {
++    std::lock_guard<std::recursive_mutex> lock(tts_output_mutex_);
++    if (tts_interrupt_v1_ && tts_ui_pending_) return;
+     DeviceState new_state = state_machine_.GetState();
+     clock_ticks_ = 0;
+ 
+@@ -920,7 +1096,7 @@
+             if (play_popup_on_listening_ || !audio_service_.IsAudioProcessorRunning()) {
+                 // For auto mode, wait for playback queue to be empty before enabling voice processing
+                 // This prevents audio truncation when STOP arrives late due to network jitter
+-                if (listening_mode_ == kListeningModeAutoStop) {
++                if (listening_mode_ == kListeningModeAutoStop && !audio_service_.IsManagedOutput()) {
+                     audio_service_.WaitForPlaybackQueueEmpty();
+                 }
+                 
+@@ -951,7 +1127,7 @@
+                 // Only AFE wake word can be detected in speaking mode
+                 audio_service_.EnableWakeWordDetection(audio_service_.IsAfeWakeWord());
+             }
+-            audio_service_.ResetDecoder();
++            if (!audio_service_.IsManagedOutput()) audio_service_.ResetDecoder();
+             break;
+         case kDeviceStateWifiConfiguring:
+             audio_service_.EnableVoiceProcessing(false);
+@@ -972,6 +1148,18 @@
+ }
+ 
+ void Application::AbortSpeaking(AbortReason reason) {
++    std::lock_guard<std::recursive_mutex> lock(tts_output_mutex_);
++    if (tts_interrupt_v1_ && audio_service_.InterruptOutput(tts_output_identity_)) {
++        tts_output_identity_ = audio_service_.OutputFenceIdentity();
++        if (!tts_output_identity_.tagged()) { CloseOutputChannelSoon(); return; }
++        tts_accepting_ = false;
++        tts_revoked_ = tts_ui_pending_ = true;
++        ScheduleOnOutput(tts_output_identity_, [this]() {
++            tts_ui_pending_ = false;
++            show_interrupted_on_listening_ = true;
++            ApplyOutputStopped();
++        }, true);
++    }
+     ESP_LOGI(TAG, "Abort speaking");
+     aborted_ = true;
+     if (protocol_) {
+@@ -1145,6 +1333,14 @@
+ 
+ void Application::ResetProtocol() {
+     Schedule([this]() {
++        { std::lock_guard<std::recursive_mutex> lock(tts_output_mutex_);
++          audio_service_.InvalidateOutputChannel(tts_channel_generation_);
++          audio_service_.SetOutputChannel(0);
++          audio_service_.SetManagedOutput(false);
++          tts_channel_generation_ = 0;
++          tts_interrupt_v1_ = tts_accepting_ = tts_revoked_ = tts_ui_pending_ = false;
++          tts_output_identity_ = {}; }
++        // 不持应用屏障join socket；网络回调的锁顺序为channel -> application。
+         // Close audio channel if opened
+         if (protocol_ && protocol_->IsAudioChannelOpened()) {
+             protocol_->CloseAudioChannel();
+--- a/main/application.h
++++ b/main/application.h
+@@ -134,6 +134,17 @@
+     AecMode aec_mode_ = kAecOff;
+     std::string last_error_message_;
+     AudioService audio_service_;
++    // WebSocket本地通道代次独立于可重置的wire epoch，所有控制/UI副作用共用此屏障。
++    std::recursive_mutex tts_output_mutex_;
++    uint64_t tts_channel_generation_ = 0;
++    uint64_t tts_closed_generation_ = 0;
++    uint32_t tts_last_epoch_ = 0;
++    bool tts_hello_seen_ = false;
++    bool tts_interrupt_v1_ = false;
++    bool tts_accepting_ = false;
++    bool tts_revoked_ = false;
++    bool tts_ui_pending_ = false;
++    AudioOutputIdentity tts_output_identity_;
+     std::unique_ptr<Ota> ota_;
+ 
+     bool has_server_time_ = false;
+@@ -164,6 +175,17 @@
+     void CheckAssetsVersion();
+     void CheckNewVersion();
+     void InitializeProtocol();
++    void OnLocalChannelOpening(uint64_t generation);
++    void OnLocalChannelOpened(uint64_t generation);
++    void OnLocalChannelClosed(uint64_t generation);
++    void OnLocalChannelJson(uint64_t generation, const cJSON* root);
++    void HandleProtocolJson(uint64_t generation, const cJSON* root);
++    void HandleManagedTts(const cJSON* root);
++    void OnOutputDrained(const AudioOutputIdentity& identity);
++    void ScheduleOnChannel(uint64_t generation, std::function<void()>&& callback);
++    void ScheduleOnOutput(const AudioOutputIdentity& identity, std::function<void()>&& callback, bool revoked = false);
++    void ApplyOutputStopped();
++    void CloseOutputChannelSoon();
+     void ShowActivationCode(const std::string& code, const std::string& message);
+     void SetListeningMode(ListeningMode mode);
+     ListeningMode GetDefaultListeningMode() const;
+--- a/main/audio/audio_service.cc
++++ b/main/audio/audio_service.cc
+@@ -1,6 +1,8 @@
+ #include "audio_service.h"
+ #include <esp_log.h>
+ #include <cstring>
++#include <algorithm>
++#include <cassert>
+ 
+ #define RATE_CVT_CFG(_src_rate, _dest_rate, _channel)        \
+     (esp_ae_rate_cvt_cfg_t)                                  \
+@@ -174,6 +176,8 @@
+         AS_EVENT_AUDIO_PROCESSOR_RUNNING);
+ 
+     std::lock_guard<std::mutex> lock(audio_queue_mutex_);
++    RevokeOutputLocked(managed_current_);
++    managed_output_ = false;
+     audio_encode_queue_.clear();
+     audio_decode_queue_.clear();
+     audio_playback_queue_.clear();
+@@ -291,36 +295,50 @@
+     while (true) {
+         std::unique_lock<std::mutex> lock(audio_queue_mutex_);
+         audio_queue_cv_.wait(lock, [this]() { return !audio_playback_queue_.empty() || service_stopped_; });
+-        if (service_stopped_) {
+-            break;
+-        }
+-
++        if (service_stopped_) break;
+         auto task = std::move(audio_playback_queue_.front());
+         audio_playback_queue_.pop_front();
++        if (task->channel_generation && task->channel_generation != output_channel_generation_) { audio_queue_cv_.notify_all(); continue; }
++        std::shared_ptr<ManagedOutput> output;
++        if (task->output_identity.tagged()) {
++            if (!MatchesOutputLocked(task->output_identity)) { audio_queue_cv_.notify_all(); continue; }
++            output = managed_current_;
++            ++output->active_output; // 与出队同一把锁，EOS没有假空窗。
++        }
+         audio_queue_cv_.notify_all();
+         lock.unlock();
+-
+-        if (!codec_->output_enabled()) {
+-            esp_timer_stop(audio_power_timer_);
+-            esp_timer_start_periodic(audio_power_timer_, AUDIO_POWER_CHECK_INTERVAL_MS * 1000);
+-            codec_->EnableOutput(true);
+-        }
+-
+-        codec_->OutputData(task->pcm);
+-
+-        /* Update the last output time */
+-        last_output_time_ = std::chrono::steady_clock::now();
+-        debug_statistics_.playback_count++;
+-
++        bool played = false;
++        try {
++            std::lock_guard<std::mutex> barrier(output_start_mutex_);
++            bool valid;
++            { std::lock_guard<std::mutex> queue_lock(audio_queue_mutex_);
++              valid = (!task->channel_generation || task->channel_generation == output_channel_generation_) &&
++                      (!output || (output->valid && output == managed_current_)); }
++            if (valid) {
++                if (!codec_->output_enabled()) {
++                    esp_timer_stop(audio_power_timer_);
++                    esp_timer_start_periodic(audio_power_timer_, AUDIO_POWER_CHECK_INTERVAL_MS * 1000);
++                    codec_->EnableOutput(true);
++                }
++                // 验证和开始输出共享屏障；已进入的调用允许返回，interrupt等待它。
++                codec_->OutputData(task->pcm);
++                played = true;
++            }
++        } catch (...) { ESP_LOGE(TAG, "Audio output task failed"); }
++        lock.lock();
++        if (played) {
++            last_output_time_ = std::chrono::steady_clock::now();
++            debug_statistics_.playback_count++;
+ #if CONFIG_USE_SERVER_AEC
+-        /* Record the timestamp for server AEC */
+-        if (task->timestamp > 0) {
+-            lock.lock();
+-            timestamp_queue_.push_back(task->timestamp);
+-        }
++            if (task->timestamp > 0 && (!output || output->valid)) timestamp_queue_.push_back(task->timestamp);
+ #endif
+-    }
+-
++        }
++        bool drained = false;
++        if (output) { assert(output->active_output > 0); --output->active_output; drained = OutputDrainedLocked(output); }
++        audio_queue_cv_.notify_all();
++        lock.unlock();
++        if (drained && callbacks_.on_output_drained) callbacks_.on_output_drained(output->identity);
++    }
+     ESP_LOGW(TAG, "Audio output task stopped");
+ }
+ 
+@@ -340,56 +358,72 @@
+         if (!audio_decode_queue_.empty() && audio_playback_queue_.size() < MAX_PLAYBACK_TASKS_IN_QUEUE) {
+             auto packet = std::move(audio_decode_queue_.front());
+             audio_decode_queue_.pop_front();
++            if (packet->channel_generation && packet->channel_generation != output_channel_generation_) { audio_queue_cv_.notify_all(); continue; }
++            std::shared_ptr<ManagedOutput> output;
++            if (packet->output_identity.tagged()) {
++                if (!MatchesOutputLocked(packet->output_identity)) { audio_queue_cv_.notify_all(); continue; }
++                output = managed_current_;
++                ++output->active_decode;
++            }
+             audio_queue_cv_.notify_all();
+             lock.unlock();
+-
+-            auto task = std::make_unique<AudioTask>();
+-            task->type = kAudioTaskTypeDecodeToPlaybackQueue;
+-            task->timestamp = packet->timestamp;
+-
+-            SetDecodeSampleRate(packet->sample_rate, packet->frame_duration);
+-            if (opus_decoder_ != nullptr) {
+-                task->pcm.resize(decoder_frame_size_);
+-                esp_audio_dec_in_raw_t raw = {
+-                    .buffer = (uint8_t *)(packet->payload.data()),
+-                    .len = (uint32_t)(packet->payload.size()),
+-                    .consumed = 0,
+-                    .frame_recover = ESP_AUDIO_DEC_RECOVERY_NONE,
+-                };
+-                esp_audio_dec_out_frame_t out_frame = {
+-                    .buffer = (uint8_t *)(task->pcm.data()),
+-                    .len = (uint32_t)(task->pcm.size() * sizeof(int16_t)),
+-                    .decoded_size = 0,
+-                };
+-                esp_audio_dec_info_t dec_info = {};
+-                std::unique_lock<std::mutex> decoder_lock(decoder_mutex_);
+-                auto ret = esp_opus_dec_decode(opus_decoder_, &raw, &out_frame, &dec_info);
+-                decoder_lock.unlock();
+-                if (ret == ESP_AUDIO_ERR_OK) {
+-                    task->pcm.resize(out_frame.decoded_size / sizeof(int16_t));
+-                    if (decoder_sample_rate_ != codec_->output_sample_rate() && output_resampler_ != nullptr) {
+-                        uint32_t target_size = 0;
+-                        esp_ae_rate_cvt_get_max_out_sample_num(output_resampler_, task->pcm.size(), &target_size);
+-                        std::vector<int16_t> resampled(target_size);
+-                        uint32_t actual_output = target_size;
+-                        esp_ae_rate_cvt_process(output_resampler_, (esp_ae_sample_t)task->pcm.data(), task->pcm.size(),
+-                                                (esp_ae_sample_t)resampled.data(), &actual_output);
+-                        resampled.resize(actual_output);
+-                        task->pcm = std::move(resampled);
++            std::unique_ptr<AudioTask> task;
++            bool decoded = false;
++            try {
++                task = std::make_unique<AudioTask>();
++                task->type = kAudioTaskTypeDecodeToPlaybackQueue;
++                task->timestamp = packet->timestamp;
++                task->output_identity = packet->output_identity;
++                task->channel_generation = packet->channel_generation;
++                // 包已经出队仍可能被撤权；真正解码、重采样与reset采用相同屏障。
++                std::lock_guard<std::mutex> decoder_lock(decoder_mutex_);
++                bool valid;
++                { std::lock_guard<std::mutex> queue_lock(audio_queue_mutex_);
++                  valid = (!packet->channel_generation || packet->channel_generation == output_channel_generation_) &&
++                          (!output || (output->valid && output == managed_current_)); }
++                if (valid) {
++                    SetDecodeSampleRate(packet->sample_rate, packet->frame_duration);
++                    if (opus_decoder_) {
++                        task->pcm.resize(decoder_frame_size_);
++                        esp_audio_dec_in_raw_t raw = {
++                            .buffer = (uint8_t*)packet->payload.data(), .len = (uint32_t)packet->payload.size(),
++                            .consumed = 0, .frame_recover = ESP_AUDIO_DEC_RECOVERY_NONE,
++                        };
++                        esp_audio_dec_out_frame_t out_frame = {
++                            .buffer = (uint8_t*)task->pcm.data(), .len = (uint32_t)(task->pcm.size() * sizeof(int16_t)),
++                            .decoded_size = 0,
++                        };
++                        esp_audio_dec_info_t dec_info = {};
++                        auto ret = esp_opus_dec_decode(opus_decoder_, &raw, &out_frame, &dec_info);
++                        if (ret == ESP_AUDIO_ERR_OK) {
++                            task->pcm.resize(out_frame.decoded_size / sizeof(int16_t));
++                            if (decoder_sample_rate_ != codec_->output_sample_rate() && output_resampler_) {
++                                uint32_t target_size = 0;
++                                esp_ae_rate_cvt_get_max_out_sample_num(output_resampler_, task->pcm.size(), &target_size);
++                                std::vector<int16_t> resampled(target_size);
++                                uint32_t actual_output = target_size;
++                                esp_ae_rate_cvt_process(output_resampler_, (esp_ae_sample_t)task->pcm.data(), task->pcm.size(),
++                                    (esp_ae_sample_t)resampled.data(), &actual_output);
++                                resampled.resize(actual_output);
++                                task->pcm = std::move(resampled);
++                            }
++                            decoded = true;
++                        } else ESP_LOGE(TAG, "Audio decode task failed: %d", ret);
+                     }
+-                    lock.lock();
+-                    audio_playback_queue_.push_back(std::move(task));
+-                    audio_queue_cv_.notify_all();
+-                    debug_statistics_.decode_count++;
+-                } else {
+-                    ESP_LOGE(TAG, "Failed to decode audio after resize, error code: %d", ret);
+-                    lock.lock();
+                 }
+-            } else {
+-                ESP_LOGE(TAG, "Audio decoder is not configured");
+-                lock.lock();
+-            }
+-            debug_statistics_.decode_count++;
++            } catch (...) { ESP_LOGE(TAG, "Audio decode task failed"); }
++            lock.lock();
++            if (decoded && (!packet->channel_generation || packet->channel_generation == output_channel_generation_) &&
++                (!output || (output->valid && output == managed_current_))) {
++                audio_playback_queue_.push_back(std::move(task));
++                debug_statistics_.decode_count++;
++            }
++            bool drained = false;
++            if (output) { assert(output->active_decode > 0); --output->active_decode; drained = OutputDrainedLocked(output); }
++            audio_queue_cv_.notify_all();
++            if (drained && callbacks_.on_output_drained) {
++                lock.unlock(); callbacks_.on_output_drained(output->identity); lock.lock();
++            }
+         }
+         /* Encode the audio to send queue */
+         if (!audio_encode_queue_.empty() && audio_send_queue_.size() < MAX_SEND_PACKETS_IN_QUEUE) {
+@@ -449,12 +483,10 @@
+     if (decoder_sample_rate_ == sample_rate && decoder_duration_ms_ == frame_duration) {
+         return;
+     }
+-    std::unique_lock<std::mutex> decoder_lock(decoder_mutex_);
+     if (opus_decoder_ != nullptr) {
+         esp_opus_dec_close(opus_decoder_);
+         opus_decoder_ = nullptr;
+     }
+-    decoder_lock.unlock();
+     esp_opus_dec_cfg_t opus_dec_cfg = OPUS_DEC_CFG(sample_rate, frame_duration);
+     auto ret = esp_opus_dec_open(&opus_dec_cfg, sizeof(esp_opus_dec_cfg_t), &opus_decoder_);
+     if (opus_decoder_ == nullptr) {
+@@ -505,13 +537,20 @@
+ 
+ bool AudioService::PushPacketToDecodeQueue(std::unique_ptr<AudioStreamPacket> packet, bool wait) {
+     std::unique_lock<std::mutex> lock(audio_queue_mutex_);
++    const auto identity = packet->output_identity; // 等待前固定，撤权后不能改标为新轮。
++    const auto channel = packet->channel_generation;
++    auto accepted = [this, &identity, channel]() {
++        return (!channel || channel == output_channel_generation_) &&
++               (!identity.tagged() || (MatchesOutputLocked(identity) && managed_current_->accepting));
++    };
++    if (!accepted() || service_stopped_) return false;
+     if (audio_decode_queue_.size() >= MAX_DECODE_PACKETS_IN_QUEUE) {
+-        if (wait) {
+-            audio_queue_cv_.wait(lock, [this]() { return audio_decode_queue_.size() < MAX_DECODE_PACKETS_IN_QUEUE; });
+-        } else {
+-            return false;
+-        }
+-    }
++        if (!wait) return false;
++        audio_queue_cv_.wait(lock, [this, &accepted]() {
++            return service_stopped_ || !accepted() || audio_decode_queue_.size() < MAX_DECODE_PACKETS_IN_QUEUE;
++        });
++    }
++    if (!accepted() || service_stopped_) return false;
+     audio_decode_queue_.push_back(std::move(packet));
+     audio_queue_cv_.notify_all();
+     return true;
+@@ -666,17 +705,137 @@
+ }
+ 
+ void AudioService::ResetDecoder() {
++    // v1重置由同步BeginOutput/interrupt负责，异步UI不能清除已收到的新首帧。
++    { std::lock_guard<std::mutex> lock(audio_queue_mutex_); if (managed_output_) return; }
++    std::unique_lock<std::mutex> decoder_lock(decoder_mutex_);
+     std::lock_guard<std::mutex> lock(audio_queue_mutex_);
+-    std::unique_lock<std::mutex> decoder_lock(decoder_mutex_);
++    if (managed_output_) return;
+     if (opus_decoder_ != nullptr) {
+         esp_opus_dec_reset(opus_decoder_);
+     }
+-    decoder_lock.unlock();
+     timestamp_queue_.clear();
+     audio_decode_queue_.clear();
+     audio_playback_queue_.clear();
+     audio_testing_queue_.clear();
+     audio_queue_cv_.notify_all();
++}
++
++void AudioService::SetManagedOutput(bool enabled) {
++    std::lock_guard<std::mutex> lock(audio_queue_mutex_);
++    managed_output_ = enabled;
++}
++
++void AudioService::SetOutputChannel(uint64_t generation) {
++    {
++        std::lock_guard<std::mutex> lock(audio_queue_mutex_);
++        output_channel_generation_ = generation;
++        // legacy WebSocket也保留不可变来源；本地提示音(0)不属于旧连接。
++        auto stale = [generation](const auto& task) { return task->channel_generation && task->channel_generation != generation; };
++        audio_decode_queue_.erase(std::remove_if(audio_decode_queue_.begin(), audio_decode_queue_.end(), stale), audio_decode_queue_.end());
++        audio_playback_queue_.erase(std::remove_if(audio_playback_queue_.begin(), audio_playback_queue_.end(), stale), audio_playback_queue_.end());
++        audio_queue_cv_.notify_all();
++    }
++    ResetCodecForOutput();
++}
++
++bool AudioService::IsManagedOutput() {
++    std::lock_guard<std::mutex> lock(audio_queue_mutex_);
++    return managed_output_;
++}
++
++bool AudioService::MatchesOutputLocked(const AudioOutputIdentity& identity) const {
++    return identity.tagged() && managed_current_ && managed_current_->valid &&
++           managed_current_->identity == identity;
++}
++
++bool AudioService::IsCurrentOutput(const AudioOutputIdentity& identity) {
++    std::lock_guard<std::mutex> lock(audio_queue_mutex_);
++    return MatchesOutputLocked(identity);
++}
++
++AudioOutputIdentity AudioService::OutputFenceIdentity() {
++    std::lock_guard<std::mutex> lock(audio_queue_mutex_);
++    return output_fence_identity_;
++}
++
++void AudioService::RevokeOutputLocked(const std::shared_ptr<ManagedOutput>& output) {
++    if (!output || !output->valid) return;
++    output->valid = output->accepting = output->eos_pending = false;
++    if (audio_generation_counter_ == UINT64_MAX) output_fence_identity_ = {};
++    else output_fence_identity_ = {output->identity.channel_generation, output->identity.output_epoch, ++audio_generation_counter_};
++    const auto id = output->identity;
++    auto packets = [&id](const auto& packet) { return packet->output_identity == id; };
++    audio_decode_queue_.erase(std::remove_if(audio_decode_queue_.begin(), audio_decode_queue_.end(), packets), audio_decode_queue_.end());
++    audio_testing_queue_.erase(std::remove_if(audio_testing_queue_.begin(), audio_testing_queue_.end(), packets), audio_testing_queue_.end());
++    audio_playback_queue_.erase(std::remove_if(audio_playback_queue_.begin(), audio_playback_queue_.end(),
++        [&id](const auto& task) { return task->output_identity == id; }), audio_playback_queue_.end());
++    audio_queue_cv_.notify_all();
++}
++
++void AudioService::ResetCodecForOutput() {
++    // 不持queue mutex等待codec/output；已出队任务也在各自屏障内重核身份。
++    { std::lock_guard<std::mutex> lock(decoder_mutex_); if (opus_decoder_) esp_opus_dec_reset(opus_decoder_); decoder_sample_rate_ = 0; }
++    { std::lock_guard<std::mutex> lock(output_start_mutex_); }
++    // 到这里旧OutputData已返回，不宣称硬件DMA或扬声器残留已归零。
++}
++
++AudioOutputIdentity AudioService::BeginOutput(uint64_t channel_generation, uint32_t epoch) {
++    {
++        std::lock_guard<std::mutex> lock(audio_queue_mutex_);
++        if (!managed_output_ || !channel_generation || !epoch || epoch > INT32_MAX ||
++            audio_generation_counter_ == UINT64_MAX) return {};
++        RevokeOutputLocked(managed_current_);
++    }
++    ResetCodecForOutput();
++    std::lock_guard<std::mutex> lock(audio_queue_mutex_);
++    if (!managed_output_ || audio_generation_counter_ == UINT64_MAX) return {};
++    auto output = std::make_shared<ManagedOutput>();
++    output->identity = {channel_generation, epoch, ++audio_generation_counter_};
++    managed_current_ = output;
++    output_fence_identity_ = output->identity;
++    return output->identity;
++}
++
++bool AudioService::InterruptOutput(const AudioOutputIdentity& identity) {
++    {
++        std::lock_guard<std::mutex> lock(audio_queue_mutex_);
++        if (!MatchesOutputLocked(identity)) return false;
++        RevokeOutputLocked(managed_current_);
++    }
++    ResetCodecForOutput();
++    return true;
++}
++
++void AudioService::InvalidateOutputChannel(uint64_t channel_generation) {
++    AudioOutputIdentity id;
++    { std::lock_guard<std::mutex> lock(audio_queue_mutex_);
++      if (managed_current_ && managed_current_->identity.channel_generation == channel_generation)
++          id = managed_current_->identity; }
++    if (id.tagged()) InterruptOutput(id);
++}
++
++bool AudioService::OutputDrainedLocked(const std::shared_ptr<ManagedOutput>& output) {
++    if (!output || !output->valid || output != managed_current_ || !output->eos_pending ||
++        output->active_decode || output->active_output) return false;
++    const auto id = output->identity;
++    for (const auto& packet : audio_decode_queue_) if (packet->output_identity == id) return false;
++    for (const auto& task : audio_playback_queue_) if (task->output_identity == id) return false;
++    output->eos_pending = false;
++    return true;
++}
++
++bool AudioService::EndOutput(const AudioOutputIdentity& identity) {
++    bool drained = false;
++    {
++        std::lock_guard<std::mutex> lock(audio_queue_mutex_);
++        if (!MatchesOutputLocked(identity) || !managed_current_->accepting) return false;
++        managed_current_->accepting = false;
++        managed_current_->eos_pending = true;
++        drained = OutputDrainedLocked(managed_current_);
++        audio_queue_cv_.notify_all();
++    }
++    if (drained && callbacks_.on_output_drained) callbacks_.on_output_drained(identity);
++    return true;
+ }
+ 
+ void AudioService::CheckAndUpdateAudioPowerState() {
+--- a/main/audio/audio_service.h
++++ b/main/audio/audio_service.h
+@@ -76,6 +76,7 @@
+     }
+ 
+ struct AudioServiceCallbacks {
++    std::function<void(const AudioOutputIdentity&)> on_output_drained;
+     std::function<void(void)> on_send_queue_available;
+     std::function<void(const std::string&)> on_wake_word_detected;
+     std::function<void(bool)> on_vad_change;
+@@ -93,6 +94,8 @@
+     AudioTaskType type;
+     std::vector<int16_t> pcm;
+     uint32_t timestamp;
++    AudioOutputIdentity output_identity;
++    uint64_t channel_generation = 0;
+ };
+ 
+ struct DebugStatistics {
+@@ -132,9 +135,36 @@
+     void PlaySound(const std::string_view& sound);
+     bool ReadAudioData(std::vector<int16_t>& data, int sample_rate, int samples);
+     void ResetDecoder();
++    void SetManagedOutput(bool enabled);
++    bool IsManagedOutput();
++    AudioOutputIdentity BeginOutput(uint64_t channel_generation, uint32_t epoch);
++    bool InterruptOutput(const AudioOutputIdentity& identity);
++    void InvalidateOutputChannel(uint64_t channel_generation);
++    bool EndOutput(const AudioOutputIdentity& identity);
++    bool IsCurrentOutput(const AudioOutputIdentity& identity);
++    AudioOutputIdentity OutputFenceIdentity();
++    void SetOutputChannel(uint64_t generation);
+     void SetModelsList(srmodel_list_t* models_list);
+ 
+ private:
++    struct ManagedOutput {
++        AudioOutputIdentity identity;
++        bool valid = true;
++        bool accepting = true;
++        bool eos_pending = false;
++        size_t active_decode = 0;
++        size_t active_output = 0;
++    };
++    bool managed_output_ = false;
++    uint64_t output_channel_generation_ = 0;
++    uint64_t audio_generation_counter_ = 0; // 只在queue mutex内增长，不随连接重置。
++    std::shared_ptr<ManagedOutput> managed_current_;
++    AudioOutputIdentity output_fence_identity_;
++    std::mutex output_start_mutex_;
++    bool MatchesOutputLocked(const AudioOutputIdentity& identity) const;
++    void RevokeOutputLocked(const std::shared_ptr<ManagedOutput>& output);
++    bool OutputDrainedLocked(const std::shared_ptr<ManagedOutput>& output);
++    void ResetCodecForOutput();
+     AudioCodec* codec_ = nullptr;
+     AudioServiceCallbacks callbacks_;
+     std::unique_ptr<AudioProcessor> audio_processor_;
+@@ -177,7 +207,7 @@
+     bool wake_word_initialized_ = false;
+     bool audio_processor_initialized_ = false;
+     bool voice_detected_ = false;
+-    bool service_stopped_ = true;
++    std::atomic<bool> service_stopped_{true};
+     bool audio_input_need_warmup_ = false;
+ 
+     esp_timer_handle_t audio_power_timer_ = nullptr;
+@@ -192,4 +222,4 @@
+     void CheckAndUpdateAudioPowerState();
+ };
+ 
+-#endif
+\ No newline at end of file
++#endif
+--- a/main/protocols/protocol.h
++++ b/main/protocols/protocol.h
+@@ -6,12 +6,40 @@
+ #include <functional>
+ #include <chrono>
+ #include <vector>
++#include <memory>
++#include <mutex>
++#include <atomic>
++#include <limits>
++#include <cstdint>
++
++// 只存在设备RAM的身份；不改变BinaryProtocol2/3或线上音频数据。
++struct AudioOutputIdentity {
++    uint64_t channel_generation = 0;
++    uint32_t output_epoch = 0;
++    uint64_t audio_generation = 0;
++    bool tagged() const { return audio_generation != 0; }
++    bool operator==(const AudioOutputIdentity& other) const {
++        return channel_generation == other.channel_generation && output_epoch == other.output_epoch &&
++               audio_generation == other.audio_generation;
++    }
++    bool operator!=(const AudioOutputIdentity& other) const { return !(*this == other); }
++};
++
++struct LocalAudioChannel {
++    const uint64_t generation;
++    std::recursive_mutex dispatch_mutex;
++    std::atomic<bool> valid{true};
++    std::atomic<bool> hello_seen{false};
++    explicit LocalAudioChannel(uint64_t value) : generation(value) {}
++};
+ 
+ struct AudioStreamPacket {
+     int sample_rate = 0;
+     int frame_duration = 0;
+     uint32_t timestamp = 0;
+     std::vector<uint8_t> payload;
++    uint64_t channel_generation = 0;
++    AudioOutputIdentity output_identity;
+ };
+ 
+ struct BinaryProtocol2 {
+@@ -63,6 +91,12 @@
+     void OnConnected(std::function<void()> callback);
+     void OnDisconnected(std::function<void()> callback);
+ 
++    // 新接口只携带本地代次；保留所有原注册接口，MQTT及旧服务器不需改合同。
++    void OnLocalChannelOpening(std::function<void(uint64_t)> fn) { on_local_opening_ = std::move(fn); }
++    void OnLocalChannelOpened(std::function<void(uint64_t)> fn) { on_local_opened_ = std::move(fn); }
++    void OnLocalChannelClosed(std::function<void(uint64_t)> fn) { on_local_closed_ = std::move(fn); }
++    void OnLocalChannelJson(std::function<void(uint64_t, const cJSON*)> fn) { on_local_json_ = std::move(fn); }
++
+     virtual bool Start() = 0;
+     virtual bool OpenAudioChannel() = 0;
+     virtual void CloseAudioChannel(bool send_goodbye = true) = 0;
+@@ -75,6 +109,41 @@
+     virtual void SendMcpMessage(const std::string& message);
+ 
+ protected:
++    std::function<void(uint64_t)> on_local_opening_, on_local_opened_, on_local_closed_;
++    std::function<void(uint64_t, const cJSON*)> on_local_json_;
++    std::mutex local_channel_mutex_;
++    std::shared_ptr<LocalAudioChannel> local_channel_;
++
++    static uint64_t NextLocalChannelGeneration() {
++        // 函数内静态量跨Protocol实例保留，断线不会重新使用旧代次。
++        static std::mutex generation_mutex;
++        static uint64_t last_generation = 0;
++        std::lock_guard<std::mutex> lock(generation_mutex);
++        if (last_generation == std::numeric_limits<uint64_t>::max()) return 0;
++        return ++last_generation;
++    }
++
++    std::shared_ptr<LocalAudioChannel> BeginLocalAudioChannel() {
++        EndLocalAudioChannel();
++        const auto generation = NextLocalChannelGeneration();
++        if (!generation) return nullptr;
++        auto next = std::make_shared<LocalAudioChannel>(generation);
++        { std::lock_guard<std::mutex> lock(local_channel_mutex_); local_channel_ = next; }
++        if (on_local_opening_) on_local_opening_(next->generation);
++        return next;
++    }
++
++    void EndLocalAudioChannel(std::shared_ptr<LocalAudioChannel> channel = nullptr) {
++        if (!channel) { std::lock_guard<std::mutex> lock(local_channel_mutex_); channel = local_channel_; }
++        if (!channel) return;
++        std::lock_guard<std::recursive_mutex> dispatch(channel->dispatch_mutex);
++        if (!channel || !channel->valid.exchange(false)) return;
++        // 失效也消耗一个本地代次；耗尽仍永久关闭旧身份，后续创建失败。
++        (void)NextLocalChannelGeneration();
++        if (on_local_closed_) on_local_closed_(channel->generation);
++        else if (on_audio_channel_closed_) on_audio_channel_closed_();
++    }
++
+     std::function<void(const cJSON* root)> on_incoming_json_;
+     std::function<void(std::unique_ptr<AudioStreamPacket> packet)> on_incoming_audio_;
+     std::function<void()> on_audio_channel_opened_;
+--- a/main/protocols/websocket_protocol.cc
++++ b/main/protocols/websocket_protocol.cc
+@@ -17,6 +17,7 @@
+ }
+ 
+ WebsocketProtocol::~WebsocketProtocol() {
++    CloseAudioChannel(false);
+     vEventGroupDelete(event_group_handle_);
+ }
+ 
+@@ -77,10 +78,19 @@
+ 
+ void WebsocketProtocol::CloseAudioChannel(bool send_goodbye) {
+     (void)send_goodbye;  // Websocket doesn't need to send goodbye message
++    EndLocalAudioChannel();
+     websocket_.reset();
+ }
+ 
+ bool WebsocketProtocol::OpenAudioChannel() {
++    auto channel = BeginLocalAudioChannel();
++    if (!channel) return false; // 本地代次耗尽时关闭，不回绕。
++    bool opened = false;
++    struct OpenGuard {
++        std::function<void()> close;
++        ~OpenGuard() { close(); }
++    } guard{[this, channel, &opened]() { if (!opened) EndLocalAudioChannel(channel); }};
++    xEventGroupClearBits(event_group_handle_, WEBSOCKET_PROTOCOL_SERVER_HELLO_EVENT);
+     Settings settings("websocket", false);
+     std::string url = settings.GetString("url");
+     std::string token = settings.GetString("token");
+@@ -115,7 +125,19 @@
+     websocket_->SetHeader("Device-Id", SystemInfo::GetMacAddress().c_str());
+     websocket_->SetHeader("Client-Id", Board::GetInstance().GetUuid().c_str());
+ 
+-    websocket_->OnData([this](const char* data, size_t len, bool binary) {
++    websocket_->OnData([this, channel](const char* data, size_t len, bool binary) {
++        std::lock_guard<std::recursive_mutex> dispatch(channel->dispatch_mutex);
++        if (!channel->valid.load()) return;
++        auto dispatch_audio = [this, channel](std::unique_ptr<AudioStreamPacket> packet) {
++            if (!channel->valid.load()) return;
++            packet->channel_generation = channel->generation;
++            if (on_incoming_audio_) on_incoming_audio_(std::move(packet));
++        };
++        auto dispatch_json = [this, channel](const cJSON* message) {
++            if (!channel->valid.load()) return;
++            if (on_local_json_) on_local_json_(channel->generation, message);
++            else if (on_incoming_json_) on_incoming_json_(message);
++        };
+         if (binary) {
+             if (on_incoming_audio_ != nullptr) {
+                 if (version_ == 2) {
+@@ -125,7 +147,7 @@
+                     bp2->timestamp = ntohl(bp2->timestamp);
+                     bp2->payload_size = ntohl(bp2->payload_size);
+                     auto payload = (uint8_t*)bp2->payload;
+-                    on_incoming_audio_(std::make_unique<AudioStreamPacket>(AudioStreamPacket{
++                    dispatch_audio(std::make_unique<AudioStreamPacket>(AudioStreamPacket{
+                         .sample_rate = server_sample_rate_,
+                         .frame_duration = server_frame_duration_,
+                         .timestamp = bp2->timestamp,
+@@ -136,14 +158,14 @@
+                     bp3->type = bp3->type;
+                     bp3->payload_size = ntohs(bp3->payload_size);
+                     auto payload = (uint8_t*)bp3->payload;
+-                    on_incoming_audio_(std::make_unique<AudioStreamPacket>(AudioStreamPacket{
++                    dispatch_audio(std::make_unique<AudioStreamPacket>(AudioStreamPacket{
+                         .sample_rate = server_sample_rate_,
+                         .frame_duration = server_frame_duration_,
+                         .timestamp = 0,
+                         .payload = std::vector<uint8_t>(payload, payload + bp3->payload_size)
+                     }));
+                 } else {
+-                    on_incoming_audio_(std::make_unique<AudioStreamPacket>(AudioStreamPacket{
++                    dispatch_audio(std::make_unique<AudioStreamPacket>(AudioStreamPacket{
+                         .sample_rate = server_sample_rate_,
+                         .frame_duration = server_frame_duration_,
+                         .timestamp = 0,
+@@ -160,16 +182,19 @@
+                 auto type = cJSON_GetObjectItem(root, "type");
+                 if (cJSON_IsString(type)) {
+                     if (strcmp(type->valuestring, "hello") == 0) {
+-                        ParseServerHello(root);
++                        auto transport = cJSON_GetObjectItem(root, "transport");
++                        if (cJSON_IsString(transport) && strcmp(transport->valuestring, "websocket") == 0 &&
++                            !channel->hello_seen.exchange(true)) {
++                            ParseServerHello(root);
++                            dispatch_json(root);
++                        }
+                     } else if (strcmp(type->valuestring, "session") == 0) {
+                         auto state = cJSON_GetObjectItem(root, "state");
+                         if (!cJSON_IsString(state) || strcmp(state->valuestring, "heartbeat") != 0) {
+-                            if (on_incoming_json_ != nullptr) {
+-                                on_incoming_json_(root);
+-                            }
++                            dispatch_json(root);
+                         }
+-                    } else if (on_incoming_json_ != nullptr) {
+-                        on_incoming_json_(root);
++                    } else {
++                        dispatch_json(root);
+                     }
+                 } else {
+                     ESP_LOGE(TAG, "Missing message type, data: %s", data);
+@@ -180,11 +205,11 @@
+         last_incoming_time_ = std::chrono::steady_clock::now();
+     });
+ 
+-    websocket_->OnDisconnected([this]() {
++    websocket_->OnDisconnected([this, channel]() {
++        std::lock_guard<std::recursive_mutex> dispatch(channel->dispatch_mutex);
++        if (!channel->valid.load()) return;
+         ESP_LOGI(TAG, "Websocket disconnected");
+-        if (on_audio_channel_closed_ != nullptr) {
+-            on_audio_channel_closed_();
+-        }
++        EndLocalAudioChannel(channel);
+     });
+ 
+     ESP_LOGI(TAG, "Connecting to websocket server: %s with version: %d", url.c_str(), version_);
+@@ -208,7 +233,11 @@
+         return false;
+     }
+ 
+-    if (on_audio_channel_opened_ != nullptr) {
++    if (!channel->valid.load()) return false;
++    opened = true;
++    if (on_local_opened_) {
++        on_local_opened_(channel->generation);
++    } else if (on_audio_channel_opened_ != nullptr) {
+         on_audio_channel_opened_();
+     }
+ 
+@@ -227,6 +256,7 @@
+     cJSON_AddBoolToObject(features, "mcp", true);
+ #if CONFIG_BOARD_TYPE_VIEWE_SMARTRING_PLUS
+     cJSON_AddBoolToObject(features, "persistent_session", true);
++    cJSON_AddBoolToObject(features, "tts_interrupt_v1", true);
+ #endif
+     cJSON_AddItemToObject(root, "features", features);
+     cJSON_AddStringToObject(root, "transport", "websocket");

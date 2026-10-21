@@ -1,0 +1,160 @@
+{
+  "id": "0016-round-subtitle-interrupt",
+  "date": "2026-10-21",
+  "timezone": "Asia/Shanghai",
+  "status": "offline_candidate_pending_joint_review",
+  "application_version": "2.2.3-otto0016",
+  "board": "viewe-smartring-plus",
+  "chip": "esp32s3",
+  "sdk_version": "5.5.4",
+  "sdk_commit": "735507283d5b2f9fb363a1901172dbd9e847945d",
+  "vendor_commit": "c4bdbab349e44cfc74fa6912f923193e9d389c7e",
+  "source_baseline": "D:\\Dev\\esp-projects\\smart-ring\\otto0015",
+  "source": "D:\\Dev\\esp-projects\\smart-ring\\ah-otto0016-subtitle",
+  "source_is_git_worktree": false,
+  "baseline_experiment": "firmware/smartring_plus/experiments/0015-otto-black-background.json",
+  "sources": {
+    "CMakeLists.txt": {
+      "baseline_raw": {
+        "bytes": 759,
+        "sha256": "b3e2212c8a3f7f7d5fbf9ac55879e0a81dd3b25a9ddb05257f7b03296cb4ad14"
+      },
+      "target_raw": {
+        "bytes": 759,
+        "sha256": "f5d75907dd7320beca1247943bfd624030e22b4558accab6c9af72312d9ceb07"
+      }
+    },
+    "main/application.cc": {
+      "baseline_raw": {
+        "bytes": 42113,
+        "sha256": "d7fd88fa50803a98611388bbafed829bc074b5dd43851443bea8129d5aecf366"
+      },
+      "target_raw": {
+        "bytes": 52011,
+        "sha256": "afbe15f5cce4585ebb3205fc8d30146355effda82c69ed82127ce89851d8c3d9"
+      }
+    },
+    "main/application.h": {
+      "baseline_raw": {
+        "bytes": 5840,
+        "sha256": "44c304518c17daaa378fdf54d62acf8d745fd7c00c0f86f473a7ca2505de4db2"
+      },
+      "target_raw": {
+        "bytes": 6999,
+        "sha256": "360e18af0e4a7c35de5772d5ab6ee77137dbe741bab0fd892746d516827b36b8"
+      }
+    },
+    "main/audio/audio_service.cc": {
+      "baseline_raw": {
+        "bytes": 29047,
+        "sha256": "278168c5c13ae36912910de646979a6eee7e53cb157aa63c44e6f6591caa601a"
+      },
+      "target_raw": {
+        "bytes": 38404,
+        "sha256": "8020ac849cb08ab496caefbbb9b40f62931c86369c5f8147d2bd5dd3608a542a"
+      }
+    },
+    "main/audio/audio_service.h": {
+      "baseline_raw": {
+        "bytes": 7725,
+        "sha256": "cd2259d42568d3b9f0852cce21c1cec39f4f378a3ba04a25f54c2c675220773c"
+      },
+      "target_raw": {
+        "bytes": 9181,
+        "sha256": "c9dac2080c6db2660d5e6ba66cdaaeed84076d3465ae0d3d1647a1405d9bd588"
+      }
+    },
+    "main/boards/viewe-smartring-plus/viewe-smartring-plus.cc": {
+      "baseline_raw": {
+        "bytes": 83915,
+        "sha256": "ddc0401177cd020d4a21afeecf40e627cfaea7c02a45870764afed49066c9d47"
+      },
+      "target_raw": {
+        "bytes": 88792,
+        "sha256": "5b04e6e1000210ddd4660295119b6776a68b23166bc41847bed44c02ddcab265"
+      }
+    },
+    "main/protocols/protocol.h": {
+      "baseline_raw": {
+        "bytes": 3179,
+        "sha256": "5757644bfa501b9276a1808717e38dfcd49953167831ad2e4150d836606e2ac5"
+      },
+      "target_raw": {
+        "bytes": 6501,
+        "sha256": "79bd1e667d0f4b6c6a9a02c4ca7e95f6ea855aca35889c4e7dfb3645dc70e527"
+      }
+    },
+    "main/protocols/websocket_protocol.cc": {
+      "baseline_raw": {
+        "bytes": 10541,
+        "sha256": "9560755fae0e1657223995817b1a5d0720747b6123926c2401c4a580b75642c9"
+      },
+      "target_raw": {
+        "bytes": 12177,
+        "sha256": "c26335645589cf780ec3ab9f7da3f498d5c3bc9da46223119d1b962af41ca209"
+      }
+    }
+  },
+  "source_files": 10765,
+  "non_target_files_unchanged": 10757,
+  "original_0015_unchanged": true,
+  "patches": {
+    "firmware/smartring_plus/patches/0016-round-subtitle-safe-area.patch": "33b43cb4d66b9c28a7c9ac5d5b93c551ef58542f774718e03ada8a900665adc4",
+    "firmware/smartring_plus/patches/0016-tts-interrupt-v1.patch": "a5f4a9c0d89d2c280c3976ebba9b99585c681f21aa0e7db6f95eebcd6ee6ebaf"
+  },
+  "apply_order": [
+    "firmware/smartring_plus/patches/0016-round-subtitle-safe-area.patch",
+    "firmware/smartring_plus/patches/0016-tts-interrupt-v1.patch"
+  ],
+  "git_apply_options": [
+    "-c core.autocrlf=false",
+    "-c core.eol=lf"
+  ],
+  "patch_forward_and_reverse_raw_bytes_verified": true,
+  "build": "D:\\Dev\\esp-projects\\smart-ring\\build-ah-otto0016-subtitle-20261021-final2",
+  "clean_initial_build_directory": true,
+  "initial_attempt_failed_before_cmake": "offline guard blocked asyncio internal socketpair; retained log",
+  "build_succeeded_after_guard_fix": true,
+  "ccache": false,
+  "external_network_disabled_in_python_children": true,
+  "build_artifacts": {
+    "xiaozhi.bin": {
+      "bytes": 4011456,
+      "sha256": "caca8cbf7b8b1df715c9523c1f32321d8b32b309acb63adf2e710d7f9901193c"
+    },
+    "xiaozhi.elf": {
+      "bytes": 40674172,
+      "sha256": "257a73c45ba85b8d7d1ae13c18c6c203b67ed2abcb5a27638fa45a464d2498a9"
+    },
+    "xiaozhi.map": {
+      "bytes": 25201511,
+      "sha256": "ad38da36bf4357b62523d9bdaf7513a5e282c8b93a972cf4ca8d85530ce6910f"
+    },
+    "partition_table/partition-table.bin": {
+      "bytes": 3072,
+      "sha256": "d46bd51980cd6e15f0bf0c86f530d87a0bbc207144bd9442937b3c1a618a3ffd"
+    }
+  },
+  "app_partition_bytes": 4128768,
+  "app_free_bytes": 117312,
+  "build_log_sha256": "a5ad3ead73ace5b112fe878effbc2de8a6546e96aa9db06d5cbf0be52b78a56a",
+  "source_audit_sha256": "7d760a906cf503572407dc3da6007e7234ab3b2bca662bf62e27b462370214b9",
+  "consumer_native_source_binding_sha256": "9f667abe1db2409a42468c2dba14d6423017bbd3cd1ad842652ae5729d624a81",
+  "consumer_native_log_sha256": "d643a5a90b7d0202a8f3defb91795640e86efa3cc42424d0e871d5f7c207416f",
+  "undeclared_client_log_sha256": "5ce09a4fc0453a8f89c3e45ea8850c9a25022d1beb02e740387e7b8cdb4b7d77",
+  "caption_native_log_sha256": "95cda431d26cb63bf7d176265eb3219c6034a077dd37bc3caec98a819f2d866d",
+  "server_contract_revision3": "2b8242e5",
+  "server_candidate_reviewed": "ff6ef6e6615017b14f1c91192a341e1b08410560",
+  "post_eos_interrupt_clarification": "ROOT: EOS alone drains naturally; later explicit same-epoch interrupt may revoke undrained tail; server integration revision pending AI",
+  "wire_binary_changed": false,
+  "personal_or_config_or_assets_written": false,
+  "serial_opened": false,
+  "flashed": false,
+  "device_experience_accepted": false,
+  "boundaries": [
+    "native fixture uses real extracted identity/queue/application control and SDK cJSON, hardware codec/Opus/FreeRTOS stubs",
+    "LVGL/font native rendering does not prove device GIF or audio experience",
+    "OutputData completion does not prove hardware/DMA/acoustic silence",
+    "generated full-flash commands are not execution instructions or permission"
+  ]
+}

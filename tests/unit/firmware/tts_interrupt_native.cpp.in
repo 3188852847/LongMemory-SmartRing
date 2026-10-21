@@ -1,0 +1,298 @@
+#include <cJSON.h>
+#include <algorithm>
+#include <atomic>
+#include <cassert>
+#include <chrono>
+#include <cmath>
+#include <condition_variable>
+#include <cstdint>
+#include <cstring>
+#include <deque>
+#include <functional>
+#include <future>
+#include <iostream>
+#include <memory>
+#include <limits>
+#include <mutex>
+#include <string>
+#include <thread>
+#include <vector>
+#include <stdexcept>
+using namespace std::chrono_literals;
+#undef assert
+#define assert(x) do { if (!(x)) { std::cerr << "FAIL line " << __LINE__ << ": " << #x << std::endl; std::exit(2); } } while(false)
+#define ESP_LOGI(...) ((void)0)
+#define ESP_LOGW(...) ((void)0)
+#define ESP_LOGE(...) ((void)0)
+#define CONFIG_USE_SERVER_AEC 1
+#ifndef CONFIG_BOARD_TYPE_VIEWE_SMARTRING_PLUS
+#define CONFIG_BOARD_TYPE_VIEWE_SMARTRING_PLUS 1
+#endif
+#define AUDIO_POWER_CHECK_INTERVAL_MS 1000
+#define MAX_DECODE_PACKETS_IN_QUEUE 40
+#define MAX_PLAYBACK_TASKS_IN_QUEUE 2
+#define ESP_AUDIO_ERR_OK 0
+#define ESP_AUDIO_DEC_RECOVERY_NONE 0
+void esp_timer_stop(int) {}
+void esp_timer_start_periodic(int, int) {}
+struct Latch {
+    std::mutex mutex; std::condition_variable cv; bool entered=false, released=false;
+    void pause() { std::unique_lock lock(mutex); entered=true; cv.notify_all(); cv.wait(lock,[&]{return released;}); }
+    void wait() { std::unique_lock lock(mutex); assert(cv.wait_for(lock,5s,[&]{return entered;})); }
+    void release() { std::lock_guard lock(mutex); released=true; cv.notify_all(); }
+};
+std::mutex hooks_mutex;
+std::function<void(const char*)> hook_fn;
+void hook(const char* name) { std::function<void(const char*)> fn; { std::lock_guard lock(hooks_mutex); fn=hook_fn; } if(fn) fn(name); }
+void hooks(std::function<void(const char*)> fn={}) { std::lock_guard lock(hooks_mutex); hook_fn=std::move(fn); }
+@identity@
+struct ChannelTransport {
+    std::function<void()> on_audio_channel_closed_;
+@channel_state@
+};
+@audio_types@
+struct esp_audio_dec_in_raw_t { uint8_t* buffer; uint32_t len; int consumed; int frame_recover; };
+struct esp_audio_dec_out_frame_t { uint8_t* buffer; uint32_t len; uint32_t decoded_size; };
+struct esp_audio_dec_info_t {};
+using esp_ae_sample_t = int16_t*;
+int esp_opus_dec_reset(void*) { hook("reset"); return 0; }
+int esp_opus_dec_decode(void*, esp_audio_dec_in_raw_t* raw, esp_audio_dec_out_frame_t* out, esp_audio_dec_info_t*) {
+    hook("decode");
+    if (raw->buffer[0]==255) return -1;
+    if (raw->buffer[0]==254) throw std::runtime_error("injected decode failure");
+    auto pcm=reinterpret_cast<int16_t*>(out->buffer);
+    std::fill(pcm,pcm+out->len/sizeof(int16_t),raw->buffer[0]);out->decoded_size=out->len;return 0;
+}
+void esp_ae_rate_cvt_get_max_out_sample_num(void*, size_t n, uint32_t* out) { *out=static_cast<uint32_t>(n); }
+void esp_ae_rate_cvt_process(void*, esp_ae_sample_t in, size_t n, esp_ae_sample_t out, uint32_t*) { std::copy(in,in+n,out); }
+struct AudioCodec {
+    std::mutex mutex; std::vector<int> played; std::vector<size_t> sizes;
+    bool output_enabled() {return true;} void EnableOutput(bool) {}
+    int output_sample_rate() {return 24000;}
+    void OutputData(std::vector<int16_t>& pcm) { hook("output"); if(pcm.at(0)==254)throw std::runtime_error("injected output failure");std::lock_guard lock(mutex); played.push_back(pcm.at(0));sizes.push_back(pcm.size()); }
+};
+class AudioService {
+public:
+@audio_state@
+    AudioCodec codec_value; AudioCodec* codec_=&codec_value;
+    AudioServiceCallbacks callbacks_; std::mutex decoder_mutex_, audio_queue_mutex_;
+    std::condition_variable audio_queue_cv_;
+    std::deque<std::unique_ptr<AudioStreamPacket>> audio_decode_queue_,audio_testing_queue_;
+    std::deque<std::unique_ptr<AudioTask>> audio_playback_queue_;
+    std::deque<uint32_t> timestamp_queue_;
+    std::atomic<bool> service_stopped_{false}; void* opus_decoder_=this; void* output_resampler_=nullptr;
+    int decoder_sample_rate_=24000, decoder_frame_size_=4, audio_power_timer_=0;
+    DebugStatistics debug_statistics_{}; std::chrono::steady_clock::time_point last_output_time_;
+    void SetDecodeSampleRate(int sample_rate,int) {decoder_sample_rate_=sample_rate;}
+    void SetManagedOutput(bool); bool IsManagedOutput(); bool IsCurrentOutput(const AudioOutputIdentity&);
+    AudioOutputIdentity OutputFenceIdentity(); AudioOutputIdentity BeginOutput(uint64_t,uint32_t);
+    void SetOutputChannel(uint64_t);
+    bool InterruptOutput(const AudioOutputIdentity&); void InvalidateOutputChannel(uint64_t);
+    bool EndOutput(const AudioOutputIdentity&); void ResetDecoder();
+    bool PushPacketToDecodeQueue(std::unique_ptr<AudioStreamPacket>,bool wait=false);
+    void AudioOutputTask(); void DecodeOne();
+    bool processor=false; int voice_resets=0;
+    void EnableVoiceProcessing(bool value) { if(value) {++voice_resets; ResetDecoder();} processor=value; }
+    void EnableWakeWordDetection(bool) {} bool IsAfeWakeWord() {return false;}
+    bool IsAudioProcessorRunning() {return processor;}
+    void WaitForPlaybackQueueEmpty() {assert(false);}
+    template<class T> void PlaySound(T) {}
+    void Shutdown() { service_stopped_=true; audio_queue_cv_.notify_all(); }
+    size_t Queued() {std::lock_guard lock(audio_queue_mutex_); return audio_decode_queue_.size()+audio_playback_queue_.size();}
+};
+@queue_push@
+@managed@
+@audio_output@
+@decode@
+enum DeviceState {kDeviceStateUnknown,kDeviceStateIdle,kDeviceStateConnecting,kDeviceStateListening,kDeviceStateSpeaking,kDeviceStateWifiConfiguring};
+enum ListeningMode {kListeningModeAutoStop,kListeningModeManualStop,kListeningModeRealtime};
+enum AbortReason {kAbortReasonNone,kAbortReasonWakeWordDetected};
+enum class PowerSaveLevel {PERFORMANCE,LOW_POWER};
+struct Display {
+    std::string caption,status;
+    void SetChatMessage(const char*,const char* value) {caption=value;} void SetStatus(const char* value) {status=value;}
+    void SetEmotion(const char*) {} void ClearChatMessages() {caption.clear();}
+};
+struct Led {void OnStateChanged() {}};
+struct Board {
+    Display display; Led led; AudioCodec codec;
+    static Board& GetInstance() { static Board board; return board; }
+    Display* GetDisplay() {return &display;} Led* GetLed() {return &led;} AudioCodec* GetAudioCodec() {return &codec;}
+    void SetPowerSaveLevel(PowerSaveLevel) {}
+};
+namespace Lang { namespace Strings {constexpr auto STANDBY="idle",CONNECTING="connecting",LISTENING="listening",SPEAKING="speaking";} namespace Sounds {constexpr auto OGG_POPUP="popup";} }
+struct MockProtocol {
+    int closed=0,aborts=0; int server_sample_rate() {return 24000;} void CloseAudioChannel() {++closed;}
+    void SendStartListening(ListeningMode) {} void SendAbortSpeaking(AbortReason) {++aborts;}
+};
+class Application {
+public:
+    AudioService audio_service_; std::recursive_mutex tts_output_mutex_;
+    uint64_t tts_channel_generation_=0,tts_closed_generation_=0; uint32_t tts_last_epoch_=0;
+    bool tts_hello_seen_=false,tts_interrupt_v1_=false,tts_accepting_=false,tts_revoked_=false,tts_ui_pending_=false;
+    AudioOutputIdentity tts_output_identity_;
+    MockProtocol protocol_value; MockProtocol* protocol_=&protocol_value;
+    bool aborted_=false,show_interrupted_on_listening_=false,play_popup_on_listening_=false;
+    ListeningMode listening_mode_=kListeningModeAutoStop; int clock_ticks_=0;
+    struct State {DeviceState state=kDeviceStateListening; DeviceState GetState() {return state;}} state_machine_;
+    std::mutex tasks_mutex; std::deque<std::function<void()>> tasks;
+    Application() {audio_service_.callbacks_.on_output_drained=[this](auto id){OnOutputDrained(id);};}
+    DeviceState GetDeviceState() {return state_machine_.state;} void SetDeviceState(DeviceState state) {state_machine_.state=state;}
+    void Schedule(std::function<void()>&& fn) {std::lock_guard lock(tasks_mutex);tasks.push_back(std::move(fn));}
+    void Run() {for(;;) {std::function<void()> fn; {std::lock_guard lock(tasks_mutex); if(tasks.empty()) break; fn=std::move(tasks.front()); tasks.pop_front();} fn(); HandleStateChangedEvent();}}
+    void OnLocalChannelOpening(uint64_t); void OnLocalChannelOpened(uint64_t); void OnLocalChannelClosed(uint64_t);
+    void OnLocalChannelJson(uint64_t,const cJSON*); void HandleManagedTts(const cJSON*);
+    void ScheduleOnChannel(uint64_t,std::function<void()>&&); void ScheduleOnOutput(const AudioOutputIdentity&,std::function<void()>&&,bool revoked=false);
+    void ApplyOutputStopped(); void CloseOutputChannelSoon(); void OnOutputDrained(const AudioOutputIdentity&); void Receive(std::unique_ptr<AudioStreamPacket>);
+    void HandleStateChangedEvent(); void AbortSpeaking(AbortReason);
+    // Legacy parser remains compiled/verified by the real target build; this fixture
+    // invokes only its v1 dispatch and models legacy tts start for negotiation tests.
+    void HandleProtocolJson(uint64_t generation,const cJSON* root) {
+        std::lock_guard lock(tts_output_mutex_); if(generation&&generation!=tts_channel_generation_)return;
+        if(tts_interrupt_v1_) {HandleManagedTts(root);return;}
+        auto state=cJSON_GetObjectItem(root,"state");
+        if(cJSON_IsString(state)&&std::string(state->valuestring)=="start") ScheduleOnChannel(generation,[this]{SetDeviceState(kDeviceStateSpeaking);});
+    }
+    void Json(uint64_t channel,const char* text) {auto root=cJSON_Parse(text);assert(root);OnLocalChannelJson(channel,root);cJSON_Delete(root);}
+};
+@application@
+@state_changed@
+@abort@
+@receive@
+std::unique_ptr<AudioStreamPacket> packet(AudioOutputIdentity id={},int value=7,uint64_t channel=0) {
+    auto p=std::make_unique<AudioStreamPacket>();p->sample_rate=24000;p->frame_duration=60;p->output_identity=id;p->channel_generation=channel;p->payload={static_cast<uint8_t>(value)};return p;
+}
+void await_invalid(AudioService& audio, AudioOutputIdentity id) {
+    auto deadline=std::chrono::steady_clock::now()+5s;
+    while(audio.IsCurrentOutput(id)) {assert(std::chrono::steady_clock::now()<deadline);std::this_thread::yield();}
+}
+void eos_decode() {
+    AudioService audio;audio.SetManagedOutput(true);auto id=audio.BeginOutput(1,1);std::atomic<int> eos=0;
+    audio.callbacks_.on_output_drained=[&](auto value){assert(value==id);++eos;};
+    Latch handoff,decode;hooks([&](const char* name){if(std::string(name)=="decode_handoff")handoff.pause();if(std::string(name)=="decode")decode.pause();});
+    assert(audio.PushPacketToDecodeQueue(packet(id,9)));std::thread worker([&]{audio.DecodeOne();});handoff.wait();
+    auto stop=std::async(std::launch::async,[&]{return audio.EndOutput(id);});assert(stop.wait_for(0ms)!=std::future_status::ready);
+    handoff.release();decode.wait();assert(stop.wait_for(5s)==std::future_status::ready);assert(stop.get());
+    assert(audio.Queued()==0);assert(eos==0);decode.release();worker.join();hooks();
+    assert(eos==0&&audio.Queued()==1);std::thread output([&]{audio.AudioOutputTask();});
+    {std::unique_lock lock(audio.audio_queue_mutex_);assert(audio.audio_queue_cv_.wait_for(lock,5s,[&]{return audio.managed_current_->active_output==0&&audio.audio_playback_queue_.empty();}));}
+    audio.Shutdown();output.join();assert(eos==1);assert(audio.codec_value.played==std::vector<int>{9});assert(audio.codec_value.sizes==std::vector<size_t>{4});
+    std::cout<<"PASS EOS includes dequeued decode and final PCM\n";
+}
+void eos_output() {
+    AudioService audio;audio.SetManagedOutput(true);auto id=audio.BeginOutput(1,1);std::atomic<int> eos=0;
+    audio.callbacks_.on_output_drained=[&](auto){++eos;};assert(audio.PushPacketToDecodeQueue(packet(id)));audio.DecodeOne();
+    Latch output;hooks([&](const char* name){if(std::string(name)=="output")output.pause();});
+    std::thread worker([&]{audio.AudioOutputTask();});output.wait();assert(audio.Queued()==0);assert(audio.EndOutput(id));assert(eos==0);
+    output.release();{std::unique_lock lock(audio.audio_queue_mutex_);assert(audio.audio_queue_cv_.wait_for(lock,5s,[&]{return audio.managed_current_->active_output==0;}));}
+    audio.Shutdown();worker.join();hooks();assert(eos==1);std::cout<<"PASS EOS waits for OutputData return\n";
+}
+void stale_tasks(bool pcm) {
+    AudioService audio;audio.SetManagedOutput(true);auto old=audio.BeginOutput(1,1);std::atomic<int> eos=0;
+    audio.callbacks_.on_output_drained=[&](auto){++eos;};assert(audio.PushPacketToDecodeQueue(packet(old,3)));
+    if(pcm)audio.DecodeOne();Latch held;hooks([&](const char* name){if(std::string(name)==(pcm?"output_dequeued":"decode_requeue"))held.pause();});
+    std::thread worker([&]{if(pcm)audio.AudioOutputTask();else audio.DecodeOne();});held.wait();assert(audio.EndOutput(old));assert(eos==0);
+    assert(audio.InterruptOutput(old));assert(audio.Queued()==0);auto next=audio.BeginOutput(2,1);assert(next!=old);
+    assert(audio.PushPacketToDecodeQueue(packet(next,5)));held.release();
+    if(pcm){audio.Shutdown();worker.join();}else worker.join();hooks();
+    assert(audio.Queued()==1);assert(eos==0);assert(audio.codec_value.played.empty());assert(audio.IsCurrentOutput(next));
+    std::cout<<"PASS revoked dequeued "<<(pcm?"PCM":"decode")<<" cannot revive across channel epoch1\n";
+}
+void interrupt_inflight() {
+    AudioService audio;audio.SetManagedOutput(true);auto id=audio.BeginOutput(1,1);std::atomic<int> eos=0;
+    audio.callbacks_.on_output_drained=[&](auto){++eos;};assert(audio.PushPacketToDecodeQueue(packet(id)));audio.DecodeOne();
+    Latch output;hooks([&](const char* name){if(std::string(name)=="output")output.pause();});std::thread worker([&]{audio.AudioOutputTask();});output.wait();
+    assert(audio.EndOutput(id));assert(eos==0); // 普通EOS不清队列；后续明确interrupt仍可撤尾音。
+    auto interrupt=std::async(std::launch::async,[&]{return audio.InterruptOutput(id);});await_invalid(audio,id);assert(interrupt.wait_for(0ms)!=std::future_status::ready);
+    output.release();assert(interrupt.wait_for(5s)==std::future_status::ready);assert(interrupt.get());audio.Shutdown();worker.join();hooks();
+    assert(audio.codec_value.played.size()==1&&eos==0);std::cout<<"PASS post-EOS interrupt barrier waits for already entered hardware call and cancels EOS (no zero-ms claim)\n";
+}
+void decode_error() {
+ for(int value:{255,254}) {
+    AudioService audio;audio.SetManagedOutput(true);auto id=audio.BeginOutput(1,1);int eos=0;audio.callbacks_.on_output_drained=[&](auto){++eos;};
+    assert(audio.PushPacketToDecodeQueue(packet(id,value)));assert(audio.EndOutput(id));audio.DecodeOne();assert(eos==1&&audio.Queued()==0);assert(audio.managed_current_->active_decode==0);
+ }
+    std::cout<<"PASS failed decode releases its activity and EOS\n";
+}
+void legacy_reconnect(bool pcm) {
+    AudioService audio;audio.SetOutputChannel(1);assert(audio.PushPacketToDecodeQueue(packet({},8,1)));
+    if(pcm)audio.DecodeOne();Latch held;hooks([&](const char* name){if(std::string(name)==(pcm?"output_dequeued":"decode_requeue"))held.pause();});
+    std::thread worker([&]{if(pcm)audio.AudioOutputTask();else audio.DecodeOne();});held.wait();
+    audio.SetOutputChannel(0);audio.SetOutputChannel(2);audio.SetManagedOutput(true);auto next=audio.BeginOutput(2,1);
+    assert(audio.PushPacketToDecodeQueue(packet(next,10,2)));held.release();
+    if(pcm)audio.Shutdown();worker.join();hooks();assert(audio.Queued()==1&&audio.codec_value.played.empty());assert(audio.IsCurrentOutput(next));
+    std::cout<<"PASS legacy untagged "<<(pcm?"PCM":"decode")<<" cannot cross into v1 reconnect\n";
+}
+void decoder_barrier_and_waiter() {
+    AudioService audio;audio.SetManagedOutput(true);auto id=audio.BeginOutput(1,1);assert(audio.PushPacketToDecodeQueue(packet(id)));
+    std::atomic<int> decodes=0;hooks([&](const char* name){if(std::string(name)=="decode")++decodes;});
+    std::unique_lock decoder(audio.decoder_mutex_);std::thread worker([&]{audio.DecodeOne();});
+    {std::unique_lock lock(audio.audio_queue_mutex_);assert(audio.audio_queue_cv_.wait_for(lock,5s,[&]{return audio.managed_current_->active_decode==1;}));}
+    auto revoke=std::async(std::launch::async,[&]{return audio.InterruptOutput(id);});await_invalid(audio,id);decoder.unlock();worker.join();assert(revoke.get());hooks();
+    assert(decodes==0&&audio.Queued()==0);auto next=audio.BeginOutput(1,2);
+    for(int i=0;i<40;++i)assert(audio.PushPacketToDecodeQueue(packet(next)));
+    auto waiter=std::async(std::launch::async,[&]{return audio.PushPacketToDecodeQueue(packet(next),true);});assert(audio.InterruptOutput(next));
+    assert(waiter.wait_for(5s)==std::future_status::ready&&!waiter.get());
+    std::cout<<"PASS decoder-entry barrier and queue-full waiter reject revoked identities\n";
+}
+void output_error() {
+    AudioService audio;audio.SetManagedOutput(true);auto id=audio.BeginOutput(1,1);int eos=0;audio.callbacks_.on_output_drained=[&](auto){++eos;};
+    auto pcm=std::make_unique<AudioTask>();pcm->output_identity=id;pcm->pcm={254};audio.audio_playback_queue_.push_back(std::move(pcm));assert(audio.EndOutput(id));
+    std::thread worker([&]{audio.AudioOutputTask();});{std::unique_lock lock(audio.audio_queue_mutex_);assert(audio.audio_queue_cv_.wait_for(lock,5s,[&]{return !audio.managed_current_->active_output&&audio.audio_playback_queue_.empty();}));}
+    audio.Shutdown();worker.join();assert(eos==1&&audio.managed_current_->active_output==0);std::cout<<"PASS output exception releases own activity\n";
+}
+void channel_generation() {
+    ChannelTransport first;auto old=first.BeginLocalAudioChannel();assert(old&&old->valid);int closed=0;first.on_local_closed_=[&](auto id){assert(id==old->generation);++closed;};
+    Latch held;std::thread callback([&]{std::lock_guard lock(old->dispatch_mutex);held.pause();});held.wait();
+    auto close=std::async(std::launch::async,[&]{first.EndLocalAudioChannel(old);});assert(close.wait_for(0ms)!=std::future_status::ready);held.release();callback.join();close.get();assert(!old->valid&&closed==1);
+    auto next=first.BeginLocalAudioChannel();assert(next->generation>old->generation+1);first.EndLocalAudioChannel(old);assert(next->valid&&closed==1);
+    ChannelTransport second;auto third=second.BeginLocalAudioChannel();assert(third->generation>next->generation);
+    std::cout<<"PASS channel close/dispatch barrier, tombstone and process-wide non-reused generations\n";
+}
+void application_controls() {
+    Application app;app.OnLocalChannelOpening(1);
+    app.Json(1,R"({"type":"hello","features":{"tts_interrupt_v1":true}})");assert(app.tts_interrupt_v1_);
+    for(auto value:{"null","true","0","-1","1.5","2147483648","\"1\""}) {
+        std::string raw=std::string("{\"type\":\"tts\",\"state\":\"start\",\"output_epoch\":")+value+"}";app.Json(1,raw.c_str());assert(!app.tts_accepting_);
+    }
+    app.Json(1,R"({"type":"tts","state":"start","output_epoch":1})");auto first=app.tts_output_identity_;
+    app.Receive(packet({},11,1));assert(app.audio_service_.Queued()==1);assert(app.GetDeviceState()==kDeviceStateListening);
+    app.HandleStateChangedEvent();assert(app.audio_service_.Queued()==1);app.Run();assert(app.GetDeviceState()==kDeviceStateSpeaking&&app.audio_service_.Queued()==1);
+    app.audio_service_.EnableVoiceProcessing(true);assert(app.audio_service_.Queued()==1);
+    app.Json(1,R"({"type":"tts","state":"start","output_epoch":1})");assert(app.tts_output_identity_==first&&app.audio_service_.Queued()==1);
+    app.Json(1,R"({"type":"tts","state":"interrupt","output_epoch":1})");assert(app.audio_service_.Queued()==0&&!app.tts_accepting_);
+    auto revoked=app.tts_output_identity_;app.Json(1,R"({"type":"tts","state":"start","output_epoch":1})");assert(app.tts_output_identity_==revoked&&!app.tts_accepting_);
+    app.Json(1,R"({"type":"tts","state":"start","output_epoch":2})");auto next=app.tts_output_identity_;app.Receive(packet({},12,1));
+    app.OnOutputDrained(first);app.Json(1,R"({"type":"tts","state":"stop","output_epoch":1})");app.Json(1,R"({"type":"tts","state":"interrupt","output_epoch":1})");app.Run();
+    assert(app.tts_output_identity_==next&&app.tts_accepting_&&app.audio_service_.Queued()==1&&app.GetDeviceState()==kDeviceStateSpeaking);
+    app.AbortSpeaking(kAbortReasonNone);assert(!app.tts_accepting_&&app.audio_service_.Queued()==0&&app.protocol_value.aborts==1);
+    app.OnLocalChannelClosed(1);app.OnLocalChannelOpening(2);app.Json(2,R"({"type":"hello","features":{"tts_interrupt_v1":true}})");app.Json(2,R"({"type":"tts","state":"start","output_epoch":1})");
+    auto reconnected=app.tts_output_identity_;app.Receive(packet({},13,2));app.Json(1,R"({"type":"hello","features":{}})");app.Json(1,R"({"type":"tts","state":"interrupt","output_epoch":1})");app.OnLocalChannelClosed(1);app.Receive(packet({},99,1));app.OnOutputDrained(next);app.Run();
+    assert(app.tts_output_identity_==reconnected&&app.tts_accepting_&&app.tts_interrupt_v1_&&app.audio_service_.Queued()==1&&app.GetDeviceState()==kDeviceStateSpeaking);
+    app.Json(2,R"({"type":"tts","state":"stop"})");assert(app.tts_accepting_);app.Json(2,R"({"type":"hello","features":{}})");assert(app.tts_interrupt_v1_);
+    std::cout<<"PASS strict epoch, synchronous first frame, no UI reset, duplicate/revoked start, stale UI/EOS/channel, local abort\n";
+}
+void negotiation() {
+    for(auto feature:{"{}",R"({"tts_interrupt_v1":false})",R"({"tts_interrupt_v1":"true"})"}) {
+        Application app;app.OnLocalChannelOpening(1);std::string hello=std::string("{\"type\":\"hello\",\"features\":")+feature+"}";app.Json(1,hello.c_str());
+        assert(!app.tts_interrupt_v1_&&!app.audio_service_.IsManagedOutput());app.Json(1,R"({"type":"tts","state":"start"})");app.Run();app.Receive(packet({},3,1));assert(app.audio_service_.Queued()==1);
+    }
+    AudioService audio;audio.SetManagedOutput(true);auto id=audio.BeginOutput(1,1);audio.audio_generation_counter_=UINT64_MAX;assert(audio.InterruptOutput(id));assert(!audio.OutputFenceIdentity().tagged());assert(!audio.BeginOutput(1,2).tagged());
+    std::cout<<"PASS old server/no ack/false/string legacy and local generation exhaustion fail closed\n";
+}
+void eos_callback_then_interrupt() {
+    Application app;app.OnLocalChannelOpening(1);app.Json(1,R"({"type":"hello","features":{"tts_interrupt_v1":true}})");
+    app.Json(1,R"({"type":"tts","state":"start","output_epoch":1})");app.Run();
+    app.Json(1,R"({"type":"tts","state":"stop","output_epoch":1})");assert(app.tasks.size()==1&&!app.tts_accepting_);
+    app.Json(1,R"({"type":"tts","state":"interrupt","output_epoch":1})");assert(app.tts_revoked_);
+    app.Json(1,R"({"type":"tts","state":"start","output_epoch":2})");auto next=app.tts_output_identity_;app.Receive(packet({},17,1));app.Run();
+    assert(app.tts_output_identity_==next&&app.tts_accepting_&&app.audio_service_.Queued()==1&&app.GetDeviceState()==kDeviceStateSpeaking);
+    app.audio_service_.audio_generation_counter_=UINT64_MAX;app.Json(1,R"({"type":"tts","state":"interrupt","output_epoch":2})");app.Run();
+    assert(!app.tts_accepting_&&app.protocol_value.closed==1);
+    std::cout<<"PASS queued EOS callback -> explicit same-epoch interrupt -> new start preserves new first frame; exhaustion closes channel\n";
+}
+#if CONFIG_BOARD_TYPE_VIEWE_SMARTRING_PLUS
+int main() {eos_decode();eos_output();stale_tasks(false);stale_tasks(true);legacy_reconnect(false);legacy_reconnect(true);interrupt_inflight();decode_error();decoder_barrier_and_waiter();output_error();channel_generation();application_controls();negotiation();eos_callback_then_interrupt();std::cout<<"ALL CONSUMER CONTRACT CASES PASSED\n";}
+#else
+int main() {Application app;app.OnLocalChannelOpening(1);app.Json(1,R"({"type":"hello","features":{"tts_interrupt_v1":true}})");assert(!app.tts_interrupt_v1_);app.Json(1,R"({"type":"tts","state":"start"})");app.Run();app.Receive(packet({},3,1));assert(app.audio_service_.Queued()==1);std::cout<<"PASS server-only true cannot activate undeclared client; legacy audio preserved\n";}
+#endif
