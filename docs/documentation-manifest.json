@@ -8226,6 +8226,23 @@
         "scope": "244项联合/10项双工及精确资源守卫，15项固定源码指纹；不部署、不启用adaptive或持久化草稿",
         "evidence": ["docs/development/parallel/AI-input-observation-integration-20261021.md", "scripts/development/xiaozhi/launch_with_memory.py", "scripts/development/xiaozhi/device_control.py", "src/longmemory/adapters/device_control/voice_input_observation.py"]},
       "tags": ["AI", "公共接线", "有限投影", "实机待诊断"]
+    },
+    {
+      "path": "docs/development/parallel/AB-diagnostics-path-20261021.md",
+      "title": "AB：诊断路径前缀与双进程CI修复",
+      "status": "draft",
+      "basis": "ROOT授权单项CI实现修复及本文条目窄登记；待ROOT审查，未合入或部署",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-21",
+        "scope": "原CI失败保留、固定Windows并发路径原因、两次resolve及根外拒绝、70项本地回归与精确资源审计；远程CI待验证",
+        "evidence": [
+          "src/longmemory/infrastructure/logging/diagnostics.py",
+          "tests/unit/infrastructure/test_diagnostics.py",
+          "scripts/ci/backend_resources.py"
+        ]
+      },
+      "tags": ["AB", "CI", "诊断", "路径归属"]
     }
   ],
   "integration_sources": {

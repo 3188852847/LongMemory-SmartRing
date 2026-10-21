@@ -3,11 +3,15 @@
 import asyncio
 import json
 import logging
-from pathlib import Path
+import os
+from pathlib import Path, PureWindowsPath
 import subprocess
 import sys
 
-from longmemory.infrastructure.logging.diagnostics import Diagnostics, REQUEST_CONTEXT, log_inventory
+import pytest
+
+from longmemory.infrastructure.logging.diagnostics import Diagnostics, REQUEST_CONTEXT, log_inventory, _comparison_path
+from longmemory.infrastructure.logging import diagnostics as diagnostics_module
 from longmemory.infrastructure.logging.setup import configure_file_logging, close_file_logging, log_event
 
 
@@ -128,6 +132,126 @@ observer.close()
     files = list((tmp_path / "data/logs/diagnostics").glob("*.jsonl"))
     assert len(files) == 2
     assert all(json.loads(file.read_text(encoding="utf-8"))["outcome"] == "unknown" for file in files)
+
+
+@pytest.mark.skipif(os.name!='nt',reason='Windows extended path representation')
+@pytest.mark.parametrize('prefixed_check',[1,2])
+def test_resolved_extended_drive_alias_does_not_disable_persistence(tmp_path,monkeypatch,prefixed_check):
+    # 复现两个进程创建父目录时，ntpath.realpath可保留的等价扩展前缀。
+    # 第一/第二次归属检查都必须继续执行，不能通过删掉检查修复。
+    original=Path.resolve;checks=[]
+    def resolve(path,*args,**kwargs):
+        result=original(path,*args,**kwargs)
+        if path.suffix=='.jsonl' and path.parent.name=='diagnostics':
+            checks.append(1)
+            if len(checks)==prefixed_check and not str(result).startswith('\\\\?\\'):
+                return Path('\\\\?\\'+str(result))
+        return result
+    monkeypatch.setattr(Path,'resolve',resolve)
+    observer=Diagnostics(tmp_path)
+    try:
+        observer.finish(observer.begin('memory_runtime',mutating=True),500)
+        assert observer.snapshot()['persistence']=='enabled'
+    finally:observer.close()
+    assert len(checks)==2
+    files=list((tmp_path/'data/logs/diagnostics').glob('*.jsonl'))
+    assert len(files)==1 and json.loads(files[0].read_text(encoding='utf-8'))['outcome']=='unknown'
+
+
+@pytest.mark.parametrize('root,path,inside',[
+    (r'D:\synthetic-root',r'\\?\D:\synthetic-root\data\log.jsonl',True),
+    (r'\\?\D:\synthetic-root',r'd:\SYNTHETIC-ROOT\data\log.jsonl',True),
+    (r'\\server\share\root',r'\\?\UNC\server\share\root\log.jsonl',True),
+    (r'\\?\unc\server\share\root',r'\\SERVER\SHARE\root\log.jsonl',True),
+    (r'D:\synthetic-root',r'\\?\D:\synthetic-root-other\log.jsonl',False),
+    (r'D:\synthetic-root',r'\\?\E:\synthetic-root\log.jsonl',False),
+    (r'\\server\share\root',r'\\?\UNC\other\share\root\log.jsonl',False),
+    (r'\\server\share\root',r'\\?\UNC\server\other\root\log.jsonl',False),
+    (r'D:\synthetic-root',r'\\?\GLOBALROOT\Device\synthetic-root\log.jsonl',False),
+    (r'D:\synthetic-root',r'\\.\D:\synthetic-root\log.jsonl',False),
+])
+def test_extended_prefix_equivalence_keeps_drive_share_and_root_boundary(root,path,inside):
+    assert _comparison_path(PureWindowsPath(path)).is_relative_to(
+        _comparison_path(PureWindowsPath(root))) is inside
+
+
+@pytest.mark.parametrize('path',[
+    r'\\?\UNC\server',r'\\?\UNC\server'+chr(92),r'\\?\UNC\.\share\x',
+    r'\\?\UNC\server\..\x',r'\\?\UNC\server?\share\x',
+    r'\\?\GLOBALROOT\Device\synthetic',r'\\?\Volume{synthetic}\x',r'\\.\D:\x',
+])
+def test_malformed_unc_and_other_device_namespaces_are_not_rewritten(path):
+    original=PureWindowsPath(path)
+    assert _comparison_path(original)==original
+
+
+@pytest.mark.parametrize('escape_check',[1,2])
+def test_resolved_escape_is_still_refused_before_or_after_mkdir(tmp_path,monkeypatch,escape_check):
+    original=Path.resolve;checks=[]
+    outside=original(tmp_path.parent/'outside-synthetic'/'log.jsonl')
+    def resolve(path,*args,**kwargs):
+        result=original(path,*args,**kwargs)
+        if path.suffix=='.jsonl' and path.parent.name=='diagnostics':
+            checks.append(1)
+            if len(checks)==escape_check:return outside
+        return result
+    monkeypatch.setattr(Path,'resolve',resolve)
+    observer=Diagnostics(tmp_path)
+    try:
+        observer.finish(observer.begin('memory_runtime',mutating=True),500)
+        assert observer.snapshot()['persistence']=='unavailable' and observer.handler is None
+    finally:observer.close()
+    assert len(checks)==escape_check
+    assert not list((tmp_path/'data/logs/diagnostics').glob('*.jsonl'))
+    assert not outside.exists()
+
+
+@pytest.mark.parametrize('failure_stage',['resolve','mkdir','handler_open'])
+def test_initialization_io_failure_is_fail_open_without_private_details(tmp_path,monkeypatch,capsys,failure_stage):
+    error=PermissionError('synthetic-private-path-and-body')
+    def fail(*args,**kwargs):raise error
+    if failure_stage=='resolve':
+        original=Path.resolve
+        def resolve(path,*args,**kwargs):
+            if path.suffix=='.jsonl' and path.parent.name=='diagnostics':raise error
+            return original(path,*args,**kwargs)
+        monkeypatch.setattr(Path,'resolve',resolve)
+    elif failure_stage=='mkdir':monkeypatch.setattr(Path,'mkdir',fail)
+    else:monkeypatch.setattr(diagnostics_module,'SafeRotatingHandler',fail)
+    observer=Diagnostics(tmp_path)
+    try:
+        observer.finish(observer.begin('memory_runtime',mutating=True),500)
+        snapshot=observer.snapshot()
+        assert snapshot['persistence']=='unavailable' and observer.handler is None
+        assert snapshot['requests'][0]['outcome']=='unknown'
+        assert 'synthetic-private' not in json.dumps(snapshot) and str(tmp_path) not in json.dumps(snapshot)
+    finally:observer.close()
+    output=capsys.readouterr()
+    assert output.out==output.err==''
+
+
+@pytest.mark.parametrize('kind',['symlink','junction'])
+def test_real_directory_link_outside_root_is_refused(tmp_path,kind):
+    if kind=='junction' and os.name!='nt':pytest.skip('Windows junction')
+    root=tmp_path/'root';root.mkdir()
+    target=tmp_path/'outside-root';target.mkdir()
+    marker=target/'protected.txt';marker.write_text('synthetic-protected',encoding='utf-8')
+    link=root/'data/logs/diagnostics';link.parent.mkdir(parents=True)
+    if kind=='symlink':
+        try:link.symlink_to(target,target_is_directory=True)
+        except OSError as error:
+            if getattr(error,'winerror',None)==1314:pytest.skip('directory symlink privilege unavailable')
+            raise
+    else:
+        result=subprocess.run(['cmd.exe','/d','/c','mklink','/J',str(link),str(target)],
+            capture_output=True,timeout=5)
+        assert result.returncode==0,'synthetic junction creation failed'
+    observer=Diagnostics(root)
+    try:
+        observer.finish(observer.begin('memory_runtime',mutating=True),500)
+        assert observer.snapshot()['persistence']=='unavailable' and observer.handler is None
+    finally:observer.close()
+    assert list(target.iterdir())==[marker] and marker.read_text(encoding='utf-8')=='synthetic-protected'
 
 
 def test_root_logger_unchanged(tmp_path):

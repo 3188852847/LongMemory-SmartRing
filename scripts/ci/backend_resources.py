@@ -5,6 +5,9 @@ requests、numpy、PyYAML已经是dev依赖，不属于资源例外。
 """
 
 RESOURCE_GROUPS = (
+    ('tests.unit.infrastructure.test_diagnostics',
+     'directory symlink privilege unavailable',
+     ('test_real_directory_link_outside_root_is_refused[symlink]',)),
     ('tests.integration.test_hy_embedding_resource_warmup',
      'explicit owner-installed SDK required',
      ('test_fixed_sdk_resource_preparation_is_read_only_and_embed_behavior_is_preserved[baseline]',

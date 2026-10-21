@@ -8,7 +8,7 @@ import json
 import logging
 from logging.handlers import RotatingFileHandler
 import os
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 import secrets
 import re
 import stat
@@ -45,6 +45,23 @@ def valid_trace_id(value):
     return isinstance(value, str) and re.fullmatch(r"[0-9a-f]{24}", value) is not None
 
 
+def _comparison_path(path):
+    """只统一已解析路径的Windows扩展前缀，供归属比较；不改实际IO目标。"""
+    if isinstance(path, PureWindowsPath):
+        drive = path.drive
+        value = str(path)
+        unc_parts = drive[8:].split("\\")
+        if (drive[:8].casefold() == "\\\\?\\unc\\" and len(unc_parts) == 2
+                and all(part and part not in {".", ".."}
+                        and not any(ord(char) < 32 or char in '<>:"/\\|?*' for char in part)
+                        for part in unc_parts)):
+            return PureWindowsPath("\\\\" + value[8:])
+        if (len(drive) == 6 and drive.startswith("\\\\?\\")
+                and drive[4].isascii() and drive[4].isalpha() and drive[5] == ":"):
+            return PureWindowsPath(value[4:])
+    return path
+
+
 class SafeRotatingHandler(RotatingFileHandler):
     def handleError(self, record):
         # 标准 logging 会吞掉写入错误，甚至写 stderr。让所有者降级为“观测不可用”。
@@ -70,11 +87,13 @@ class Diagnostics:
         self.owner = secrets.token_hex(8)
         if self.root is not None:
             path = self.root / "data/logs/diagnostics" / f"api-{os.getpid()}-{self.owner}.jsonl"
+            base = _comparison_path(self.root)
             try:
-                if not path.resolve().is_relative_to(self.root):
+                # 并发mkdir可让Windows resolve保留\\?\前缀；同一目录不应被误判越界。
+                if not _comparison_path(path.resolve()).is_relative_to(base):
                     raise OSError("diagnostic_path_outside_root")
                 path.parent.mkdir(parents=True, exist_ok=True)
-                if not path.resolve().is_relative_to(self.root):
+                if not _comparison_path(path.resolve()).is_relative_to(base):
                     raise OSError("diagnostic_path_outside_root")
                 self.handler = SafeRotatingHandler(path, maxBytes=MAX_BYTES, backupCount=BACKUPS, encoding="utf-8")
                 self.handler.setFormatter(logging.Formatter("%(message)s"))
