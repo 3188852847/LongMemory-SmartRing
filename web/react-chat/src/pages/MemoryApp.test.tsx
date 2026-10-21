@@ -1,6 +1,7 @@
 import {KnownMemoryEngine} from '../tests/memoryEngine';
 import {afterEach,describe,expect,test,vi} from 'vitest';
 import {fireEvent,render,screen,waitFor,within} from '@testing-library/react';
+import {isInaccessible} from '@testing-library/dom';
 import {MemoryRouter} from 'react-router-dom';
 import {QueryClient,QueryClientProvider} from '@tanstack/react-query';
 import {ApiError,ChatApi} from '../api';
@@ -116,7 +117,10 @@ describe('每日记忆回顾',()=>{
     fireEvent.click(tasks.getByRole('button',{name:'每日回顾'}));
     const dailyItem=within(daily.getByText(item.content).closest('li')!);
     // 工作流断言直接定位本条可见文案的原生按钮，避免jsdom反复计算整条祖先样式。
-    const correctionButton=dailyItem.getByText('直接纠正',{exact:true}).closest('button')!;
+    const correctionText=dailyItem.getByText('直接纠正',{exact:true});
+    // 对实际文案检查一次CSS/祖先可访问性，保留getByRole原先的隐藏过滤语义。
+    expect(isInaccessible(correctionText)).toBe(false);
+    const correctionButton=correctionText.closest('button')!;
     expect(correctionButton).not.toBeNull();
     expect(correctionButton.closest('[hidden],[aria-hidden="true"]')).toBeNull();
     await waitFor(()=>expect(correctionButton.hasAttribute('disabled')).toBe(false));

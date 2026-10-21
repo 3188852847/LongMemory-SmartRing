@@ -1,5 +1,6 @@
 import {afterEach, describe, expect, test, vi} from 'vitest';
 import {act, fireEvent, render, screen, waitFor, within} from '@testing-library/react';
+import {isInaccessible} from '@testing-library/dom';
 import {MemoryRouter} from 'react-router-dom';
 import {QueryClientProvider} from '@tanstack/react-query';
 import {deviceSkinErrorCopy, RoundDisplayApp, resolveRoundDisplay} from './RoundDisplayApp';
@@ -144,7 +145,10 @@ describe('圆屏状态协议与模拟器', () => {
   test('切换皮肤显示等待回读，编辑草稿与实机观察仍独立',async()=>{
     const {request,queryClient,setWallpaperStatus}=mountSkinWorkspace('/display-preview?tab=device');
     const button=(scope:ReturnType<typeof within>,name:string)=>{
-      const target=scope.getByText(name,{exact:true}).closest('button');
+      const text=scope.getByText(name,{exact:true});
+      // 单个实际文案检查包含CSS隐藏和祖先隐藏，不重新扫描整个子树。
+      expect(isInaccessible(text)).toBe(false);
+      const target=text.closest('button');
       expect(target).not.toBeNull();
       expect(target!.getAttribute('role')??'button').toBe('button');
       expect(target!.closest('[hidden],[aria-hidden="true"]')).toBeNull();
