@@ -520,3 +520,25 @@ AI重算三份原收集JSON及哈希并逐项比较[143原用例映射](AH-ci-br
 按主会话要求，在本树通过原入口 `python scripts/ci/backend_quality.py` 实际完整运行，**3593 passed / 200精确资源skip / 0失败 / 234.13s**，报告护栏返回成功。JUnit `data/test-tmp/ci/backend.xml` SHA-256=`40f58b19765331dea8bcca07662266028b65a204b9bf538e3c71e5ead30a33a6`；完整日志 `data/test-tmp/ai-ah-combined-backend-01.log` SHA-256=`9aa37e61afafb3fbf350f621ebbccd8bb9c94872049d75f559f5f488f81e71aa`。实际3793用例逐项无failure/error，本轮新增37项资源name/reason均精确匹配声明；没有用缺普通依赖跳过放行。本次完整入口未设置SDK资源路径，不能替代前段d871固定真实SDK13项；本机3593/200、远端旧3552/179、受控最小3550/181是不同条件，不混写。
 
 源码/产物审查未发现新增阻断项，可由主会话按既定候选分支调度远端Quality；本地成功不等于远端已绿。AE首轮SDK失败仍未定位且完整历史保留；跨标签同时冷启动不覆盖；3个Otto素材验收与1个独立真实SDK浏览器本轮未执行。候选仍保持提前回答双端默认关闭、buffered日用及原已选模型/声线；本会话未推送、部署、停服务、改个人数据或操作GPU/设备。主会话完整远端验收后再决定准确新dist切换。
+
+## ROOT发布报告与本轮收尾（2026-10-21）
+
+以下是ROOT主会话在发布后发来的执行报告；AI仅据报告维护公开记录，未亲自停止/启动服务、读取私有备份/配置/个人库或实测设备。此前“未推送/未部署”对应AI交付阶段，现由本段补充后续事实，不改写当时证据。
+
+ROOT报告候选分支的Quality `39518824436` 对冻结业务提交 `944b83bac013aa008f3b05db8b12d6042e686eae` 全部success，随后main已快进至该提交并普通推送。该候选远端实际后端3577 passed/216精确资源skip/264.43s，组件63文件350通过，浏览器143 scheduled/140 pass/3 skip/0 unexpected/0 flaky/247651ms，完整原始日志由ROOT保存在检查点quality-full.log；这些数字不同于AI本机3593/200和AH本地237973ms，不混写。main自动Quality `39520018676` 同属944；ROOT最新补充其frontend job已failure、backend仍运行，具体失败阶段/原因正在查日志。该次尚无完整结论，不写成main全绿。候选远端通过、main合入、部署就绪与实机体验分别记录。
+
+ROOT核对owned旧launcher33512及其16个祖先链实例全部退出，7个端口释放后，取得完整停机备份：93文件/14,715,389字节，manifest SHA-256=`8a9b23ee558012196ec80921fb1c9d5fb7f4e0479b96f002170aae9932a7499a`，检查点为主项目 `local/archive/hy-advanced-release/20261021T000628Z-944b83ba-d3b53e/`。该路径和摘要来自ROOT报告，AI未访问或解析其中内容。新45文件dist逐项复核为1,839,032字节、规范摘要 `bcde5ee77a08fa513942c7f13ffe60885e7a3c4acfe237f5dac4975886679af1`；ROOT保留旧dist，17份私有配置原字节保持，未以旧c5产物替代本次会话修复。
+
+ROOT通过正式入口创建新launcher14536，创建时间UTC `2026-10-21T00:13:37.515519+00:00`（北京时间08:13:37.515519）。本次启动请求中host/voice候选均为0、话轮结束识别off、CosyVoice声音交付模式为adaptive；adaptive只经本次子进程环境请求，没有回写持久设置。当前接口未暴露实际声音模式，因此这份证据只证明请求参数及下述服务状态，不能写成已证明真实adaptive播放或已定为持久默认。此前buffered默认与回退边界保留；当前是ROOT安排的受控adaptive试用，等待所有者实际反馈。
+
+ROOT报告control/runtime ready，TTS warm ready、active=0、generation=false、restart=false，八层只读入口可读；语义派生仍初始epoch0/ready_epoch-1、isolated、无任务，没有为了健康状态生成个人任务或假对话。调用账本仍38 complete＋1 historical unknown、0 reserve，未清除旧unknown。OTA地址保持原值，Docker和设备均未操作。这些是ROOT发布时报告的状态，不是AI复读个人库或新发起真实模型/声音会话的测量。
+
+任务追溯如下；“合入944”仅指已发布的业务交付，本次后续docs-only记录提交仍待ROOT另行整合。
+
+| 任务 | 交付提交 | 实际验收边界 | 合入提交 | 会话ID |
+|---|---|---|---|---|
+| AI整合AE/AG及后端精确资源登记 | d871437b、2bb0da48、a512a4f6 | 固定SDK组合13项、合成464项；首轮SDK失败原因仍未定位 | 944b83bac013aa008f3b05db8b12d6042e686eae | AI：01a15ab0-25a3-7380-b682-681441e8b403 |
+| AI审查AH完整浏览器交付并补端口保护 | 7f6cb6b6、c52825e9、b7083ce0、5b116366、944b83ba | AH本地350组件/140浏览器通过＋3既有素材skip，AI完整后端3593/200及产物独立核对；ROOT报告候选Quality39518824436全绿 | 944b83bac013aa008f3b05db8b12d6042e686eae | AI：01a15ab0-25a3-7380-b682-681441e8b403 |
+| ROOT受控发布与所有者实机验收安排 | 944b83ba＋新bcde产物 | ROOT报告owned备份/停机、普通推送、新服务ready；实机尚待反馈 | 944b83bac013aa008f3b05db8b12d6042e686eae | ROOT：01a1534f-3c56-78c1-9e13-4777422a67bb |
+
+ROOT已向所有者提出三步实机验收问题，等待回复；AI未取得或代填验收结果。保留未定位的首轮SDK失败、跨标签同时冷启动不覆盖、host/voice候选关闭、SmartTurn off、TRT无真实engine，以及真实声音/打断/延迟/设备体验待验等限制。原219项及其管理proof仍仅属于 `f5906827d98ce4d2665d5e6b83b04ee1ebda58fa` 的固定边界，没有重签或改称944的新全量证明。本段不归档待实机或后续实验会话；发布成功不等于全部技术启用或研究目标完成。

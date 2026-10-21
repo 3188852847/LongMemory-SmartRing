@@ -38,3 +38,9 @@ AE四个精确提交已接入AI分支，公开启动器新增 `--enable-voice-pr
 正式能力回调沿实际intent和provider方法判断：function_call存在合法handler时，即使工具描述列表为空，上游仍会追加direct_answer，必须按有工具处理；不调用会写缓存的get_functions。配置搜索且provider支持functions时，在任何候选RPC前跳过；intent_llm/未知路径和无法证明可复用的精确时间路径保守跳过。保留正式搜索能力、工具编排及实时时间，不把预览时间写回正式消息。
 
 确认仍只有原0.3秒预算，超时走一次原正式回答并关闭候选，不重复prepare；增加仅计数的confirmation_deadline/confirmation_failed，避免将有界回退与输入miss混为一类。合成屏障另验证确认永不返回时的资源收尾。真实SDK/3.10/正式RPC组合使用提交冻结源码和真正公开启动回调/自动绑定，结果与首次失败证据见AI任务书；旧219项及协议2管理proof不改写为新桥的验收。
+
+## 2026-10-21：ROOT发布报告与待实机边界
+
+ROOT主会话报告：候选Quality39518824436在冻结944b83ba全success后，main已快进/普通推送并完成owned检查点与新bcde前端部署，control/runtime及TTS warm ready；执行路径、摘要与会话追溯见[AI任务书发布收尾](../development/parallel/AI-hy-advanced-low-latency-20261021.md)。AI仅维护该报告，没有操作生产或独立测量发布状态。ROOT最新补充main自动Quality39520018676的frontend job已failure、backend仍运行，具体阶段/原因待查；同提交候选已绿不能改写为main也绿。
+
+本次启动请求保持host/voice候选均关闭、话轮结束识别off，仅通过子进程环境请求CosyVoice adaptive，持久配置字节不变。接口未暴露实际声音模式，故不能据启动参数/ready声称已证明真实adaptive播放；当前是受控试用，所有者实机反馈待到，尚未决定为持久默认。首次SDK失败原因未定位、跨标签同时冷启动不覆盖、SmartTurn off与TRT无真实engine等边界保持；原219项proof仍属f590固定实现，不重签为944证明，不将发布ready当全部技术启用或设备验收。
