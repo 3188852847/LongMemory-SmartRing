@@ -50,3 +50,13 @@ ROOT已保存失败时序元数据和所有者拒绝记录，将音频/自然打
 
 
 ROOT另报告AH正在准备字幕bottom复位/圆形安全区的隔离审计补丁与离线计划，尚无固件写入许可；AD复现client_abort可复位而旧轮缺永久撤权的上游代码缺口，尚不能据此认定实机根因。AI等待补丁交付后审查，需要helper装配时再独立整合，当前不改944冻结业务；所有者“圆边裁字幕、stop识别后旧声继续”的FAILED结论保持。
+
+## 2026-10-21：打断修复的隔离决策
+
+普通回答的音频/助手历史/完成回执使用永久输出租约，不依赖可复位abort布尔或AE开关。实际executor.submit捕获代次，阻止旧排队工作重新prepare；助手put与撤权共屏障。MemoryProvider的pending领取是完成线性化点：先Memory锁，再短音频锁和wire状态锁，在有效身份下检查并pop；不得持音频/wire锁等Memory锁、RPC或磁盘。领取前撤权走cancel；已经领取且外发的完成不承诺回滚。固定原生ASR/chat、真实provider及合成回执覆盖候选关闭与外层检查后撤权竞争。
+
+显式设备撤尾采用[合同修订4](../development/parallel/AD-tts-interrupt-v1-20261021.md)，双向严格hello、当前连接单调epoch、所有实际ws.send同门。普通EOS只关接收且保留已收音频；后续明确打断仍可撤同epoch的尾音，不能因server stop返回假定设备已播完。设备以不可复用本地通道/输出代次隔离解码、PCM和UI，正常排空计入已出队活动任务；不增加物理播放回执。
+
+声音HTTP仅对尚未生成的精确503 busy开放一次400ms重试准入窗口，首请求与200后的生成读取保留原超时，避免重放已开始的合成。固定源不兼容或wire覆盖改变时拒绝协商/关闭本连接，不悄悄声称即时flush。`tts_interrupt`与`voice_interruption`均为有限只读摘要，缺旧可选字段仍兼容，已知字段非法返回稳定502；计数、配置、客户端路径与物理播放保持独立。
+
+字幕/消费者候选与联合审查结果见[AH记录](../development/parallel/AH-round-subtitles-20261021.md)和[AI记录](../development/parallel/AI-hy-advanced-low-latency-20261021.md)。本地合成/源码抽取验证和容量只支持下一阶段审查；生产部署、精确候选远程Quality、新0016应用写入授权及owner体验仍另验，当前实机FAILED不改写为通过。

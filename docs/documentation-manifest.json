@@ -1420,6 +1420,71 @@
         "SSE"
       ],
       "review": "verified 2026-10-20: 实际源码身份与AST、8项固定消费者、14项候选组合、旧合成库只读元数据及首文本口径；无现场格式根因或实机通过结论"
+    },
+    {
+      "id": "voice-output-interrupt-v1",
+      "scope": "永久音频撤权、wire修订4和0016候选的隔离实现合同；设备写入与体验不在此范围",
+      "authority": "docs/development/parallel/AD-tts-interrupt-v1-20261021.md",
+      "sources": [
+        ".gitattributes",
+        "scripts/development/xiaozhi/voice_interruption.py",
+        "scripts/development/xiaozhi/voice_output_protocol.py",
+        "scripts/development/xiaozhi/voice_completion.py",
+        "scripts/development/xiaozhi/cosyvoice_streaming.py",
+        "scripts/development/xiaozhi/launch_with_memory.py",
+        "scripts/development/xiaozhi/longmemory_provider.py",
+        "scripts/development/xiaozhi/device_control.py",
+        "src/longmemory/adapters/device_control/tts_interrupt.py",
+        "src/longmemory/adapters/device_control/voice_interruption.py",
+        "src/longmemory/adapters/device_control/projections.py",
+        "web/react-chat/src/api/types/device.ts",
+        "scripts/ci/backend_resources.py",
+        "tests/unit/development/test_voice_interruption.py",
+        "tests/unit/development/test_voice_interruption_opus.py",
+        "tests/unit/development/test_voice_output_protocol_ws.py",
+        "tests/unit/development/test_cosyvoice_busy_handoff.py",
+        "tests/unit/development/test_voice_completion_executor.py",
+        "tests/unit/development/test_voice_proposal_bootstrap.py",
+        "tests/unit/adapters/test_tts_interrupt_status.py",
+        "tests/unit/adapters/test_voice_interruption_status.py",
+        "tests/integration/memory_pipeline/test_voice_completion_revocation.py",
+        "firmware/smartring_plus/",
+        "firmware/smartring_plus/patches/0016-*.patch",
+        "scripts/development/otto_firmware/audit_0016_source.py",
+        "scripts/development/otto_firmware/prepare_subtitle_layout.py",
+        "tests/unit/firmware/prepare_*native.py",
+        "tests/unit/firmware/tts_interrupt_native.cpp.in"
+      ],
+      "related": [
+        "docs/development/parallel/AI-hy-advanced-low-latency-20261021.md",
+        "docs/development/parallel/AD-tts-interrupt-server-20261021.md",
+        "docs/development/parallel/AH-ci-repeat-944-20261021.md",
+        "docs/development/parallel/AH-ci-visibility-20261021.md",
+        "docs/development/parallel/AH-round-subtitles-20261021.md",
+        "docs/development/parallel/AD-voice-interruption-summary-v1-20261021.md",
+        "docs/development/parallel/AH-final-interface-20261021.md"
+      ],
+      "tags": [
+        "字幕",
+        "打断",
+        "EOS",
+        "0016",
+        "完成回执",
+        "只读诊断"
+      ],
+      "review": {
+        "state": "verified",
+        "date": "2026-10-21",
+        "scope": "隔离永久音频撤权、原子完成领取、双向wire修订4及0016联合源码/合成验证；原完整后端失败及发布/实机未验边界保留",
+        "evidence": [
+          "docs/development/parallel/AI-hy-advanced-low-latency-20261021.md",
+          "docs/development/parallel/AD-tts-interrupt-v1-20261021.md",
+          "scripts/development/xiaozhi/voice_output_protocol.py",
+          "tests/unit/development/test_voice_output_protocol_ws.py",
+          "tests/integration/memory_pipeline/test_voice_completion_revocation.py",
+          "firmware/smartring_plus/experiments/0016-round-subtitle-interrupt.json"
+        ]
+      }
     }
   ],
   "old_path_rules": [
@@ -7144,13 +7209,18 @@
       "path": "docs/development/parallel/AI-hy-advanced-low-latency-20261021.md",
       "title": "AI：L6/L7与低延迟组合审查",
       "status": "draft",
-      "basis": "公共源码/隔离审查与ROOT报告分别记录；所有者反馈本次adaptive实机FAILED待修，部署ready不抵消体验失败",
+      "basis": "AD/AH冻结接力及AI隔离联合审查；实机FAILED保持，候选远程Quality/正式发布/新写入许可/owner复验另验",
       "review": {
         "state": "verified",
         "date": "2026-10-21",
-        "scope": "AI核对公共源码及隔离证据，据ROOT报告记录实机FAILED、buffered已恢复ready、main组件超时失败；字幕/撤权发现不视为根因或修复验收，未操作生产，不按已验收归档",
+        "scope": "隔离永久音频撤权、原子完成领取、双向wire修订4及0016联合源码/合成验证；原完整后端失败及发布/实机未验边界保留",
         "evidence": [
-          "docs/development/parallel/AI-hy-advanced-low-latency-20261021.md"
+          "docs/development/parallel/AI-hy-advanced-low-latency-20261021.md",
+          "docs/development/parallel/AD-tts-interrupt-v1-20261021.md",
+          "scripts/development/xiaozhi/voice_output_protocol.py",
+          "tests/unit/development/test_voice_output_protocol_ws.py",
+          "tests/integration/memory_pipeline/test_voice_completion_revocation.py",
+          "firmware/smartring_plus/experiments/0016-round-subtitle-interrupt.json"
         ]
       },
       "tags": [
@@ -7164,13 +7234,18 @@
       "path": "docs/adr/0201-composed-runtime-write-gates-and-observation.md",
       "title": "ADR-0201：L6/L7与低延迟组合审查",
       "status": "draft",
-      "basis": "公共源码/隔离审查与ROOT报告分别记录；所有者反馈本次adaptive实机FAILED待修，部署ready不抵消体验失败",
+      "basis": "AD/AH冻结接力及AI隔离联合审查；实机FAILED保持，候选远程Quality/正式发布/新写入许可/owner复验另验",
       "review": {
         "state": "verified",
         "date": "2026-10-21",
-        "scope": "AI核对公共源码及隔离证据，据ROOT报告记录实机FAILED、buffered已恢复ready、main组件超时失败；字幕/撤权发现不视为根因或修复验收，未操作生产，不按已验收归档",
+        "scope": "隔离永久音频撤权、原子完成领取、双向wire修订4及0016联合源码/合成验证；原完整后端失败及发布/实机未验边界保留",
         "evidence": [
-          "docs/development/parallel/AI-hy-advanced-low-latency-20261021.md"
+          "docs/development/parallel/AI-hy-advanced-low-latency-20261021.md",
+          "docs/development/parallel/AD-tts-interrupt-v1-20261021.md",
+          "scripts/development/xiaozhi/voice_output_protocol.py",
+          "tests/unit/development/test_voice_output_protocol_ws.py",
+          "tests/integration/memory_pipeline/test_voice_completion_revocation.py",
+          "firmware/smartring_plus/experiments/0016-round-subtitle-interrupt.json"
         ]
       },
       "tags": [
@@ -7263,6 +7338,175 @@
         "Hy-Memory",
         "ASR",
         "低延迟"
+      ]
+    },
+    {
+      "path": "docs/development/parallel/AD-tts-interrupt-v1-20261021.md",
+      "title": "AD：显式设备打断合同候选v1修订4",
+      "status": "draft",
+      "basis": "固定交付与AI独立隔离核查；未部署/未刷写，不取代实机验收",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-21",
+        "scope": "隔离永久音频撤权、原子完成领取、双向wire修订4及0016联合源码/合成验证；原完整后端失败及发布/实机未验边界保留",
+        "evidence": [
+          "docs/development/parallel/AI-hy-advanced-low-latency-20261021.md",
+          "docs/development/parallel/AD-tts-interrupt-v1-20261021.md",
+          "scripts/development/xiaozhi/voice_output_protocol.py",
+          "tests/unit/development/test_voice_output_protocol_ws.py",
+          "tests/integration/memory_pipeline/test_voice_completion_revocation.py",
+          "firmware/smartring_plus/experiments/0016-round-subtitle-interrupt.json"
+        ]
+      },
+      "tags": [
+        "隔离",
+        "打断",
+        "0016",
+        "CI"
+      ]
+    },
+    {
+      "path": "docs/development/parallel/AD-tts-interrupt-server-20261021.md",
+      "title": "AD：TTS显式打断服务端冻结交付",
+      "status": "draft",
+      "basis": "固定交付与AI独立隔离核查；未部署/未刷写，不取代实机验收",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-21",
+        "scope": "隔离永久音频撤权、原子完成领取、双向wire修订4及0016联合源码/合成验证；原完整后端失败及发布/实机未验边界保留",
+        "evidence": [
+          "docs/development/parallel/AI-hy-advanced-low-latency-20261021.md",
+          "docs/development/parallel/AD-tts-interrupt-v1-20261021.md",
+          "scripts/development/xiaozhi/voice_output_protocol.py",
+          "tests/unit/development/test_voice_output_protocol_ws.py",
+          "tests/integration/memory_pipeline/test_voice_completion_revocation.py",
+          "firmware/smartring_plus/experiments/0016-round-subtitle-interrupt.json"
+        ]
+      },
+      "tags": [
+        "隔离",
+        "打断",
+        "0016",
+        "CI"
+      ]
+    },
+    {
+      "path": "docs/development/parallel/AH-ci-repeat-944-20261021.md",
+      "title": "AH：944组件超时修复与运行时绑定",
+      "status": "draft",
+      "basis": "固定交付与AI独立隔离核查；未部署/未刷写，不取代实机验收",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-21",
+        "scope": "隔离永久音频撤权、原子完成领取、双向wire修订4及0016联合源码/合成验证；原完整后端失败及发布/实机未验边界保留",
+        "evidence": [
+          "docs/development/parallel/AI-hy-advanced-low-latency-20261021.md",
+          "docs/development/parallel/AD-tts-interrupt-v1-20261021.md",
+          "scripts/development/xiaozhi/voice_output_protocol.py",
+          "tests/unit/development/test_voice_output_protocol_ws.py",
+          "tests/integration/memory_pipeline/test_voice_completion_revocation.py",
+          "firmware/smartring_plus/experiments/0016-round-subtitle-interrupt.json"
+        ]
+      },
+      "tags": [
+        "隔离",
+        "打断",
+        "0016",
+        "CI"
+      ]
+    },
+    {
+      "path": "docs/development/parallel/AH-ci-visibility-20261021.md",
+      "title": "AH：d286可见性增量接力验证",
+      "status": "draft",
+      "basis": "固定交付与AI独立隔离核查；未部署/未刷写，不取代实机验收",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-21",
+        "scope": "隔离永久音频撤权、原子完成领取、双向wire修订4及0016联合源码/合成验证；原完整后端失败及发布/实机未验边界保留",
+        "evidence": [
+          "docs/development/parallel/AI-hy-advanced-low-latency-20261021.md",
+          "docs/development/parallel/AD-tts-interrupt-v1-20261021.md",
+          "scripts/development/xiaozhi/voice_output_protocol.py",
+          "tests/unit/development/test_voice_output_protocol_ws.py",
+          "tests/integration/memory_pipeline/test_voice_completion_revocation.py",
+          "firmware/smartring_plus/experiments/0016-round-subtitle-interrupt.json"
+        ]
+      },
+      "tags": [
+        "隔离",
+        "打断",
+        "0016",
+        "CI"
+      ]
+    },
+    {
+      "path": "docs/development/parallel/AH-round-subtitles-20261021.md",
+      "title": "AH：0016圆屏字幕与TTS打断消费者候选",
+      "status": "draft",
+      "basis": "固定交付与AI独立隔离核查；未部署/未刷写，不取代实机验收",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-21",
+        "scope": "隔离永久音频撤权、原子完成领取、双向wire修订4及0016联合源码/合成验证；原完整后端失败及发布/实机未验边界保留",
+        "evidence": [
+          "docs/development/parallel/AI-hy-advanced-low-latency-20261021.md",
+          "docs/development/parallel/AD-tts-interrupt-v1-20261021.md",
+          "scripts/development/xiaozhi/voice_output_protocol.py",
+          "tests/unit/development/test_voice_output_protocol_ws.py",
+          "tests/integration/memory_pipeline/test_voice_completion_revocation.py",
+          "firmware/smartring_plus/experiments/0016-round-subtitle-interrupt.json"
+        ]
+      },
+      "tags": [
+        "隔离",
+        "打断",
+        "0016",
+        "CI"
+      ]
+    },
+    {
+      "path": "docs/development/parallel/AD-voice-interruption-summary-v1-20261021.md",
+      "title": "AD：进程内撤权与只读摘要v1",
+      "status": "draft",
+      "basis": "AD冻结接口与AI当前连接严格投影接力；生产与设备体验未验",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-21",
+        "scope": "隔离永久音频撤权、原子完成领取、双向wire修订4及0016联合源码/合成验证；原完整后端失败及发布/实机未验边界保留",
+        "evidence": [
+          "docs/development/parallel/AI-hy-advanced-low-latency-20261021.md",
+          "docs/development/parallel/AD-tts-interrupt-v1-20261021.md",
+          "scripts/development/xiaozhi/voice_output_protocol.py",
+          "tests/unit/development/test_voice_output_protocol_ws.py",
+          "tests/integration/memory_pipeline/test_voice_completion_revocation.py",
+          "firmware/smartring_plus/experiments/0016-round-subtitle-interrupt.json"
+        ]
+      },
+      "tags": [
+        "撤权",
+        "只读诊断",
+        "隔离"
+      ]
+    },
+    {
+      "path": "docs/development/parallel/AH-final-interface-20261021.md",
+      "title": "AH：最终前端类型接口与运行时绑定",
+      "status": "draft",
+      "basis": "AH ba37精确共同web tree与AI独立45文件/引用/接口核查；未重复旧组件/浏览器或部署",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-21",
+        "scope": "精确web tree、tsc/构建绑定及产物同字节；不声称后端/固件已发布",
+        "evidence": [
+          "docs/development/parallel/AH-final-interface-20261021.md",
+          "docs/development/parallel/AI-hy-advanced-low-latency-20261021.md"
+        ]
+      },
+      "tags": [
+        "前端",
+        "产物绑定",
+        "隔离"
       ]
     }
   ],

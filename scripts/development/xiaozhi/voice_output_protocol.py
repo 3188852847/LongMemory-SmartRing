@@ -228,7 +228,9 @@ class OutputProtocol:
             await asyncio.wait(tuple(self.writes), timeout=.25)
 
     async def close(self, *args, **kwargs):
-        guard.state_for(self.connection).closed = True
+        state = guard.state_for(self.connection)
+        with state.lock:
+            state.closed = True
         await self._fail("connection_closed", close_code=kwargs.get("code", args[0] if args else 1000))
 
     async def _write(self, value):

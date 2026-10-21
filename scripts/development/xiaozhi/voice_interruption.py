@@ -161,9 +161,11 @@ class OutputLease:
         with state.lock:
             current = getattr(state.connection, "sentence_id", self.sentence_id)
             wire_turn = getattr(self, "wire_turn", None)
+            protocol = getattr(state.connection, "_longmemory_tts_interrupt_wire", None)
             return (not state.closed and self.epoch == state.epoch
                     and self.sentence_id not in state.revoked
                     and (self.sentence_id is None or self.sentence_id == current)
+                    and (protocol is None or not protocol.closed)
                     and (wire_turn is None or wire_turn.identity_current()))
 
     def release(self):

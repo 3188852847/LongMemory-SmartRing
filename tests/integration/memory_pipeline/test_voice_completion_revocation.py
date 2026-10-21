@@ -125,7 +125,7 @@ def test_revoked_turn_never_completes_after_abort_bool_reset(provider_class, con
 
 
 @pytest.mark.parametrize('phase',['waiting_memory_lock','rpc_after_claim'])
-@pytest.mark.parametrize('authority',['asr','wire'])
+@pytest.mark.parametrize('authority',['asr','wire','wire_close'])
 def test_atomic_pending_claim_never_holds_audio_lock_while_waiting_memory_or_rpc(provider_class,config,monkeypatch,phase,authority):
     import sys
     monkeypatch.syspath_prepend(str(ROOT/'scripts/development/xiaozhi'))
@@ -133,11 +133,12 @@ def test_atomic_pending_claim_never_holds_audio_lock_while_waiting_memory_or_rpc
     from voice_interruption import OutputLease
     provider=provider_class(config)
     conn=NS(sentence_id='synthetic',tts=NS(_longmemory_cosy_streaming_installed=True))
-    if authority=='wire':
+    if authority in {'wire','wire_close'}:
         import voice_output_protocol as wire
         protocol=wire.OutputProtocol(conn,NS())
         setattr(conn,wire.ATTRIBUTE,protocol)
-        with protocol.state_lock:protocol._reserve()
+        if authority=='wire':
+            with protocol.state_lock:protocol._reserve()
     lease=OutputLease(conn,None)
     key=uuid4().hex
     provider._pending_completions[key]={'turn_id':str(uuid4()),'retrieved_counts':None,'memory_protocol':2,
@@ -173,6 +174,7 @@ def test_atomic_pending_claim_never_holds_audio_lock_while_waiting_memory_or_rpc
     def revoke():
         if authority=='wire':
             with protocol.state_lock:protocol._reserve()
+        elif authority=='wire_close':asyncio.run(protocol.close())
         else:lease.state.revoke('asr_handoff_revoked')
         revoked.set()
     worker=threading.Thread(target=complete)

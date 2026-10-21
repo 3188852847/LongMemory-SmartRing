@@ -118,3 +118,11 @@ interrupt后旧音频帧0；同编码器reset后新轮20帧完整且逐帧解码
 
 文档严格检查未通过：当前AD独立文档未登记共享manifest，--only报unknown-selection，
 没有实际选中文档做正文检查。按文件归属未改共享清单；由主会话整合登记，本交付不冒称文档全验通过。
+
+## AI接力修正与隔离装配
+
+以上为AD冻结 `ff6ef6e6` 的原交付记录。AI在 `0970e5bf` 接入正式启动顺序的隔离源码：永久撤权及完成交接之后、control/app之前安装wire代理，candidate OFF同样适用；没有操作生产。状态字段为可选 `tts_interrupt`，沿当前连接getter、控制HTTP及3.12严格投影返回，保留16KiB响应上限，前端只加类型。closed保留曾协商事实，断线后不沿用旧getter；物理ack始终false。
+
+修订4补齐服务端EOS后的尾音窗口：普通stop照常发送并保留尾音；随后正式ASR交接、显式abort和控制面板stop仍可撤销同epoch并发interrupt。控制面板不再仅凭服务端队列空/speaking=false返回already_idle。重复abort不重发，旧轮不复活，下一轮start仍在线序屏障之后。
+
+400ms精确含义为**首次收到严格503 busy之后的重试准入预算**，包含后续退避、connect及响应头；每次请求前复核剩余预算，各阻塞步骤使用剩余时间，watcher同时取消过期自有socket。首请求保留原超时；后续收到200即结束准入预算，生成体使用原读取超时，任何200之后错误都不重放。400ms不是包含首请求、清理和操作系统调度的硬墙钟保证，也不证明真实模型能在该预算内释放。AI组合首次暴露socket超时可能略早于单调deadline而泄漏TimeoutError，修正为稳定失败准入；失败JUnit与后续验证分别保留。具体结果、消费者边界及文档接力见[AI记录](AI-hy-advanced-low-latency-20261021.md)。

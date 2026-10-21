@@ -549,3 +549,64 @@ ROOT转述所有者进一步明确：字幕被圆边裁掉，stop已识别但旧
 
 
 保留未定位的首轮SDK失败、跨标签同时冷启动不覆盖、host/voice候选关闭、SmartTurn off、TRT无真实engine等限制；字幕、自然打断及真实声音/延迟/设备体验当前待修或复验。原219项及其管理proof仍仅属于 `f5906827d98ce4d2665d5e6b83b04ee1ebda58fa` 的固定边界，没有重签或改称944的新全量证明。ROOT未授权AI操作生产、个人数据或固件；本次记录更正不扩大执行范围。
+
+## 字幕与打断候选的隔离接力（2026-10-21）
+
+本段补充上述等待交付之后的实际工作。AI工作树 `local/worktrees/ai-integration-review-20261021`，分支 `codex/ai-integration-review-20261021`；仅隔离源码、合成数据和随机环回端口。未操作日用8767/8000/8003、模型/GPU、私有配置/个人库、串口或设备，不推送/合main。此前实机FAILED保持；候选离线通过不能代填owner体验。
+
+接力关系如下，均尚待ROOT正式候选流程：
+
+| 来源任务 | 固定来源提交 | AI接入/修正 |
+|---|---|---|
+| AD进程内永久撤权 | b0973bbd | 05bac372；安装顺序、普通完成/严格摘要接线57b448d8，领取竞争修复0bc29b5f |
+| AD设备线协议 | 修订3 2b8242e5；服务端ff6ef6e6 | 3d68e8bc、4e65515c；0970e5bf补EOS后撤尾、控制stop、准入预算、wire领取屏障，合同现为修订4 |
+| AH组件查询与可见性 | 84fa8e4e、0fddd882；AI d286b4cd，AH等效e5fcca1e | 87b5e181、97dc79c5、d286b4cd；AH冻结验证记录38a04d4b接为2fbf0ab6 |
+| AH字幕/消费者/镜像 | e63441a4；最终验证记录055a7f39 | 0ac69371、197837b7；0970e5bf另补两份审计patch的精确LF属性 |
+
+软件接口冻结 **`0970e5bf5f5c4672344bf74377eb505f00a676fe`**。前端tree `2d06c0dd5081eab580618cfbca6978477f5d0d60`，`device.ts` blob `0cd6ae2c0fc8e4ab5bec74c76999b523e06d36fb`；与AH e5fcca1e相比，前端唯一差异为该文件的可选状态类型，两个流程测试blob相同。后续197837b7只接AH固件测试/记录，未改变web tree；ROOT已安排AH按该最终精确类型接力构建。不能将此前AH完整350/构建直接标成这棵最终web tree的验证。
+
+### 实现及证据边界
+
+普通candidate OFF也安装永久音频撤权。actual executor.submit捕获不可变代次，旧排队chat不会重新prepare；助手put在共同屏障内拒绝撤权后的文本。真实MemoryProvider先取得Memory锁，再以音频/wire短锁检查并原子领取pending；RPC、磁盘及等待Memory锁不占音频锁。外层检查通过后才发生ASR撤权也只能cancel，不发complete。已经领取并开始外发的完成允许结束，不承诺回滚；撤权前已入内存历史的助手文本不被事后改写。
+
+显式wire代理装在全部原包装之后、control/app之前；仅直接WebSocket/pipeline/本地Cosy且双向严格hello及最终发送覆盖齐备才确认v1，旧0015或旧服务器保持legacy。所有TTS JSON/二进制共用最终socket发送门，入门前固定身份，旧在途发送返回后才发interrupt，再开新start。epoch耗尽、覆盖改变、写或等门超时关闭当前连接，有界取消/join自有任务；不把发送返回当物理播放确认。
+
+联合审查发现并补齐EOS后尾音窗口：普通stop仍自然排空；随后ASR交接、明确abort或控制面板stop可以发同epoch interrupt。服务端队列空、speaking=false也不能据此判定物理already_idle。重复停止不重发，正常EOS完整尾帧回归保留，旧EOS/UI不能伤新轮。该补充已经ROOT明确确认，见[合同修订4](AD-tts-interrupt-v1-20261021.md)。
+
+声音HTTP只对精确503 JSON `{"error":"busy"}`重试，首次busy之后共享400ms准入窗口；每次connect/响应头使用剩余时间，过期或永久撤权关闭自有socket。首请求保留原超时，200后的生成体不受该预算截断、不重放。AD原交接失败来自旧生成finally未释放、新请求尚未进入合成的busy，不能归因于wire；AI组合首次又发现socket timeout略早于单调deadline的异常类型差异，已修稳定拒绝。首次失败和修复后报告均保留，不称实际模型400ms内可恢复。
+
+当前连接只读 `voice_interruption` 和 `tts_interrupt` 沿现有受保护HTTP返回。3.12投影严格枚举、整数/布尔、固定计数和零额外字段；已知摘要非法为稳定502，旧响应缺可选摘要仍兼容。断线不复用旧连接摘要；closed保留曾经协商事实，`device_playback_acknowledged=false`始终成立，原16KiB响应上限不变。前端只有可选类型，没有新增显示或自动启用逻辑。
+
+### 实际验证与保留失败
+
+主Python3.12.13、声音Python3.10.20及固定上游 `eb4b28c59ed7ed885258498cf757ce14352d620e`，不安装/下载依赖。下列JUnit位于本树 ignored `data/test-tmp/`，报告间有重叠，不将通过数相加为唯一用例数：
+
+| 报告 | 实际结果与范围 |
+|---|---|
+| ai-wire-combined-01.xml | 135通过/2既有资源skip/1失败，重试headers超时类型差异；保留原件 |
+| ai-wire-combined-02.xml | 修正后136通过/2既有资源skip/26.32s；固定原生ASR/chat三阶段、真实provider、真实随机WS、真实Opus及严格状态 |
+| ai-wire-broader-01.xml | 225通过/7 subtests/4.41s；流式PCM、重采样、控制、客户端、文档工具和CI护栏 |
+| ai-wire-control-opus-01.xml | 最终控制stop补齐后77通过/12.03s；真实WS的EOS后ASR/abort/control stop、实际HTTP/FIR/Opus链路 |
+| ai-wire-resource-03.xml | 25通过/20精确资源skip/0.56s；模拟固定上游及专属3.10缺失，质量audit_report返回(25,20) |
+
+20项新增资源边界逐项登记：12固定SDK、4声音解释器、3明确原生仓库路径、1websockets专属解释器；不按模块通配，纯schema/HTTP/上下文/锁/busy用例保持执行。resource-02只成功模拟固定源码/原生路径缺失，实际30通过/15skip，未将其冒称全部20项缺失；03在收集时精确模拟解释器缺失后补齐。固定资源运行中三阶段均实际执行，2项skip来自旧test_xiaozhi_bridge以本树local路径判断资源，不是新增三阶段未执行。单文件前端类型检查使用已固定Node24.19.0和AH已装编译器工具退出0，未给本树安装/联接node_modules；完整最终web树构建由ROOT安排接力。
+
+此前d286完整后端入口 **3639通过/202skip/1失败/285.99s** 保留：`test_launcher_doubao.py::test_secret_dialog_is_blank_and_saves_only_on_user_action` 的Tk entry.tcl初始化读取失败。冻结副本 `ai-b097-full-backend-01.xml` SHA256 `c184a88bbe967927f7a0a3e432c4028253bc81339357025488b8c0b2f4ee1904`。只读核对同解释器Tcl/Tk8.6，相关文件可读、相关环境变量为空；同一用例独立复现1通过/0.15s（ai-tk-isolated-reproduction-01.xml）。失败时加载现场未采样，原因未定位；不能称全量绿、不能断言永久环境损坏或并行负载就是根因。没有改环境/跳过/超时或重跑全量充绿。
+
+### AH与固件联合审查
+
+独立核对AH e5fcca1e绑定：45文件/1,839,032字节、规范SHA `bcde5ee77a08fa513942c7f13ffe60885e7a3c4acfe237f5dac4975886679af1`，264引用、91既有截图及源输入摘要吻合，两个测试与AI d286逐字一致。`ai-ah-e5fcca-review.json` 保留完整检查。原始组件第一次16通过/3个5s超时，随后空闲19/19与350/350均0失败，原失败保留；没有提高5s或加retry。浏览器140通过/3既有Otto skip是先前已绑定运行，未冒称本轮重跑；原始Vitest的numTotalTestSuites含父级/重复统计，63文件以实际报告记录为准。最终可选类型的完整web构建仍单列接力，不能只因type-only就宣称已实测相同产物。
+
+AH最终[字幕/消费者记录](AH-round-subtitles-20261021.md)和固定JSON已接入。AI实际重跑源审计：10,765文件、8目标改动、10,757非目标一致，原0015保持，两个补丁正向/逆向逐字节通过；审计JSON SHA `7d760a906cf503572407dc3da6007e7234ab3b2bca662bf62e27b462370214b9`。初次因checkout将新patch变CRLF而拒绝，补两份精确LF属性并恢复冻结blob字节后通过；不是改固件凑证据。
+
+AI按实际最终源重新生成消费者v4和字幕夹具，逐字比较AH已编译输入后重新执行AH既有本地测试二进制：消费者与未声明客户端均退出0，消费者日志SHA `b61a7f47aad77e524f3dbfca12fce1360907bd025f9394a2ccaa49fd3b477918`；包括已出队decode/PCM、legacy→v1重连、EOS活动计数、EOS后interrupt、旧已排队EOS/Speaking→新start。AI没有另做MSVC或固件重编译。真实队列/身份/应用方法来自抽取原件，硬件codec/Opus/FreeRTOS为替身；这与服务端WS的合同预言机是两层证据，不是服务器到真机端到端听验。
+
+字幕重新执行真实LVGL/原字体夹具日志SHA `95cda431d26cb63bf7d176265eb3219c6034a077dd37bc3caec98a819f2d866d`：标签(70,252)-(289,305)，五句12行全部可见、首移900ms、末行10220ms，40ms旁路刷新不复位。AI另查看修正后的v4首/末PNG，确为首句和最后一行；早期快照错帧证据保留，未当成最终像素证明。下一条字幕仍按原sentence_start替换，所以不能保证实机语速下每条都滚完；实际GIF/字体覆盖/声画节奏待owner验。
+
+最终应用仅为4,011,456字节的 `2.2.3-otto0016`，SHA `caca8cbf7b8b1df715c9523c1f32321d8b32b309acb63adf2e710d7f9901193c`，静态slot余117,312；不是早期final1。ROOT另报告已独立核对8文件、2patch、4产物和SDK固定commit，并将唯一应用保存到其检查点 `0016-root-review/`，记录root-readonly-verification.json和source-build-manifest.json。该ROOT核对只证明身份/容量，不授权写入，也不替代本次审查或设备体验。AI未打开串口/写设备，未宣称第二次独立固件重建。
+
+最终web树接力随后完成：[AH记录](AH-final-interface-20261021.md) 固定a601e7f7（AI接为ec927d21），实际构建来源ba37f972，双方web tree均为 `2d06c0dd5081eab580618cfbca6978477f5d0d60`。AI再次独立核对新绑定SHA `6c8465822e2c8d701f7d1ded11760ce600419c92028f4d795d6cb51b8503ad8f`、5个构建输入、45文件、264引用、91旧截图及精确接口blob；新产物逐文件仍等于bcde，类型检查/正式构建退出0。`ai-ah-final-interface-review.json`保留结果，前端无须重新部署。350组件及旧浏览器不重跑，来源仍如前段，不能称本轮新跑。
+
+最后复核又将wire.close的closed写入纳入音频短锁，且未绑定首个wire turn的租约也检查protocol.closed；关闭同样不能穿过完成领取。新增真实provider的close前领取/已领取RPC两种屏障验证，连同固定原生ASR三阶段、真实WS、executor及永久撤权共 **26通过/8.46s**，`ai-wire-close-completion-01.xml`；没有改web tree或固件镜像。文档接力最终以共享manifest窄范围strict检查记录为准。
+
+未解决的发布/体验事项：ROOT精确最终候选远程Quality、新0016活动应用写入许可与K专属执行、owner真实字幕/声音/打断/多轮复验。当前没有发现仍阻断隔离候选提交的代码缺陷；上述本地完整后端失败原因、真实模型和设备边界均保留，不按已验收归档。
