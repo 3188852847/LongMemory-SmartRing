@@ -384,6 +384,9 @@ class OutputProtocol:
                     self.counts["hello_confirmed"] += 1
                 return None
             if not self.negotiated:
+                # legacy不要求hello/心跳/控制消息有租约；已带归属的音频包仍须在门内复核。
+                if binary and owner.lease is not None and not owner.current():
+                    raise StaleOutput()
                 return await self._write(value, on_sent=on_sent)
             if not self.eligible():
                 await self._fail("mode_changed")

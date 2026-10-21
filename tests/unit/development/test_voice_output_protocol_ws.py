@@ -443,9 +443,9 @@ async def case_eos_tail_interrupt():
   finally:await u.cleanup()
  return rows
 
-async def case_observed_answer_and_waiting_gate():
+async def case_observed_answer_and_waiting_gate(cap=True):
  import voice_latency,voice_waiting
- u=await setup(timeout=1,observed=True)
+ u=await setup(cap,timeout=1,observed=True)
  try:
   c=u.conn;p=getattr(c,wire.ATTRIBUTE)
   tracker=c._longmemory_voice_latency=voice_latency.VoiceLatencyTracker(c)
@@ -473,8 +473,52 @@ async def case_observed_answer_and_waiting_gate():
   assert state.budget.last_sent_at is None
   assert tracker.snapshot()['timings_ms']['first_audio_sent_ms'] is not None
   assert state.first_feedback_ms is None and state.first_answer_ms is not None
-  return {'answer_timing_present':True,'waiting_consumed_cooldown':False,'physical_playback_verified':False}
+  return {'negotiated':cap,'answer_timing_present':True,'waiting_consumed_cooldown':False,'physical_playback_verified':False}
  finally:await u.cleanup()
+
+async def case_legacy_packet_gate_and_unowned_compatibility():
+ import voice_latency,voice_waiting
+ rows=[]
+ for reason in ('revoked_lease','callback_error'):
+  u=await setup(False,observed=True,timeout=1)
+  try:
+   c=u.conn;p=getattr(c,wire.ATTRIBUTE)
+   tracker=c._longmemory_voice_latency=voice_latency.VoiceLatencyTracker(c)
+   tracker.begin();c.sentence_id=c.tts.current_sentence_id='legacy-gate';tracker.bind_sentence()
+   state=c._longmemory_waiting=voice_waiting.WaitingTurn(c,'model',delay=0,packets=(b'cue',))
+   await u.send.send_tts_message(c,'start');await u.next()
+   cls=voice_waiting.AnswerPacket if reason=='revoked_lease' else voice_waiting.WaitingPacket
+   packet=cls(b'legacy-must-drop',state)
+   failed=[False]
+   original_cancelled=packet._longmemory_cosy_cancelled
+   def cancelled():
+    if failed[0]:raise RuntimeError('synthetic_cancel_check_error')
+    return original_cancelled()
+   packet._longmemory_cosy_cancelled=cancelled
+   entered=asyncio.Event();send=c.websocket.send
+   async def observed(value):
+    if value==b'legacy-must-drop':entered.set()
+    return await send(value)
+   c.websocket.send=observed
+   await p.gate.acquire()
+   task=asyncio.create_task(u.ttsbase.sendAudioMessage(c,'middle',packet,None,c.sentence_id))
+   await asyncio.wait_for(entered.wait(),1)
+   if reason=='revoked_lease':guard.state_for(c).revoke('asr_handoff_revoked')
+   else:failed[0]=True
+   assert c.client_abort is False  # 不能借可复位布尔通过这个负例。
+   p.gate.release();await task
+   assert packet._longmemory_send_receipt.sent_at is None
+   assert state.budget.last_sent_at is None
+   assert tracker.snapshot()['timings_ms']['first_audio_sent_ms'] is None
+   # 无包归属的legacy控制/心跳/二进制保持原样，不补epoch、不强制租约。
+   for value in (json.dumps({'type':'session','state':'heartbeat'}),
+                 json.dumps({'type':'tts','state':'stop','session_id':c.session_id}),b'legacy-unowned'):
+    await c.websocket.send(value);assert await u.next()==value
+   assert b'legacy-must-drop' not in u.trace
+   assert wire.protocol_snapshot(c)['state']=='legacy'
+   rows.append({'reason':reason,'dropped':True,'unowned_legacy_compatible':True})
+  finally:await u.cleanup()
+ return rows
 
 async def case_observed_actual_send_receipts():
  import voice_latency,voice_waiting
@@ -555,6 +599,8 @@ async def main():
          'implicit_start':await case_revoke_during_implicit_start(),
          'eos_tail':await case_eos_tail_interrupt(),
          'observed_gate':await case_observed_answer_and_waiting_gate(),
+         'legacy_observed_gate':await case_observed_answer_and_waiting_gate(False),
+         'legacy_gate_compatibility':await case_legacy_packet_gate_and_unowned_compatibility(),
          'send_receipts':await case_observed_actual_send_receipts(),
          'receipt_cancel_failure':await case_observed_receipt_cancel_and_failure()}
  assert 'torch' not in sys.modules
