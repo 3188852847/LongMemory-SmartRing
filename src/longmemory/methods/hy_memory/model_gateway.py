@@ -1,6 +1,6 @@
 """自有回环模型网关：同一预算覆盖 Hy、旧提取、回答器；BGE 留在主环境。"""
 
-from contextlib import AbstractContextManager, contextmanager
+from contextlib import AbstractContextManager, contextmanager, nullcontext
 from dataclasses import replace
 import hashlib
 import hmac
@@ -19,6 +19,7 @@ from .provider_transport import PersistentProviderTransport
 from .answer_content import FinalStream, final_response
 from .prefix_cache import cache_evidence, has_final_text
 from .model_admission import ModelAdmission, AdmissionClosed, AdmissionFull, work_kind
+from .observation import embedding_observation, detail_header, measured, observed_lock, span
 
 
 MAX_BODY = 2_000_000
@@ -133,6 +134,7 @@ class ModelGateway(AbstractContextManager):
                 else:
                     self.respond(404,{"error":"local_gateway_path_not_allowed"})
             def do_POST(self):
+                self._hy_embedding_observation=None
                 if not hmac.compare_digest(self.headers.get("Authorization",""),"Bearer "+gateway.token):
                     self.respond(401,{"error":"local_gateway_auth_failed"}); return
                 paths = {f"/{phase}/v1/chat/completions":phase for phase in ("hy","baseline","answer","probe")}
@@ -146,7 +148,11 @@ class ModelGateway(AbstractContextManager):
                         status, payload = gateway.complete("answer", body)
                         self.respond(status, payload)
                     elif self.path == "/hy/v1/embeddings":
-                        result = gateway.embed(body,self.headers.get("X-Hy-Embedding-Role","document"))
+                        observation=embedding_observation(self.headers.get('X-Hy-Observation-Id'),
+                            self.headers.get('X-Hy-Observe-Detail'))
+                        self._hy_embedding_observation=observation
+                        with observation.activate() if observation is not None else nullcontext():
+                            result = gateway.embed(body,self.headers.get("X-Hy-Embedding-Role","document"))
                         self.respond(200,result)
                     elif self.path == "/hy-background/v1/chat/completions":
                         status, payload = gateway.complete("hy", body, work_class="background")
@@ -164,6 +170,11 @@ class ModelGateway(AbstractContextManager):
             def respond(self,status,body):
                 payload=json.dumps(body,ensure_ascii=False).encode()
                 self.send_response(status); self.send_header("Content-Type","application/json")
+                observation=getattr(self,'_hy_embedding_observation',None)
+                if observation is not None:
+                    detail=detail_header(observation)
+                    if detail:
+                        self.send_header('X-Hy-Observation-Detail',detail)
                 self.send_header("Content-Length",str(len(payload))); self.end_headers()
                 try:self.wfile.write(payload)
                 except (BrokenPipeError,ConnectionResetError):pass
@@ -218,6 +229,7 @@ class ModelGateway(AbstractContextManager):
         """仅建议，不返回lease或预留；AB应在任务running/SDK原子操作之前查询。"""
         return self._admission.background_readiness()
 
+    @measured('embed_gateway_ms')
     def embed(self,body,role):
         if body.get("model") != self.encoder.identity or role not in {"query","document"}:
             raise ValueError("embedding_identity_or_role_invalid")
@@ -225,9 +237,10 @@ class ModelGateway(AbstractContextManager):
         if isinstance(texts,str):texts=[texts]
         if not isinstance(texts,list) or not 1 <= len(texts) <= 128 or any(not isinstance(text,str) or not text.strip() for text in texts):
             raise ValueError("embedding_input_invalid")
-        with self._embedding_lock:
-            vectors = ([self.encoder.encode_query(text) for text in texts] if role == "query"
-                       else self.encoder.encode_documents(texts))
+        with observed_lock(self._embedding_lock,'embed_gateway_lock_wait_ms'):
+            with span('embed_bge_encode_ms'):
+                vectors = ([self.encoder.encode_query(text) for text in texts] if role == "query"
+                           else self.encoder.encode_documents(texts))
             self.embedding_calls+=1; self.embedding_inputs+=len(texts)
         return {"object":"list","model":self.encoder.identity,
             "data":[{"object":"embedding","index":i,"embedding":vector} for i,vector in enumerate(vectors)]}

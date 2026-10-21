@@ -1,0 +1,18 @@
+{
+  "all_modes_same_getter_embedding_backend_counts": true,
+  "batch_size": 60,
+  "batches": 9,
+  "detail_minus_base_median_us": 11.671,
+  "kind": "synthetic_wrapper_overhead_not_production_latency",
+  "limit": "Includes Python wrappers and one dedicated synthetic executor; excludes real latency and numerical error bound.",
+  "median_us_per_call": {"base": 64.062, "detail": 75.733, "off": 56.922},
+  "model": "fake two-dimensional encoder; no SDK/BGE/HTTP/RPC/GPU",
+  "python": "3.12.13",
+  "samples_us_per_call": {
+    "base": [68.35, 62.43, 68.907, 63.61, 64.062, 75.478, 57.068, 61.493, 68.592],
+    "detail": [70.517, 76.4, 75.733, 76.15, 82.588, 73.778, 69.59, 85.123, 75.572],
+    "off": [62.282, 66.448, 56.69, 70.655, 60.893, 56.922, 54.347, 52.08, 50.247]
+  },
+  "timestamp_utc": "2026-10-21T12:15:28.484806+00:00",
+  "warmups_per_mode": 20
+}

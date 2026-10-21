@@ -2,6 +2,8 @@
 
 日期：2026-10-21。基线main `c74b88834683080d4dc4ee4b770f48707ff5b349`。隔离树沿用AB原树，新分支 `codex/ab-hy-first-recall-observation-20261021`；旧 `codex/ab-hy-l6-l7-20261021` 和四个已交付提交保留。本次按主会话后续指令收缩为设计/合成契约验证，待ROOT/AI审查，不实施或部署详情协议。
 
+后续状态：以上为设计冻结提交 `3739d8857b35c3dc54b631e7a9d5e83f1c11a0dd` 当时边界。ROOT随后批准v2最小实现，当前软件结果见 [实施记录](AB-first-recall-observation-implementation-20261021.md)；本页保留旧草稿与设计阶段历史，不作为当前禁止实施或允许部署的依据。
+
 ## 冻结内容
 
 提议见 [ADR-0202](../../adr/0202-first-recall-observation-negotiation.md)，固定 [三向合成回执](AB-first-recall-observation-examples-20261021.json)，参考模型 `tests/fixtures/ab_first_recall_observation_contract.py`，测试 `tests/unit/methods/test_first_recall_observation_contract.py`。

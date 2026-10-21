@@ -21,7 +21,7 @@ from .source_evidence import enrich_profile,enrich_search
 from .management_rpc import ManagementRPC, profile_scope_proof
 from .layer_data import LayerDataRPC
 from .sdk_bridge import SOURCE_NAMESPACE
-from .observation import Observation, span
+from .observation import CURRENT, Observation, merge_embedding_header, span
 from .semantic import SemanticCoordinator, read_intentions, graph_evidence, read_profile, SearchSourceReader, invalidate_inactive_semantics
 from .candidate_snapshot import CandidateSnapshots
 from .background import BackgroundLane
@@ -182,7 +182,17 @@ def create_sdk(settings, workspace, *, create, short_embedding_fast_path=True, p
                 # search RPC 的查询用 BGE 查询前缀；add 内部 reconcile 的查询无法
                 # 从标准 Embedding API 区分，仍按 document，实验明确记录该差异。
                 request.headers["X-Hy-Embedding-Role"] = "query" if getattr(budget,"operation",None)=="search" else "document"
-            response = await self.inner.handle_async_request(request)
+            observation=(CURRENT.get() if settings.managed_gateway and
+                str(request.url)==settings.embedding.base_url.rstrip('/')+'/embeddings' else None)
+            if observation is not None and not observation.detail_enabled:
+                observation=None
+            if observation is not None:
+                request.headers['X-Hy-Observation-Id']=observation.trace_id
+                request.headers['X-Hy-Observe-Detail']='2'
+            with span('embed_http_headers_ms') if observation is not None else nullcontext():
+                response = await self.inner.handle_async_request(request)
+            if observation is not None:
+                merge_embedding_header(observation,response.headers.get('X-Hy-Observation-Detail'))
             # 重定向不发给未经配置的端点；SDK 内部 retry 也受统一计数上限约束。
             if 300 <= response.status_code < 400:
                 await response.aclose()
@@ -270,7 +280,8 @@ class ProtocolService:
                 Path(arguments["workspace"]), create=arguments["create"])
             self.management = ManagementRPC(self.client,self.settings,self.budget)
             self.candidates = CandidateSnapshots(self.client,self.settings,self.budget)
-            return {"ready":True, "sdk_version":SDK_VERSION}
+            return {"ready":True, "sdk_version":SDK_VERSION,
+                "observation_detail_versions":[2] if detail_supported(self) else []}
         if self.client is None:
             raise ValueError("hy_worker_not_initialized")
         if operation == "diagnostics":
@@ -399,6 +410,25 @@ class ProtocolService:
         return response
 
 
+def detail_supported(service):
+    return getattr(getattr(getattr(service,'budget',None),'sdk_observation',None),'applied',False) is True
+
+
+def encode_response(response, observation):
+    if observation is not None:
+        response['observation']=observation.snapshot()
+        detail=observation.detail_snapshot()
+        if detail is not None:
+            response['observation_detail']=detail
+    encoded=json.dumps(response,ensure_ascii=False)
+    if len(encoded)>MAX_LINE and 'observation_detail' in response:
+        response.pop('observation_detail')
+        encoded=json.dumps(response,ensure_ascii=False)
+    if len(encoded)>MAX_LINE:
+        raise ValueError('hy_response_too_large')
+    return encoded
+
+
 def main(*, service=None):
     service = service or ProtocolService()
     output = sys.stdout
@@ -416,7 +446,10 @@ def main(*, service=None):
                 with redirect_stdout(sink), redirect_stderr(sink):
                     identity=request.get('observation_id')
                     if isinstance(identity,str) and len(identity) in range(24,33) and all(c in '0123456789abcdef' for c in identity):
-                        observation=Observation(identity)
+                        version=request.get('observation_detail_version')
+                        detailed=type(version) is int and version==2 and detail_supported(service)
+                        observation=Observation(identity,detail=detailed)
+                        observation.detail_available=detailed
                         with observation.activate(), span('sdk_execute_ms'):
                             operation_stage={'get_user_profile':'sdk_profile_ms','search':'sdk_search_ms','add':'sdk_add_ms'}.get(operation)
                             with span(operation_stage) if operation_stage else nullcontext():
@@ -424,16 +457,10 @@ def main(*, service=None):
                     else:
                         result = service.execute(operation, request["arguments"])
                 response = {"id":request_id, "ok":True, "result":result}
-                if observation is not None:
-                    response['observation']=observation.snapshot()
-                encoded = json.dumps(response, ensure_ascii=False)
-                if len(encoded) > MAX_LINE:
-                    raise ValueError("hy_response_too_large")
+                encoded=encode_response(response,observation)
             except Exception as exc:
                 response={"id":request_id,"ok":False,"error":"hy_worker_failed","error_type":type(exc).__name__}
-                if observation is not None:
-                    response['observation']=observation.snapshot()
-                encoded=json.dumps(response)
+                encoded=encode_response(response,observation)
             output.write(encoded + "\n")
             output.flush()
             if operation == "close":

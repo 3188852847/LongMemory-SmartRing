@@ -13,7 +13,7 @@ from aiohttp import web
 from longmemory.entrypoints.xiaozhi.mapping import extract_user_text
 from longmemory.entrypoints.api.observability import bind_voice_request
 from longmemory.application.round_screen_turns import memory_receipt
-from longmemory.methods.hy_memory.observation import Observation, span, header
+from longmemory.methods.hy_memory.observation import DETAIL_VERSION, Observation, span, response_headers
 
 
 def _retrieval_evidence(prepared):
@@ -91,7 +91,8 @@ def register_memory_runtime_routes(app, backend):
                 raise ValueError
         except (ValueError, TypeError, UnicodeError):
             return web.json_response({"error": "invalid_memory_request", "version": 1}, status=400)
-        observation = (Observation(body['client_round_id']) if request.headers.get('X-Memory-Observe')=='1'
+        detailed=request.headers.get('X-Memory-Observe-Detail')==DETAIL_VERSION
+        observation = (Observation(body['client_round_id'],detail=detailed) if request.headers.get('X-Memory-Observe')=='1'
                        and 'client_round_id' in body and neutral_runtime() else None)
         try:
             if observation is None:
@@ -109,7 +110,7 @@ def register_memory_runtime_routes(app, backend):
                 with observation.activate():
                     prepared, feedback = await asyncio.to_thread(prepare_observed)
         except ValueError:
-            headers={'X-Memory-Observation':header(observation)} if observation is not None else {}
+            headers=response_headers(observation)
             return web.json_response({"error": "round_screen_prepare_conflict", "version": 1}, status=409,headers=headers)
         feedback_notice = None
         if feedback is not None and feedback.recorded:
@@ -205,7 +206,7 @@ def register_memory_runtime_routes(app, backend):
                 response.pop(key)
             response.update(memory_protocol=2, memory_receipt=memory_receipt(prepared))
             response["external_model_pause"] = prepared.observation.warning_code == "external_model_budget_paused"
-        headers={'X-Memory-Observation':header(observation)} if observation is not None else {}
+        headers=response_headers(observation)
         return web.json_response(response,headers=headers)
 
     async def voice_model_configuration(_request):

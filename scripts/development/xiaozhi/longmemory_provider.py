@@ -37,6 +37,9 @@ _OBSERVATION_STAGES = frozenset(('api_queue_ms','api_prepare_ms','runtime_outer_
     'vdb_query_ms','vdb_get_ms','vdb_list_ms','archive_ms','hy_observe_ms','hy_recall_ms',
     'management_overlay_ms','prepare_lock_wait_ms','prepare_command_ms','prepare_observe_ms',
     'prepare_recall_ms','prepare_scenario_ms','prepare_persona_ms','prepare_total_ms'))
+_DETAIL_STAGES = frozenset((
+    'embed_client_get_ms','embed_http_headers_ms','embed_gateway_ms','embed_gateway_lock_wait_ms',
+    'embed_bge_encode_ms','vdb_query_pool_wait_ms','vdb_query_backend_ms'))
 
 
 def _observation_header(value, identity):
@@ -55,8 +58,42 @@ def _observation_header(value, identity):
                     or not math.isfinite(item['total_ms'])):
                 return None
         return result
-    except (ValueError,TypeError):
+    except (ValueError,TypeError,RecursionError):
         return None
+
+
+def _detail_header(value, identity):
+    if not isinstance(value,str) or len(value)>4096 or identity is None:
+        return None
+    try:
+        result=json.loads(value)
+        if (not isinstance(result,dict) or set(result)!={'version','trace_id','stages'}
+                or type(result['version']) is not int or result['version']!=2 or result['trace_id']!=identity
+                or not isinstance(result['stages'],dict) or set(result['stages'])-_DETAIL_STAGES):
+            return None
+        for item in result['stages'].values():
+            if (not isinstance(item,dict) or set(item)!={'calls','total_ms'}
+                    or type(item['calls']) is not int or not 1<=item['calls']<=100000
+                    or type(item['total_ms']) not in (int,float) or not 0<=item['total_ms']<=3600000
+                    or not math.isfinite(item['total_ms'])):
+                return None
+        return result
+    except (ValueError,TypeError,RecursionError):
+        return None
+
+
+def _capture_observation_headers(headers, record):
+    if record is None:
+        return
+    base=headers.get('X-Memory-Observation')
+    record['observation']=_observation_header(base,record['round_id'])
+    if record.get('detail_requested') is not True:
+        return
+    detail=headers.get('X-Memory-Observation-Detail')
+    parsed=(_detail_header(detail,record['round_id']) if isinstance(detail,str)
+        and len(detail)+(len(base) if isinstance(base,str) else 0)<=4096 else None)
+    record['detail_observation']=parsed
+    record['detail_state']='received' if parsed is not None else 'unavailable' if detail is None else 'invalid'
 
 
 def _emit_request_timing(record, stage, status, finished):
@@ -75,6 +112,14 @@ def _emit_request_timing(record, stage, status, finished):
         logger.bind(tag='LongMemoryTiming').info('memory_request_timing={}', json.dumps(payload, sort_keys=True))
     except Exception:
         pass  # 旁路日志失败不能改变原查询返回、异常或取消。
+    if stage=='worker_returned' and record.get('detail_requested') is True:
+        detail={'version':2,'round_id':record['round_id'],
+            'state':record.get('detail_state','unavailable'),
+            'observation':record.get('detail_observation')}
+        try:
+            logger.bind(tag='LongMemoryTiming').info('memory_request_detail={}',json.dumps(detail,sort_keys=True))
+        except Exception:
+            pass
 
 
 class MemoryProvider(MemoryProviderBase):
@@ -147,25 +192,27 @@ class MemoryProvider(MemoryProviderBase):
             data=body,
             method="POST",
             headers={"Content-Type": "application/json", "Authorization": "Bearer " + token,
-                     **({'X-Memory-Observe':'1'} if key is not None else {}),
+                     **({'X-Memory-Observe':'1','X-Memory-Observe-Detail':'2'} if key is not None else {}),
                      **(_diagnostics.headers() if _diagnostics else {})},
         )
         timing = _REQUEST_TIMING.get()
+        if timing is not None:
+            timing['detail_requested']=key is not None
         started = perf_counter() if timing is not None else None
         try:
             with self._lock, urlrequest.urlopen(request, timeout=20) as result:
+                _capture_observation_headers(getattr(result,'headers',{}),timing)
                 if result.status != 200:
                     raise RuntimeError("invalid status")
                 response_body = result.read(65537)
                 if len(response_body) > 65536:
                     raise RuntimeError("response too large")
                 response = json.loads(response_body)
-                if timing is not None:
-                    timing['observation']=_observation_header(
-                        getattr(result,'headers',{}).get('X-Memory-Observation'),timing['round_id'])
                 if _diagnostics:
                     _diagnostics.event("memory_response", request_id=getattr(result, "headers", {}).get("X-Request-Id"))
         except (OSError, urlerror.URLError, ValueError, TypeError, RuntimeError, json.JSONDecodeError) as error:
+            if isinstance(error,urlerror.HTTPError):
+                _capture_observation_headers(error.headers or {},timing)
             if _diagnostics:
                 _diagnostics.event("memory_timeout" if isinstance(error, TimeoutError)
                     or isinstance(getattr(error, "reason", None), TimeoutError) else "memory_failed")

@@ -49,6 +49,7 @@ class HyProcessClient:
         self._lock = threading.RLock()
         self._counter = 0
         self._closed = False
+        self._observation_detail_supported = False
         self._responses = queue.Queue()
         flags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
         self._process = subprocess.Popen(argv, cwd=workspace, env=clean_environment(workspace),
@@ -57,7 +58,10 @@ class HyProcessClient:
         self._reader = threading.Thread(target=self._read, daemon=True)
         self._reader.start()
         try:
-            self._rpc("initialize", settings=settings.wire(), workspace=str(workspace), create=create)
+            initialized=self._rpc("initialize", settings=settings.wire(), workspace=str(workspace), create=create)
+            versions=initialized.get('observation_detail_versions') if isinstance(initialized,dict) else None
+            self._observation_detail_supported=(isinstance(versions,list) and
+                all(type(version) is int and version==2 for version in versions) and 2 in versions)
         except BaseException:
             self._stop()
             raise
@@ -103,7 +107,15 @@ class HyProcessClient:
             request = {"id": self._counter, "operation": operation, "arguments": arguments}
             if observation is not None:
                 request['observation_id']=observation.trace_id
+            detail_requested=(observation is not None and observation.detail_enabled
+                and self._observation_detail_supported)
+            if detail_requested:
+                request['observation_detail_version']=2
             payload = json.dumps(request, ensure_ascii=False)
+            if len(payload)>MAX_LINE and detail_requested:
+                request.pop('observation_detail_version')
+                detail_requested=False
+                payload=json.dumps(request,ensure_ascii=False)
             if len(payload) > MAX_LINE:
                 raise ValueError("hy_rpc_payload_too_large")
             try:
@@ -122,6 +134,8 @@ class HyProcessClient:
                 raise HyResponseError("hy_worker_transport_failed_state_unknown") from None
             if observation is not None:
                 observation.merge(response.get('observation'))
+                if detail_requested:
+                    observation.merge_detail(response.get('observation_detail'))
             if response.get("ok") is not True:
                 kind = response.get("error_type", "unknown")
                 if not isinstance(kind, str) or not kind.isidentifier() or len(kind) > 60:

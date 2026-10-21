@@ -1,13 +1,18 @@
 """仅固定2.0.3独占worker内包装观测引用；不改安装目录、不主动执行SDK。"""
 
 from functools import wraps
+from contextlib import contextmanager
+from contextvars import ContextVar
 import hashlib
 import inspect
 import importlib
 from pathlib import Path
 from time import perf_counter
+from threading import Lock
 
-from .observation import span
+from .observation import CURRENT, span
+
+_VDB_QUERY = ContextVar('hy_observed_vdb_query',default=False)
 
 
 SOURCES = {
@@ -16,20 +21,66 @@ SOURCES = {
     'pipelines/_retrieval/lemmatize.py':'c7eee75fe45f8ddcc7d118f1532680c88cd9f5b3e9fe7f762caa1ddc729102da',
     'core/embed_service.py':'19a929f5a5c8b2d8c8266a594cc1c1be0ec5861e60b858ca5a380453096cf905',
     'data/vector_store_chroma.py':'a3be99b273da02aa1ce860376886de76079e3c061400dc039c2408f69c4b1a33',
+    'utils/async_executor.py':'7ec5900601914bc3468130d13e6426c1a511cfb0c7c69df394996ea91036e5cb',
 }
+
+
+@contextmanager
+def _scope(stage):
+    observation=CURRENT.get()
+    token=(_VDB_QUERY.set(True) if stage=='vdb_query_ms' and observation is not None
+           and observation.detail_enabled else None)
+    try:
+        with span(stage):
+            yield
+    finally:
+        if token is not None:
+            _VDB_QUERY.reset(token)
 
 
 def _wrap(original, stage):
     if inspect.iscoroutinefunction(original):
         @wraps(original)
         async def call(*args,**kwargs):
-            with span(stage):
+            with _scope(stage):
                 return await original(*args,**kwargs)
     else:
         @wraps(original)
         def call(*args,**kwargs):
-            with span(stage):
+            with _scope(stage):
                 return original(*args,**kwargs)
+    return call
+
+
+def _wrap_vdb_pool(original):
+    """保留原executor/cancel策略；只测实际callback进入/返回，不猜Rust内部锁。"""
+    @wraps(original)
+    async def call(func,*args,**kwargs):
+        observation=CURRENT.get()
+        if observation is None or not observation.detail_enabled or not _VDB_QUERY.get():
+            return await original(func,*args,**kwargs)
+        submitted=perf_counter()
+        times={}
+        lock=Lock()
+        def measured_call():
+            with lock:
+                times['started']=perf_counter()
+            try:
+                return func(*args,**kwargs)
+            finally:
+                with lock:
+                    times['finished']=perf_counter()
+        try:
+            return await original(measured_call)
+        finally:
+            # 取消后后台callback可能继续。只记此时已发生的边界，不虚填0，
+            # 不在迟到callback里修改已经返回给消费者的观测。
+            with lock:
+                completed=dict(times)
+            if 'started' in completed:
+                observation.add('vdb_query_pool_wait_ms',max(0,completed['started']-submitted)*1000)
+            if 'finished' in completed:
+                observation.add('vdb_query_backend_ms',max(0,completed['finished']-completed['started'])*1000)
     return call
 
 
@@ -49,7 +100,9 @@ class SDKObservation:
                 return
         targets=[(registry.ComponentFactory,'get_reader','reader_get_ms','pipelines/registry.py'),
             (reader_base,'lemmatize_for_bm25','tokenize_ms','pipelines/_retrieval/lemmatize.py'),
-            (embed_service.EmbedService,'embed_with_meta','embed_rpc_ms','core/embed_service.py')]
+            (embed_service.EmbedService,'embed_with_meta','embed_rpc_ms','core/embed_service.py'),
+            (embed_service.EmbedService,'_get_client','embed_client_get_ms','core/embed_service.py'),
+            (vector_store_chroma,'_run_in_vdb_pool',None,'data/vector_store_chroma.py')]
         targets += [(vector_store_chroma.ChromaVectorStore,name,stage,'data/vector_store_chroma.py')
             for name,stage in (('search','vdb_query_ms'),('get_by_id','vdb_get_ms'),('list_by_user','vdb_list_ms'))]
         for owner,name,_,path in targets:
@@ -59,7 +112,8 @@ class SDKObservation:
                 return
         try:
             for owner,name,stage,_ in targets:
-                original=getattr(owner,name);wrapped=_wrap(original,stage)
+                original=getattr(owner,name)
+                wrapped=_wrap_vdb_pool(original) if stage is None else _wrap(original,stage)
                 setattr(owner,name,wrapped)
                 self.installed.append((owner,name,original,wrapped))
             self.applied=True

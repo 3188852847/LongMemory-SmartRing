@@ -35,6 +35,76 @@ def provider(module):
     return result
 
 
+@pytest.mark.parametrize('mode',['missing','valid','foreign','unknown','nan','extra','large','body_error','http_error'])
+def test_detail_sidecar_keeps_base_on_bad_headers_and_errors(provider_module,monkeypatch,mode):
+    import threading
+    module,lines=provider_module
+    p=provider(module);p._session_id='b'*32;p._lock=threading.Lock()
+    monkeypatch.setenv('LONGMEMORY_RUNTIME_URL','http://127.0.0.1:19999/api/internal/memory/prepare')
+    monkeypatch.setenv('LONGMEMORY_RUNTIME_TOKEN','c'*64)
+    base={'version':1,'trace_id':'a'*32,'stages':{'sdk_execute_ms':{'calls':1,'total_ms':3.0}}}
+    detail={'version':2,'trace_id':'a'*32,'stages':{'embed_client_get_ms':{'calls':1,'total_ms':1.0}}}
+    headers={'X-Memory-Observation':json.dumps(base)}
+    if mode=='foreign':detail['trace_id']='b'*32
+    if mode=='unknown':detail['stages']['private-question']={'calls':1,'total_ms':1}
+    if mode=='nan':detail['stages']['embed_client_get_ms']['total_ms']=float('nan')
+    if mode=='extra':detail['private']='raw secret'
+    if mode!='missing':headers['X-Memory-Observation-Detail']=json.dumps(detail)
+    if mode=='large':headers['X-Memory-Observation-Detail']=' '*4097
+    calls=[]
+    class Response:
+        status=200
+        def __enter__(self):return self
+        def __exit__(self,*args):pass
+        def read(self,limit):return b'invalid private body' if mode=='body_error' else b'{"original":true}'
+    Response.headers=headers
+    def urlopen(request,timeout):
+        calls.append(request)
+        assert request.get_header('X-memory-observe-detail')=='2'
+        if mode=='http_error':
+            raise module.urlerror.HTTPError(request.full_url,409,'private error',headers,None)
+        return Response()
+    monkeypatch.setattr(module.urlrequest,'urlopen',urlopen)
+    p._request=p._runtime_request
+    token=p._turn_key.set('a'*32)
+    try:
+        if mode in {'body_error','http_error'}:
+            with pytest.raises(RuntimeError,match='Runtime 调用失败'):asyncio.run(p.query_memory('private query'))
+        else:assert asyncio.run(p.query_memory('private query'))=={'original':True}
+    finally:p._turn_key.reset(token)
+    assert len(calls)==1
+    assert lines[0]['version']==1 and lines[0]['observation']==base
+    expected='unavailable' if mode=='missing' else 'received' if mode in {'valid','body_error','http_error'} else 'invalid'
+    assert lines[1]=={'version':2,'round_id':'a'*32,'state':expected,
+        'observation':detail if expected=='received' else None}
+    assert 'private' not in repr(lines) and 'c'*64 not in repr(lines)
+
+
+def test_cancelled_detail_is_logged_only_after_physical_return_for_original_round(provider_module,monkeypatch):
+    module,lines=provider_module;p=provider(module);pending=[]
+    async def to_thread(call):
+        context=copy_context();pending.append(lambda:context.run(call))
+        return await asyncio.Future()
+    monkeypatch.setattr(module.asyncio,'to_thread',to_thread)
+    def request(query):
+        record=module._REQUEST_TIMING.get();record['detail_requested']=True
+        module._capture_observation_headers({},record)
+        return 'unchanged'
+    p._request=request
+    async def scenario():
+        token=p._turn_key.set('a'*32)
+        task=asyncio.create_task(p.query_memory('private'))
+        await asyncio.sleep(0);task.cancel()
+        with pytest.raises(asyncio.CancelledError):await task
+        assert len(lines)==1 and lines[0]['stage']=='consumer_cancelled'
+        p._turn_key.reset(token)
+        newer=p._turn_key.set('b'*32)
+        try:assert pending.pop()()=='unchanged'
+        finally:p._turn_key.reset(newer)
+    asyncio.run(scenario())
+    assert len(lines)==3 and lines[-1]=={'version':2,'round_id':'a'*32,'state':'unavailable','observation':None}
+
+
 def test_handoff_and_physical_request_are_one_call_with_private_fixed_metadata(provider_module, monkeypatch):
     module, lines = provider_module
     p = provider(module); now = [0.0]; calls = []
