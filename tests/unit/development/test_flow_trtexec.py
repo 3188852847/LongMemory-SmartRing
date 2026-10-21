@@ -26,6 +26,30 @@ def test_builder_uses_existing_cpp_tool_and_fp32_dynamic_profiles(tmp_path):
     assert all(x not in argv for x in ("--fp16", "--int8", "--useCudaGraph"))
 
 
+def test_external_recipe_changes_only_graph_path_and_remains_explicit(tmp_path):
+    legacy=flow.build_command(tmp_path/"sdk",tmp_path/"out")
+    external=flow.build_command(tmp_path/"sdk",tmp_path/"out","external_fp32_v1")
+    assert legacy[2:]==external[2:]
+    assert Path(external[1].removeprefix("--onnx=")).parts[-3:]==("external-candidate","package","model.onnx")
+    assert legacy[1].endswith("flow.fp32.onnx")
+    with pytest.raises(ValueError,match="unknown_export_recipe"):
+        flow.onnx_path(tmp_path,"guess")
+
+
+def test_export_recipe_is_part_of_admission_bindings(monkeypatch,tmp_path):
+    monkeypatch.setattr(flow,"resource_plan",lambda *args:dict(files={},resources_match=True))
+    monkeypatch.setattr(flow,"_git_state",lambda:("a"*40,True))
+    monkeypatch.setattr(flow,"verify_source",lambda _:dict(verified=True))
+    versions={"torch":"2.3.1+cu121","numpy":"1.26.4","onnx":"1.16.0","onnxruntime":"1.18.0","transformers":"4.51.3","x-transformers":"2.11.24"}
+    monkeypatch.setattr(flow.admission,"interpreter_metadata",lambda *a,**k:dict(version="3.10.20",packages={n:dict(version=v) for n,v in versions.items()}))
+    args=[tmp_path]*6
+    legacy=flow.bindings_plan(*args)
+    external=flow.bindings_plan(*args,"external_fp32_v1")
+    assert legacy["bindings"]["export_recipe"]=="legacy_embedded"
+    assert external["bindings"]["export_recipe"]=="external_fp32_v1"
+    assert legacy["bindings_sha256"]!=external["bindings_sha256"]
+
+
 def test_runner_pins_input_path_parsing_and_does_real_transfers(tmp_path):
     argv = flow.run_command(tmp_path / "sdk", Path("D:/含 空格/run"), 127, True)
     inputs = next(x for x in argv if x.startswith("--loadInputs="))

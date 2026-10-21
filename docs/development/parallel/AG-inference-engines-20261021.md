@@ -245,3 +245,40 @@ ignored原始目录为`experiments/runs/ag-flow-6496873888c34589899f89c0c3debcd4
 opset更改与低内存打包是独立变量：不因小图成功直接把真实18改成17，也不引入dynamo/新依赖、FP16、profile变化或提高6GiB限制。若主会话选择进一步实施，先确定单项变化及CPU小图/外置数据契约，再用新plan和ROOT新窗口检验真实模型；本次没有第二次真实导出或GPU操作。新源码/提交使旧0d918f...bindings失效，001已用完，不沿用旧plan或收据。
 
 本轮收尾验证：加速相关四组测试及文档机制测试合计113 passed（2.84秒），含真实轻量CPU进程与只读Job计量、子进程/并发拒绝双证据、关闭001及计量查询失败后的清理。11模块通过Python3.10语法核对；两份自有文档内存清单audit检查无findings，公共清单仍交主会话处理。本轮只提交自有源码/测试/这两份文档，不提交ignored原始证据、不merge/push，不代表真实模型导出已修复。
+
+### 从c74b8883继续：外置权重候选已实施，真实Flow仍待验
+
+按ROOT委派，在既有AG树新分支`codex/ag-flow-external-data-20261021`从c74b88834683080d4dc4ee4b770f48707ff5b349开始。先复核001的attempt-summary及retained8文件摘要，全部匹配；未改变原失败事实，也没有补造其峰值。AD声线窗口优先，本阶段没有停日用、采实际GPU、加载真实Flow、执行trtexec或获取/安装资源。
+
+新增[external_weights.py](../../../scripts/development/cosyvoice/acceleration/external_weights.py)。图导出只接受固定torch2.3.1+cu121、自有CPU FP32/eval实例及CPU样例；使用export_params=False、keep_initializers_as_inputs=True、do_constant_folding=False，维持默认opset18。按图输入精确匹配registered parameter/buffer名称、dtype与固定维度，CPU ndarray只作零拷贝视图；流写块大小最多4MiB、按FP32边界对齐，每块检查有限值。无整权重tobytes或将权重先填入TensorProto.raw_data；小图中只添加EXTERNAL TensorProto引用。每参数记录offset/length/原字节摘要，另记录整数据文件、小图摘要和实际最大write大小。
+
+支持边界为平坦图及非空连续小端FP32参数；未知/转置折叠衍生参数名、非连续/非FP32、符号参数维度、嵌套图、稀疏initializer、本地函数及已有外置引用明确失败。图上限64MiB、外置数据上限6GiB；这些不替代整轮已有6GiB产物采样和Job限额。输出必须全新，固定文件名model.onnx/weights.bin/manifest.json，拒绝路径逃逸。逐文件与参数引用校验通过后最后创建manifest，供下游识别完成；失败/取消仅unlink本次成功创建的文件，保留failure.json，不覆盖或递归清理既有目录。强制杀进程若留下部分文件，无清单即不可消费。微型测试验证了取消保留旁侧文件，原失败目录也不在清理范围。
+
+已接入flow工具的显式`--export-recipe external_fp32_v1`候选，默认`legacy_embedded`不变；配方成为bindings内容，切换配方必改摘要。新配方先在CPU生成分离图/权重，打包后才转GPU做原FP32 reference；关闭折叠和改变导出设备的影响都必须由后续原10样本验证，不能用小图替代。ORT仍显式CPU，最终只暴露原六输入与estimator_out。主控制器缺ONNX，故只调stdlib-only verify_bundle_files；完整ONNX图/参数引用校验位于Cosy导出环境，不能因此给主环境安装包。构建路径指向external-candidate/package/model.onnx，其他trtexec参数/精度/profile不变；构建前再次核对清单及原字节。执行入口/唯一外层Job/准入/原6GiB、2CPU、1320秒预算不变。未生成新的真实admission-plan或收据，001仍关闭。
+
+CPU验证利用既有Cosy3.10.20环境：torch2.3.1+cu121、numpy1.26.4、onnx1.16.0、ORT1.18.0。该环境无pytest，因此[独立CPU套件](../../../tests/fixtures/external_weights_cpu_suite.py)使用标准库unittest，由主pytest通过stdin门在自有2GiB/2CPU/60秒Job内启动；禁止网络、CUDA初始化及checkpoint加载。15项套件覆盖精确映射与输出、形状/dtype/非连续/符号维度拒绝、未知onnx::MatMul_32拒绝、有限值/取消/超额清理、既有目录保护、篡改/摘要/外置路径拒绝等。88参数的Linear/LayerNorm/attention微图实际写出352字节权重；opset17/18各4组ORT CPU比较均通过，最大绝对误差3.5762786865234375e-7；每个配方实际7次write、最大64字节，所有参数恢复为initializer且输入只保留x/mask。18的支持范围警告仍记录，真实配方不改成17。
+
+独立ignored证据在`experiments/runs/ag-external-cpu-21e2ef1e9ef147cc8e420048b3f6bdf4/`：cpu-suite.json SHA256=364a0b275645365dea9fde4c21f1e35750b70be507dc7f05bb98ef6ced56d4a1；receipt.json=b8998c19a9e36196ae3580c8053f845359cd51fda7111419536e7ec05c9b60a1。收据包含完整argv、源码摘要、Job限额、CPU/IO和终止前后计量；峰值提交555446272字节、退出码0、清理后active_processes=0、cuda_initialized=false、real_flow_loaded=false。SHA256.json列出微型数据/图/清单/日志指纹，仅ignored保留，不提交二进制。此峰值包含框架和整个测试套件，不能与旧小图或原失败直接比较，也不能据此声称真实内存下降。
+
+未验证项：真实DiT是否保留全部可精确绑定的参数名/FP32连续布局、CPU trace与GPU eager原10输入数值、图优化和外置格式的SDK11.2.1.2/中文路径读取、原6GiB内峰值/耗时/容量，以及声音/取消/设备行为。任何映射失败应报告具体名字并停止，不能临时猜测或修改profile/精度。ROOT→AI审查代码后，AD完成才可由ROOT安排新窗口；新的候选提交、配方、资源/环境或输出路径均需新plan绑定，不能复用001或旧0d918f...摘要。
+
+### vLLM：隔离Linux环境完整交接条件，当前不构成可安装锁
+
+官方0.11.0材料确认Linux、Python3.9–3.12及默认CUDA12.8二进制；该版本cuda.txt固定torch/torchaudio2.8.0、torchvision0.23.0、Linux x86_64的xformers0.0.32.post1。common.txt仅约束transformers>=4.55.2，并非完整传递锁。本项目既有适配器选择transformers4.57.1；固定Cosy源码仍用074ca6dc...，不能把其torch2.3.1/transformers4.51.3的requirements原样混入此环境。依据：[固定平台文档](https://docs.vllm.ai/en/v0.11.0/getting_started/installation/gpu.html)、[固定cuda.txt](https://github.com/vllm-project/vllm/blob/v0.11.0/requirements/cuda.txt)、[固定common.txt](https://github.com/vllm-project/vllm/blob/v0.11.0/requirements/common.txt)。
+
+| 交接对象 | 固定目标/边界 | 进入执行前仍缺的工件或证据 |
+|---|---|---|
+| Linux基底 | 单独Linux x86_64环境；候选Python3.10.20在官方支持范围内 | 实际发行版/glibc/解释器工件摘要、对应镜像manifest与平台digest；官方tag不等于选定Python版本或已验证digest |
+| vLLM/PyTorch ABI | vLLM0.11.0、torch/torchaudio2.8.0、torchvision0.23.0、xformers0.0.32.post1；目标CUDA12.8二进制族 | 每个Linux wheel/共享库的精确build、来源与SHA256；实际加载库/驱动兼容验收；不复用Windows SDK11或cu121 DLL |
+| Cosy层 | 固定Cosy提交、transformers4.57.1候选；x-transformers2.11.24等原依赖须逐项兼容 | 全量传递依赖锁/平台markers/工件摘要；Deepspeed0.15.1等固定原依赖与torch2.8尚未整合验证，不能用忽略依赖命令伪装完成 |
+| ONNX/flow/HiFT | 初轮vLLM只替换speech-token LLM，适配器load_trt=False | Tokenizer/ORT provider选择及CUDA/cuDNN相容锁；不默认把原Linux ORT-GPU1.18/cu121组合视为cu128兼容，不强装原requirements中的TRT10.13 |
+| 镜像和离线物料 | 镜像、全量wheelhouse及模型都由所有者取得 | 平台/层digest、下载及展开体积、完整依赖工件清单、离线重建/自检记录；当前没有完整可复现成品，不拉镜像 |
+| 模型身份 | 独立staged模型，保留原日用目录；不能沿用无身份旧vllm导出 | Fun-CosyVoice3模型精确revision及llm/flow/hift/tokenizer/campplus/BlankEN等全文件摘要；导出产生config/tokenizer/权重指纹及容量 |
+| 进程/资源 | Linux专用进程/目录/cache；共享物理GPU由ROOT另排，AD优先 | 新窗口与Linux进程/cgroup归属、独立资源限额和退出核验、实际显存/主存/磁盘预算；未知值不先宣称可容纳或加速 |
+| 回退/验收 | 上游导出会改head并删层，只销毁独立进程和自有实验输出回退 | 同一合成输入/seed/参考音频的eager对照、首PCM/总时延/续说和abort记录；不支持文字生成器/热切换的边界保留 |
+
+该表完整列出交接类别，但缺项仍真实存在，所以不提供半套安装/镜像拉取/模型转换命令，不尝试联网依赖解析或借本次CPU许可启用Linux GPU。当前交付的可运行代码集中在既有依赖可验证的外置权重候选；vLLM保持blocked/needs_isolated_validation。BGE原FP32与旧局部INT8证据不变，未重建个人索引，也不混入本轮发布。
+
+AD真实声线窗口期间按ROOT要求暂停模型加载/批量测试，仅做文档/静态审查；收到关闭窗口通知后才恢复本段CPU验证。最终六组pytest共118 passed（5.32秒），其中一次子进程执行15项unittest，不把内部15项重复加总。新增普通逻辑测试证明配方改变bindings、默认路径/其他builder参数不变、主控制器核验不需ONNX；最初一项新测试错误地按正斜杠比较Windows路径，修为按Path.parts比较后通过，未放宽实现。
+
+最终源码对应的独立CPU证据为`experiments/runs/ag-external-cpu-final-e2fec63c3ccb41f4a74fe5c1a8b8e73d/`：cpu-suite.json SHA256=51ba38c3f60cec02f5817b31670495e9d5c3ad5eaa076646c7cccb16d0732850；receipt.json=756320817475511a5dd29c962bb82ebe47df9a6ea4d0fdfd4aebdf0f67ad373a；library-at-run.py=7ba619e25d441ce7ef3f2a4de59b757479740d2e6f34d771aa6ca3e42e043384。目录保留实际套件/库/Job查询源码副本、现装Torch导出器源码摘要及全部工件指纹，15项CPU套件零失败/零错误；Job峰值554733568字节、退出码0、终止后活动进程0，CUDA未初始化、真实Flow未加载。它是最终源码的微型验证，不改变001原始结果，也不证明真实模型已解决MemoryError。仅提交自有代码/测试/ADR/本记录，不merge main、不push、不修改公共文档清单。

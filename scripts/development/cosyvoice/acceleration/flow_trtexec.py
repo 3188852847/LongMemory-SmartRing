@@ -26,6 +26,7 @@ from . import window_admission as admission
 ROOT = Path(__file__).resolve().parents[4]
 NAMES = ("x", "mask", "mu", "t", "spks", "cond")
 LENGTHS = (16, 127, 128, 257, 512)
+EXPORT_RECIPES = ("legacy_embedded", "external_fp32_v1")
 PINNED = {
     "flow.pt": "a6fab32a7825e5b0bc855ddd948f8db9370b0a786fbc249caa4595e95b608e4b",
     "cosyvoice3.yaml": "f5a6b2c6f05139d0f18861a1fe506f751e787026b77c05f7e8fef9f8a4405965",
@@ -55,8 +56,14 @@ def case_id(length, padded):
     return f"n{length}-{'padded' if padded else 'full'}"
 
 
-def build_command(sdk: Path, output: Path):
-    return [str(sdk / "bin/trtexec.exe"), "--onnx=" + str(output / "flow.fp32.onnx"),
+def onnx_path(output: Path, export_recipe="legacy_embedded"):
+    if export_recipe not in EXPORT_RECIPES:
+        raise ValueError("unknown_export_recipe")
+    return output/"external-candidate/package/model.onnx" if export_recipe == "external_fp32_v1" else output/"flow.fp32.onnx"
+
+
+def build_command(sdk: Path, output: Path, export_recipe="legacy_embedded"):
+    return [str(sdk / "bin/trtexec.exe"), "--onnx=" + str(onnx_path(output, export_recipe)),
             "--saveEngine=" + str(output / "flow.fp32.plan"), "--minShapes=" + shape_arg(16),
             "--optShapes=" + shape_arg(128), "--maxShapes=" + shape_arg(512),
             "--noTF32", "--builderOptimizationLevel=0", "--maxTactics=8", "--memPoolSize=workspace:512M",
@@ -75,7 +82,8 @@ def run_command(sdk: Path, output: Path, length: int, padded: bool):
             "--exportOutput=" + str(case / "trt-output.json"), "--exportTimes=" + str(case / "trt-times.json")]
 
 
-def resource_plan(source: Path, model: Path, sdk: Path, toolkit: Path, output: Path):
+def resource_plan(source: Path, model: Path, sdk: Path, toolkit: Path, output: Path, export_recipe="legacy_embedded"):
+    onnx_path(output, export_recipe)
     files = {}
     for name, expected in PINNED.items():
         base = model if name in ("flow.pt", "cosyvoice3.yaml") else source if name.startswith("cosyvoice/") else sdk
@@ -96,20 +104,22 @@ def resource_plan(source: Path, model: Path, sdk: Path, toolkit: Path, output: P
     cli_flags = {flag: flag.encode("ascii") in executable_bytes for flag in (
         "--noTF32", "--maxTactics", "--memPoolSize", "--skipInference", "--exportOutput",
         "--noCudaGraph", "--includeDataTransfers", "--noSpinWait", "--noCompilationCache")}
-    return dict(status="needs_isolated_validation", resources_match=all(x["matches"] for x in files.values()) and all(cli_flags.values()) and verify_source(source)["verified"] and len(estimator_keys) == 323,
+    return dict(status="needs_isolated_validation", export_recipe=export_recipe, resources_match=all(x["matches"] for x in files.values()) and all(cli_flags.values()) and verify_source(source)["verified"] and len(estimator_keys) == 323,
                 files=files, source_verified=verify_source(source)["verified"], downloads_required=False,
                 gpu_window_scope="project_model_window_shared_windows_desktop", physical_gpu_exclusive=False,
                 harness_sha256=sha256(Path(__file__)), job_harness_sha256=sha256(Path(__file__).with_name("bge_benchmark.py")),
                 native_cli_flag_strings=cli_flags,
                 checkpoint_metadata=dict(bytes=len(metadata), estimator_keys=len(estimator_keys), unpickled=False, weights_loaded=False),
-                output=str(output), builder_argv=build_command(sdk, output), sample_runner_argv=run_command(sdk, output, 127, True),
+                output=str(output), builder_argv=build_command(sdk, output, export_recipe), sample_runner_argv=run_command(sdk, output, 127, True),
                 matrix=dict(lengths=LENGTHS, masks=["full", "last_quarter_zero"], streaming=False, batch=2, dtype="float32", cases=10),
                 bounds=dict(export_seconds=240, build_seconds=600, each_run_seconds=45, whole_seconds=1320,
                             host_job_memory_mib=6144, cpu_logical_count=2, workspace_mib=512,
                             disk_limit_gib=6, disk_free_required_gib=8, gpu_observed_used_limit_mib=12288,
                             torch_allocator_limit_mib=6144, gpu_free_required_mib=8192),
-                estimates=dict(export_seconds=[60, 240], build_seconds=[120, 600], total_minutes=[5, 22],
-                               host_peak_gib=[3, 6], gpu_peak_gib=[2, 6], artifacts_gib=[3, 6], measured=False),
+                estimates=(dict(export_seconds=[60, 240], build_seconds=[120, 600], total_minutes=[5, 22],
+                                host_peak_gib=[3, 6], gpu_peak_gib=[2, 6], artifacts_gib=[3, 6], measured=False)
+                           if export_recipe == "legacy_embedded" else dict(host_peak_gib=None, gpu_peak_gib=None, total_minutes=None, measured=False)),
+                external_recipe_measurements=dict(real_flow_verified=False, host_peak=None, seconds=None, trtexec_verified=False),
                 caveats=["workspace_is_not_total_vram_cap", "nvidia_smi_watchdog_is_sampling_not_hard_vram_limit",
                          "no_service_integration_or_audio_quality_claim", "abort_only_terminates_owned_offline_job"])
 
@@ -127,6 +137,8 @@ def export_worker(source: Path, model: Path, output: Path, gate: Path, window_id
     if gate.read_text(encoding="utf-8") != window_id:
         raise ValueError("resource_job_gate_mismatch")
     payload = json.loads(admission_payload.read_text(encoding="utf-8"))
+    export_recipe = payload["bindings"]["export_recipe"]
+    onnx_path(output, export_recipe)
     proof = admission.AdmissionGuard(payload)
     try:
         proof.check("export_worker_before_torch")
@@ -165,7 +177,9 @@ def export_worker(source: Path, model: Path, output: Path, gate: Path, window_id
         raise RuntimeError("estimator_checkpoint_prefix_missing")
     estimator.load_state_dict(state, strict=True, assign=True)
     del checkpoint, state
-    estimator = estimator.eval().float().to("cuda")
+    estimator = estimator.eval().float()
+    if export_recipe == "legacy_embedded":
+        estimator = estimator.to("cuda")
     class Buffered(torch.nn.Module):
         def __init__(self, inner):
             super().__init__()
@@ -183,16 +197,25 @@ def export_worker(source: Path, model: Path, output: Path, gate: Path, window_id
             values[name][1] = 0  # 与固定上游CFG（无条件分支）输入布局一致。
         return values
     example = inputs(128, False)
+    external_bundle = None
+    model_path = onnx_path(output, export_recipe)
     with torch.no_grad(), torch.backends.cuda.sdp_kernel(enable_flash=False, enable_math=True, enable_mem_efficient=False):
-        torch.onnx.export(module, tuple(torch.from_numpy(example[name]).cuda() for name in NAMES), str(output / "flow.fp32.onnx"),
-                          input_names=list(NAMES), output_names=["estimator_out"], export_params=True,
-                          opset_version=18, do_constant_folding=True,
-                          dynamic_axes={name: {2: "seq_len"} for name in ("x", "mask", "mu", "cond", "estimator_out")})
-        onnx.checker.check_model(str(output / "flow.fp32.onnx"))
+        axes = {name: {2: "seq_len"} for name in ("x", "mask", "mu", "cond", "estimator_out")}
+        if export_recipe == "external_fp32_v1":
+            from .external_weights import export_module
+            external_bundle = export_module(module, tuple(torch.from_numpy(example[name]) for name in NAMES),
+                                            output/"external-candidate", input_names=NAMES, output_names=("estimator_out",),
+                                            dynamic_axes=axes, opset=18)
+            module = module.to("cuda")  # 外置图完成后才转GPU作原10样本reference，不变FP32或profile。
+        else:
+            torch.onnx.export(module, tuple(torch.from_numpy(example[name]).cuda() for name in NAMES), str(model_path),
+                              input_names=list(NAMES), output_names=["estimator_out"], export_params=True,
+                              opset_version=18, do_constant_folding=True, dynamic_axes=axes)
+        onnx.checker.check_model(str(model_path))
         options = ort.SessionOptions()
         options.intra_op_num_threads = 2
         options.inter_op_num_threads = 1
-        session = ort.InferenceSession(str(output / "flow.fp32.onnx"), sess_options=options, providers=["CPUExecutionProvider"])
+        session = ort.InferenceSession(str(model_path), sess_options=options, providers=["CPUExecutionProvider"])
         io = session.get_inputs()
         if [item.name for item in io] != list(NAMES) or any(item.type != "tensor(float)" for item in io):
             raise RuntimeError("exported_input_names_or_dtypes_changed")
@@ -218,7 +241,7 @@ def export_worker(source: Path, model: Path, output: Path, gate: Path, window_id
                     values[name].tofile(case / (name + ".bin"))
                 expected.tofile(case / "expected.bin")
                 checks.append(dict(case=case.name, shape=list(expected.shape), ort_eager_allclose=True))
-    receipt = dict(onnx_sha256=sha256(output / "flow.fp32.onnx"), checks=checks, streaming=False,
+    receipt = dict(onnx_sha256=sha256(model_path), export_recipe=export_recipe, external_bundle=external_bundle, checks=checks, streaming=False,
                    numpy=np.__version__, onnx=onnx.__version__, ort=ort.__version__, torch=torch.__version__,
                    gpu=torch.cuda.get_device_name(0), torch_peak_allocated_mib=torch.cuda.max_memory_allocated()/2**20,
                    torch_peak_reserved_mib=torch.cuda.max_memory_reserved()/2**20, cpu_window_id=None, gpu_window_id=window_id)
@@ -316,15 +339,15 @@ def _git_state():
     return commit, clean
 
 
-def bindings_plan(source: Path, model: Path, sdk: Path, toolkit: Path, output: Path, python: Path):
-    plan = resource_plan(source, model, sdk, toolkit, output)
+def bindings_plan(source: Path, model: Path, sdk: Path, toolkit: Path, output: Path, python: Path, export_recipe="legacy_embedded"):
+    plan = resource_plan(source, model, sdk, toolkit, output, export_recipe)
     commit, clean = _git_state()
     envs = {"controller": admission.interpreter_metadata(Path(sys.executable)),
             "export": admission.interpreter_metadata(python, export=True)}
     installed = {name.lower().replace("_", "-"): row["version"] for name, row in envs["export"]["packages"].items()}
     expected = {"torch": "2.3.1+cu121", "numpy": "1.26.4", "onnx": "1.16.0", "onnxruntime": "1.18.0", "transformers": "4.51.3", "x-transformers": "2.11.24"}
     compatible = envs["export"]["version"] == "3.10.20" and all(installed.get(k) == v for k, v in expected.items())
-    bindings = dict(candidate_commit=commit, checkout=str(ROOT),
+    bindings = dict(candidate_commit=commit, checkout=str(ROOT), export_recipe=export_recipe,
                     paths={k: str(p.resolve()) for k, p in dict(source=source, model=model, sdk=sdk, toolkit=toolkit, output=output).items()},
                     own_sources={p.name: sha256(p) for p in sorted(Path(__file__).parent.glob("*.py"))},
                     resources={k: v["sha256"] for k, v in plan["files"].items()},
@@ -337,14 +360,15 @@ def bindings_plan(source: Path, model: Path, sdk: Path, toolkit: Path, output: P
 
 
 def _pipeline(source: Path, model: Path, sdk: Path, toolkit: Path, output: Path, python: Path, payload):
-    current = bindings_plan(source, model, sdk, toolkit, output, python)
+    export_recipe = payload["bindings"]["export_recipe"]
+    current = bindings_plan(source, model, sdk, toolkit, output, python, export_recipe)
     if not current["working_tree_clean"] or not current["export_environment_compatible"] or current["bindings_sha256"] != payload["bindings_sha256"]:
         raise ValueError("worker_source_interpreter_or_dependency_binding_changed")
     guard = admission.AdmissionGuard(payload)
     window_id = payload["window_id"]
     deadline = payload["deadline_perf_counter"]
     guard.check("controller_before_capacity", remaining=max(1, deadline-perf_counter()))
-    plan = resource_plan(source, model, sdk, toolkit, output)
+    plan = resource_plan(source, model, sdk, toolkit, output, export_recipe)
     if not plan["resources_match"] or shutil.disk_usage(ROOT).free < 8*2**30 or gpu_memory()[1] < 8192:
         guard.close()
         raise RuntimeError("resources_or_free_capacity_not_ready")
@@ -365,8 +389,12 @@ def _pipeline(source: Path, model: Path, sdk: Path, toolkit: Path, output: Path,
         code = "import sys; from pathlib import Path; sys.path.insert(0,sys.argv[1]); from acceleration.flow_trtexec import export_worker; export_worker(*(Path(x) for x in sys.argv[2:6]),sys.argv[6],Path(sys.argv[7]))"
         command = [str(python), "-I", "-B", "-c", code, str(Path(__file__).parent.parent), str(source), str(model), str(output), str(gate), window_id, str(output/"execution-admission.json")]
         stages.append(bounded(command, output, "export", env, 240, gate=gate, window_id=window_id, whole_deadline=deadline, guard=guard))
+        if export_recipe == "external_fp32_v1":
+            from .external_weights import verify_bundle_files
+            exported = json.loads((output/"export-receipt.json").read_text(encoding="utf-8"))
+            verify_bundle_files(output/"external-candidate/package", exported["external_bundle"]["manifest_sha256"])
         native_env = dict(env, PATH=os.pathsep.join(map(str, (sdk/"bin", toolkit/"bin/x64", toolkit/"bin", Path(os.environ["SystemRoot"])/"System32"))))
-        stages.append(bounded(build_command(sdk, output), output, "build", native_env, 600, window_id=window_id, whole_deadline=deadline, guard=guard))
+        stages.append(bounded(build_command(sdk, output, export_recipe), output, "build", native_env, 600, window_id=window_id, whole_deadline=deadline, guard=guard))
         checks = []
         for length in LENGTHS:
             for padded in (False, True):
@@ -374,7 +402,9 @@ def _pipeline(source: Path, model: Path, sdk: Path, toolkit: Path, output: Path,
                 checks.append(compare_output(output, length, padded))
         result = dict(status="offline_flow_numeric_candidate_only", stages=stages, checks=checks,
                       plan_sha256=sha256(output/"flow.fp32.plan"), production_ready=False, audio_quality_verified=False,
-                      interruption_verified=False, dynamic_profile_max=512, gpu_window_id=window_id)
+                      interruption_verified=False, dynamic_profile_max=512, gpu_window_id=window_id, export_recipe=export_recipe)
+        if export_recipe == "external_fp32_v1":
+            result["external_manifest_sha256"] = exported["external_bundle"]["manifest_sha256"]
     except Exception as error:
         result = dict(status="failed_stop_no_retry", error=type(error).__name__, reason=str(error), stages=stages, gpu_window_id=window_id)
         if isinstance(error, OwnedStageFailure):
@@ -398,7 +428,7 @@ def controller(payload):
     return _pipeline(**values, payload=payload)
 
 
-def execute(source: Path, model: Path, sdk: Path, toolkit: Path, output: Path, python: Path, window_id="", *, receipt_path=None, receipt_sha256="", production_root=None):
+def execute(source: Path, model: Path, sdk: Path, toolkit: Path, output: Path, python: Path, window_id="", *, receipt_path=None, receipt_sha256="", production_root=None, export_recipe="legacy_embedded"):
     began = perf_counter()
     if receipt_path is None or production_root is None or window_id or sys.platform != "win32":
         raise ValueError("matching_v2_project_model_receipt_required_no_legacy_window_id")
@@ -414,7 +444,7 @@ def execute(source: Path, model: Path, sdk: Path, toolkit: Path, output: Path, p
         raise ValueError("new_receipt_bound_output_required")
     if source.resolve() != (production_root/"local/runtime/CosyVoice").resolve() or python.resolve() != (source/".venv/Scripts/python.exe").resolve():
         raise ValueError("fixed_production_source_and_cosy_interpreter_required")
-    current = bindings_plan(source, model, sdk, toolkit, output, python)
+    current = bindings_plan(source, model, sdk, toolkit, output, python, export_recipe)
     if not current["resources_match"] or not current["export_environment_compatible"] or receipt["bindings_sha256"] != current["bindings_sha256"]:
         raise ValueError("source_interpreter_dependency_digest_mismatch")
     job_name = "ag-flow-"+uuid.uuid4().hex
@@ -489,6 +519,7 @@ def main():
     parser.add_argument("--receipt-sha256", default="")
     parser.add_argument("--production-root", type=Path)
     parser.add_argument("--admission-plan", action="store_true", help="CPU-only源码/解释器/安装元数据摘要，不采集GPU")
+    parser.add_argument("--export-recipe", choices=EXPORT_RECIPES, default="legacy_embedded")
     args = parser.parse_args()
     if args.execute and not all((args.python, args.receipt, args.receipt_sha256, args.production_root)):
         parser.error("--execute requires fixed --python and main-session --receipt/--receipt-sha256/--production-root")
@@ -496,11 +527,11 @@ def main():
         parser.error("--admission-plan requires fixed Cosy --python")
     values = {name: getattr(args, name).resolve() for name in ("source", "model", "sdk", "toolkit", "output")}
     if args.execute:
-        result = execute(**values, python=args.python, receipt_path=args.receipt, receipt_sha256=args.receipt_sha256, production_root=args.production_root)
+        result = execute(**values, python=args.python, receipt_path=args.receipt, receipt_sha256=args.receipt_sha256, production_root=args.production_root, export_recipe=args.export_recipe)
     elif args.admission_plan:
-        result = bindings_plan(**values, python=args.python)
+        result = bindings_plan(**values, python=args.python, export_recipe=args.export_recipe)
     else:
-        result = resource_plan(**values)
+        result = resource_plan(**values, export_recipe=args.export_recipe)
     print(json.dumps(result, indent=2))
 
 
