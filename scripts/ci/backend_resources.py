@@ -5,6 +5,10 @@ requests、numpy、PyYAML已经是dev依赖，不属于资源例外。
 """
 
 RESOURCE_GROUPS = (
+    ('tests.integration.test_hy_embedding_resource_warmup',
+     'explicit owner-installed SDK required',
+     ('test_fixed_sdk_resource_preparation_is_read_only_and_embed_behavior_is_preserved[baseline]',
+      'test_fixed_sdk_resource_preparation_is_read_only_and_embed_behavior_is_preserved[prepared]',)),
     ('tests.unit.development.test_ad_aec_reference_probe',
      'owner-installed CPU numpy/Opus runtime unavailable',
      ('test_missing_or_single_reference_bypasses_without_changing_pcm',

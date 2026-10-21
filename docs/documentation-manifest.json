@@ -13,6 +13,22 @@
   },
   "topics": [
     {
+      "id": "embedding-resource-startup-preparation",
+      "scope": "公开AsyncEmbeddings类在worker ready前导入的候选及离线收益；非旧4.6秒根因或日用提速",
+      "authority": "docs/development/parallel/AI-embedding-resource-review-20261021.md",
+      "sources": [
+        "src/longmemory/methods/hy_memory/sdk_observation.py",
+        "tests/fixtures/hy_embedding_resource_probe.py",
+        "tests/integration/test_hy_embedding_resource_warmup.py",
+        "tests/unit/methods/test_hy_sdk_observation.py"
+      ],
+      "related": [
+        "docs/development/parallel/AB-embedding-resource-warmup-20261021.md",
+        "docs/development/parallel/AI-first-recall-observation-review-20261021.md"
+      ],
+      "review": "verified 2026-10-21: 102项含显式3.10零跳过，独立单对首次583.168→134.505ms、准备成本前移；1003fe新原语身份，proof待必要219实跑，不部署"
+    },
+    {
       "id": "launcher-running-timeout-test-sync",
       "scope": "启动器running请求结果未知测试的同步与CI39611928357失败；不改变业务超时",
       "authority": "docs/development/parallel/AI-launcher-control-ci-20261021.md",
@@ -1759,6 +1775,50 @@
     }
   ],
   "documents": [
+    {
+      "path": "docs/development/parallel/AI-embedding-resource-review-20261021.md",
+      "title": "AI：embedding 公开资源启动预备候选审查",
+      "status": "draft",
+      "basis": "独立于98db日用发布的公开资源预备候选；新身份proof待生成，未部署",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-21",
+        "scope": "3行业务差异、公开资源代码与版本、ready前边界；七回执重算/独立双进程/102项零跳过及精确CI例外；无日用收益结论",
+        "evidence": [
+          "docs/development/parallel/AI-embedding-resource-review-20261021.md",
+          "src/longmemory/methods/hy_memory/sdk_observation.py",
+          "tests/integration/test_hy_embedding_resource_warmup.py"
+        ]
+      },
+      "tags": [
+        "启动预备",
+        "embedding",
+        "离线候选",
+        "管理证明"
+      ]
+    },
+    {
+      "path": "docs/development/parallel/AB-embedding-resource-warmup-20261021.md",
+      "title": "AB：首次embedding资源导入定位与启动预备候选",
+      "status": "reference",
+      "basis": "f04d24f0固定源码及合成剖析/六进程证据；AI独立回执与日用收益另记",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-21",
+        "scope": "3行业务差异、公开资源代码与版本、ready前边界；七回执重算/独立双进程/102项零跳过及精确CI例外；无日用收益结论",
+        "evidence": [
+          "docs/development/parallel/AI-embedding-resource-review-20261021.md",
+          "src/longmemory/methods/hy_memory/sdk_observation.py",
+          "tests/integration/test_hy_embedding_resource_warmup.py"
+        ]
+      },
+      "tags": [
+        "启动预备",
+        "embedding",
+        "离线候选",
+        "管理证明"
+      ]
+    },
     {
       "path": "docs/development/parallel/AI-launcher-control-ci-20261021.md",
       "title": "AI：启动器已运行请求超时测试的同步修正",
