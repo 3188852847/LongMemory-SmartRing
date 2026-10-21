@@ -114,6 +114,7 @@ def test_failure_before_handoff_can_use_existing_full_wav_fallback_once(cancella
     assert fallback == [True] and state.packets == [b"full-wav"]
     assert delivery_snapshot(state.connection)["outcomes"]["fallback"] == 1
     assert delivery_snapshot(state.connection)["effective_mode"] == "buffered"
+    assert delivery_snapshot(state.connection)["handoff_started"]
 
 
 def test_uncertain_reader_cleanup_blocks_future_requests_even_for_new_sentence(cancellable_stream, monkeypatch):
