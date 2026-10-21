@@ -632,3 +632,15 @@ AI逐项核对AH八组原始results.json/run.log与绑定摘要：原完整目�
 AI另以固定Node24.19.0、已装编译器和只读Playwright声明独立严格检查当前e2e文件，退出0；未安装/联接依赖。首次自建临时配置误请求未安装且该文件不需要的Node环境类型，纠正为该文件实际DOM/Playwright类型后通过，没有修改产品tsconfig或测试源码来掩盖错误。当前CI收集护栏对AH原件再次确认13份spec/143项、两个project均retry0；6项浏览器护栏、7项后端报告护栏（及7 subtests）通过，后端资源清单未变。AI未额外执行浏览器或350项组件，不冒称自身重跑AH场景。独立核查结果保存在本树 ignored `data/test-tmp/ai-63ef-console-review.json`、ai-63ef-collection-review.json和ai-63ef-resource-guard-01.xml。
 
 ROOT最新运行报告另单列：恢复额度时原9680进程已不存在，七个项目端口未监听，退出原因未知，ROOT没有先行停止它。全部服务退出状态取得新一致备份95文件/14,979,159字节，检查点 `local/archive/hy-advanced-release/20261021T082805Z-stable-restoration-ef3a9a/`，随后正式入口仅恢复原4c buffered，launcher56068，control_created UTC `2026-10-21T08:28:34.978068`；controller、TTS及selected_voice_warm ready，stream active0/generationfalse/restartfalse，62个配置和dist文件逐字保持，账本53complete/1unknown。证据为ROOT检查点restoration-health.json/stopped-backup.json。以上是ROOT报告，不是AI新测生产；未恢复旧数据库、未烧录、未操作Docker，360和191622均未部署。候选仍待ROOT精确远程Quality及后续授权/owner实机复验，不按体验通过收尾。
+
+## f159发布启动故障：固定旧提供器的受控升级
+
+上述候选交付之后，ROOT报告精确f159的Quality `39572671724` 全绿：后端3642通过/236资源skip、组件350通过、浏览器140通过/3既有skip。ROOT退出22个旧owned实例、取得93文件/14,978,741字节一致备份后，main已快进并普通推送f159。新launcher46268、control_created UTC `2026-10-21T09:08:50` 的voice启动exit3，启动器自动停止其余服务；**该故障报告时服务未恢复，设备仍旧0015且未烧录**。远程绿不等于本次实际启动成功，也不改写360失败或原实机FAILED。
+
+ROOT只读定位为 `launcher/voice.py → setup.install_memory_provider(...allow_known_update=True)` 拒绝旧提供器：目标SHA256 `260ebfe1024abdcaa330ebae685183a48f7bb106c805118e8403820bddbd2056` 与已发布4c Git原件一致，却未进入LEGACY清单。私有validate_config、memory_contract和tts_contract均已通过，目标未写；ROOT没有连续重启或覆盖未知文件。原证据在其检查点 `local/archive/hy-advanced-release/20261021T085246Z-f1595515-781148/startup-failure-readonly-diagnosis.json`。这些是ROOT报告，AI不访问私有目标/配置或执行恢复。
+
+AI独立从Git `4c64216e0acde18ff45448ac8fd0df3d7df54389:scripts/development/xiaozhi/longmemory_provider.py` 取得公开原件，blob为 `d434ce0fbf4e72342fe5fa50f6816a1fd549d54b`，28,124字节。LF SHA即260ebfe1；仅将该原件换行为CRLF的SHA为 `25c39c77bd99b61a20f0be694b996933baec405945296c3cee0f7033056eee5a`。当前源仍为 `7241a12e6fe9d8c250245cf781167555c7df53375ef643bc02ebcaf1a18240e9`。窄修复 **`7627c46fef45eb60ab268bb5c21f4bfd9469c960`** 只在生产setup清单增加这两个精确哈希，保留allow_known_update显式门；未知内容、用户修改及默认不升级仍拒绝，没有try/except绕过保护。
+
+回归使用公开旧原件 [固定fixture](../../../tests/fixtures/xiaozhi_provider_4c64216e.py.txt)，不是个人恢复包或运行目录副本；LF属性保证浅克隆/Windows CI也可复现。合成临时目标覆盖两种换行的默认拒绝、显式升级到当前完整字节、当前版mtime不变的幂等、旧原件追加用户修改后的拒绝，base文件不变。主3.12下完整test_xiaozhi_setup **43通过/0skip/0.28s**，报告 `data/test-tmp/ai-provider-upgrade-4c-02.xml`；首次单文件调用因既有测试加载路径缺config_paths而收集失败，保留01原件，随后仅对子进程显式指定本树src/xiaozhi路径，没有改全局环境。
+
+实际声音Python **3.10.20** 另在自身合成TemporaryDirectory执行相同真实旧LF/CRLF升级、当前版不重写、任意unknown和用户追加修改拒绝，并编译旧/当前提供器，全部通过，未导入torch；结果 `data/test-tmp/ai-provider-upgrade-python310-01.json`。没有新依赖、下载、skip或CI资源例外，没有改web/src、固件或私有消费目标；旧运行时提供器的实际升级及重启只能由ROOT受控接力。本地窄回归不冒称新提交远程Quality已通过，服务恢复和owner体验另记。

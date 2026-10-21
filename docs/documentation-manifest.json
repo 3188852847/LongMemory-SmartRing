@@ -1454,7 +1454,10 @@
         "scripts/development/otto_firmware/prepare_subtitle_layout.py",
         "tests/unit/firmware/prepare_*native.py",
         "tests/unit/firmware/tts_interrupt_native.cpp.in",
-        "tests/unit/development/test_launcher_latency.py"
+        "tests/unit/development/test_launcher_latency.py",
+        "scripts/development/xiaozhi/setup.py",
+        "tests/unit/development/test_xiaozhi_setup.py",
+        "tests/fixtures/xiaozhi_provider_4c64216e.py.txt"
       ],
       "related": [
         "docs/development/parallel/AI-hy-advanced-low-latency-20261021.md",
@@ -7246,7 +7249,7 @@
       "review": {
         "state": "verified",
         "date": "2026-10-21",
-        "scope": "隔离永久音频撤权、原子完成领取、双向wire修订4及0016联合源码/合成验证；原完整后端失败及发布/实机未验边界保留；保留360精确远程Quality失败，复现并补bootstrap测试契约，53项定向与精确CI资源护栏通过，不改生产或浏览器；接入并核对AH导航有界诊断、143收集及同字节运行时，保留未知原因和ROOT新稳定恢复报告",
+        "scope": "隔离永久音频撤权、原子完成领取、双向wire修订4及0016联合源码/合成验证；原完整后端失败及发布/实机未验边界保留；保留360精确远程Quality失败，复现并补bootstrap测试契约，53项定向与精确CI资源护栏通过，不改生产或浏览器；接入并核对AH导航有界诊断、143收集及同字节运行时，保留未知原因和ROOT新稳定恢复报告；保留f159远程通过后启动exit3的ROOT报告，核验4c原件并登记受控升级窄修及43项/真实3.10验证，未自行恢复服务",
         "evidence": [
           "docs/development/parallel/AI-hy-advanced-low-latency-20261021.md",
           "docs/development/parallel/AD-tts-interrupt-v1-20261021.md",
@@ -7254,7 +7257,8 @@
           "tests/unit/development/test_voice_output_protocol_ws.py",
           "tests/integration/memory_pipeline/test_voice_completion_revocation.py",
           "firmware/smartring_plus/experiments/0016-round-subtitle-interrupt.json",
-          "tests/unit/development/test_launcher_latency.py"
+          "tests/unit/development/test_launcher_latency.py",
+          "tests/unit/development/test_xiaozhi_setup.py"
         ]
       },
       "tags": [
