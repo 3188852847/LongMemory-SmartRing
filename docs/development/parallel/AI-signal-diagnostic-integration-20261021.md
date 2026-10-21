@@ -14,7 +14,7 @@ AC 用原次解码、AEC、VAD、推理结果做有限摘要，没有新增推�
 
 ## 独立端点与体积决定
 
-所有者明确选择独立只读诊断端点，ROOT 同时确认路径 **GET `/api/voice-input-signal`**。它复用 [原 control_http](../../../scripts/development/xiaozhi/control_http.py) 的 8766 回环服务、Bearer、Host/Origin/Sec-Fetch 检查、异常处理及 no-store 响应。没有新端口、UI 或 8767 投影字段；原 `/api/device` 和网页客户端 16384 字节上限不变。
+ROOT 协调决定采用独立只读诊断端点，并确认路径 **GET `/api/voice-input-signal`**。它复用 [原 control_http](../../../scripts/development/xiaozhi/control_http.py) 的 8766 回环服务、Bearer、Host/Origin/Sec-Fetch 检查、异常处理及 no-store 响应。没有新端口、UI 或 8767 投影字段；原 `/api/device` 和网页客户端 16384 字节上限不变。
 
 原因来自 [合法上界样本](../../../tests/fixtures/ai_signal_device_status_boundary.py)：原设备状态含 64 段 TTS 明细、输入/输出/协议饱和计数和其余合法诊断字段，默认 JSON 已 **15519 字节**，紧凑 JSON 也有 **14330 字节**。不能把新对象直接塞入状态响应，也不删除旧明细或增加旧客户端上限。
 
