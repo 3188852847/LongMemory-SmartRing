@@ -47,3 +47,20 @@ CPU回放没有声学模型、服务器真实请求或物理播放。handoff只�
 管理原语15文件摘要仍为 **`1003fe901fa49bd2750242637b18744694f5bebdabfc3d06e0cf7a5eb262fdac`**，已核对本树 `data/test-tmp/ai-embedding-resource-managed-proof-20261021-02/management-verification.json` 原字节SHA256 **`875d1eb5f7750ddc3ef4a23a812997433bdb8182e22db7c64b44b4c4a266dcdc`** 及其rpc_source_sha256仍匹配。不改旧219项实测HEAD或完整源码摘要，不因外围变化重跑不受影响管理大组，也不将旧证明冒充本次UI/音频验收。
 
 此后仅文档收尾，`src/scripts/tests/web` 与 f751d3dc 无差异。ROOT获得最终分支/HEAD后自行审查并推送候选、对该精确SHA运行既有workflow_dispatch；不要先快进主仓再拿b218已通过的Quality39625722258代替。新四项组件和一个合成主机浏览器模式保存用例、TypeScript构建与完整浏览器仍待该次CI。真实声音、连续性和插话仍由所有者另验，本轮未部署或动日用。
+
+
+## 2026-10-22：远程旧版本断言失败的窄修复
+
+ROOT转接候选a34的Quality **39629639667** / backend **119324076308**：3976 passed、270 skipped、2 failed；失败精确为 `test_launcher_latency.py::test_choice_roundtrip_and_legacy_default[realtime]` 与 `[original]`，保存后仍断言version=7。协议8的决定和实现正确，前置416项回归漏选了该跨响应策略文件，不能以它声称全后端通过。ROOT保存的公开合成日志为主项目 `local/archive/hy-advanced-release/cosy-candidate-deploy-20261021T155358Z-3fd06c/quality-backend-a34.log`，原字节SHA256 `03704b1da1f9918950990836756f812b4799451631c8384390388bbf0755b78d`；已只读核对两项与8==7，不覆盖原失败。
+
+本树修改前独立复现同样 **2 failed，0.16秒**，报告 `data/test-tmp/ai-cosy-v8-old-assumption-repro-01.xml`。检索tests/scripts/前端未见其他同类旧保存版本断言；偏好测试中v7坏字段和v7缺字段是有意兼容输入，保留。
+
+测试修复提交 **`69ea2cbd44f1bcc55b4ab0bf600ad80dbbbb1646`** 只改 [原两项测试](../../../tests/unit/development/test_launcher_latency.py)：每个响应策略分别验证v5/v7读取不改原字节、默认buffered、保存为显式版本8、语音开关保留、重新打开后策略保留、修改Cosy模式不丢响应策略及编辑响应策略不丢adaptive、非法保存拒绝且字节不变。未把运行实现回退到7，未改质量守卫或资源例外。两项预检2 passed（0.15秒）。
+
+清洁69ea HEAD将整个 `test_launcher_latency.py` 加入前轮十二文件回归，第二轮 **437 passed、1 skipped、7 subtests passed，19.40秒**；`audit_report=(437,1)`。报告 `data/test-tmp/ai-cosy-v8-migration-clean-head-02.xml` 的SHA256 **`e382e9087dae48b62d332a8336f19e1c9f0c826678947bfb646e5c95f5d24d47`**。唯一跳过仍是已有目录符号链接权限条目；原两项逐项确认已实际通过。
+
+首轮同范围报告 `ai-cosy-v8-migration-clean-head-01.xml` 为436 passed、1 skipped、1 failed（19.22秒），唯一失败是既有Tk窗口初始化提示icons.tcl不可读；随后只读核对文件实际存在、无TCL_LIBRARY/TK_LIBRARY覆盖，单项复核1 passed（0.20秒），再以相同源码/命令完成上述第二轮。没有改Tk测试、运行时或跳过条件；保留首轮及 `ai-cosy-v8-local-tk-runtime-recheck-01.xml`，不推断瞬时错误原因。
+
+清洁版本回执 **`data/test-tmp/ai-cosy-v8-migration-clean-receipt-01.json`**，SHA256 **`898eb7e659b42f08c4f4c90066c43de90d5ec0458a6dadceaa6c19218d4f888b`**，含69ea完整HEAD/tree、前后clean、测试字节摘要、两项实际结果、原CI/本地失败摘要和资源审计。`src/scripts/web` 与a34逐文件无差异，全Python业务源码摘要仍为 `4bd3aec25205c76c3cfd52610d9645d21056e8ab93a82c4229ffa5d462cf2f56`；原管理及固定WAV回执实测HEAD保留，不重写或无关重跑。
+
+此后仅本记录和其清单窄收尾；不推送、部署或动日用。原a34 CI仍为失败，后续精确候选完整CI由ROOT执行；前端进行中结果由ROOT转接，本轮未本机执行前端，也不扩大物理体验结论。

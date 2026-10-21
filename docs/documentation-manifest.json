@@ -8312,10 +8312,11 @@
       "basis": "ROOT授权隔离候选；不部署，日用buffered与物理验收边界保持",
       "review": {
         "state": "verified",
-        "date": "2026-10-21",
-        "scope": "精确AD链与发布b218、stash保全、版本化复现和有限契约；最终检查追加本记录",
+        "date": "2026-10-22",
+        "scope": "精确AD链/b218、stash和有限契约；2026-10-22仅旧v7保存断言修复，v5/v7迁移与跨模式保留、437/1回归，原CI及瞬时Tk失败均保留",
         "evidence": [
           "tests/unit/development/test_cosy_mode_handoff.py",
+          "tests/unit/development/test_launcher_latency.py",
           "scripts/ci/backend_resources.py",
           "web/react-chat/src/features/launcher/LauncherApp.test.tsx"
         ]
