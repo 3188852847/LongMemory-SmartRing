@@ -1587,6 +1587,42 @@
           "firmware/smartring_plus/patches/0016-tts-interrupt-v1.patch"
         ]
       }
+    },
+    {
+      "id": "occasional-waiting-and-send-receipts",
+      "scope": "44d7之后3s静默/90s连接冷却和逐包传输事实候选；保留既有声线及撤权合同",
+      "authority": "docs/development/parallel/AD-waiting-cue-20261021.md",
+      "sources": [
+        "scripts/development/xiaozhi/voice_waiting.py",
+        "scripts/development/xiaozhi/voice_interruption.py",
+        "scripts/development/xiaozhi/voice_output_protocol.py",
+        "tests/unit/development/test_voice_waiting_policy.py",
+        "tests/unit/development/test_voice_waiting_cache.py",
+        "tests/fixtures/voice_waiting_handoff.py",
+        "tests/unit/development/test_voice_output_protocol_ws.py",
+        "scripts/ci/backend_resources.py"
+      ],
+      "related": [
+        "docs/development/parallel/AI-hy-advanced-low-latency-20261021.md"
+      ],
+      "tags": [
+        "等待",
+        "低延迟",
+        "发送事实"
+      ],
+      "review": {
+        "state": "verified",
+        "date": "2026-10-21",
+        "scope": "AD三笔固定交付、AI真实环回复现与legacy门内最小修正、171项和精确资源审计；未部署/未新听验，不宣称提速",
+        "evidence": [
+          "docs/development/parallel/AD-waiting-cue-20261021.md",
+          "docs/development/parallel/AI-hy-advanced-low-latency-20261021.md",
+          "scripts/development/xiaozhi/voice_waiting.py",
+          "scripts/development/xiaozhi/voice_output_protocol.py",
+          "tests/unit/development/test_voice_waiting_policy.py",
+          "tests/unit/development/test_voice_output_protocol_ws.py"
+        ]
+      }
     }
   ],
   "old_path_rules": [
@@ -7315,7 +7351,7 @@
       "review": {
         "state": "verified",
         "date": "2026-10-21",
-        "scope": "隔离永久音频撤权、原子完成领取、双向wire修订4及0016联合源码/合成验证；原完整后端失败及发布/实机未验边界保留；保留360精确远程Quality失败，复现并补bootstrap测试契约，53项定向与精确CI资源护栏通过，不改生产或浏览器；接入并核对AH导航有界诊断、143收集及同字节运行时，保留未知原因和ROOT新稳定恢复报告；保留f159远程通过后启动exit3的ROOT报告，核验4c原件并登记受控升级窄修及43项/真实3.10验证，未自行恢复服务；据ROOT保留5c恢复ready与main两次失败，接入AD/AH测试窄修、核对350原件与新构建，产品和固件不变；仅接K本次0016两笔文档，保留ROOT保存字节/协议快照和所有者三项有限通过，物理ACK仍false；历史失败不改写",
+        "scope": "隔离永久音频撤权、原子完成领取、双向wire修订4及0016联合源码/合成验证；原完整后端失败及发布/实机未验边界保留；保留360精确远程Quality失败，复现并补bootstrap测试契约，53项定向与精确CI资源护栏通过，不改生产或浏览器；接入并核对AH导航有界诊断、143收集及同字节运行时，保留未知原因和ROOT新稳定恢复报告；保留f159远程通过后启动exit3的ROOT报告，核验4c原件并登记受控升级窄修及43项/真实3.10验证，未自行恢复服务；据ROOT保留5c恢复ready与main两次失败，接入AD/AH测试窄修、核对350原件与新构建，产品和固件不变；仅接K本次0016两笔文档，保留ROOT保存字节/协议快照和所有者三项有限通过，物理ACK仍false；历史失败不改写；偶发等待提示候选接力，legacy门内复核及171项/42+21资源审计，未扩展既有体验验收",
         "evidence": [
           "docs/development/parallel/AI-hy-advanced-low-latency-20261021.md",
           "docs/development/parallel/AD-tts-interrupt-v1-20261021.md",
@@ -7325,7 +7361,8 @@
           "firmware/smartring_plus/experiments/0016-round-subtitle-interrupt.json",
           "tests/unit/development/test_launcher_latency.py",
           "tests/unit/development/test_xiaozhi_setup.py",
-          "docs/development/parallel/K-otto0016-flash-20261021.md"
+          "docs/development/parallel/K-otto0016-flash-20261021.md",
+          "docs/development/parallel/AD-waiting-cue-20261021.md"
         ]
       },
       "tags": [
@@ -7702,6 +7739,32 @@
         "活动应用",
         "保护核验",
         "有限实机验收"
+      ]
+    },
+    {
+      "path": "docs/development/parallel/AD-waiting-cue-20261021.md",
+      "title": "AD：偶发等待提示与逐包答案发送观测",
+      "status": "draft",
+      "basis": "44d7之后的新体验候选；3s/90s及逐包观测、legacy接力已隔离验证，部署/体验另验",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-21",
+        "scope": "AD三笔固定交付、AI真实环回复现与legacy门内最小修正、171项和精确资源审计；未部署/未新听验，不宣称提速",
+        "evidence": [
+          "docs/development/parallel/AD-waiting-cue-20261021.md",
+          "docs/development/parallel/AI-hy-advanced-low-latency-20261021.md",
+          "scripts/development/xiaozhi/voice_waiting.py",
+          "scripts/development/xiaozhi/voice_output_protocol.py",
+          "tests/unit/development/test_voice_waiting_policy.py",
+          "tests/unit/development/test_voice_output_protocol_ws.py"
+        ]
+      },
+      "tags": [
+        "等待提示",
+        "3秒",
+        "90秒",
+        "逐包观测",
+        "legacy"
       ]
     }
   ],
