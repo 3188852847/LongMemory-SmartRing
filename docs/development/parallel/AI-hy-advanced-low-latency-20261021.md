@@ -523,13 +523,13 @@ AI重算三份原收集JSON及哈希并逐项比较[143原用例映射](AH-ci-br
 
 ## ROOT发布报告与实机失败（2026-10-21，未完成收尾）
 
-以下是ROOT主会话在发布后发来的执行报告；AI仅据报告维护公开记录，未亲自停止/启动服务、读取私有备份/配置/个人库或实测设备。此前“未推送/未部署”对应AI交付阶段，现由本段补充后续事实，不改写当时证据。**最新状态：所有者实机验收FAILED，字幕遮挡且无法打断；ROOT正在owned重启恢复buffered，修复与复验未完成，不能按验收通过收尾或归档。**
+以下是ROOT主会话在发布后发来的执行报告；AI仅据报告维护公开记录，未亲自停止/启动服务、读取私有备份/配置/个人库或实测设备。此前“未推送/未部署”对应AI交付阶段，现由本段补充后续事实，不改写当时证据。**最新状态：所有者实机验收FAILED，字幕遮挡且无法打断；ROOT已报告buffered恢复并ready，但字幕/打断修复与复验未完成，不能按验收通过收尾或归档。**
 
-ROOT报告候选分支的Quality `39518824436` 对冻结业务提交 `944b83bac013aa008f3b05db8b12d6042e686eae` 全部success，随后main已快进至该提交并普通推送。该候选远端实际后端3577 passed/216精确资源skip/264.43s，组件63文件350通过，浏览器143 scheduled/140 pass/3 skip/0 unexpected/0 flaky/247651ms，完整原始日志由ROOT保存在检查点quality-full.log；这些数字不同于AI本机3593/200和AH本地237973ms，不混写。main自动Quality `39520018676` 同属944；ROOT已将frontend failure定位到两项组件用例：MemoryApp日常纠正、RoundDisplay皮肤等待回读，均5s超时；根因待AH定位，不通过rerun充绿或放宽原5s界限。失败原始日志为ROOT检查点内main-39520018676-frontend.log。后端在此前报告时仍运行，尚无更新结论；不写成main全绿。候选远端通过、main合入、部署就绪与实机体验分别记录。
+ROOT报告候选分支的Quality `39518824436` 对冻结业务提交 `944b83bac013aa008f3b05db8b12d6042e686eae` 全部success，随后main已快进至该提交并普通推送。该候选远端实际后端3577 passed/216精确资源skip/264.43s，组件63文件350通过，浏览器143 scheduled/140 pass/3 skip/0 unexpected/0 flaky/247651ms，完整原始日志由ROOT保存在检查点quality-full.log；这些数字不同于AI本机3593/200和AH本地237973ms，不混写。main自动Quality `39520018676` 同属944；ROOT已将frontend failure定位到两项组件用例：MemoryApp日常纠正、RoundDisplay皮肤等待回读，均5s超时；根因待AH定位，不通过rerun充绿或放宽原5s界限。失败原始日志为ROOT检查点内main-39520018676-frontend.log。ROOT最新确认该次main运行已completed failure：frontend两项超时、backend success；不写成main全绿。候选远端通过、main合入、部署就绪与实机体验分别记录。
 
 ROOT核对owned旧launcher33512及其16个祖先链实例全部退出，7个端口释放后，取得完整停机备份：93文件/14,715,389字节，manifest SHA-256=`8a9b23ee558012196ec80921fb1c9d5fb7f4e0479b96f002170aae9932a7499a`，检查点为主项目 `local/archive/hy-advanced-release/20261021T000628Z-944b83ba-d3b53e/`。该路径和摘要来自ROOT报告，AI未访问或解析其中内容。新45文件dist逐项复核为1,839,032字节、规范摘要 `bcde5ee77a08fa513942c7f13ffe60885e7a3c4acfe237f5dac4975886679af1`；ROOT保留旧dist，17份私有配置原字节保持，未以旧c5产物替代本次会话修复。
 
-ROOT通过正式入口创建新launcher14536，创建时间UTC `2026-10-21T00:13:37.515519+00:00`（北京时间08:13:37.515519）。本次启动请求中host/voice候选均为0、话轮结束识别off、CosyVoice声音交付模式为adaptive；adaptive只经本次子进程环境请求，没有回写持久设置。当前接口未暴露实际声音模式，因此这份证据只证明请求参数及下述服务状态，不能写成已证明真实adaptive播放或已定为持久默认。此前buffered默认与回退边界保留。以上是失败反馈前的启动状态；所有者随后明确拒绝本次adaptive实机体验，ROOT正在恢复buffered，恢复完成尚待ROOT报告，adaptive未被接受为持久默认。
+ROOT通过正式入口创建新launcher14536，创建时间UTC `2026-10-21T00:13:37.515519+00:00`（北京时间08:13:37.515519）。本次启动请求中host/voice候选均为0、话轮结束识别off、CosyVoice声音交付模式为adaptive；adaptive只经本次子进程环境请求，没有回写持久设置。当前接口未暴露实际声音模式，因此这份证据只证明请求参数及下述服务状态，不能写成已证明真实adaptive播放或已定为持久默认。此前buffered默认与回退边界保留。以上是失败反馈前的启动状态；所有者随后明确拒绝本次adaptive实机体验，ROOT随后报告已恢复buffered并ready，adaptive未被接受为持久默认；恢复就绪不代表字幕或打断缺陷已修复。
 
 ROOT报告control/runtime ready，TTS warm ready、active=0、generation=false、restart=false，八层只读入口可读；语义派生仍初始epoch0/ready_epoch-1、isolated、无任务，没有为了健康状态生成个人任务或假对话。调用账本仍38 complete＋1 historical unknown、0 reserve，未清除旧unknown。OTA地址保持原值，Docker和设备均未操作。这些是ROOT发布时报告的状态，不是AI复读个人库或新发起真实模型/声音会话的测量。
 
@@ -539,10 +539,13 @@ ROOT报告control/runtime ready，TTS warm ready、active=0、generation=false�
 |---|---|---|---|---|
 | AI整合AE/AG及后端精确资源登记 | d871437b、2bb0da48、a512a4f6 | 固定SDK组合13项、合成464项；首轮SDK失败原因仍未定位 | 944b83bac013aa008f3b05db8b12d6042e686eae | AI：01a15ab0-25a3-7380-b682-681441e8b403 |
 | AI审查AH完整浏览器交付并补端口保护 | 7f6cb6b6、c52825e9、b7083ce0、5b116366、944b83ba | AH本地350组件/140浏览器通过＋3既有素材skip，AI完整后端3593/200及产物独立核对；ROOT报告候选Quality39518824436全绿 | 944b83bac013aa008f3b05db8b12d6042e686eae | AI：01a15ab0-25a3-7380-b682-681441e8b403 |
-| ROOT受控发布与所有者实机验收安排 | 944b83ba＋新bcde产物 | ROOT报告owned备份/停机、普通推送、新服务ready；所有者实机FAILED，ROOT正在恢复buffered | 944b83bac013aa008f3b05db8b12d6042e686eae | ROOT：01a1534f-3c56-78c1-9e13-4777422a67bb |
+| ROOT受控发布与所有者实机验收安排 | 944b83ba＋新bcde产物 | ROOT报告owned备份/停机、普通推送、新服务ready；所有者实机FAILED，ROOT报告已恢复buffered/ready，缺陷待修 | 944b83bac013aa008f3b05db8b12d6042e686eae | ROOT：01a1534f-3c56-78c1-9e13-4777422a67bb |
 
-所有者实机反馈经ROOT转达：“字幕很多都被遮挡了，与圆屏不适配。无法打断”。本次adaptive验收明确为 **FAILED／待修**，不能用服务ready、候选CI全绿或本地合成通过抵消。ROOT已保存检查点内adaptive-failure-timing-metadata.json及adaptive-owner-rejected.json；AI没有访问该私有元数据或代填实机结果。ROOT正在owned重启恢复buffered，尚未收到恢复完成报告；因试用期间已有真实会话，ROOT明确不还原个人库，最新报告调用账本为48 completed＋1 historical unknown、0 reserve，原发布时38条是先前时点而非当前状态。
+所有者实机反馈经ROOT转达：“字幕很多都被遮挡了，与圆屏不适配。无法打断”。本次adaptive验收明确为 **FAILED／待修**，不能用服务ready、候选CI全绿或本地合成通过抵消。ROOT已保存检查点内adaptive-failure-timing-metadata.json及adaptive-owner-rejected.json；AI没有访问该私有元数据或代填实机结果。ROOT已完成owned重启并报告恢复buffered：launcher9680，创建时间UTC `2026-10-21T00:21:22.992765+00:00`（北京时间08:21:22.992765），control ready、TTS warm ready、active=0/generation=false/restart=false；恢复状态存于ROOT检查点health-buffered-restoration.json。17份私有配置字节保持，没有回滚个人对话或944代码；ROOT最新health-buffered-restoration.json读取快照为53 completed＋1 historical unknown、0 reserved；48条是停机前快照，38条是原发布时点，均不能当作恢复后的当前计数。ROOT未进一步归因恢复后新增5次的来源，未读个人正文，也未手动enqueue、生成合成对话或重置额度。新停机保全为93文件/14,978,741字节、manifest SHA-256=`8a896a4301d102b16a68bf9a22ee8f7aa8faaa7ae69a0f62b1925e4a2b2de7e9`。这些均为ROOT报告，AI未访问保全内容或操作恢复，buffered ready不抵消本次实机FAILED。
 
-ROOT已将音频与自然打断定位修复交AD、字幕适配交AH，AI保留整合审查角色，不给AD/AH直接发消息。本轮暂停新增特性及AG试验，保留944业务字节；字幕/打断修复、buffered恢复与所有者重新实机验收完成前，不按已验收归档相关会话。main两项组件超时另由AH取证定位，不推定与这次设备反馈具有同一根因，不rerun充绿、不放宽5s。
+ROOT已将音频与自然打断定位修复交AD、字幕适配交AH，AI保留整合审查角色，不给AD/AH直接发消息。本轮暂停新增特性及AG试验，保留944业务字节；buffered已报告恢复；字幕/打断修复与所有者重新实机验收完成前，不按已验收归档相关会话。main两项组件超时另由AH取证定位，不推定与这次设备反馈具有同一根因，不rerun充绿、不放宽5s。
+
+ROOT转述所有者进一步明确：字幕被圆边裁掉，stop已识别但旧声继续。AH报告板级字幕上移38px后，基类SetChatMessage又将其bottom复位为252×48，正在准备隔离审计补丁、安全区预览和离线编译计划；尚无固件写入许可。AD报告已在固定上游复现client_abort可复位、旧轮缺永久撤权的代码缺口，正在修候选关闭时的音频撤权与诊断；这项代码发现不等于已证明所有者故障原因。AI尚未取得并独立审查这些后续补丁，不将方向或复现写成修复完成。AH不改AD公共音频/launch文件，若需helper装配，待交付后由AI整合审查；本阶段不交叉改生产或944冻结业务。
+
 
 保留未定位的首轮SDK失败、跨标签同时冷启动不覆盖、host/voice候选关闭、SmartTurn off、TRT无真实engine等限制；字幕、自然打断及真实声音/延迟/设备体验当前待修或复验。原219项及其管理proof仍仅属于 `f5906827d98ce4d2665d5e6b83b04ee1ebda58fa` 的固定边界，没有重签或改称944的新全量证明。ROOT未授权AI操作生产、个人数据或固件；本次记录更正不扩大执行范围。

@@ -41,9 +41,12 @@ AE四个精确提交已接入AI分支，公开启动器新增 `--enable-voice-pr
 
 ## 2026-10-21：ROOT发布报告与实机失败边界
 
-ROOT主会话报告：候选Quality39518824436在冻结944b83ba全success后，main已快进/普通推送并完成owned检查点与新bcde前端部署，control/runtime及TTS warm ready；执行路径、摘要与会话追溯见[AI任务书发布收尾](../development/parallel/AI-hy-advanced-low-latency-20261021.md)。AI仅维护该报告，没有操作生产或独立测量发布状态。ROOT补充main自动Quality39520018676的frontend failure为MemoryApp日常纠正、RoundDisplay皮肤等待回读两项组件用例5s超时，根因仍待AH查明；后端无更新结论，同提交候选已绿不能改写为main也绿，不rerun充绿或放宽5s。
+ROOT主会话报告：候选Quality39518824436在冻结944b83ba全success后，main已快进/普通推送并完成owned检查点与新bcde前端部署，control/runtime及TTS warm ready；执行路径、摘要与会话追溯见[AI任务书发布收尾](../development/parallel/AI-hy-advanced-low-latency-20261021.md)。AI仅维护该报告，没有操作生产或独立测量发布状态。ROOT补充main自动Quality39520018676的frontend failure为MemoryApp日常纠正、RoundDisplay皮肤等待回读两项组件用例5s超时，根因仍待AH查明；该次main已completed failure、backend success，同提交候选已绿不能改写为main也绿，不rerun充绿或放宽5s。
 
-本次启动请求保持host/voice候选均关闭、话轮结束识别off，仅通过子进程环境请求CosyVoice adaptive，持久配置字节不变。接口未暴露实际声音模式，故不能据启动参数/ready声称已证明真实adaptive播放；此后所有者反馈字幕大量遮挡、无法打断，本次adaptive实机验收FAILED，不能按通过收尾。ROOT正在owned重启恢复buffered，完成状态待报告，不回滚已有真实会话的个人库；adaptive未被接受为持久默认。首次SDK失败原因未定位、跨标签同时冷启动不覆盖、SmartTurn off与TRT无真实engine等边界保持；原219项proof仍属f590固定实现，不重签为944证明，不将发布ready当全部技术启用或设备验收。
+本次启动请求保持host/voice候选均关闭、话轮结束识别off，仅通过子进程环境请求CosyVoice adaptive，持久配置字节不变。接口未暴露实际声音模式，故不能据启动参数/ready声称已证明真实adaptive播放；此后所有者反馈字幕大量遮挡、无法打断，本次adaptive实机验收FAILED，不能按通过收尾。ROOT随后报告buffered已通过owned重启恢复并ready，launcher9680；私有配置字节保持，不回滚已有真实会话的个人库或944代码，恢复ready不等于修复字幕/打断；adaptive未被接受为持久默认。首次SDK失败原因未定位、跨标签同时冷启动不覆盖、SmartTurn off与TRT无真实engine等边界保持；原219项proof仍属f590固定实现，不重签为944证明，不将发布ready当全部技术启用或设备验收。
 
 
-ROOT已保存失败时序元数据和所有者拒绝记录，将音频/自然打断修复交AD、字幕适配交AH；AI仅维护记录并保留后续整合审查角色，不直接消息AD/AH，不操作服务、个人数据或固件。暂停新增特性/AG试验，保留944业务与候选CI真实通过历史；恢复、修复和重新实机验收完成前不按已验收归档。详细证据文件名及任务追溯见AI任务书。
+ROOT已保存失败时序元数据和所有者拒绝记录，将音频/自然打断修复交AD、字幕适配交AH；AI仅维护记录并保留后续整合审查角色，不直接消息AD/AH，不操作服务、个人数据或固件。暂停新增特性/AG试验，保留944业务与候选CI真实通过历史；buffered已报告恢复，缺陷修复和重新实机验收完成前不按已验收归档。详细证据文件名及任务追溯见AI任务书。
+
+
+ROOT另报告AH正在准备字幕bottom复位/圆形安全区的隔离审计补丁与离线计划，尚无固件写入许可；AD复现client_abort可复位而旧轮缺永久撤权的上游代码缺口，尚不能据此认定实机根因。AI等待补丁交付后审查，需要helper装配时再独立整合，当前不改944冻结业务；所有者“圆边裁字幕、stop识别后旧声继续”的FAILED结论保持。
