@@ -7247,13 +7247,14 @@
       "path": "docs/development/parallel/AF-prefix-cache-20261021.md",
       "title": "AF：学校前缀缓存取证",
       "status": "reference",
-      "basis": "本轮独立方向交付与AI隔离审查登记；不表示正式部署或真机验收",
+      "basis": "AF六项软件交付已等价合入c74，08bdc53e仅文档收尾；学校缓存仍unknown，六次额度已结束",
       "review": {
         "state": "verified",
         "date": "2026-10-21",
-        "scope": "仅本轮文档链接、接口边界与已交付源码；真实模型/设备与全部方向完成状态见AI任务书",
+        "scope": "AF六组稳定patch-id与c74宿主摘要独立核对、收尾记录接入；无新学校请求或软件缺口，体验不随AF归档扩写",
         "evidence": [
-          "docs/development/parallel/AI-hy-advanced-low-latency-20261021.md"
+          "docs/development/parallel/AI-hy-advanced-low-latency-20261021.md",
+          "docs/development/parallel/AI-current-voice-window-20261021.md"
         ]
       },
       "tags": [
@@ -7849,11 +7850,11 @@
       "path": "docs/development/parallel/AI-current-voice-window-20261021.md",
       "title": "AI：当前声线三模式窗口审查与启动交接",
       "status": "draft",
-      "basis": "AD精确提交审查、RMS能量代理修正及独立单实例窗口管理；真实GPU/发布另验",
+      "basis": "AD精确提交审查、RMS修正及窗口01真实当前声线验证；技术放行受控adaptive，物理体验/正式恢复另验",
       "review": {
         "state": "verified",
         "date": "2026-10-21",
-        "scope": "75项CPU/真实自有Job与Opus验证，显式声线根/300秒整窗/15秒暖机/16次上限；未执行模型或停日用",
+        "scope": "75项CPU与资源护栏；独立核对116047eb真实窗口两份摘要，83.078秒/16调用、取消及复用/整树退出；ROOT负责日用，AF仅文档收尾",
         "evidence": [
           "scripts/development/cosyvoice/run_ad_three_mode_window.py",
           "tests/unit/development/test_ad_three_mode_window.py",
@@ -7862,6 +7863,23 @@
         ]
       },
       "tags": ["AI", "窗口管理", "显式声线", "CPU验证"]
+    },
+    {
+      "path": "docs/development/parallel/AD-three-mode-results-20261021.md",
+      "title": "AD：当前声线三模式窗口解释与模式建议",
+      "status": "reference",
+      "basis": "窗口01两份指定真实摘要的独立解释；技术放行受控adaptive，未扩为永久默认或设备体验通过",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-21",
+        "scope": "0de318ea单笔文档与AI两摘要逐项核对：16调用/13完整+1取消、身份/预算/尾帧/清理；保留未控种子及物理指标限制",
+        "evidence": [
+          "docs/development/parallel/AD-three-mode-results-20261021.md",
+          "docs/development/parallel/AI-current-voice-window-20261021.md",
+          "scripts/development/cosyvoice/benchmark_ad_three_modes.py"
+        ]
+      },
+      "tags": ["AD", "真实窗口", "受控adaptive", "物理体验待验"]
     }
   ],
   "integration_sources": {
