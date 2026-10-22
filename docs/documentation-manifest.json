@@ -8429,6 +8429,40 @@
         ]
       },
       "tags": ["AEC", "整合候选", "证据复核", "无录音"]
+    },
+    {
+      "path": "docs/development/parallel/AC-aec-window-ablation-20261022.md",
+      "title": "AC：AEC 输出窗的有界消融",
+      "status": "reference",
+      "basis": "五种固定公开输入四臂离线证据；候选因仅回声退化否决，不作为现场打断修复",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-22",
+        "scope": "源码与执行脚本摘要、500行及2000分臂输出只读复核、原流程复现与四臂AST变换；AI本树14项回归，不重跑模型或实机",
+        "evidence": [
+          "scripts/development/xiaozhi/aec_window_ablation.py",
+          "tests/unit/development/test_aec_window_ablation.py",
+          "docs/development/parallel/AI-aec-ablation-integration-20261022.md"
+        ]
+      },
+      "tags": ["AEC", "Hann消融", "候选否决", "离线证据"]
+    },
+    {
+      "path": "docs/development/parallel/AI-aec-ablation-integration-20261022.md",
+      "title": "AI：AEC 窗消融工具整合与候选否决证据",
+      "status": "draft",
+      "basis": "ROOT授权的离线研究工具整合候选；生产未改，待主分支整合与新CI",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-22",
+        "scope": "来源和接入提交、冻结摘要与独立审查边界；14项本地回归、旧470c提交远程CI整体成功与新候选待验区分",
+        "evidence": [
+          "scripts/development/xiaozhi/aec_window_ablation.py",
+          "tests/unit/development/test_aec_window_ablation.py",
+          "docs/development/parallel/AC-aec-window-ablation-20261022.md"
+        ]
+      },
+      "tags": ["AEC", "整合候选", "候选否决", "生产未改"]
     }
   ],
   "integration_sources": {
