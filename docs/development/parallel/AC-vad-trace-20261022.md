@@ -23,7 +23,7 @@ ROOT 转述所有者在 adaptive 本轮报告“停一下未显示、旧声音�
 来源为 ROOT 明确提供的 `ad-adaptive-observe-20261022-01` 中 `samples.jsonl/summary.json/analysis.json/event-timeline.json`，未复制原始数值文件入 Git。原 samples SHA256 `776f7b4137e3dc624249b980e0a1af8853ce37b508306bdb9006ed4fd0398f46`，summary SHA256 `d935271b9f682290f95a879bb07feba912e8f4f974f4acb986f0f2dcf9f0b93e`。
 
 - 北京时间10:40:22.694–10:42:45.698，共144组，两个请求均返回200，无请求失败。在线64组，最后在线10:41:25.697；10:41:26.684起断线。断线后的无连接值不是零输入的在线观测。
-- 同一在线连接首末差分：queue_put、queue_get、vad_check 各 +732，vad_speech +48。每个采样点 queue_depth=0，各阶段 inflight=0；支持没有采样到持续积压/等待，不能排除采样间短暂等待。
+- 连续在线采样首末可见计数差：queue_put、queue_get、vad_check 各 +732，vad_speech +48。它们是device端点背景，不构成跨端点同连接或原子证明。每个采样点 queue_depth=0，各阶段 inflight=0；支持没有采样到持续积压/等待，不能排除采样间短暂等待。
 - 播放分组 vad_input/vad_false 各 +653，无新 vad_true；原次 inference_return/probability_le_low 各 +1224。加载合同固定 high=0.5、low=0.3、silence=600ms、window=3；这1224次全部低于/等于0.3，不支持“已越过高阈值，只被三格窗口挡住”的解释。播放累计概率最大0.1326246，已存在于首样本，不能称为本段新增最大值。
 - 非播放分组新增79包，vad_true +48、vad_false +31，原次推理 +148、probability_ge_high +86。模型并非全时段不工作；也不能将这些非播放阳性归给所有者那句“停一下”。该分组 AEC 计数由 null 变为2，属于首次可见计数，不能直接按通常整数差分漏掉或把 null 任意算成确定零。
 - 播放分组 AEC input/output 各 +615，对应非零时间戳/参考存在均 +615；最新最近参考时差为0。支持实际服务器处理与参考存在，不只能力声明；不能据“最近”推断算法最终选中的参考，也不支持将“缺参考/旧参考”直接当作本次根因。
@@ -45,7 +45,7 @@ ROOT 转述所有者在 adaptive 本轮报告“停一下未显示、旧声音�
 
 ## 交付边界
 
-本分支只新增此记录，未写业务代码，因此不新增镜像实现的测试，不重复模型回放。已完成源指纹、白名单逐项差分、采样点队列/处理中状态及事件时间线的只读核对。共享清单归 AI，登记后由整合会话执行严格文档检查；AC 不编辑其清单或主文档。本次不 merge、不 push、不向其他会话发消息。
+定位记录提交26547006时只新增此记录，未写业务代码，因此该阶段不新增镜像实现的测试、不重复模型回放。已完成源指纹、白名单逐项差分、采样点队列/处理中状态及事件时间线的只读核对；后续新增授权与候选见下。共享清单归 AI，登记后由整合会话执行严格文档检查；AC 不编辑其清单或主文档。本次不 merge、不 push、不向其他会话发消息。
 
 ## 后续已授权候选：同次 AEC 成对统计
 
@@ -76,7 +76,7 @@ invalid为正常返回但输入/输出不成合法对；original_error为原调�
 1. ROOT按AI接线结果启动短时数值采样，包住整组device、v1、v2查询记录`monotonic_before_ms/monotonic_after_ms`；保存原始计数与公开v2对象。采样行约定为`device.ready`、`device.voice_input_observation.counts`、`signal_v2`（公开六字段）及这两个单调锚点；读取signal.clock_ms必须落在整组请求括号内，否则拒绝对齐。可在只采v2的行名signal下放同一公开对象，但不接受缺kind的内部完整v2或默认v1冒充。
 2. 以主项目现有Python运行`voice_signal_markers.py record --output <私有证据目录的新markers.jsonl>`。看到起提示后按回车再说一次，讲完立即按结束回车；q或Ctrl-C取消。语句不经本工具ASR，不写个人库；ROOT统一安排实际对话，不因本脚本改日用。
 3. 数值采样至少覆盖结束标记后的完整一组请求，再正常停止。以同一Python运行`voice_signal_markers.py align --markers <markers.jsonl> --samples <数值samples.jsonl> --output <新的alignment.json>`。
-4. 工具从起标记之前已经完成的最后一组请求，到止标记之后才开始的第一组请求取外括号，输出两侧不确定毫秒数及queue_put/vad_check/vad_speech/formal_begin/speech_begin/abort_begin/abort_return累计差分，成对统计也只做累计差分，不相减重叠recent。中间任何代次变化、缺锚点、相关计数饱和或下降均不输出有效差分。首次没有成对基线则pair_delta为null，不能造零。按键只圈定所有者计划发声的外侧时段，数值本身不验证人声或AEC误伤。
+4. 工具从起标记之前已经完成的最后一组请求，到止标记之后才开始的第一组请求取外括号。严格差分仅用于同代次v2 paired累计计数，不相减重叠recent；不输出input_delta，device的queue_put/vad_check/vad_speech/formal_begin/speech_begin/abort_begin/abort_return只保留前后两份时间邻近背景。整组HTTP时间括号不证明device与v2是同连接或跨端点原子。按键只圈定所有者计划发声的外侧时段，数值本身不验证人声或AEC误伤。
 
 供AD采样接力的最小单行JSONL示例（纯合成；其他既有采样字段可保留，工具只提取白名单）：
 
@@ -88,8 +88,21 @@ invalid为正常返回但输入/输出不成合法对；original_error为原调�
 
 相邻请求之间也可能有未采样的断开/重连；随机观察代次检测重连、计数和时钟检查防止明显错误，但不声称按键或低频API是无误差的设备级时间追踪。本轮原144行没有新增v2/单调括号，不能事后伪造这些字段使其成为带标记证据。align输出仅固定白名单数值，不复制样本中的任意其他键/正文。
 
-[标记工具测试](../../../tests/unit/development/test_voice_signal_markers.py) 13项通过：单轮标记、不保存输入文字、取消/中断、拒绝覆盖、时间外括号、累计对齐、代次/未知/饱和/下降拒绝、默认v1不能冒充v2，以及纯合成CLI往返。未接服务或实际邀请所有者讲话。
+[标记工具测试](../../../tests/unit/development/test_voice_signal_markers.py) 在f30b7e21交付时13项通过：单轮标记、不保存输入文字、取消/中断、拒绝覆盖、时间外括号、累计对齐、代次/未知/饱和/下降拒绝、默认v1不能冒充v2，以及纯合成CLI往返。后续合同小修见下；未接服务或实际邀请所有者讲话。
 
 纯CPU有界微基准：主Python3.12，基线86179117原数值包装对照成对候选；960样本（16kHz下60ms）纯合成PCM16、假AEC原样返回，双方预热40次，各测2000次，10批每批200次并交替AB/BA次序。批次每调用中位数旧262.807µs、新267.394µs，差4.587µs；旧批次范围255.806–288.979µs、新261.673–280.944µs。两侧返回对象身份均保留；新逻辑复用原两处能量测量，不重复解码/RMS遍历，仅保留局部标量。未导入Torch，不加载模型/GPU、无服务调用或大型基准；没有设置墙钟CI断言。该单机微小差值受调度噪声影响，不等于端到端或实机延迟改善。
 
-收尾定向回归85项通过（另补输出0/比值大于1/等于边界的三例），CLI help可独立以`-I`运行；10个本地文档链接目标存在。严格文档检查因本新增记录未登记共享manifest而退出，错误为unlisted-document/unknown-selection，留AI登记与整合验证；未据此修改其共享文件。未merge、push或部署。
+f30b7e21收尾定向回归85项通过（另补输出0/比值大于1/等于边界的三例），CLI help可独立以`-I`运行；10个本地文档链接目标存在。严格文档检查因本新增记录未登记共享manifest而退出，错误为unlisted-document/unknown-selection，留AI登记与整合验证；未据此修改其共享文件。未merge、push或部署。
+
+## ROOT复核后的对齐合同小修
+
+ROOT指出f30b7e21未严格验证marker合同、缺少内部采样空洞描述、以及中间pair未知仍可能恢复首末差分。先加入合成反例，旧实现18失败/14通过，确认并非仅文档表述问题；修正不触碰record提示流程、生产观察器或任何语音行为。
+
+- 完成标记只接受恰三行ready→speech_start→speech_end，每行固定五字段、整数version=1、固定timing_kind、非负整数Unix/单调毫秒且单调有序；取消、未知/缺失/额外字段、乱序或错误类型均拒绝。结构校验不证明真实发声或文件不可伪造。
+- signal_v2严格六字段与固定version/kind；aec_pairs若存在须严格门值500、五个边界、total固定七字段、六格及未饱和有效对守恒。只有显式aec_pairs=null表示该次配对未知，缺字段/total=null/错门值/错边界不当作合法未知跳过。
+- pair_state=observed时才有pair_delta。首基线未知给baseline_unknown和null；首基线已知而窗口中任何配对未知给unknown_within_window和null，不借首末已知掩盖中间未知。代次变化、相关计数饱和/下降等仍拒绝；device只是邻近背景，其下降保守拒绝，不推导其与v2同连接。
+- 在挑选首末之前校验整份JSONL的单调请求括号全序，拒绝重叠、重复、逆序及每组开始晚于结束，防止乱序行被挑选过程排除。每个可用v2 clock仍须落在自己的整组请求括号内。
+- 输出sampling固定标注kind=between_request_groups_not_audio_loss，含sample_count/gap_count/max_gap_ms/total_gap_ms及至多三项largest_gaps（after_ms/before_ms/gap_ms）。按实际相邻请求组的间隔计算，不假定1Hz、不设任意固定阈值，也不把观测间隙说成音频丢失。首末不确定时间另保留。
+- 移除input_delta；device_background含before/after各自整组括号及固定INPUT_KEYS原值，kind明确为time_nearby_snapshots_not_atomic_or_same_connection_proof。此处两份背景不能与同代次AEC分箱逐帧交叉归因。
+
+上述改动仅用于本地离线对齐；不增加采样请求，不扩大API或引入新标记控制面。最新单模块33项通过，整组定向回归结果以本笔交付为准。

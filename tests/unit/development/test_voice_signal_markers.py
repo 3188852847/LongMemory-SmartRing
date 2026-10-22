@@ -66,7 +66,9 @@ def samples(marker):
 
 
 def marks():
-    return [{"event": "speech_start", "monotonic_ms": 18}, {"event": "speech_end", "monotonic_ms": 37}]
+    return [{"version": 1, "event": event, "monotonic_ms": clock, "unix_ms": 1000 + clock,
+             "timing_kind": "manual_outer_bracket_not_exact_voice_boundary"}
+            for event, clock in (("ready", 10), ("speech_start", 18), ("speech_end", 37))]
 
 
 def test_align_outer_request_brackets_and_cumulative_counts(marker):
@@ -74,7 +76,10 @@ def test_align_outer_request_brackets_and_cumulative_counts(marker):
     assert value["state"] == "bounded_cumulative_difference_not_voice_verification"
     assert value["sample_before_ms"] == 10 and value["sample_after_ms"] == 45
     assert value["start_uncertainty_ms"] == value["end_uncertainty_ms"] == 8
-    assert value["input_delta"] == {key: 30 for key in marker.INPUT_KEYS}
+    assert "input_delta" not in value
+    assert value["device_background"]["before"]["counts"] == {key: 10 for key in marker.INPUT_KEYS}
+    assert value["device_background"]["after"]["counts"] == {key: 40 for key in marker.INPUT_KEYS}
+    assert value["device_background"]["kind"] == "time_nearby_snapshots_not_atomic_or_same_connection_proof"
     assert value["pair_delta"]["valid"] == 30
     assert value["pair_delta"]["ratio_bins"] == [0, 0, 0, 0, 30, 0]
     assert "recent" not in json.dumps(value)
@@ -116,3 +121,91 @@ def test_cli_offline_alignment_exports_only_whitelisted_values(marker, tmp_path)
     assert "never-save" not in out.read_text(encoding="utf-8")
     with pytest.raises(FileExistsError):
         marker.main(["align", "--markers", str(a), "--samples", str(b), "--output", str(out)])
+
+
+@pytest.mark.parametrize("mode", ["version", "kind", "extra", "missing", "event", "order", "bool_clock", "missing_ready"])
+def test_forged_marker_contract_is_rejected(marker, mode):
+    data = marks()
+    if mode == "version":
+        data[1]["version"] = 2
+    elif mode == "kind":
+        data[1]["timing_kind"] = "exact_audio_boundary"
+    elif mode == "extra":
+        data[1]["text"] = "do-not-export"
+    elif mode == "missing":
+        data[1].pop("unix_ms")
+    elif mode == "event":
+        data.insert(1, dict(data[0], event="unknown"))
+    elif mode == "order":
+        data = [data[1], data[0], data[2]]
+    elif mode == "bool_clock":
+        data[1]["monotonic_ms"] = True
+    else:
+        data.pop(0)
+    value = marker.align(data, samples(marker))
+    assert value["state"] == "invalid_or_cancelled_marker"
+    assert "input_delta" not in value
+
+
+@pytest.mark.parametrize("mode", ["missing_pairs", "total_none", "floor", "edges", "extra_signal", "extra_total", "sum"])
+def test_public_pair_contract_is_not_silently_accepted(marker, mode):
+    data = samples(marker)
+    signal = data[1]["signal_v2"]
+    if mode == "missing_pairs":
+        signal.pop("aec_pairs")
+    elif mode == "total_none":
+        signal["aec_pairs"]["total"] = None
+    elif mode == "floor":
+        signal["aec_pairs"]["rms_floor_pcm16"] = 0
+    elif mode == "edges":
+        signal["aec_pairs"]["ratio_edges"] = [0, .25, .5, .9, 1.1]
+    elif mode == "extra_signal":
+        signal["extra"] = "do-not-export"
+    elif mode == "extra_total":
+        signal["aec_pairs"]["total"]["extra"] = 0
+    else:
+        signal["aec_pairs"]["total"]["valid"] += 1
+    result = marker.align(marks(), data)
+    assert "pair_delta" not in result or result["pair_delta"] is None
+    assert "do-not-export" not in json.dumps(result)
+
+
+def test_unknown_pair_inside_window_does_not_restore_endpoint_difference(marker):
+    data = samples(marker)
+    data[1]["signal_v2"]["aec_pairs"] = None
+    value = marker.align(marks(), data)
+    assert "input_delta" not in value
+    assert value["device_background"]["after"]["counts"]["vad_check"] == 40
+    assert value["pair_delta"] is None
+    assert value["pair_state"] == "unknown_within_window"
+    data[0]["signal_v2"]["aec_pairs"] = None
+    assert marker.align(marks(), data)["pair_state"] == "baseline_unknown"
+
+
+@pytest.mark.parametrize("mode", ["overlap", "duplicate", "file_order"])
+def test_nonordered_request_brackets_are_rejected(marker, mode):
+    data = samples(marker)
+    if mode == "overlap":
+        data[1]["monotonic_before_ms"] = 12
+    elif mode == "duplicate":
+        data[1] = copy.deepcopy(data[0])
+    else:
+        data = [data[0], data[3], data[1], data[2]]
+    value = marker.align(marks(), data)
+    assert value["state"] == "request_brackets_not_monotonic"
+    assert "input_delta" not in value
+
+
+def test_internal_sampling_gaps_report_actual_intervals_not_fixed_rate(marker):
+    data = samples(marker)
+    for row, before in zip(data, (10, 20, 200, 400)):
+        row["monotonic_before_ms"], row["monotonic_after_ms"] = before, before + 5
+        row["signal_v2"]["clock_ms"] = before + 2
+    marked = marks()
+    marked[-1]["monotonic_ms"] = 397
+    value = marker.align(marked, data)
+    assert value["sampling"]["sample_count"] == 4
+    assert value["sampling"]["max_gap_ms"] == 195
+    assert value["sampling"]["total_gap_ms"] == 375
+    assert value["sampling"]["kind"] == "between_request_groups_not_audio_loss"
+    assert [item["gap_ms"] for item in value["sampling"]["largest_gaps"]] == [195, 175, 5]
