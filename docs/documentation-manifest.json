@@ -8335,7 +8335,7 @@
       "review": {
         "state": "verified",
         "date": "2026-10-22",
-        "scope": "AC固定四笔来源、RMS局部配对/时钟/预算失败保留；a1强化helper，AI306项组合通过，未部署",
+        "scope": "AC成对观测与a1记录保留；e8/4df为本机门禁候选，AI授权修复重复键0ca并338/0组合、AD精确重绑；无新的实机结论",
         "evidence": [
           "scripts/development/xiaozhi/voice_vad_signal_observation.py",
           "scripts/development/xiaozhi/voice_signal_markers.py",
@@ -8371,6 +8371,29 @@
         "独立v2",
         "同次配对",
         "实机待诊断"
+      ]
+    },
+    {
+      "path": "docs/development/parallel/AI-marker-gate-integration-20261022.md",
+      "title": "AI：本机标记门禁整合与新按键修复",
+      "status": "draft",
+      "basis": "ROOT授权仅本地门禁与控制台事件；保留旧无效窗口，不动日用或语音算法",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-22",
+        "scope": "清洁0ca键盘释放边沿、338/0组合、3.10/3.12合成ABI与CLI拒绝；AD16场景精确摘要重绑核对，真实控制台/实机待所有者",
+        "evidence": [
+          "scripts/development/xiaozhi/voice_signal_markers.py",
+          "tests/unit/development/test_voice_signal_console_keys.py",
+          "tests/unit/development/test_voice_signal_markers.py",
+          "docs/development/parallel/AC-vad-trace-20261022.md"
+        ]
+      },
+      "tags": [
+        "本地门禁",
+        "新按键",
+        "无录音",
+        "实机待验"
       ]
     }
   ],
