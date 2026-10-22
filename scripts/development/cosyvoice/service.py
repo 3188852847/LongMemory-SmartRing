@@ -22,7 +22,7 @@ import sys
 from time import perf_counter
 import threading
 import select
-from typing import Callable, Protocol
+from typing import Protocol
 from voice_profiles import VoiceProfileStore
 
 _STREAM_SPEC = importlib.util.spec_from_file_location(
@@ -131,8 +131,15 @@ class CosyVoiceSynthesizer:
         profile_root: Path | None = None,
         force_buffered_audio: bool = False,
         warm_selected_voice: bool = True,
-        flow_estimator_loader: Callable | None = None,
+        flow_trt_engine: Path | None = None,
+        flow_trt_worker: Path | None = None,
+        flow_trt_sdk_root: Path | None = None,
+        flow_trt_toolkit_root: Path | None = None,
     ):
+        if flow_trt_engine is not None and any(value is None for value in (
+            flow_trt_worker, flow_trt_sdk_root, flow_trt_toolkit_root,
+        )):
+            raise ValueError("Flow TensorRT engine requires worker, SDK and toolkit paths")
         paths = validate_local_files(source_root, model_dir)
         configure_runtime_cache()
         sys.path.insert(0, str(source_root))
@@ -161,16 +168,6 @@ class CosyVoiceSynthesizer:
         self.force_buffered_audio = force_buffered_audio
         load_started = perf_counter()
         self._model = CosyVoice3(str(model_dir), fp16=True)
-        if flow_estimator_loader is not None:
-            # AG 的加载函数接收原 PyTorch estimator，返回同签名的引擎包装模块。
-            # 只在新实例预热前替换；未提供真实引擎加载函数时完整保留原路径。
-            runtime = self._model.model
-            estimator = flow_estimator_loader(
-                runtime.flow.decoder.estimator, device=runtime.device, fp16=runtime.fp16,
-            )
-            if not isinstance(estimator, torch.nn.Module):
-                raise TypeError("flow estimator loader must return torch.nn.Module")
-            runtime.flow.decoder.estimator = estimator.eval()
         self.load_seconds = perf_counter() - load_started
         self._sample_rate = int(self._model.sample_rate)
         self.stream_runtime = _stream_runtime.install_stream_runtime(self._model.model)
@@ -224,14 +221,33 @@ class CosyVoiceSynthesizer:
         # 不擅自使用低于训练 static_chunk_size 的分块长度。
         self.stream_token_hop_len = stream_token_hop_len
         self.reference_cached = True
-        # 服务只有在懒初始化路径也跑过之后才宣告 ready，避免首位用户承担额外冷启动。
-        warmup_started = perf_counter()
-        self._generate(WARMUP_TEXT)
-        self.warmup_seconds = perf_counter() - warmup_started
-        self.selected_warmup_seconds = None
-        self.selected_warmup_identity = None
-        if warm_selected_voice and self._profiles.profile_path.is_file():
-            self.prepare_selected_voice()
+        self._flow_trt_adapter = None
+        try:
+            if flow_trt_engine is not None:
+                # 显式 engine 才启动 AG worker；现有 FP16/增量输入转换由其负责。
+                from acceleration.native_flow import install_flow_trt11_worker
+                self._flow_trt_adapter = install_flow_trt11_worker(
+                    runtime_model, engine_path=flow_trt_engine, worker_path=flow_trt_worker,
+                    sdk_root=flow_trt_sdk_root, toolkit_root=flow_trt_toolkit_root,
+                    graph_streaming=True,
+                )
+            # 服务只有在懒初始化路径也跑过之后才宣告 ready，避免首位用户承担额外冷启动。
+            warmup_started = perf_counter()
+            self._generate(WARMUP_TEXT)
+            self.warmup_seconds = perf_counter() - warmup_started
+            self.selected_warmup_seconds = None
+            self.selected_warmup_identity = None
+            if warm_selected_voice and self._profiles.profile_path.is_file():
+                self.prepare_selected_voice()
+        except BaseException:
+            self.close()
+            raise
+
+    def close(self):
+        with self._lock:
+            adapter, self._flow_trt_adapter = getattr(self, "_flow_trt_adapter", None), None
+            if adapter is not None:
+                adapter.restore()
 
     def prepare_selected_voice(self):
         """明确准备当前选中声线和实际音频流，不把默认参考暖机冒充选中声线。
@@ -759,10 +775,15 @@ def main() -> None:
     parser.add_argument("--port", type=int, default=DEFAULT_PORT)
     parser.add_argument("--source-root", type=Path, default=DEFAULT_SOURCE)
     parser.add_argument("--model-dir", type=Path, default=DEFAULT_MODEL)
+    parser.add_argument('--profile-root', type=Path, help='日用声线所属项目根目录；隔离启动时显式指向主项目')
     parser.add_argument("--no-hidden-only", action="store_true", help="恢复上游 Qwen 完整文本输出路径")
     parser.add_argument("--model-streaming", action="store_true", help="恢复模型内部流式分块生成")
     parser.add_argument('--force-buffered-audio', action='store_true', help='回退为完整片段生成；不改声线或音频精度')
     parser.add_argument('--skip-selected-warmup', action='store_true', help='隔离对照：只预热默认参考，不预热选中声线')
+    parser.add_argument('--flow-trt-engine', type=Path, help='AG 已构建的增量 Flow TensorRT 11 engine；缺省使用 PyTorch')
+    parser.add_argument('--flow-trt-worker', type=Path, help='AG flow_trt11_worker 可执行文件')
+    parser.add_argument('--flow-trt-sdk-root', type=Path, help='TensorRT 11 SDK 根目录')
+    parser.add_argument('--flow-trt-toolkit-root', type=Path, help='CUDA toolkit 根目录，须含 bin/x64')
     parser.add_argument("--system-qos", action="store_true", help="恢复 Windows 默认进程调度，不显式申请 HighQoS")
     args = parser.parse_args()
     if not 1024 <= args.port <= 65535:
@@ -777,24 +798,33 @@ def main() -> None:
     )
     synthesizer = CosyVoiceSynthesizer(
         args.source_root, args.model_dir,
+        profile_root=args.profile_root,
         hidden_only=not args.no_hidden_only, model_streaming=args.model_streaming,
         force_buffered_audio=args.force_buffered_audio,
         warm_selected_voice=not args.skip_selected_warmup,
+        flow_trt_engine=args.flow_trt_engine, flow_trt_worker=args.flow_trt_worker,
+        flow_trt_sdk_root=args.flow_trt_sdk_root, flow_trt_toolkit_root=args.flow_trt_toolkit_root,
     )
-    synthesizer.runtime_info["windows_qos"] = windows_qos
-    server = CosyVoiceHTTPServer((args.host, args.port), synthesizer)
-    print(
-        "CosyVoice 3 已就绪："
-        f"http://{args.host}:{args.port}/health "
-        f"load={synthesizer.load_seconds:.2f}s warmup={synthesizer.warmup_seconds:.2f}s",
-        flush=True,
-    )
+    server = None
     try:
-        server.serve_forever(poll_interval=0.25)
-    except KeyboardInterrupt:
-        pass
+        synthesizer.runtime_info["windows_qos"] = windows_qos
+        server = CosyVoiceHTTPServer((args.host, args.port), synthesizer)
+        print(
+            "CosyVoice 3 已就绪："
+            f"http://{args.host}:{args.port}/health "
+            f"load={synthesizer.load_seconds:.2f}s warmup={synthesizer.warmup_seconds:.2f}s",
+            flush=True,
+        )
+        try:
+            server.serve_forever(poll_interval=0.25)
+        except KeyboardInterrupt:
+            pass
     finally:
-        server.server_close()
+        try:
+            if server is not None:
+                server.server_close()
+        finally:
+            synthesizer.close()
 
 
 if __name__ == "__main__":
