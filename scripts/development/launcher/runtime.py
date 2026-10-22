@@ -298,12 +298,19 @@ def build_commands(options, uv=None):
             required = [cosyvoice_python, service, DEFAULT_COSYVOICE_MODEL / "cosyvoice3.yaml"]
             if not all(path.is_file() for path in required):
                 raise ValueError("CosyVoice 独立环境、适配服务或模型快照不完整。")
-            commands.append(("cosyvoice3", [str(cosyvoice_python), str(service),
-                                              "--host", "127.0.0.1",
-                                              "--port", str(COSYVOICE_PORT),
-                                              "--source-root", str(DEFAULT_COSYVOICE_SOURCE),
-                                              "--model-dir", str(DEFAULT_COSYVOICE_MODEL)],
-                             service.parent))
+            cosy_command = [str(cosyvoice_python), str(service),
+                            "--host", "127.0.0.1", "--port", str(COSYVOICE_PORT),
+                            "--source-root", str(DEFAULT_COSYVOICE_SOURCE),
+                            "--model-dir", str(DEFAULT_COSYVOICE_MODEL),
+                            "--profile-root", str(root)]
+            # 仅本次启动进程显式选择引擎；缺省仍走 PyTorch，不改日用偏好或声线。
+            if os.environ.get("LONGMEMORY_FLOW_TRT_ENGINE"):
+                for name in ("engine", "worker", "sdk_root", "toolkit_root"):
+                    value = os.environ.get("LONGMEMORY_FLOW_TRT_" + name.upper())
+                    if not value:
+                        raise ValueError("Flow TensorRT 启动需要 engine、worker、SDK 和 toolkit 路径。")
+                    cosy_command.extend(["--flow-trt-" + name.replace("_", "-"), str(Path(value).resolve())])
+            commands.append(("cosyvoice3", cosy_command, service.parent))
         voice_command = [str(python), str(Path(__file__).with_name("voice.py")),
                                   str(root), str(options.voice_root.resolve()), str(options.database.resolve()),
                                   str(ip), options.tts_backend, options.memory_backend]
