@@ -120,7 +120,14 @@ def create_app(control, token, port=PORT):
         return web.json_response(await control.read_volume())
 
     async def voice_input_signal(request):
-        return web.json_response(control.voice_input_signal())
+        versions = request.query.getall("version", [])
+        if set(request.query) - {"version"} or len(versions) > 1:
+            raise ControlError("invalid_signal_query", status=400)
+        if versions and versions[0] not in ("1", "2"):
+            raise ControlError("unsupported_signal_version", status=400)
+        value = (control.voice_input_signal(version=int(versions[0])) if versions
+                 else control.voice_input_signal())
+        return web.json_response(value)
 
     async def read_status(request):
         return web.json_response(await control.read_status())

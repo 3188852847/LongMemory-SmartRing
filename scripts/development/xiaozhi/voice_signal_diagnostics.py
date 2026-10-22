@@ -2,6 +2,7 @@
 
 import json
 import math
+import re
 
 LIMIT = 2**31 - 1
 MAX_BYTES = 6000
@@ -17,9 +18,16 @@ EDGES = (.01, .1, .2, .5, .8, .95)
 VALUE_KIND = "bounded_numeric_signal_summary_not_speech_or_waveform"
 FIELDS = {"version", "state", "groups", "recent_groups", "contract", "aec_reference",
           "window_positive_count", "count_keys", "probability_bin_edges", "value_kind"}
+PAIR_KIND = "aec_pairs_supplement"
+PAIR_RATIO_EDGES = (.1, .25, .5, .9, 1.1)
+PAIR_COUNT_FIELDS = {"valid", "invalid", "zero_input", "below_floor", "original_error", "observer_error", "ratio_bins"}
+CLOCK_MAX = 2**63 - 1
 
 
-def missing(state):
+def missing(state, *, version=1):
+    if version == 2:
+        return dict(version=2, kind=PAIR_KIND, state=state, clock_ms=None,
+                    observation_generation=None, aec_pairs=None)
     return dict(version=1, state=state, groups=None, recent_groups=None, contract=None,
                 aec_reference=None, window_positive_count=None, count_keys=list(COUNT_KEYS),
                 probability_bin_edges=list(EDGES), value_kind=VALUE_KIND)
@@ -63,8 +71,58 @@ def _group(value, recent=False):
     return True
 
 
-def project(value):
+def _pair_total(value):
+    if type(value) is not dict or set(value) != PAIR_COUNT_FIELDS:
+        return False
+    if any(not _count(value[key]) for key in PAIR_COUNT_FIELDS - {"ratio_bins"}):
+        return False
+    bins = value["ratio_bins"]
+    if type(bins) is not list or len(bins) != 6 or not all(_count(n) for n in bins):
+        return False
+    # 子类计数独立饱和；饱和总量不能再用于窗口差分，但仍可按原样读取。
+    return value["valid"] == min(LIMIT, value["zero_input"] + value["below_floor"] + sum(bins))
+
+
+def _project_pairs(value):
+    unavailable = missing("unavailable", version=2)
+    try:
+        if (type(value) is not dict or set(value) != FIELDS | {"aec_pairs", "clock_ms", "observation_id"}
+                or type(value["version"]) is not int or value["version"] != 2):
+            return unavailable
+        state = value["state"]
+        if state in ("no_connection", "not_observed", "unavailable"):
+            if value["aec_pairs"] is not None or value["observation_id"] is not None:
+                return unavailable
+            return missing(state, version=2)
+        if state != "observed":
+            return unavailable
+        clock = value["clock_ms"]
+        generation = value["observation_id"]
+        if (clock is not None and (type(clock) is not int or not 0 <= clock <= CLOCK_MAX)
+                or type(generation) is not str or re.fullmatch(r"[0-9a-f]{16}", generation) is None):
+            return unavailable
+        pairs = value["aec_pairs"]
+        if pairs is not None:
+            if (type(pairs) is not dict or set(pairs) != {"rms_floor_pcm16", "ratio_edges", "total", "recent"}
+                    or type(pairs["rms_floor_pcm16"]) is not int or pairs["rms_floor_pcm16"] != 500
+                    or type(pairs["ratio_edges"]) not in (list, tuple)
+                    or tuple(pairs["ratio_edges"]) != PAIR_RATIO_EDGES
+                    or not _pair_total(pairs["total"])):
+                return unavailable
+            # raw-v2可超过6000B；只复制独立补充字段，不输出旧groups或新增recent。
+            pairs = {key: pairs[key] for key in ("rms_floor_pcm16", "ratio_edges", "total")}
+        result = dict(version=2, kind=PAIR_KIND, state="observed", clock_ms=clock,
+                      observation_generation=generation, aec_pairs=pairs)
+        encoded = json.dumps(result, allow_nan=False).encode("utf-8")
+        return json.loads(encoded) if len(encoded) <= MAX_BYTES else unavailable
+    except Exception:
+        return unavailable
+
+
+def project(value, *, version=1):
     """坏旁路只返回unavailable；不透传未知键或任意异常字符串。"""
+    if version == 2:
+        return _project_pairs(value)
     unavailable = missing("unavailable")
     try:
         if (type(value) is not dict or set(value) != FIELDS
@@ -117,15 +175,17 @@ def project(value):
         return unavailable
 
 
-def snapshot(connection=None):
-    fallback = missing("no_connection" if connection is None else "not_observed")
+def snapshot(connection=None, *, version=1):
+    fallback = missing("no_connection" if connection is None else "not_observed", version=version)
     try:
         from voice_vad_signal_observation import voice_vad_signal_snapshot
-        result = project(voice_vad_signal_snapshot(connection))
+        raw = (voice_vad_signal_snapshot(connection, include_aec_pairs=True) if version == 2
+               else voice_vad_signal_snapshot(connection))
+        result = project(raw, version=version)
         if connection is None and result["state"] != "no_connection":
             return fallback
         return result
     except ImportError:
         return fallback
     except Exception:
-        return missing("unavailable") if connection is not None else fallback
+        return missing("unavailable", version=version) if connection is not None else fallback

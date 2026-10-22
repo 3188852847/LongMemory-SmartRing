@@ -8326,6 +8326,52 @@
         "候选",
         "只读状态"
       ]
+    },
+    {
+      "path": "docs/development/parallel/AC-vad-trace-20261022.md",
+      "title": "AC：播放期VAD定位与成对数值候选",
+      "status": "draft",
+      "basis": "ROOT授权仅诊断、显式v2小响应；不改日用或原v1合同，所有者实测待后续",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-22",
+        "scope": "AC固定三笔来源、RMS局部配对/时钟/预算失败保留；helper边界待后笔，未部署",
+        "evidence": [
+          "scripts/development/xiaozhi/voice_vad_signal_observation.py",
+          "scripts/development/xiaozhi/voice_signal_markers.py",
+          "tests/unit/development/test_voice_vad_signal_observation.py"
+        ]
+      },
+      "tags": [
+        "AEC",
+        "独立v2",
+        "同次配对",
+        "实机待诊断"
+      ]
+    },
+    {
+      "path": "docs/development/parallel/AI-aec-pairs-integration-20261022.md",
+      "title": "AI：AEC成对补充端点与按键标记整合候选",
+      "status": "draft",
+      "basis": "ROOT授权仅诊断、显式v2小响应；不改日用或原v1合同，所有者实测待后续",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-22",
+        "scope": "v1严格兼容与独立v2白名单/6000B构造、鉴权、完整客户端及3.10时钟检查；helper修正和最终冻结待接力",
+        "evidence": [
+          "scripts/development/xiaozhi/voice_signal_diagnostics.py",
+          "scripts/development/xiaozhi/control_http.py",
+          "scripts/development/xiaozhi/device_control.py",
+          "tests/unit/development/test_voice_signal_v2.py",
+          "tests/fixtures/ai_aec_signal_probe.py"
+        ]
+      },
+      "tags": [
+        "AEC",
+        "独立v2",
+        "同次配对",
+        "实机待诊断"
+      ]
     }
   ],
   "integration_sources": {

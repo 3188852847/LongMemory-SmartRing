@@ -447,16 +447,16 @@ class DeviceControl:
             result['cosy_delivery'] = delivery
         return result
 
-    def voice_input_signal(self):
+    def voice_input_signal(self, *, version=1):
         """只读当前连接的声学摘要，不依赖MCP工具完成，不沿用已断开的连接。"""
         from voice_signal_diagnostics import missing, snapshot
         if len(self.connections) > 1:
-            return missing("unavailable")
+            return missing("unavailable", version=version)
         conn = next(iter(self.connections.values()), None)
         if (conn is not None
                 and getattr(getattr(getattr(conn, "websocket", None), "state", None), "name", None) != "OPEN"):
             conn = None
-        return snapshot(conn)
+        return snapshot(conn, version=version)
 
     async def _call(self, conn, name, arguments, *, timeout=None):
         """复用小智 MCP 的回执路由，直接发送以避免上游辅助函数吞掉发送异常。
