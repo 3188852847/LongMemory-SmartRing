@@ -22,7 +22,7 @@ import sys
 from time import perf_counter
 import threading
 import select
-from typing import Protocol
+from typing import Callable, Protocol
 from voice_profiles import VoiceProfileStore
 
 _STREAM_SPEC = importlib.util.spec_from_file_location(
@@ -131,6 +131,7 @@ class CosyVoiceSynthesizer:
         profile_root: Path | None = None,
         force_buffered_audio: bool = False,
         warm_selected_voice: bool = True,
+        flow_estimator_loader: Callable | None = None,
     ):
         paths = validate_local_files(source_root, model_dir)
         configure_runtime_cache()
@@ -160,6 +161,16 @@ class CosyVoiceSynthesizer:
         self.force_buffered_audio = force_buffered_audio
         load_started = perf_counter()
         self._model = CosyVoice3(str(model_dir), fp16=True)
+        if flow_estimator_loader is not None:
+            # AG 的加载函数接收原 PyTorch estimator，返回同签名的引擎包装模块。
+            # 只在新实例预热前替换；未提供真实引擎加载函数时完整保留原路径。
+            runtime = self._model.model
+            estimator = flow_estimator_loader(
+                runtime.flow.decoder.estimator, device=runtime.device, fp16=runtime.fp16,
+            )
+            if not isinstance(estimator, torch.nn.Module):
+                raise TypeError("flow estimator loader must return torch.nn.Module")
+            runtime.flow.decoder.estimator = estimator.eval()
         self.load_seconds = perf_counter() - load_started
         self._sample_rate = int(self._model.sample_rate)
         self.stream_runtime = _stream_runtime.install_stream_runtime(self._model.model)
