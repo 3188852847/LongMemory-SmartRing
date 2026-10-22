@@ -8498,6 +8498,40 @@
         ]
       },
       "tags": ["AEC", "整合候选", "标签防覆盖", "实机待验"]
+    },
+    {
+      "path": "docs/development/parallel/AC-aec-echo-criterion-20261022.md",
+      "title": "AC：纯回声判据的只读反例与成分误差",
+      "status": "reference",
+      "basis": "七种公开固定输入的观测与误判反例；未形成安全DSP修复，不作为现场根因",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-22",
+        "scope": "700行/443次选参、局部谱评分和误差指标只读重算；16包无回声误判与19包路径相关范围核对，AI本树20项边界回归，不重跑模型",
+        "evidence": [
+          "scripts/development/xiaozhi/aec_echo_criterion_probe.py",
+          "tests/unit/development/test_aec_echo_criterion_probe.py",
+          "docs/development/parallel/AI-aec-criterion-integration-20261022.md"
+        ]
+      },
+      "tags": ["AEC", "判据反例", "只读观测", "无生产改法"]
+    },
+    {
+      "path": "docs/development/parallel/AI-aec-criterion-integration-20261022.md",
+      "title": "AI：回声判据只读对照整合",
+      "status": "draft",
+      "basis": "ROOT授权的研究工具整合候选；保留f6bf标签修复，生产链路未改，待主分支整合",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-22",
+        "scope": "来源及接入提交、冻结脚本/summary/config/七trace摘要、独立审查结论和20项零跳过回归；研究交付与生产修复及实机验收边界",
+        "evidence": [
+          "scripts/development/xiaozhi/aec_echo_criterion_probe.py",
+          "tests/unit/development/test_aec_echo_criterion_probe.py",
+          "docs/development/parallel/AC-aec-echo-criterion-20261022.md"
+        ]
+      },
+      "tags": ["AEC", "研究工具", "整合候选", "生产未改"]
     }
   ],
   "integration_sources": {
