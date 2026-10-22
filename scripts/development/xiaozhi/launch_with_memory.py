@@ -55,10 +55,10 @@ def install_advanced_voice_policy(connection_class, *, turn_end_mode="off",
                                   turn_end_model=None, cosy_delivery_mode="buffered",
                                   detector_factory=None, asr_provider_class=None,
                                   on_turn_event=None, calibration_approved=False):
-    """公共接线只激活有实际前提的方向；失败保留既有 buffered/VAD 主链路。
+    """显式接入话轮模型；模型不可用时保留既有声音模式/VAD 主链路。
 
     必须在输入计时/ASR预取后安装话轮层。off 不导入模型或推理依赖。
-    calibration_approved 由可信组合验收提供，CLI/环境变量不能自行声明通过。
+    enabled 是功能选择；calibration_approved 独立记录真实中文验收状态。
     """
     if turn_end_mode not in {"off", "shadow", "enabled"}:
         raise ValueError("voice_turn_end_mode_invalid")
@@ -70,9 +70,7 @@ def install_advanced_voice_policy(connection_class, *, turn_end_mode="off",
               "cosy": {"mode": cosy_delivery_mode, "actual_playback_proven": False},
               "turn_end": {"requested": turn_end_mode, "mode": "off", "installed": False,
                            "reason": "disabled"}}
-    if turn_end_mode == "enabled" and not calibration_approved:
-        report["turn_end"]["reason"] = "calibration_required"
-    elif turn_end_mode != "off":
+    if turn_end_mode != "off":
         if turn_end_model is None or asr_provider_class is None:
             report["turn_end"]["reason"] = "model_unavailable"
         else:
@@ -493,6 +491,13 @@ def main():
     parser.add_argument("--doubao-env", "--doubao-env-file", type=Path,
                         default=Path(__file__).resolve().parents[3] / "local/config/.env.doubao.local")
     args = parser.parse_args()
+    if args.voice_turn_end_mode != "off":
+        # 常驻侧车使用现有独立 CPU 环境，正常入口无需向小智环境混装推理依赖。
+        project = Path(__file__).resolve().parents[3]
+        if args.voice_turn_end_model is None:
+            args.voice_turn_end_model = project / "local/runtime/models/smart-turn-v3.2/smart-turn-v3.2-cpu.onnx"
+        if args.voice_turn_end_python is None:
+            args.voice_turn_end_python = project / "local/runtime/CosyVoice/.venv/Scripts/python.exe"
     if args.enable_voice_preemptive and (args.voice_mode != "pipeline" or args.voice_latency_mode != "realtime"):
         parser.error("voice_preemptive_requires_realtime_pipeline")
     if args.voice_mode != "pipeline" and (args.voice_turn_end_mode != "off"

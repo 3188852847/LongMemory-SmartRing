@@ -40,14 +40,14 @@ def test_defaults_do_not_import_or_construct_detector_and_keep_buffered():
     assert not hasattr(asr, "_longmemory_turn_end_installed")
 
 
-def test_unverified_enabled_does_not_load_or_claim_calibration():
+def test_explicit_enabled_installs_without_claiming_calibration():
     connection, asr = classes()
-    def forbidden(_path):
-        raise AssertionError("unverified enabled must not load")
     result = launch.install_advanced_voice_policy(connection, turn_end_mode="enabled", turn_end_model="synthetic",
-                                                  asr_provider_class=asr, detector_factory=forbidden)
-    assert result["turn_end"]["reason"] == "calibration_required"
-    assert result["turn_end"]["mode"] == "off"
+        asr_provider_class=asr, detector_factory=lambda _: SimpleNamespace(predict=lambda _pcm: .8),
+        cosy_delivery_mode="incremental")
+    assert result["turn_end"]["installed"] and result["turn_end"]["mode"] == "enabled"
+    assert result["turn_end"]["calibration_approved"] is False
+    assert connection._longmemory_cosy_delivery_mode == "incremental"
 
 
 @pytest.mark.parametrize("error", [FileNotFoundError("private"), ImportError("private"), ValueError("private")])

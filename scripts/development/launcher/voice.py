@@ -82,6 +82,10 @@ def main():
         parser = argparse.ArgumentParser(add_help=False)
         parser.add_argument("--voice-mode", choices=("pipeline", "doubao_realtime"), default="pipeline")
         parser.add_argument("--voice-latency-mode", choices=("realtime", "original"), default="realtime")
+        parser.add_argument("--voice-turn-end-mode", choices=("off", "shadow", "enabled"))
+        parser.add_argument("--voice-turn-end-model", type=Path)
+        parser.add_argument("--voice-turn-end-python", type=Path)
+        parser.add_argument("--cosy-delivery-mode", choices=("buffered", "incremental", "adaptive"))
         parser.add_argument("--doubao-env", type=Path)
         parser.add_argument('--voice-ws-port', type=int, default=8000)
         parser.add_argument('--voice-http-port', type=int, default=8003)
@@ -114,6 +118,10 @@ def main():
                     "--tts-backend", tts_backend,
                     "--voice-latency-mode", arguments.voice_latency_mode]
         sys.argv.extend(port_arguments(arguments.voice_ws_port, arguments.voice_http_port))
+        for name in ("voice_turn_end_mode", "voice_turn_end_model", "voice_turn_end_python", "cosy_delivery_mode"):
+            value = getattr(arguments, name)
+            if value is not None:
+                sys.argv.extend(["--" + name.replace("_", "-"), str(value)])
         return setup.main()
     except Exception:
         return 3  # 私有配置/路径错误，绝不回传 YAML 或第三方异常正文。

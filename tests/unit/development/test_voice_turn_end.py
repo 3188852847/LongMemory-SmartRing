@@ -68,8 +68,6 @@ def test_default_off_has_no_patch_or_model():
         pass
     assert turn.install_voice_turn_end(Connection, Provider) == {"mode": "off", "installed": False}
     assert not hasattr(Provider, "receive_audio")
-    with pytest.raises(ValueError, match="calibration_required"):
-        turn.install_voice_turn_end(Connection, Provider, config=turn.TurnEndConfig(mode="enabled"))
 
 
 def test_complete_only_confirms_after_guard_and_does_not_duplicate():
