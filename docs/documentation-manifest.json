@@ -8463,6 +8463,41 @@
         ]
       },
       "tags": ["AEC", "整合候选", "候选否决", "生产未改"]
+    },
+    {
+      "path": "docs/development/parallel/AD-aec-label-20261022.md",
+      "title": "AD：直连 v2 活动参考标签防覆盖",
+      "status": "draft",
+      "basis": "单点标签覆盖修复候选；33项本地定向回归，主会话发布与实机待验",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-22",
+        "scope": "AD六文件摘要与33项JUnit；AI独立旧新复现、设备标签消费者源码及本树38项含真实取消/旧轮次回归，不覆盖实机体验",
+        "evidence": [
+          "scripts/development/xiaozhi/direct_ws_v2.py",
+          "tests/unit/development/test_direct_ws_v2.py",
+          "docs/development/parallel/AI-v2-aec-label-integration-20261022.md"
+        ]
+      },
+      "tags": ["AEC", "标签防覆盖", "单点修复", "实机待验"]
+    },
+    {
+      "path": "docs/development/parallel/AI-v2-aec-label-integration-20261022.md",
+      "title": "AI：直连 v2 参考标签防覆盖整合",
+      "status": "draft",
+      "basis": "ROOT授权的标签单点整合候选；已通过本地审查与回归，待主会话合推重启",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-22",
+        "scope": "来源与接入提交/源码摘要、有限活动标签合同、独立旧新复现和38项零跳过回归；发送前缓存遗留及实机未验边界",
+        "evidence": [
+          "scripts/development/xiaozhi/direct_ws_v2.py",
+          "tests/unit/development/test_direct_ws_v2.py",
+          "tests/unit/development/test_voice_output_protocol_ws.py",
+          "docs/development/parallel/AD-aec-label-20261022.md"
+        ]
+      },
+      "tags": ["AEC", "整合候选", "标签防覆盖", "实机待验"]
     }
   ],
   "integration_sources": {
