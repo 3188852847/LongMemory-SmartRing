@@ -8532,6 +8532,24 @@
         ]
       },
       "tags": ["AEC", "研究工具", "整合候选", "生产未改"]
+    },
+    {
+      "path": "docs/development/parallel/AI-eos-vad-interruption-20261022.md",
+      "title": "AI：EOS 后既有 VAD 阳性的撤权缺口",
+      "status": "draft",
+      "basis": "ROOT授权的EOS输出身份撤权候选；既有遗漏的合成复现与92项回归，待AD独审/发布/实机",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-22",
+        "scope": "AD封存摘要/120行及归因边界、历史2b58同blob、真实固定上游/包装/回环复现、捕获EOS目标及92项零跳过回归；不覆盖声学、播放ACK或现场根因",
+        "evidence": [
+          "scripts/development/xiaozhi/voice_interruption.py",
+          "tests/unit/development/test_voice_eos_vad_control.py",
+          "tests/unit/development/test_voice_output_protocol_ws.py",
+          "scripts/development/xiaozhi/voice_input_interruption_probe.py"
+        ]
+      },
+      "tags": ["EOS", "VAD撤权", "既存遗漏", "实机待验"]
     }
   ],
   "integration_sources": {
