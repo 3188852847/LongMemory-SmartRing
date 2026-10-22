@@ -405,6 +405,20 @@ def test_pair_floor_and_zero_never_divide_by_zero(modules, amplitude, subset):
     assert sum(total["ratio_bins"]) == (subset is None)
 
 
+@pytest.mark.parametrize("input_amplitude,output_amplitude,index", [(1000, 0, 0), (500, 1500, 5), (500, 50, 1)])
+def test_pair_output_zero_and_gain_are_not_clamped(modules, input_amplitude, output_amplitude, index):
+    observer, _ = modules
+    conn = connection(provider())
+    original = np.full(960, input_amplitude, np.int16).tobytes()
+    output = np.full(960, output_amplitude, np.int16).tobytes()
+    type(conn)._apply_aec = lambda self, timestamp, pcm_frame: output
+    install(modules, conn)
+    assert conn._apply_aec(0, original) is output
+    total = observer.voice_vad_signal_snapshot(conn, include_aec_pairs=True)["aec_pairs"]["total"]
+    assert total["valid"] == sum(total["ratio_bins"]) == 1
+    assert total["ratio_bins"][index] == 1
+
+
 @pytest.mark.parametrize("error", [ValueError("do-not-export"), BaseException("do-not-export")])
 def test_pair_original_exception_identity_and_type(modules, error):
     observer, _ = modules

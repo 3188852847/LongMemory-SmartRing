@@ -64,3 +64,32 @@ invalid为正常返回但输入/输出不成合法对；original_error为原调�
 预算保留失败回执：初始生产者三位小数最大值中原v1=5237B，早期无代次内部v2=5825B；后按旧投影允许的长浮点表示加强最大值测试，完整原v1=5815B，含代次/时钟的完整内部v2=6481B，即使仅删尚未发布的新近期成对统计仍6224B。ROOT明确否决把完整内部v2当HTTP响应，不收紧原v1浮点合法范围、不提6000B、不删旧字段；改为独立成对小响应，建议仅取 `version/state/observation_id/clock_ms/aec_pairs`，最大值测试小于1000B。对应否决事实保留在回归测试，不将失败方案改写为已通过。
 
 主Python与小智Python独立标准库进程的单调时钟读数已验证落在同机调用前后78ms括号内；不接服务，不导入模型/Torch/GPU。此证明用于本机时间关联，不把按键标记当准确音频边界。标记工具和CPU微基准另笔交付；当前核心模块合成回归包括交错并发、零/无效对、原异常身份、观察失败、旧getter、复位/断线方法透明及最大预算。
+
+核心提交 `5d92e43b8c03fdbcba1118962dd93e365c19891c`，定向69项通过；ROOT/AI随后冻结公开小响应六字段：`version=2/kind='aec_pairs_supplement'/state/clock_ms/observation_generation/aec_pairs`。公开代次由内部observation_id映射，公开aec_pairs只取门值/边界/total，不输出新recent；默认请求和显式v1完整保留。HTTP接线及共享文档清单由AI交付，不宣称本分支已部署。
+
+## 单轮按键标记工具与计数对齐
+
+[voice_signal_markers.py](../../../scripts/development/xiaozhi/voice_signal_markers.py) 只使用标准库，不连任何API/服务、不监听全局键盘、不打开音频设备。`record`只接本进程的回车/q/中断，不保存任何输入正文，只写固定ready/speech_start/speech_end/cancelled枚举和单调/Unix毫秒。只做一轮；起键后再说、说完后按止键是手动外侧括号，包含人为反应时间，绝不是准确音频起止。输出父目录必须已存在，使用独占新建，拒绝覆盖。
+
+由ROOT在将来已安排的唯一一次受控流程中执行，**本轮没有运行真实提示/要求所有者再试**：
+
+1. ROOT按AI接线结果启动短时数值采样，包住整组device、v1、v2查询记录`monotonic_before_ms/monotonic_after_ms`；保存原始计数与公开v2对象。采样行约定为`device.ready`、`device.voice_input_observation.counts`、`signal_v2`（公开六字段）及这两个单调锚点；读取signal.clock_ms必须落在整组请求括号内，否则拒绝对齐。可在只采v2的行名signal下放同一公开对象，但不接受缺kind的内部完整v2或默认v1冒充。
+2. 以主项目现有Python运行`voice_signal_markers.py record --output <私有证据目录的新markers.jsonl>`。看到起提示后按回车再说一次，讲完立即按结束回车；q或Ctrl-C取消。语句不经本工具ASR，不写个人库；ROOT统一安排实际对话，不因本脚本改日用。
+3. 数值采样至少覆盖结束标记后的完整一组请求，再正常停止。以同一Python运行`voice_signal_markers.py align --markers <markers.jsonl> --samples <数值samples.jsonl> --output <新的alignment.json>`。
+4. 工具从起标记之前已经完成的最后一组请求，到止标记之后才开始的第一组请求取外括号，输出两侧不确定毫秒数及queue_put/vad_check/vad_speech/formal_begin/speech_begin/abort_begin/abort_return累计差分，成对统计也只做累计差分，不相减重叠recent。中间任何代次变化、缺锚点、相关计数饱和或下降均不输出有效差分。首次没有成对基线则pair_delta为null，不能造零。按键只圈定所有者计划发声的外侧时段，数值本身不验证人声或AEC误伤。
+
+供AD采样接力的最小单行JSONL示例（纯合成；其他既有采样字段可保留，工具只提取白名单）：
+
+```json
+{"sample_index":0,"monotonic_before_ms":100,"monotonic_after_ms":110,"device":{"ready":true,"voice_input_observation":{"counts":{"queue_put":100,"vad_check":100,"vad_speech":0,"formal_begin":0,"speech_begin":0,"abort_begin":0,"abort_return":0}}},"signal_v2":{"version":2,"kind":"aec_pairs_supplement","state":"observed","clock_ms":105,"observation_generation":"aaaaaaaaaaaaaaaa","aec_pairs":{"rms_floor_pcm16":500,"ratio_edges":[0.1,0.25,0.5,0.9,1.1],"total":{"valid":1,"invalid":0,"zero_input":0,"below_floor":0,"original_error":0,"observer_error":0,"ratio_bins":[0,0,0,0,1,0]}}}}
+```
+
+两个请求外侧单调锚点必须实际采集，不能事后由Unix时间或样本序号推算；clock_ms为服务端GET查询锚点，必须处于它们之间。marker JSONL每行恰有`version=1/event/monotonic_ms/unix_ms/timing_kind='manual_outer_bracket_not_exact_voice_boundary'`；event仅四个固定枚举，不包含任何口令文字。
+
+相邻请求之间也可能有未采样的断开/重连；随机观察代次检测重连、计数和时钟检查防止明显错误，但不声称按键或低频API是无误差的设备级时间追踪。本轮原144行没有新增v2/单调括号，不能事后伪造这些字段使其成为带标记证据。align输出仅固定白名单数值，不复制样本中的任意其他键/正文。
+
+[标记工具测试](../../../tests/unit/development/test_voice_signal_markers.py) 13项通过：单轮标记、不保存输入文字、取消/中断、拒绝覆盖、时间外括号、累计对齐、代次/未知/饱和/下降拒绝、默认v1不能冒充v2，以及纯合成CLI往返。未接服务或实际邀请所有者讲话。
+
+纯CPU有界微基准：主Python3.12，基线86179117原数值包装对照成对候选；960样本（16kHz下60ms）纯合成PCM16、假AEC原样返回，双方预热40次，各测2000次，10批每批200次并交替AB/BA次序。批次每调用中位数旧262.807µs、新267.394µs，差4.587µs；旧批次范围255.806–288.979µs、新261.673–280.944µs。两侧返回对象身份均保留；新逻辑复用原两处能量测量，不重复解码/RMS遍历，仅保留局部标量。未导入Torch，不加载模型/GPU、无服务调用或大型基准；没有设置墙钟CI断言。该单机微小差值受调度噪声影响，不等于端到端或实机延迟改善。
+
+收尾定向回归85项通过（另补输出0/比值大于1/等于边界的三例），CLI help可独立以`-I`运行；10个本地文档链接目标存在。严格文档检查因本新增记录未登记共享manifest而退出，错误为unlisted-document/unknown-selection，留AI登记与整合验证；未据此修改其共享文件。未merge、push或部署。
