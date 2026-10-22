@@ -61,11 +61,12 @@ def worker(payload):
     example = tuple(torch.from_numpy(values[name]) for name in NAMES)
     print("Exporting real Flow "+payload["mode"]+" graph and external FP32 weights", flush=True)
     from .external_weights import export_module
-    bundle = export_module(module, example, output/"external-candidate", input_names=NAMES,
-                           output_names=("estimator_out",), opset=18,
-                           dynamic_axes={name:{2:"seq_len"} for name in ("x", "mask", "mu", "cond", "estimator_out")})
-    # 留下同一真实模型的参考输入/输出，GPU构建窗口可直接使用，不重载CPU导出。
-    with torch.no_grad():
+    from torch.nn.attention import SDPBackend, sdpa_kernel
+    # ONNX把SDPA展开为math；参考也用math，不能混入CPU flash的另一条FP32归约路径。
+    with torch.no_grad(), sdpa_kernel(SDPBackend.MATH):
+        bundle = export_module(module, example, output/"external-candidate", input_names=NAMES,
+                               output_names=("estimator_out",), opset=18,
+                               dynamic_axes={name:{2:"seq_len"} for name in ("x", "mask", "mu", "cond", "estimator_out")})
         expected = module(*example).numpy()
     case = output/"n128-full"
     case.mkdir()
