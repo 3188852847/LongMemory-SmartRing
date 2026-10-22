@@ -8335,7 +8335,7 @@
       "review": {
         "state": "verified",
         "date": "2026-10-22",
-        "scope": "AC固定三笔来源、RMS局部配对/时钟/预算失败保留；helper边界待后笔，未部署",
+        "scope": "AC固定四笔来源、RMS局部配对/时钟/预算失败保留；a1强化helper，AI306项组合通过，未部署",
         "evidence": [
           "scripts/development/xiaozhi/voice_vad_signal_observation.py",
           "scripts/development/xiaozhi/voice_signal_markers.py",
@@ -8357,7 +8357,7 @@
       "review": {
         "state": "verified",
         "date": "2026-10-22",
-        "scope": "v1严格兼容与独立v2白名单/6000B构造、鉴权、完整客户端及3.10时钟检查；helper修正和最终冻结待接力",
+        "scope": "独立v2六字段与v1兼容、5846/6512/484B极值、先鉴权与完整读取；最终306/0和两Python清洁回执，helper未知/gap/跨端点背景复核",
         "evidence": [
           "scripts/development/xiaozhi/voice_signal_diagnostics.py",
           "scripts/development/xiaozhi/control_http.py",

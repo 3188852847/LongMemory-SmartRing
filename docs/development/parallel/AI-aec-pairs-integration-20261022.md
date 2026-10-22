@@ -4,7 +4,7 @@
 
 ## 来源及范围
 
-AC定位记录 `26547006` 接为 `d160ae0d`；核心 `5d92e43b8c03fdbcba1118962dd93e365c19891c` 接为 `0deafa6c`；后笔helper/合成检查 `f30b7e2106ed6733af2c96d27f5ac75f51f71760` 接为 `c0742fa3`。AC生产侧与原始阶段证据见 [AC记录](AC-vad-trace-20261022.md)，不把未提交源码作为冻结来源。原Cosy候选分支和两份stash保留。
+AC定位记录 `26547006` 接为 `d160ae0d`；核心 `5d92e43b8c03fdbcba1118962dd93e365c19891c` 接为 `0deafa6c`；后笔helper/合成检查 `f30b7e2106ed6733af2c96d27f5ac75f51f71760` 接为 `c0742fa3`；最终helper修正 `a1dd5b076f59178e0f10ed560e151d8e58c44486` 接为 `0d49dfd0`。AC生产侧与原始阶段证据见 [AC记录](AC-vad-trace-20261022.md)，不把未提交源码作为冻结来源。原Cosy候选分支和两份stash保留。
 
 AI拥有 [有限投影](../../../scripts/development/xiaozhi/voice_signal_diagnostics.py)、原 [HTTP端点](../../../scripts/development/xiaozhi/control_http.py) 与 [当前连接读取](../../../scripts/development/xiaozhi/device_control.py) 的版本协商；没有改/src适配器、控制API权限或原设备状态16KiB限制。AC继续拥有原观测与 [纯本机标记工具](../../../scripts/development/xiaozhi/voice_signal_markers.py)，helper审查问题由ROOT转接修正，不在两边重复修改。
 
@@ -39,9 +39,24 @@ AD数值采样在每组请求外实际采集monotonic_before_ms/monotonic_after_
 
 接口初检72 passed（0.76秒）；补充丢弃字段/方法拒绝及AC新增边界后76 passed（0.82秒），报告 `data/test-tmp/ai-aec-pairs-endpoint-preflight-01.xml/-02.xml`，重叠组不相加。现装3.10已实际运行 [标准库probe](../../../tests/fixtures/ai_aec_signal_probe.py)：500→250合成PCM、原方法2次（含一次BaseException身份保留）、getter不增加调用、默认v1及源clock包围正确；无网络、模型/Torch、音频落盘。最终清洁HEAD的检查与回执待候选冻结后列明。
 
-helper尚未放行：AI合成复现 `data/test-tmp/ai-aec-marker-review-repro-20261022-01.json` 显示f30阶段中间aec_pairs=null后仍算首末pair_delta，并且内部2500ms空洞未报告。ROOT已转AC修正marker完整schema、内部unknown、floor/edges、时钟与gap；本树只接精确后笔，不重复改其helper。不拿原13项通过覆盖新边界；当前尚无实机、部署或漏检修复结论。
+f30阶段helper当时尚未放行：AI合成复现 `data/test-tmp/ai-aec-marker-review-repro-20261022-01.json` 显示f30阶段中间aec_pairs=null后仍算首末pair_delta，并且内部2500ms空洞未报告。ROOT已转AC修正marker完整schema、内部unknown、floor/edges、时钟与gap；本树只接精确后笔，不重复改其helper。不拿原13项通过覆盖新边界；当前尚无实机、部署或漏检修复结论。
 
 
 API侧独立阶段提交 **`a6cf8a11cea77d77f5d98c2f613e5940044340c6`**；其后暂只有文档收尾，仍需AC的helper后笔才可冻结完整候选。八文件组合预检 **286 passed、0 skipped，1.54秒**，`data/test-tmp/ai-aec-pairs-combined-preflight-01.xml`；包含helper已有测试，不覆盖上述新发现边界，不能称helper已验收。
 
 在清洁a6cf8a11上，现装3.12.13和3.10.20分别实际运行标准库probe及当前device_control/control_http模块导入，均保留默认v1、真实clock包围、未知成对不造零、getter不增加调用及原BaseException对象身份。新回执 `data/test-tmp/ai-aec-api-clean-python310-312-20261022-01.json`，SHA256 **`565d40cd123e4da43853c1a4cef3734525e410ac6fb262d5a86591d12fe1a747`**。它明确标记阶段为API源码冻结/helper审查待修，不假称最终组合已经通过。未调用服务、模型、GPU或设备，未推送/部署。
+
+
+## 最终组合冻结与独立复核
+
+软件源码冻结提交 **`0d49dfd0acbdd7b8123b93112831d4eb74da4aed`**，Git tree `ed2784a3062a15d407ae1f00f87a8e2d8e49a1a1`，前后均clean；已发布861是祖先，原分支/stash仍在。之后仅本记录及文档清单收尾，不修改src/scripts/tests/web，最终文档提交不能伪写进原回执的实测HEAD。
+
+八文件最终组合回归 **306 passed、0 skipped，1.83秒**，报告 `data/test-tmp/ai-aec-pairs-combined-clean-head-01.xml`，SHA256 **`d9ef96f78c23013f5d008a223c4368964e1245b75c7b1637909e4d7506dd631f`**；质量门audit_report=(306,0)，没有新资源例外或跳过守卫更改。306含helper强化后的用例，不与旧286/76等重叠组相加。
+
+对最终helper独立重跑原反例，新回执 `data/test-tmp/ai-aec-marker-review-fixed-20261022-02.json`，SHA256 **`29d973914b153c84cc87a09ced0af5472d29c72d433b098932ce6fafd58f8b1f`**：中间pairs=null时pair_delta=null、pair_state=unknown_within_window；稀疏两采样间的2500ms空洞在sampling.max_gap_ms及largest_gaps中明确保留，不称丢音频；没有input_delta，device_background明确标注非原子/非同连接证明。源码同时检查全部窗口内快照的代次/计数降或饱和/state/时钟，拒绝原文件请求乱序、重叠、重复及坏marker/固定pairs字段；只有同代次累计成对差分可以有效。
+
+完整清洁回执 **`data/test-tmp/ai-aec-pairs-clean-combined-receipt-20261022-01.json`**，SHA256 **`d7152072f0f4bd3327e3168cb00f20024382298e69f9922425d587e26dc061e9`**。其中独立核对默认v1=5846B、不能发布的full raw-v2=6512B、公开v2=484B；实际现装3.12.13/3.10.20均运行标准库probe，包含当前control_http/device_control导入与假连接读取、原调用2次/GET增加0次、原异常身份、默认v1及真实clock包围。与f30对比，record函数AST完全相同；没有运行真实键盘提示、服务或模型。来源检查使用本树源码，不借其他工作树实现。
+
+全 `src/longmemory`＋`scripts/development/xiaozhi` Python路径和规范化字节摘要现为 **`8f6e7d26710e21200196dd95c48aff237f00572885026c9580a770fec24cedcd`**；新增观测/投影/helper使它区别于旧外围回执。受管记忆原语15文件摘要仍为 **`1003fe901fa49bd2750242637b18744694f5bebdabfc3d06e0cf7a5eb262fdac`**，未修改记忆核心，不重写或无关重跑旧219项证明，更不把它当成当前音频/接口验收。
+
+两份文档严格检查通过。软件候选可交ROOT审查、推候选分支并对最终精确SHA运行既有CI；本会话未推送、部署或改日用，未修改前端/锁文件，也未本机运行前端。ROOT仍需协调AD采样适配及正式上线；未来受控adaptive发声窗口仅是诊断，不等于漏检修复验收。此处所有结果均非真实声音/人声起止/AEC误伤证明。
