@@ -66,6 +66,12 @@ RESOURCE_GROUPS = (
     ('tests.unit.development.test_voice_output_protocol_ws',
      'owner-installed websockets runtime unavailable',
      ('test_bilateral_handshake_true_wire_order_eos_alias_and_bounded_close',)),
+    ('tests.unit.development.test_direct_ws_v2',
+     'owner-installed pinned SDK unavailable',
+     ('test_actual_first_five_prebuffer_sends_do_not_overwrite',)),
+    ('tests.unit.development.test_voice_eos_vad_control',
+     'owner-installed websockets runtime unavailable',
+     ('test_native_vad_eos_tail_real_wrappers_and_loopback',)),
     ('tests.unit.development.test_voice_interruption',
      'owner-installed pinned SDK unavailable',
      (

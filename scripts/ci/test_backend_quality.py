@@ -60,6 +60,44 @@ class ReportAuditTests(unittest.TestCase):
             self.audit(prefix + f'<testcase classname="{classname}" name="{name}"><skipped message="unexpected failure" /></testcase>')
         self.assertEqual(self.audit(prefix + f'<testcase classname="{classname}" name="{name}"><skipped message="host does not grant synthetic symlink creation" /></testcase>'), (1, 1))
 
+    def test_new_voice_resource_skips_require_reviewed_identity_and_reason(self):
+        reviewed = {
+            ('tests.unit.development.test_direct_ws_v2',
+             'test_actual_first_five_prebuffer_sends_do_not_overwrite'):
+                'owner-installed pinned SDK unavailable',
+            ('tests.unit.development.test_voice_eos_vad_control',
+             'test_native_vad_eos_tail_real_wrappers_and_loopback'):
+                'owner-installed websockets runtime unavailable',
+        }
+        modules = {module for module, _ in reviewed}
+        self.assertEqual({key: reason for key, reason in SKIP_REASON_SUBSTRINGS.items()
+                          if key[0] in modules}, reviewed)
+        passing = '<testcase classname="synthetic" name="passing" />'
+        for (module, name), reason in reviewed.items():
+            with self.subTest(module=module):
+                skip = f'<testcase classname="{module}" name="{name}"><skipped message="{reason}" /></testcase>'
+                self.assertEqual(self.audit(passing + skip), (1, 1))
+                for wrong_reason in ('', 'missing numpy', 'unexpected SDK failure'):
+                    with self.subTest(reason=wrong_reason), self.assertRaisesRegex(ValueError, '原因与声明不符'):
+                        self.audit(passing + f'<testcase classname="{module}" name="{name}"><skipped message="{wrong_reason}" /></testcase>')
+
+    def test_new_voice_resource_skips_do_not_allow_other_cases_or_parameters(self):
+        passing = '<testcase classname="synthetic" name="passing" />'
+        for module, name, reason in (
+            ('tests.unit.development.test_direct_ws_v2',
+             'test_actual_first_five_prebuffer_sends_do_not_overwrite',
+             'owner-installed pinned SDK unavailable'),
+            ('tests.unit.development.test_voice_eos_vad_control',
+             'test_native_vad_eos_tail_real_wrappers_and_loopback',
+             'owner-installed websockets runtime unavailable'),
+        ):
+            for changed_module, changed_name in (
+                (module, name + '[unreviewed]'), (module, name + '_other'),
+                (module + '.other', name), (module, 'test_unknown'),
+            ):
+                with self.subTest(module=changed_module, name=changed_name), self.assertRaisesRegex(ValueError, '未经声明'):
+                    self.audit(passing + f'<testcase classname="{changed_module}" name="{changed_name}"><skipped message="{reason}" /></testcase>')
+
 
 if __name__ == "__main__":
     unittest.main()
