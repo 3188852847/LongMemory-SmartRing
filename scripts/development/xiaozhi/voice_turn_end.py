@@ -1,4 +1,4 @@
-"""音频话轮结束判定：默认关闭，影子观察，显式验收后才可影响正式端点。
+"""音频话轮结束判定：默认关闭，显式启用后接管自然话轮端点。
 
 只拥有语音适配边界。无网络、磁盘、记忆、模型网关、播放或设备操作。
 on_event(connection, event) 必须同步、快速；调用方负责把音频版本绑定到真实文本。
@@ -216,14 +216,13 @@ def install_voice_turn_end(connection_class, asr_provider_class, *, detector=Non
                            config=None, on_event=None, calibration_approved=False):
     """AI 接线入口：先装 ASR 预取，再装本模块；仅 LOCAL auto/realtime。
 
-    enabled 必须由组合层提供真实影子/中文验收通过的决定，不能用开关自证。
+    enabled 由组合层显式选择。calibration_approved仅记录真实中文验收状态，
+    不将已授权的功能体验误写成校准通过，也不再阻挡显式启用。
     回退为重启时 mode=off，不在已打补丁的进程内动态切换。
     """
     config = config or TurnEndConfig()
     if config.mode == "off":
         return {"mode": "off", "installed": False}
-    if config.mode == "enabled" and not calibration_approved:
-        raise ValueError("turn_end_calibration_required")
     if getattr(asr_provider_class, "_longmemory_turn_end_installed", False):
         raise RuntimeError("turn_end_already_installed_restart_required")
     original_receive = asr_provider_class.receive_audio
@@ -292,4 +291,5 @@ def install_voice_turn_end(connection_class, asr_provider_class, *, detector=Non
     connection_class.close = close
     connection_class._longmemory_voice_turn_end_snapshot = lambda conn: (
         getattr(conn, STATE).snapshot() if hasattr(conn, STATE) else {"version": 1, "mode": config.mode})
-    return {"mode": config.mode, "installed": True, "model_available": detector is not None}
+    return {"mode": config.mode, "installed": True, "model_available": detector is not None,
+            "calibration_approved": bool(calibration_approved)}
