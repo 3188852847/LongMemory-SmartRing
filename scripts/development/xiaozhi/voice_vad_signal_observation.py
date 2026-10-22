@@ -8,6 +8,7 @@ from array import array
 from contextvars import ContextVar
 import copy
 import math
+import secrets
 import sys
 import threading
 import time
@@ -19,6 +20,8 @@ PHASES = ("speaking", "not_speaking", "unknown")
 STAGES = ("decode_return", "aec_input", "aec_output", "vad_input")
 ENERGY_EDGES = (-90, -70, -50, -35, -20, -6)
 PROBABILITY_EDGES = (.01, .1, .2, .5, .8, .95)
+PAIR_RMS_FLOOR = 500
+PAIR_RATIO_EDGES = (.1, .25, .5, .9, 1.1)
 EXPORTED_COUNTS = ("decode_return", "aec_input", "aec_output", "vad_input", "vad_true", "vad_false",
                    "vad_none", "vad_other", "vad_raised", "inference_return", "inference_error",
                    "inference_contract_other", "inference_observation_error", "probability_invalid",
@@ -68,6 +71,9 @@ class _State:
         self.aec_reference = None
         self.window_positive_count = None
         self.failed = False
+        self.pairs = None
+        self.pairs_failed = False
+        self.observation_id = secrets.token_hex(8)
 
     def record(self, phase, event, *, energy=None, probability=None):
         with self.lock:
@@ -122,6 +128,85 @@ def _note(state, phase, event, **values):
 
 def _number(value, lower, upper):
     return float(value) if type(value) in (int, float) and math.isfinite(value) and lower <= value <= upper else None
+
+
+def _measure(pcm):
+    try:
+        return _energy(pcm), False
+    except Exception:
+        return None, True
+
+
+def _pair_counts():
+    return {"valid": 0, "invalid": 0, "zero_input": 0, "below_floor": 0, "original_error": 0,
+            "observer_error": 0, "ratio_bins": [0] * 6}
+
+
+def _pair(state, before, after, *, same_size=True, raised=False):
+    """局部值只来自同一次调用；完成后锁内一次提交，不保留帧或逐调用记录。"""
+    if state is None:
+        return
+    try:
+        input_energy, input_failed = before
+        output_energy, output_failed = after
+        event, subset, index = "valid", None, None
+        if raised:
+            event = "original_error"
+        elif input_failed or output_failed:
+            event = "observer_error"
+        elif input_energy is None or output_energy is None or not same_size:
+            event = "invalid"
+        else:
+            input_rms, output_rms = input_energy["rms_pcm16"], output_energy["rms_pcm16"]
+            if input_rms == 0:
+                subset = "zero_input"
+            elif input_rms < PAIR_RMS_FLOOR:
+                subset = "below_floor"
+            else:
+                index = _bin(output_rms / input_rms, PAIR_RATIO_EDGES)
+        with state.lock:
+            second = int(time.monotonic())
+            if state.pairs is None:
+                state.pairs = {"total": _pair_counts(), "buckets": []}
+            pairs = state.pairs
+            pairs["buckets"] = [item for item in pairs["buckets"] if second - item[0] < 3]
+            if not pairs["buckets"] or pairs["buckets"][-1][0] != second:
+                pairs["buckets"].append((second, _pair_counts()))
+                pairs["buckets"] = pairs["buckets"][-3:]
+            for counts in (pairs["total"], pairs["buckets"][-1][1]):
+                _increment(counts, event)
+                if subset is not None:
+                    _increment(counts, subset)
+                if index is not None:
+                    counts["ratio_bins"][index] = min(LIMIT, counts["ratio_bins"][index] + 1)
+    except Exception:
+        # 新旁路失败只使新字段未知；旧字段及音频调用仍保持原行为。
+        state.pairs_failed = True
+
+
+def _pair_snapshot(state):
+    if state.pairs is None or state.pairs_failed:
+        return None
+    recent = _pair_counts()
+    second = int(time.monotonic())
+    for at, counts in state.pairs["buckets"]:
+        if second - at >= 3:
+            continue
+        for key in recent:
+            if key == "ratio_bins":
+                recent[key] = [min(LIMIT, a + b) for a, b in zip(recent[key], counts[key])]
+            else:
+                recent[key] = min(LIMIT, recent[key] + counts[key])
+    return {"rms_floor_pcm16": PAIR_RMS_FLOOR, "ratio_edges": PAIR_RATIO_EDGES,
+            "total": state.pairs["total"], "recent": recent}
+
+
+def _clock_ms():
+    try:
+        value = time.monotonic_ns() // 1_000_000
+        return value if type(value) is int and 0 <= value <= 2**63 - 1 else None
+    except Exception:
+        return None
 
 
 class _Session:
@@ -236,10 +321,12 @@ def install_voice_vad_signal_observation(connection_class, *, input_observation_
         def wrap(original, stage):
             def call(connection, *args, **kwargs):
                 state, phase = _safe(lambda: _state(connection)), _phase(connection)
+                before = (None, False)
                 if stage == "aec_output":
                     timestamp = args[0] if args else kwargs.get("timestamp")
                     pcm = args[1] if len(args) > 1 else kwargs.get("pcm_frame")
-                    _note(state, phase, "aec_input", energy=_safe(lambda: _energy(pcm)))
+                    before = _measure(pcm)
+                    _note(state, phase, "aec_input", energy=before[0])
                     if state is not None:
                         reference = _safe(lambda: _reference(connection, timestamp))
                         with state.lock:
@@ -251,8 +338,15 @@ def install_voice_vad_signal_observation(connection_class, *, input_observation_
                     result = original(connection, *args, **kwargs)
                 except BaseException:
                     _note(state, phase, stage + "_error")
+                    if stage == "aec_output":
+                        _pair(state, before, (None, False), raised=True)
                     raise
-                _note(state, phase, stage, energy=_safe(lambda: _energy(result)))
+                after = _measure(result)
+                _note(state, phase, stage, energy=after[0])
+                if stage == "aec_output":
+                    same_size = (isinstance(pcm, (bytes, bytearray)) and isinstance(result, (bytes, bytearray))
+                                 and len(pcm) == len(result))
+                    _pair(state, before, after, same_size=same_size)
                 return result
             return call
         setattr(connection_class, name, wrap(original, stage))
@@ -300,13 +394,17 @@ def _project_group(group, *, recent=False):
             "energy": energy, "probability": probability}
 
 
-def voice_vad_signal_snapshot(connection):
+def voice_vad_signal_snapshot(connection, *, include_aec_pairs=False):
     """未观测值为 null；近期桶最多包含当前秒和前两秒，无逐帧轨迹。"""
-    missing = {"version": 1, "state": "no_connection" if connection is None else "not_observed",
+    missing = {"version": 2 if include_aec_pairs else 1, "state": "no_connection" if connection is None else "not_observed",
                "groups": None, "recent_groups": None, "contract": None, "aec_reference": None,
                "window_positive_count": None, "count_keys": EXPORTED_COUNTS,
                "probability_bin_edges": PROBABILITY_EDGES,
                "value_kind": "bounded_numeric_signal_summary_not_speech_or_waveform"}
+    if include_aec_pairs:
+        missing["aec_pairs"] = None
+        missing["clock_ms"] = _clock_ms()
+        missing["observation_id"] = None
     try:
         state = getattr(connection, STATE, None)
         if state is None:
@@ -316,12 +414,17 @@ def voice_vad_signal_snapshot(connection):
         with state.lock:
             recent = [groups for second, groups in state.recent if int(time.monotonic()) - second < 3]
             recent_groups = _recent_summary(recent)
-            return copy.deepcopy({"version": 1, "state": "observed",
+            value = {"version": 2 if include_aec_pairs else 1, "state": "observed",
                 "groups": {phase: _project_group(group) for phase, group in state.groups.items()},
                 "recent_groups": {phase: _project_group(group, recent=True) for phase, group in recent_groups.items()},
                 "count_keys": EXPORTED_COUNTS, "contract": state.contract, "aec_reference": state.aec_reference,
                 "window_positive_count": state.window_positive_count,
                 "probability_bin_edges": PROBABILITY_EDGES,
-                "value_kind": "bounded_numeric_signal_summary_not_speech_or_waveform"})
+                "value_kind": "bounded_numeric_signal_summary_not_speech_or_waveform"}
+            if include_aec_pairs:
+                value["aec_pairs"] = _safe(lambda: _pair_snapshot(state))
+                value["clock_ms"] = _clock_ms()
+                value["observation_id"] = state.observation_id
+            return copy.deepcopy(value)
     except Exception:
         return dict(missing, state="unavailable")
