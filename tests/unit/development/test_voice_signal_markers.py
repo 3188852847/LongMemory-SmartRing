@@ -3,6 +3,8 @@
 import copy
 import importlib
 import json
+import sys
+from types import SimpleNamespace
 from pathlib import Path
 
 import pytest
@@ -209,3 +211,206 @@ def test_internal_sampling_gaps_report_actual_intervals_not_fixed_rate(marker):
     assert value["sampling"]["total_gap_ms"] == 375
     assert value["sampling"]["kind"] == "between_request_groups_not_audio_loss"
     assert [item["gap_ms"] for item in value["sampling"]["largest_gaps"]] == [195, 175, 5]
+
+
+def gate_sample(marker, at, *, paired=True, ready=True, active=True, answer=0, first=0,
+                generation="a" * 16, mode="adaptive", fallback=0, live=1):
+    row = samples(marker)[0]
+    row.update(monotonic_before_ms=at - 10, monotonic_after_ms=at)
+    row["signal_v2"].update(clock_ms=at - 5, observation_generation=generation)
+    row["device"]["ready"] = ready
+    row["device"]["cosy_delivery"] = {"state": "configured", "requested_mode": mode,
+        "effective_mode": mode, "failure_code": None, "restart_required": False, "outcomes": {"fallback": fallback}}
+    row["device"]["voice_interruption"] = {"active_output": active, "counts": {
+        "answer_send_returned": answer, "first_answer_send_returned": first, "cue_send_returned": 100,
+        "producer_adaptive_buffer": live, "producer_incremental_pcm": 0, "producer_buffered_pcm": 0}}
+    if not paired:
+        row["signal_v2"]["aec_pairs"] = None
+    return row
+
+
+class Simulation:
+    def __init__(self, rows, keys=None):
+        self.now, self.rows, self.keys, self.messages = 1000, rows, keys or {}, []
+
+    def read_samples(self):
+        return [row for row in self.rows if row["monotonic_after_ms"] <= self.now]
+
+    def read_key(self):
+        pending = self.keys.get(self.now, [])
+        return pending.pop(0) if pending else None
+
+    def clock(self):
+        return self.now, self.now + 100000
+
+    def wait(self, seconds):
+        self.now += 100
+
+    def run(self, marker, path, **options):
+        return marker.record_gated(path, "not-opened-by-test", read_samples=self.read_samples,
+            read_key=self.read_key, clock=self.clock, wait=self.wait, notify=self.messages.append, **options)
+
+
+def gate_rows(marker):
+    rows = [gate_sample(marker, 1000, paired=False, ready=False, active=False),
+            gate_sample(marker, 1100, paired=False, active=False),
+            gate_sample(marker, 1200),
+            gate_sample(marker, 1300, answer=10, first=1),
+            gate_sample(marker, 1500, answer=20, first=1),
+            gate_sample(marker, 1600, active=False, answer=20, first=1),
+            gate_sample(marker, 1800, active=False, answer=20, first=1)]
+    rows[1]["device"]["cosy_delivery"]["state"] = "not_observed"
+    return rows
+
+
+def test_gate_discards_early_keys_requires_heard_and_new_start_and_outer_group(marker, tmp_path):
+    keys = {1000: ["enter"], 1100: ["heard", "enter"], 1300: ["heard", "enter"],
+            1400: ["heard", "enter"], 1500: ["enter"], 1700: ["enter"]}
+    sim = Simulation(gate_rows(marker), keys)
+    path = tmp_path / "gated.jsonl"
+    assert sim.run(marker, path) == "marked_not_audio_verified"
+    rows = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+    assert [row["event"] for row in rows] == ["ready", "speech_start", "speech_end"]
+    assert [row["monotonic_ms"] for row in rows] == [1400, 1500, 1700]
+    assert sim.now == 1800  # 不因起键后的output=false取消；等到了完整外侧组。
+    assert any("丢弃" in value for value in sim.messages)
+    assert marker.align(rows, gate_rows(marker))["pair_state"] == "observed"
+
+
+@pytest.mark.parametrize("mode", ["generation", "disconnected", "fallback", "buffered", "saturated", "output_before_start", "delivery_lost"])
+def test_gate_cancels_after_binding_and_does_not_write_start(marker, tmp_path, mode):
+    data = gate_rows(marker)
+    row = data[4]
+    if mode == "generation":
+        row["signal_v2"]["observation_generation"] = "b" * 16
+    elif mode == "disconnected":
+        row["signal_v2"].update(state="no_connection", clock_ms=None, observation_generation=None, aec_pairs=None)
+        row["device"]["ready"] = False
+    elif mode == "fallback":
+        row["device"]["cosy_delivery"]["outcomes"]["fallback"] = 1
+    elif mode == "buffered":
+        row["device"]["cosy_delivery"]["effective_mode"] = "buffered"
+    elif mode == "saturated":
+        row["signal_v2"]["aec_pairs"]["total"]["valid"] = marker.LIMIT
+    elif mode == "output_before_start":
+        row["device"]["voice_interruption"]["active_output"] = False
+    else:
+        row["device"]["cosy_delivery"]["state"] = "not_observed"
+    sim = Simulation(data, {1400: ["heard"], 1500: ["enter"]})
+    path = tmp_path / "gated.jsonl"
+    assert sim.run(marker, path).startswith("cancelled_")
+    records = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+    assert [row["event"] for row in records] == ["ready", "cancelled"]
+
+
+def test_gate_cue_and_producer_start_cannot_arm_and_timeout_is_bounded(marker, tmp_path):
+    data = [gate_sample(marker, at) for at in (1000, 1100, 1200, 1300)]
+    sim = Simulation(data, {1000: ["heard", "enter"], 1200: ["heard", "enter"]})
+    path = tmp_path / "gated.jsonl"
+    assert sim.run(marker, path, timeout_seconds=.5) == "cancelled_gate_timeout"
+    assert [json.loads(line)["event"] for line in path.read_text(encoding="utf-8").splitlines()] == ["cancelled"]
+
+
+def test_gate_preset_or_warmup_answer_packets_do_not_arm(marker, tmp_path):
+    data = [gate_sample(marker, at, answer=index + 1, first=1, live=0)
+            for index, at in enumerate((1000, 1100, 1200, 1300))]
+    for row in data:
+        row["device"]["voice_interruption"]["counts"]["producer_preset"] = 1
+    sim = Simulation(data, {1200: ["heard", "enter"]})
+    path = tmp_path / "gated.jsonl"
+    assert sim.run(marker, path, timeout_seconds=.5) == "cancelled_gate_timeout"
+    assert [json.loads(line)["event"] for line in path.read_text(encoding="utf-8").splitlines()] == ["cancelled"]
+
+
+def test_gate_expiration_after_start_cancels_without_synthetic_end(marker, tmp_path):
+    data = gate_rows(marker)[:5]
+    data.insert(4, gate_sample(marker, 1400, answer=15, first=1))
+    sim = Simulation(data, {1400: ["heard"], 1500: ["enter"]})
+    path = tmp_path / "gated.jsonl"
+    assert sim.run(marker, path, freshness_ms=150) == "cancelled_gate_sample_expired"
+    records = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+    assert [row["event"] for row in records] == ["ready", "speech_start", "cancelled"]
+
+
+def test_gate_missing_file_and_processing_pause_do_not_reuse_ready_state(marker):
+    first = gate_sample(marker, 1000, answer=1, first=1)
+    for missing in (None, []):
+        gate = marker._Gate(1000, 3000)
+        gate.update([first], 1000, pre_start=True)
+        gate.update(missing, 1100, pre_start=True)
+        assert gate.reason == "samples_unavailable"
+    gate = marker._Gate(1000, 3000)
+    gate.update([first], 1000, pre_start=True)
+    gate.update([gate_sample(marker, 5000, answer=10, first=1)], 5000, pre_start=True)
+    assert gate.reason == "gate_processing_gap_or_clock_rewound"
+
+
+def test_gate_end_is_not_moved_when_complete_outer_sample_is_missing(marker, tmp_path):
+    sim = Simulation(gate_rows(marker)[:-1], {1400: ["heard"], 1500: ["enter"], 1700: ["enter"]})
+    path = tmp_path / "gated.jsonl"
+    assert sim.run(marker, path, timeout_seconds=2.5) == "cancelled_gate_timeout"
+    records = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+    assert [row["event"] for row in records] == ["ready", "speech_start", "speech_end", "cancelled"]
+    assert records[2]["monotonic_ms"] == 1700
+    assert marker.align(records, gate_rows(marker)[:-1])["state"] == "invalid_or_cancelled_marker"
+
+
+def test_live_tail_uses_complete_lines_only_and_does_not_store_extra_fields(marker, tmp_path):
+    path = tmp_path / "samples.jsonl"
+    row = gate_sample(marker, 1000)
+    path.write_text(json.dumps(row) + '\n{"partial":', encoding="utf-8")
+    assert marker._live_samples(path) == [row]
+    path.write_text('{"broken-complete":\n', encoding="utf-8")
+    assert marker._live_samples(path) is None
+
+
+def test_record_cli_refuses_missing_samples_before_prompt(marker, tmp_path):
+    with pytest.raises(SystemExit):
+        marker.main(["record", "--output", str(tmp_path / "must-not-exist.jsonl")])
+    assert not (tmp_path / "must-not-exist.jsonl").exists()
+
+
+def test_console_extended_key_suffix_cannot_become_heard_confirmation(marker, monkeypatch):
+    pending = ["\xe0"]
+    fake = SimpleNamespace(kbhit=lambda: bool(pending), getwch=lambda: pending.pop(0))
+    monkeypatch.setitem(sys.modules, "msvcrt", fake)
+    monkeypatch.setattr(marker, "_CONSOLE_EXTENDED", False)
+    assert marker._console_key() == "other"
+    assert marker._console_key() is None
+    pending.append("H")  # 箭头键后半码延迟到下一次poll，不能当作H确认。
+    assert marker._console_key() == "other"
+    pending.extend(["h", "\r", "q"])
+    assert [marker._console_key() for _ in range(3)] == ["heard", "enter", "cancel"]
+
+
+def test_gate_rechecks_latest_file_after_start_key_before_writing_marker(marker, tmp_path):
+    sim = Simulation(gate_rows(marker), {1400: ["heard"], 1500: ["enter"]})
+    reads_at_start = [0]
+    def changed_during_key():
+        data = copy.deepcopy(sim.read_samples())
+        if sim.now == 1500:
+            reads_at_start[0] += 1
+            if reads_at_start[0] == 2:
+                data[-1]["signal_v2"]["observation_generation"] = "b" * 16
+                # 同一查询时间已处理过的行不能合法改写；此处模拟下一组在读键时落地。
+                data[-1]["monotonic_before_ms"] += 1
+                data[-1]["monotonic_after_ms"] += 1
+                data[-1]["signal_v2"]["clock_ms"] += 1
+                sim.now += 1
+        return data
+    path = tmp_path / "gated.jsonl"
+    result = marker.record_gated(path, "not-opened", read_samples=changed_during_key,
+        read_key=sim.read_key, clock=sim.clock, wait=sim.wait, notify=sim.messages.append)
+    assert result == "cancelled_generation_changed"
+    assert [json.loads(line)["event"] for line in path.read_text(encoding="utf-8").splitlines()] == ["ready", "cancelled"]
+
+
+def test_gated_paths_and_existing_output_are_protected(marker, tmp_path):
+    path = tmp_path / "same.jsonl"
+    with pytest.raises(ValueError, match="paths_must_differ"):
+        marker.record_gated(path, path)
+    assert not path.exists()
+    path.write_text("preserve", encoding="utf-8")
+    with pytest.raises(FileExistsError):
+        marker.record_gated(path, tmp_path / "samples.jsonl", read_key=lambda: pytest.fail("no prompt"))
+    assert path.read_text(encoding="utf-8") == "preserve"

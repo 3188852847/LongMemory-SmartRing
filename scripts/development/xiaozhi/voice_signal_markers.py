@@ -13,6 +13,8 @@ SIGNAL_FIELDS = {"version", "kind", "state", "clock_ms", "observation_generation
 MARKER_FIELDS = {"version", "event", "monotonic_ms", "unix_ms", "timing_kind"}
 TIMING_KIND = "manual_outer_bracket_not_exact_voice_boundary"
 RATIO_EDGES = [.1, .25, .5, .9, 1.1]
+LIVE_PRODUCER_KEYS = ("producer_adaptive_buffer", "producer_incremental_pcm", "producer_buffered_pcm")
+_CONSOLE_EXTENDED = False
 
 
 def _clock():
@@ -200,18 +202,264 @@ def _read(path):
         return [json.loads(line) for line in stream if line.strip()]
 
 
+def _live_samples(path):
+    """只读最近完整行；尾部正在写入的半行不作为一次观测。"""
+    try:
+        with Path(path).open("rb") as stream:
+            stream.seek(0, 2)
+            start = max(0, stream.tell() - 262144)
+            stream.seek(start)
+            data = stream.read()
+        if start:
+            data = data.partition(b"\n")[2]
+        complete = data.split(b"\n")[:-1]
+        return [json.loads(line) for line in complete[-32:] if line.strip()]
+    except (OSError, UnicodeError, ValueError):
+        return None
+
+
+def _console_key():
+    # 仅本机当前控制台队列；不监听全局键盘、不记录文字。
+    import msvcrt
+    global _CONSOLE_EXTENDED
+    if not msvcrt.kbhit():
+        return None
+    value = msvcrt.getwch()
+    if _CONSOLE_EXTENDED:
+        _CONSOLE_EXTENDED = False
+        return "other"
+    if value in ("\x00", "\xe0"):
+        if msvcrt.kbhit():
+            msvcrt.getwch()
+        else:
+            _CONSOLE_EXTENDED = True
+        return "other"
+    if value in ("\r", "\n"):
+        return "enter"
+    return {"h": "heard", "q": "cancel", "\x03": "cancel"}.get(value.lower(), "other")
+
+
+def _keys(read_key):
+    result = []
+    for _ in range(64):
+        value = read_key()
+        if value is None:
+            return result, False
+        result.append(value)
+    return result, True
+
+
+class _Gate:
+    """v2代次及累计可核验；device模式/输出只是时间邻近启发门禁。"""
+    def __init__(self, started, freshness_ms):
+        self.started, self.freshness = started, freshness_ms
+        self.generation = None
+        self.last_seen = None
+        self.previous = None
+        self.paired = []
+        self.latest = None
+        self.reason = None
+        self.ready = False
+        self.last_update = started
+        self.delivery_seen = False
+
+    def update(self, rows, now, *, pre_start):
+        self.ready = False
+        if now < self.last_update or (self.generation is not None and now - self.last_update > self.freshness):
+            self.reason = "gate_processing_gap_or_clock_rewound"
+            return
+        self.last_update = now
+        if rows is None or (not rows and self.generation is not None):
+            if self.generation is not None:
+                self.reason = "samples_unavailable"
+            return
+        if not _ordered_requests(rows):
+            self.reason = "request_brackets_not_monotonic"
+            return
+        if self.last_seen is not None and rows and rows[-1]["monotonic_after_ms"] < self.last_seen:
+            self.reason = "sample_file_rewound"
+            return
+        for row in rows:
+            after = row["monotonic_after_ms"]
+            if after < self.started or (self.last_seen is not None and after <= self.last_seen):
+                continue
+            self.last_seen = after
+            if after > now:
+                self.reason = "sample_clock_in_future"
+                return
+            try:
+                anchor = _anchor(row)
+                if anchor is None:
+                    self.paired = []
+                    if self.generation is not None:
+                        self.reason = "gate_snapshot_unavailable"
+                        return
+                    continue
+                if self.generation is None:
+                    # 不从旧文件的过期行绑定代次。
+                    if now - after > self.freshness:
+                        continue
+                    self.generation = anchor["observation_id"]
+                if anchor["observation_id"] != self.generation:
+                    self.reason = "generation_changed"
+                    return
+                if self.previous is not None and _decreased(self.previous, anchor):
+                    self.reason = "counter_decreased"
+                    return
+                self.previous, self.latest = anchor, anchor
+                device = row["device"]
+                delivery, output = device.get("cosy_delivery", {}), device.get("voice_interruption", {})
+                fallback = delivery.get("outcomes", {}).get("fallback")
+                if not (delivery.get("requested_mode") == delivery.get("effective_mode") == "adaptive"
+                        and delivery.get("failure_code") is None
+                        and delivery.get("restart_required") is False and _count(fallback) and fallback == 0):
+                    self.reason = "mode_not_adaptive_or_fallback"
+                    return
+                if delivery.get("state") == "not_observed" and not self.delivery_seen:
+                    continue  # 尚未调用TTS的合法起始状态，不能当实答，也不误判回退。
+                if delivery.get("state") != "configured":
+                    self.reason = "delivery_observation_lost"
+                    return
+                self.delivery_seen = True
+                counts = output.get("counts", {})
+                answer, first = counts.get("answer_send_returned"), counts.get("first_answer_send_returned")
+                live = [counts.get(key) for key in LIVE_PRODUCER_KEYS]
+                if (type(output.get("active_output")) is not bool or not _count(answer) or not _count(first)
+                        or not all(_count(value) for value in live)):
+                    self.reason = "output_metadata_unknown_or_saturated"
+                    return
+                if anchor["pairs"] is None or anchor["pairs"]["valid"] == 0:
+                    if self.paired:
+                        self.reason = "paired_baseline_lost"
+                        return
+                    continue
+                self.paired.append((anchor, output["active_output"], answer, first, sum(live) > 0))
+                self.paired = self.paired[-2:]
+            except (TypeError, AttributeError, KeyError):
+                self.reason = "malformed_gate_sample"
+                return
+        if self.latest is None:
+            return
+        if now - self.latest["after"] > self.freshness:
+            self.reason = "gate_sample_expired"
+            return
+        if len(self.paired) == 2:
+            a, b = self.paired
+            if a[2] > b[2] or a[3] > b[3]:
+                self.reason = "output_counter_decreased"
+                return
+            self.ready = (all(0 <= now - item[0]["after"] <= self.freshness for item in (a, b))
+                          and a[1] and b[1] and b[2] > a[2] and b[3] > 0)
+            self.ready = self.ready and b[4]
+        # 起键后不以output停止/答案包不再增长取消：可能正是成功打断。
+        if not pre_start:
+            self.ready = self.latest["pairs"] is not None
+
+
+def record_gated(path, samples_path, *, timeout_seconds=90, freshness_ms=3000,
+                 read_samples=None, read_key=_console_key, clock=_clock, wait=time.sleep, notify=print):
+    """只消费既有采样；先H确认听到实答，再一次新Enter起键，终键后等外侧组。"""
+    if not 0 < timeout_seconds <= 240 or not 0 < freshness_ms <= 30000:
+        raise ValueError("invalid_gate_limits")
+    if Path(path).resolve() == Path(samples_path).resolve():
+        raise ValueError("marker_and_sample_paths_must_differ")
+    read_samples = read_samples or (lambda: _live_samples(samples_path))
+    started = clock()[0]
+    gate = _Gate(started, freshness_ms)
+    phase, end, announced = "waiting", None, None
+    with Path(path).open("x", encoding="utf-8", newline="\n") as stream:
+        def write(event):
+            monotonic, unix = clock()
+            stream.write(json.dumps(dict(version=1, event=event, monotonic_ms=monotonic, unix_ms=unix,
+                timing_kind=TIMING_KIND), allow_nan=False) + "\n")
+            stream.flush()
+            return monotonic
+        def cancel(reason):
+            write("cancelled")
+            message = {"operator": "操作者取消", "gate_timeout": "达到本轮总时限",
+                "clock_invalid": "本机计时不可用", "samples_unavailable": "采样文件不可用或已清空",
+                "gate_processing_gap_or_clock_rewound": "提示进程停顿过久或时钟倒退",
+                "request_brackets_not_monotonic": "采样请求时间乱序", "sample_file_rewound": "采样文件倒退",
+                "sample_clock_in_future": "采样时钟与本机不匹配", "gate_snapshot_unavailable": "就绪观测已丢失",
+                "generation_changed": "观察代次已变化", "counter_decreased": "观测计数下降",
+                "mode_not_adaptive_or_fallback": "测试模式变化或已发生回退",
+                "delivery_observation_lost": "实答生成观测已丢失",
+                "output_metadata_unknown_or_saturated": "正文输出观测未知或计数已饱和",
+                "paired_baseline_lost": "成对观测基线已丢失", "malformed_gate_sample": "采样格式不符",
+                "gate_sample_expired": "采样已过期", "output_counter_decreased": "正文输出计数下降",
+                "gate_lost_before_start": "起键前就绪条件已失效"}.get(reason, "诊断门禁条件不再满足")
+            notify("已取消：" + message + "；不自动重试。")
+            return "cancelled_" + reason
+        try:
+            while True:
+                now = clock()[0]
+                if not _milliseconds(now) or now < started:
+                    return cancel("clock_invalid")
+                if now - started >= timeout_seconds * 1000:
+                    return cancel("gate_timeout")
+                gate.update(read_samples(), now, pre_start=phase not in ("speaking", "outer"))
+                keys, flooded = _keys(read_key)
+                if "cancel" in keys:
+                    return cancel("operator")
+                if gate.reason:
+                    return cancel(gate.reason)
+                if phase == "waiting":
+                    status = "等待圆屏连接与正文输出；此时按Enter/H不会开始记录。"
+                    if gate.ready and not flooded:
+                        # 同一轮已排空的按键全部丢弃，不能把门禁前按键转成确认。
+                        phase = "heard"
+                        status = "软件门禁满足（非声学证明）。确实听到设备正文后按英文H，无需回车。"
+                elif phase in ("heard", "start"):
+                    if not gate.ready:
+                        return cancel("gate_lost_before_start")
+                    status = "确实听到设备正文后按英文H，无需回车。" if phase == "heard" else "已确认听到；看到本提示后新按Enter，随后说一次口令。"
+                    if not flooded and phase == "heard" and "heard" in keys:
+                        write("ready")
+                        phase = "start"
+                        status = "已确认听到；看到本提示后新按Enter，随后说一次口令。"
+                    elif not flooded and phase == "start" and "enter" in keys:
+                        # 按键前再读取最新组，避免只靠旧门禁放行。
+                        gate.update(read_samples(), clock()[0], pre_start=True)
+                        if gate.reason or not gate.ready:
+                            return cancel(gate.reason or "gate_lost_before_start")
+                        write("speech_start")
+                        phase, status = "speaking", "起键已记录。说完后立即新按Enter结束；Q取消。"
+                elif phase == "speaking":
+                    status = "说完后立即新按Enter结束；Q取消。"
+                    if not flooded and "enter" in keys:
+                        end = write("speech_end")
+                        phase, status = "outer", "终键已记录，等待终键之后的一组完整采样。"
+                else:
+                    status = "等待终键之后的一组完整采样。"
+                    if gate.latest is not None and gate.latest["before"] >= end:
+                        notify("单次标记完成；不代表语音或实机验收通过。")
+                        return "marked_not_audio_verified"
+                if "enter" in keys and phase in ("waiting", "heard"):
+                    notify("本次Enter过早，已丢弃；不会延后补记。")
+                if status != announced:
+                    notify(status)
+                    announced = status
+                wait(.1)
+        except (KeyboardInterrupt, EOFError):
+            return cancel("operator")
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     modes = parser.add_subparsers(dest="mode", required=True)
     mark = modes.add_parser("record")
     mark.add_argument("--output", type=Path, required=True)
+    mark.add_argument("--samples", type=Path, required=True)
+    mark.add_argument("--timeout-seconds", type=float, default=90)
+    mark.add_argument("--freshness-ms", type=int, default=3000)
     compare = modes.add_parser("align")
     compare.add_argument("--markers", type=Path, required=True)
     compare.add_argument("--samples", type=Path, required=True)
     compare.add_argument("--output", type=Path, required=True)
     args = parser.parse_args(argv)
     if args.mode == "record":
-        print(record(args.output))
+        print(record_gated(args.output, args.samples, timeout_seconds=args.timeout_seconds,
+                           freshness_ms=args.freshness_ms))
     else:
         value = align(_read(args.markers), _read(args.samples))
         with args.output.open("x", encoding="utf-8", newline="\n") as stream:

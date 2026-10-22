@@ -69,13 +69,13 @@ invalid为正常返回但输入/输出不成合法对；original_error为原调�
 
 ## 单轮按键标记工具与计数对齐
 
-[voice_signal_markers.py](../../../scripts/development/xiaozhi/voice_signal_markers.py) 只使用标准库，不连任何API/服务、不监听全局键盘、不打开音频设备。`record`只接本进程的回车/q/中断，不保存任何输入正文，只写固定ready/speech_start/speech_end/cancelled枚举和单调/Unix毫秒。只做一轮；起键后再说、说完后按止键是手动外侧括号，包含人为反应时间，绝不是准确音频起止。输出父目录必须已存在，使用独占新建，拒绝覆盖。
+[voice_signal_markers.py](../../../scripts/development/xiaozhi/voice_signal_markers.py) 只使用标准库，不连任何API/服务、不监听全局键盘、不打开音频设备。CLI `record`现已要求门禁采样文件，只接当前控制台的H/回车/Q/中断，不保存任何输入正文，只写固定ready/speech_start/speech_end/cancelled枚举和单调/Unix毫秒。只做一轮；起键后再说、说完后按止键是手动外侧括号，包含人为反应时间，绝不是准确音频起止。输出父目录必须已存在，使用独占新建，拒绝覆盖；marker和samples不得同一路径。
 
 由ROOT在将来已安排的唯一一次受控流程中执行，**本轮没有运行真实提示/要求所有者再试**：
 
 1. ROOT按AI接线结果启动短时数值采样，包住整组device、v1、v2查询记录`monotonic_before_ms/monotonic_after_ms`；保存原始计数与公开v2对象。采样行约定为`device.ready`、`device.voice_input_observation.counts`、`signal_v2`（公开六字段）及这两个单调锚点；读取signal.clock_ms必须落在整组请求括号内，否则拒绝对齐。可在只采v2的行名signal下放同一公开对象，但不接受缺kind的内部完整v2或默认v1冒充。
-2. 以主项目现有Python运行`voice_signal_markers.py record --output <私有证据目录的新markers.jsonl>`。看到起提示后按回车再说一次，讲完立即按结束回车；q或Ctrl-C取消。语句不经本工具ASR，不写个人库；ROOT统一安排实际对话，不因本脚本改日用。
-3. 数值采样至少覆盖结束标记后的完整一组请求，再正常停止。以同一Python运行`voice_signal_markers.py align --markers <markers.jsonl> --samples <数值samples.jsonl> --output <新的alignment.json>`。
+2. 以主项目现有Python运行`voice_signal_markers.py record --samples <既有数值samples.jsonl> --output <私有证据目录的新markers.jsonl> --timeout-seconds 90 --freshness-ms 3000`。先等软件门禁，早按键丢弃；实际听到正文后按英文H（无需回车），此后看到起提示再新按Enter并说一次口令，讲完立即新按Enter；Q或Ctrl-C取消。语句不经本工具ASR，不写个人库；ROOT统一安排实际对话，不因本脚本改日用。
+3. helper本身等待结束标记之后的一组完整采样后才返回，AD仍按既有规则完成该外侧组再停止。以同一Python运行`voice_signal_markers.py align --markers <markers.jsonl> --samples <数值samples.jsonl> --output <新的alignment.json>`；不移动标记或补造外侧组。
 4. 工具从起标记之前已经完成的最后一组请求，到止标记之后才开始的第一组请求取外括号。严格差分仅用于同代次v2 paired累计计数，不相减重叠recent；不输出input_delta，device的queue_put/vad_check/vad_speech/formal_begin/speech_begin/abort_begin/abort_return只保留前后两份时间邻近背景。整组HTTP时间括号不证明device与v2是同连接或跨端点原子。按键只圈定所有者计划发声的外侧时段，数值本身不验证人声或AEC误伤。
 
 供AD采样接力的最小单行JSONL示例（纯合成；其他既有采样字段可保留，工具只提取白名单）：
@@ -131,3 +131,19 @@ ROOT选择先修测试门禁而非改算法或立刻再要求所有者试。最�
 - 首先离线听辨两轨，判断处理前是否实际有可辨口令、处理后是否消失/受损；若需模型复放，再由ROOT安排同一CPU模型、相同分块/阈值与相同初始条件的对照，不假称能恢复未采集的生产RNN历史。前后都没有可辨近端语音时，仍不能独立证明设备AEC或麦克风的具体问题；需要设备前端证据须另界定授权范围。
 
 以上是主会话判断所需的候选范围，不是对所有者的新录音请求、实现授权或已完成实验。
+
+## 已授权的最小门禁候选（仅本地诊断交互）
+
+ROOT后续批准实现门禁，继续保持正式日用buffered，本会话未连接其API或改变模式。实现只在原marker helper及其纯合成测试中；不改生产观察器/AEC/VAD/音频/abort，不新建UI、API字段、依赖或额外状态文件，所有者暂不重测。
+
+本地输入契约复用AD的samples.jsonl：既有整组单调before/after、公开六字段signal_v2、device.ready、cosy_delivery及voice_interruption。后者counts须保留既有answer_send_returned/first_answer_send_returned，以及producer_adaptive_buffer/producer_incremental_pcm/producer_buffered_pcm三个非preset路径计数；cue/preset单独增长不放行。INPUT_KEYS仍仅背景，不把device条件强证为与v2同连接。
+
+CLI record新增必填--samples，缺少它在参数解析时失败、不打开旧无门禁交互；新增--timeout-seconds默认90（总时限，最大240）和--freshness-ms默认3000（可显式配置，最大30000）。低层record格式函数保留给既有合成测试；正常实测只能使用有门禁的CLI。按实际单调时间检查，不暗设固定1Hz；采样间隔若不符合明确新鲜度界限应取消，而非自动延长或伪造新点。
+
+helper只读取尾部最多256KiB中的最后32个完整JSONL行；正在追加的半行忽略，源文件缺失/损坏/清空及时间倒退在绑定代次后取消。业务观测的v2代次、clock、未饱和及配对守恒仍由原严格校验；最少两组新鲜、同代次、非null且valid>0的paired基线才有资格放行。requested/effective均adaptive、无failure/restart/fallback；初始TTS尚未调用的合法not_observed态只等待，进入configured之后再丢失观测才取消。
+
+软件门禁还要求邻近背景中的ready、output active、实答发送计数增长、first_answer_send_returned>0及非preset生产路径已出现。active_output或预热/稍等本身不算正文。软件条件只是启发条件，并非声学播放确认，也不证明两个HTTP端点同连接；所有者必须在门禁后按英文H明确确认自己确实听到了正文。此时才写ready，再看到下一提示后新按Enter才写speech_start；H与同一批Enter不复用，门禁前按键每轮排空，不积压后补记。延迟到下一轮的扩展方向键后半码不会被当成H确认。
+
+起键前重新读取最新采样复核。绑定后换代、未知/过期、模式回退、计数下降/饱和、采样文件倒退或提示进程停顿超过新鲜度均取消；90秒总上限含等待/听感确认/发声/外侧组，不自动重试。起键后output=false或答案包不再增长可能是成功打断，不因此取消；其余代次/模式/时钟/观测条件继续检查。终键后必须等到同代次、请求开始时刻不早于speech_end的完整组；若未等到就取消，保留原终键并追加cancelled，不补写或挪动时间。门禁前取消可能只写cancelled一行，属于无效/取消记录，不能按完成三事件解释；关闭窗口留下的不完整文件也不算成功。
+
+原无效64行只做了离线门禁代入：旧起键时不就绪，首个软件可放行点676991625，比旧起键晚15079ms；原文件不存在门禁后的H听感确认，因此不会从该文件补出有效新标记。该代入未改源文件或执行交互。离线检查也发现并修正了初始not_observed误判取消的前提，加入纯合成回归。最新单模块51项通过；未做所有者键感/实机复验，后续由ROOT/AI审查及整合，不以此宣称语音故障已修复。
