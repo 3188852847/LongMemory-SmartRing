@@ -39,6 +39,12 @@ def execute(cpu_output, worker_path, sdk, toolkit, output, *, existing_engine=No
         native.close()
     reference_path=reference_path if reference_path is not None else case/"expected.bin"
     expected=np.fromfile(reference_path,dtype="<f4").reshape(2,80,128)
+    result.tofile(output/"estimator_out.bin")
+    delta=np.abs(result-expected)
+    comparison=dict(reference_allclose=bool(np.allclose(result,expected,rtol=1e-2,atol=1e-4)),
+                    reference_path=str(reference_path.resolve()),max_abs_error=float(delta.max()),
+                    mismatched=int((delta>1e-4+1e-2*np.abs(expected)).sum()),elements=int(result.size))
+    (output/"comparison.json").write_text(json.dumps(comparison,indent=2),encoding="utf-8")
     np.testing.assert_allclose(result,expected,rtol=1e-2,atol=1e-4)
     identity=dict(engine_path=str(engine.resolve()),engine_sha256=sha256(engine),precision="fp32",
                   source_commit=exported["source_commit"],graph_streaming=exported["streaming"],
