@@ -16,6 +16,7 @@ from voice_waiting import WaitingPacket, AnswerPacket
 
 STATE = "_longmemory_audio_interruption"
 _ABORT = ContextVar("cosy_abort_epoch_context", default=None)
+_EOS_INPUT = ContextVar("cosy_eos_input_target", default=None)
 _CONTROL = ContextVar("cosy_control_epoch_context", default=None)
 _HANDOFF = ContextVar("cosy_handoff_context", default=None)
 _MESSAGE = ContextVar("cosy_message_epoch_context", default=None)
@@ -215,8 +216,66 @@ class _ControlPacket(bytes):
         return packet
 
 
+def _install_eos_vad_interruption(receive_module, asr_base_module):
+    """只补EOS后的既有VAD阳性路径；固定单包目标，等待中出现的新轮不可撤销。"""
+    original_no_voice = getattr(receive_module, "no_voice_close_connect", None)
+    original_handle = getattr(receive_module, "handleAudioMessage", None)
+    if (not inspect.iscoroutinefunction(original_no_voice)
+            or not inspect.iscoroutinefunction(original_handle)
+            or getattr(original_no_voice, "_longmemory_eos_vad_wrapped", False)):
+        return
+
+    def input_handler(original):
+        if getattr(original, "_longmemory_eos_input_wrapped", False):
+            return original
+        async def handle(connection, *args, **kwargs):
+            prior = _EOS_INPUT.get()
+            if prior is not None and prior[0] is connection:
+                return await original(connection, *args, **kwargs)
+            protocol = getattr(connection, "_longmemory_tts_interrupt_wire", None)
+            turn = getattr(protocol, "turn", None)
+            target = (connection, None, None)
+            if (supported(connection) and getattr(connection, "client_aec", False) is True
+                    and getattr(connection, "client_listen_mode", None) != "manual"
+                    and getattr(connection, "client_is_speaking", None) is False
+                    and turn is not None and turn.eos and protocol.has_interrupt_target()):
+                target = (connection, protocol, turn)
+            token = _EOS_INPUT.set(target)
+            try:
+                return await original(connection, *args, **kwargs)
+            finally:
+                _EOS_INPUT.reset(token)
+        handle._longmemory_eos_input_wrapped = True
+        return handle
+
+    original = original_handle
+    alias = getattr(asr_base_module, "handleAudioMessage", None)
+    receive_module.handleAudioMessage = input_handler(original)
+    if alias is not None:
+        asr_base_module.handleAudioMessage = (receive_module.handleAudioMessage if alias is original
+                                             else input_handler(alias))
+
+    async def no_voice_close_connect(connection, have_voice):
+        target = _EOS_INPUT.get()
+        if target is not None and target[0] is connection and have_voice is True:
+            _, protocol, turn = target
+            # 原handle已跑过一次VAD、唤醒忽略和原快速abort。只处理捕获的EOS目标；
+            # 等待期间若目标已撤销或被新轮替换，不能再次撤权。
+            if (protocol is not None
+                    and getattr(connection, "_longmemory_tts_interrupt_wire", None) is protocol
+                    and protocol.turn is turn and turn.eos and protocol.has_interrupt_target()
+                    and supported(connection) and getattr(connection, "client_aec", False) is True
+                    and getattr(connection, "client_listen_mode", None) != "manual"):
+                await receive_module.handleAbortMessage(connection)
+        # 保留结束提示/持久会话等既有包装的返回值、异常和调用顺序。
+        return await original_no_voice(connection, have_voice)
+    no_voice_close_connect._longmemory_eos_vad_wrapped = True
+    receive_module.no_voice_close_connect = no_voice_close_connect
+
+
 def install_voice_interruption(connection_class, receive_module, asr_base_module, send_module, *, tts_base_module):
     """上游模块须由启动器传入；不在此加载模型，保留不同导入别名的原包装。"""
+    _install_eos_vad_interruption(receive_module, asr_base_module)
     if not getattr(connection_class, "_longmemory_audio_revocation_installed", False):
         original_clear = connection_class.clear_queues
         def clear(connection, *args, **kwargs):
