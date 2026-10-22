@@ -29,7 +29,7 @@ AI拥有 [有限投影](../../../scripts/development/xiaozhi/voice_signal_diagno
 
 主Python3.12.13和现装小智Python3.10.20实测均用GetTickCount64，报告分辨率 **15.625ms**，不是QPC高精度。首轮21个短通信均在父进程时钟括号内，但0ms值是量化结果，不能解释为零延迟；第二轮覆盖31个不同刻度、跨度890ms，所有子戳仍在父进程发出/收完区间内，受控25ms子延迟每五次一次，最大往返记录47ms。回执 `data/test-tmp/ai-aec-python310-312-monotonic-check-20261022-02.json`，SHA256 `db04d41664ba09e35deddf3cf797b8201cdeedb6375d921c87769903f7edf1be`。仅证明当前机器/解释器可比较，不能证明精确发声边界或真实服务时延。
 
-ROOT将来一次受控配合中可安排安静和播放窗口，同一句公开“停一下”、同一距离位置音量；每窗口单独新建markers文件，不能将多组起止塞入一次align。record起键后再说，讲完再按止键；至少留出起键前约2秒和止键后约1秒的安静/仅播放背景，采样覆盖止键后的完整一组请求。无效窗口停止，不追加循环实测。本轮未实际发提示或邀请所有者讲话。
+ROOT随后收窄为一次自然发声：诊断候选正式发布后，由ROOT以既有进程级覆盖临时复现同一adaptive模式/声线/阈值，持久偏好继续buffered；取证后正规停止、清除进程覆盖并重开回buffered。所有者在实际听到播放时只自然说一次公开“停一下”，不要求刻意放慢、提高音量或改变声线。record起键后再说，讲完再按止键；采样预留起键前约2秒仅播放背景和止键后约1秒，覆盖止键后的完整一组请求。安静对照不增加所有者发声；无效窗口停止，不追加循环实测。模式切换和真实流程只由ROOT执行，本轮未发提示或邀请所有者讲话，也不将候选描述为修复已就绪。
 
 AD数值采样在每组请求外实际采集monotonic_before_ms/monotonic_after_ms，约1Hz；必须将公开对象存signal_v2。clock_ms落在整组括号内，marker与sourceclock保留计时粒度余量，报告实际请求跨度、两端余量和内部采样空洞。只用同观察代次累计配对统计作差，近期三秒滚动窗口不得相减。原144行没有真实新时钟/代次/按键，禁止事后补造。
 
@@ -40,3 +40,8 @@ AD数值采样在每组请求外实际采集monotonic_before_ms/monotonic_after_
 接口初检72 passed（0.76秒）；补充丢弃字段/方法拒绝及AC新增边界后76 passed（0.82秒），报告 `data/test-tmp/ai-aec-pairs-endpoint-preflight-01.xml/-02.xml`，重叠组不相加。现装3.10已实际运行 [标准库probe](../../../tests/fixtures/ai_aec_signal_probe.py)：500→250合成PCM、原方法2次（含一次BaseException身份保留）、getter不增加调用、默认v1及源clock包围正确；无网络、模型/Torch、音频落盘。最终清洁HEAD的检查与回执待候选冻结后列明。
 
 helper尚未放行：AI合成复现 `data/test-tmp/ai-aec-marker-review-repro-20261022-01.json` 显示f30阶段中间aec_pairs=null后仍算首末pair_delta，并且内部2500ms空洞未报告。ROOT已转AC修正marker完整schema、内部unknown、floor/edges、时钟与gap；本树只接精确后笔，不重复改其helper。不拿原13项通过覆盖新边界；当前尚无实机、部署或漏检修复结论。
+
+
+API侧独立阶段提交 **`a6cf8a11cea77d77f5d98c2f613e5940044340c6`**；其后暂只有文档收尾，仍需AC的helper后笔才可冻结完整候选。八文件组合预检 **286 passed、0 skipped，1.54秒**，`data/test-tmp/ai-aec-pairs-combined-preflight-01.xml`；包含helper已有测试，不覆盖上述新发现边界，不能称helper已验收。
+
+在清洁a6cf8a11上，现装3.12.13和3.10.20分别实际运行标准库probe及当前device_control/control_http模块导入，均保留默认v1、真实clock包围、未知成对不造零、getter不增加调用及原BaseException对象身份。新回执 `data/test-tmp/ai-aec-api-clean-python310-312-20261022-01.json`，SHA256 **`565d40cd123e4da43853c1a4cef3734525e410ac6fb262d5a86591d12fe1a747`**。它明确标记阶段为API源码冻结/helper审查待修，不假称最终组合已经通过。未调用服务、模型、GPU或设备，未推送/部署。
