@@ -8550,6 +8550,25 @@
         ]
       },
       "tags": ["EOS", "VAD撤权", "既存遗漏", "实机待验"]
+    },
+    {
+      "path": "docs/development/parallel/AI-ci-owner-skips-20261022.md",
+      "title": "AI：两项专属语音资源 skip 的精确登记",
+      "status": "draft",
+      "basis": "ROOT授权的CI精确资源登记候选；不改生产与用例，待AD独审和远程验证",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-22",
+        "scope": "已保存365后端失败日志、两个真实skip条件/完整JUnit身份、清单仅加2项、9测试23子检查及异常原因/未知身份拒绝；保留原92项证据，不代替远程CI",
+        "evidence": [
+          "scripts/ci/backend_resources.py",
+          "scripts/ci/backend_quality.py",
+          "scripts/ci/test_backend_quality.py",
+          "tests/unit/development/test_direct_ws_v2.py",
+          "tests/unit/development/test_voice_eos_vad_control.py"
+        ]
+      },
+      "tags": ["CI", "精确skip", "专属资源", "生产未改"]
     }
   ],
   "integration_sources": {
