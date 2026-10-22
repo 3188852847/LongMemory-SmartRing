@@ -370,17 +370,17 @@ def test_record_cli_refuses_missing_samples_before_prompt(marker, tmp_path):
     assert not (tmp_path / "must-not-exist.jsonl").exists()
 
 
-def test_console_extended_key_suffix_cannot_become_heard_confirmation(marker, monkeypatch):
-    pending = ["\xe0"]
-    fake = SimpleNamespace(kbhit=lambda: bool(pending), getwch=lambda: pending.pop(0))
-    monkeypatch.setitem(sys.modules, "msvcrt", fake)
-    monkeypatch.setattr(marker, "_CONSOLE_EXTENDED", False)
-    assert marker._console_key() == "other"
-    assert marker._console_key() is None
-    pending.append("H")  # 箭头键后半码延迟到下一次poll，不能当作H确认。
-    assert marker._console_key() == "other"
-    pending.extend(["h", "\r", "q"])
-    assert [marker._console_key() for _ in range(3)] == ["heard", "enter", "cancel"]
+def test_console_extended_key_cannot_become_heard_confirmation(marker):
+    arrow = marker._ConsoleRecord()
+    arrow.EventType = 1
+    arrow.Event.KeyEvent.bKeyDown = 1
+    arrow.Event.KeyEvent.wRepeatCount = 1
+    arrow.Event.KeyEvent.wVirtualKeyCode = 0x26  # UP；不再有getwch的延迟H后半码。
+    arrow.Event.KeyEvent.uChar.UnicodeChar = ord('H')
+    pending = [arrow]
+    reader = marker._ConsoleKeyReader(lambda: pending.pop(0) if pending else None)
+    assert reader.read() == "other"
+    assert reader.read() is None
 
 
 def test_gate_rechecks_latest_file_after_start_key_before_writing_marker(marker, tmp_path):

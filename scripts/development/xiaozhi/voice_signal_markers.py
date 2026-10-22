@@ -1,7 +1,9 @@
 """一次本机发声外侧按键标记及离线计数对齐；无网络、麦克风或正文存储。"""
 
 import argparse
+import ctypes
 import json
+import os
 from pathlib import Path
 import time
 
@@ -14,7 +16,7 @@ MARKER_FIELDS = {"version", "event", "monotonic_ms", "unix_ms", "timing_kind"}
 TIMING_KIND = "manual_outer_bracket_not_exact_voice_boundary"
 RATIO_EDGES = [.1, .25, .5, .9, 1.1]
 LIVE_PRODUCER_KEYS = ("producer_adaptive_buffer", "producer_incremental_pcm", "producer_buffered_pcm")
-_CONSOLE_EXTENDED = False
+_CONSOLE_INPUT = None
 
 
 def _clock():
@@ -218,25 +220,107 @@ def _live_samples(path):
         return None
 
 
+class _ConsoleChar(ctypes.Union):
+    _fields_ = [("UnicodeChar", ctypes.c_uint16), ("AsciiChar", ctypes.c_char)]
+
+
+class _ConsoleKeyEvent(ctypes.Structure):
+    _fields_ = [("bKeyDown", ctypes.c_int32), ("wRepeatCount", ctypes.c_uint16),
+                ("wVirtualKeyCode", ctypes.c_uint16), ("wVirtualScanCode", ctypes.c_uint16),
+                ("uChar", _ConsoleChar), ("dwControlKeyState", ctypes.c_uint32)]
+
+
+class _ConsoleEvent(ctypes.Union):
+    _fields_ = [("KeyEvent", _ConsoleKeyEvent), ("reserved", ctypes.c_ubyte * 16)]
+
+
+class _ConsoleRecord(ctypes.Structure):
+    _fields_ = [("EventType", ctypes.c_uint16), ("Event", _ConsoleEvent)]
+
+
+class _ConsoleKeyReader:
+    """只认可本控制台观察到的按下边沿；重复字符不等于释放后重新按下。"""
+    def __init__(self, read_event):
+        self.read_event, self.held = read_event, set()
+
+    def read(self):
+        record = self.read_event()
+        if record is None:
+            return None
+        if record.EventType != 1:  # KEY_EVENT；不把方向键后半码或窗口事件当文字。
+            return "other"
+        key = record.Event.KeyEvent
+        virtual = key.wVirtualKeyCode
+        if virtual not in (0x0D, 0x48, 0x51, 0x43):  # Enter/H/Q/C，仅暂存有关键的按下状态。
+            return "other"
+        control = key.dwControlKeyState
+        identity = (virtual, key.wVirtualScanCode, bool(control & 0x0100))
+        if not key.bKeyDown:
+            self.held.discard(identity)
+            return "other"
+        char = chr(key.uChar.UnicodeChar)
+        # 取消无需新确认边沿，长按Q/Ctrl-C也应立即安全结束。
+        if char == "\x03" or (virtual == 0x43 and control & 0x000C):
+            return "cancel"
+        if virtual == 0x51 and char.lower() == "q" and not control & 0x000F:
+            return "cancel"
+        already_held = any(item[0] == virtual for item in self.held)
+        self.held.add(identity)
+        if already_held:
+            return "other"
+        if key.wRepeatCount != 1:
+            return "other"  # 合并的自动重复同样不能充当一次新的确认。
+        if virtual == 0x0D and not control & 0x000F:
+            return "enter"
+        if not control & 0x000F:  # 不把Ctrl/Alt组合键误作普通H/Q。
+            if virtual == 0x48 and char.lower() == "h":
+                return "heard"
+        return "other"
+
+
+class _WindowsConsoleInput:
+    """仅读当前STD_INPUT_HANDLE的控制台事件；不装钩子、不改变控制台模式。"""
+    def __init__(self, api=None):
+        if api is None:
+            if os.name != "nt":
+                raise OSError("console_input_unavailable")
+            api = ctypes.WinDLL("kernel32", use_last_error=True)
+            api.GetStdHandle.argtypes = [ctypes.c_uint32]
+            api.GetStdHandle.restype = ctypes.c_void_p
+            api.GetConsoleMode.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_uint32)]
+            api.GetConsoleMode.restype = ctypes.c_int32
+            api.GetNumberOfConsoleInputEvents.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_uint32)]
+            api.GetNumberOfConsoleInputEvents.restype = ctypes.c_int32
+            api.ReadConsoleInputW.argtypes = [ctypes.c_void_p, ctypes.POINTER(_ConsoleRecord),
+                                            ctypes.c_uint32, ctypes.POINTER(ctypes.c_uint32)]
+            api.ReadConsoleInputW.restype = ctypes.c_int32
+        self.api = api
+        self.handle = api.GetStdHandle(0xFFFFFFF6)  # STD_INPUT_HANDLE = -10
+        mode = ctypes.c_uint32()
+        if self.handle in (None, 0, ctypes.c_void_p(-1).value) or not api.GetConsoleMode(self.handle, ctypes.byref(mode)):
+            raise OSError("console_input_unavailable")
+        self.reader = _ConsoleKeyReader(self._read_event)
+
+    def _read_event(self):
+        count = ctypes.c_uint32()
+        if not self.api.GetNumberOfConsoleInputEvents(self.handle, ctypes.byref(count)):
+            raise OSError("console_input_unavailable")
+        if count.value == 0:
+            return None
+        record, read = _ConsoleRecord(), ctypes.c_uint32()
+        if not self.api.ReadConsoleInputW(self.handle, ctypes.byref(record), 1, ctypes.byref(read)) or read.value != 1:
+            raise OSError("console_input_unavailable")
+        return record
+
+    def read(self):
+        return self.reader.read()
+
+
 def _console_key():
-    # 仅本机当前控制台队列；不监听全局键盘、不记录文字。
-    import msvcrt
-    global _CONSOLE_EXTENDED
-    if not msvcrt.kbhit():
-        return None
-    value = msvcrt.getwch()
-    if _CONSOLE_EXTENDED:
-        _CONSOLE_EXTENDED = False
-        return "other"
-    if value in ("\x00", "\xe0"):
-        if msvcrt.kbhit():
-            msvcrt.getwch()
-        else:
-            _CONSOLE_EXTENDED = True
-        return "other"
-    if value in ("\r", "\n"):
-        return "enter"
-    return {"h": "heard", "q": "cancel", "\x03": "cancel"}.get(value.lower(), "other")
+    global _CONSOLE_INPUT
+    if _CONSOLE_INPUT is None:
+        _CONSOLE_INPUT = _WindowsConsoleInput()
+    return _CONSOLE_INPUT.read()
 
 
 def _keys(read_key):
@@ -387,6 +471,7 @@ def record_gated(path, samples_path, *, timeout_seconds=90, freshness_ms=3000,
                 "output_metadata_unknown_or_saturated": "正文输出观测未知或计数已饱和",
                 "paired_baseline_lost": "成对观测基线已丢失", "malformed_gate_sample": "采样格式不符",
                 "gate_sample_expired": "采样已过期", "output_counter_decreased": "正文输出计数下降",
+                "console_input_unavailable": "当前控制台输入不可用，未回退到无门禁录制",
                 "gate_lost_before_start": "起键前就绪条件已失效"}.get(reason, "诊断门禁条件不再满足")
             notify("已取消：" + message + "；不自动重试。")
             return "cancelled_" + reason
@@ -442,6 +527,8 @@ def record_gated(path, samples_path, *, timeout_seconds=90, freshness_ms=3000,
                 wait(.1)
         except (KeyboardInterrupt, EOFError):
             return cancel("operator")
+        except OSError:
+            return cancel("console_input_unavailable")
 
 
 def main(argv=None):
