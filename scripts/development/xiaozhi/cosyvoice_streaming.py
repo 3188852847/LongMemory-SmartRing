@@ -459,6 +459,10 @@ def install_cosyvoice_streaming(tts, connection):
         pattern = getattr(tts, "_correct_words_pattern", None)
         if pattern:
             cleaned = pattern.sub(lambda match: tts.correct_words[match.group(0)], cleaned)
+        # 表情或词替换可能留下空片段；它不需要合成，也不是流式交付失败。
+        # 在创建交付状态和发 HTTP 前跳过，让同一连接的后续正文继续增量。
+        if not cleaned.strip():
+            return None
         preset_name = fast_asset_for_text(cleaned) if default_voice_active() else None
         preset = PRESET_ROOT / preset_name if preset_name else None
         delivered = False

@@ -1,5 +1,7 @@
 """连接内交付模式、故障降级及不重播边界；没有真实HTTP/模型或偏好写入。"""
 import json
+import re
+import sys
 from types import SimpleNamespace as NS
 
 import pytest
@@ -17,6 +19,40 @@ def quiet(state):
             if pcm:
                 callback(b"encoded:" + pcm)
     state.tts.opus_encoder = Encoder()
+
+
+def test_cleaned_empty_segments_do_not_degrade_or_replay_following_incremental_text(cancellable_stream, monkeypatch):
+    state = cancellable_stream
+    quiet(state)
+    cleaner = sys.modules['core.utils.tts'].MarkdownCleaner
+    monkeypatch.setattr(cleaner, 'clean_markdown', lambda text: '' if text == '🙂' else text)
+    modes = []
+    original_open = streaming._open_stream
+    def open_stream(*args, **kwargs):
+        modes.append(kwargs['json']['delivery_mode'])
+        return original_open(*args, **kwargs)
+    monkeypatch.setattr(streaming, '_open_stream', open_stream)
+
+    state.tts.to_tts_stream('🙂', opus_handler=state.packets.append)
+    assert state.requests == 0 and state.packets == state.queued == []
+    assert not hasattr(state.connection, ATTRIBUTE)
+
+    state.tts.to_tts_stream('公开正文', opus_handler=state.packets.append)
+    before = delivery_snapshot(state.connection)
+    state.tts._correct_words_pattern = re.compile('silent')
+    state.tts.correct_words = {'silent': ''}
+    for text in ('🙂', ' \t\n', 'silent'):
+        state.tts.to_tts_stream(text, opus_handler=state.packets.append)
+    assert state.requests == 1 and state.packets == [b'encoded:abcdef']
+    assert len(state.queued) == 1 and state.resets == 0
+    assert delivery_snapshot(state.connection) == before
+
+    state.tts.to_tts_stream('继续公开正文', opus_handler=state.packets.append)
+    assert modes == ['incremental', 'incremental'] and state.requests == 2
+    assert state.packets == [b'encoded:abcdef', b'encoded:abcdef'] and len(state.queued) == 2
+    after = delivery_snapshot(state.connection)
+    assert after['effective_mode'] == 'incremental' and after['failure_code'] is None
+    assert after['outcomes']['completed'] == 2 and after['outcomes']['failed'] == 0
 
 
 def test_snapshot_is_readonly_and_default_legacy_configuration_is_buffered():
