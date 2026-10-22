@@ -10,6 +10,27 @@ import time
 
 HEADER = struct.Struct("!HHIII")
 MAX_OPUS_BYTES = 8192
+_LABEL_MODULUS = 2**32
+
+
+def _next_audio_label(connection):
+    """毫秒值仅作标签候选；同连接碰撞/回退时向前分配，不能当播放时钟。"""
+    label = int(time.time() * 1000) % _LABEL_MODULUS
+    previous = getattr(connection, "_longmemory_last_v2_audio_label", None)
+    if previous is not None:
+        distance = (label - previous) % _LABEL_MODULUS
+        # 半环以内才视作正常向前（含自然回绕），否则是同毫秒或时钟回退。
+        if distance == 0 or distance >= _LABEL_MODULUS // 2:
+            label = (previous + 1) % _LABEL_MODULUS
+    label = label or 1  # 0在接收端表示没有可配对参考，不能分配给有效音频。
+    cache = getattr(connection, "aec_audio_cache", {})
+    # 即使回绕到仍保留的旧标签，也不能覆盖另一包的实际解码参考。
+    for _ in range(len(cache) + 1):
+        if label not in cache:
+            connection._longmemory_last_v2_audio_label = label
+            return label
+        label = (label + 1) % _LABEL_MODULUS or 1
+    raise RuntimeError("v2_audio_label_space_exhausted")
 
 
 def connection_protocol_version(connection):
@@ -78,7 +99,7 @@ def install_direct_ws_v2(connection_class):
                 or connection_protocol_version(connection) != 2):
             return await original_send(connection, opus_packet, flow_control)
 
-        timestamp = int(time.time() * 1000) % (2**32)
+        timestamp = _next_audio_label(connection)
         if getattr(connection, "client_aec", False):
             # 与固定上游 MQTT AEC 路径使用相同的参考帧缓存格式。
             if not hasattr(connection, "aec_audio_cache"):
