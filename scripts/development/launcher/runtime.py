@@ -303,11 +303,18 @@ def build_commands(options, uv=None):
                             "--source-root", str(DEFAULT_COSYVOICE_SOURCE),
                             "--model-dir", str(DEFAULT_COSYVOICE_MODEL),
                             "--profile-root", str(root)]
-            # 仅本次启动进程显式选择引擎；缺省仍走 PyTorch，不改日用偏好或声线。
-            if os.environ.get("LONGMEMORY_FLOW_TRT_ENGINE"):
+            # 双击启动沿用专属私有选择；显式进程环境覆盖文件，不改声线或其他偏好。
+            flow_selection_path = root / "local/config/preferences/flow-acceleration.json"
+            flow_selection = json.loads(flow_selection_path.read_text(encoding="utf-8")) if flow_selection_path.is_file() else {}
+            if not isinstance(flow_selection, dict):
+                raise ValueError("Flow 加速选择必须为 JSON 对象。")
+            flow_enabled = (bool(os.environ["LONGMEMORY_FLOW_TRT_ENGINE"])
+                            if "LONGMEMORY_FLOW_TRT_ENGINE" in os.environ
+                            else flow_selection.get("enabled") is True)
+            if flow_enabled:
                 for name in ("engine", "worker", "sdk_root", "toolkit_root"):
-                    value = os.environ.get("LONGMEMORY_FLOW_TRT_" + name.upper())
-                    if not value:
+                    value = os.environ.get("LONGMEMORY_FLOW_TRT_" + name.upper(), flow_selection.get(name))
+                    if not isinstance(value, str) or not value:
                         raise ValueError("Flow TensorRT 启动需要 engine、worker、SDK 和 toolkit 路径。")
                     cosy_command.extend(["--flow-trt-" + name.replace("_", "-"), str(Path(value).resolve())])
             commands.append(("cosyvoice3", cosy_command, service.parent))
