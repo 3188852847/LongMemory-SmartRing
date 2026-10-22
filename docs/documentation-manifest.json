@@ -8395,6 +8395,40 @@
         "无录音",
         "实机待验"
       ]
+    },
+    {
+      "path": "docs/development/parallel/AC-public-aec-replay-20261022.md",
+      "title": "AC：公开语音的有界 CPU AEC/VAD 重放",
+      "status": "reference",
+      "basis": "已完成的固定公开素材离线诊断记录；不作为现场根因或生产修复验收",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-22",
+        "scope": "固定来源与保存产物摘要、500包及282次参考切片只读复核；失败记录和统计解释边界；AI整合七项回归，不重复运行模型",
+        "evidence": [
+          "scripts/development/xiaozhi/public_aec_replay.py",
+          "tests/unit/development/test_public_aec_replay.py",
+          "docs/development/parallel/AI-public-aec-replay-integration-20261022.md"
+        ]
+      },
+      "tags": ["AEC", "公开素材", "离线重放", "现场未验"]
+    },
+    {
+      "path": "docs/development/parallel/AI-public-aec-replay-integration-20261022.md",
+      "title": "AI：公开 AEC 重放工具整合与证据复核",
+      "status": "draft",
+      "basis": "独立分支整合候选，ROOT负责主分支整合与发布；Hann消融另行审查",
+      "review": {
+        "state": "verified",
+        "date": "2026-10-22",
+        "scope": "来源与接入提交关系、工具摘要和冻结证据关系；本树七项边界回归及窄范围文档登记；不含模型重跑和现场验收",
+        "evidence": [
+          "scripts/development/xiaozhi/public_aec_replay.py",
+          "tests/unit/development/test_public_aec_replay.py",
+          "docs/development/parallel/AC-public-aec-replay-20261022.md"
+        ]
+      },
+      "tags": ["AEC", "整合候选", "证据复核", "无录音"]
     }
   ],
   "integration_sources": {
