@@ -150,3 +150,22 @@ test('G 页面读取真实认证摘要，返回版本和设备未确认语义', 
   expect(Array.isArray(body.requests)).toBe(true);
   await expect(page.getByText(/设备播放仍未确认/)).toBeVisible();
 });
+
+test('两个标签在同一段聊天中依次发送后能读到完整话轮', async ({page, context}) => {
+  await page.goto('/chat');
+  await expect(page.locator('#chat-input')).toBeEnabled();
+  const second = await context.newPage();
+  await second.goto('/chat-react');
+  const input = second.getByRole('textbox', {name:'消息'});
+  await expect(input).toBeEnabled();
+  await page.locator('#chat-input').fill('第一标签的合成输入');
+  await page.locator('#chat-send').click();
+  await expect(page.locator('#chat-turns')).toContainText('第一标签的合成输入');
+  await input.fill('第二标签的合成输入');
+  await second.getByRole('button', {name:'发送', exact:true}).click();
+  const history = second.getByRole('region', {name:'聊天记录'});
+  await expect(history).toContainText(/第一标签的合成输入[\s\S]*第二标签的合成输入/);
+  await page.locator('#chat-input').fill('回到第一标签继续');
+  await page.locator('#chat-send').click();
+  await expect(page.locator('#chat-turns')).toContainText(/第二标签的合成输入[\s\S]*回到第一标签继续/);
+});

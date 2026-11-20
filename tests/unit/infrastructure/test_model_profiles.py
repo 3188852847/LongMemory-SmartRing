@@ -55,3 +55,18 @@ def test_profile_validation_rejects_http_without_consent_and_unknown_fields(tmp_
         store.save("official", payload(base_url="http://model.invalid/v1"))
     with pytest.raises(ValueError):
         store.save("official", payload(extra=True))
+    with pytest.raises(ValueError):
+        store.save("official", payload(model="two\nlines"))
+
+
+@pytest.mark.parametrize("new_url", ["https://other.invalid/v1", "https://api.deepseek.com:8443/v1", "http://api.deepseek.com/v1"])
+def test_key_stays_with_its_origin(tmp_path, new_url):
+    store = ModelProfileStore(tmp_path)
+    store.save("official", payload())
+    store.save("official", payload(base_url="https://API.DEEPSEEK.COM:443/other", api_key=""))
+    before = store.path("official").read_bytes()
+    with pytest.raises(ValueError, match="model_key_required_for_new_origin"):
+        store.save("official", payload(base_url=new_url, allow_http=True, api_key=""))
+    assert store.path("official").read_bytes() == before
+    store.save("official", payload(base_url=new_url, allow_http=True, api_key="replacement"))
+    assert store.settings("official").api_key == "replacement"

@@ -17,7 +17,13 @@ function mount(snapshot: Snapshot, override?: (path: string, method: string, bod
   vi.spyOn(ChatApi.prototype, 'bootstrap').mockResolvedValue(undefined);
   const request = vi.spyOn(ChatApi.prototype, 'request').mockImplementation(async (path, method = 'GET', body) => {
     const result = override?.(path, method, body);
-    if (result !== undefined) return result;
+    if (result !== undefined) {
+      if (method === 'POST' && path.endsWith('/messages')) {
+        const saved = await result as Turn;
+        if (!snapshot.turns.some(item => item.request_id === saved.request_id)) snapshot.turns = [...snapshot.turns, saved];
+      }
+      return result;
+    }
     if (path === '/api/chat-config') return {enabled:true, database:'synthetic.db', provider:'fake', model:'Fake', role:'测试'};
     if (path === '/api/chats') return {chats:[{chat_id:snapshot.chat_id, title:snapshot.title, turn_count:snapshot.turns.length}]};
     if (path === `/api/chats/${snapshot.chat_id}`) return snapshot;

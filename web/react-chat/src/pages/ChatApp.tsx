@@ -169,11 +169,20 @@ export function ChatApp() {
         }
         const turn = await api.request<Turn>(`/api/chats/${chat.chat_id}/messages`, 'POST', {text: draft, request_id: submitted.current.requestId});
         submitted.current = null;
-        setChat({...chat, turns: [...chat.turns, turn]}); setDraft('');
-        setChats(rows => rows.map(row => row.chat_id === chat.chat_id ? {...row, turn_count: chat.turns.length + 1} : row));
+        setDraft('');
         refreshMemoryCountAfter(turn);
         const modelProblem=modelFailure(turn.error);
         void refreshModelHealthAfter(turn);
+        // POST 已确认落盘，后续只读档案，带回其他标签页刚提交的轮次。
+        let latest: Snapshot;
+        try {latest = await load(chat.chat_id);}
+        catch {
+          setUnknown(true);
+          setNotice('本轮已保存，暂时无法读取最新会话。请点击只查询结果。');
+          return;
+        }
+        setChats(rows => rows.map(row => row.chat_id === latest.chat_id
+          ? {...row, title:latest.title, turn_count:latest.turns.length} : row));
         setNotice(modelProblem
           ? `${modelProblem} 本轮用户输入可能已经保存，但没有伪造助手回答。`
           : turn.memory_processing === 'source_only'

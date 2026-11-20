@@ -8,6 +8,7 @@ import re
 import threading
 from uuid import UUID
 
+from .errors import ExperimentError
 from longmemory.evaluation.comparison.review import RUBRIC, summarize_review
 from longmemory.evaluation.l1_sufficiency_policy_replay import (
     SUPPORTED_SOURCE_PROTOCOLS as L1_REPLAY_SOURCE_PROTOCOLS,
@@ -21,11 +22,6 @@ PROTOCOLS = {"history-replay-frozen-qa-v1": "comparison",
 MAX_BYTES = 8 * 1024 * 1024
 L1_SOURCE_ID = re.compile(r"l1-sufficiency-(?:rescore-)?[0-9a-f]{32}\Z")
 L1_REPLAY_ID = re.compile(r"l1-sufficiency-policy-replay-[0-9a-f]{32}\Z")
-
-
-class ExperimentError(ValueError):
-    def __init__(self, code, status=400):
-        self.code, self.status = code, status
 
 
 def safe_file(root, path):

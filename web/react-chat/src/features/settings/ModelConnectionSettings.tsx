@@ -112,8 +112,8 @@ export function ModelConnectionSettings({api, config, disabled, onHealth}: {
         <Form.Item label="模型名称" name="model" rules={[{required:true,message:'请填写模型名称'}]}>
           <Input autoComplete="off"/>
         </Form.Item>
-        <Form.Item label={profile?.api_key_configured ? 'API Key（已配置；留空保留原值）' : 'API Key（尚未配置）'} name="api_key">
-          <Input.Password autoComplete="new-password" placeholder="只在覆盖时填写；页面不会读取已有 Key"/>
+        <Form.Item label={profile?.api_key_configured ? 'API Key（同一服务可留空）' : 'API Key（尚未配置）'} name="api_key">
+          <Input.Password autoComplete="new-password" placeholder="更换协议、主机或端口时，请填写新服务的 Key"/>
         </Form.Item>
         <Space wrap align="start">
           <Form.Item label="超时（秒）" name="timeout_seconds" rules={[{required:true}]}><InputNumber min={1} max={300}/></Form.Item>

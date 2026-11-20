@@ -121,14 +121,15 @@ def test_restart_list_rename_history_and_replay(backend):
 def test_sidecar_does_not_migrate_memory_and_exclusive_lock(backend):
     before = backend.database.read_bytes()
     store = ChatStore(backend.database)
-    assert store.load() == {}
+    store.open()
     assert not store.path.exists()
     second = ChatStore(backend.database)
     with pytest.raises(ValueError):
-        second.load()
-    store.save('test', asdict(Chat('synthetic-owner', 0)))
+        second.open()
+    store.create('test', asdict(Chat('synthetic-owner', 0)))
     store.close()
-    assert second.load()['test']['title'] == '新聊天'
+    second.open()
+    assert second.get('test')['title'] == '新聊天'
     second.close()
     assert backend.database.read_bytes() == before
 
@@ -146,12 +147,13 @@ def test_sidecar_connections_close_after_each_operation_and_file_can_be_renamed(
 
         monkeypatch.setattr(sqlite3, 'connect', track_connection)
         with closing(ChatStore(database)) as store:
-            assert store.load() == {}
-            store.save('one', {'title': '合成会话'})
+            store.open()
+            store.create('one', {'title': '合成会话'})
             with pytest.raises(sqlite3.ProgrammingError, match='closed database'):
                 connections[-1].execute('SELECT 1')
         with closing(ChatStore(database)) as reopened:
-            assert reopened.load() == {'one': {'title': '合成会话'}}
+            reopened.open()
+            assert reopened.get('one') == {'title': '合成会话'}
             with pytest.raises(sqlite3.ProgrammingError, match='closed database'):
                 connections[-1].execute('SELECT 1')
             reopened.remove('one')
@@ -166,8 +168,8 @@ def test_sidecar_connections_close_after_each_operation_and_file_can_be_renamed(
 
 def test_sidecar_failed_delete_rolls_back_before_closing(tmp_path, monkeypatch):
     with closing(ChatStore(tmp_path / 'synthetic.db')) as store:
-        store.load()
-        store.save('one', {'title': '保留原会话'})
+        store.open()
+        store.create('one', {'title': '保留原会话'})
         connect = sqlite3.connect
         with closing(connect(store.path)) as db, db:
             db.execute("""CREATE TRIGGER reject_delete AFTER DELETE ON web_chats
@@ -185,13 +187,47 @@ def test_sidecar_failed_delete_rolls_back_before_closing(tmp_path, monkeypatch):
             assert db.execute('SELECT id FROM web_chats').fetchall() == [('one',)]
 
 
+@pytest.mark.parametrize("action", ["title", "messages"])
+def test_delete_while_an_update_is_reading_its_body(backend, monkeypatch, action):
+    from aiohttp.web_request import Request
+
+    async def run():
+        reading, resume = asyncio.Event(), asyncio.Event()
+        original = Request.json
+
+        async def delayed(request, **kwargs):
+            if request.path.endswith("/" + action):
+                reading.set()
+                await resume.wait()
+            return await original(request, **kwargs)
+
+        monkeypatch.setattr(Request, "json", delayed)
+        async with console(chat_backend=backend) as (client, base, _):
+            headers = await login(client, base)
+            key = (await (await client.post(base + "/api/chats", headers=headers)).json())["chat_id"]
+            path = base + f"/api/chats/{key}"
+            body = {"title": "合成标题"} if action == "title" else {"text": "合成输入", "request_id": str(uuid4())}
+            update = asyncio.create_task(client.post(path + "/" + action, headers=headers, json=body))
+            try:
+                await asyncio.wait_for(reading.wait(), timeout=3)
+                assert (await client.delete(path, headers=headers)).status == 200
+            finally:
+                resume.set()
+            assert (await update).status == 404
+            assert ChatStore(backend.database).get(key) is None
+
+    asyncio.run(run())
+
+
 def test_interrupted_turn_recovered_without_reexecution(backend):
     import hashlib
     token = 'a'*64
     body = {'request_id':str(uuid4()), 'input':'合成中断输入'}
     key = str(uuid4())
     store = ChatStore(backend.database)
-    store.save(key, asdict(Chat(hashlib.sha256(token.encode()).hexdigest(), 0, pending=True, active_request=body)))
+    legacy = asdict(Chat(hashlib.sha256(token.encode()).hexdigest(), 0, pending=True, active_request=body))
+    legacy["request_ids"] = {}
+    store.create(key, legacy)
     async def run():
         async with console(chat_backend=backend) as (client, base, _):
             headers = await login(client, base)
@@ -201,6 +237,10 @@ def test_interrupted_turn_recovered_without_reexecution(backend):
             replay = await (await client.post(base+f'/api/chats/{key}/messages',
                 json={'text':body['input'], 'request_id':body['request_id']}, headers=headers)).json()
             assert replay['status'] == 'interrupted'
+            renamed = await client.post(base+f'/api/chats/{key}/title', json={'title':'合成档案'}, headers=headers)
+            assert renamed.status == 200
+            saved = store.get(key)
+            assert 'request_ids' not in saved and saved['turns'] == [replay]
     asyncio.run(run())
 
 

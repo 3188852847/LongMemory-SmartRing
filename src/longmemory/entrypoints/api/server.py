@@ -14,10 +14,7 @@ from .security import COOKIE, MAX_AGE, Sessions, security_middleware
 from .memory_backend import MemoryBackend
 from .routes.memories import register_memory_routes
 from .routes.chat import register_chat_routes
-from .routes.experiments import register_experiment_routes
-from .experiment_backend import ExperimentBackend
-from .experiment_jobs import ExperimentJobs
-from .routes.experiment_jobs import register_job_routes
+from .routes.experiments import register_research_routes
 from .react_assets import register_react_routes
 from .otto_preview import register_otto_preview
 from .routes.assistant_role import register_role_routes
@@ -26,7 +23,6 @@ from .routes.memory_mode import register_memory_mode_routes
 from .routes.memory_commands import register_memory_command_routes
 from .routes.l2_sufficiency_shadow import register_l2_sufficiency_shadow_routes
 from .routes.l1_sufficiency_shadow import register_l1_sufficiency_shadow_routes
-from .routes.l1_policy_replay import register_l1_policy_replay_routes
 from .routes.l1_extraction_audit import register_l1_extraction_audit_routes
 from .routes.model_profiles import register_model_profile_routes
 from .xiaozhi_model_profiles import XiaozhiModelProfiles
@@ -275,14 +271,10 @@ def create_app(*, port=8765, bridge=None, web_root=None, database=None, allow_me
 
         app.on_startup.append(start_wallpaper_delivery)
         app.on_cleanup.append(stop_wallpaper_delivery)
-    experiments = experiment_backend if experiment_backend is not None else ExperimentBackend(ROOT / "experiments")
-    register_experiment_routes(app, experiments)
-    register_l1_policy_replay_routes(app, experiments)
-    jobs = job_backend if job_backend is not None else ExperimentJobs(experiments)
-    register_job_routes(app, jobs)
+    register_research_routes(app, ROOT / "experiments", experiment_backend, job_backend)
     # 不能证明后台算法空闲时，自动重开保守拒绝；当前Hy日用已暂停这些后台入口。
     maintenance.supported = (not legacy_sqlite and not proactive_schedule_enabled and not consolidation_background_enabled
-                             and getattr(jobs, 'enabled', True) is False)
+                             and (job_backend is None or getattr(job_backend, 'enabled', True) is False))
     app.on_cleanup.append(close)
     return app
 
@@ -386,6 +378,8 @@ def main():
     semantic_relation_previewer = None
     proactive_greeting_composer = None
     if args.enable_experiment_runs:
+        from .experiment_backend import ExperimentBackend
+        from .experiment_jobs import ExperimentJobs
         from longmemory.infrastructure.config.settings import load_model_settings
         try:
             experiment_settings = load_model_settings(provider="openai_compatible")

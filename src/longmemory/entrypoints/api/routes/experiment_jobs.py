@@ -1,12 +1,13 @@
 """运行入口与原报告路由分开，沿用会话、同源和 CSRF 检查。"""
 import asyncio
 from aiohttp import web
-from ..experiment_backend import ExperimentError
+from ..errors import ExperimentError
 from ..security import COOKIE
 
 
-def register_job_routes(app, backend):
+def register_job_routes(app, get_backend):
     async def dispatch(request):
+        backend = get_backend()
         try:
             if request.method == "GET":
                 fn = backend.options if request.path.endswith("/options") else backend.listing
@@ -33,7 +34,3 @@ def register_job_routes(app, backend):
     app.router.add_post("/api/experiment-jobs/prepare", dispatch)
     app.router.add_post("/api/experiment-jobs/start", dispatch)
     app.router.add_post("/api/experiment-jobs/{job_id}/stop", dispatch)
-
-    async def cleanup(_app):
-        await asyncio.to_thread(backend.close)
-    app.on_cleanup.append(cleanup)

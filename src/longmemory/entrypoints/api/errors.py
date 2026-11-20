@@ -5,3 +5,8 @@ class MemoryAccessError(Exception):
     def __init__(self, code, status=409):
         super().__init__(code)
         self.code, self.status = code, status
+
+
+class ExperimentError(ValueError):
+    def __init__(self, code, status=400):
+        self.code, self.status = code, status

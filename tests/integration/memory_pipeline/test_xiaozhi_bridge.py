@@ -229,6 +229,21 @@ def test_provider_uses_runtime_transport_without_starting_subprocess(provider_cl
     assert completion_body["answer"] == "这是最终回答"
 
 
+def test_long_voice_answer_releases_only_its_own_round(provider_class, config, monkeypatch):
+    provider = provider_class(config)
+    other = {"turn_id": "other"}
+    provider._pending_completions["other"] = other
+    cancelled = []
+    monkeypatch.setattr(provider, "_cancel_pending_completion", lambda pending, reason: cancelled.append((pending, reason)))
+    for i in range(9):
+        key = str(i)
+        pending = {"turn_id": key}
+        provider._pending_completions[key] = pending
+        assert not provider.record_completed_turn("长" * 16001, turn_key=key)
+        assert cancelled[-1] == (pending, "chat_failed")
+    assert provider._pending_completions == {"other": other}
+
+
 @pytest.mark.parametrize("protocol", [1, 2])
 def test_full_unicode_completion_provider_and_utf8_replay(protocol, provider_class, config, tmp_path, monkeypatch):
     from aiohttp import web

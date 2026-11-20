@@ -462,8 +462,6 @@ class MemoryProvider(MemoryProviderBase):
     def record_completed_turn(self, answer: str, *, turn_key=None, completion_guard=None) -> bool:
         """至多回传一次最终文本；失败不重试，避免重复或错配回答。"""
 
-        if not isinstance(answer, str) or not answer.strip() or len(answer) > 16000:
-            return False
         with self._lock:
             # 先等Memory锁，再短暂进入音频撤权锁；等待其他RPC时绝不占住音频锁。
             # 资格检查与消费本轮pending为同一次原子领取，外层旧布尔检查不能替代它。
@@ -477,6 +475,10 @@ class MemoryProvider(MemoryProviderBase):
             return False
         if permitted is not True:
             self._cancel_pending_completion(pending, "cancelled")
+            return False
+        if not isinstance(answer, str) or not answer.strip() or len(answer) > 16000:
+            logger.bind(tag="LongMemory").info("回答归档跳过：文本为空或超长，已释放本轮名额")
+            self._cancel_pending_completion(pending, "chat_failed")
             return False
         source_url = os.environ.get("LONGMEMORY_RUNTIME_URL", "")
         token = os.environ.get("LONGMEMORY_RUNTIME_TOKEN", "")

@@ -4,11 +4,12 @@ import asyncio
 
 from aiohttp import web
 
-from ..experiment_backend import ExperimentError
+from ..errors import ExperimentError
 
 
-def register_l1_policy_replay_routes(app, backend):
+def register_l1_policy_replay_routes(app, get_backend):
     async def dispatch(request):
+        backend = get_backend()
         try:
             if request.method == "GET":
                 result = await asyncio.to_thread(

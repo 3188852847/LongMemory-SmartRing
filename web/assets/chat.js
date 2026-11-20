@@ -2,12 +2,12 @@ import {renderTurn} from "/assets/chat-view.mjs";
 
 const $ = id => document.getElementById(id);
 let csrf, chatId, pending = false, unknown = false, shown = 0;
-let selectionKey;
+let selectionKey, submitted;
 function rememberSelection() {
   try { localStorage.setItem(selectionKey, chatId); } catch (_) { /* 禁用存储不影响服务端档案。 */ }
 }
 const errors = {
-  chat_busy: "已有消息正在处理，请稍后查询结果。", chat_capacity: "会话档案数量达到当前上限；重启不会清除档案。",
+  chat_busy: "已有消息正在处理，请稍后查询结果。",
   chat_turn_limit: "本聊天已达 40 轮，请开启新聊天；长期记忆会保留。",
   session_required: "本机会话已失效。请刷新页面；不要自动重发刚才的消息。",
   chat_disabled: "文字聊天未启用。请按部署文档用 --enable-chat 和已有数据库启动。",
@@ -37,7 +37,7 @@ function append(turn) {
 }
 async function create() {
   const data = await api("/api/chats", "POST");
-  chatId = data.chat_id; shown = 0;
+  chatId = data.chat_id; shown = 0; submitted = undefined;
   rememberSelection();
   $("chat-turns").replaceChildren(); $("chat-count").textContent = "0 / 40 轮";
   $("chat-empty").classList.remove("hidden");
@@ -58,6 +58,7 @@ async function listChats() {
 }
 async function loadChat(id) {
   const data = await api(`/api/chats/${id}`);
+  if (chatId !== id) submitted = undefined;
   chatId = id; shown = 0; unknown = data.pending;
   rememberSelection();
   $("chat-turns").replaceChildren();
@@ -67,6 +68,7 @@ async function loadChat(id) {
   $("chat-select").value = id;
   notice(data.pending ? '此会话正在处理消息，请查询结果，不要重发。' : '会话已恢复；继续聊天只带入最近六轮成功对话。');
   controls();
+  return data;
 }
 $("chat-select").addEventListener('change', async () => {
   if ($("chat-input").value && !confirm('切换会清空尚未发送的草稿，继续吗？')) {
@@ -90,8 +92,13 @@ $("chat-form").addEventListener("submit", async event => {
   if (pending || unknown || !chatId || !$("chat-input").value.trim()) return;
   pending = true; controls(); notice("正在处理：保存输入、提取、检索、调用回答器…请勿重复发送。");
   try {
-    const turn = await api(`/api/chats/${chatId}/messages`, "POST", {text: $("chat-input").value, request_id: crypto.randomUUID()});
-    append(turn); $("chat-input").value = "";
+    const text = $("chat-input").value;
+    if (submitted?.text !== text) submitted = {text, request_id: crypto.randomUUID()};
+    const turn = await api(`/api/chats/${chatId}/messages`, "POST", submitted);
+    submitted = undefined;
+    $("chat-input").value = "";
+    try { await loadChat(chatId); }
+    catch { unknown = true; notice("本轮已保存，请查询最新会话。"); return; }
     notice(turn.status === "completed" ? "本轮完成，可展开查看写入与召回证据。" : "本轮失败。请展开过程查看已完成的阶段；输入可能已保存，不自动重试。");
   } catch (error) {
     unknown = true; notice(`${error.message} 操作结果暂未确认，可点击下方按钮只查询、不重发。`);
@@ -99,13 +106,12 @@ $("chat-form").addEventListener("submit", async event => {
 });
 $("chat-recover").addEventListener("click", async () => {
   try {
-    const data = await api(`/api/chats/${chatId}`);
-    if (data.pending) { notice("后台仍在处理，请稍后再次查询；没有重发消息。"); return; }
-    const received = data.turns.length > shown;
-    for (const turn of data.turns.slice(shown)) append(turn);
-    unknown = false;
-    if (received) $("chat-input").value = "";
-    notice(received ? "已找回处理结果，请展开查看。" : "当前会话没有新增处理记录；请检查输入或重新发送。服务重启后不能据此保证未写入。");
+    const data = await loadChat(chatId);
+    if (submitted && data.turns.some(turn => turn.request_id === submitted.request_id)) {
+      $("chat-input").value = "";
+      submitted = undefined;
+    }
+    notice(data.pending ? "后台仍在处理，请稍后查询。" : "已读取最新记录。");
     controls();
   } catch (error) { notice(error.message); }
 });

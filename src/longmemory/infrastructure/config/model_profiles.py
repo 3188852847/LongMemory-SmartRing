@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from .settings import ModelSettings
 
@@ -17,6 +18,16 @@ MANAGED_KEYS = (
     "LONGMEMORY_LLM_TIMEOUT_SECONDS", "LONGMEMORY_LLM_MAX_TOKENS",
     "LONGMEMORY_LLM_ALLOW_HTTP",
 )
+
+
+class ModelKeyRequired(ValueError):
+    """服务来源改变后，必须显式提供适用于新服务的密钥。"""
+
+
+def _origin(address: str) -> tuple[str, str | None, int | None]:
+    url = urlsplit(address)
+    port = url.port if url.port is not None else {"https": 443, "http": 80}.get(url.scheme)
+    return url.scheme, url.hostname, port
 
 
 class ModelProfileStore:
@@ -121,15 +132,23 @@ class ModelProfileStore:
         if not isinstance(body, dict) or not required <= set(body) or set(body) - allowed:
             raise ValueError("invalid_model_profile")
         existing = self._read_values(self.path(profile))
-        api_key = body.get("api_key") or existing.get("LONGMEMORY_LLM_API_KEY", "")
+        base_url = str(body["base_url"]).strip().rstrip("/")
+        api_key = body.get("api_key")
+        if not api_key:
+            api_key = existing.get("LONGMEMORY_LLM_API_KEY", "")
+            if api_key and _origin(base_url) != _origin(existing.get("LONGMEMORY_LLM_BASE_URL", "")):
+                raise ModelKeyRequired("model_key_required_for_new_origin")
         if type(body["allow_http"]) is not bool or type(body["activate"]) is not bool:
             raise ValueError("invalid_model_profile")
         settings = ModelSettings(
-            provider="openai_compatible", base_url=str(body["base_url"]).strip().rstrip("/"),
+            provider="openai_compatible", base_url=base_url,
             api_key=str(api_key), model=str(body["model"]).strip(),
             timeout_seconds=float(body["timeout_seconds"]), max_tokens=int(body["max_tokens"]),
             allow_http=body["allow_http"],
         )
+        # 每个配置项只占 env 文件的一行。
+        if len(settings.model.splitlines()) != 1:
+            raise ValueError("invalid_model_profile")
         values = {
             "LONGMEMORY_LLM_PROVIDER": settings.provider,
             "LONGMEMORY_LLM_BASE_URL": settings.base_url,

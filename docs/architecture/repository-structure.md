@@ -2,7 +2,7 @@
 
 ## 从陪伴体验读代码
 
-当前产品面向一个人、一位伙伴、两个入口。圆屏可以呈现桌宠并进行语音交流，网页也要能与这位伙伴互动。记忆服务于相处，例如记住称呼、接上昨天的话题、允许用户纠正。以下为 2026-11-21 对提交 `00691b2c` 的静态梳理，按真实入口追踪到代码和存储。需求对照采用《智慧圆屏个人陪伴智能体产品需求说明书》V1.3 第 8、12、15 和 19 章，并纳入本次明确的网页桌宠方向。
+当前产品面向一个人、一位伙伴、两个入口。圆屏可以呈现桌宠并进行语音交流，网页也要能与这位伙伴互动。记忆服务于相处，例如记住称呼、接上昨天的话题、允许用户纠正。以下为 2026-11-21 以提交 `00691b2c` 为起点的源码梳理，已同步日用聊天归档和实验工具按需加载的改动。需求对照采用《智慧圆屏个人陪伴智能体产品需求说明书》V1.3 第 8、12、15 和 19 章，并纳入本次明确的网页桌宠方向。
 
 ## 源码与入口
 
@@ -36,7 +36,7 @@
 - Python 源码位于 `src/longmemory/`。从 `entrypoints/` 找入口，`application/` 找业务流程，`core/` 找领域规则，`methods/` 找不同记忆实现，`adapters/` 找模型、设备与存储的具体接法，`infrastructure/` 找配置和数据库结构。角色提示词放在 `prompts/`。
 - `web/react-chat/` 是现行网页；`web/` 顶层的静态页面供兼容入口使用。`scripts/development/` 同时包含正式启动器、小智适配、声音服务和离线工具，有运行时依赖。[前端说明](../../web/README.md)
 - `local/config/` 存人工配置，`local/runtime/` 存各自的运行环境和模型；`data/` 存日用数据。真实数据库、音频、密钥和设备备份留在本机。[配置管理](../development/configuration.md)
-- `src/longmemory/evaluation/`、`datasets/` 和 `experiments/` 支撑研究；`tests/` 验证实现。阅读陪伴主线时可跳过评分、消融、影子复核和旧阶段报告。部分研究接口与日用接口同处控制台装配入口，删除前须按实际调用关系核对。[方法边界](method-boundary.md) · [测试产物](../development/test-artifacts.md)
+- `src/longmemory/evaluation/`、`datasets/` 和 `experiments/` 支撑研究；`tests/` 验证实现。阅读陪伴主线时可跳过评分、消融、影子复核和旧阶段报告。实验档案、作业和策略回放在[研究路由](../../src/longmemory/entrypoints/api/routes/experiments.py)统一登记。日用启动只登记入口，访问研究接口时才加载实现；显式开启实验运行模式时会提前准备作业服务。[方法边界](method-boundary.md) · [测试产物](../development/test-artifacts.md)
 - 固件目录保存本项目的补丁、资源描述和恢复资料，实际原生工程按机器指南单独维护。网页预览、仓库补丁和设备当前运行画面需要分别核对。[固件编译与工程位置](../guides/恢复固件编译-20261014.md)
 
 旧的目录安排可查[历史仓库说明](../history/current-docs-before-20261014/docs/architecture/repository-structure.md)。当前阶段的安排见[路线图](../../ROADMAP.md)。

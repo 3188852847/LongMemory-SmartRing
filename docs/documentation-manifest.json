@@ -5060,8 +5060,8 @@
       "review": {
         "state": "verified",
         "date": "2026-11-21",
-        "scope": "现有启动、网页、圆屏、记忆、角色、表情、跟进及模型的静态代码路径；产品建议与实机验收分开",
-        "evidence": "源码 00691b2c；server.py、routes/chat.py、longmemory_provider.py、assistant_role.py、OttoPreview.tsx、otto_state.h、model_profiles.py。"
+        "scope": "现有启动、网页、圆屏、记忆、角色、表情、跟进、模型及实验工具的按需装配",
+        "evidence": "源码 00691b2c；server.py、routes/chat.py、longmemory_provider.py、assistant_role.py、OttoPreview.tsx、otto_state.h、model_profiles.py。研究入口更新见 src/longmemory/entrypoints/api/routes/experiments.py。"
       },
       "tags": [
         "architecture"
@@ -5896,10 +5896,13 @@
       "review": {
         "state": "verified",
         "date": "2026-11-21",
-        "scope": "会话终轮持久化、按请求号回放与草稿保留",
+        "scope": "会话归档、重启、请求回放、归属隔离和跨标签读取",
         "evidence": [
           "docs/development/parallel/review-memory-20261121.md",
-          "docs/development/parallel/review-web-20261121.md"
+          "docs/development/parallel/review-web-20261121.md",
+          "tests/unit/entrypoints/test_chat_persistence.py",
+          "tests/unit/entrypoints/test_chat_console.py",
+          "web/react-chat/e2e/integration.spec.ts"
         ]
       },
       "tags": [

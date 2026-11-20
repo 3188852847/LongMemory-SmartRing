@@ -27,10 +27,6 @@ from longmemory.application.companion_absence_strategy import (
 from longmemory.application.companion_routine import CompanionRoutineCandidateService
 from longmemory.application.companion_strategy import CompanionStrategyCandidateService
 from longmemory.core.companion import CompanionStrategyReplayEvidence
-from longmemory.evaluation.companion.absence_replay import (
-    load_replay_dataset,
-    run_replay,
-)
 
 from .errors import MemoryAccessError
 from .proactive_presenters import (
@@ -196,6 +192,8 @@ class CompanionLearningBackend:
             policy = SQLiteProactivePolicyStore(connection).get("user:self")
             store = SQLiteCompanionAbsenceStrategyVersionStore(connection)
             try:
+                from longmemory.evaluation.companion.absence_replay import load_replay_dataset, run_replay
+
                 replayed_at = self._clock()
                 report = run_replay(load_replay_dataset())
                 summary = report["summary"]

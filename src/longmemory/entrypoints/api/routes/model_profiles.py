@@ -1,6 +1,7 @@
 """本机模型配置档 API；读取响应绝不包含密钥。"""
 
 from aiohttp import web
+from longmemory.infrastructure.config.model_profiles import ModelKeyRequired
 
 
 def register_model_profile_routes(app, store, voice=None):
@@ -19,6 +20,8 @@ def register_model_profile_routes(app, store, voice=None):
             return web.json_response({"error": "invalid_body"}, status=400)
         try:
             result = store.save(request.match_info["profile"], await request.json())
+        except ModelKeyRequired:
+            return web.json_response({"error": "model_key_required_for_new_origin"}, status=400)
         except (ValueError, TypeError, UnicodeError, OSError):
             return web.json_response({"error": "invalid_model_profile"}, status=400)
         payload = {"enabled": True, **result}

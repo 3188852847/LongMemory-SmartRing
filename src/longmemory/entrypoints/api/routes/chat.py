@@ -18,7 +18,6 @@ from ..contracts import (
 )
 
 MAX_TURNS = 40
-MAX_CHATS = 32
 HISTORY_PAIRS = 6
 HISTORY_CHARACTERS = 24000
 OWNER_COOKIE = 'longmemory_chat_owner'
@@ -29,10 +28,22 @@ class Chat:
     owner: str
     expires: float
     turns: list = field(default_factory=list)
-    request_ids: dict = field(default_factory=dict)
     pending: bool = False
     title: str = '新聊天'
     active_request: dict | None = None
+
+    @classmethod
+    def restore(cls, payload):
+        # 旧格式多存了一份按请求号索引的正文。每段最多 40 轮，直接查找即可。
+        payload.pop("request_ids", None)
+        chat = cls(**payload)
+        if chat.pending and chat.active_request:
+            chat.turns.append(interrupted_turn(chat.active_request))
+        chat.pending, chat.active_request = False, None
+        return chat
+
+    def turn(self, request_id):
+        return next((turn for turn in self.turns if turn.get("request_id") == request_id), None)
 
 
 def interrupted_turn(active_request):
@@ -43,20 +54,10 @@ def interrupted_turn(active_request):
 
 def register_chat_routes(app, backend):
     store = ChatStore(getattr(backend, "sidecar_database", backend.database)) if backend else None
-    chats = {key: Chat(**value) for key, value in store.load().items()} if store else {}
-    # 崩溃中断不是模型失败或“未写入”：保留请求号，禁止自动重复执行。
-    for chat in chats.values():
-        if chat.pending and chat.active_request:
-            result = interrupted_turn(chat.active_request)
-            chat.turns.append(result)
-            chat.request_ids[result['request_id']] = result
-        # JSON 会把 turns 与 request_ids 中的同一轮反序列化为两个 dict。
-        # 重新绑定到 turns 的对象，确保重启后的反馈、读取和幂等回放看到同一版本。
-        for turn in chat.turns:
-            if isinstance(turn.get('request_id'), str):
-                chat.request_ids[turn['request_id']] = turn
-        chat.pending = False
-        chat.active_request = None
+    if store:
+        store.open()
+    # 只保留正在生成或等待落盘的会话。历史会话从旁库按需读取。
+    active_chats = {}
     tasks = set()
     # 每个会话至多一份已执行、尚待旁库确认的结果。重启时仍以持久档案为准。
     unsaved_turns = {}
@@ -72,7 +73,6 @@ def register_chat_routes(app, backend):
     async def save_final_turn(key, chat):
         result = unsaved_turns[key]
         finished = replace(chat, turns=[*chat.turns, result],
-                           request_ids={**chat.request_ids, result["request_id"]: result},
                            pending=False, active_request=None)
         try:
             # 线程只拿独立快照；SQLite 等锁或提交期间，其它 HTTP 请求仍可处理。
@@ -81,10 +81,11 @@ def register_chat_routes(app, backend):
             return False
         finally:
             del saving_turns[key]
-        # 保留 Chat 的对象身份，已开始解析请求正文的处理函数也会看到提交后的状态。
-        chat.turns, chat.request_ids = finished.turns, finished.request_ids
+        # 等待同一写入的查询会从这个实例读取已提交的结果。
+        chat.turns = finished.turns
         chat.pending, chat.active_request = False, None
         del unsaved_turns[key]
+        del active_chats[key]
         return True
 
     def shared_save(key, chat):
@@ -98,15 +99,21 @@ def register_chat_routes(app, backend):
             return web.json_response({"error": "chat_archive_unavailable"}, status=503)
         return web.json_response(result)
 
-    def prune():
-        pass  # 持久会话不按短期认证 cookie 的寿命删除。
-
     def selected(request):
-        prune()
-        chat = chats.get(request.match_info["chat_id"])
+        key = request.match_info["chat_id"]
+        chat = active_chats.get(key)
+        if chat is None and store is not None:
+            saved = store.get(key)
+            if saved is not None:
+                chat = Chat.restore(saved)
         if chat is None or chat.owner != owner(request):
             raise web.HTTPNotFound()
         return chat
+
+    def owned_chats(owner_id):
+        if store:
+            for key, saved in store.owned(owner_id):
+                yield key, active_chats.get(key) or Chat.restore(saved)
 
     async def config(request):
         return web.json_response(await asyncio.to_thread(backend.info) if backend else {"enabled": False})
@@ -120,26 +127,21 @@ def register_chat_routes(app, backend):
     async def create(request):
         if backend is None:
             return web.json_response({"error": "chat_disabled"}, status=403)
-        prune()
-        if len(chats) >= MAX_CHATS:
-            return web.json_response({"error": "chat_capacity"}, status=429)
         key = str(uuid4())
         token = request.cookies.get(OWNER_COOKIE, '')
         if not re.fullmatch('[0-9a-f]{64}', token):
             token = secrets.token_hex(32)
         chat = Chat(hashlib.sha256(token.encode()).hexdigest(), 0)
-        persist(key, chat)
-        chats[key] = chat
+        store.create(key, asdict(chat))
         response = web.json_response({"chat_id": key, "title": chat.title, "turns": [], "limit": MAX_TURNS}, status=201)
         response.set_cookie(OWNER_COOKIE, token, httponly=True, samesite='Strict', path='/', max_age=31536000)
         return response
 
     async def listing(request):
-        return web.json_response({'chats': [{'chat_id': key, 'title': chat.title, 'turn_count': len(chat.turns)}
-                                           for key, chat in reversed(list(chats.items())) if chat.owner == owner(request)]})
+        rows = await asyncio.to_thread(store.summaries, owner(request), set(active_chats)) if store else []
+        return web.json_response({'chats': rows})
 
     async def rename(request):
-        chat = selected(request)
         try:
             body = await request.json()
             title = body['title']
@@ -147,15 +149,11 @@ def register_chat_routes(app, backend):
                 raise ValueError
         except (ValueError, TypeError, KeyError):
             return web.json_response({'error': 'invalid_title'}, status=400)
+        chat = selected(request)
         if chat.pending:
             return web.json_response({'error': 'chat_busy'}, status=409)
-        old = chat.title
         chat.title = title.strip()
-        try:
-            persist(request.match_info['chat_id'], chat)
-        except Exception:
-            chat.title = old
-            raise
+        persist(request.match_info['chat_id'], chat)
         return web.json_response({'title': chat.title})
 
     async def get(request):
@@ -168,7 +166,6 @@ def register_chat_routes(app, backend):
 
     async def memory_feedback(request):
         """记录人工复核，不修改记忆、不调用模型，也不自动重跑当前回答。"""
-        chat = selected(request)
         try:
             request_id = request.match_info["request_id"]
             # 路径也坚持 canonical UUID，避免旁库中出现同一 ID 的不同文本形式。
@@ -179,9 +176,10 @@ def register_chat_routes(app, backend):
             body = ChatMemoryFeedbackRequest.model_validate(await request.json())
         except (ValidationError, ValueError, TypeError, UnicodeError):
             return web.json_response({"error": "invalid_memory_feedback"}, status=400)
+        chat = selected(request)
         if chat.pending:
             return web.json_response({"error": "chat_busy"}, status=409)
-        turn = chat.request_ids.get(request_id)
+        turn = chat.turn(request_id)
         if turn is None or turn.get("status") != "completed" or not turn.get("answer"):
             return web.json_response({"error": "feedback_turn_unavailable"}, status=404)
         current = turn.get("memory_feedback")
@@ -192,19 +190,9 @@ def register_chat_routes(app, backend):
             return web.json_response({"error": "memory_feedback_revision_limit"}, status=409)
         event = {"kind": body.kind, "revision": revision + 1,
                  "occurred_at": datetime.now(UTC).isoformat()}
-        old_current = current
-        old_events = list(turn.get("memory_feedback_events") or [])
         turn["memory_feedback"] = event
-        turn["memory_feedback_events"] = old_events + [event]
-        try:
-            persist(request.match_info["chat_id"], chat)
-        except Exception:
-            if old_current is None:
-                turn.pop("memory_feedback", None)
-            else:
-                turn["memory_feedback"] = old_current
-            turn["memory_feedback_events"] = old_events
-            raise
+        turn["memory_feedback_events"] = [*(turn.get("memory_feedback_events") or []), event]
+        persist(request.match_info["chat_id"], chat)
         return web.json_response({"feedback": event})
 
     async def memory_feedback_daily(request):
@@ -226,9 +214,7 @@ def register_chat_routes(app, backend):
         rows = []
         current_rows = []
         offset = timedelta(minutes=offset_minutes)
-        for chat_id, chat in chats.items():
-            if chat.owner != owner_id:
-                continue
+        for chat_id, chat in owned_chats(owner_id):
             for turn in chat.turns:
                 current = turn.get("memory_feedback")
                 if isinstance(current, dict):
@@ -300,9 +286,7 @@ def register_chat_routes(app, backend):
             "memory_ok", "recall_miss", "wrong_memory", "memory_irrelevant"
         )}
         rows = []
-        for chat_id, chat in chats.items():
-            if chat.owner != owner_id:
-                continue
+        for chat_id, chat in owned_chats(owner_id):
             for turn in chat.turns:
                 current = turn.get("memory_feedback")
                 if not isinstance(current, dict) or current.get("kind") not in counts:
@@ -416,10 +400,8 @@ def register_chat_routes(app, backend):
         target_exists = False
         if payload.source == "web_chat":
             owner_id = owner(request)
-            for chat in chats.values():
-                if chat.owner != owner_id:
-                    continue
-                turn = chat.request_ids.get(payload.target_id)
+            for _, chat in owned_chats(owner_id):
+                turn = chat.turn(payload.target_id)
                 current = turn.get("memory_feedback") if isinstance(turn, dict) else None
                 if (isinstance(current, dict)
                         and current.get("kind") in {"recall_miss", "wrong_memory"}
@@ -456,7 +438,6 @@ def register_chat_routes(app, backend):
             return web.json_response({"error": "chat_busy"}, status=409)
         # 兼容原删除接口：只删除网页会话档案，不删除 L0/L1；页面不默认调用。
         store.remove(request.match_info['chat_id'])
-        del chats[request.match_info["chat_id"]]
         return web.json_response({"forgotten": True, "long_term_memory_preserved": True})
 
     async def round_screen_feedback_detail(request):
@@ -485,7 +466,6 @@ def register_chat_routes(app, backend):
         return await final_response(key, chat)
 
     async def send(request):
-        chat = selected(request)
         key = request.match_info["chat_id"]
         if request.content_type != "application/json":
             raise web.HTTPBadRequest()
@@ -497,7 +477,8 @@ def register_chat_routes(app, backend):
             text, request_id = message.text, message.request_id
         except (ValidationError, ValueError, TypeError, UnicodeError):
             return web.json_response({"error": "invalid_chat_message"}, status=400)
-        previous = chat.request_ids.get(request_id)
+        chat = selected(request)
+        previous = chat.turn(request_id)
         if previous is not None:
             if previous["input"] != text:
                 return web.json_response({"error": "chat_request_conflict"}, status=409)
@@ -524,12 +505,8 @@ def register_chat_routes(app, backend):
                         for role, key in (("user", "input"), ("assistant", "answer")))
         chat.pending = True
         chat.active_request = {'request_id': request_id, 'input': text}
-        try:
-            persist(key, chat)
-        except Exception:
-            chat.pending = False
-            chat.active_request = None
-            raise
+        persist(key, chat)
+        active_chats[key] = chat
         task = asyncio.create_task(finish(key, chat, request_id, text, history))
         tasks.add(task)
         task.add_done_callback(tasks.discard)
@@ -542,10 +519,10 @@ def register_chat_routes(app, backend):
         if saving_turns:
             await asyncio.gather(*tuple(saving_turns.values()), return_exceptions=True)
         # 退出前给仍在内存中的终态最后一次提交机会。个别旁库失败沿用中断恢复。
-        await asyncio.gather(*(shared_save(key, chats[key]) for key in tuple(unsaved_turns)),
+        await asyncio.gather(*(shared_save(key, active_chats[key]) for key in tuple(unsaved_turns)),
                              return_exceptions=True)
         unsaved_turns.clear()
-        chats.clear()
+        active_chats.clear()
         if store:
             store.close()
 
@@ -566,4 +543,4 @@ def register_chat_routes(app, backend):
     )
     app.router.add_delete("/api/chats/{chat_id}", forget)
     app.on_cleanup.append(cleanup)
-    return lambda: not tasks and not any(chat.pending for chat in chats.values())
+    return lambda: not tasks and not active_chats

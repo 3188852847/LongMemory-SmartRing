@@ -283,7 +283,6 @@ def test_chinese_body_limit_failed_retry_and_new_chat_preserves_l0(backend):
 def test_session_capacity_and_history_window(backend, monkeypatch):
     # 小限额验证边界，避免让测试集为每种边界跑几十次模型替身。
     from longmemory.entrypoints.api.routes import chat as routes
-    monkeypatch.setattr(routes, "MAX_CHATS", 1)
     monkeypatch.setattr(routes, "MAX_TURNS", 3)
     monkeypatch.setattr(routes, "HISTORY_PAIRS", 1)
     histories = []
@@ -296,11 +295,19 @@ def test_session_capacity_and_history_window(backend, monkeypatch):
         async with console(chat_backend=backend) as (client, base, _):
             headers = await login(client, base)
             chat_id = (await (await client.post(base + "/api/chats", headers=headers)).json())["chat_id"]
-            assert (await client.post(base + "/api/chats", headers=headers)).status == 429
+            for _ in range(32):
+                assert (await client.post(base + "/api/chats", headers=headers)).status == 201
+            listing = await (await client.get(base + "/api/chats")).json()
+            assert len(listing["chats"]) == 33 and listing["chats"][-1]["chat_id"] == chat_id
             for number in range(4):
                 response = await client.post(base + f"/api/chats/{chat_id}/messages", headers=headers,
                                              json={"text": f"合成问题{number}", "request_id": str(uuid4())})
                 assert response.status == (200 if number < 3 else 409)
             assert len(histories) == 3 and len(histories[2]) == 2
             assert histories[2][0]["content"] == "合成问题1"
+            client.cookie_jar.clear()
+            headers = await login(client, base)
+            assert (await (await client.get(base + "/api/chats")).json())["chats"] == []
+            assert (await client.post(base + "/api/chats", headers=headers)).status == 201
+            assert (await client.get(base + f"/api/chats/{chat_id}")).status == 404
     asyncio.run(run())

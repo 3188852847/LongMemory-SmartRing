@@ -11,6 +11,7 @@ const settingsFailureText: Record<string, string> = {
   runtime_auth_required: '本机控制台认证尚未建立。请从启动面板重新打开控制台。',
   request_rejected: '本机服务拒绝了该请求。请刷新页面后核对当前状态。',
   model_profiles_disabled: '当前启动方式没有开放模型配置档管理。请从统一启动面板进入。',
+  model_key_required_for_new_origin: '服务地址已更换，请填写新服务的 API Key 后保存。',
   invalid_model_profile: '模型配置无效。请核对服务根地址、模型名、超时、输出上限以及 HTTP 风险开关。',
   voice_model_profiles_disabled: '圆屏模型配置管理未启用。请核对启动面板中的小智服务目录。',
   invalid_voice_model_profile: '圆屏模型配置档无效；没有改变下次启动选择。',

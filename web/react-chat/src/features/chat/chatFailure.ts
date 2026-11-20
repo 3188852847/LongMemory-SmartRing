@@ -16,7 +16,6 @@ const failureText: Record<string, string> = {
   bootstrap_required: '本机会话尚未建立，请刷新整个页面。',
   request_rejected: '本机服务拒绝了该请求。请刷新页面后核对当前状态。',
   chat_disabled: '文字聊天尚未启用，请通过启动面板启动控制台服务。',
-  chat_capacity: '会话数量已达到上限。请先整理不再需要的网页会话；长期记忆不会随会话自动删除。',
   chat_busy: '当前会话仍在处理上一项操作。请等待完成后只查询最新状态，不要重复发送。',
   invalid_title: '聊天名称不符合要求：请填写 1 至 60 个字符。',
   invalid_chat_message: '消息格式不符合要求，请检查内容后重新输入。',
