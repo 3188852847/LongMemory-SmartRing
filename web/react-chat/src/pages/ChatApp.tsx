@@ -129,6 +129,26 @@ export function ChatApp() {
       void queryClient.invalidateQueries({queryKey:legacyMemorySummaryKey});
     }
   }
+  function showModelHealth(health:NonNullable<Config['model_health']>) {
+    setConfig(current => {
+      // 手动检测和消息回执可能交错，只采用服务端最近一次检查的时间。
+      const previous = current?.model_health?.checked_at;
+      if (!current || (previous && (!health.checked_at || previous > health.checked_at))) return current;
+      return {...current, model_health:health};
+    });
+  }
+  async function refreshModelHealthAfter(turn:Turn) {
+    if (config?.provider !== 'openai_compatible') return;
+    const error = modelFailure(turn.error);
+    const health = config.model_health;
+    if (error ? health?.code === turn.error && health?.state === 'unavailable'
+              : turn.answer_source !== 'model' || !turn.answer || health?.state === 'available') return;
+    try {
+      // 已保存的轮次可以重放；只读当前服务状态，避免把旧轮次的成功显示成新检查。
+      const info = await api.request<Config>('/api/chat-config');
+      if (info.model_health) showModelHealth(info.model_health);
+    } catch { /* 保留上次确认的状态；状态读取失败不影响本轮已保存的回答。 */ }
+  }
   async function send() {
     if (!chat || busy || unknown || !draft.trim() || chat.turns.length >= 40) return;
     await action(async () => {
@@ -144,7 +164,7 @@ export function ChatApp() {
         setChats(rows => rows.map(row => row.chat_id === chat.chat_id ? {...row, turn_count: chat.turns.length + 1} : row));
         refreshMemoryCountAfter(turn);
         const modelProblem=modelFailure(turn.error);
-        if(modelProblem)setConfig(current=>current?{...current,model_health:{state:'unavailable',code:String(turn.error),checked_at:new Date().toISOString()}}:current);
+        void refreshModelHealthAfter(turn);
         setNotice(modelProblem
           ? `${modelProblem} 本轮用户输入可能已经保存，但没有伪造助手回答。`
           : turn.memory_processing === 'source_only'
@@ -167,6 +187,7 @@ export function ChatApp() {
         setDraft(current => current === attempt.text ? '' : current);
         submitted.current = null;
         refreshMemoryCountAfter(ownTurn);
+        void refreshModelHealthAfter(ownTurn);
       }
       if (result.pending) setNotice('后台仍在处理，没有重发。');
       else if (ownTurn) setNotice('已找到本次发送的记录，可查看该轮处理结果。');
@@ -175,7 +196,7 @@ export function ChatApp() {
     });
   }
   async function checkModel(){if(checkingModel||config?.provider!=='openai_compatible')return;setCheckingModel(true);
-    try{const health=await api.request<NonNullable<Config['model_health']>>('/api/chat-model/check','POST',{});setConfig(current=>current?{...current,model_health:health}:current);
+    try{const health=await api.request<NonNullable<Config['model_health']>>('/api/chat-model/check','POST',{});showModelHealth(health);
       setNotice(health.state==='available'?'模型连接验证通过；这不代表回答质量或圆屏链路已经验收。':modelFailure(health.code)??'模型连接验证失败。');
     }catch(error){
       const problem = error instanceof ApiError ? modelFailure(error.code) : undefined;

@@ -114,6 +114,42 @@ describe('聊天工作区', () => {
     expect(request.mock.calls.filter(([path]) => path.startsWith('/api/memories?'))).toHaveLength(2);
   });
 
+  test.each([false, true])('模型恢复后从服务读取最近状态，应用命令保留原状态（查询找回=%s）', async lookup => {
+    const snapshot:Snapshot = {chat_id:'chat-model',title:'模型状态',pending:false,turns:[]};
+    const previous = {state:'unavailable',code:'model_unreachable',checked_at:'2026-11-20T08:00:00+00:00'};
+    const available = {state:'available',code:null,checked_at:'2026-11-21T08:00:00+00:00'};
+    let modelAnswered = false;
+    const request = mount(snapshot, (path, method, body) => {
+      if (path === '/api/chat-config') return {enabled:true,provider:'openai_compatible',database:'test.db',
+        model:'测试',role:'测试',model_health:modelAnswered ? available : previous};
+      if (method === 'POST' && path.endsWith('/messages')) {
+        const {text,request_id} = body as {text:string; request_id:string};
+        modelAnswered = text === '交给模型回答';
+        const result:Turn = {...turn(modelAnswered ? 2 : 1),input:text,request_id,
+          answer_source:modelAnswered ? 'model' : 'application_command'};
+        snapshot.turns = [...snapshot.turns, result];
+        if (modelAnswered && lookup) throw new ApiError('chat_archive_unavailable',503);
+        return result;
+      }
+    });
+    await screen.findByText(/会话已恢复，可以继续聊/);
+    fireEvent.click(screen.getByRole('button', {name:'运行状态'}));
+    await screen.findByText('模型服务最近验证失败');
+    const input = screen.getByRole('textbox', {name:'消息'});
+    const send = screen.getByRole('button', {name:'发送'});
+    fireEvent.change(input, {target:{value:'应用内命令'}});
+    fireEvent.click(send);
+    await screen.findByText('合成回答 1');
+    expect(screen.getByText('模型服务最近验证失败')).toBeTruthy();
+    expect(request.mock.calls.filter(([path]) => path === '/api/chat-config')).toHaveLength(1);
+    fireEvent.change(input, {target:{value:'交给模型回答'}});
+    fireEvent.click(send);
+    if (lookup) fireEvent.click(await screen.findByRole('button', {name:'只查询结果，不重发'}));
+    await screen.findByText('模型服务最近验证可用');
+    expect(request.mock.calls.filter(([path]) => path.endsWith('/messages'))).toHaveLength(2);
+    expect(request.mock.calls.some(([path]) => path === '/api/chat-model/check')).toBe(false);
+  });
+
   test('40 轮限制明确显示，仍可以进入会话和新聊天', async () => {
     mount({chat_id:'chat-synthetic', title:'合成会话', pending:false, turns:Array.from({length:40}, (_,i) => turn(i))});
     await screen.findByText('合成回答 39');

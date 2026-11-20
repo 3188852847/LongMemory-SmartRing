@@ -2,6 +2,7 @@ import {mechanismFixture} from '../../tests/fixtures/hyMechanisms';
 import {KnownMemoryEngine} from '../../tests/memoryEngine';
 import {afterEach,expect,test,vi} from 'vitest';
 import {fireEvent,render,screen,waitFor,within} from '@testing-library/react';
+import {ConfigProvider} from 'antd';
 import {MemoryRouter,Route,Routes} from 'react-router-dom';
 import {ChatApi,ApiError,type EngineItem} from '../../api';
 import {HyMemoryWorkspace,memoryTime} from './HyMemoryWorkspace';
@@ -23,7 +24,7 @@ function setup(route='/memories',override?:(path:string,method:string,body:unkno
     if(path==='/api/memory-engine/hy/items/synthetic-1/history')return {items:[],limited:false,recording_complete:false} as never;
     throw new Error(`unexpected synthetic path ${path}`);
   });
-  render(<MemoryRouter initialEntries={[route]}><KnownMemoryEngine kind="hy"><HyMemoryWorkspace api={new ChatApi()} method="hy_memory_pro_chat" capabilities={{listing:true,detail:true}}/></KnownMemoryEngine></MemoryRouter>);
+  render(<ConfigProvider theme={{token:{motion:false}}}><MemoryRouter initialEntries={[route]}><KnownMemoryEngine kind="hy"><HyMemoryWorkspace api={new ChatApi()} method="hy_memory_pro_chat" capabilities={{listing:true,detail:true}}/></KnownMemoryEngine></MemoryRouter></ConfigProvider>);
   return request;
 }
 
@@ -176,6 +177,47 @@ test('收到 HTTP 413 后保留草稿并显示操作未执行，用户缩短内�
   fireEvent.click(save);
   await screen.findByText(/纠正已完成/);
   expect(contents).toEqual([draft, shorter]);
+});
+
+test.each([
+  {open:'纠正这条记忆', confirm:'保存纠正', suffix:'/corrections'},
+  {open:'删除这条记忆', confirm:'确认删除条目', suffix:'/deletion'},
+])('另一标签修改记忆后，$open 需要重新核对新修订', async ({open, confirm, suffix}) => {
+  const nextItem = {...item, content:'另一标签保存的新内容', revision:'b'.repeat(64)};
+  const revisions:string[] = [];
+  setup('/memories?item=synthetic-1', (path, method, body) => {
+    if (path === '/api/memory-engine/items/synthetic-1' && revisions.length) return nextItem;
+    if (method === 'POST' && path.endsWith(suffix)) {
+      const {revision, request_id} = body as {revision:string; request_id:string};
+      revisions.push(revision);
+      if (revision !== nextItem.revision) throw new ApiError('hy_management_revision_conflict', 409);
+      return {request_id, state:'completed', platform_sources_preserved:true};
+    }
+  });
+  async function editAndConfirm() {
+    const detail = await screen.findByRole('dialog', {name:'记忆详情'});
+    const begin = await within(detail).findByRole('button', {name:open});
+    await waitFor(() => expect(begin.hasAttribute('disabled')).toBe(false));
+    fireEvent.click(begin);
+    const button = await screen.findByRole('button', {name:confirm});
+    const modal = within(button.closest('[role=dialog]') as HTMLElement);
+    const input = modal.queryByLabelText('正确的内容');
+    if (input) fireEvent.change(input, {target:{value:'本标签的草稿'}});
+    fireEvent.click(modal.getByRole('checkbox'));
+    fireEvent.click(button);
+    return {button, modal, dialog:button.closest('[role=dialog]') as HTMLElement};
+  }
+  const {button, modal, dialog} = await editAndConfirm();
+  await modal.findByText(/条目已更新/);
+  expect(button.hasAttribute('disabled')).toBe(true);
+  fireEvent.click(button);
+  expect(revisions).toEqual([item.revision]);
+  fireEvent.click(modal.getByRole('button', {name:/取\s*消/}));
+  await waitFor(() => expect(screen.queryAllByRole('dialog')).not.toContain(dialog));
+  const detail = await screen.findByRole('dialog', {name:'记忆详情'});
+  await within(detail).findByText(nextItem.content);
+  await editAndConfirm();
+  await waitFor(() => expect(revisions).toEqual([item.revision, nextItem.revision]));
 });
 
 test('时间未知及无效格式如实呈现',()=>{expect(memoryTime(null)).toBe('时间未记录');expect(memoryTime('invalid')).toBe('时间格式未知');});
