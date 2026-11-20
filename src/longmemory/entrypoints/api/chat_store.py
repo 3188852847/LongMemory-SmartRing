@@ -1,4 +1,5 @@
 """网页会话旁库：不改变 L0/L1 schema，不将过去的无会话消息猜测归组。"""
+from contextlib import closing
 import json
 import sqlite3
 import os
@@ -32,7 +33,7 @@ class ChatStore:
         if not self.path.exists():
             return {}
         try:
-            with sqlite3.connect(self.path.as_uri() + '?mode=ro', uri=True) as db:
+            with closing(sqlite3.connect(self.path.as_uri() + '?mode=ro', uri=True)) as db, db:
                 return {key: json.loads(payload) for key, payload in db.execute('SELECT id, payload FROM web_chats ORDER BY rowid')}
         except Exception:
             self.close()
@@ -40,11 +41,11 @@ class ChatStore:
 
     def save(self, key, payload):
         # 仅用户创建/提交/重命名时初始化旁库，启动和读取不会创建个人文件。
-        with sqlite3.connect(self.path) as db:
+        with closing(sqlite3.connect(self.path)) as db, db:
             db.execute('CREATE TABLE IF NOT EXISTS web_chats (id TEXT PRIMARY KEY, payload TEXT NOT NULL)')
             db.execute('INSERT INTO web_chats VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload',
                        (key, json.dumps(payload, ensure_ascii=False)))
 
     def remove(self, key):
-        with sqlite3.connect(self.path) as db:
+        with closing(sqlite3.connect(self.path)) as db, db:
             db.execute('DELETE FROM web_chats WHERE id=?', (key,))

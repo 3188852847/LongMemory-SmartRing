@@ -1,6 +1,6 @@
 """合成旁库恢复，不读日常数据库，不请求校园模型。"""
 import asyncio
-from contextlib import closing
+from contextlib import ExitStack, closing
 from dataclasses import asdict
 import sqlite3
 from unittest.mock import Mock
@@ -131,6 +131,58 @@ def test_sidecar_does_not_migrate_memory_and_exclusive_lock(backend):
     assert second.load()['test']['title'] == '新聊天'
     second.close()
     assert backend.database.read_bytes() == before
+
+
+def test_sidecar_connections_close_after_each_operation_and_file_can_be_renamed(tmp_path, monkeypatch):
+    database = tmp_path / 'synthetic.db'
+    connect = sqlite3.connect
+    connections = []
+    with ExitStack() as cleanup:
+        def track_connection(*args, **kwargs):
+            db = connect(*args, **kwargs)
+            connections.append(db)  # 持有真实连接，排除垃圾回收代为关闭的情况。
+            cleanup.callback(db.close)
+            return db
+
+        monkeypatch.setattr(sqlite3, 'connect', track_connection)
+        with closing(ChatStore(database)) as store:
+            assert store.load() == {}
+            store.save('one', {'title': '合成会话'})
+            with pytest.raises(sqlite3.ProgrammingError, match='closed database'):
+                connections[-1].execute('SELECT 1')
+        with closing(ChatStore(database)) as reopened:
+            assert reopened.load() == {'one': {'title': '合成会话'}}
+            with pytest.raises(sqlite3.ProgrammingError, match='closed database'):
+                connections[-1].execute('SELECT 1')
+            reopened.remove('one')
+            with pytest.raises(sqlite3.ProgrammingError, match='closed database'):
+                connections[-1].execute('SELECT 1')
+
+        assert len(connections) == 3
+        renamed = store.path.rename(tmp_path / 'renamed.chats.sqlite3')
+        with closing(connect(renamed)) as db:
+            assert db.execute('SELECT id FROM web_chats').fetchall() == []
+
+
+def test_sidecar_failed_delete_rolls_back_before_closing(tmp_path, monkeypatch):
+    with closing(ChatStore(tmp_path / 'synthetic.db')) as store:
+        store.load()
+        store.save('one', {'title': '保留原会话'})
+        connect = sqlite3.connect
+        with closing(connect(store.path)) as db, db:
+            db.execute("""CREATE TRIGGER reject_delete AFTER DELETE ON web_chats
+                          BEGIN SELECT RAISE(FAIL, 'synthetic delete fault'); END""")
+        statements = []
+        with closing(connect(store.path)) as writer:
+            writer.set_trace_callback(statements.append)
+            monkeypatch.setattr(sqlite3, 'connect', lambda path: writer)
+            with pytest.raises(sqlite3.IntegrityError, match='synthetic delete fault'):
+                store.remove('one')
+            assert 'ROLLBACK' in statements
+            with pytest.raises(sqlite3.ProgrammingError, match='closed database'):
+                writer.execute('SELECT 1')
+        with closing(connect(store.path)) as db:
+            assert db.execute('SELECT id FROM web_chats').fetchall() == [('one',)]
 
 
 def test_interrupted_turn_recovered_without_reexecution(backend):
