@@ -60,6 +60,15 @@ export function ChatApp() {
     queryFn:() => api.request<DeviceStatus>('/api/device'), refetchInterval:5000});
   const memoryEngine=useMemoryEngine();
   const memoryCount=useMemorySummary(panel==='runtime');
+  const checkedChatMethod = useRef<string | null>(null);
+  useEffect(() => {
+    // chat-config 会初始化聊天引擎，同时发起的只读身份查询可能先取到“尚未初始化”。
+    // 两份响应都到达后再核对一次，由身份接口决定证据链接的类型。
+    if (!config?.enabled || !config.method || memoryEngine.kind !== 'uninitialized'
+      || memoryEngine.phase !== 'ready' || memoryEngine.refreshing || checkedChatMethod.current === config.method) return;
+    checkedChatMethod.current = config.method;
+    memoryEngine.refresh();
+  }, [config?.enabled, config?.method, memoryEngine]);
   const focusedRequestId = searchParams.get('request_id');
   const followLatest = useRef(true);
   const previousChat = useRef<string | undefined>(undefined);

@@ -25,8 +25,13 @@ test('文字聊天可保存并在刷新后恢复，React 页面可统一导航',
   await page.locator('button[type="submit"]').click();
   await expect(page.locator('.bubble.assistant').getByText('好的，我记住了。', {exact:true})).toBeVisible();
   await page.getByRole('button', {name:'记忆证据', exact:true}).click();
-  await expect(page.getByRole('region', {name:'本轮记忆证据'})).toContainText('用户养了一只叫豆包的猫。');
-  await page.getByRole('link', {name:'核对 L0 原话'}).click();
+  const recalledFact = page.getByRole('region', {name:'本轮记忆证据'}).getByRole('article')
+    .filter({has:page.getByText('用户养了一只叫豆包的猫。', {exact:true})});
+  await expect(recalledFact).toBeVisible();
+  const sourceLink = recalledFact.getByRole('link');
+  await expect(sourceLink).toHaveAccessibleName('核对 L0 原话');
+  await expect(sourceLink).toHaveAttribute('href', /^\/memories\?memory_id=[^&]+$/);
+  await sourceLink.click();
   await expect(page).toHaveURL(/\/memories\?memory_id=/);
   const memoryDetail = page.getByRole('dialog', {name:'事实记忆（L1）'});
   await expect(memoryDetail).toBeVisible();
