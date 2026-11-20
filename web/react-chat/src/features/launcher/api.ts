@@ -25,6 +25,7 @@ export type LauncherSnapshot = {
   state: 'stopped' | 'starting' | 'ready' | 'stopping' | 'failed'; message: string;
   services: Array<{id: string; label: string; state: string; tone?: 'quiet' | 'good' | 'busy' | 'warning' | 'bad' | 'idle' | 'error'}>;
   shutdown_complete?: boolean;
+  hy_reset_revision?: string | null;
   console_url: string | null; settings: LauncherSettings; settings_revision: string;
   can_start: boolean; can_stop: boolean;
   network?: {state: string; message: string; address?: string};
@@ -46,13 +47,13 @@ export class LauncherError extends Error {
 }
 export class LauncherApi {
   constructor(private readonly token: string) {}
-  async request(path: 'status' | 'settings' | 'actions', body?: unknown, signal?: AbortSignal): Promise<LauncherSnapshot> {
+  async request(path: 'status' | 'settings' | 'actions' | 'reset-memory', body?: unknown, signal?: AbortSignal): Promise<LauncherSnapshot> {
     if (!this.token) throw new LauncherError(401, '请重新双击“启动智慧圆屏.cmd”打开面板。');
     const response = await fetch(`/api/launcher/${path}`, {
       method: body === undefined ? 'GET' : 'POST', credentials: 'same-origin', cache: 'no-store',
       headers: {'Authorization': `Bearer ${this.token}`, ...(body === undefined ? {} : {'Content-Type': 'application/json'})},
       ...(body === undefined ? {} : {body: JSON.stringify(body)}),
-      signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(8000)]) : AbortSignal.timeout(8000),
+      signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(8000)]) : AbortSignal.timeout(path === 'reset-memory' ? 240000 : 8000),
     });
     if (!response.ok) {
       // 固定消息避免把异常响应中的本机路径、令牌或配置内容显示出来。

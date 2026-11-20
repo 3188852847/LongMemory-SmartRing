@@ -77,3 +77,40 @@ def build_daily_hy_runtime(root, *, create=False):
         raise ValueError("hy_daily_real_model_configuration_required")
     from longmemory.bootstrap_hy_daily import build_owned_daily_runtime
     return build_owned_daily_runtime(root, deployment, create=create)
+
+
+def reset_daily_hy_memory(root, expected_revision):
+    """停服后创建并复开空库。仅在两次成功后原子切换，旧库留作本地备份。"""
+    from dataclasses import replace
+    from uuid import uuid4
+    from longmemory.bootstrap_hy_daily import build_owned_daily_runtime
+    from longmemory.methods.hy_memory.assembly import HyState
+
+    root = Path(root).resolve()
+    pointer = root / "local/config/hy-memory/deployment.json"
+    original = pointer.read_bytes()
+    if sha256(original).hexdigest() != expected_revision:
+        raise ValueError("hy_reset_selection_changed")
+    old = load_hy_deployment(root)
+    lease = HyState(old.state_directory, old.settings, create=False)
+    lease.acquire()
+    try:
+        generation = uuid4().hex
+        state = f"data/memory/hy-{generation}"
+        sources = f"data/databases/hy-{generation}.sqlite3"
+        new = replace(old, state_directory=_path(root, state, parent="data/memory"),
+                      source_path=_path(root, sources, parent="data/databases"))
+        build_owned_daily_runtime(root, new, create=True, reuse_budget=True).close()
+        build_owned_daily_runtime(root, new).close()
+        if pointer.read_bytes() != original:
+            raise ValueError("hy_reset_selection_changed")
+        backup = root / "data/backups" / f"hy-before-reset-{generation}.json"
+        backup.parent.mkdir(parents=True, exist_ok=True)
+        with backup.open("xb") as stream:
+            stream.write(original)
+        descriptor = dict(json.loads(original), state_directory=state, source_path=sources)
+        temporary = pointer.with_suffix(f".{generation}.tmp")
+        temporary.write_text(json.dumps(descriptor, ensure_ascii=False, indent=2), encoding="utf-8")
+        temporary.replace(pointer)
+    finally:
+        lease.release()

@@ -141,6 +141,13 @@ def create_app(*, port=8765, bridge=None, web_root=None, database=None, allow_me
     for path in STATIC_FILES:
         app.router.add_get(path, static)
     register_react_routes(app, assets / 'react-chat/dist')
+    async def whale_animation(request):
+        directory = ROOT / 'data/round-screen/whale'
+        path = directory / (request.match_info['face'] + '.gif')
+        if path.is_symlink() or directory.resolve() != directory or not path.is_file():
+            raise web.HTTPNotFound()
+        return web.FileResponse(path)
+    app.router.add_get(r'/pet/whale/{face:neutral|happy|listening|thinking|speaking|sleep|wink}.gif', whale_animation)
     app.router.add_get("/api/session", session, allow_head=False)
     register_otto_preview(app, otto_asset_root)
     app.router.add_get("/api/runtime-status", runtime_status, allow_head=False)

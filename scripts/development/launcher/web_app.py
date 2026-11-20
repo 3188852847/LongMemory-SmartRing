@@ -179,7 +179,7 @@ class LauncherHandler(BaseHTTPRequestHandler):
         self.request_id = secrets.token_hex(12)
         if not self._local_request() or not self._authenticated():
             return
-        if self.path not in {'/api/launcher/settings', '/api/launcher/actions'}:
+        if self.path not in {'/api/launcher/settings', '/api/launcher/actions', '/api/launcher/reset-memory'}:
             return self._error(404, 'not_found', '入口不存在。')
         try:
             lengths = self.headers.get_all('Content-Length', [])
@@ -195,7 +195,11 @@ class LauncherHandler(BaseHTTPRequestHandler):
             body = json.loads(data)
             if not isinstance(body, dict):
                 raise ValueError
-            if self.path.endswith('/settings'):
+            if self.path.endswith('/reset-memory'):
+                if set(body) != {'confirmation', 'revision'} or body['confirmation'] != '清空当前记忆库':
+                    raise ValueError
+                result = self.server.controller.reset_hy(body['revision'])
+            elif self.path.endswith('/settings'):
                 self.audit_action = 'settings'
                 if set(body) != {'settings', 'expected_revision'}:
                     raise ValueError

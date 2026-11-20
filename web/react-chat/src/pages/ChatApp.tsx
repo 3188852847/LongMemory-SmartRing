@@ -36,6 +36,14 @@ export function ChatApp() {
   const [chats, setChats] = useState<Summary[]>([]);
   const [chat, setChat] = useState<Snapshot>();
   const [draft, setDraft] = useState('');
+  const [petAvailable, setPetAvailable] = useState(true);
+  const [sending, setSending] = useState(false);
+  const [petTouched, setPetTouched] = useState(false);
+  useEffect(() => {
+    if (!petTouched) return;
+    const timer = window.setTimeout(() => setPetTouched(false), 1800);
+    return () => window.clearTimeout(timer);
+  }, [petTouched]);
   useUnsavedChanges(Boolean(draft), '有尚未发送的聊天草稿。');
   const [busy, setBusy] = useState(true);
   const [unknown, setUnknown] = useState(false);
@@ -161,6 +169,7 @@ export function ChatApp() {
   async function send() {
     if (!chat || busy || unknown || !draft.trim() || chat.turns.length >= 40) return;
     await action(async () => {
+      setSending(true);
       setNotice('正在处理，请勿重复发送…');
       try {
         // 断线后手动重发相同草稿，沿用原请求号，让服务端识别已处理的消息。
@@ -191,6 +200,7 @@ export function ChatApp() {
             ? '回答已完成，但本地 BGE 检索失败，本轮已明确降级为关键词检索。'
           : turn.status === 'completed' ? '本轮完成，可展开查看记忆证据。' : '本轮未完成；输入可能已保存，请查看过程。');
       } catch (error) {setUnknown(true); setNotice(chatFailure(error, 'write'));}
+      finally {setSending(false);}
     });
   }
   async function checkSendResult() {
@@ -262,7 +272,9 @@ export function ChatApp() {
   }
   function togglePanel(next: NonNullable<typeof panel>) {if (panel === next) closePanel(); else setPanel(next);}
   return <><AppShell subtitle="你的日常聊天空间" className="chat-shell" layout="workspace" sidebar={<ConsoleNav active="chat" legacyPath="/chat"/>}>
-      <PageHeader eyebrow="日常使用" title="聊聊今天" action={<div className="page-header-actions"><span>{chat?.turns.length ?? 0} / 40 轮</span><MemoryCommandHelp/></div>}/>
+      <PageHeader eyebrow="日常使用" title="聊聊今天" action={<div className="page-header-actions">{petAvailable && <button className="whale-chat-pet" type="button" aria-label="摸摸大肥鱼，开始打字" onClick={() => {setPetTouched(true); document.getElementById('chat-message')?.focus();}}>
+        <img onError={() => setPetAvailable(false)} width="68" height="68" alt="大肥鱼" src={`/pet/whale/${sending ? 'thinking' : petTouched ? 'happy' : draft ? 'listening' : 'neutral'}.gif`}/>
+      </button>}<span>{chat?.turns.length ?? 0} / 40 轮</span><MemoryCommandHelp/></div>}/>
       <div className="chat-tools" aria-label="聊天工作区工具">
         <span className="chat-current-title" title={chat?.title}>{chat?.title ?? '正在打开会话…'}</span>
         <Button id="chat-tool-sessions" aria-label="会话" aria-expanded={panel === 'sessions'} aria-controls={panel ? 'chat-aux-panel' : undefined} onClick={() => togglePanel('sessions')}>会话</Button>

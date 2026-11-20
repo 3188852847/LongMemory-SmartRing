@@ -44,6 +44,9 @@ export function LauncherApp({api, pollMs = 1200}: {api: LauncherApi; pollMs?: nu
   const [pending, setPending] = useState(false);
   const [copyResult, setCopyResult] = useState({url: '', message: ''});
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [resetPhrase, setResetPhrase] = useState<string | null>(null);
+  const [resetRevision, setResetRevision] = useState('');
+  const [resetDone, setResetDone] = useState(false);
   const [settingsGroup, setSettingsGroup] = useState('daily');
   const [draft, setDraft] = useState<LauncherSettings | null>(null);
   const [revision, setRevision] = useState('');
@@ -87,7 +90,7 @@ export function LauncherApp({api, pollMs = 1200}: {api: LauncherApi; pollMs?: nu
     setRefreshKey(value => value + 1);
   }
 
-  async function mutate(path: 'settings' | 'actions', body: unknown) {
+  async function mutate(path: 'settings' | 'actions' | 'reset-memory', body: unknown) {
     if (operation.current) return;
     generation.current += 1; operation.current = true; mutationError.current = false; setPending(true); setError('');
     try {
@@ -215,6 +218,10 @@ export function LauncherApp({api, pollMs = 1200}: {api: LauncherApi; pollMs?: nu
       <Segmented className="launcher-settings-tabs" block aria-label="启动设置分类" options={settingsGroups.map(({value, label}) => ({value, label}))} value={settingsGroup} onChange={value => setSettingsGroup(String(value))}/>
       {draft && <div className="launcher-settings-form">
         <TransitionSurface identity={settingsGroup}>
+          {settingsGroup === 'memory' && snapshot?.settings.memory_backend === 'hy_memory' && <>
+            <Button danger disabled={!snapshot.hy_reset_revision || settingsDirty || pending} onClick={() => {setResetDone(false); setResetRevision(snapshot.hy_reset_revision ?? ''); setResetPhrase('');}}>清空当前记忆库</Button>
+            <p role="status">{resetDone ? '已切换到空记忆库，下次开启陪伴时使用。' : '停止陪伴服务后，可一次清空 Hy 的记忆、画像和记忆来源。'}</p>
+          </>}
           {settingsGroup === 'daily' && <div className="launcher-switch-row"><label htmlFor="launcher-voice">连接圆屏语音</label><Switch id="launcher-voice" checked={draft.voice} disabled={settingsLocked} onChange={voice => setDraft({...draft, voice})}/></div>}
           {fields.filter(field => settingsGroups.find(group => group.value === settingsGroup)?.keys.includes(field.key)).map(field => <div className="launcher-field" key={field.key}><label htmlFor={`launcher-${field.key}`}>{field.label}</label><Select id={`launcher-${field.key}`} options={field.options} value={String(draft[field.key] ?? (field.key === 'cosy_delivery_mode' ? 'buffered' : ''))} disabled={settingsLocked || (draft.memory_backend === 'hy_memory' && ['memory_extraction', 'memory_retrieval'].includes(field.key)) || (field.key === 'cosy_delivery_mode' && (draft.voice_mode !== 'pipeline' || draft.tts_backend !== 'cosyvoice3'))} onChange={value => setDraft({...draft, [field.key]: value})}/></div>)}
           {settingsGroup === 'voice' && <p>声音交付方式仅用于本地链路的 CosyVoice 3，不改变声线。缓冲播放为默认，另两种方式仍在验证。保存后需停止服务并重新启动，不会在说话中途切换。</p>}
@@ -229,6 +236,18 @@ export function LauncherApp({api, pollMs = 1200}: {api: LauncherApi; pollMs?: nu
         {needsConsent && <div className="launcher-risk"><p>学校模型接口使用 HTTP，传输内容可能被网络中间方读取。请确认网络环境及数据使用范围。</p><Checkbox disabled={settingsLocked} checked={draft.http_risk_ack} onChange={event => setDraft({...draft, http_risk_ack: event.target.checked})}>我了解并接受本次使用的传输风险</Checkbox></div>}
       </div>}
     </Drawer>
+    <Modal title="清空当前 Hy 记忆库？" open={resetPhrase !== null} okText="确认清空" cancelText="取消"
+      okButtonProps={{danger:true, disabled: resetPhrase !== '清空当前记忆库' || resetRevision !== snapshot?.hy_reset_revision}}
+      confirmLoading={pending} onCancel={() => !pending && setResetPhrase(null)} onOk={async () => {
+        if (resetPhrase !== '清空当前记忆库' || resetRevision !== snapshot?.hy_reset_revision) return;
+        const result = await mutate('reset-memory', {confirmation:resetPhrase, revision:resetRevision});
+        if (result) {setResetDone(true); setResetPhrase(null);}
+      }}>
+      <p>下次启动从空库开始。旧库保留为本地恢复备份，网页聊天记录和其他记忆库保留。</p>
+      <label htmlFor="reset-hy-confirm">请输入“清空当前记忆库”</label>
+      <Input id="reset-hy-confirm" value={resetPhrase ?? ''} onChange={e => setResetPhrase(e.target.value)} disabled={pending}/>
+      {error && <Alert type="error" title={error}/>}
+    </Modal>
     <Modal title={confirmation === 'shutdown' ? '停止服务并退出面板？' : '停止陪伴服务？'} open={confirmation !== null} okText={confirmation === 'shutdown' ? '停止并退出' : '停止服务'} cancelText="继续运行" okButtonProps={{danger: true}} confirmLoading={pending} onCancel={() => !pending && setConfirmation(null)} onOk={() => confirmation && void action(confirmation)}>
       <p>文字聊天和圆屏语音会断开，已保存的记忆会保留。{confirmation === 'shutdown' && '再次使用时，双击启动入口重新打开。'}</p>
     </Modal>

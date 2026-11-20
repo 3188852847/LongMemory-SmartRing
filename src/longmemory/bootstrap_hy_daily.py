@@ -77,7 +77,7 @@ def load_daily_encoder(root):
     return encoder
 
 
-def build_owned_daily_runtime(root, deployment, *, create=False, encoder_loader=load_daily_encoder,
+def build_owned_daily_runtime(root, deployment, *, create=False, reuse_budget=False, encoder_loader=load_daily_encoder,
                               model_loader=selected_model, gateway_factory=ModelGateway):
     from longmemory.bootstrap import build_hy_memory_runtime
     root = Path(root).resolve()
@@ -89,7 +89,7 @@ def build_owned_daily_runtime(root, deployment, *, create=False, encoder_loader=
         raise ValueError("daily_selected_model_or_dimension_changed")
     if identity.get("profile") == "campus":
         from longmemory.infrastructure.config.campus_calls import open_campus_calls
-        budget = open_campus_calls(root, model, create=create)
+        budget = open_campus_calls(root, model, create=create and not reuse_budget)
         identity = dict(identity, endpoint_sha256=getattr(budget, "original_endpoint_sha256", identity["endpoint_sha256"]))
     else:
         budget = ExistingCampaignBudget(root / CAMPAIGN_RELATIVE)

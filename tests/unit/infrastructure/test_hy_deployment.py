@@ -35,6 +35,34 @@ def test_fixed_files_explicit_paths_and_pinned_identity_without_implicit_creatio
     assert not deployment.state_directory.exists() and not deployment.source_path.exists()
 
 
+def test_failed_empty_database_reopen_preserves_current_selection(tmp_path, monkeypatch):
+    from longmemory.infrastructure.config.hy_deployment import reset_daily_hy_memory
+    from longmemory.methods.hy_memory.assembly import HyState
+    from types import SimpleNamespace
+
+    _, pointer, settings = setup_config(tmp_path)
+    old = load_hy_deployment(tmp_path)
+    state = HyState(old.state_directory, settings, create=True)
+    (state.root / "sdk" / "synthetic").write_bytes(b"original")
+    state.ready()
+    original = pointer.read_bytes()
+    calls = []
+
+    def build(root, deployment, *, create=False, reuse_budget=False):
+        assert deployment.state_directory != old.state_directory
+        calls.append((create, reuse_budget))
+        if not create:
+            raise ValueError("synthetic_reopen_failure")
+        return SimpleNamespace(close=lambda: None)
+
+    monkeypatch.setattr("longmemory.bootstrap_hy_daily.build_owned_daily_runtime", build)
+    with pytest.raises(ValueError, match="synthetic_reopen_failure"):
+        reset_daily_hy_memory(tmp_path, sha256(original).hexdigest())
+    assert calls == [(True, True), (False, False)]
+    assert pointer.read_bytes() == original
+    assert (state.root / "sdk" / "synthetic").read_bytes() == b"original"
+
+
 def test_daily_entry_rejects_offline_or_simulated_models_before_initializing_state(tmp_path):
     setup_config(tmp_path)
     with pytest.raises(ValueError, match="real_model_configuration_required"):

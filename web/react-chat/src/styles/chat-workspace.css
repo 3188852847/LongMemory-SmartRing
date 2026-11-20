@@ -68,3 +68,6 @@
   .shell.workspace-shell.chat-shell .chat-composer textarea { max-height: 4rem; }
   .shell.workspace-shell.chat-shell .chat-status { max-height: 3em; }
 }
+
+.whale-chat-pet { border: 0; background: transparent; padding: 0; border-radius: 50%; cursor: pointer; }
+.whale-chat-pet img { display: block; border-radius: inherit; }

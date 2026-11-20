@@ -122,11 +122,29 @@ class LauncherController:
                 'console_url': (console_url(self.manager.options.port, settings['start_page'])
                                 if self.state == 'ready' and self.manager.options else None),
                 'settings': settings, 'settings_revision': revision,
+                'hy_reset_revision': self.hy_reset_revision(settings),
                 'cosy_delivery': cosy_delivery_summary(self.manager, settings, os.environ),
                 'shutdown_complete': self.shutdown_requested.is_set(),
                 'can_start': self.state in {'stopped', 'failed'} and not self.manager.services and not self.shutdown_requested.is_set(),
                 'can_stop': self.state in {'starting', 'ready', 'failed'} and bool(self.manager.services),
             }
+
+    def hy_reset_revision(self, settings):
+        if self.state != 'stopped' or self.manager.services or not self.allow_memory_delete or settings['memory_backend'] != 'hy_memory':
+            return None
+        path = self.root / 'local/config/hy-memory/deployment.json'
+        return hashlib.sha256(path.read_bytes()).hexdigest() if path.is_file() else None
+
+    def reset_hy(self, expected_revision):
+        from longmemory.infrastructure.config.hy_deployment import reset_daily_hy_memory
+        with self._lock:
+            if not expected_revision or expected_revision != self.hy_reset_revision(self.settings()):
+                raise ControllerError('请先停止陪伴服务，重新核对当前 Hy 记忆库。', 409)
+            try:
+                reset_daily_hy_memory(self.root, expected_revision)
+            except Exception as error:
+                raise ControllerError('空库校验或切换失败，请检查独占使用状态与本机配置。') from error
+            return self.snapshot()
 
     def update_settings(self, values, expected_revision):
         with self._lock:
