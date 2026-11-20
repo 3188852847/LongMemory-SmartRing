@@ -16,3 +16,11 @@
 ```text
 python -m pytest -q tests/integration/test_hy_semantic_platform.py tests/unit/application/test_managed_memory_proposals.py tests/unit/entrypoints/test_chat_backend.py tests/unit/entrypoints/test_chat_console.py tests/unit/entrypoints/test_chat_persistence.py
 ```
+
+## 同一条记忆的多条来源
+
+整合提交 `88c7f236` 报告去重端到端测试中两条原文偶发倒序。该提交与本分支的相关读写实现及原用例一致。自 `67c7f7c2` 起，SQLite 按证据关联时间 `linked_at` 升序读取，同一时间按来源消息 ID 升序。日常消息使用随机 UUID，同一时刻可能先读到后说的那句话。
+
+用合成时钟和逆序消息 ID 运行原顺序断言，间隔一秒的用例通过，同一时刻的用例稳定复现“叹号、句号”。修订后的用例按两种时间条件逐条比较证据和原始消息，关闭并重开数据库后再次核对整个列表，并验证第三条陈述复用原记忆且排在末尾。改动仅涉及测试和本记录，沿用既有档案的读取顺序。
+
+`python -m pytest -q tests/e2e tests/integration/database/test_sqlite_stores.py tests/unit/methods/test_longmemory_v1.py tests/unit/application/test_chat_service.py` 共 **40 项通过**，包括旧版合成数据库的来源迁移和独立 CLI 进程重启。
