@@ -42,6 +42,7 @@ export function LauncherApp({api, pollMs = 1200}: {api: LauncherApi; pollMs?: nu
   const [snapshot, setSnapshot] = useState<LauncherSnapshot | null>(null);
   const [error, setError] = useState('');
   const [pending, setPending] = useState(false);
+  const [copyResult, setCopyResult] = useState({url: '', message: ''});
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsGroup, setSettingsGroup] = useState('daily');
   const [draft, setDraft] = useState<LauncherSettings | null>(null);
@@ -130,6 +131,18 @@ export function LauncherApp({api, pollMs = 1200}: {api: LauncherApi; pollMs?: nu
   const needsConsent = draft?.model_profile === 'campus' || (draft?.voice && draft.voice_mode === 'pipeline' && draft.voice_model_profile === 'campus');
   const coreState = closed ? 'stopped' : exiting ? 'stopping' : snapshot?.state ?? 'unknown';
   const cosy = snapshot?.cosy_delivery;
+  const ip = snapshot?.settings.lan_ip.trim();
+  const port = snapshot?.settings.voice_http_port ?? 8003;
+  const otaUrl = ip && /^\d{1,3}(\.\d{1,3}){3}$/.test(ip) && ip.split('.').every(part => Number(part) <= 255) && port > 0
+    ? `http://${ip}:${port}/xiaozhi/ota/` : '';
+  async function copyOtaUrl() {
+    try {
+      await navigator.clipboard.writeText(otaUrl);
+      setCopyResult({url: otaUrl, message: '已复制'});
+    } catch {
+      setCopyResult({url: otaUrl, message: '请选中地址手动复制'});
+    }
+  }
   const observed = cosy?.observation;
   const observedMode = observed && ['configured', 'buffered_fallback'].includes(observed.state) ? observed.effective_mode : null;
 
@@ -177,6 +190,13 @@ export function LauncherApp({api, pollMs = 1200}: {api: LauncherApi; pollMs?: nu
       {snapshot?.settings.network_auto && snapshot.network && <div role="status" aria-live="polite"><Alert type={snapshot.network.state === 'network_stable' ? 'info' : 'warning'} title="圆屏网络自动跟踪" description={<>{snapshot.network.message}{snapshot.network.address && <span> 当前检测地址：{snapshot.network.address}</span>}</>} showIcon/></div>}
       <SciFiSurface className="launcher-services">
         <div className="launcher-services-heading"><h2>连接状态</h2><span>来自本机服务</span></div>
+        {snapshot?.settings.voice && <div className="launcher-state-detail">
+          <strong>圆屏 OTA 地址</strong>
+          {otaUrl ? <p><code style={{overflowWrap: 'anywhere'}}>{otaUrl}</code>{' '}
+            <Button size="small" onClick={() => void copyOtaUrl()}>复制地址</Button>{' '}
+            <span role="status">{copyResult.url === otaUrl && copyResult.message}</span></p>
+            : <p>请在启动设置中确认电脑局域网 IP 和圆屏 OTA 端口。</p>}
+        </div>}
         <ul>{snapshot?.services.map(service => <li key={service.id}><span className="service-label">{service.label}</span><StatusIndicator tone={service.tone === 'idle' ? 'quiet' : service.tone === 'error' ? 'bad' : service.tone ?? 'quiet'}>{service.state}</StatusIndicator></li>) ?? <li><span className="service-label">本机启动服务</span><StatusIndicator>正在检查</StatusIndicator></li>}</ul>
         {cosy && snapshot && (cosy.startup_mode || (snapshot.settings.tts_backend === 'cosyvoice3' && snapshot.settings.voice_mode === 'pipeline')) && <div className="launcher-state-detail" aria-label="声音交付状态" role="status" aria-atomic="true">
           <p>下次启动：{!cosy.selection_valid ? '覆盖值无效' : cosy.next_start_mode ? cosyModes[cosy.next_start_mode] : '本模式未启用'}{cosy.next_start_source === 'environment' && '（维护环境覆盖）'}。{cosy.startup_mode && <>本次启动设置：{cosyModes[cosy.startup_mode]}{cosy.startup_source === 'environment' && '（维护环境覆盖）'}。</>}</p>
