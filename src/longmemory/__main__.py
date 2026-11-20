@@ -1,6 +1,5 @@
-"""允许使用 python -m longmemory 启动 CLI。"""
+"""通过 python -m longmemory 打开本机控制台。"""
 
-from longmemory.entrypoints.cli.app import main
+from longmemory.entrypoints.api.server import main
 
-
-raise SystemExit(main())
+main()

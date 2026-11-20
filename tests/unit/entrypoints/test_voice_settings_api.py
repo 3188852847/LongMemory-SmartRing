@@ -4,9 +4,8 @@ import pytest
 from test_console import console, login
 from longmemory.entrypoints.api import server
 from longmemory.entrypoints.api.voice_settings import speech_failure
-from longmemory.entrypoints.api.chat_backend import ChatBackend
 from longmemory.adapters.llm.fake import FakeAnswerGenerator
-from longmemory.methods.longmemory_v1.method import LongMemoryV1
+from test_chat_console import synthetic_backend
 from longmemory.infrastructure.config.tts_benchmark_history import TTSBenchmarkHistory
 
 
@@ -82,8 +81,8 @@ def test_speech_failure_only_exposes_safe_actionable_codes(internal, public, sta
 
 
 def test_voice_api_auth_strict_body_and_audio(tmp_path, monkeypatch):
-    database = tmp_path / 'synthetic.db'; LongMemoryV1(database).close()
-    backend = ChatBackend(database, FakeAnswerGenerator())
+    database = tmp_path / 'synthetic.db'
+    backend = synthetic_backend(database, FakeAnswerGenerator())
     calls = []
     class Fake:
         def __init__(self, *args): pass
@@ -114,8 +113,8 @@ def test_voice_api_auth_strict_body_and_audio(tmp_path, monkeypatch):
 
 
 def test_speech_api_returns_safe_actionable_failure(tmp_path, monkeypatch):
-    database = tmp_path / 'synthetic.db'; LongMemoryV1(database).close()
-    backend = ChatBackend(database, FakeAnswerGenerator())
+    database = tmp_path / 'synthetic.db'
+    backend = synthetic_backend(database, FakeAnswerGenerator())
     class Fake:
         def __init__(self, *args): pass
         async def speech(self, _text):
@@ -134,8 +133,8 @@ def test_speech_api_returns_safe_actionable_failure(tmp_path, monkeypatch):
 
 
 def test_tts_benchmark_uses_only_registered_synthetic_cases(tmp_path, monkeypatch):
-    database = tmp_path / 'synthetic.db'; LongMemoryV1(database).close()
-    chat = ChatBackend(database, FakeAnswerGenerator())
+    database = tmp_path / 'synthetic.db'
+    chat = synthetic_backend(database, FakeAnswerGenerator())
 
     class Fake:
         def __init__(self, *args):

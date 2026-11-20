@@ -5,7 +5,7 @@ import {QueryClient, QueryClientProvider} from '@tanstack/react-query';
 import {ApiError, ChatApi, type Snapshot, type Turn} from '../api';
 import {ChatApp} from './ChatApp';
 import {MemoryEngineProvider} from '../app/MemoryEngineProvider';
-import {KnownMemoryEngine, legacyIdentity} from '../tests/memoryEngine';
+import {KnownMemoryEngine, hyIdentity, legacyIdentity} from '../tests/memoryEngine';
 
 const turn = (index: number): Turn => ({request_id:`synthetic-${index}`, input:`合成输入 ${index}`,
   answer:`合成回答 ${index}`, status:'completed', writes:[], user_saved:true, duration_ms:1,
@@ -28,7 +28,6 @@ function mount(snapshot: Snapshot, override?: (path: string, method: string, bod
     if (path === '/api/chats') return {chats:[{chat_id:snapshot.chat_id, title:snapshot.title, turn_count:snapshot.turns.length}]};
     if (path === `/api/chats/${snapshot.chat_id}`) return snapshot;
     if (path === '/api/device') return {ready:false, connection_count:0};
-    if (path.startsWith('/api/memories?')) return {total:2,items:[]};
     throw new Error(`unexpected synthetic request: ${method} ${path}`);
   });
   render(<QueryClientProvider client={new QueryClient({defaultOptions:{queries:{retry:false}}})}>
@@ -47,23 +46,23 @@ describe('聊天工作区', () => {
     let release!: () => void;
     const delayedResponse = new Promise<void>(resolve => {release = resolve;});
     const coldIdentity = {...legacyIdentity,method:null,state:'not_initialized'};
-    const identity = vi.fn().mockResolvedValue(legacyIdentity);
+    const identity = vi.fn().mockResolvedValue(hyIdentity);
     if (!ready) identity.mockReturnValueOnce(configFirst ? delayedResponse.then(() => coldIdentity) : coldIdentity);
-    const config = {enabled:true, database:'synthetic.db', provider:'fake', model:'Fake', role:'测试', method:legacyIdentity.method};
+    const config = {enabled:true, database:'synthetic.db', provider:'fake', model:'Fake', role:'测试', method:hyIdentity.method};
     mount({chat_id:'synthetic-cold', title:'合成会话', pending:false, turns:[turn(1)]}, path => {
       if (path === '/api/memory-engine/identity') return identity();
       if (path === '/api/chat-config') return configFirst ? config : delayedResponse.then(() => config);
     }, MemoryEngineProvider);
 
     if (configFirst) await screen.findByText('合成回答 1');
-    else if (ready) await screen.findByRole('link', {name:'原话与事实'});
-    else await screen.findByText('记忆已配置，尚未初始化');
+    else if (ready) await waitFor(() => expect(identity).toHaveBeenCalledTimes(1));
+    else await waitFor(() => expect(identity).toHaveBeenCalledTimes(1));
     expect(identity).toHaveBeenCalledTimes(1);
     release();
     await screen.findByText('合成回答 1');
     fireEvent.click(screen.getByRole('button', {name:'查看第 1 轮记忆证据'}));
-    const link = await screen.findByRole('link', {name:'核对 L0 原话'});
-    expect(link.getAttribute('href')).toBe('/memories?memory_id=memory-1');
+    const link = await screen.findByRole('link', {name:'核对条目与平台来源'});
+    expect(link.getAttribute('href')).toBe('/memories?item=memory-1');
     expect(identity).toHaveBeenCalledTimes(ready ? 1 : 2);
   });
 
@@ -71,7 +70,7 @@ describe('聊天工作区', () => {
     const identity = vi.fn().mockResolvedValue({...legacyIdentity, method:null, state:'not_initialized'});
     mount({chat_id:'synthetic-cold', title:'合成会话', pending:false, turns:[turn(1)]}, path => {
       if (path === '/api/memory-engine/identity') return identity();
-      if (path === '/api/chat-config') return {enabled:true, database:'synthetic.db', method:legacyIdentity.method};
+      if (path === '/api/chat-config') return {enabled:true, database:'synthetic.db', method:hyIdentity.method};
     }, MemoryEngineProvider);
     await waitFor(() => expect(identity).toHaveBeenCalledTimes(2));
     fireEvent.click(await screen.findByRole('button', {name:'查看第 1 轮记忆证据'}));
@@ -103,7 +102,7 @@ describe('聊天工作区', () => {
     fireEvent.click(screen.getByRole('button', {name:'查看第 1 轮记忆证据'}));
     const evidence = screen.getByRole('region', {name:'本轮记忆证据'});
     expect(within(evidence).getByText('合成证据 1')).toBeTruthy();
-    expect(within(evidence).getByRole('link', {name:'核对 L0 原话'}).getAttribute('href')).toBe('/memories?memory_id=memory-1');
+    expect(within(evidence).getByRole('link', {name:'核对条目与平台来源'}).getAttribute('href')).toBe('/memories?item=memory-1');
     fireEvent.click(screen.getByRole('button', {name:'会话'}));
     expect(screen.getByRole('textbox', {name:'查找会话'})).toBeTruthy();
     fireEvent.click(screen.getByRole('button', {name:'收起面板'}));
@@ -134,34 +133,6 @@ describe('聊天工作区', () => {
     expect(request.mock.calls.find(([path]) => path.endsWith('/memory-feedback'))?.[2]).toEqual({kind:'recall_miss',expected_revision:0});
   });
 
-  test('聊天写入后运行状态显示新计数，仅追加来源时复用计数', async () => {
-    let total = 2;
-    let sent = 0;
-    const request = mount({chat_id:'chat-synthetic', title:'合成会话', pending:false, turns:[]}, (path, method, body) => {
-      if (path.startsWith('/api/memories?')) return {total,items:[]};
-      if (path.endsWith('/messages') && method === 'POST') {
-        sent += 1;
-        if (sent === 1) total += 1;
-        return {...turn(sent), request_id:(body as {request_id:string}).request_id,
-          writes:[{operation:sent === 1 ? 'add' : 'noop',item_id:'synthetic-fact'}]};
-      }
-    });
-    await screen.findByText('会话已恢复，可以继续聊。');
-    fireEvent.click(screen.getByRole('button', {name:'运行状态'}));
-    await screen.findByText('2 条有效 L1');
-
-    const input = screen.getByRole('textbox', {name:'消息'});
-    const send = screen.getByRole('button', {name:'发送'});
-    fireEvent.change(input, {target:{value:'新增合成事实'}});
-    fireEvent.click(send);
-    await screen.findByText('3 条有效 L1');
-
-    fireEvent.change(input, {target:{value:'重复合成事实'}});
-    fireEvent.click(send);
-    await screen.findByText('合成回答 2');
-    expect(screen.getByText('3 条有效 L1')).toBeTruthy();
-    expect(request.mock.calls.filter(([path]) => path.startsWith('/api/memories?'))).toHaveLength(2);
-  });
 
   test.each([false, true])('模型恢复后从服务读取最近状态，应用命令保留原状态（查询找回=%s）', async lookup => {
     const snapshot:Snapshot = {chat_id:'chat-model',title:'模型状态',pending:false,turns:[]};
@@ -252,7 +223,6 @@ describe('聊天工作区', () => {
     const snapshot: Snapshot = {chat_id:'chat-synthetic', title:'合成会话', pending:false, turns:[]};
     let requestId: string | undefined;
     const request = mount(snapshot, (path, method, body) => {
-      if (path.startsWith('/api/memories?')) return {total:2 + snapshot.turns.length, items:[]};
       if (method === 'POST' && path.endsWith('/messages')) {
         requestId = (body as {request_id:string}).request_id;
         throw new TypeError('synthetic disconnect');
@@ -260,7 +230,6 @@ describe('聊天工作区', () => {
     });
     await screen.findByText('会话已恢复，可以继续聊。');
     fireEvent.click(screen.getByRole('button', {name:'运行状态'}));
-    await screen.findByText('2 条有效 L1');
     const input = screen.getByRole<HTMLTextAreaElement>('textbox', {name:'消息'});
     fireEvent.change(input, {target:{value:'合成输入 1'}});
     fireEvent.click(screen.getByRole('button', {name:'发送'}));
@@ -272,7 +241,6 @@ describe('聊天工作区', () => {
     snapshot.turns = [{...turn(1), request_id:requestId, writes:[{operation:'add'}]}];
     fireEvent.click(query);
     await screen.findByText('合成回答 1');
-    await screen.findByText('3 条有效 L1');
     expect(input.value).toBe('');
     expect(input.disabled).toBe(true);
     snapshot.pending = false;

@@ -1,7 +1,7 @@
-import {useMemoryEngine, useMemorySummary, legacyMemorySummaryKey, memoryEngineLabel, retrievalLabel} from '../app/MemoryEngineProvider';
+import {useMemoryEngine, memoryEngineLabel, retrievalLabel} from '../app/MemoryEngineProvider';
 import {useEffect, useRef, useState} from 'react';
 import {Alert, Button, Input, Modal, Select} from 'antd';
-import {useQuery, useQueryClient} from '@tanstack/react-query';
+import {useQuery} from '@tanstack/react-query';
 import {Link, useSearchParams} from 'react-router-dom';
 import {useUnsavedChanges} from '../app/UnsavedChanges';
 import {ApiError, ChatApi, type Config, type DeviceStatus, type MemoryFeedbackKind, type Snapshot, type Summary, type Turn} from '../api';
@@ -10,7 +10,6 @@ import {AppShell, ConsoleNav} from '../components/AppShell';
 import {PageHeader} from '../components/PageHeader';
 import {SpeechPlayer} from '../features/voice/SpeechPlayer';
 import {modelFailure} from '../features/settings/modelHealth';
-import {MemoryCommandHelp} from '../features/chat/MemoryCommandHelp';
 import {loadSendShortcut, saveSendShortcut, shouldSendFromKeyboard, type SendShortcut} from '../features/chat/chatInput';
 import {organizeChats, readPinnedChats, togglePinnedChat, writePinnedChats} from '../features/chat/chatSessions';
 import {ConsoleStatusRail, MemoryFeedbackControls, TurnMemoryEvidence} from '../features/chat/ChatObservability';
@@ -30,7 +29,6 @@ function memoryCommandAlert(status: string) {
 }
 /** 文字聊天页面串起输入、服务响应和记忆证据；请求仍通过统一 API 客户端。 */
 export function ChatApp() {
-  const queryClient = useQueryClient();
   const [searchParams] = useSearchParams();
   const [config, setConfig] = useState<Config>();
   const [chats, setChats] = useState<Summary[]>([]);
@@ -67,7 +65,6 @@ export function ChatApp() {
   const deviceStatus = useQuery({queryKey:['device-status'], enabled:Boolean(config?.enabled), retry:false,
     queryFn:() => api.request<DeviceStatus>('/api/device'), refetchInterval:5000});
   const memoryEngine=useMemoryEngine();
-  const memoryCount=useMemorySummary(panel==='runtime');
   const checkedChatMethod = useRef<string | null>(null);
   useEffect(() => {
     // chat-config 会初始化聊天引擎，同时发起的只读身份查询可能先取到“尚未初始化”。
@@ -140,12 +137,6 @@ export function ChatApp() {
     if (busy || unknown || (draft && !confirm('这会清空尚未发送的草稿，继续吗？'))) return;
     void action(async () => {if (id) await load(id); else await create(); submitted.current = null; setDraft(''); setNotice('会话已切换；长期记忆保留。');});
   }
-  function refreshMemoryCountAfter(turn: Turn) {
-    // NOOP 只增加来源。仅在服务确认实际记忆变更后重新读取有效条数。
-    if (turn.writes?.some(item => item.operation !== 'noop')) {
-      void queryClient.invalidateQueries({queryKey:legacyMemorySummaryKey});
-    }
-  }
   function showModelHealth(health:NonNullable<Config['model_health']>) {
     setConfig(current => {
       // 手动检测和消息回执可能交错，只采用服务端最近一次检查的时间。
@@ -179,7 +170,6 @@ export function ChatApp() {
         const turn = await api.request<Turn>(`/api/chats/${chat.chat_id}/messages`, 'POST', {text: draft, request_id: submitted.current.requestId});
         submitted.current = null;
         setDraft('');
-        refreshMemoryCountAfter(turn);
         const modelProblem=modelFailure(turn.error);
         void refreshModelHealthAfter(turn);
         // POST 已确认落盘，后续只读档案，带回其他标签页刚提交的轮次。
@@ -214,7 +204,6 @@ export function ChatApp() {
       if (attempt && ownTurn) {
         setDraft(current => current === attempt.text ? '' : current);
         submitted.current = null;
-        refreshMemoryCountAfter(ownTurn);
         void refreshModelHealthAfter(ownTurn);
       }
       if (result.pending) setNotice('后台仍在处理，没有重发。');
@@ -271,10 +260,10 @@ export function ChatApp() {
     setPanel(null);
   }
   function togglePanel(next: NonNullable<typeof panel>) {if (panel === next) closePanel(); else setPanel(next);}
-  return <><AppShell subtitle="你的日常聊天空间" className="chat-shell" layout="workspace" sidebar={<ConsoleNav active="chat" legacyPath="/chat"/>}>
+  return <><AppShell subtitle="你的日常聊天空间" className="chat-shell" layout="workspace" sidebar={<ConsoleNav active="chat"/>}>
       <PageHeader eyebrow="日常使用" title="聊聊今天" action={<div className="page-header-actions">{petAvailable && <button className="whale-chat-pet" type="button" aria-label="摸摸大肥鱼，开始打字" onClick={() => {setPetTouched(true); document.getElementById('chat-message')?.focus();}}>
         <img onError={() => setPetAvailable(false)} width="68" height="68" alt="大肥鱼" src={`/pet/whale/${sending ? 'thinking' : petTouched ? 'happy' : draft ? 'listening' : 'neutral'}.gif`}/>
-      </button>}<span>{chat?.turns.length ?? 0} / 40 轮</span><MemoryCommandHelp/></div>}/>
+      </button>}<span>{chat?.turns.length ?? 0} / 40 轮</span></div>}/>
       <div className="chat-tools" aria-label="聊天工作区工具">
         <span className="chat-current-title" title={chat?.title}>{chat?.title ?? '正在打开会话…'}</span>
         <Button id="chat-tool-sessions" aria-label="会话" aria-expanded={panel === 'sessions'} aria-controls={panel ? 'chat-aux-panel' : undefined} onClick={() => togglePanel('sessions')}>会话</Button>
@@ -290,9 +279,6 @@ export function ChatApp() {
       }}>{!chat?.turns.length && <div className="empty"><h2>今天想聊些什么？</h2><p>可以说说今天的事，也可以继续上次的话题。</p></div>}
         {chat?.turns.map((turn, i) => <article id={turn.request_id ? `turn-${turn.request_id}` : undefined} className={turn.request_id === focusedRequestId ? 'focused-chat-turn' : undefined} key={turn.request_id ?? i}><div className="bubble user"><strong>你</strong><p>{turn.input}</p></div><div className="bubble assistant"><strong>助手</strong><p>{turn.answer ?? '未获得完整回答。'}</p></div>
           {turn.memory_command && <Alert className="memory-command-result" showIcon type={memoryCommandAlert(turn.memory_command.status)} title="实际记忆操作结果" description={turn.memory_command.notice}/>}
-          {turn.follow_up_suggestion?.status === 'candidate_armed' && <Alert className="memory-command-result" showIcon type="success" title="一次性跟进已安排" description={`${new Date(turn.follow_up_suggestion.follow_up_at!).toLocaleString('zh-CN')} · ${turn.follow_up_suggestion.prompt_text}。到点仍会经过勿扰时段、频率和设备状态检查。`}/>}
-          {turn.follow_up_suggestion?.status === 'candidate_created_requires_proactive_enabled' && <Alert className="memory-command-result" showIcon type="info" title="已保存跟进候选" description={`${new Date(turn.follow_up_suggestion.follow_up_at!).toLocaleString('zh-CN')} · ${turn.follow_up_suggestion.prompt_text}。主动交流总开关目前关闭，因此尚未安排播报；可在“设置中心 → 主动交流”开启后核对并启用。`}/>}
-          {turn.follow_up_suggestion?.status === 'not_created' && <Alert className="memory-command-result" showIcon type="warning" title="跟进候选未保存" description="本轮聊天和长期记忆仍已保存；可稍后在设置中心手动创建跟进。"/>}
           {turn.memory_processing === 'source_only' && <p className="memory-warning">{memoryWarning(turn)} 可继续聊天，之后需要重新整理这条来源。</p>}
           {turn.retrieval_warning === 'dense_retrieval_failed' && <p className="memory-warning">本轮本地 BGE 检索失败，已使用关键词结果继续回答；展开过程可查看实际策略。</p>}
           <div className="turn-tools"><details className="turn-secondary-actions" onToggle={event=>{
@@ -304,8 +290,8 @@ export function ChatApp() {
         {panel && <aside id="chat-aux-panel" className="chat-aux-panel" aria-label={panel === 'sessions' ? '会话管理' : panel === 'evidence' ? '记忆证据面板' : '运行状态面板'} onKeyDown={event => {if (event.key === 'Escape') {event.stopPropagation(); closePanel();}}}>
           <div className="chat-panel-heading"><h2 ref={panelHeading} tabIndex={-1}>{panel === 'sessions' ? '会话管理' : panel === 'evidence' ? evidenceIndex === undefined ? '本轮记忆证据' : `第 ${evidenceIndex + 1} 轮记忆证据` : '运行状态'}</h2><Button onClick={closePanel}>收起面板</Button></div>
           <div className="chat-panel-content">{panel === 'sessions' ? sessions : panel === 'evidence' ? <TurnMemoryEvidence turn={evidenceTurn}/> : <>
-            <ConsoleStatusRail config={config} device={deviceStatus.data} deviceFailed={deviceStatus.isError} activeMemoryCount={memoryEngine.phase==='ready'?memoryCount.data?.total:undefined} memoryCountState={memoryCount.isError?'error':memoryCount.isFetching?'loading':memoryCount.isSuccess?'ready':'unavailable'}/>
-            {modelCheck}<section className="chat-runtime-info"><h3>运行配置与记忆说明</h3><p>{config?.enabled ? `${config.model} · ${config.role} · ${config.provider}` : '聊天未启用'}</p>{config?.provider === 'fake' && <p>Fake 是离线工程替身，不具备角色和多轮理解能力。</p>}<p>引擎：{memoryEngineLabel(memoryEngine)}；检索：{retrievalLabel(config?.retrieval)}。{memoryEngine.kind==='legacy'?`提取：${config?.method==='longmemory_daily_llm_v2'?'模型辅助（失败保留原话）':'原引擎策略'}。`:memoryEngine.kind==='hy'?'Hy 提取与冲突协调的逐项决策尚不可观测。':''}网页不自动驱动圆屏播放。</p>{memoryEngine.kind==='hy'&&<Link to="/memories?view=mechanisms">核对记忆机制与证据边界</Link>}{config?.enabled && <p>记忆库：{config.database}</p>}<p>发送会先保存原始输入，再按当前提取策略生成长期记忆。</p></section>
+            <ConsoleStatusRail config={config} device={deviceStatus.data} deviceFailed={deviceStatus.isError} memoryCountState="unavailable"/>
+            {modelCheck}<section className="chat-runtime-info"><h3>运行配置与记忆说明</h3><p>{config?.enabled ? `${config.model} · ${config.role} · ${config.provider}` : '聊天未启用'}</p>{config?.provider === 'fake' && <p>Fake 是离线工程替身，不具备角色和多轮理解能力。</p>}<p>引擎：{memoryEngineLabel(memoryEngine)}；检索：{retrievalLabel(config?.retrieval)}。{memoryEngine.kind==='hy'?'Hy 提取与冲突协调的逐项决策尚不可观测。':''}网页不自动驱动圆屏播放。</p>{memoryEngine.kind==='hy'&&<Link to="/memories?view=mechanisms">核对记忆机制与证据边界</Link>}{config?.enabled && <p>记忆库：{config.database}</p>}<p>发送会先保存原始输入，再按当前提取策略生成长期记忆。</p></section>
           </>}</div>
         </aside>}
       </div>

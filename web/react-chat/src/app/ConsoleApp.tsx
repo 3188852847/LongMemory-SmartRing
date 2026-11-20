@@ -5,14 +5,10 @@ import {RouteWorkspace} from './RouteWorkspace';
 import {AppearanceProvider} from './AppearanceProvider';
 import {createConsoleQueryClient} from './queryClient';
 import {ChatApp} from '../pages/ChatApp';
-import {MemoryDomainRoute} from '../features/memory/MemoryDomainRoute';
 import '../styles/workspace-shell.css';
 
 const DeviceApp = lazy(() => import('../pages/DeviceApp').then(module => ({default: module.DeviceApp})));
 const MemoryApp = lazy(() => import('../pages/MemoryApp').then(module => ({default: module.MemoryApp})));
-const MemoryQualityApp = lazy(() => import('../pages/MemoryQualityApp').then(module => ({default: module.MemoryQualityApp})));
-const ScenarioApp = lazy(() => import('../pages/ScenarioApp').then(module => ({default: module.ScenarioApp})));
-const PersonaApp = lazy(() => import('../pages/PersonaApp').then(module => ({default: module.PersonaApp})));
 const SettingsApp = lazy(() => import('../pages/SettingsApp').then(module => ({default: module.SettingsApp})));
 const RoundDisplayApp = lazy(() => import('../pages/RoundDisplayApp').then(module => ({default: module.RoundDisplayApp})));
 const OverviewApp = lazy(() => import('../pages/OverviewApp').then(module => ({default: module.OverviewApp})));
@@ -27,9 +23,9 @@ const router = createBrowserRouter(createRoutesFromElements(
     <Route path="/display-preview" element={<Suspense fallback={<p className="page-loading">正在加载圆屏预览…</p>}><RoundDisplayApp/></Suspense>}/>
     <Route path="/chat-react" element={<ChatApp/>}/>
     <Route path="/memories" element={<Suspense fallback={<p className="page-loading">正在加载记忆管理…</p>}><MemoryApp/></Suspense>}/>
-    <Route path="/memory-quality" element={<MemoryDomainRoute view="activity" legacy={<Suspense fallback={<p className="page-loading">正在加载记忆质量样本…</p>}><MemoryQualityApp/></Suspense>}/>}/>
-    <Route path="/scenarios" element={<MemoryDomainRoute view="items" legacy={<Suspense fallback={<p className="page-loading">正在加载生活场景…</p>}><ScenarioApp/></Suspense>}/>}/>
-    <Route path="/personas" element={<MemoryDomainRoute view="profile" legacy={<Suspense fallback={<p className="page-loading">正在加载用户画像…</p>}><PersonaApp/></Suspense>}/>}/>
+    <Route path="/memory-quality" element={<Navigate to="/memories?view=activity" replace/>}/>
+    <Route path="/scenarios" element={<Navigate to="/memories?view=items" replace/>}/>
+    <Route path="/personas" element={<Navigate to="/memories?view=profile" replace/>}/>
     <Route path="/settings" element={<Suspense fallback={<p className="page-loading">正在加载个性化设置…</p>}><SettingsApp/></Suspense>}/>
     <Route path="*" element={<Navigate to="/chat-react" replace/>}/>
   </Route>));

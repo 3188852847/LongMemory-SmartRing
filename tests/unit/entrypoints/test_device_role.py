@@ -3,9 +3,8 @@ from pathlib import Path
 import pytest
 from test_console import console, login
 from longmemory.entrypoints.api import server
-from longmemory.entrypoints.api.chat_backend import ChatBackend
 from longmemory.adapters.llm.fake import FakeAnswerGenerator
-from longmemory.methods.longmemory_v1.method import LongMemoryV1
+from test_chat_console import synthetic_backend
 from longmemory.entrypoints.api.device_role import DeviceRole, voice_prompt
 from longmemory.entrypoints.api.role_settings import RoleSettings
 
@@ -39,8 +38,8 @@ def test_preview_single_use_and_revision_checks(tmp_path):
 
 
 def test_device_role_api_requires_enablement_and_csrf(tmp_path, monkeypatch):
-    database = tmp_path / 'synthetic.db'; LongMemoryV1(database).close()
-    backend = ChatBackend(database, FakeAnswerGenerator())
+    database = tmp_path / 'synthetic.db'
+    backend = synthetic_backend(database, FakeAnswerGenerator())
     calls = []
     class FakeDevice:
         def __init__(self, *args): pass

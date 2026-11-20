@@ -24,8 +24,8 @@ for (const size of sizes) test(`聊天滚动、证据与输入 ${size.width}×${
     if (request.method() === 'POST') posts.push(path);
     let body:unknown;
     if (path === '/api/session') body = {csrf:'synthetic-csrf'};
-    else if (path === '/api/memory-engine/identity') body = {schema_version:1,configured:true,method:'longmemory_v1',representation:'atomic_fact',legacy_sqlite:true,state:'available'};
-    else if (path === '/api/chat-config') body = {enabled:true,database:'synthetic.db',provider:'fake',model:'Fake',role:'测试'};
+    else if (path === '/api/memory-engine/identity') body = {schema_version:1,configured:true,method:'hy_memory_pro_chat',representation:'method_defined',legacy_sqlite:false,state:'available'};
+    else if (path === '/api/chat-config') body = {enabled:true,database:'synthetic.db',method:'hy_memory_pro_chat',provider:'fake',model:'Fake',role:'测试'};
     else if (path === '/api/chats') body = {chats:[{chat_id:snapshot.chat_id,title:snapshot.title,turn_count:snapshot.turns.length}]};
     else if (path === `/api/chats/${snapshot.chat_id}`) body = snapshot;
     else if (path === `/api/chats/${snapshot.chat_id}/messages`) {
@@ -34,7 +34,6 @@ for (const size of sizes) test(`聊天滚动、证据与输入 ${size.width}×${
       snapshot.turns.push(next); body = next;
     } else if (path.endsWith('/memory-feedback')) body = {feedback:{kind:'recall_miss',revision:1,occurred_at:'2026-10-14T00:00:00Z'}};
     else if (path === '/api/device') body = {ready:false,connection_count:0};
-    else if (path === '/api/memories') body = {total:20,offset:0,limit:1,items:[]};
     else if (path === '/api/runtime-status') body = {enabled:false,state:'unknown',services:{}};
     else throw new Error(`C 浏览器用例出现未声明的请求：${request.method()} ${path}`);
     await route.fulfill({json:body});

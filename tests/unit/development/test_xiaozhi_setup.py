@@ -15,12 +15,15 @@ spec.loader.exec_module(setup)
 
 
 @pytest.fixture
-def config():
+def config(tmp_path):
     return {
         "server": {"ip": "127.0.0.1", "port": 8000, "http_port": 8003,
                    "websocket": "ws://127.0.0.1:8000/xiaozhi/v1/"},
         "selected_module": dict(VAD="SileroVAD", ASR="FunASR", LLM="CampusLLM",
-                                TTS="EdgeTTS", Memory="nomem", Intent="nointent"),
+                                TTS="EdgeTTS", Memory="LongMemory", Intent="nointent"),
+        "prompt": "<memory></memory>",
+        "Memory": {"LongMemory": {"type":"longmemory", "allowed_device_id":"aa:bb:cc:dd:ee:ff",
+                                  **{key:str(tmp_path / key) for key in ("python_executable", "project_root", "database_path", "audit_log")}}},
         "LLM": {"CampusLLM": {"type": "openai", "base_url": "https://example.invalid/v1",
                               "api_key": "synthetic-key", "model_name": "synthetic-model"}},
     }
@@ -131,7 +134,9 @@ def test_http_needs_explicit_consent():
 def test_init_does_not_overwrite_private_config(tmp_path):
     (tmp_path / "app.py").touch()
     target = setup.init_config(tmp_path)
-    assert "FILL_LOCALLY" in target.read_text(encoding="utf-8")
+    template = target.read_text(encoding="utf-8")
+    assert "FILL_LOCALLY" in template and "Memory: LongMemory" in template
+    assert "__PROJECT_ROOT__" not in template and "<memory></memory>" in template
     target.write_text("keep-this", encoding="utf-8")
     with pytest.raises(FileExistsError):
         setup.init_config(tmp_path)
@@ -204,6 +209,7 @@ def test_realtime_config_does_not_require_pipeline_credentials_or_memory_files(c
 
 
 def test_realtime_config_still_checks_single_device_boundary(config):
+    config["Memory"]["LongMemory"].pop("allowed_device_id")
     with pytest.raises(setup.SetupError, match="单设备"):
         setup.validate_config(config, voice_mode="doubao_realtime")
 
@@ -346,6 +352,7 @@ def test_published_shared_runtime_provider_is_a_known_upgrade_source():
 
 
 def test_longmemory_config_requires_prompt_slot_and_explicit_device(config, tmp_path):
+    config.pop('prompt', None)
     config['selected_module']['Memory'] = 'LongMemory'
     config['Memory'] = {'LongMemory': dict(
         type='longmemory', allowed_device_id='aa:bb:cc:dd:ee:ff',

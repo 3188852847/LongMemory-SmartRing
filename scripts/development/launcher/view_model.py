@@ -8,13 +8,8 @@ def daily_recommendation():
         "voice_model_profile": "campus",
         "voice_mode": "pipeline",
         "memory_backend": "hy_memory",
-        "memory_extraction": "llm",
-        "memory_retrieval": "hybrid",
         "tts_backend": "cosyvoice3",
         "vad_profile": "normal",
-        "memory_consolidation": False,
-        "l1_sufficiency_shadow": False,
-        "l2_sufficiency_shadow": False,
     }
 
 
@@ -22,15 +17,9 @@ def summary_text(
     voice,
     start_page,
     role,
-    extraction,
-    retrieval,
     tts,
     allow_delete,
-    consolidation,
-    memory_backend="longmemory",
     vad_profile="normal",
-    l2_sufficiency_shadow=False,
-    l1_sufficiency_shadow=False,
     model_profile="campus",
     voice_model_profile="campus",
     voice_mode="pipeline",
@@ -46,10 +35,6 @@ def summary_text(
         "settings": "设置中心",
     }[start_page]
     role_label = "爱莉希雅风格" if role == "elysia_v1" else "普通助手"
-    extraction_label = "模型辅助提取" if extraction == "llm" else "规则提取"
-    retrieval_label = (
-        "关键词＋语义召回" if retrieval == "hybrid" else "关键词召回"
-    )
     sound_label = {
         "edge": "EdgeTTS 联网声音",
         "voxcpm2": "VoxCPM2 本地声音",
@@ -57,20 +42,6 @@ def summary_text(
         "cosyvoice3": "CosyVoice 3 本地高质量声音",
     }[tts]
     delete_label = "允许单条删除" if allow_delete else "不开放删除"
-    experimental = []
-    if consolidation:
-        experimental.append("低频整理")
-    if l1_sufficiency_shadow:
-        experimental.append("L1 旁路质检")
-    if l2_sufficiency_shadow:
-        experimental.append("L2 旁路质检")
-    experimental_label = "、".join(experimental) + "已开启" if experimental else "均关闭"
-    backend_label = {
-        "hy_memory": "Hy-Memory（旧主动交流暂停）",
-        "longmemory": "LongMemory",
-        "xiaozhi_local": "小智本地摘要",
-        "none": "无长期记忆",
-    }[memory_backend]
     vad_label = {
         "normal": "普通拾音",
         "noisy": "嘈杂环境拾音",
@@ -81,7 +52,7 @@ def summary_text(
         "学校模型" if voice_model_profile == "campus" else "官方 DeepSeek"
     )
     round_screen = (
-        f"圆屏：{voice_model_label}  ·  {backend_label}  ·  {sound_label}  ·  {vad_label}"
+        f"圆屏：{voice_model_label}  ·  Hy-Memory  ·  {sound_label}  ·  {vad_label}"
         if voice else f"圆屏：本次不启动  ·  下次声音 {sound_label}"
     )
     if voice_mode == "doubao_realtime":
@@ -91,9 +62,9 @@ def summary_text(
         )
     return (
         f"{mode}  ·  打开{page_label}  ·  {role_label}\n"
-        f"网页：{web_model_label}  ·  {extraction_label}  ·  {retrieval_label}\n"
+        f"网页：{web_model_label}  ·  Hy-Memory\n"
         f"{round_screen}\n"
-        f"记忆管理：{delete_label}  ·  实验开关：{experimental_label}"
+        f"记忆管理：{delete_label}"
     )
 
 
@@ -164,14 +135,8 @@ def starting_services(*, voice, tts_backend, model_profile, voice_model_profile,
     voice_model_label = (
         "官方 DeepSeek" if voice_model_profile == "official" else "学校模型"
     )
-    memory_label = {
-        "hy_memory": "Hy-Memory（旧主动交流暂停）",
-        "longmemory": "LongMemory",
-        "xiaozhi_local": "小智本地摘要",
-        "none": "无长期记忆",
-    }[memory_backend]
     voice_detail = (
-        f"，圆屏使用 {voice_model_label} / {memory_label}。" if voice else "。"
+        f"，圆屏使用 {voice_model_label} / Hy-Memory。" if voice else "。"
     )
     note = "语音模式已自动核对并备份同步配置；首次加载语音模型可能较慢。"
     if voice and voice_mode == "doubao_realtime":

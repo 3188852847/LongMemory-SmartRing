@@ -5,16 +5,13 @@ import asyncio
 from aiohttp import web
 
 
-def register_memory_identity_route(app, runtime_provider, *, legacy_configured=False):
+def register_memory_identity_route(app, runtime_provider):
     def read():
         runtime = runtime_provider()
         if runtime is not None:
             return runtime.identity()
-        # 只有显式旧库选择才可作此声明；不为识别打开文件或构建Runtime。
-        return {"schema_version": 1, "configured": legacy_configured, "method": None,
-                "representation": "atomic_fact" if legacy_configured else None,
-                "legacy_sqlite": True if legacy_configured else None,
-                "state": "not_initialized" if legacy_configured else "unconfigured"}
+        return {"schema_version": 1, "configured": False, "method": None,
+                "representation": None, "legacy_sqlite": None, "state": "unconfigured"}
 
     async def identity(request):
         if request.query or request.can_read_body:

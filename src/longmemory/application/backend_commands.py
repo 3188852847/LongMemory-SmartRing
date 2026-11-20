@@ -4,7 +4,7 @@ from longmemory.application.natural_memory_commands import (
     NaturalMemoryCommandResult, classify_memory_command,
 )
 from longmemory.application.follow_up_suggestions import parse_explicit_follow_up
-from longmemory.application.natural_companion_commands import NaturalCompanionCommandService
+from longmemory.application.natural_companion_commands import recognizes_companion_command
 
 
 class UnsupportedBackendCommands:
@@ -29,7 +29,7 @@ class UnsupportedBackendCommands:
                                                 utc_offset_minutes=offset)
         except ValueError:
             follow_up = None
-        if NaturalCompanionCommandService.recognizes(event) or follow_up is not None:
+        if recognizes_companion_command(event) or follow_up is not None:
             self.method.archive(event)
             return NaturalMemoryCommandResult("companion", "unsupported",
                 "当前引擎尚未接入可追溯的陪伴控制和跟进安排，本轮没有修改设置或安排主动联系。")

@@ -5,11 +5,10 @@ import {ChatApi, type Config} from '../api';
 import {AppShell, ConsoleNav} from '../components/AppShell';
 import {RoleEditor} from '../features/settings/RoleEditor';
 import {VoiceSettings} from '../features/voice/VoiceSettings';
-import {ProactiveSettings} from '../features/settings/proactive/ProactiveSettings';
 import {useAppearance} from '../app/AppearanceProvider';
 import {PageHeader} from '../components/PageHeader';
 import {ModelConnectionSettings} from '../features/settings/ModelConnectionSettings';
-import {MemoryBackendSettings} from '../features/settings/MemoryBackendSettings';
+import {useMemoryEngine} from '../app/MemoryEngineProvider';
 import {PersonalizationOverview} from '../features/settings/PersonalizationOverview';
 import {TTSBenchmarkPanel} from '../features/voice/TTSBenchmarkPanel';
 import {VADSettings} from '../features/voice/VADSettings';
@@ -22,6 +21,7 @@ const api = new ChatApi();
 
 /** 将模型、助手角色、声音和浏览器外观汇集到一个入口；设置仍保持不同生效边界。 */
 export function SettingsApp() {
+  const engine = useMemoryEngine();
   const [searchParams,setSearchParams]=useSearchParams();
   const queryClient = useQueryClient();
   const {prefs, update, reset} = useAppearance();
@@ -29,12 +29,12 @@ export function SettingsApp() {
   const config = useQuery({queryKey:['chat-config'], queryFn:() => api.request<Config>('/api/chat-config'), enabled:session.isSuccess});
   const enabled = session.isSuccess && config.data?.enabled === true;
   const requestedTab=searchParams.get('tab');
-  const activeTab=['overview','model','memory-backend','role','voice','appearance','proactive'].includes(requestedTab??'')?requestedTab!:'role';
+  const activeTab=['overview','model','memory-backend','role','voice','appearance'].includes(requestedTab??'')?requestedTab!:'role';
   const selectTab=(tab:string)=>{const next=new URLSearchParams(searchParams);if(tab==='role')next.delete('tab');else next.set('tab',tab);setSearchParams(next);};
-  const sidebar = <ConsoleNav active="settings" legacyPath="/chat"/>;
+  const sidebar = <ConsoleNav active="settings"/>;
 
   return <AppShell subtitle="角色、声音与阅读体验" className="settings-shell" sidebar={sidebar}>
-    <PageHeader eyebrow="控制与观察" title="助手设置" description="在这里调整助手表达、参考声线、页面外观和主动联系。声音与性格分别保存，事实记忆保持独立。"/>
+    <PageHeader eyebrow="控制与观察" title="助手设置" description="在这里调整助手表达、参考声线和页面外观。声音与性格分别保存，事实记忆保持独立。"/>
     {(session.isError || config.isError) && <Alert type="error" showIcon title="设置服务当前不可用" description="请确认统一启动的文字服务仍在运行，再刷新本页。"/>}
     <Tabs className="settings-tabs settings-workspace" activeKey={activeTab} onChange={selectTab} items={[
       {key:'overview', label:'设置总览', children:<>
@@ -53,7 +53,9 @@ export function SettingsApp() {
           onHealth={health => queryClient.setQueryData<Config>(['chat-config'], current => current ? {...current, model_health:health} : current)}/>
       </Card>},
       {key:'memory-backend', label:'记忆后端', children:<Card title="长期记忆" extra={<span className="setting-scope">网页与圆屏</span>}>
-        <MemoryBackendSettings api={api} disabled={!enabled}/>
+        <Alert type="info" showIcon title="Hy-Memory" description={engine.kind === 'hy'
+          ? '当前服务正在使用 Hy-Memory。网页聊天和圆屏对话共享长期记忆。'
+          : engine.phase === 'loading' ? '正在读取记忆服务状态…' : '当前未连接到 Hy-Memory。'}/>
       </Card>},
       {key:'role', label:'助手表达', children:<Card title="性格与回答方式" extra={<span className="setting-scope">网页＋可选圆屏同步</span>}>
         <p>编辑角色名称与系统提示词。网页从下一轮开始使用；圆屏必须在弹窗里单独预检和同步。</p>
@@ -77,10 +79,6 @@ export function SettingsApp() {
           <label>界面动画</label><Select className="wide" aria-label="界面动画" value={prefs.motion} onChange={motion => update({...prefs, motion})} options={[{value:'system',label:'跟随系统'},{value:'reduce',label:'减少动画'},{value:'full',label:'完整动画'}]}/>
           <Button onClick={() => reset()}>恢复默认</Button>
         </Space>
-      </Card>},
-      {key:'proactive', label:'主动交流', children:<Card title="主动交流" extra={<span className="setting-scope">持久许可边界</span>}>
-        <p>设置系统什么时候可以联系你，管理显式定时和习惯策略，并查看每次运行为什么发送或被拦截。</p>
-        <ProactiveSettings api={api} ready={session.isSuccess}/>
       </Card>},
     ]}/>
     {!enabled && !session.isError && !config.isError && <p role="status">正在读取设置能力；未启用文字服务时角色和声音设置不可操作。</p>}

@@ -319,12 +319,11 @@ def test_formal_server_selects_hy_sources_and_preserves_original_sidecar_base(tm
     before = original.read_bytes()
     selected = {}
     monkeypatch.setattr(hy_deployment, "build_daily_hy_runtime", lambda root: runtime)
-    monkeypatch.setattr(server.MemoryBackend, "list_page", lambda *args, **kwargs: pytest.fail("Hy startup must not read legacy database"))
     monkeypatch.setattr(server, "create_app", lambda **kwargs: selected.update(kwargs) or "synthetic-app")
     monkeypatch.setattr(server.web, "run_app", lambda app, **kwargs: None)
     monkeypatch.delenv("LONGMEMORY_RUNTIME_TOKEN", raising=False)
-    monkeypatch.setattr(sys, "argv", ["longmemory-api", "--enable-chat", "--chat-provider", "fake",
-        "--memory-backend", "hy_memory", "--database", str(original), "--disable-proactive-schedule"])
+    monkeypatch.setattr(sys, "argv", ["longmemory-api", "--enable-chat",
+        "--memory-backend", "hy_memory", "--database", str(original)])
     server.main()
     backend = selected["chat_backend"]
     assert selected["database"] == runtime.database

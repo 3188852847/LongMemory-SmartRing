@@ -39,7 +39,7 @@ def modules(monkeypatch):
 
 
 @pytest.fixture
-def options(tmp_path, modules):
+def options(tmp_path, modules, monkeypatch):
     root = tmp_path / "synthetic project"
     (root / ".venv/Scripts").mkdir(parents=True)
     (root / ".venv/Scripts/python.exe").touch()
@@ -49,6 +49,15 @@ def options(tmp_path, modules):
     server = tmp_path / "synthetic server"
     (server / ".venv/Scripts").mkdir(parents=True)
     (server / ".venv/Scripts/python.exe").touch()
+    from longmemory.infrastructure.config import hy_deployment
+    source = root / "data/databases/hy-sources.db"
+    source.parent.mkdir(parents=True)
+    source.touch()
+    state = root / "data/memory/hy-daily"
+    state.mkdir(parents=True)
+    (state / "hy-state.json").write_text("{}")
+    monkeypatch.setattr(hy_deployment, "load_hy_deployment", lambda root: SimpleNamespace(
+        source_path=source, state_directory=state))
     return modules.runtime.Options(root=root, database=root / "synthetic.db", model_profile="official",
                                    voice=True, voice_root=server, voice_model_profile="official",
                                    lan_ip="192.168.1.8", tts_backend="edge")
@@ -95,10 +104,10 @@ def test_only_voice_command_gets_response_mode(options, modules, mode):
         modules.runtime.build_commands(replace(options, voice_latency_mode="unknown"), uv="synthetic-uv")
 
 
-def test_cloud_commands_do_not_get_pipeline_response_mode(options, modules, monkeypatch):
-    monkeypatch.setattr(modules.runtime, "validate_doubao_config", lambda _: None)
-    commands = modules.runtime.build_commands(replace(options, voice_mode="doubao_realtime"), uv="synthetic-uv")
-    assert all("--voice-latency-mode" not in command for _, command, _ in commands)
+def test_cloud_commands_do_not_bypass_hy(options, modules):
+    with pytest.raises(ValueError, match="Hy 圆屏"):
+        modules.runtime.build_commands(replace(options, voice_mode="doubao_realtime"), uv="synthetic-uv")
+
 
 
 @pytest.mark.parametrize("mode", ["realtime", "original"])
@@ -136,6 +145,8 @@ def test_setup_passes_mode_to_adapter_only(tmp_path, monkeypatch, mode):
     config = {"server": {"ip": "127.0.0.1"}, "selected_module": {"Memory": "LongMemory"}}
     monkeypatch.setitem(sys.modules, "yaml", SimpleNamespace(safe_load=lambda _: config))
     monkeypatch.setattr(module, "validate_config", lambda *args, **kwargs: {"base_url": "https://example.invalid/v1"})
+    monkeypatch.setitem(sys.modules, "voice_budget", SimpleNamespace(load_owned_configuration=lambda: {}))
+    monkeypatch.setattr(module, "render_runtime_config", lambda *args, **kwargs: None)
     provider = server / 'core/providers/memory/longmemory/longmemory.py'
     provider.parent.mkdir(parents=True)
     provider.write_bytes((XIAOZHI / 'longmemory_provider.py').read_bytes())
@@ -196,6 +207,8 @@ def test_cloud_bootstrap_does_not_set_pipeline_style_or_import_asr(tmp_path, mon
     monkeypatch.setenv("LONGMEMORY_VOICE_RESPONSE_STYLE", "synthetic-untouched")
     monkeypatch.setattr(sys, "argv", ["launch_with_memory.py", "--voice-mode", "doubao_realtime"])
     monkeypatch.setitem(sys.modules, "control_compatibility", SimpleNamespace(verify_control_snapshot=lambda _: None))
+    monkeypatch.setitem(sys.modules, "core.providers.llm.openai", SimpleNamespace(openai=object()))
+    monkeypatch.setitem(sys.modules, "voice_budget", SimpleNamespace(install_no_retry_gateway_client=lambda _: None))
     connection_class = type("Connection", (), {})
     monkeypatch.setitem(sys.modules, "core.connection", SimpleNamespace(ConnectionHandler=connection_class))
     monkeypatch.setitem(sys.modules, "direct_ws_v2", SimpleNamespace(install_direct_ws_v2=lambda _: None))
@@ -219,6 +232,8 @@ def test_pipeline_bootstrap_installs_input_timing_before_response_policy(tmp_pat
     monkeypatch.setattr(sys, "argv", ["launch_with_memory.py", "--voice-latency-mode", mode]
                         + (["--device-control"] if device_control else []))
     calls = []
+    monkeypatch.setitem(sys.modules, "core.providers.llm.openai", SimpleNamespace(openai=object()))
+    monkeypatch.setitem(sys.modules, "voice_budget", SimpleNamespace(install_no_retry_gateway_client=lambda _: None))
     connection_class = type("Connection", (), {})
     monkeypatch.setitem(sys.modules, "core.connection", SimpleNamespace(ConnectionHandler=connection_class))
     monkeypatch.setitem(sys.modules, "direct_ws_v2", SimpleNamespace(install_direct_ws_v2=lambda _: None))

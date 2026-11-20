@@ -5,14 +5,11 @@
 """
 
 import asyncio
-from datetime import datetime
 import html
 import json
 import math
 import os
-from pathlib import Path
 import re
-import subprocess
 import threading
 from contextvars import ContextVar
 from contextlib import nullcontext
@@ -129,24 +126,7 @@ class MemoryProvider(MemoryProviderBase):
         self.allowed_device_id = str(config.get("allowed_device_id", "")).lower()
         if not self.allowed_device_id or self.allowed_device_id == "fill_device_id":
             raise ValueError("LongMemory 需要明确指定一个演示设备 ID")
-        self.paths = {}
-        for key in ("python_executable", "project_root", "database_path", "audit_log"):
-            path = Path(config[key])
-            if not path.is_absolute():
-                raise ValueError("LongMemory 路径必须为绝对路径")
-            self.paths[key] = path
-        if not self.paths["python_executable"].is_file():
-            raise ValueError("LongMemory Python 解释器不存在")
-        if not (self.paths["project_root"] / "src/longmemory/entrypoints/xiaozhi/adapter.py").is_file():
-            raise ValueError("LongMemory 项目入口不存在")
-        # 限制本适配器写入项目 data 内的独立演示文件，不沿用用户 PC 数据库。
-        root = self.paths["project_root"].resolve()
-        for key, folder in (("database_path", "databases"), ("audit_log", "logs")):
-            path = self.paths[key].resolve()
-            if path.parent != root / "data" / folder or not path.name.startswith("xiaozhi-demo"):
-                raise ValueError("LongMemory 必须使用 data 下的 xiaozhi-demo 专用文件")
         self._lock = threading.Lock()
-        self._pending_completion = None
         self._pending_completions = {}
         self._turn_key = ContextVar("memory_turn_key", default=None)
         self._session_id = uuid4().hex
@@ -181,11 +161,9 @@ class MemoryProvider(MemoryProviderBase):
                 or parsed.query or parsed.fragment
                 or re.fullmatch(r"[0-9a-f]{64}", token) is None):
             raise RuntimeError("LongMemory Runtime 启动环境无效")
-        turn_context = getattr(self, "_turn_key", None)
-        key = turn_context.get() if turn_context is not None else None
+        key = self._turn_key.get()
         body_data = {"version": 1, "query": query}
-        if key is not None:
-            body_data.update(client_round_id=key, session_id=self._session_id)
+        body_data.update(client_round_id=key, session_id=self._session_id)
         body = json.dumps(body_data).encode("utf-8")
         request = urlrequest.Request(
             url,
@@ -222,29 +200,6 @@ class MemoryProvider(MemoryProviderBase):
                 timing['runtime_request_ms'] = round(max(0, perf_counter() - started) * 1000, 3)
         return response
 
-    def _subprocess_request(self, query):
-        """兼容旧教学入口；只有显式选择时才逐轮启动子进程。"""
-        env = os.environ.copy()
-        env["PYTHONUTF8"] = "1"
-        # 模型 Key 不作为参数或配置交给记忆入口；入口不读取模型环境变量。
-        command = [str(self.paths["python_executable"]), "-m",
-                   "longmemory.entrypoints.xiaozhi.adapter", "--database",
-                   str(self.paths["database_path"]), "--audit-log", str(self.paths["audit_log"])]
-        try:
-            with self._lock:
-                result = subprocess.run(
-                    command, input=json.dumps({"version": 1, "query": query}).encode("utf-8"),
-                    capture_output=True, cwd=self.paths["project_root"], env=env,
-                    timeout=20, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-                )
-            response = json.loads(result.stdout)
-            if result.returncode:
-                raise RuntimeError("invalid response")
-        except Exception:
-            # 失败即中止本轮，不返回空上下文伪装为成功，也不自动重试导致重复 L0。
-            raise RuntimeError("LongMemory 调用失败；本轮未完成，未输出请求正文。") from None
-        return response
-
     def _request(self, query):
         turn_key = self._turn_key.get()
         query = self._validate_query(query)
@@ -256,26 +211,19 @@ class MemoryProvider(MemoryProviderBase):
                     "已跳过一条由小智服务生成的内部输入；未归档、未召回"
                 )
                 return ""
-        transport = os.environ.get("LONGMEMORY_MEMORY_TRANSPORT", "subprocess")
-        if transport == "runtime":
-            response = self._runtime_request(query)
-        elif transport == "subprocess":
-            response = self._subprocess_request(query)
-        else:
-            raise RuntimeError("LongMemory 传输方式无效")
-        neutral = response.get("memory_protocol") == 2
-        if (response.get("version") != 1 or not isinstance(response.get("context"), str)
-                or not isinstance(response.get("turn_id"), str)
-                or not (type(response.get("added")) is int or (neutral and response.get("added") is None))
-                or not (type(response.get("retrieved")) is int or (neutral and response.get("retrieved") is None))):
+        if turn_key is None:
+            raise RuntimeError("LongMemory 对话轮次未初始化")
+        response = self._runtime_request(query)
+        if (response.get("version") != 1 or response.get("memory_protocol") != 2
+                or not isinstance(response.get("context"), str) or not isinstance(response.get("turn_id"), str)
+                or any(k not in response or (response[k] is not None and type(response[k]) is not int)
+                       for k in ("added", "retrieved"))):
             raise RuntimeError("LongMemory 返回协议无效")
-        if neutral:
-            receipt = response.get("memory_receipt")
-            if (not isinstance(receipt, dict) or set(receipt) != {"retrieved_count", "retrieval_strategy", "evidence"}
-                    or receipt["retrieved_count"] != response["retrieved"]
-                    or (receipt["evidence"] is not None and not isinstance(receipt["evidence"], list))
-                    or turn_key is None):
-                raise RuntimeError("LongMemory 返回协议无效")
+        receipt = response.get("memory_receipt")
+        if (not isinstance(receipt, dict) or set(receipt) != {"retrieved_count", "retrieval_strategy", "evidence"}
+                or receipt["retrieved_count"] != response.get("retrieved")
+                or (receipt["evidence"] is not None and not isinstance(receipt["evidence"], list))):
+            raise RuntimeError("LongMemory 返回协议无效")
         command_reply = response.get("command_reply")
         if command_reply is not None and (
                 not isinstance(command_reply, str) or not command_reply.strip()
@@ -305,107 +253,16 @@ class MemoryProvider(MemoryProviderBase):
                 "记忆处理完成 turn_id={} added={} retrieved={}",
                 response["turn_id"], response["added"], response["retrieved"],
             )
-        scenario_items = response.get("scenario_retrieved", [])
-        persona_items = response.get("persona_retrieved", [])
-        if not isinstance(scenario_items, list) or not isinstance(persona_items, list):
-            raise RuntimeError("LongMemory 返回协议无效")
-        retrieval_strategy = response.get("retrieval_strategy")
-        if (retrieval_strategy is not None
-                and (not isinstance(retrieval_strategy, str)
-                     or not 1 <= len(retrieval_strategy.strip()) <= 240)):
-            raise RuntimeError("LongMemory 返回协议无效")
-        retrieval_evidence = response.get("retrieval_evidence")
-        if retrieval_evidence is not None:
-            if not isinstance(retrieval_evidence, list) or len(retrieval_evidence) > 300:
-                raise RuntimeError("LongMemory 返回协议无效")
-            layer_counts = {"l1": 0, "l2": 0, "l3": 0}
-            layer_ranks = {"l1": [], "l2": [], "l3": []}
-            seen = set()
-            for item in retrieval_evidence:
-                basic_fields = {"layer", "item_id", "rank", "content_sha256"}
-                score_fields = {"keyword_score", "dense_score", "fused_score"}
-                temporal_fields = {"temporal_role", "valid_from", "valid_to"}
-                if (not isinstance(item, dict) or set(item) not in (
-                        basic_fields,
-                        basic_fields | score_fields,
-                        basic_fields | score_fields | temporal_fields,
-                )):
-                    raise RuntimeError("LongMemory 返回协议无效")
-                layer = item["layer"]
-                item_id = item["item_id"]
-                rank = item["rank"]
-                digest = item["content_sha256"]
-                if (layer not in layer_counts or not isinstance(item_id, str)
-                        or not 1 <= len(item_id.strip()) <= 200
-                        or type(rank) is not int or rank < 1
-                        or not isinstance(digest, str)
-                        or re.fullmatch(r"[0-9a-f]{64}", digest) is None
-                        or (layer, item_id) in seen):
-                    raise RuntimeError("LongMemory 返回协议无效")
-                keyword_score = item.get("keyword_score")
-                dense_score = item.get("dense_score")
-                fused_score = item.get("fused_score")
-                if ((keyword_score is not None and (
-                        type(keyword_score) is not int or keyword_score < 0))
-                        or any(value is not None and (
-                            type(value) not in (int, float) or not math.isfinite(value))
-                            for value in (dense_score, fused_score))
-                        or (layer == "l2" and any(
-                            value is not None for value in (dense_score, fused_score)))
-                        or (layer == "l3" and any(
-                            value is not None
-                            for value in (keyword_score, dense_score, fused_score)))):
-                    raise RuntimeError("LongMemory 返回协议无效")
-                temporal_role = item.get("temporal_role")
-                valid_from = item.get("valid_from")
-                valid_to = item.get("valid_to")
-                if temporal_role is None:
-                    if valid_from is not None or valid_to is not None:
-                        raise RuntimeError("LongMemory 返回协议无效")
-                elif (temporal_role != "historical" or layer != "l1"
-                        or valid_to is None
-                        or not all(self._valid_timestamp(value) for value in (
-                            valid_from, valid_to,
-                        ) if value is not None)):
-                    raise RuntimeError("LongMemory 返回协议无效")
-                seen.add((layer, item_id))
-                layer_counts[layer] += 1
-                layer_ranks[layer].append(rank)
-            expected = {
-                "l1": response["retrieved"],
-                "l2": len(scenario_items),
-                "l3": len(persona_items),
-            }
-            if layer_counts != expected or any(
-                    sorted(layer_ranks[layer]) != list(range(1, expected[layer] + 1))
-                    for layer in expected):
-                raise RuntimeError("LongMemory 返回协议无效")
-        # 顶层 chat 完成后由启动适配器取走一次。覆盖旧值表示旧回答没有得到
-        # 完成回执；不能把后来的答案错误关联给旧 turn_id。
         with self._lock:
-            pending = {
-                "diagnostic_trace": _diagnostics.CURRENT.get() if _diagnostics else None,
-                "turn_id": response["turn_id"],
-                "retrieved_counts": {
-                    "l1": response["retrieved"],
-                    "l2": len(scenario_items),
-                    "l3": len(persona_items),
-                },
-                "retrieval_evidence": retrieval_evidence,
-                "retrieval_strategy": retrieval_strategy,
-            }
-            if neutral:
-                pending.update(memory_protocol=2, memory_receipt=receipt, client_round_id=turn_key)
-                if response.get("external_model_pause") is True:
-                    if command_reply is None:
-                        raise RuntimeError("LongMemory 返回协议无效")
-                    pending["fixed_reply"] = command_reply
-            if turn_key is None:
-                self._pending_completion = pending
-            else:
-                if len(self._pending_completions) >= 8:
-                    raise RuntimeError("LongMemory 待完成轮次过多")
-                self._pending_completions[turn_key] = pending
+            pending = {"diagnostic_trace": _diagnostics.CURRENT.get() if _diagnostics else None,
+                       "turn_id": response["turn_id"], "memory_receipt": receipt, "client_round_id": turn_key}
+            if response.get("external_model_pause") is True:
+                if command_reply is None:
+                    raise RuntimeError("LongMemory 返回协议无效")
+                pending["fixed_reply"] = command_reply
+            if len(self._pending_completions) >= 8:
+                raise RuntimeError("LongMemory 待完成轮次过多")
+            self._pending_completions[turn_key] = pending
         if command_reply is not None:
             reply = html.escape(command_reply, quote=False)
             context = (
@@ -423,18 +280,6 @@ class MemoryProvider(MemoryProviderBase):
         # 固定版本上游把 memory_str 直接作为 re.sub 替换字符串，必须转义
         # 反斜杠，否则 C:\\new 等用户内容会被当作正则替换转义。
         return context.replace("\\", "\\\\")
-
-    @staticmethod
-    def _valid_timestamp(value):
-        """限制历史证据时间为短、带时区的 ISO 文本，保持薄适配器独立。"""
-
-        if not isinstance(value, str) or not 1 <= len(value) <= 64:
-            return False
-        try:
-            parsed = datetime.fromisoformat(value)
-        except ValueError:
-            return False
-        return parsed.tzinfo is not None and parsed.utcoffset() is not None
 
     def suppress_internal_query_once(self, query: str) -> None:
         """按适配层可信来源标记跳过一次；不检查具体提示文案。"""
@@ -466,11 +311,7 @@ class MemoryProvider(MemoryProviderBase):
             # 先等Memory锁，再短暂进入音频撤权锁；等待其他RPC时绝不占住音频锁。
             # 资格检查与消费本轮pending为同一次原子领取，外层旧布尔检查不能替代它。
             with completion_guard if completion_guard is not None else nullcontext(True) as permitted:
-                if turn_key is None:
-                    pending = self._pending_completion
-                    self._pending_completion = None
-                else:
-                    pending = self._pending_completions.pop(turn_key, None)
+                pending = self._pending_completions.pop(turn_key, None)
         if pending is None:
             return False
         if permitted is not True:
@@ -494,22 +335,9 @@ class MemoryProvider(MemoryProviderBase):
                 or re.fullmatch(r"[0-9a-f]{64}", token) is None):
             raise RuntimeError("LongMemory Runtime 启动环境无效")
         target = parsed._replace(path="/api/internal/memory/complete").geturl()
-        completion = {
-            "version": 1,
-            "turn_id": pending["turn_id"],
-            "answer": answer,
-            "retrieved_counts": pending["retrieved_counts"],
-        }
-        if pending.get("memory_protocol") == 2:
-            completion = {"version": 1, "memory_protocol": 2,
-                "turn_id": pending["turn_id"], "answer": answer,
-                "memory_receipt": pending["memory_receipt"],
-                "client_round_id": pending["client_round_id"]}
-        # 字段缺省兼容更新期间的旧 Runtime；新 Runtime 会返回并持久化精确索引。
-        if pending.get("memory_protocol") != 2 and pending.get("retrieval_evidence") is not None:
-            completion["retrieval_evidence"] = pending["retrieval_evidence"]
-        if pending.get("memory_protocol") != 2 and pending.get("retrieval_strategy") is not None:
-            completion["retrieval_strategy"] = pending["retrieval_strategy"]
+        completion = {"version": 1, "memory_protocol": 2,
+                      "turn_id": pending["turn_id"], "answer": answer,
+                      "memory_receipt": pending["memory_receipt"], "client_round_id": pending["client_round_id"]}
         body = json.dumps(completion).encode("utf-8")
         request = urlrequest.Request(
             target, data=body, method="POST",
@@ -536,7 +364,7 @@ class MemoryProvider(MemoryProviderBase):
 
     def _cancel_pending_completion(self, pending, reason):
         # 原子领取结束后才做网络I/O，既不重试，也不回滚已经认领/提交的另一条回执。
-        if pending is None or pending.get("memory_protocol") != 2:
+        if pending is None:
             return False
         source = urlsplit(os.environ.get("LONGMEMORY_RUNTIME_URL", ""))
         token = os.environ.get("LONGMEMORY_RUNTIME_TOKEN", "")

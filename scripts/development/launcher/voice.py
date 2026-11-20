@@ -7,12 +7,6 @@ import time
 from voice_ports import port_arguments
 
 
-MEMORY_PROVIDERS = {
-    "hy_memory": "LongMemory",
-    "longmemory": "LongMemory",
-    "xiaozhi_local": "mem_local_short",
-    "none": "nomem",
-}
 CUSTOM_TTS_URLS = {
     "voxcpm2": "http://127.0.0.1:18768/v1/audio/speech",
     "sanotts": "http://127.0.0.1:18769/v1/audio/speech",
@@ -22,18 +16,16 @@ CUSTOM_TTS_URLS = {
 
 def memory_contract_matches(config, root, database, backend):
     """核对所选后端和设备控制身份；数据仍由各后端独立保存。"""
-    if backend not in MEMORY_PROVIDERS:
+    if backend != "hy_memory":
         return False
-    if config["selected_module"]["Memory"] != MEMORY_PROVIDERS[backend]:
+    if config["selected_module"]["Memory"] != "LongMemory":
         return False
     memory = config["Memory"]["LongMemory"]
     expected = {"database_path": database, "project_root": root,
                 "python_executable": root / ".venv/Scripts/python.exe"}
     if not all(Path(memory[key]).resolve() == value.resolve() for key, value in expected.items()):
         return False
-    selected = config["Memory"].get(MEMORY_PROVIDERS[backend], {})
-    expected_type = {"longmemory": "longmemory", "hy_memory": "longmemory", "xiaozhi_local": "mem_local_short", "none": "nomem"}[backend]
-    return selected.get("type") == expected_type
+    return memory.get("type") == "longmemory"
 
 
 def tts_matches(config, backend):

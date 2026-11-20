@@ -18,7 +18,7 @@ selected_module:
   LLM: CampusLLM
   VLLM: null
   TTS: EdgeTTS
-  Memory: nomem
+  Memory: LongMemory
   Intent: nointent
 LLM:
   CampusLLM:
@@ -48,8 +48,13 @@ TTS:
     voice: zh-CN-XiaoxiaoNeural
     output_dir: tmp/
 Memory:
-  nomem:
-    type: nomem
+  LongMemory:
+    type: longmemory
+    allowed_device_id: FILL_DEVICE_ID
+    project_root: "__PROJECT_ROOT__"
+    python_executable: "__PROJECT_ROOT__/.venv/Scripts/python.exe"
+    database_path: "__PROJECT_ROOT__/data/databases/xiaozhi-demo-v1.db"
+    audit_log: "__PROJECT_ROOT__/data/logs/xiaozhi-demo-v1.jsonl"
 Intent:
   nointent:
     type: nointent
@@ -59,8 +64,8 @@ enable_greeting: false
 mcp_endpoint: null
 context_providers: []
 prompt: |
-  你是语音链路测试助手，请用简短中文回答。
-  当前尚未接入长期记忆，不要声称能够记住跨会话信息。
+  你是桌面圆屏上的聊天伙伴，请用自然、简短的中文回答。
+  根据当前对话和相关记忆回答。<memory></memory>
   不知道的信息请说明不知道，不要编造设备状态或个人事实。
 log:
   log_level: INFO

@@ -6,7 +6,6 @@ import {ConfigProvider} from 'antd';
 import {MemoryRouter,Route,Routes} from 'react-router-dom';
 import {ChatApi,ApiError,type EngineItem} from '../../api';
 import {HyMemoryWorkspace,memoryTime} from './HyMemoryWorkspace';
-import {MemoryDomainRoute} from './MemoryDomainRoute';
 
 afterEach(()=>vi.restoreAllMocks());
 const item:EngineItem={item_id:'synthetic-1',content:'合成用户周末照顾一只猫。',kind:'l2_fact',revision:'a'.repeat(64),source_event_ids:['source-one','source-two'],recorded_at:null,valid_from:null,valid_to:null,state:'ACTIVE'};
@@ -249,13 +248,4 @@ test('组装画像在自己的详情核对，不把聚合编号交给普通条�
   expect(await within(dialog).findByText('基本信息')).toBeTruthy();
   expect(within(dialog).queryByRole('button',{name:'纠正这条记忆'})).toBeNull();
   expect(request.mock.calls.some(([path])=>path.includes('/items/assembled-profile'))).toBe(false);
-});
-
-test('旧记忆书签先确认引擎再跳到新任务，不挂载旧页',async()=>{
-  vi.spyOn(ChatApi.prototype,'bootstrap').mockResolvedValue(undefined);
-  vi.spyOn(ChatApi.prototype,'request').mockResolvedValue({representation:'method_defined'});
-  const legacy=vi.fn(()=> <p>不应挂载</p>);
-  const Legacy=legacy;
-  render(<MemoryRouter initialEntries={['/personas']}><KnownMemoryEngine kind="hy"><Routes><Route path="/personas" element={<MemoryDomainRoute legacy={<Legacy/>} view="profile"/>}/><Route path="/memories" element={<p>新记忆任务</p>}/></Routes></KnownMemoryEngine></MemoryRouter>);
-  expect(await screen.findByText('新记忆任务')).toBeTruthy();expect(legacy).not.toHaveBeenCalled();
 });

@@ -5,10 +5,6 @@ import {syntheticResponse} from '../src/features/data-workspace/syntheticFixture
 
 const dist=resolve(import.meta.dirname,'../dist');
 const pages=[
-  {path:'/memories',task:'浏览记忆',normal:'合成事实：用户喜欢茶。',empty:'没有符合条件的 L1',failure:'无法读取记忆服务'},
-  {path:'/memory-quality',task:'问题队列',normal:'合成问题样本',empty:'目前没有待核对问题',failure:'无法读取质量样本'},
-  {path:'/scenarios',task:'场景与候选',normal:'合成场景',empty:'尚无 L2 生活场景',failure:'无法读取记忆服务'},
-  {path:'/personas',task:'统一画像',normal:'合成画像',empty:'尚无已接受的画像认识',failure:'无法读取记忆服务'},
   {path:'/device',task:'常用控制',normal:'应用音量',empty:'不可控',failure:'不可控'},
 ];
 
@@ -20,7 +16,7 @@ async function syntheticPage(page:Page,mode:'normal'|'empty'|'failure') {
     if(url.pathname.startsWith('/api/')) {
       if(request.method()!=='GET'){writes.push(url.pathname);return route.fulfill({status:405,json:{error:'synthetic_read_only'}});}
       // 引擎身份属于页面装配前提；本矩阵验证的是已知旧引擎下各业务读取失败。
-      if(mode==='failure' && !['/api/session','/api/memory-engine/identity','/api/memory-config'].includes(url.pathname))return route.fulfill({status:503,json:{error:'http_503'}});
+      if(mode==='failure' && !['/api/session','/api/memory-engine/identity'].includes(url.pathname))return route.fulfill({status:503,json:{error:'http_503'}});
       return route.fulfill({json:syntheticResponse(url.pathname+url.search,mode==='normal')});
     }
     if(request.isNavigationRequest())return route.fulfill({contentType:'text/html',body:await readFile(resolve(dist,'index.html'))});
@@ -53,19 +49,3 @@ for(const viewport of [{width:1366,height:768},{width:1440,height:900},{width:48
     });
   }
 }
-
-test('场景搜索、抽屉、刷新与浏览器返回保留浏览坐标',async({page})=>{
-  const writes=await syntheticPage(page,'normal');await page.goto('/scenarios?q=合成&state=active');
-  const search=page.getByRole('textbox',{name:'搜索已加载场景'});await expect(search).toHaveValue('合成');
-  await page.getByRole('button',{name:'查看来源',exact:true}).click();
-  await expect(page).toHaveURL(/scenario_id=synthetic-scenario/);
-  await expect(page.getByText('L2 场景详情', {exact:true})).toBeVisible();
-  await page.locator('.ant-drawer-close').click();await expect(search).toHaveValue('合成');
-  await page.getByRole('button',{name:'整理状态',exact:true}).click();
-  await expect(page.getByRole('textbox',{name:'搜索已加载场景'})).toBeHidden();
-  await page.reload();await expect(page.getByRole('button',{name:'整理状态',exact:true})).toHaveAttribute('aria-pressed','true');
-  await page.getByRole('button',{name:'场景与候选',exact:true}).click();await expect(search).toHaveValue('合成');
-  await page.goBack();await expect(page.getByRole('button',{name:'整理状态',exact:true})).toHaveAttribute('aria-pressed','true');
-  await page.goForward();await expect(search).toHaveValue('合成');
-  expect(writes).toEqual([]);
-});

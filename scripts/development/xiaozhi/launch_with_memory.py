@@ -260,9 +260,8 @@ def isolate_memory_initialization(connection_class, provider_class):
             # 即使非法设备初始化失败，它也不能复用合法设备的记忆对象。
             connection.memory = provider_class(config)
         result = original(connection)
-        if os.environ.get("LONGMEMORY_MEMORY_BACKEND") == "hy_memory":
-            from voice_budget import BudgetNoticeLLM
-            connection.llm = BudgetNoticeLLM(connection.llm, connection.memory)
+        from voice_budget import BudgetNoticeLLM
+        connection.llm = BudgetNoticeLLM(connection.llm, connection.memory)
         observe_memory_operations(connection)
         return result
 
@@ -548,10 +547,9 @@ def main():
         ConnectionHandler, turn_end_mode=args.voice_turn_end_mode,
         turn_end_model=args.voice_turn_end_model, asr_provider_class=turn_asr_class,
         cosy_delivery_mode=args.cosy_delivery_mode, detector_factory=detector_factory)
-    if os.environ.get("LONGMEMORY_MEMORY_BACKEND") == "hy_memory":
-        from core.providers.llm.openai import openai as provider_module
-        from voice_budget import install_no_retry_gateway_client
-        install_no_retry_gateway_client(provider_module)
+    from core.providers.llm.openai import openai as provider_module
+    from voice_budget import install_no_retry_gateway_client
+    install_no_retry_gateway_client(provider_module)
     # 快速通道必须位于时序包装器内部，才能像普通回答一样记录真实首包。
     install_fast_voice_responses(ConnectionHandler)
     install_voice_latency(ConnectionHandler)

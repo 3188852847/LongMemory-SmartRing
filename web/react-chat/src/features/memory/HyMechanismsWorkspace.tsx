@@ -76,7 +76,7 @@ export function HyMechanismsWorkspace() {
   const current=data&&!query.isError&&engine.phase==='ready';
   const selectedMissing=Boolean(params.get('mechanism'))&&!mechanisms.some(item=>item.id===params.get('mechanism'));
 
-  return <AppShell subtitle="理解记忆怎样形成与使用" className="hy-mechanisms-shell" sidebar={<ConsoleNav active="mechanisms" legacyPath="/memories-legacy"/>}>
+  return <AppShell subtitle="理解记忆怎样形成与使用" className="hy-mechanisms-shell" sidebar={<ConsoleNav active="mechanisms"/>}>
     <PageHeader eyebrow="长期记忆" title="记忆机制" description={tab==='layers'?'选择一层，查看实际保存内容、状态、来源与原生版本。':'从一段原话到一次回答，区分固定版支持、当前接入和真正可得的证据。'}
       action={<Button disabled={query.isFetching||engine.refreshing} onClick={()=>engine.phase!=='ready'?engine.refresh():void query.refetch()}>刷新声明</Button>}/>
     {engine.phase!=='ready'&&<Alert showIcon type={engine.phase==='error'?'error':'info'} title={engine.phase==='error'?'当前引擎身份尚未确认':'正在确认当前引擎'} description="其他功能可继续使用；确认前不加载旧引擎数据。"/>}

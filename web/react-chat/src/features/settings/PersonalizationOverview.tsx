@@ -1,6 +1,6 @@
 import {useQuery} from '@tanstack/react-query';
 import {Button, Tag} from 'antd';
-import type {ChatApi, ProactivePolicy, RoundSkins, TTSBackendId, TTSBackends} from '../../api';
+import type {ChatApi, RoundSkins, TTSBackendId, TTSBackends} from '../../api';
 import type {AppearancePreferences} from '../../app/AppearanceProvider';
 import {readRolePreferences} from './rolePreferences';
 
@@ -45,7 +45,6 @@ export function PersonalizationOverview({api, ready, prefs, onSelectTab, availab
   }
   const role = useQuery({queryKey:['assistant-role'], queryFn:()=>api.request<RoleSummary>('/api/assistant-role'), enabled:ready});
   const skins = useQuery({queryKey:['round-skins'], queryFn:()=>api.request<RoundSkins>('/api/round-skins'), enabled:ready});
-  const proactive = useQuery({queryKey:['proactive-policy'], queryFn:()=>api.request<ProactivePolicy>('/api/proactive-policy'), enabled:ready});
   const tts = useQuery({queryKey:['tts-backends'], queryFn:()=>api.request<TTSBackends>('/api/tts-backends'), enabled:ready});
   const voice = useQuery({
     queryKey:['personalization-voice'], queryFn:()=>api.request<VoiceSummary>('/api/voice-settings'),
@@ -80,7 +79,6 @@ export function PersonalizationOverview({api, ready, prefs, onSelectTab, availab
     {key:'voice', title:'声音方案', value:voiceValue, scope:'网页朗读＋圆屏 TTS', timing:voiceTiming, action:'voice'},
     {key:'skin', title:'圆屏状态皮肤', value:!ready ? unavailable(skins) : selectedSkin?.name ?? (skins.data ? skins.data.selected_skin : unavailable(skins)), scope:'当前只是预览选择', timing:'真机需单独应用', action:'display'},
     {key:'wallpaper', title:'动态壁纸', value:'真机状态未自动读取', scope:'智能圆屏', timing:'在圆屏外观页发布', action:'display'},
-    {key:'proactive', title:'主动交流', value:proactive.data && ready ? (proactive.data.enabled ? '已允许' : '已关闭') : unavailable(proactive), scope:'持久策略', timing:ready && proactive.data ? '保存后生效' : '尚未确认', action:'proactive'},
   ];
 
   return <section className="personalization-overview" aria-labelledby="personalization-overview-title">

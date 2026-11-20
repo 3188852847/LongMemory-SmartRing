@@ -29,19 +29,6 @@ class FollowUpSuggestionDraft:
     follow_up_at: datetime
 
 
-@dataclass(frozen=True, slots=True)
-class FollowUpSuggestionResult:
-    """旁路创建结果，供网页和圆屏诊断而不泄露完整 L1。"""
-
-    status: str
-    candidate_id: str | None = None
-    source_memory_id: str | None = None
-    prompt_text: str | None = None
-    follow_up_at: str | None = None
-    warning_code: str | None = None
-    outreach_id: str | None = None
-
-
 def _number(value: str) -> int:
     if value.isdigit():
         return int(value)

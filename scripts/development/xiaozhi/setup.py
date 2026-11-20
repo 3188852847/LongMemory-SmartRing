@@ -11,7 +11,7 @@ import hashlib
 import ipaddress
 import os
 from pathlib import Path
-from config_paths import config_path, render_runtime_config
+from config_paths import config_path, managed_project, render_runtime_config
 import subprocess
 import sys
 import re
@@ -34,6 +34,9 @@ CUSTOM_TTS_URLS = {
     "cosyvoice3": "http://127.0.0.1:18770/v1/audio/speech",
 }
 LEGACY_MEMORY_PROVIDER_SHA256 = {
+    # Hy 专用 HTTP 适配器发布前的日用版本（LF/CRLF）。
+    "23bd4f2f11a06ee1d09d78393942c61ec69c4df350925f69434117537d42ac0f",
+    "1a48bddba1cf115fcb6077edc044917d769b870551fc8ac7e65b29ff8e21372c",
     # 超长回答收尾修复前的仓库版本（LF 和 CRLF）。
     "e2039e9953d34acc866e8accb9d2ffbd581855d9efbdd3374af8e78564201802",
     "f425a3824f3771a16e7bd8df2b022376257c0d8f6673cd70c23d552a8943f717",
@@ -76,10 +79,11 @@ def init_config(server_dir: Path) -> Path:
     if not (server_dir / "app.py").is_file():
         raise SetupError("目标目录没有 app.py，请检查服务目录。")
     target = config_path(server_dir)
+    project = managed_project(server_dir) or ROOT
     template = (ROOT / "config/examples/xiaozhi.example.yaml").read_text(encoding="utf-8")
     target.parent.mkdir(parents=True, exist_ok=True)
     with target.open("x", encoding="utf-8", newline="") as handle:
-        handle.write(template)
+        handle.write(template.replace("__PROJECT_ROOT__", project.as_posix()))
     return target
 
 
@@ -160,30 +164,18 @@ def validate_config(config: dict, lan_ip: str | None = None, tts_backend: str = 
         return {}
     selected = config.get("selected_module", {})
     memory_name = selected.get("Memory")
-    if memory_name not in ("nomem", "mem_local_short", "LongMemory"):
-        raise SetupError("Memory 必须为 nomem、mem_local_short 或 LongMemory。")
-    if memory_name == "LongMemory":
-        memory = config.get("Memory", {}).get("LongMemory", {})
-        if memory.get("type") != "longmemory":
-            raise SetupError("LongMemory.type 必须为 longmemory。")
-        if not re.fullmatch(r"[0-9a-fA-F]{2}(?::[0-9a-fA-F]{2}){5}", str(memory.get("allowed_device_id", ""))):
-            raise SetupError("请填写已核实的单个圆屏 MAC 作为 allowed_device_id。")
-        for key in ("python_executable", "project_root", "database_path", "audit_log"):
-            if not isinstance(memory.get(key), str) or not Path(memory[key]).is_absolute():
-                raise SetupError("LongMemory 的四个本地路径必须完整填写为绝对路径。")
-        if "<memory>" not in config.get("prompt", "") or "</memory>" not in config.get("prompt", ""):
-            raise SetupError("prompt 必须包含 <memory></memory>，否则上游快速提示阶段不会注入记忆。")
-    elif memory_name == "mem_local_short":
-        memory = config.get("Memory", {}).get("mem_local_short", {})
-        if memory.get("type") != "mem_local_short" or "llm" not in memory:
-            raise SetupError("mem_local_short 配置不完整。")
-    else:
-        # 小智原生 nomem 是零配置实现；历史配置可能只在 selected_module
-        # 里选择它，而没有显式的 Memory.nomem 节。若用户确实写了该节，
-        # 才检查其类型，兼容旧配置的同时仍能发现拼写错误。
-        memory = config.get("Memory", {}).get("nomem")
-        if memory is not None and memory.get("type") != "nomem":
-            raise SetupError("nomem 配置不完整。")
+    if memory_name != "LongMemory":
+        raise SetupError("圆屏必须使用 Hy-Memory 适配器 LongMemory。")
+    memory = config.get("Memory", {}).get("LongMemory", {})
+    if memory.get("type") != "longmemory":
+        raise SetupError("LongMemory.type 必须为 longmemory。")
+    if not re.fullmatch(r"[0-9a-fA-F]{2}(?::[0-9a-fA-F]{2}){5}", str(memory.get("allowed_device_id", ""))):
+        raise SetupError("请填写已核实的单个圆屏 MAC 作为 allowed_device_id。")
+    for key in ("python_executable", "project_root", "database_path", "audit_log"):
+        if not isinstance(memory.get(key), str) or not Path(memory[key]).is_absolute():
+            raise SetupError("LongMemory 的四个本地路径必须完整填写为绝对路径。")
+    if "<memory>" not in config.get("prompt", "") or "</memory>" not in config.get("prompt", ""):
+        raise SetupError("prompt 必须包含 <memory></memory>，否则上游快速提示阶段不会注入记忆。")
     validate_tts_config(config, tts_backend)
     expected = dict(VAD="SileroVAD", ASR="FunASR", LLM="CampusLLM",
                     Memory=memory_name, Intent="nointent")
@@ -258,7 +250,7 @@ def prepare_environment(server_dir: Path, ffmpeg_dir: Path, voice_mode="pipeline
     env["HF_HUB_OFFLINE"] = "1"
     env["PYTHONUTF8"] = "1"
     env["PYTHONUNBUFFERED"] = "1"
-    if env.get("LONGMEMORY_MEMORY_BACKEND") == "hy_memory":
+    if voice_mode == "pipeline":
         for key in ("LONGMEMORY_LLM_API_KEY", "OPENAI_API_KEY", "DEEPSEEK_API_KEY"):
             env.pop(key, None)
     return env
@@ -340,7 +332,7 @@ def main() -> int:
             if ((not realtime and control_memory.get("type") != "longmemory") or
                     not re.fullmatch(r"[0-9a-fA-F]{2}(?::[0-9a-fA-F]{2}){5}",
                                      str(control_memory.get("allowed_device_id", "")))):
-                raise SetupError("设备控制需要保留已核实的 LongMemory.allowed_device_id；当前记忆算法可以不是 LongMemory。")
+                raise SetupError("设备控制需要保留已核实的 LongMemory.allowed_device_id。")
             from control_compatibility import verify_control_snapshot
             try:
                 verify_control_snapshot(server_dir)
@@ -387,7 +379,7 @@ def main() -> int:
         if args.device_control:
             command.append("--device-control")
         model_override = None
-        if os.environ.get("LONGMEMORY_MEMORY_BACKEND") == "hy_memory":
+        if not realtime:
             from voice_budget import load_owned_configuration
             model_override = load_owned_configuration()
         if model_override is None:

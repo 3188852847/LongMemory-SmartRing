@@ -35,38 +35,21 @@ def config_text():
     )
 
 
-def test_adds_local_summary_and_only_switches_provider(tmp_path):
+def test_startup_repairs_only_the_selected_provider(tmp_path):
     server = tmp_path / "server"
     (server / "data").mkdir(parents=True)
     path = server / "data/.config.yaml"
-    original = config_text()
+    original = config_text().replace("Memory: LongMemory", "Memory: nomem")
     path.write_text(original, encoding="utf-8")
-    checked = module.action(server, "xiaozhi_local")
-    assert checked["config_matches"] is False
-    assert path.read_text(encoding="utf-8") == original
-    result = module.action(server, "xiaozhi_local", apply=True,
-                           expected_digest=checked["digest"])
-    updated = path.read_text(encoding="utf-8")
-    parsed = yaml.safe_load(updated)
-    assert parsed["selected_module"]["Memory"] == "mem_local_short"
-    assert parsed["Memory"]["mem_local_short"] == {
-        "type": "mem_local_short", "llm": None,
-    }
-    assert parsed["Memory"]["LongMemory"]["database_path"].endswith("example.db")
-    assert "# keep this comment" in updated and parsed["unrelated"] == {"keep": True}
-    assert ".memory-" in result["backup"]
+    checked = module.action(server, "hy_memory")
+    result = module.action(server, "hy_memory", apply=True, expected_digest=checked["digest"])
+    expected = yaml.safe_load(original)
+    expected["selected_module"]["Memory"] = "LongMemory"
+    assert yaml.safe_load(path.read_text(encoding="utf-8")) == expected
     assert (path.parent / result["backup"]).read_text(encoding="utf-8") == original
 
 
-def test_switching_to_none_preserves_existing_local_and_longmemory_data_config(tmp_path):
-    server = tmp_path / "server"
-    (server / "data").mkdir(parents=True)
-    path = server / "data/.config.yaml"
-    path.write_text(config_text(), encoding="utf-8")
-    first = module.action(server, "xiaozhi_local")
-    module.action(server, "xiaozhi_local", apply=True, expected_digest=first["digest"])
-    checked = module.action(server, "none")
-    module.action(server, "none", apply=True, expected_digest=checked["digest"])
-    parsed = yaml.safe_load(path.read_text(encoding="utf-8"))
-    assert parsed["selected_module"]["Memory"] == "nomem"
-    assert "LongMemory" in parsed["Memory"] and "mem_local_short" in parsed["Memory"]
+@pytest.mark.parametrize("retired", ["longmemory", "xiaozhi_local", "none"])
+def test_old_profiles_are_rejected(tmp_path, retired):
+    with pytest.raises(ValueError, match="unknown_profile"):
+        module.action(tmp_path, retired)

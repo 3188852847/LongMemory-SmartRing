@@ -116,6 +116,8 @@ def test_formal_main_adapter_wraps_all_chat_paths_before_connections_are_created
         'voice_output_protocol': NS(install_tts_interrupt_protocol=lambda *_a, **_k: calls.append('wire')),
         'core.handle.receiveAudioHandle': receive,
         'core.providers.asr': NS(base=base, fun_local=fun),
+        'core.providers.llm.openai': NS(openai=object()),
+        'voice_budget': NS(install_no_retry_gateway_client=lambda _: None),
         'core.providers.memory.longmemory.longmemory': NS(MemoryProvider=object),
         'direct_ws_v2': NS(install_direct_ws_v2=lambda *_a: None),
         'fast_voice_responses': NS(install_fast_voice_responses=lambda *_a: None),

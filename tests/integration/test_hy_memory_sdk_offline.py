@@ -10,9 +10,6 @@ import pytest
 from longmemory.bootstrap import build_hy_memory_runtime
 from longmemory.methods.contracts import MemoryEvent, UnsupportedCapabilityError
 from longmemory.methods.hy_memory.settings import HySettings
-from longmemory.methods.hy_memory.assembly import assemble_hy_backend
-from longmemory.evaluation.comparison.dataset import Dataset, Question
-from longmemory.evaluation.comparison.hy_memory_runner import run_hy_comparison
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -103,24 +100,3 @@ def test_real_sdk_commit_before_platform_receipt_is_uncertain(tmp_path,monkeypat
         assert reopened.administer("listing","list_items",state="active").total == 1
     finally:
         reopened.close()
-
-
-def test_real_sdk_per_question_clone_protocol_isolation(tmp_path):
-    import hashlib
-    import json
-    settings = HySettings(user_id="synthetic-real-sdk", model_mode="synthetic_transport")
-    question = Question("sdk-smoke-q1","dev","sdk_pipeline_only","合成用户喜欢什么茶",False,
-        "无糖乌龙茶",((EVENT.event_id,),),("无糖乌龙茶",))
-    dataset = Dataset("real-sdk-simulated-model-smoke","1.0.0",
-        hashlib.sha256(json.dumps({"history":EVENT.content,"question":question.query},ensure_ascii=False).encode()).hexdigest(),
-        (EVENT,), (question,))
-    def opener(directory, *, create_engine, create_sources):
-        return assemble_hy_backend(settings=settings,state_directory=directory / "engine",source_path=directory / "sources.db",
-            create=create_engine,create_sources=create_sources,python=SDK_PYTHON)
-    _,report = run_hy_comparison(dataset,output_root=tmp_path,hy_opener=opener,hy_metadata={"settings":settings.public()})
-    assert report["status"] == "completed", json.dumps(report,ensure_ascii=False,indent=2)
-    assert all(row["sealed_source_unchanged"] for row in report["questions"])
-    hy = next(row for row in report["questions"] if row["method"] == "hy_memory_pro_chat")
-    assert hy["support"]["retrieved"][0]["source_event_ids"] == (EVENT.event_id,)
-    assert hy["clone_state_audit"]["semantic_state_unchanged"] is None
-    assert hy["sdk_diagnostics"]["external_http_attempts"] == 0

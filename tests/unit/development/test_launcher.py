@@ -33,7 +33,7 @@ finally:
 
 
 @pytest.fixture
-def options(tmp_path):
+def options(tmp_path, monkeypatch):
     root = tmp_path / "中文 path"
     (root / ".venv/Scripts").mkdir(parents=True)
     (root / ".venv/Scripts/python.exe").touch()
@@ -41,6 +41,15 @@ def options(tmp_path):
     (root / "local/config/.env").write_text("# synthetic only", encoding="utf-8")
     database = root / "synthetic.db"
     database.touch()  # 只测文件预检，数据库 schema 仍由真实入口独立校验。
+    from longmemory.infrastructure.config import hy_deployment
+    source = root / "data/databases/hy-sources.db"
+    source.parent.mkdir(parents=True)
+    source.touch()
+    state = root / "data/memory/hy-daily"
+    state.mkdir(parents=True)
+    (state / "hy-state.json").write_text("{}")
+    monkeypatch.setattr(hy_deployment, "load_hy_deployment", lambda root: SimpleNamespace(
+        source_path=source, state_directory=state))
     return runtime.Options(root=root, database=database, consent=True)
 
 
@@ -53,39 +62,15 @@ def test_command_preserves_paths_and_does_not_enable_deletion_or_jobs(options):
     assert "--allow-memory-delete" not in cmd
     assert "--allow-memory-correction" in cmd
     assert "--enable-memory-consolidation" not in cmd
-    assert "--disable-proactive-schedule" in cmd
-    assert "--chat-provider" in cmd
-    assert cmd[cmd.index("--memory-extraction") + 1] == "rules"
-    assert cmd[cmd.index("--memory-retrieval") + 1] == "keyword"
+    assert "--disable-proactive-schedule" not in cmd
+    assert "--chat-provider" not in cmd
+    assert "--memory-extraction" not in cmd
+    assert "--memory-retrieval" not in cmd
     assert "--embedding-model-dir" not in cmd
     assert "--allow-insecure-http" not in cmd  # 网页仍需 .env 的独立 HTTP 许可。
-    assert cmd[cmd.index("--memory-backend") + 1] == "longmemory"
+    assert cmd[cmd.index("--memory-backend") + 1] == "hy_memory"
     assert cmd[cmd.index("--tts-backend") + 1] == "edge"
     assert cmd[cmd.index("--launcher-status-file") + 1].endswith("data\\control\\launcher-status.json")
-
-
-def test_hy_selection_pauses_old_scheduling_and_ignores_old_algorithm_flags(options, monkeypatch):
-    from longmemory.infrastructure.config import hy_deployment
-    source = options.root / "data/databases/hy-sources.db"
-    source.parent.mkdir(parents=True)
-    source.touch()
-    state = options.root / "data/memory/hy-daily"
-    state.mkdir(parents=True)
-    (state / "hy-state.json").write_text("{}")
-    monkeypatch.setattr(hy_deployment, "load_hy_deployment", lambda root: SimpleNamespace(
-        source_path=source, state_directory=state))
-    selected = replace(options, memory_backend="hy_memory", memory_extraction="llm",
-        memory_retrieval="hybrid", enable_memory_consolidation=True,
-        enable_l1_sufficiency_shadow=True, enable_l2_sufficiency_shadow=True)
-    _, cmd, _ = runtime.build_commands(selected, uv="synthetic-uv")[0]
-    assert cmd[cmd.index("--memory-backend") + 1] == "hy_memory"
-    assert cmd[cmd.index("--memory-extraction") + 1] == "rules"
-    assert cmd[cmd.index("--memory-retrieval") + 1] == "keyword"
-    assert "--disable-proactive-schedule" in cmd
-    assert "--embedding-model-dir" not in cmd
-    assert "--enable-memory-consolidation" not in cmd
-    assert "--enable-l1-sufficiency-shadow" not in cmd
-    assert "--enable-l2-sufficiency-shadow" not in cmd
 
 
 def test_ready_view_model_keeps_console_voice_and_speech_states_independent():
@@ -121,11 +106,11 @@ def test_starting_and_stopped_view_models_cover_voice_and_text_modes():
         tts_backend="voxcpm2",
         model_profile="official",
         voice_model_profile="campus",
-        memory_backend="xiaozhi_local",
+        memory_backend="hy_memory",
     )
     assert voice["components"]["speech"] == ("VoxCPM2 加载中", "busy")
     assert "网页使用 官方 DeepSeek" in voice["message"]
-    assert "圆屏使用 学校模型 / 小智本地摘要" in voice["message"]
+    assert "圆屏使用 学校模型 / Hy-Memory" in voice["message"]
 
     text_only = view_model.starting_services(
         voice=False,
@@ -263,52 +248,8 @@ def test_official_profile_uses_separate_env_file_and_needs_no_http_ack(options):
     assert cmd[cmd.index("--model-profile") + 1] == "official"
 
 
-def test_explicit_launcher_choice_enables_single_consolidation_owner(options):
-    cmd = runtime.build_commands(
-        replace(options, enable_memory_consolidation=True), uv="synthetic-uv"
-    )[0][1]
-
-    assert cmd.count("--enable-memory-consolidation") == 1
-
-
-def test_explicit_launcher_choice_enables_l2_sufficiency_shadow(options):
-    disabled = runtime.build_commands(options, uv="synthetic-uv")[0][1]
-    enabled = runtime.build_commands(
-        replace(options, enable_l2_sufficiency_shadow=True), uv="synthetic-uv"
-    )[0][1]
-
-    assert "--enable-l2-sufficiency-shadow" not in disabled
-    assert enabled.count("--enable-l2-sufficiency-shadow") == 1
-
-
-def test_explicit_launcher_choice_enables_l1_sufficiency_shadow(options):
-    disabled = runtime.build_commands(options, uv="synthetic-uv")[0][1]
-    enabled = runtime.build_commands(
-        replace(options, enable_l1_sufficiency_shadow=True), uv="synthetic-uv"
-    )[0][1]
-
-    assert "--enable-l1-sufficiency-shadow" not in disabled
-    assert enabled.count("--enable-l1-sufficiency-shadow") == 1
-
-
-def test_hybrid_retrieval_requires_and_passes_existing_snapshot(options):
-    model = options.root / "synthetic-bge"
-    model.mkdir()
-    cmd = runtime.build_commands(
-        replace(options, memory_retrieval="hybrid", embedding_model_dir=model),
-        uv="synthetic-uv",
-    )[0][1]
-    assert cmd[cmd.index("--memory-retrieval") + 1] == "hybrid"
-    assert cmd[cmd.index("--embedding-model-dir") + 1] == str(model.resolve())
-    with pytest.raises(ValueError):
-        runtime.build_commands(
-            replace(options, memory_retrieval="hybrid", embedding_model_dir=model / "missing"),
-            uv="synthetic-uv",
-        )
-
-
 @pytest.mark.parametrize("change", [dict(consent=False), dict(port=8000), dict(port=80),
-                                    dict(role="bad"), dict(memory_retrieval="bad"),
+                                    dict(role="bad"), dict(memory_backend="longmemory"),
                                     dict(voice=True, lan_ip="0.0.0.0"),
                                     dict(voice=True, lan_ip="8.8.8.8")])
 def test_invalid_options_rejected(options, change):
@@ -349,7 +290,7 @@ def test_voice_command_uses_own_environment(options):
     assert cmd[0] == str(voice / ".venv/Scripts/python.exe")
     assert cmd[1].endswith("voice.py")
     assert str(options.database.resolve()) in cmd
-    assert cmd[7] == "longmemory"  # 后面可追加独立语音策略选项。
+    assert cmd[7] == "hy_memory"  # 后面可追加独立语音策略选项。
 
 
 def test_default_console_url_opens_react_chat():
@@ -376,7 +317,7 @@ def test_voxcpm_commands_use_isolated_environment_and_start_before_voice(options
     assert [item[0] for item in commands] == ["console", "voxcpm2", "voice"]
     assert commands[1][1][0] == str(external_python)
     assert commands[1][1][1] == str(voxcpm / "service.py")
-    assert commands[2][1][6:8] == ["voxcpm2", "longmemory"]
+    assert commands[2][1][6:8] == ["voxcpm2", "hy_memory"]
 
 
 def test_sanotts_commands_use_external_source_and_start_before_voice(options, monkeypatch):
@@ -400,7 +341,7 @@ def test_sanotts_commands_use_external_source_and_start_before_voice(options, mo
     assert commands[1][1][:2] == ["synthetic-node", str(service)]
     assert commands[1][1][-4:-2] == ["--source", str(source.resolve())]
     assert commands[1][1][-2:] == ["--expected-fingerprint", runtime.EXPECTED_SANOTTS_FINGERPRINT]
-    assert commands[2][1][6:8] == ["sanotts", "longmemory"]
+    assert commands[2][1][6:8] == ["sanotts", "hy_memory"]
 
 
 def test_cosyvoice3_commands_use_isolated_environment_and_start_before_voice(options, monkeypatch):
@@ -426,11 +367,11 @@ def test_cosyvoice3_commands_use_isolated_environment_and_start_before_voice(opt
     assert commands[1][1][1] == str(service)
     assert commands[1][1][commands[1][1].index("--port") + 1] == "18770"
     assert commands[2][1][0] == str(voice_python)
-    assert commands[2][1][6:8] == ["cosyvoice3", "longmemory"]
+    assert commands[2][1][6:8] == ["cosyvoice3", "hy_memory"]
 
 
 @pytest.mark.parametrize("role", ["plain_v1", "elysia_v1"])
-@pytest.mark.parametrize("memory_backend", ["longmemory", "xiaozhi_local", "none"])
+@pytest.mark.parametrize("memory_backend", ["hy_memory"])
 @pytest.mark.parametrize("tts_backend", ["edge", "voxcpm2", "sanotts", "cosyvoice3"])
 def test_role_memory_and_tts_domains_compose_independently(
     options, monkeypatch, role, memory_backend, tts_backend,
@@ -521,14 +462,14 @@ def test_voice_shared_paths_are_checked_without_loading_private_config(options, 
     config = {"selected_module": {"Memory": "LongMemory"}, "Memory": {"LongMemory": memory}}
     if mismatch:
         memory[mismatch] = str(options.root / "wrong")
-    assert voice.memory_contract_matches(config, options.root, options.database, "longmemory") is (mismatch is None)
+    assert voice.memory_contract_matches(config, options.root, options.database, "hy_memory") is (mismatch is None)
 
 
 @pytest.mark.parametrize("backend,provider,provider_type", [
     ("xiaozhi_local", "mem_local_short", "mem_local_short"),
     ("none", "nomem", "nomem"),
 ])
-def test_voice_accepts_builtin_memory_backends_without_losing_control_identity(
+def test_voice_rejects_builtin_memory_backends_without_losing_control_identity(
         options, backend, provider, provider_type):
     spec = importlib.util.spec_from_file_location("launcher_voice_builtin_test", DIRECTORY / "voice.py")
     voice = importlib.util.module_from_spec(spec)
@@ -538,7 +479,7 @@ def test_voice_accepts_builtin_memory_backends_without_losing_control_identity(
                   "python_executable": str(options.root / ".venv/Scripts/python.exe")}
     config = {"selected_module": {"Memory": provider},
               "Memory": {"LongMemory": longmemory, provider: {"type": provider_type}}}
-    assert voice.memory_contract_matches(config, options.root, options.database, backend)
+    assert not voice.memory_contract_matches(config, options.root, options.database, backend)
 
 
 def test_voice_tts_contract_is_strict():
@@ -745,7 +686,6 @@ def test_manager_gives_console_and_voice_one_ephemeral_runtime_identity(options,
     try:
         manager.start(options)
         assert len(captured) == 2
-        assert captured[0]["LONGMEMORY_MEMORY_TRANSPORT"] == "runtime"
         assert captured[0]["LONGMEMORY_RUNTIME_TOKEN"] == captured[1]["LONGMEMORY_RUNTIME_TOKEN"]
         assert captured[0]["LONGMEMORY_RUNTIME_URL"].endswith("/api/internal/memory/prepare")
     finally:
@@ -885,14 +825,11 @@ def test_manager_syncs_selected_voice_model_and_memory_after_ports_are_free(opti
     manager = runtime.Manager()
     try:
         manager.start(selected)
-        assert calls[0][2:] == ("official", {})
-        assert calls[1][2:] == ("official", {})
-        assert calls[2][2] == "official"
-        assert calls[2][3] == {"apply": True, "expected_digest": "2" * 64}
-        assert memory_calls[0][2:] == ("longmemory", {})
-        assert memory_calls[1][2:] == ("longmemory", {})
-        assert memory_calls[2][2] == "longmemory"
-        assert memory_calls[2][3] == {"apply": True, "expected_digest": "3" * 64}
+        assert not calls
+        assert memory_calls[0][2:] == ("hy_memory", {})
+        assert memory_calls[1][2:] == ("hy_memory", {})
+        assert memory_calls[2][2] == "hy_memory"
+        assert memory_calls[2][3] == {"apply": True, "expected_digest": "2" * 64}
         assert network_calls == [
             (voice_root, "192.168.1.9", False),
             (voice_root, "192.168.1.9", True),
@@ -904,12 +841,12 @@ def test_manager_syncs_selected_voice_model_and_memory_after_ports_are_free(opti
         assert vad_calls[0][2:] == ("normal", {})
         assert vad_calls[1][2:] == ("normal", {})
         assert vad_calls[2][2] == "normal"
-        assert vad_calls[2][3] == {"apply": True, "expected_digest": "4" * 64}
+        assert vad_calls[2][3] == {"apply": True, "expected_digest": "3" * 64}
         # console、8000、8003、8768、8766 五个监听位都通过后，才允许第一次配置检查。
         assert ordering[:5] == ["port"] * 5
         assert ordering[5:] == [
-            "network_check", "tts_check", "model_check", "memory_check", "vad_check",
-            "network_apply", "tts_check", "tts_apply", "model_check", "model_apply",
+            "network_check", "tts_check", "memory_check", "vad_check",
+            "network_apply", "tts_check", "tts_apply",
             "memory_check", "memory_apply", "vad_check", "vad_apply",
         ]
     finally:
@@ -1053,15 +990,15 @@ def test_daily_summary_uses_human_labels_instead_of_internal_enums(monkeypatch):
     spec.loader.exec_module(app)
 
     summary = app._summary_text(
-        True, "memories", "elysia_v1", "llm", "hybrid", "voxcpm2",
-        True, False, "xiaozhi_local", model_profile="official",
+        True, "memories", "elysia_v1", "voxcpm2",
+        True, model_profile="official",
         voice_model_profile="campus",
     )
     assert summary == (
         "网页＋圆屏语音  ·  打开记忆管理  ·  爱莉希雅风格\n"
-        "网页：官方 DeepSeek  ·  模型辅助提取  ·  关键词＋语义召回\n"
-        "圆屏：学校模型  ·  小智本地摘要  ·  VoxCPM2 本地声音  ·  普通拾音\n"
-        "记忆管理：允许单条删除  ·  实验开关：均关闭"
+        "网页：官方 DeepSeek  ·  Hy-Memory\n"
+        "圆屏：学校模型  ·  Hy-Memory  ·  VoxCPM2 本地声音  ·  普通拾音\n"
+        "记忆管理：允许单条删除"
     )
     assert not {"elysia_v1", "llm", "hybrid", "voxcpm2"}.intersection(summary.split())
 
@@ -1074,13 +1011,8 @@ def test_daily_recommendation_keeps_experimental_work_disabled():
         "voice_model_profile": "campus",
         "voice_mode": "pipeline",
         "memory_backend": "hy_memory",
-        "memory_extraction": "llm",
-        "memory_retrieval": "hybrid",
         "tts_backend": "cosyvoice3",
         "vad_profile": "normal",
-        "memory_consolidation": False,
-        "l1_sufficiency_shadow": False,
-        "l2_sufficiency_shadow": False,
     }
 
 

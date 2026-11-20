@@ -25,12 +25,6 @@ DEFAULTS = {
     "network_auto": False,
     "lan_interface_id": "",
     "role": "elysia_v1",
-    "memory_extraction": "rules",
-    "memory_retrieval": "keyword",
-    "memory_consolidation": False,
-    "l1_sufficiency_shadow": False,
-    "l2_sufficiency_shadow": False,
-    "embedding_model_dir": "",
     # 当前 V1 日用声音以 CosyVoice 3 为正式选择；Edge 仍是显式联网回退，
     # sanoTTS 只保留作速度基线。已有共享指针始终优先于这个首次默认值。
     "tts_backend": "cosyvoice3",
@@ -45,12 +39,10 @@ _CHOICES = {
     "cosy_delivery_mode": {"buffered", "incremental", "adaptive"},
     "start_page": {"overview", "chat", "device", "memories", "settings"},
     "role": {"elysia_v1", "plain_v1"},
-    "memory_extraction": {"rules", "llm"},
-    "memory_retrieval": {"keyword", "hybrid"},
     "tts_backend": {"edge", "voxcpm2", "sanotts", "cosyvoice3"},
     "vad_profile": {"normal", "noisy", "close_talk"},
 }
-_PATH_FIELDS = {"database", "voice_root", "embedding_model_dir", "sanotts_source_root"}
+_PATH_FIELDS = {"database", "voice_root", "sanotts_source_root"}
 
 
 def load_preferences(path: Path) -> dict:
@@ -65,12 +57,6 @@ def load_preferences(path: Path) -> dict:
         return result
     if isinstance(raw.get("voice"), bool):
         result["voice"] = raw["voice"]
-    if isinstance(raw.get("memory_consolidation"), bool):
-        result["memory_consolidation"] = raw["memory_consolidation"]
-    if isinstance(raw.get("l1_sufficiency_shadow"), bool):
-        result["l1_sufficiency_shadow"] = raw["l1_sufficiency_shadow"]
-    if isinstance(raw.get("l2_sufficiency_shadow"), bool):
-        result["l2_sufficiency_shadow"] = raw["l2_sufficiency_shadow"]
     for field, allowed in _CHOICES.items():
         value = raw.get(field)
         if isinstance(value, str) and value in allowed:
@@ -114,20 +100,6 @@ def save_preferences(path: Path, values: dict) -> None:
         "network_auto": values.get('network_auto') is True,
         "lan_interface_id": str(values.get('lan_interface_id', ''))[:64],
         "role": values.get("role", DEFAULTS["role"]),
-        "memory_extraction": values.get(
-            "memory_extraction", DEFAULTS["memory_extraction"]
-        ),
-        "memory_retrieval": values.get(
-            "memory_retrieval", DEFAULTS["memory_retrieval"]
-        ),
-        "memory_consolidation": bool(values.get("memory_consolidation", False)),
-        "l1_sufficiency_shadow": bool(
-            values.get("l1_sufficiency_shadow", False)
-        ),
-        "l2_sufficiency_shadow": bool(
-            values.get("l2_sufficiency_shadow", False)
-        ),
-        "embedding_model_dir": str(values.get("embedding_model_dir", ""))[:2048],
         "tts_backend": values.get("tts_backend", DEFAULTS["tts_backend"]),
         "sanotts_source_root": str(values.get("sanotts_source_root", ""))[:2048],
         "vad_profile": values.get("vad_profile", DEFAULTS["vad_profile"]),

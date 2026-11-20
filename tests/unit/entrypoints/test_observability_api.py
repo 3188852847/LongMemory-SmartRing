@@ -42,7 +42,7 @@ def test_authenticated_summary_and_safe_failure_metadata(tmp_path):
         listener = socket.socket()
         listener.bind(("127.0.0.1", 0))
         port = listener.getsockname()[1]
-        app = create_app(port=port, bridge=Bridge(), diagnostics=observer, proactive_schedule_enabled=False)
+        app = create_app(port=port, bridge=Bridge(), diagnostics=observer)
 
         async def failed(_request):
             raise RuntimeError("synthetic-api-key and private conversation")
@@ -113,7 +113,7 @@ def test_separate_http_client_receives_id_linked_to_memory_stage(tmp_path):
         listener.bind(("127.0.0.1", 0))
         port = listener.getsockname()[1]
         app = create_app(port=port, bridge=Bridge(), diagnostics=observer,
-                         memory_runtime_token="synthetic-internal-token", proactive_schedule_enabled=False)
+                         memory_runtime_token="synthetic-internal-token")
 
         async def probe(_request):
             await asyncio.to_thread(log_event, "context_built", turn_id="synthetic-cross-process-turn", count=0)

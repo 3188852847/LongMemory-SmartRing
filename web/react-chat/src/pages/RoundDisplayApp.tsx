@@ -238,7 +238,7 @@ export function RoundDisplayApp() {
   } : skin;
   const blocked = Boolean(systemCopy[system]);
   const powerLabel = system === 'charging' ? '充电中' : system === 'low_battery' ? '电量低' : '';
-  const sidebar = <ConsoleNav active="display" legacyPath="/"/>;
+  const sidebar = <ConsoleNav active="display"/>;
 
   return <AppShell subtitle="智能圆屏交互实验台" className="display-preview-shell" sidebar={sidebar}>
     <PageHeader eyebrow="体验设计" title="圆屏状态预览" description="在网页上和大肥鱼互动，预览圆屏的表情与对话状态。"/>

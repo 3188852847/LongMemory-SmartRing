@@ -45,11 +45,8 @@ def test_preferences_roundtrip_and_never_persist_delete_permission(tmp_path):
     loaded = preferences.load_preferences(path)
     assert loaded["voice"] is True
     assert loaded["start_page"] == "settings"
-    assert loaded["memory_retrieval"] == "hybrid"
-    assert loaded["memory_consolidation"] is True
-    assert loaded["l1_sufficiency_shadow"] is True
-    assert loaded["l2_sufficiency_shadow"] is True
     assert loaded["http_risk_ack"] is True
+    assert "memory_retrieval" not in loaded
     assert "allow_memory_delete" not in raw
     assert "must-not-be-written" not in raw
 

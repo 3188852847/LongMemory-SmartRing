@@ -8,15 +8,12 @@ from pathlib import Path
 
 import pytest
 
-from longmemory.bootstrap import assemble_backend, build_backend_runtime, build_legacy_runtime
-from longmemory.entrypoints.api.memory_backend import MemoryBackend
-from longmemory.entrypoints.api.method_management import LegacyMemoryAdministration
+from longmemory.bootstrap import assemble_backend, build_backend_runtime
 from longmemory.methods.backend_contracts import ManagementCapabilities, MemoryItem, MemoryPage, StateResource
 from longmemory.methods.contracts import (
     MemoryEvent, MemorySupport, MethodCapabilities, ObservationResult,
     RetrievedTrace, UnsupportedCapabilityError,
 )
-from longmemory.methods.longmemory_v1.method import LongMemoryV1
 
 
 NOW = datetime(2026, 10, 19, tzinfo=UTC)
@@ -114,15 +111,10 @@ def directory_runtime(root, *, create=True, management=True, idempotent=True):
     return build_backend_runtime(assembly, clock=lambda: NOW), engine
 
 
-@pytest.mark.parametrize("kind", ["legacy", "directory"])
-def test_unified_runtime_management_and_reopen(tmp_path, kind):
+def test_unified_runtime_management_and_reopen(tmp_path):
     def open_runtime(create):
-        if kind == "directory":
-            return directory_runtime(tmp_path, create=create)[0]
-        path = tmp_path / "legacy.db"
-        method = LongMemoryV1(path, allow_cross_thread=True)
-        return build_legacy_runtime(path, method=method, clock=lambda: NOW,
-            management=LegacyMemoryAdministration(MemoryBackend(path, allow_delete=True, allow_correction=True)))
+        return directory_runtime(tmp_path, create=create)[0]
+
     runtime = open_runtime(True)
     try:
         turn = runtime.prepare_user("我养了一只叫豆包的猫")
@@ -349,11 +341,9 @@ def test_neutral_http_management_chat_and_legacy_rejection(tmp_path, writes_allo
                 headers = {"Origin": base, "X-Console-CSRF": csrf["csrf"]}
                 state = await (await client.get(base + "/api/memory-engine")).json()
                 assert state["state_resources"][0]["kind"] == "directory"
-                config = await (await client.get(base + "/api/memory-config")).json()
-                assert config["representation"] == "method_defined" and not config["allow_clear"]
-                for path in ("/api/memories", "/api/personas", "/api/scenarios", "/api/proactive-policy"):
+                for path in ("/api/memory-backends", "/api/memory-config", "/api/memories", "/api/personas", "/api/scenarios", "/api/proactive-policy"):
                     response = await client.get(base + path)
-                    assert response.status == 501, (path, await response.text())
+                    assert response.status == 404, (path, await response.text())
                 # 真实聊天后端可消费 writes=None，助手只进入平台来源库。
                 turn = await asyncio.to_thread(chat.run, "我养了一只叫豆包的猫", ())
                 assert turn["status"] == "completed", turn

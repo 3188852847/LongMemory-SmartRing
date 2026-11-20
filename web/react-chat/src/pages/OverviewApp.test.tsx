@@ -13,14 +13,13 @@ describe('系统总览', () => {
       if (path === '/api/chat-config') return {enabled:true,database:'synthetic.db',model:'SyntheticModel',role:'测试角色',provider:'openai_compatible',method:'longmemory_daily_llm_v2',retrieval:'keyword_dense_rrf_v1',model_health:{state:'available',code:null,checked_at:'2026-09-10T00:00:00Z'}};
       if (path === '/api/device') return {connection_count:1,ready:true,read_volume_supported:true,set_volume_supported:true,read_status_supported:true,set_brightness_supported:true,set_theme_supported:true,aec_advertised:true};
       if (path === '/api/runtime-status') return {enabled:true,state:'ready',reason:null,updated_at:'2026-09-10T00:00:00Z',age_seconds:0.4,services:{console:'ready',voice:'running',voxcpm2:'disabled'}};
-      if (path.startsWith('/api/memories?')) return {total:12,limit:1,offset:0,items:[]};
       throw new Error(`unexpected path: ${path}`);
     });
     const query = new QueryClient({defaultOptions:{queries:{retry:false}}});
-    render(<QueryClientProvider client={query}><MemoryRouter><KnownMemoryEngine kind="legacy"><OverviewApp/></KnownMemoryEngine></MemoryRouter></QueryClientProvider>);
+    render(<QueryClientProvider client={query}><MemoryRouter><KnownMemoryEngine kind="hy"><OverviewApp/></KnownMemoryEngine></MemoryRouter></QueryClientProvider>);
 
     expect((await screen.findAllByText('SyntheticModel')).length).toBe(2);
-    expect(await screen.findByText('12 条')).toBeTruthy();
+    expect(await screen.findByText('查看我的记忆')).toBeTruthy();
     expect(screen.getAllByText('已连接').length).toBeGreaterThan(0);
     const details = screen.getByText('查看服务、回答与圆屏链路详情').closest('details')!;
     expect(details.open).toBe(false);

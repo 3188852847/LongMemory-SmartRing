@@ -2,92 +2,19 @@
 
 from datetime import UTC, datetime
 
-from longmemory.adapters.storage.sqlite_conversation_store import (
-    SQLiteConversationStore,
-)
-from longmemory.adapters.storage.sqlite_memory_store import SQLiteMemoryStore
-from longmemory.core.common.identifiers import MemoryId, MessageId
-from longmemory.core.conversation.models import (
-    ConversationMessage,
-    MessageRole,
-)
-from longmemory.core.memory.models import (
-    CURRENT_USER_SUBJECT_ID,
-    AtomicMemory,
-    MemoryEvidence,
-    MemorySourceType,
-)
 from longmemory.infrastructure.database.connection import open_database
 from longmemory.infrastructure.database.definition import SCHEMA_VERSION
 from longmemory.infrastructure.database.schema import initialize_schema
 
 
-def test_message_and_memory_survive_database_reopen(tmp_path) -> None:
-    """关闭并重新打开数据库后，消息和记忆仍然存在。"""
-
-    database_path = tmp_path / "longmemory.db"
-    created_at = datetime(2026, 9, 3, 10, 0, tzinfo=UTC)
-
-    message = ConversationMessage(
-        id=MessageId("message-001"),
-        role=MessageRole.USER,
-        content="我养了一只叫豆包的猫。",
-        created_at=created_at,
-    )
-
-    memory = AtomicMemory(
-        id=MemoryId("memory-001"),
-        subject_id=CURRENT_USER_SUBJECT_ID,
-        content="用户养了一只叫豆包的猫。",
-        recorded_at=created_at,
-    )
-    evidence = MemoryEvidence(
-        memory_id=memory.id,
-        source_message_id=message.id,
-        source_type=MemorySourceType.USER_STATED,
-        linked_at=created_at,
-    )
-
-    # 第一次连接：创建数据库并写入 L0 和 L1。
-    first_connection = open_database(database_path)
-    initialize_schema(first_connection)
-
-    first_conversation_store = SQLiteConversationStore(first_connection)
-    first_memory_store = SQLiteMemoryStore(first_connection)
-
-    first_conversation_store.save(message)
-    first_memory_store.save(memory, evidence)
-
-    first_connection.close()
-
-    # 第二次连接：模拟程序重新启动后重新打开数据库。
-    reopened_connection = open_database(database_path)
-    initialize_schema(reopened_connection)
-
-    reopened_conversation_store = SQLiteConversationStore(reopened_connection)
-    reopened_memory_store = SQLiteMemoryStore(reopened_connection)
-
-    restored_message = reopened_conversation_store.get(message.id)
-    restored_memory = reopened_memory_store.get(memory.id)
-
-    assert restored_message == message
-    assert restored_memory == memory
-    assert reopened_memory_store.list_all() == (memory,)
-    assert reopened_memory_store.list_evidence(memory.id) == (
-        evidence,
-    )
-
-    assert reopened_memory_store.find_by_content(
-        "用户养了一只叫豆包的猫。",
-        subject_id=CURRENT_USER_SUBJECT_ID,
-    ) == memory
-
-    assert reopened_memory_store.find_by_content(
-        "用户养了一只叫不存在的猫。",
-        subject_id=CURRENT_USER_SUBJECT_ID,
-    ) is None
-
-    reopened_connection.close()
+def seed_history(connection, event, fact, content, source_type, now):
+    connection.execute("INSERT INTO conversation_messages (id, role, content, created_at) VALUES (?, 'user', ?, ?)",
+                       (event, content, now.isoformat()))
+    connection.execute("INSERT INTO atomic_memories (id, subject_id, content, recorded_at) VALUES (?, 'user:self', ?, ?)",
+                       (fact, content, now.isoformat()))
+    connection.execute("INSERT INTO memory_evidence (memory_id, source_message_id, source_type, linked_at) VALUES (?, ?, ?, ?)",
+                       (fact, event, source_type, now.isoformat()))
+    connection.commit()
 
 
 def test_v1_database_is_upgraded_without_losing_source(
@@ -150,33 +77,17 @@ def test_v1_database_is_upgraded_without_losing_source(
 
     initialize_schema(connection)
 
-    store = SQLiteMemoryStore(connection)
-    evidence = store.list_evidence(MemoryId("memory-v1"))
-
-    assert connection.execute(
-        "PRAGMA user_version"
-    ).fetchone()[0] == SCHEMA_VERSION
-    assert store.get(MemoryId("memory-v1")) == AtomicMemory(
-        id=MemoryId("memory-v1"),
-        subject_id=CURRENT_USER_SUBJECT_ID,
-        content="用户养了一只叫豆包的猫。",
-        recorded_at=created_at,
-    )
+    assert connection.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION
+    assert tuple(connection.execute("SELECT subject_id, content, recorded_at FROM atomic_memories WHERE id='memory-v1'").fetchone()) == (
+        "user:self", "用户养了一只叫豆包的猫。", created_at.isoformat())
     assert "source_message_id" not in {
         row["name"]
         for row in connection.execute(
             "PRAGMA table_info(atomic_memories)"
         ).fetchall()
     }
-    assert evidence == (
-        MemoryEvidence(
-            memory_id=MemoryId("memory-v1"),
-            source_message_id=MessageId("message-v1"),
-            source_type=MemorySourceType.USER_STATED,
-            linked_at=created_at,
-        ),
-    )
-
+    assert tuple(connection.execute("SELECT source_message_id, source_type, linked_at FROM memory_evidence WHERE memory_id='memory-v1'").fetchone()) == (
+        "message-v1", "user_stated", created_at.isoformat())
     connection.close()
 
 
@@ -253,18 +164,12 @@ def test_v2_database_preserves_multiple_evidence_during_upgrade(
 
     initialize_schema(connection)
 
-    store = SQLiteMemoryStore(connection)
 
     assert connection.execute(
         "PRAGMA user_version"
     ).fetchone()[0] == SCHEMA_VERSION
-    assert tuple(
-        evidence.source_message_id
-        for evidence in store.list_evidence(MemoryId("memory-v2"))
-    ) == (
-        MessageId("message-v2-1"),
-        MessageId("message-v2-2"),
-    )
+    assert [row[0] for row in connection.execute("SELECT source_message_id FROM memory_evidence WHERE memory_id='memory-v2' ORDER BY source_message_id")] == [
+        "message-v2-1", "message-v2-2"]
     assert connection.execute(
         "PRAGMA foreign_key_check"
     ).fetchall() == []
@@ -304,17 +209,10 @@ def test_v3_upgrade_accepts_user_corrected_evidence(tmp_path) -> None:
     initialize_schema(connection)
 
     now = datetime(2026, 9, 6, tzinfo=UTC)
-    SQLiteConversationStore(connection).save(ConversationMessage(
-        MessageId("correction-message"), MessageRole.USER, "用户的猫叫年糕。", now
-    ))
-    memory = AtomicMemory(MemoryId("corrected-memory"), CURRENT_USER_SUBJECT_ID,
-                          "用户的猫叫年糕。", now)
-    evidence = MemoryEvidence(memory.id, MessageId("correction-message"),
-                              MemorySourceType.USER_CORRECTED, now)
-    SQLiteMemoryStore(connection).save(memory, evidence)
+    seed_history(connection, "correction-message", "corrected-memory", "用户的猫叫年糕。", "user_corrected", now)
     assert connection.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION
     assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
-    assert SQLiteMemoryStore(connection).list_evidence(memory.id) == (evidence,)
+    assert connection.execute("SELECT source_type FROM memory_evidence WHERE memory_id='corrected-memory'").fetchone()[0] == "user_corrected"
     connection.close()
 
 
@@ -335,20 +233,12 @@ def test_v4_upgrade_adds_empty_l2_tables_without_changing_l1(tmp_path) -> None:
         PRAGMA user_version = 4;
     """)
     now = datetime(2026, 9, 6, 8, 0, tzinfo=UTC)
-    SQLiteConversationStore(connection).save(ConversationMessage(
-        MessageId("source-v4"), MessageRole.USER, "我周五要答辩。", now
-    ))
-    memory = AtomicMemory(
-        MemoryId("memory-v4"), CURRENT_USER_SUBJECT_ID, "用户周五要答辩。", now
-    )
-    SQLiteMemoryStore(connection).save(memory, MemoryEvidence(
-        memory.id, MessageId("source-v4"), MemorySourceType.USER_STATED, now
-    ))
+    seed_history(connection, "source-v4", "memory-v4", "用户周五要答辩。", "user_stated", now)
 
     initialize_schema(connection)
 
     assert connection.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION
-    assert SQLiteMemoryStore(connection).get(memory.id) == memory
+    assert connection.execute("SELECT content FROM atomic_memories WHERE id='memory-v4'").fetchone()[0] == "用户周五要答辩。"
     assert connection.execute("SELECT count(*) FROM scenario_memories").fetchone()[0] == 0
     assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
     connection.close()

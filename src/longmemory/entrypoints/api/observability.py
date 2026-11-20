@@ -26,7 +26,7 @@ def operation_name(path):
     for prefix, name in (("/api/chats", "chat"), ("/api/chat-config", "chat"),
                          ("/api/chat-model", "chat"), ("/api/chat-memory-feedback", "chat"),
                          ("/api/device", "device"),
-                         ("/api/memories", "memory"), ("/api/observability", "diagnostics")):
+                         ("/api/memory-engine", "memory"), ("/api/observability", "diagnostics")):
         if path == prefix or path.startswith(prefix + "/"):
             return name
     return "console"

@@ -435,8 +435,10 @@ def test_complete_segment_exhausts_model_before_http_consumer_can_disconnect():
 
 
 @pytest.fixture
-def constructor_runtime(monkeypatch):
+def constructor_runtime(monkeypatch, tmp_path):
     """只替换构造器的外部依赖；服务自己的初始化顺序与状态生成保持真实。"""
+    profile_store = service.VoiceProfileStore(tmp_path)
+    monkeypatch.setattr(service, "VoiceProfileStore", lambda root: profile_store)
     state = SimpleNamespace(validations=[], registrations=[], warmups=[], installations=[])
     state.encoder = SimpleNamespace(forward_one_step=lambda *_args: "original")
     state.runtime = SimpleNamespace(

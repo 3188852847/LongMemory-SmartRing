@@ -62,17 +62,6 @@ export function MemoryEngineProvider({children}:{children:ReactNode}) {
   return <MemoryEngineContext.Provider value={value}>{children}</MemoryEngineContext.Provider>;
 }
 
-export const legacyMemorySummaryKey = ['legacy-memory-entry-summary'] as const;
-
-/** 只保留已确认旧引擎的兼容统计；Hy 总览/聊天绝不为计数进入 SDK 或共享锁。 */
-export function useMemorySummary(enabled=true) {
-  const engine=useMemoryEngine();
-  return useQuery({queryKey:[...legacyMemorySummaryKey,engine.identity?.method],retry:false,staleTime:30000,
-    enabled:enabled&&engine.phase==='ready'&&engine.kind==='legacy',
-    queryFn:async()=>{const data=await api.request<{total:number}>('/api/memories?q=&state=active&offset=0&limit=1');if(!Number.isInteger(data.total)||data.total<0)throw new Error('memory_count_invalid');return data;},
-  });
-}
-
 export function memoryEngineLabel(engine:MemoryEngineContextValue) {
   if(engine.kind==='hy')return engine.phase==='error'?'Hy-Memory（上次确认）':'Hy-Memory';
   if(engine.kind==='legacy')return engine.phase==='error'?'原记忆引擎（上次确认）':'原记忆引擎';
@@ -87,11 +76,4 @@ export function retrievalLabel(retrieval?:string) {
   if(retrieval?.startsWith('hy_'))return 'Hy 分层召回';
   if(retrieval?.startsWith('keyword'))return '关键词基线';
   return retrieval||'尚未提供';
-}
-
-
-/** 仅显式旧库管理可用这项声明；不改变全站未初始化身份或猜测方法名。 */
-export function canBrowseLegacyMemory(engine:MemoryEngineContextValue) {
-  return engine.phase==='ready'&&engine.identity?.configured===true&&engine.identity.legacy_sqlite===true&&
-    engine.identity.representation==='atomic_fact'&&['available','not_initialized'].includes(engine.identity.state);
 }

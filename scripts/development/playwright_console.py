@@ -1,7 +1,7 @@
 """为 Playwright 启动一次性 Fake 控制台，不读取真实配置或个人数据。"""
 
 import argparse
-import sqlite3
+import importlib.util
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -12,7 +12,8 @@ from longmemory.entrypoints.api.chat_backend import ChatBackend
 from longmemory.entrypoints.api.server import create_app
 from longmemory.infrastructure.config.round_skins import RoundSkinStore
 from longmemory.infrastructure.media.round_wallpaper_library import RoundWallpaperLibrary
-from longmemory.methods.longmemory_v1.method import LongMemoryV1
+from longmemory.bootstrap import build_hy_memory_runtime
+from longmemory.methods.hy_memory.settings import HySettings
 
 
 class OfflineBridge:
@@ -38,41 +39,14 @@ class OfflineBridge:
         return None
 
 
-def seed_owner_review_cases(database: Path) -> None:
-    """只给一次性库写入可判定的重复与矛盾样例，验证所有者复核护栏。"""
-
-    sources = [
-        ("source-duplicate-a", "我喜欢乌龙茶。", "2026-09-13T00:00:00+00:00"),
-        ("source-duplicate-b", "我确实喜欢乌龙茶", "2026-09-13T00:01:00+00:00"),
-        ("source-conflict-a", "我喜欢喝咖啡。", "2026-09-13T00:02:00+00:00"),
-        ("source-conflict-b", "我不喜欢喝咖啡。", "2026-09-13T00:03:00+00:00"),
-    ]
-    memories = [
-        ("memory-duplicate-a", "用户喜欢乌龙茶。", sources[0][2]),
-        ("memory-duplicate-b", "此人喜欢乌龙茶", sources[1][2]),
-        ("memory-conflict-a", "用户喜欢喝咖啡。", sources[2][2]),
-        ("memory-conflict-b", "用户不喜欢喝咖啡。", sources[3][2]),
-    ]
-    with sqlite3.connect(database) as connection:
-        connection.executemany(
-            "INSERT INTO conversation_messages(id,role,content,created_at) "
-            "VALUES (?,'user',?,?)",
-            sources,
-        )
-        connection.executemany(
-            "INSERT INTO atomic_memories "
-            "(id,subject_id,content,recorded_at,valid_from,valid_to,retired_at,"
-            "superseded_by_id) VALUES (?,'user:self',?,?,NULL,NULL,NULL,NULL)",
-            memories,
-        )
-        connection.executemany(
-            "INSERT INTO memory_evidence(memory_id,source_message_id,source_type,linked_at) "
-            "VALUES (?,?,'user_stated',?)",
-            [
-                (memory[0], source[0], source[2])
-                for memory, source in zip(memories, sources, strict=True)
-            ],
-        )
+def offline_runtime(root):
+    fixture = Path(__file__).resolve().parents[2] / "tests/fixtures/hy_memory_fake_worker.py"
+    spec = importlib.util.spec_from_file_location("offline_hy_worker", fixture)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return build_hy_memory_runtime(settings=HySettings(user_id="local-browser-test"),
+        state_directory=root / "hy-engine", source_path=root / "sources.db",
+        create=True, client_factory=module.PersistentFakeClient)
 
 
 def main():
@@ -87,10 +61,9 @@ def main():
     temporary_root.mkdir(parents=True, exist_ok=True)
     with TemporaryDirectory(prefix="run-", dir=temporary_root) as directory:
         root = Path(directory)
-        database = root / "synthetic.db"
-        LongMemoryV1(database).close()
-        seed_owner_review_cases(database)
-        backend = ChatBackend(database, FakeAnswerGenerator())
+        runtime = offline_runtime(root)
+        database = runtime.database
+        backend = ChatBackend(database, FakeAnswerGenerator(), runtime=runtime)
         # 仅复用版本化的内置皮肤；选择、自定义皮肤和媒体都属于本次临时工程。
         # create_app 的默认目录是日用项目，测试必须显式覆盖这两个本地资产入口。
         skins = RoundSkinStore(root)
@@ -103,7 +76,6 @@ def main():
                 chat_backend=backend,
                 round_skin_store=skins,
                 round_wallpaper_library=RoundWallpaperLibrary(root / "wallpapers"),
-                proactive_schedule_enabled=False,
                 allow_memory_correction=True,
                 allow_memory_delete=True,
                 otto_asset_root=args.otto_assets,

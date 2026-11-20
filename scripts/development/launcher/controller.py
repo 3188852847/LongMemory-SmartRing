@@ -75,7 +75,6 @@ class LauncherController:
         for key, default in (
             ('database', self.root / 'data/databases/xiaozhi-demo-v1.db'),
             ('voice_root', self.root / 'local/runtime/xiaozhi-esp32-server/main/xiaozhi-server'),
-            ('embedding_model_dir', self.root / 'local/runtime/models/bge-small-zh-v1.5/7999e1d3359715c523056ef9478215996d62a620'),
             ('sanotts_source_root', self.root / 'local/runtime/sanoTTS')):
             if not values[key]:
                 values[key] = str(default)
@@ -230,11 +229,6 @@ class LauncherController:
                        cosy_delivery_mode=values['cosy_delivery_mode'],
                        lan_ip=values['lan_ip'], role=values['role'], consent=values['http_risk_ack'],
                        voice_ws_port=values['voice_ws_port'], voice_http_port=values['voice_http_port'],
-                       memory_extraction=values['memory_extraction'], memory_retrieval=values['memory_retrieval'],
-                       enable_memory_consolidation=values['memory_consolidation'],
-                       enable_l1_sufficiency_shadow=values['l1_sufficiency_shadow'],
-                       enable_l2_sufficiency_shadow=values['l2_sufficiency_shadow'],
-                       embedding_model_dir=Path(values['embedding_model_dir']),
                        sanotts_source_root=Path(values['sanotts_source_root']),
                        tts_backend=values['tts_backend'], vad_profile=values['vad_profile'],
                        model_profile=values['model_profile'], voice_model_profile=values['voice_model_profile'],

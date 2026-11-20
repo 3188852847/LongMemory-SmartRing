@@ -5,13 +5,17 @@ import hashlib
 import json
 from pathlib import Path
 
-from longmemory.core.memory.retrieval.vector import fingerprint
 
 MODEL_ID = "BAAI/bge-small-zh-v1.5"
 REVISION = "7999e1d3359715c523056ef9478215996d62a620"
 MODEL_FILES = ("config.json", "model.safetensors", "tokenizer.json", "tokenizer_config.json",
                "special_tokens_map.json", "vocab.txt")
 QUERY_PREFIX = "为这个句子生成表示以用于检索相关文章："
+
+
+def fingerprint(value) -> str:
+    return hashlib.sha256(json.dumps(value, ensure_ascii=False, sort_keys=True,
+                                     allow_nan=False).encode("utf-8")).hexdigest()
 
 
 def snapshot_hashes(directory):

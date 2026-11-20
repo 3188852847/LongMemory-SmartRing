@@ -8,9 +8,8 @@ import wave
 from test_console import console, login
 from longmemory.entrypoints.api import server
 from longmemory.entrypoints.api.voice_settings import VoiceSettings
-from longmemory.entrypoints.api.chat_backend import ChatBackend
+from test_chat_console import synthetic_backend
 from longmemory.adapters.llm.fake import FakeAnswerGenerator
-from longmemory.methods.longmemory_v1.method import LongMemoryV1
 
 
 def synthetic_wav():
@@ -23,8 +22,7 @@ def synthetic_wav():
 
 def test_authenticated_upload_profile_conflict_preview_and_no_global_limit_change(tmp_path, monkeypatch):
     backend = VoiceSettings(tmp_path / 'server', tmp_path / 'synthetic.db', tmp_path)
-    LongMemoryV1(backend.database).close()
-    chat = ChatBackend(backend.database, FakeAnswerGenerator())
+    chat = synthetic_backend(backend.database, FakeAnswerGenerator())
     monkeypatch.setattr(server, 'VoiceSettings', lambda *args: backend)
     monkeypatch.setattr(backend, 'cosy_profile_service_state', lambda: 'ready')
     calls = []
@@ -68,8 +66,7 @@ def test_authenticated_upload_profile_conflict_preview_and_no_global_limit_chang
 
 def test_reference_upload_bounded_and_no_write_on_invalid_wave(tmp_path, monkeypatch):
     backend = VoiceSettings(tmp_path / 'server', tmp_path / 'synthetic.db', tmp_path)
-    LongMemoryV1(backend.database).close()
-    chat = ChatBackend(backend.database, FakeAnswerGenerator())
+    chat = synthetic_backend(backend.database, FakeAnswerGenerator())
     monkeypatch.setattr(server, 'VoiceSettings', lambda *args: backend)
     monkeypatch.setattr(backend, 'cosy_profile_service_state', lambda: 'ready')
     async def run():

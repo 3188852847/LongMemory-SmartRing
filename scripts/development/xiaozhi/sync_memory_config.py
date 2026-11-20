@@ -11,14 +11,6 @@ from config_paths import config_path
 from sync_role import commit_change
 
 
-PROFILES = {
-    "hy_memory": "LongMemory",
-    "longmemory": "LongMemory",
-    "xiaozhi_local": "mem_local_short",
-    "none": "nomem",
-}
-
-
 def _mapping_value(node, key, yaml):
     if not isinstance(node, yaml.MappingNode):
         raise ValueError("ambiguous_config")
@@ -31,7 +23,7 @@ def _mapping_value(node, key, yaml):
 def prepare(server: Path, profile: str):
     import yaml
 
-    if profile not in PROFILES:
+    if profile != "hy_memory":
         raise ValueError("unknown_profile")
     path = config_path(server)
     if path.is_symlink() or not path.is_file() or path.stat().st_size > 1024 * 1024:
@@ -49,36 +41,19 @@ def prepare(server: Path, profile: str):
     longmemory = memories.get("LongMemory")
     if not isinstance(longmemory, dict) or longmemory.get("type") != "longmemory" or not longmemory.get("allowed_device_id"):
         raise ValueError("missing_control_identity")
-    target_name = PROFILES[profile]
-    existing = memories.get(target_name)
-    expected_entry = ({"type": "mem_local_short", "llm": None}
-                      if profile == "xiaozhi_local" else {"type": target_name.lower()})
-    if existing is not None and (
-            not isinstance(existing, dict) or existing.get("type") != expected_entry["type"]):
-        raise ValueError("conflicting_provider")
+    target_name = "LongMemory"
     if any(isinstance(token, (yaml.tokens.AnchorToken, yaml.tokens.AliasToken)) for token in yaml.scan(text)):
         raise ValueError("unsupported_alias")
     root = yaml.compose(text)
     selected_node = _mapping_value(_mapping_value(root, "selected_module", yaml), "Memory", yaml)
-    memory_node = _mapping_value(root, "Memory", yaml)
-    if not isinstance(selected_node, yaml.ScalarNode) or not isinstance(memory_node, yaml.MappingNode):
+    if not isinstance(selected_node, yaml.ScalarNode):
         raise ValueError("ambiguous_config")
-    replacements = [(selected_node.start_mark.index, selected_node.end_mark.index,
-                     json.dumps(target_name, ensure_ascii=False))]
-    if existing is None:
-        insertion = (f"  {target_name}:\n    type: {expected_entry['type']}\n")
-        if profile == "xiaozhi_local":
-            insertion += "    llm: null\n"
-        replacements.append((memory_node.end_mark.index, memory_node.end_mark.index, insertion))
-    updated_text = text
-    for start, end, replacement in sorted(replacements, reverse=True):
-        updated_text = updated_text[:start] + replacement + updated_text[end:]
+    updated_text = text[:selected_node.start_mark.index] + json.dumps(target_name) + text[selected_node.end_mark.index:]
     expected = copy.deepcopy(config)
     expected["selected_module"]["Memory"] = target_name
-    expected["Memory"].setdefault(target_name, expected_entry)
     if yaml.safe_load(updated_text) != expected:
         raise ValueError("unexpected_config_change")
-    matches = selected.get("Memory") == target_name and existing is not None
+    matches = selected.get("Memory") == target_name
     return path, original, updated_text.encode("utf-8"), matches, {
         "profile": profile,
         "provider_name": target_name,
@@ -100,7 +75,7 @@ def action(server: Path, profile: str, *, apply=False, expected_digest=None) -> 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--server", type=Path, required=True)
-    parser.add_argument("--profile", choices=tuple(PROFILES), required=True)
+    parser.add_argument("--profile", choices=("hy_memory",), required=True)
     parser.add_argument("--action", choices=("check", "apply"), default="check")
     parser.add_argument("--expected-digest")
     try:

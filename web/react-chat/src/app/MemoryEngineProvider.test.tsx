@@ -3,12 +3,12 @@ import {fireEvent,render,screen,waitFor,within} from '@testing-library/react';
 import {QueryClient,QueryClientProvider} from '@tanstack/react-query';
 import {Link,MemoryRouter} from 'react-router-dom';
 import {ApiError,ChatApi} from '../api';
-import {MemoryEngineProvider,useMemoryEngine,useMemorySummary,memoryEngineLabel,parseMemoryIdentity} from './MemoryEngineProvider';
+import {MemoryEngineProvider,useMemoryEngine,memoryEngineLabel,parseMemoryIdentity} from './MemoryEngineProvider';
 import {ConsoleNav} from '../components/AppShell';
 import {hyIdentity,legacyIdentity} from '../tests/memoryEngine';
 
 afterEach(()=>vi.restoreAllMocks());
-function Surface(){const engine=useMemoryEngine();const count=useMemorySummary();return <><p>聊天主体始终可用</p><p role="status">{memoryEngineLabel(engine)}</p><p>{engine.issue}</p><p>{count.data?.total}</p><button onClick={engine.refresh}>重新读取身份</button><ConsoleNav active="overview" legacyPath="/chat"/><Link to="/device">到设备</Link></>;}
+function Surface(){const engine=useMemoryEngine();return <><p>聊天主体始终可用</p><p role="status">{memoryEngineLabel(engine)}</p><p>{engine.issue}</p><button onClick={engine.refresh}>重新读取身份</button><ConsoleNav active="overview"/><Link to="/device">到设备</Link></>;}
 function mount(route='/overview') {return render(<QueryClientProvider client={new QueryClient({defaultOptions:{queries:{retry:false}}})}><MemoryRouter initialEntries={[route]}><MemoryEngineProvider><Surface/></MemoryEngineProvider></MemoryRouter></QueryClientProvider>);}
 
 test('冷加载身份未返回时保持中立且不阻塞主体，Hy 不取旧配置或统计',async()=>{
@@ -23,13 +23,6 @@ test('冷加载身份未返回时保持中立且不阻塞主体，Hy 不取旧�
   expect(request.mock.calls.map(([p])=>p)).toEqual(['/api/memory-engine/identity']);
   fireEvent.click(screen.getByRole('link',{name:'到设备'}));
   expect(request.mock.calls.length).toBe(1);
-});
-
-test('只有已确认旧引擎才保留旧导航和旧统计',async()=>{
-  vi.spyOn(ChatApi.prototype,'bootstrap').mockResolvedValue(undefined);
-  const request=vi.spyOn(ChatApi.prototype,'request').mockImplementation(async path=>{if(path==='/api/memory-engine/identity')return legacyIdentity as never;if(path.startsWith('/api/memories?'))return {total:7} as never;throw new Error(path);});
-  mount();await screen.findByRole('link',{name:'原话与事实'});await screen.findByText('7');
-  expect(request.mock.calls.some(([p])=>p.startsWith('/api/memory-engine/items'))).toBe(false);
 });
 
 test('未初始化且method=null不猜旧方法，不读库',async()=>{

@@ -39,7 +39,7 @@ torch = [{ index = "pytorch-cpu", extra = "semantic", marker = "sys_platform == 
 cache-dir = ".uv-cache"
 
 [project.scripts]
-longmemory = "longmemory.entrypoints.cli.app:main"
+longmemory = "longmemory.entrypoints.api.server:main"
 longmemory-console = "longmemory.entrypoints.api.server:main"
 
 [dependency-groups]

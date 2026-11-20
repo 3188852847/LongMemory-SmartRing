@@ -8,7 +8,7 @@ import webbrowser
 from pathlib import Path
 
 from runtime import (
-    DEFAULT_BGE_MODEL, DEFAULT_SANOTTS_SOURCE, Manager, Options, ROOT, Singleton,
+    DEFAULT_SANOTTS_SOURCE, Manager, Options, ROOT, Singleton,
     VOICE_ROOT, console_url, doubao_config_module,
 )
 from network import local_addresses, config_action
@@ -374,25 +374,13 @@ def main():
     role = tk.StringVar(value=next(
         label for label, value in role_labels.items() if value == saved["role"]
     ))
-    extraction_labels = {"rules": "规则提取（基础/对照）", "llm": "模型辅助提取（日常推荐）"}
-    retrieval_labels = {"keyword": "关键词召回（基础/对照）", "hybrid": "关键词＋BGE 混合召回（日常推荐）"}
     tts_labels = {
         "edge": "EdgeTTS（联网稳定回退）",
         "voxcpm2": "VoxCPM2（本地 plain）",
         "sanotts": "sanoTTS（实验速度基线，音质较低）",
         "cosyvoice3": "CosyVoice 3（本地高质量，日常推荐）",
     }
-    memory_extraction = tk.StringVar(value=extraction_labels[saved["memory_extraction"]])
-    memory_retrieval = tk.StringVar(value=retrieval_labels[saved["memory_retrieval"]])
     allow_memory_delete = tk.BooleanVar(value=DEFAULT_SESSION_ALLOW_MEMORY_DELETE)
-    memory_consolidation = tk.BooleanVar(value=saved["memory_consolidation"])
-    l1_sufficiency_shadow = tk.BooleanVar(
-        value=saved["l1_sufficiency_shadow"]
-    )
-    l2_sufficiency_shadow = tk.BooleanVar(
-        value=saved["l2_sufficiency_shadow"]
-    )
-    embedding_model = tk.StringVar(value=saved["embedding_model_dir"] or str(DEFAULT_BGE_MODEL))
     tts_backend = tk.StringVar(value=tts_labels[saved["tts_backend"]])
     # 记录面板最后一次从共享指针吸收的值。启动前只有在用户没有亲自改过
     # 下拉框时才重新读取网页选择，避免已打开的面板覆盖控制台的新意图。
@@ -435,12 +423,6 @@ def main():
     def selected_voice_latency_mode():
         return voice_latency_labels[voice_latency_mode.get()]
 
-    def selected_extraction():
-        return "llm" if memory_extraction.get().startswith("模型") else "rules"
-
-    def selected_retrieval():
-        return "hybrid" if "BGE" in memory_retrieval.get() else "keyword"
-
     def selected_tts():
         if tts_backend.get().startswith("VoxCPM2"):
             return "voxcpm2"
@@ -475,12 +457,6 @@ def main():
             "network_auto": saved['network_auto'],
             "lan_interface_id": saved['lan_interface_id'],
             "role": selected_role(),
-            "memory_extraction": selected_extraction(),
-            "memory_retrieval": selected_retrieval(),
-            "memory_consolidation": memory_consolidation.get(),
-            "l1_sufficiency_shadow": l1_sufficiency_shadow.get(),
-            "l2_sufficiency_shadow": l2_sufficiency_shadow.get(),
-            "embedding_model_dir": embedding_model.get().strip(),
             "tts_backend": selected_tts(),
             "sanotts_source_root": sanotts_source.get().strip(),
             "vad_profile": selected_vad_profile(),
@@ -521,17 +497,11 @@ def main():
             label for label, value in model_profile_labels.items()
             if value == recommended["voice_model_profile"]
         ))
-        memory_extraction.set(extraction_labels[recommended["memory_extraction"]])
-        memory_retrieval.set(retrieval_labels[recommended["memory_retrieval"]])
         set_tts_backend(recommended["tts_backend"])
         vad_profile.set(next(
             label for label, value in vad_profile_labels.items()
             if value == recommended["vad_profile"]
         ))
-        memory_consolidation.set(recommended["memory_consolidation"])
-        l1_sufficiency_shadow.set(recommended["l1_sufficiency_shadow"])
-        l2_sufficiency_shadow.set(recommended["l2_sufficiency_shadow"])
-        embedding_model.set(str(DEFAULT_BGE_MODEL))
         try:
             save_preferences(choice_path, current_preferences())
         except (OSError, ValueError):
@@ -648,53 +618,11 @@ def main():
     _boolean_option(
         behavior_box,
         allow_memory_delete,
-        title="L1 单条删除权限",
-        description="网页仍需逐条确认；会保留 L0 原话、备份和日志。本机日常每次打开面板默认允许。",
+        title="记忆删除权限",
+        description="允许从网页删除所选记忆。",
         enabled_text="已允许",
         disabled_text="未允许",
     )
-    experiment_box = ttk.LabelFrame(
-        intelligence, text="实验与质检开关", style="Section.TLabelframe"
-    )
-    experiment_box.pack(fill="x", pady=10)
-    ttk.Label(
-        experiment_box,
-        text="通常保持关闭。开启会增加模型请求或后台工作，但不会自动提高正式回答质量。",
-        style="WarningHint.TLabel",
-        wraplength=760,
-    ).pack(anchor="w", pady=(0, 9))
-    _boolean_option(
-        experiment_box,
-        memory_consolidation,
-        title="低频自动整理",
-        description="后台按预算和风险规则尝试 L1 → L2 → L3；个人日用默认关闭。",
-    )
-    _boolean_option(
-        experiment_box,
-        l1_sufficiency_shadow,
-        title="L1 证据旁路质检",
-        description="增加模型请求并记录证据充分性判断；不改变正式召回或回答，默认关闭。",
-    )
-    _boolean_option(
-        experiment_box,
-        l2_sufficiency_shadow,
-        title="L2 证据旁路质检",
-        description="增加模型请求并记录场景证据判断；不改变正式召回或回答，默认关闭。",
-    )
-    model_resource_box = ttk.LabelFrame(
-        maintenance, text="模型资源（仅排障）", style="Section.TLabelframe"
-    )
-    model_resource_box.pack(fill="x", pady=10)
-    ttk.Label(model_resource_box, text="BGE 本地快照（仅混合召回使用）").pack(
-        anchor="w", pady=(0, 4)
-    )
-    embedding_row = ttk.Frame(model_resource_box)
-    embedding_row.pack(fill="x")
-    ttk.Entry(embedding_row, textvariable=embedding_model).pack(side="left", fill="x", expand=True)
-    ttk.Button(embedding_row, text="选择目录", command=lambda: (
-        embedding_model.set(path) if (path := filedialog.askdirectory(
-            parent=window, initialdir=embedding_model.get() or str(ROOT))) else None
-    )).pack(side="left", padx=(8, 0))
     sound_box = ttk.LabelFrame(device, text="圆屏声音", style="Section.TLabelframe")
     sound_box.pack(fill="x", pady=10)
     voice_mode_row = ttk.Frame(sound_box)
@@ -786,8 +714,7 @@ def main():
     # 路径输入仍在启动或显式同步时保存，避免每次键入都写磁盘；下面这些
     # 有限枚举和布尔选择则在用户操作时立即落盘。
     for variable in (
-        voice, voice_mode, voice_latency_mode, start_page, role, memory_extraction, memory_retrieval,
-        memory_consolidation, l1_sufficiency_shadow, l2_sufficiency_shadow,
+        voice, voice_mode, voice_latency_mode, start_page, role,
         vad_profile, consent,
     ):
         variable.trace_add("write", persist_launcher_choices)
@@ -877,27 +804,14 @@ def main():
     summary = tk.StringVar()
 
     def update_summary(*_):
-        experimental_count = sum((
-            bool(memory_consolidation.get()),
-            bool(l1_sufficiency_shadow.get()),
-            bool(l2_sufficiency_shadow.get()),
-        ))
-        tabs.tab(
-            intelligence_tab,
-            text=(f"模型与记忆 · 实验 {experimental_count}"
-                  if experimental_count else "模型与记忆"),
-        )
         mode_selection.set(
             "当前选择：文字聊天＋圆屏语音" if voice.get()
             else "当前选择：文字聊天"
         )
         summary.set(_summary_text(
-            voice.get(), start_page_labels[start_page.get()], selected_role(), selected_extraction(), selected_retrieval(),
-            selected_tts(), allow_memory_delete.get(), memory_consolidation.get(),
-            "hy_memory",
+            voice.get(), start_page_labels[start_page.get()], selected_role(),
+            selected_tts(), allow_memory_delete.get(),
             selected_vad_profile(),
-            l2_sufficiency_shadow.get(),
-            l1_sufficiency_shadow.get(),
             model_profile=selected_model_profile(),
             voice_model_profile=selected_voice_model_profile(),
             voice_mode=selected_voice_mode(),
@@ -912,10 +826,8 @@ def main():
         style="Subtitle.TLabel",
     ).pack(anchor="w", pady=(4, 0))
     for variable in (voice, voice_mode, start_page, role, model_profile, voice_model_profile,
-                     memory_extraction, memory_retrieval, tts_backend, vad_profile,
-                     allow_memory_delete,
-                     memory_consolidation, l1_sufficiency_shadow,
-                     l2_sufficiency_shadow):
+                     tts_backend, vad_profile,
+                     allow_memory_delete):
         variable.trace_add("write", update_summary)
     update_summary()
 
@@ -1091,13 +1003,7 @@ def main():
                               tts_backend=selected_tts(),
                               sanotts_source_root=Path(sanotts_source.get()),
                               vad_profile=selected_vad_profile(),
-                              memory_extraction=selected_extraction(),
-                              memory_retrieval=selected_retrieval(),
-                              enable_memory_consolidation=memory_consolidation.get(),
-                              enable_l1_sufficiency_shadow=l1_sufficiency_shadow.get(),
-                              enable_l2_sufficiency_shadow=l2_sufficiency_shadow.get(),
                               allow_memory_delete=allow_memory_delete.get(),
-                              embedding_model_dir=Path(embedding_model.get()),
                               model_profile=selected_model_profile(),
                               voice_model_profile=selected_voice_model_profile(),
                               memory_backend="hy_memory")
@@ -1151,13 +1057,8 @@ def main():
                     "model_profile": selected_model_profile(),
                     "voice_model_profile": selected_voice_model_profile(),
                     "memory_backend": "hy_memory",
-                    "memory_extraction": selected_extraction(),
-                    "memory_retrieval": selected_retrieval(),
                     "tts_backend": selected_tts(),
                     "vad_profile": selected_vad_profile(),
-                    "memory_consolidation": bool(memory_consolidation.get()),
-                    "l1_sufficiency_shadow": bool(l1_sufficiency_shadow.get()),
-                    "l2_sufficiency_shadow": bool(l2_sufficiency_shadow.get()),
                 },
             }
         if action == "start":

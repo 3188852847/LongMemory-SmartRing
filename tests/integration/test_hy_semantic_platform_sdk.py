@@ -41,8 +41,7 @@ def test_actual_sdk_nonempty_candidate_formal_context_claim_and_native_http_erro
         prepared, _ = runtime.prepare_round_screen("检查资料", client_round_id="b"*32, session_id="a"*32)
         same_context = "\n".join(row["content"] for row in receipt["engine"]["items"]) == prepared.support.context
         assert same_context is expected_hit
-        assert runtime._proposal_formal[prepared.event.event_id]["eligible"], (
-            prepared.memory_command, prepared.follow_up_suggestion)
+        assert runtime._proposal_formal[prepared.event.event_id]["eligible"], prepared.memory_command
         assert engine.candidate_validate(snapshot_token=receipt["engine"]["snapshot_token"],
             memory_digest=receipt["engine"]["memory_digest"])["valid"]
         claimed = runtime.claim_candidate_memory(receipt, query="检查资料", formal_turn_id=prepared.event.event_id,

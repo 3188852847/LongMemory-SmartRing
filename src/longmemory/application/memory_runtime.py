@@ -20,25 +20,15 @@ from longmemory.methods.contracts import (
     MemorySupport,
     MemoryReadBusyError,
     ObservationResult,
-    RetrievedTrace,
     require_management,
 )
-from longmemory.application.scenario_recall import ScenarioRecallItem, ScenarioRecallResult
-from longmemory.application.persona_recall import PersonaRecallItem, PersonaRecallResult
-from longmemory.application.temporal_recall import TemporalRecallResult
 from longmemory.application.natural_memory_commands import NaturalMemoryCommandResult
-from longmemory.application.natural_companion_commands import NaturalCompanionCommandResult
-from longmemory.application.follow_up_suggestions import FollowUpSuggestionResult
 from longmemory.application.temporary_interaction import (
     TemporaryInteractionCommandResult,
     TemporaryInteractionDirective,
     TemporaryInteractionMode,
-    TemporaryInteractionProvider,
     classify_next_turn_interaction,
     directive_context,
-)
-from longmemory.application.consolidation.scheduler import (
-    LowFrequencyConsolidationScheduler,
 )
 
 
@@ -73,17 +63,6 @@ class MemoryPreparationTimings:
     total_ms: float
 
 
-def _dated_current_context(items: tuple[RetrievedTrace, ...]) -> str:
-    """只把可证明覆盖目标日期的当前 L1 重新组装为模型上下文。"""
-
-    if not items:
-        return ""
-    return (
-        "以下当前长期记忆的可证区间覆盖问题指定的日期：\n"
-        + "\n".join(f"- {item.content}" for item in items)
-    )
-
-
 @dataclass(frozen=True, slots=True)
 class PreparedMemoryTurn:
     """一次用户输入的实际写入与召回结果，供不同入口统一消费。"""
@@ -93,41 +72,23 @@ class PreparedMemoryTurn:
     support: MemorySupport
     write_enabled: bool
     use_enabled: bool
-    scenario_use_enabled: bool
-    scenarios: tuple[ScenarioRecallItem, ...]
-    persona_use_enabled: bool
-    personas: tuple[PersonaRecallItem, ...]
     timings: MemoryPreparationTimings
     # 字段名为兼容既有 API 保留；它现在也可承载明确的陪伴控制命令。
     memory_command: (
         NaturalMemoryCommandResult
-        | NaturalCompanionCommandResult
         | TemporaryInteractionCommandResult
         | None
     )
-    follow_up_suggestion: FollowUpSuggestionResult | None = None
     temporary_interaction: TemporaryInteractionDirective | None = None
 
 
 class MemoryRuntime:
-    """持有一个长期存活的记忆方法实例，并安全服务多个入口线程。
+    """串行管理网页和圆屏共用的引擎实例、来源账本与后台投递队列。"""
 
-    SQLite 连接本身不适合被多个线程同时操作，所以这里用互斥锁把一次
-    observe/recall 或助手归档作为不可交错的运行时操作。旧两阶段提取把模型
-    计算移出锁；外部组合 pipeline 保守串行，不能保证同样的读取延迟。
-    """
-
-    def __init__(self, database: Path, *, method: MemoryMethod, scenario_provider=None,
-                 persona_provider=None, temporal_provider=None, memory_command_handler=None,
-                 temporary_interaction_provider: TemporaryInteractionProvider | None = None,
-                 consolidation_scheduler: LowFrequencyConsolidationScheduler | None = None,
-                 l1_sufficiency_shadow=None,
-                 l2_sufficiency_shadow=None,
+    def __init__(self, database: Path, *, method: MemoryMethod, memory_command_handler=None,
                  clock=None, backend_assembly=None, round_screen_store=None,
                  state_identity=None) -> None:
         self.database = database.resolve()
-        # Runtime 只编排统一方法契约。具体使用规则、LLM 提取还是其他方法，
-        # 必须由进程入口的装配层决定，不能在应用层偷偷选择实现。
         self._method = method
         self._round_screen_store = round_screen_store
         self.backend_assembly = backend_assembly
@@ -144,24 +105,10 @@ class MemoryRuntime:
         self._proposal_instance = token_hex(16)
         self._proposal_revision = 0
         self._proposal_formal = {}
-        self._scenario_provider = scenario_provider
-        # L2 刚进入真实回答链，默认关闭，避免升级后无提示改变既有行为。
-        self._scenario_use_enabled = False
-        self._persona_provider = persona_provider
-        self._persona_use_enabled = False
-        # 时间补充器不是第二套检索器：它只能从当前 L1 锚点沿显式事实变化链
-        # 读取旧状态，并且必须由明确历史问句触发。
-        self._temporal_provider = temporal_provider
         self._memory_command_handler = memory_command_handler
-        self._temporary_interaction_provider = temporary_interaction_provider
         # “下一轮”是进程内、至多消费一次的会话控制，不进入长期记忆层。
         # 所有网页与圆屏入口共享同一个 Runtime，因此不会按入口各自残留。
         self._next_interaction: tuple[TemporaryInteractionMode, str, str] | None = None
-        self._consolidation_scheduler = consolidation_scheduler
-        # 两个影子观察器只接收当前轮候选快照并在后台写审计；
-        # 它们都没有修改 ``support`` 的接口，因此不能放行或拦截回答。
-        self._l1_sufficiency_shadow = l1_sufficiency_shadow
-        self._l2_sufficiency_shadow = l2_sufficiency_shadow
         self._clock = clock or (lambda: datetime.now(UTC))
         # Hy的持久后台队列与平台前台写门保持一致；旧方法没有此能力则不接管。
         # 初始化失败前不创建本Runtime的工作线程，避免留下无人拥有的执行器。
@@ -169,7 +116,7 @@ class MemoryRuntime:
         # 单工作线程保证候选模型不会并发轰击供应商。任务只由圆屏完成回执
         # 触发，Runtime 关闭时会等待它收尾，再关闭 SQLite 连接。
         self._deferred_executor = ThreadPoolExecutor(
-            max_workers=1, thread_name_prefix="longmemory-l1",
+            max_workers=1, thread_name_prefix="hy-observation",
         )
         self._deferred_events: dict[str, MemoryEvent] = {}
         self._deferred_futures: set[Future] = set()
@@ -194,7 +141,7 @@ class MemoryRuntime:
                     return PreparedMemoryTurn(event,
                         ObservationResult(event.event_id, (), "source_only", "external_model_budget_paused"),
                         MemorySupport(str(uuid4()), "", (), "budget_paused"),
-                        self._write_enabled, self._use_enabled, False, (), False, (),
+                        self._write_enabled, self._use_enabled,
                         MemoryPreparationTimings((lock_acquired - lock_started) * 1000, 0, 0, 0, 0, 0,
                                                  (perf_counter() - started) * 1000),
                         NaturalMemoryCommandResult("budget", "paused", notice))
@@ -247,19 +194,6 @@ class MemoryRuntime:
                         command = self._memory_command_handler.handle(event)
             command_finished = perf_counter()
             observe_started = perf_counter()
-            # 一次性跟进必须在回答前知道是否真正创建。否则圆屏的延后 L1
-            # 路径会让回答模型先声称“无法主动开口”，随后后台才悄悄创建候选。
-            # 严格识别只影响明确日期、时刻和“到时候问我”的少数控制轮次。
-            explicit_follow_up_requested = False
-            if (
-                command is None
-                and self._memory_command_handler is not None
-            ):
-                recognizes_follow_up = getattr(
-                    self._memory_command_handler, "recognizes_follow_up", None,
-                )
-                if recognizes_follow_up is not None:
-                    explicit_follow_up_requested = recognizes_follow_up(event)
             if isinstance(command, TemporaryInteractionCommandResult):
                 # 一次性设置句是控制证据，只保留 L0，不能被规则或 LLM
                 # 提取器误写成长期用户偏好。
@@ -270,7 +204,6 @@ class MemoryRuntime:
                 defer_slow_observation
                 and self._write_enabled
                 and self._method.capabilities.deferred_observation
-                and not explicit_follow_up_requested
             ):
                 # 本轮回答不需要等模型把“当前这句话”派生为 L1；先保存
                 # L0，再用此前已经完成的记忆召回。回答完成回执会触发补写。
@@ -285,141 +218,14 @@ class MemoryRuntime:
                 observation = (self._method.observe(event) if self._write_enabled
                                else self._method.archive(event))
             observe_finished = perf_counter()
-            follow_up_suggestion = None
-            if command is None:
-                if observation.writes:
-                    suggester = getattr(
-                        self._memory_command_handler, "suggest_follow_up", None,
-                    )
-                    if suggester is not None:
-                        follow_up_suggestion = suggester(
-                            event, observation.writes,
-                        )
-            if (
-                command is None
-                and explicit_follow_up_requested
-                and follow_up_suggestion is None
-            ):
-                # 请求已被严格识别，但没有形成唯一的新 L1，不能让模型自由
-                # 承诺，也不能谎称产品不具备该能力。
-                follow_up_suggestion = FollowUpSuggestionResult(
-                    "not_created",
-                    warning_code=(
-                        "follow_up_source_not_created"
-                        if self._write_enabled
-                        else "follow_up_memory_write_disabled"
-                    ),
-                )
             recall_started = perf_counter()
             support = (
                 self._method.recall(text)
                 if self._use_enabled
                 else MemorySupport(str(uuid4()), "", (), "disabled_by_user", None)
             )
-            # 只截取记忆方法刚返回的 L1。后续加入的 L2、L3 和临时互动
-            # 证据不属于这个评估单元，不能混入候选快照。
-            l1_shadow_candidates = tuple(support.retrieved or ())
-            l1_shadow_strategy = support.retrieval_strategy or "unspecified"
-            temporal_result = TemporalRecallResult("", (), None)
-            date_restricted = False
-            if self._use_enabled and self._temporal_provider is not None:
-                temporal_result = self._temporal_provider.recall(
-                    text,
-                    current_memory_ids=tuple(
-                        item.item_id for item in l1_shadow_candidates
-                    ),
-                )
-                date_restricted = temporal_result.date_target is not None
-                current_retrieved = tuple(support.retrieved or ())
-                current_context = support.context
-                if date_restricted:
-                    eligible_ids = set(temporal_result.current_target_ids or ())
-                    current_retrieved = tuple(
-                        item for item in current_retrieved
-                        if item.item_id in eligible_ids
-                    )
-                    current_context = _dated_current_context(current_retrieved)
-                if temporal_result.context or date_restricted:
-                    combined = "\n\n".join(
-                        value for value in (
-                            current_context, temporal_result.context,
-                        ) if value
-                    )
-                    retrieved = current_retrieved + tuple(
-                        RetrievedTrace(
-                            item.memory_id,
-                            item.content,
-                            item.source_message_ids,
-                            temporal_role="historical",
-                            valid_from=item.valid_from,
-                            valid_to=item.valid_to,
-                        )
-                        for item in temporal_result.items
-                    )
-                    strategy = "+".join(
-                        value for value in (
-                            support.retrieval_strategy, temporal_result.strategy,
-                        ) if value
-                    )
-                    support = MemorySupport(
-                        support.call_id, combined, retrieved,
-                        strategy, support.warning_code,
-                    )
             recall_finished = perf_counter()
-            scenario_started = perf_counter()
-            scenario_result = ScenarioRecallResult("", ())
-            if (
-                self._use_enabled
-                and self._scenario_use_enabled
-                and self._scenario_provider
-                and not date_restricted
-            ):
-                scenario_result = self._scenario_provider.recall(text)
-                if scenario_result.context:
-                    combined = "\n\n".join(value for value in (support.context, scenario_result.context) if value)
-                    strategy = "+".join(value for value in (
-                        support.retrieval_strategy, scenario_result.strategy
-                    ) if value)
-                    support = MemorySupport(
-                        support.call_id, combined, support.retrieved,
-                        strategy, support.warning_code,
-                    )
-            shadow_scenario_result = scenario_result
-            if (self._use_enabled and self._l2_sufficiency_shadow is not None
-                    and self._scenario_provider is not None
-                    and not self._scenario_use_enabled):
-                # 正式 L2 关闭时仍可旁路观测同一个召回器；结果不会进入
-                # ``support.context``，因此个人体验与当前策略完全一致。
-                try:
-                    shadow_scenario_result = self._scenario_provider.recall(text)
-                except Exception:
-                    # 这是明确的旁路边界：影子读取失败只丢失一条研究样本，
-                    # 不能把原本不使用 L2 的正式回答变成失败。
-                    shadow_scenario_result = None
-            scenario_finished = perf_counter()
-            persona_started = perf_counter()
-            persona_result = PersonaRecallResult("", ())
-            if (
-                self._use_enabled
-                and self._persona_use_enabled
-                and self._persona_provider
-                and not date_restricted
-            ):
-                persona_result = self._persona_provider.recall(text)
-                if persona_result.context:
-                    combined = "\n\n".join(
-                        value for value in (support.context, persona_result.context) if value
-                    )
-                    strategy = "+".join(value for value in (
-                        support.retrieval_strategy, persona_result.strategy
-                    ) if value)
-                    support = MemorySupport(
-                        support.call_id, combined, support.retrieved,
-                        strategy, support.warning_code,
-                    )
-            persona_finished = perf_counter()
             temporary_interaction = None
-            interaction_strategy = "temporary_interaction_v1"
             if command is None and self._next_interaction is not None:
                 mode, source_message_id, source_content = self._next_interaction
                 # 在进入模型调用前原子消费，失败或中断也不会在之后重复套用。
@@ -433,33 +239,13 @@ class MemoryRuntime:
                     context=directive_context(mode),
                     scope="next_turn",
                 )
-                interaction_strategy = "temporary_interaction_next_turn_v1"
-            elif (
-                command is None and self._use_enabled
-                and self._temporary_interaction_provider is not None
-            ):
-                temporary_interaction = self._temporary_interaction_provider.current(
-                    at=event.occurred_at,
-                )
             if temporary_interaction is not None:
                 combined = "\n\n".join(value for value in (
                     support.context, temporary_interaction.context,
                 ) if value)
                 retrieved = tuple(support.retrieved or ())
-                if (
-                    temporary_interaction.source_memory_id is not None
-                    and not any(
-                        item.item_id == temporary_interaction.source_memory_id
-                        for item in retrieved
-                    )
-                ):
-                    retrieved += (RetrievedTrace(
-                        temporary_interaction.source_memory_id,
-                        temporary_interaction.source_content,
-                        (temporary_interaction.source_message_id,),
-                    ),)
                 strategy = "+".join(value for value in (
-                    support.retrieval_strategy, interaction_strategy,
+                    support.retrieval_strategy, "temporary_interaction_next_turn_v1",
                 ) if value)
                 support = MemorySupport(
                     support.call_id, combined, retrieved,
@@ -468,8 +254,6 @@ class MemoryRuntime:
             if command is not None:
                 if isinstance(command, TemporaryInteractionCommandResult):
                     label = "[互动设置结果]"
-                elif isinstance(command, NaturalCompanionCommandResult):
-                    label = "[陪伴设置结果]"
                 else:
                     label = "[记忆操作结果]"
                 operation_context = label + "\n" + command.notice
@@ -482,49 +266,18 @@ class MemoryRuntime:
                 )
             write_enabled = self._write_enabled
             use_enabled = self._use_enabled
-            scenario_use_enabled = self._scenario_use_enabled
-            persona_use_enabled = self._persona_use_enabled
         finished = perf_counter()
         timings = MemoryPreparationTimings(
             lock_wait_ms=round((lock_acquired - lock_started) * 1000, 3),
             command_ms=round((command_finished - command_started) * 1000, 3),
             observe_ms=round((observe_finished - observe_started) * 1000, 3),
             recall_ms=round((recall_finished - recall_started) * 1000, 3),
-            scenario_ms=round((scenario_finished - scenario_started) * 1000, 3),
-            persona_ms=round((persona_finished - persona_started) * 1000, 3),
+            scenario_ms=0, persona_ms=0,
             total_ms=round((finished - started) * 1000, 3),
         )
-        # 通知发生在 SQLite 互斥锁之外；它只唤醒后台线程，不让聊天等待整理。
-        if observation.writes and self._consolidation_scheduler is not None:
-            self._consolidation_scheduler.notify_new_evidence()
-        if (command is None and use_enabled
-                and self._l1_sufficiency_shadow is not None):
-            try:
-                self._l1_sufficiency_shadow.submit(
-                    user_message_id=event.event_id,
-                    query=text,
-                    candidates=l1_shadow_candidates,
-                    retrieval_strategy=l1_shadow_strategy,
-                )
-            except Exception:
-                # 旁路任务即使关闭或排队失败，也不改变本轮返回。
-                pass
-        if (command is None and use_enabled and shadow_scenario_result is not None
-                and self._l2_sufficiency_shadow is not None):
-            try:
-                self._l2_sufficiency_shadow.submit(
-                    user_message_id=event.event_id,
-                    query=text,
-                    candidates=shadow_scenario_result,
-                )
-            except Exception:
-                # 提交器关闭或旁路队列异常同样不改变本轮返回值。
-                pass
         return PreparedMemoryTurn(
             event, observation, support, write_enabled, use_enabled,
-            scenario_use_enabled, scenario_result.items,
-            persona_use_enabled, persona_result.items, timings, command,
-            follow_up_suggestion, temporary_interaction,
+            timings, command, temporary_interaction,
         )
 
     def complete_deferred_observation(self, event_id: str, *, resume_pending=False) -> bool:
@@ -541,16 +294,7 @@ class MemoryRuntime:
                         datetime.fromisoformat(detail["occurred_at"]), detail["session_id"])
             if event is None or self._closing:
                 return False
-            # V44 账本和失败事件也属于 SQLite 写入，必须在 Runtime 锁内。
-            # 工作线程随后只执行模型计算，不能直接使用共享连接。
-            begin = getattr(self._method, "begin_archived_extraction", None)
-            start_audit_in_worker = begin is None
-            if begin is not None:
-                begin(event)
-            future = self._deferred_executor.submit(
-                self._run_deferred_observation, event,
-                start_audit_in_worker, start_audit_in_worker,
-            )
+            future = self._deferred_executor.submit(self._run_deferred_observation, event)
             self._deferred_futures.add(future)
             self._deferred_last_result = {"state": "running", "warning_code": None}
             future.add_done_callback(self._deferred_done)
@@ -594,7 +338,7 @@ class MemoryRuntime:
                     "created": perf_counter(), "query": self._proposal_digest(text.strip()),
                     "context": self._proposal_digest(prepared.support.context),
                     "evidence": self._proposal_digest(memory_receipt(prepared)["evidence"]),
-                    "eligible": (prepared.memory_command is None and prepared.follow_up_suggestion is None
+                    "eligible": (prepared.memory_command is None
                                  and feedback is None)}
                 status = 'completed'
                 return prepared, feedback
@@ -651,78 +395,12 @@ class MemoryRuntime:
                 raise ValueError("owned_model_service_unavailable")
             return self._model_service.voice_configuration()
 
-    def retry_failed_observation(
-        self, source_message_id: str, *, expected_attempt_id: str,
-    ) -> dict:
-        """显式重跑一个失败/中断的 L1 派生；只排队一次，不复制 L0。"""
-
+    def _run_deferred_observation(self, event: MemoryEvent) -> ObservationResult:
         with self._lock:
             self._ensure_open()
-            if self._closing:
-                raise ValueError("l1_retry_runtime_closing")
-            if not self._method.capabilities.failed_observation_recovery:
-                raise ValueError("l1_retry_method_unsupported")
-            prepare = getattr(
-                self._method, "prepare_failed_observation_recovery", None,
-            )
-            if prepare is None:
-                raise ValueError("l1_retry_method_unsupported")
-            event, attempt_id = prepare(
-                source_message_id, expected_attempt_id=expected_attempt_id,
-            )
-            future = self._deferred_executor.submit(
-                self._run_deferred_observation, event, False, False,
-            )
-            self._deferred_futures.add(future)
-            self._deferred_last_result = {"state": "running", "warning_code": None}
-            future.add_done_callback(self._deferred_done)
-            return {
-                "state": "queued", "source_message_id": source_message_id,
-                "attempt_id": attempt_id,
-            }
-
-    def _run_deferred_observation(
-        self, event: MemoryEvent, start_audit: bool = True,
-        persist_failure: bool = True,
-    ) -> ObservationResult:
-        complete_pipeline = getattr(self._method, "complete_archived_observation", None)
-        if complete_pipeline is not None:
-            # 外部 add 可能把提取/写入组合在一起，不要求它暴露私有阶段。
-            # 该保守路径串行整个调用；不声称具备旧两阶段路径的并发延迟。
-            with self._lock:
-                self._ensure_open()
-                if not self._write_enabled:
-                    return ObservationResult(event.event_id, (), "source_only", "observation_paused")
-                return complete_pipeline(event)
-        # 网络模型调用不持 Runtime 锁；网页查看、设备召回和状态读取不会
-        # 因 2–5 秒的候选生成而一起卡住。只有最终 SQLite 补写需要互斥。
-        extracted = self._method.extract_archived(
-            event, start_audit=start_audit, persist_failure=persist_failure,
-        )
-        if isinstance(extracted, ObservationResult):
-            if not persist_failure:
-                with self._lock:
-                    self._ensure_open()
-                    finalize = getattr(
-                        self._method, "finalize_archived_extraction_failure", None,
-                    )
-                    if finalize is None:
-                        raise RuntimeError("延后提取方法缺少失败持久化边界。")
-                    finalize(event)
-            return extracted
-        with self._lock:
-            self._ensure_open()
-            observation = self._method.persist_archived(event, extracted)
-            if observation.writes:
-                suggester = getattr(
-                    self._memory_command_handler, "suggest_follow_up", None,
-                )
-                if suggester is not None:
-                    suggester(event, observation.writes)
-        if observation.writes and self._consolidation_scheduler is not None:
-            self._consolidation_scheduler.notify_new_evidence()
-        return observation
-
+            if not self._write_enabled:
+                return ObservationResult(event.event_id, (), "source_only", "observation_paused")
+            return self._method.complete_archived_observation(event)
     def _deferred_done(self, future: Future) -> None:
         try:
             result = future.result()
@@ -759,11 +437,6 @@ class MemoryRuntime:
             self._ensure_open()
             return self._method.observe(event)
 
-    @property
-    def legacy_sqlite(self):
-        # 未提供 assembly 的既有调用方沿用原兼容路径；新装配显式传入。
-        return self.backend_assembly is None or self.backend_assembly.legacy_sqlite
-
     def administer(self, capability, operation, *args, **kwargs):
         with self._lock:
             self._ensure_open()
@@ -779,7 +452,7 @@ class MemoryRuntime:
                 raise ValueError("memory_correction_source_must_be_user")
             if capability in {"correction", "deletion"}:
                 self._proposal_revision += 1
-            if capability == "correction" and not self.legacy_sqlite:
+            if capability == "correction":
                 # 新引擎管理来源也先归档；管理失败不声称跨存储回滚。
                 self._method.archive(kwargs["source"])
             return getattr(admin, operation)(*args, **kwargs)
@@ -812,7 +485,7 @@ class MemoryRuntime:
                 raise RuntimeError("hy_mechanisms_unavailable")
             assembly = self.backend_assembly
             admin = assembly.management if assembly else None
-            if (namespace != "hy_memory" or operation not in allowed or self.legacy_sqlite
+            if (namespace != "hy_memory" or operation not in allowed
                     or admin is None or getattr(admin, "extension_namespace", None) != namespace
                     or not callable(getattr(admin, "extension", None))):
                 raise UnsupportedCapabilityError("memory_management_extension_unsupported")
@@ -896,8 +569,8 @@ class MemoryRuntime:
                 raise RuntimeError("memory_identity_unavailable")
             return {"schema_version": 1, "configured": True,
                     "method": self._method.name,
-                    "representation": "atomic_fact" if self.legacy_sqlite else "method_defined",
-                    "legacy_sqlite": self.legacy_sqlite, "state": "available"}
+                    "representation": "method_defined",
+                    "legacy_sqlite": False, "state": "available"}
         finally:
             self._lock.release()
 
@@ -923,19 +596,16 @@ class MemoryRuntime:
                 "method_capabilities": asdict(self._method.capabilities),
                 "management_capabilities": (asdict(self.backend_assembly.management.capabilities)
                     if self.backend_assembly and self.backend_assembly.management else {}),
-                "legacy_sqlite": self.legacy_sqlite,
-                "proactive": ({"available": False, "state": "paused_backend_unsupported"}
-                              if not self.legacy_sqlite else {"available": True, "state": "managed_by_policy"}),
+                "legacy_sqlite": False,
+                "proactive": {"available": False, "state": "paused_backend_unsupported"},
                 "write_enabled": self._write_enabled,
                 "use_enabled": self._use_enabled,
-                "scenario_use_enabled": self._scenario_use_enabled,
-                "scenario_available": self._scenario_provider is not None,
-                "persona_use_enabled": self._persona_use_enabled,
-                "persona_available": self._persona_provider is not None,
-                "temporal_history_available": self._temporal_provider is not None,
-                "temporary_interaction_available": (
-                    self._temporary_interaction_provider is not None
-                ),
+                "scenario_use_enabled": False,
+                "scenario_available": False,
+                "persona_use_enabled": False,
+                "persona_available": False,
+                "temporal_history_available": False,
+                "temporary_interaction_available": False,
                 "next_interaction_armed": self._next_interaction is not None,
                 "settings_persistent": False,
                 "deferred_observation": {
@@ -944,34 +614,10 @@ class MemoryRuntime:
                     "running_or_queued": len(self._deferred_futures),
                     "last_result": dict(self._deferred_last_result),
                 },
-                "consolidation_scheduler": (
-                    self._consolidation_scheduler.status().to_dict()
-                    if self._consolidation_scheduler is not None
-                    else {"enabled": False, "available": False}
-                ),
-                "l2_sufficiency_shadow": (
-                    self._l2_sufficiency_shadow.status().to_dict()
-                    if self._l2_sufficiency_shadow is not None
-                    else {"enabled": False, "state": "disabled"}
-                ),
-                "l1_sufficiency_shadow": (
-                    self._l1_sufficiency_shadow.status().to_dict()
-                    if self._l1_sufficiency_shadow is not None
-                    else {"enabled": False, "state": "disabled"}
-                ),
+                "consolidation_scheduler": {"enabled": False, "available": False},
+                "l2_sufficiency_shadow": {"enabled": False, "state": "disabled"},
+                "l1_sufficiency_shadow": {"enabled": False, "state": "disabled"},
             }
-
-    def wait_for_l1_sufficiency_shadow(self) -> None:
-        """等待 L1 旁路任务，仅供测试和受控停机使用。"""
-
-        if self._l1_sufficiency_shadow is not None:
-            self._l1_sufficiency_shadow.wait()
-
-    def wait_for_l2_sufficiency_shadow(self) -> None:
-        """等待旁路任务，供测试和受控停机使用；正式聊天不调用。"""
-
-        if self._l2_sufficiency_shadow is not None:
-            self._l2_sufficiency_shadow.wait()
 
     def configure(self, *, write_enabled: bool, use_enabled: bool,
                   scenario_use_enabled: bool | None = None,
@@ -984,21 +630,15 @@ class MemoryRuntime:
             raise ValueError("memory_mode_invalid")
         with self._lock:
             self._ensure_open()
-            if scenario_use_enabled and self._scenario_provider is None:
+            if scenario_use_enabled:
                 raise ValueError("scenario_memory_unavailable")
-            if persona_use_enabled and self._persona_provider is None:
+            if persona_use_enabled:
                 raise ValueError("persona_memory_unavailable")
-            proposal_changed = (write_enabled != self._write_enabled or use_enabled != self._use_enabled
-                or (scenario_use_enabled is not None and scenario_use_enabled != self._scenario_use_enabled)
-                or (persona_use_enabled is not None and persona_use_enabled != self._persona_use_enabled))
+            proposal_changed = write_enabled != self._write_enabled or use_enabled != self._use_enabled
             if write_enabled != self._confirmed_background_write_enabled:
                 self._sync_background_writes(write_enabled)
             self._write_enabled = write_enabled
             self._use_enabled = use_enabled
-            if scenario_use_enabled is not None:
-                self._scenario_use_enabled = scenario_use_enabled
-            if persona_use_enabled is not None:
-                self._persona_use_enabled = persona_use_enabled
             if proposal_changed:
                 self._proposal_revision += 1
             return self.status()
@@ -1035,7 +675,7 @@ class MemoryRuntime:
             gateway = getattr(self._model_service, "gateway", None)
             if self._closing or not self._use_enabled:
                 raise RuntimeError("candidate_memory_unavailable")
-            if self.legacy_sqlite or not callable(snapshot) or gateway is None:
+            if not callable(snapshot) or gateway is None:
                 raise UnsupportedCapabilityError("candidate_memory_unsupported")
             revision = self._candidate_runtime_revision()
             encoder = gateway.encoder
@@ -1138,7 +778,7 @@ class MemoryRuntime:
             if self._closing or not self._use_enabled or runtime_revision != self._candidate_runtime_revision():
                 return False
             validate = getattr(self._method, "candidate_validate", None)
-            if self.legacy_sqlite or not callable(validate):
+            if not callable(validate):
                 raise UnsupportedCapabilityError("candidate_memory_unsupported")
             return validate(snapshot_token=snapshot_token, memory_digest=memory_digest)
         finally:
@@ -1157,20 +797,8 @@ class MemoryRuntime:
         with self._lock:
             if not self._closed:
                 try:
-                    if self._l1_sufficiency_shadow is not None:
-                        self._l1_sufficiency_shadow.close()
-                    if self._l2_sufficiency_shadow is not None:
-                        self._l2_sufficiency_shadow.close()
-                    if self._consolidation_scheduler is not None:
-                        self._consolidation_scheduler.close()
                     self._method.close()
                 finally:
-                    if self._scenario_provider is not None:
-                        self._scenario_provider.close()
-                    if self._persona_provider is not None:
-                        self._persona_provider.close()
-                    if self._temporal_provider is not None:
-                        self._temporal_provider.close()
                     if self._memory_command_handler is not None:
                         self._memory_command_handler.close()
                     self._closed = True

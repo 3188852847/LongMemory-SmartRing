@@ -86,52 +86,6 @@ test('H01 回看期间新回答不拉底，回到最新恢复跟随', async ({pa
   await expect.poll(()=>messages.evaluate(node=>node.scrollHeight-node.clientHeight-node.scrollTop)).toBeLessThan(48);
 });
 
-test('H04 390px 来源抽屉标题和全部动作可见，关闭保留筛选', async ({page}, info) => {
-  await page.setViewportSize({width:390,height:844});
-  await page.goto('/memories');
-  const search=page.getByRole('searchbox',{name:'搜索当前层级'});
-  await expect(search).toBeEnabled();
-  await search.fill('乌龙茶');await search.press('Enter');
-  await page.locator('.memory-item').first().getByRole('button',{name:'查看来源'}).click();
-  const drawer=page.getByRole('dialog',{name:'事实记忆（L1）'});
-  await expect(drawer).toBeVisible();
-  await expect.poll(async()=>{const box=await drawer.boundingBox();return Boolean(box && box.x>=0 && box.x+box.width<=391);}).toBe(true);
-  for(const name of ['事实时间线','纠正错误','记录变化',/删\s*除/,'Close']) {
-    const button=drawer.getByRole('button',{name,exact:true});
-    await expect(button).toBeVisible();
-    const box=await button.boundingBox();expect(box!.x).toBeGreaterThanOrEqual(0);expect(box!.x+box!.width).toBeLessThanOrEqual(391);
-  }
-  const title=await drawer.locator('.ant-drawer-title').boundingBox();expect(title!.width).toBeGreaterThan(80);
-  await page.screenshot({path:info.outputPath('h04-source-390.png'),fullPage:true});
-  await drawer.getByRole('button',{name:'Close',exact:true}).click();
-  await expect(drawer).not.toBeVisible();await expect(search).toHaveValue('乌龙茶');
-});
-
-test('H07 新页面归零和焦点、历史返回恢复文档位置与筛选', async ({page}) => {
-  await page.setViewportSize({width:1366,height:768});
-  await page.addInitScript(()=>localStorage.setItem('longmemory:chat-appearance:v3',
-    JSON.stringify({theme:'future',size:'larger',motion:'reduce',density:'comfortable',chatWidth:'focused'})));
-  await page.goto('/memories');
-  const search=page.getByRole('searchbox',{name:'搜索当前层级'});
-  await expect(search).toBeEnabled();
-  await search.fill('茶');await search.press('Enter');
-  await page.getByRole('button',{name:'每日回顾',exact:true}).click();
-  await expect(page.getByRole('button',{name:'每日回顾',exact:true})).toHaveAttribute('aria-pressed','true');
-  // 查询切换和日报读取会改变文档高度；先确认可滚动布局，再建立返回恢复的测试坐标。
-  await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollHeight-innerHeight)).toBeGreaterThan(0);
-  await page.evaluate(()=>window.scrollTo(0,5000));
-  await expect.poll(()=>page.evaluate(()=>scrollY)).toBeGreaterThan(0);
-  const before=await page.evaluate(()=>scrollY);expect(before).toBeGreaterThan(0);
-  await page.getByRole('link',{name:'系统总览',exact:true}).click();
-  await expect(page.getByRole('heading',{name:'系统总览',exact:true})).toBeVisible();
-  await expect.poll(()=>page.evaluate(()=>scrollY)).toBe(0);
-  await expect.poll(()=>page.evaluate(()=>document.activeElement?.id)).toBe('main-content');
-  await page.goBack();
-  await expect(page.getByRole('button',{name:'每日回顾',exact:true})).toHaveAttribute('aria-pressed','true');
-  await expect.poll(()=>page.evaluate(()=>scrollY)).toBeCloseTo(before,0);
-  await page.getByRole('button',{name:'浏览记忆',exact:true}).click();await expect(search).toHaveValue('茶');
-});
-
 test('H11 父级失败不保留连接中或已保存承诺', async ({page}) => {
   await page.route('**/api/**',route=>route.fulfill({status:503,json:{error:'console_internal_error'}}));
   await page.goto('/settings?tab=overview');

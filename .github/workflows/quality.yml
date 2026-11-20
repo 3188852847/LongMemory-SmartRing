@@ -58,7 +58,7 @@ jobs:
         run: >-
           uv run --no-sync python -m pytest -q "--junitxml=$env:RUNNER_TEMP/quick.xml"
           tests/unit/entrypoints/test_chat_persistence.py::test_restart_list_rename_history_and_replay
-          tests/e2e/test_process_and_evaluation.py::test_two_cli_processes_recall_persistent_memory
+          tests/unit/entrypoints/test_platform_roundscreen.py::test_fact_becomes_recallable_only_after_completion_and_assistant_is_archive_only
           tests/unit/methods/test_hy_memory_backend.py::test_u_runtime_archives_assistant_and_replays_completed_after_restart
           tests/test_launcher_web.py::test_start_readiness_stop_and_console
           tests/unit/development/test_direct_ws_v2.py::test_installer_preserves_v1_and_decodes_v2_with_aec

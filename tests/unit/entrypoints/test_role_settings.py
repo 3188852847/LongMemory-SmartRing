@@ -6,11 +6,10 @@ from pathlib import Path
 
 import pytest
 from longmemory.entrypoints.api.role_settings import RoleSettings, RoleConflict
-from longmemory.entrypoints.api.chat_backend import ChatBackend
 from longmemory.adapters.llm.fake import FakeAnswerGenerator
 from longmemory.adapters.llm.openai_compatible import OpenAICompatibleAnswerGenerator, SYSTEM_PROMPT
 from longmemory.infrastructure.config.settings import ModelSettings
-from longmemory.methods.longmemory_v1.method import LongMemoryV1
+from test_chat_console import synthetic_backend
 from test_console import console, login
 
 
@@ -56,7 +55,7 @@ def test_concurrent_saves_do_not_overwrite(tmp_path):
 
 
 def test_role_snapshot_applies_next_turn_preserves_guardrails(tmp_path):
-    database = tmp_path / 'synthetic.db'; LongMemoryV1(database).close()
+    database = tmp_path / 'synthetic.db'
     payloads = []
     def transport(_settings, body):
         payloads.append(json.loads(body))
@@ -64,7 +63,7 @@ def test_role_snapshot_applies_next_turn_preserves_guardrails(tmp_path):
             backend.roles.save(expected_revision=1, name='第二版', prompt='第二版表达')
         return 200, b'{"choices":[{"message":{"content":"ok"}}]}'
     generator = OpenAICompatibleAnswerGenerator(ModelSettings(provider='openai_compatible', base_url='https://synthetic.invalid/v1', api_key='synthetic', model='test'), transport=transport)
-    backend = ChatBackend(database, generator, provider='openai_compatible')
+    backend = synthetic_backend(database, generator, provider='openai_compatible')
     backend.roles.save(expected_revision=0, name='第一版', prompt='第一版表达')
     first = backend.run('你好', ())
     second = backend.run('再聊一句', ())
@@ -76,8 +75,8 @@ def test_role_snapshot_applies_next_turn_preserves_guardrails(tmp_path):
 
 
 def test_role_api_security_validation_and_persistence(tmp_path):
-    database = tmp_path / 'synthetic.db'; LongMemoryV1(database).close()
-    backend = ChatBackend(database, FakeAnswerGenerator())
+    database = tmp_path / 'synthetic.db'
+    backend = synthetic_backend(database, FakeAnswerGenerator())
     async def run():
         async with console(chat_backend=backend) as (client, base, _):
             url = base + '/api/assistant-role'

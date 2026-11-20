@@ -5,12 +5,10 @@ from pathlib import Path
 import subprocess
 
 
-BACKENDS = {"longmemory", "hy_memory", "xiaozhi_local", "none"}
-
 
 def config_action(server: Path, project: Path, backend: str, *, apply=False,
                   expected_digest=None):
-    if backend not in BACKENDS:
+    if backend != "hy_memory":
         raise ValueError("未知圆屏记忆后端。")
     python = server / ".venv/Scripts/python.exe"
     script = project / "scripts/development/xiaozhi/sync_memory_config.py"

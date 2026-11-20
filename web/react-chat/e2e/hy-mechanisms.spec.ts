@@ -94,9 +94,12 @@ test('繁忙保留旧快照且无紧密轮询；首次忙保留未知身份',asy
   expect(coldState.calls.filter(call=>call.path.endsWith('/identity'))).toHaveLength(1);await cold.close();
 });
 
-test('旧引擎与未初始化兼容，method=null不冒充L1统计',async({browser})=>{
-  const legacy=await browser.newPage();const state=await synthetic(legacy,{legacy:true});await legacy.goto('/overview');await expect(legacy.getByRole('link',{name:'原话与事实'})).toBeVisible();await expect(legacy.getByText('12 条有效 L1',{exact:true})).toBeVisible();
-  await legacy.getByRole('link',{name:'原话与事实'}).click();await expect(legacy.getByRole('heading',{name:'原话与事实',exact:true})).toBeVisible();expect(state.calls.some(call=>call.path.endsWith('/hy/mechanisms'))).toBe(false);expect(state.errors).toEqual([]);await legacy.close();
+test('遇到旧服务和未初始化状态只展示身份，不打开旧库',async({browser})=>{
+  const legacy=await browser.newPage();const state=await synthetic(legacy,{legacy:true});
+  await legacy.goto('/memories');
+  await expect(legacy.getByText('原记忆引擎',{exact:true})).toBeVisible();
+  expect(state.calls.some(call=>call.path==='/api/memories'||call.path==='/api/memory-config')).toBe(false);
+  await legacy.close();
   const uninitialized=await browser.newPage();const cold=await synthetic(uninitialized,{uninitialized:true});await uninitialized.goto('/overview');await expect(uninitialized.getByRole('link',{name:'查看记忆管理'}).getByText('记忆已配置，尚未初始化',{exact:true})).toBeVisible();await expect(uninitialized.getByRole('link',{name:'原话与事实'})).toHaveCount(0);expect(cold.calls.some(call=>call.path==='/api/memories'||call.path==='/api/memory-config')).toBe(false);await uninitialized.close();
 });
 

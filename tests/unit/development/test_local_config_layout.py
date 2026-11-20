@@ -238,5 +238,6 @@ def test_new_managed_init_uses_public_template_without_vendor_write(tmp_path):
     write(tmp_path, migration.SERVER + "/app.py", b"# synthetic upstream")
     target = setup.init_config(server(tmp_path))
     assert target == tmp_path / "local/config/xiaozhi.yaml"
-    assert target.read_bytes() == (ROOT / "config/examples/xiaozhi.example.yaml").read_bytes()
+    template = (ROOT / "config/examples/xiaozhi.example.yaml").read_text(encoding="utf-8")
+    assert target.read_text(encoding="utf-8") == template.replace("__PROJECT_ROOT__", tmp_path.as_posix())
     assert not (server(tmp_path) / "data/.config.yaml").exists()

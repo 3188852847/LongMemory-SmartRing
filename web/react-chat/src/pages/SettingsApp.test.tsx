@@ -19,7 +19,6 @@ function mount(path='/settings') {
     if (path === '/api/assistant-role') return {current:{revision:1,name:'合成助手',prompt:'合成角色',saved_at:null}, web:'next_turn',device:'not_synced'};
     if (path === '/api/round-skins') return {enabled:true, selected_skin:'test',skins:[]};
     if (path === '/api/tts-backends') return {enabled:true, next_start_backend:'cosyvoice3'};
-    if (path === '/api/proactive-policy') return {enabled:false};
     throw new Error(`没有配置合成响应：${path}`);
   });
   render(<QueryClientProvider client={createConsoleQueryClient()}><AppearanceProvider>
@@ -31,7 +30,7 @@ afterEach(() => vi.restoreAllMocks());
 describe('设置任务工作区', () => {
   test('分类直接可达，总览单独进入，前进后退恢复分类', async () => {
     mount();
-    for (const name of ['设置总览','模型与服务','记忆后端','助手表达','声音与克隆','外观与阅读','主动交流']) {
+    for (const name of ['设置总览','模型与服务','记忆后端','助手表达','声音与克隆','外观与阅读']) {
       expect(screen.getByRole('tab', {name})).toBeTruthy();
     }
     expect(screen.queryByRole('region', {name:'当前设置摘要'})).toBeNull();

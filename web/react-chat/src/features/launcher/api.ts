@@ -15,9 +15,9 @@ export type CosyDeliveryStatus = {
 };
 export type LauncherSettings = {
   voice: boolean; model_profile: string; voice_model_profile: string;
-  voice_mode: string; voice_latency_mode: string; memory_extraction: string;
+  voice_mode: string; voice_latency_mode: string;
   cosy_delivery_mode?: CosyDeliveryMode;
-  memory_retrieval: string; memory_backend: string; vad_profile: string;
+  memory_backend: string; vad_profile: string;
   start_page: string; lan_ip: string; http_risk_ack: boolean; tts_backend: string;
   voice_ws_port?: number; voice_http_port?: number; network_auto?: boolean;
 };

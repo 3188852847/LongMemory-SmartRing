@@ -33,7 +33,7 @@ class Timings:
 
 
 class Backend:
-    def prepare_round_screen_user(self, text):
+    def prepare_round_screen_user(self, text, **metadata):
         assert text == "private synthetic transcript"
         log_event("context_built", turn_id="synthetic-turn", count=0)
         return Namespace(
@@ -91,6 +91,9 @@ module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
 provider = object.__new__(module.MemoryProvider)
 provider._lock = threading.Lock()
+from contextvars import ContextVar
+provider._turn_key = ContextVar('synthetic_turn', default='d' * 32)
+provider._session_id = 'e' * 32
 trace = diagnostic.VoiceRound()
 token = diagnostic.CURRENT.set(trace)
 try:

@@ -8,16 +8,22 @@ pytest.importorskip("aiohttp")
 from test_console import console, login
 from longmemory.adapters.llm.fake import FakeAnswerGenerator
 from longmemory.entrypoints.api.chat_backend import ChatBackend
-from longmemory.methods.longmemory_v1.method import LongMemoryV1
+from test_platform_roundscreen import open_runtime
 from longmemory.infrastructure.config.model_profiles import ModelProfileStore
-from longmemory.infrastructure.config.memory_backends import MemoryBackendStore
+
+
+def synthetic_backend(database, generator, **kwargs):
+    runtime, _ = open_runtime(database.parent)
+    return ChatBackend(runtime.database, generator, runtime=runtime, **kwargs)
 
 
 @pytest.fixture
 def backend(tmp_path):
-    database = tmp_path / "synthetic.db"
-    LongMemoryV1(database).close()
-    return ChatBackend(database, FakeAnswerGenerator())
+    chat = synthetic_backend(tmp_path / "sources.db", FakeAnswerGenerator())
+    try:
+        yield chat
+    finally:
+        chat.close()
 
 
 def test_chat_disabled_and_static_security():
@@ -158,21 +164,6 @@ def test_voice_model_selection_and_check_are_explicit_and_keyless(tmp_path):
                                         json={}, headers=headers)
             text = await checked.text()
             assert checked.status == 200 and "synthetic-secret" not in text
-    asyncio.run(run())
-
-
-def test_daily_memory_backend_is_read_only():
-    store = MemoryBackendStore(current_backend="hy_memory")
-
-    async def run():
-        async with console(memory_backend_store=store) as (client, base, _):
-            headers = await login(client, base)
-            result = await (await client.get(base + "/api/memory-backends")).json()
-            assert [item["id"] for item in result["backends"]] == ["hy_memory"]
-            response = await client.put(base + "/api/memory-backends/selection",
-                                        json={"backend": "none"}, headers=headers)
-            assert response.status == 404
-
     asyncio.run(run())
 
 

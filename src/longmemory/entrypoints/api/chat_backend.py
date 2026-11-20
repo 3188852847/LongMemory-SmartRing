@@ -9,43 +9,18 @@ import sqlite3
 
 from longmemory.application.chat.contracts import AnswerGenerationError
 from longmemory.application.memory_runtime import MemoryRuntime
-from longmemory.application.natural_companion_commands import NaturalCompanionCommandResult
 from longmemory.application.natural_memory_commands import NaturalMemoryCommandResult
 from longmemory.application.temporary_interaction import TemporaryInteractionCommandResult
-from longmemory.adapters.storage.sqlite_round_screen_turn_store import (
-    SQLiteRoundScreenTurnStore,
-)
-from longmemory.adapters.storage.sqlite_round_screen_memory_feedback_store import (
-    RoundScreenMemoryFeedbackResult,
-    SQLiteRoundScreenMemoryFeedbackStore,
-)
-from longmemory.adapters.storage.sqlite_memory_feedback_review_store import (
-    SQLiteMemoryFeedbackReviewStore,
-)
-from longmemory.adapters.storage.sqlite_l2_sufficiency_shadow import (
-    SQLiteL2SufficiencyShadowStore,
-)
-from longmemory.adapters.storage.sqlite_l1_sufficiency_shadow import (
-    SQLiteL1SufficiencyShadowStore,
-)
-from longmemory.adapters.storage.sqlite_l1_extraction_audit import (
-    SQLiteL1ExtractionAuditStore,
-)
-from longmemory.infrastructure.database.connection import open_database
-from longmemory.application.round_screen_memory_feedback import (
-    classify_explicit_round_screen_feedback,
-)
-from longmemory.bootstrap import build_memory_runtime
 from .role_settings import RoleSettings
 
 
 class ChatBackend:
     def __init__(self, database: Path, generator, *, provider="fake", model="fake",
-                 role="plain_v1", runtime=None, model_endpoint=None, insecure_model_transport=False,
+                 role="plain_v1", runtime: MemoryRuntime, model_endpoint=None, insecure_model_transport=False,
                  sidecar_database=None):
         self.database = database.resolve()
         self.sidecar_database = (sidecar_database or database).resolve()
-        if runtime is not None and not runtime.legacy_sqlite and runtime.database != self.database:
+        if runtime.database != self.database:
             raise ValueError("chat_platform_source_path_mismatch")
         self.generator = generator
         self.provider, self.model, self.role = provider, model, role
@@ -53,10 +28,7 @@ class ChatBackend:
         self.model_endpoint = model_endpoint if provider != "fake" else None
         self.insecure_model_transport = bool(insecure_model_transport and provider != "fake")
         self.roles = RoleSettings(self.sidecar_database, role)
-        # 延迟打开让错误仍在一次请求的固定错误边界内返回；生产服务器和
-        # 内部语音接口随后复用同一个实例，不再每轮重新装配记忆引擎。
         self._runtime = runtime
-        self._runtime_creation_lock = Lock()
         self._model_health_lock = Lock()
         self._model_health = {"state": "not_applicable" if provider == "fake" else "unchecked",
                               "code": None, "checked_at": None}
@@ -85,16 +57,7 @@ class ChatBackend:
         return self.model_health()
 
     def memory_runtime(self):
-        if self._runtime is None:
-            with self._runtime_creation_lock:
-                if self._runtime is None:
-                    self._runtime = build_memory_runtime(self.database)
         return self._runtime
-
-    def _require_legacy_diagnostics(self):
-        if not self.memory_runtime().legacy_sqlite:
-            from longmemory.methods.contracts import UnsupportedCapabilityError
-            raise UnsupportedCapabilityError("memory_backend_capability_unsupported")
 
     def complete_round_screen_turn(
         self, *, turn_id, answer, retrieved_counts, retrieval_evidence=None,
@@ -102,141 +65,16 @@ class ChatBackend:
     ):
         """归档小智实际生成的回答；关联表与助手 L0 在同一事务提交。"""
 
-        if not self.memory_runtime().legacy_sqlite:
-            return self.memory_runtime().complete_round_screen(turn_id=turn_id, answer=answer,
-                receipt=receipt, client_round_id=client_round_id, request_id=request_id)
-
-        result = SQLiteRoundScreenTurnStore(self.database).record(
-            user_message_id=turn_id,
-            answer=answer,
-            retrieved_l1_count=retrieved_counts["l1"],
-            retrieved_l2_count=retrieved_counts["l2"],
-            retrieved_l3_count=retrieved_counts["l3"],
-            retrieval_evidence=retrieval_evidence,
-            retrieval_strategy=retrieval_strategy,
-        )
-        # 助手 L0 和精确召回索引已经先提交；延后 L1 在受管队列中执行，
-        # 不让完成回执或正在播放的语音继续等待候选模型。
-        self.memory_runtime().complete_deferred_observation(turn_id)
-        return result
+        return self._runtime.complete_round_screen(turn_id=turn_id, answer=answer,
+            receipt=receipt, client_round_id=client_round_id, request_id=request_id)
 
     def prepare_round_screen_user(self, text, *, client_round_id=None, session_id=None, request_id=None,
                                   voice_round_id=None, timing_callback=None):
         """准备圆屏输入，并尝试记录对上一轮的严格显式质量反馈。"""
 
-        if not self.memory_runtime().legacy_sqlite:
-            extra = {'timing_callback':timing_callback} if timing_callback is not None else {}
-            prepared, feedback = self.memory_runtime().prepare_round_screen(text,
-                client_round_id=client_round_id, session_id=session_id, request_id=request_id,
-                voice_round_id=voice_round_id, **extra)
-            return prepared, (RoundScreenMemoryFeedbackResult(**feedback) if feedback else None)
-        prepared = self.memory_runtime().prepare_user(
-            text, defer_slow_observation=True,
-        )
-        try:
-            feedback = SQLiteRoundScreenMemoryFeedbackStore(
-                self.database,
-            ).record_if_explicit(prepared.event)
-        except sqlite3.Error:
-            # 质量采集是旁路能力，短暂锁冲突不能让已经完成 L0/召回的
-            # 正常语音请求失败；返回稳定状态供内部协议观察，不伪称已记录。
-            kind = classify_explicit_round_screen_feedback(text)
-            feedback = (
-                RoundScreenMemoryFeedbackResult(
-                    kind, False, None, "storage_unavailable",
-                ) if kind is not None else None
-            )
-        return prepared, feedback
-
-    def round_screen_memory_feedback(self):
-        """读取圆屏反馈的无正文诊断索引。"""
-
-        self._require_legacy_diagnostics()
-        return SQLiteRoundScreenMemoryFeedbackStore(self.database).list_events()
-
-    def round_screen_memory_feedback_detail(self, event_id):
-        """按需读取一条圆屏问题的原始问答与召回证据。"""
-
-        self._require_legacy_diagnostics()
-        return SQLiteRoundScreenMemoryFeedbackStore(self.database).get_event(event_id)
-
-    def memory_feedback_review_states(self, targets):
-        """读取质量样本当前复核状态；目标中不包含聊天正文。"""
-        self._require_legacy_diagnostics()
-
-        return SQLiteMemoryFeedbackReviewStore(self.database).current(tuple(targets))
-
-    def record_memory_feedback_review(self, **values):
-        """追加一次质量复核事件，不修改任何长期记忆。"""
-        self._require_legacy_diagnostics()
-
-        return SQLiteMemoryFeedbackReviewStore(self.database).record(**values)
-
-    def list_l2_sufficiency_shadow(self, *, limit=50):
-        """列出影子运行；是否正在启用由 Runtime 状态单独给出。"""
-        self._require_legacy_diagnostics()
-
-        result = SQLiteL2SufficiencyShadowStore(self.database).list_recent(
-            limit=limit,
-        )
-        result["runtime"] = self.memory_runtime().status()[
-            "l2_sufficiency_shadow"
-        ]
-        return result
-
-    def get_l2_sufficiency_shadow(self, user_message_id):
-        self._require_legacy_diagnostics()
-        return SQLiteL2SufficiencyShadowStore(self.database).get(user_message_id)
-
-    def review_l2_sufficiency_shadow(self, user_message_id, **values):
-        """追加人工复核事件；不修改影子原判或正式回答。"""
-        self._require_legacy_diagnostics()
-
-        return SQLiteL2SufficiencyShadowStore(self.database).review(
-            user_message_id=user_message_id, **values,
-        )
-
-    def list_l1_sufficiency_shadow(self, *, limit=50):
-        """列出 L1 影子运行；正文仍只从原表按需读取。"""
-        self._require_legacy_diagnostics()
-
-        result = SQLiteL1SufficiencyShadowStore(self.database).list_recent(
-            limit=limit,
-        )
-        result["runtime"] = self.memory_runtime().status()[
-            "l1_sufficiency_shadow"
-        ]
-        return result
-
-    def get_l1_sufficiency_shadow(self, user_message_id):
-        self._require_legacy_diagnostics()
-        return SQLiteL1SufficiencyShadowStore(self.database).get(user_message_id)
-
-    def review_l1_sufficiency_shadow(self, user_message_id, **values):
-        """追加 L1 人工复核事件；不修改原判、候选或回答。"""
-        self._require_legacy_diagnostics()
-
-        return SQLiteL1SufficiencyShadowStore(self.database).review(
-            user_message_id=user_message_id, **values,
-        )
-
-    def list_l1_extraction_audit(self, *, limit=50):
-        """读取脱敏提取结果；刻意不返回用户原文。"""
-        self._require_legacy_diagnostics()
-
-        connection = open_database(self.database)
-        try:
-            return SQLiteL1ExtractionAuditStore(connection).list_recent(limit=limit)
-        finally:
-            connection.close()
-
-    def retry_l1_extraction(self, source_message_id, *, expected_attempt_id):
-        """将所有者的一次显式恢复请求交给常驻 Runtime 的受管队列。"""
-        self._require_legacy_diagnostics()
-
-        return self.memory_runtime().retry_failed_observation(
-            source_message_id, expected_attempt_id=expected_attempt_id,
-        )
+        return self._runtime.prepare_round_screen(text,
+            client_round_id=client_round_id, session_id=session_id, request_id=request_id,
+            voice_round_id=voice_round_id, timing_callback=timing_callback)
 
     def info(self):
         role = self.roles.current()
@@ -286,28 +124,19 @@ class ChatBackend:
             result["method"] = runtime_status["method"]
             result["memory_write_enabled"] = runtime_status["write_enabled"]
             result["memory_use_enabled"] = runtime_status["use_enabled"]
-            result["scenario_use_enabled"] = runtime_status["scenario_use_enabled"]
-            result["persona_use_enabled"] = runtime_status["persona_use_enabled"]
             # 开始处理时固定本轮角色。保存新版本不改变已经开始的回答。
             role = self.roles.current()
             result.update(role=role['name'], role_revision=role['revision'])
             generator = self.generator
             if role['revision'] and self.provider != 'fake':
                 generator = generator.with_role_prompt(role['prompt'])
-            prepared = runtime.prepare_user(text, session_id=session_id if not runtime.legacy_sqlite else None)
+            prepared = runtime.prepare_user(text, session_id=session_id)
             event, observed, support = prepared.event, prepared.observation, prepared.support
             result["memory_write_enabled"] = prepared.write_enabled
             result["memory_use_enabled"] = prepared.use_enabled
-            result["scenario_use_enabled"] = prepared.scenario_use_enabled
-            result["scenario_retrieved"] = [asdict(item) for item in prepared.scenarios]
-            result["persona_use_enabled"] = prepared.persona_use_enabled
-            result["persona_retrieved"] = [asdict(item) for item in prepared.personas]
+            result.update(scenario_retrieved=[], persona_retrieved=[])
             result["memory_command"] = (asdict(prepared.memory_command)
                                         if prepared.memory_command is not None else None)
-            result["follow_up_suggestion"] = (
-                asdict(prepared.follow_up_suggestion)
-                if prepared.follow_up_suggestion is not None else None
-            )
             result["temporary_interaction"] = (
                 asdict(prepared.temporary_interaction)
                 if prepared.temporary_interaction is not None else None
@@ -324,36 +153,10 @@ class ChatBackend:
             # 模型改写成功/失败事实，避免网页用户被模型的口头承诺误导。
             # 圆屏的上游接口只能注入系统上下文，仍由独立适配器加强约束。
             if isinstance(prepared.memory_command, (
-                NaturalMemoryCommandResult, NaturalCompanionCommandResult,
+                NaturalMemoryCommandResult,
                 TemporaryInteractionCommandResult,
             )):
                 answer = prepared.memory_command.notice
-                result["answer_source"] = "application_command"
-            elif prepared.follow_up_suggestion is not None:
-                follow_up = prepared.follow_up_suggestion
-                if (
-                    follow_up.status == "candidate_armed"
-                    or (
-                        follow_up.status == "replayed"
-                        and follow_up.outreach_id is not None
-                    )
-                ):
-                    answer = (
-                        "好，这次跟进已经按你说的时间安排。"
-                        "到点时仍会遵守勿扰时段、频率限制和设备状态。"
-                    )
-                elif follow_up.status in {
-                    "candidate_created_requires_proactive_enabled", "replayed",
-                }:
-                    answer = (
-                        "我记下了这次跟进，但主动交流总开关目前关闭，所以它还不会播报。"
-                        "你可以在设置中心开启总开关，再核对并启用这条候选。"
-                    )
-                else:
-                    answer = (
-                        "我识别到你想安排一次跟进，但本轮没有成功建立可追溯的长期事项，"
-                        "所以目前还没有安排。请到设置中心核对，或稍后重新告诉我。"
-                    )
                 result["answer_source"] = "application_command"
             # Fake 只验证工程闭环，页面明确标出它不模拟角色/多轮语义能力。
             elif self.provider == "fake":
@@ -369,7 +172,7 @@ class ChatBackend:
                 self._record_model_health("available")
                 checking_model = False
             result["answer"] = answer
-            assistant = runtime.record_assistant(answer, session_id=session_id if not runtime.legacy_sqlite else None)
+            assistant = runtime.record_assistant(answer, session_id=session_id)
             result.update(status="completed", assistant_saved=True, assistant_event_id=assistant.event_id)
         except AnswerGenerationError as error:
             result["error"] = error.code

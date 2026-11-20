@@ -208,7 +208,7 @@ export function DeviceApp() {
   const busy = readVolume.isPending || setVolume.isPending || readSnapshot.isPending || setScreen.isPending || stopSpeech.isPending;
   const operationView = operation ? resultView(operation.error ? {error:operation.error} : operation.data, operation.action) : null;
   const operationDetails = (operationView?.details ?? []) as Array<[string, unknown]>;
-  const sidebar = <><ConsoleNav active="device" legacyPath="/"/><Card size="small" className="device-boundary-card" title="控制边界"><p>开放音量、亮度和明暗主题；电池、网络与温度只读。</p><p>重启、配网和刷写仍不开放。</p></Card></>;
+  const sidebar = <><ConsoleNav active="device"/><Card size="small" className="device-boundary-card" title="控制边界"><p>开放音量、亮度和明暗主题；电池、网络与温度只读。</p><p>重启、配网和刷写仍不开放。</p></Card></>;
   const unread = '尚未读取';
   const unsupported = '固件未上报';
   const snapshotValue = (available: boolean, value: React.ReactNode) => snapshot ? (available ? value : unsupported) : unread;

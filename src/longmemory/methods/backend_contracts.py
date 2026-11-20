@@ -76,14 +76,8 @@ class MemoryAdministration(Protocol):
 
 @dataclass(frozen=True, slots=True)
 class BackendAssembly:
-    """一个显式选定的引擎及管理适配；Runtime 拥有 method 的关闭责任。
-
-    新后端默认不接旧派生功能。legacy_sqlite 仅限本仓库旧引擎适配器；
-    外部方法不能通过这个标志把私有结构写进通用协议。
-    management=None 必须公开不支持，不能回落到旧库。
-    """
+    """运行时拥有引擎实例与对应的来源和管理资源。"""
 
     method: MemoryMethod
     resources: tuple[StateResource, ...]
     management: MemoryAdministration | None = None
-    legacy_sqlite: bool = False

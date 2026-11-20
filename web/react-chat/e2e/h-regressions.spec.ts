@@ -30,28 +30,6 @@ for(const width of [1440,390]) for(const motion of ['full','reduce'] as const) {
     }
     await page.getByRole('tab',{name:'外观与阅读',exact:true}).click();
     await expect(page.getByRole('combobox',{name:'主题'})).toBeVisible();
-    await page.goto('/memories');
-    await page.locator('.memory-item').first().getByRole('button',{name:'查看来源',exact:true}).click();
-    const source=page.getByRole('dialog',{name:'事实记忆（L1）'});
-    const remove=source.getByRole('button',{name:/删\s*除/});
-    for(const close of ['escape','enter','pointer'] as const) {
-      await remove.click();
-      const confirmation=page.getByRole('dialog',{name:'删除这条 L1 记忆？'});
-      await expect(confirmation).toBeVisible();
-      await expect(confirmation.getByRole('button',{name:'确认删除 L1'})).toBeDisabled();
-      if(close==='escape') await page.keyboard.press('Escape');
-      else if(close==='enter') {await confirmation.getByRole('button',{name:/取\s*消/}).focus();await page.keyboard.press('Tab');await page.keyboard.press('Shift+Tab');await page.keyboard.press('Enter');}
-      else {await page.keyboard.press('Tab');await confirmation.getByRole('button',{name:/取\s*消/}).click();}
-      await expect(page.locator('.ant-modal-wrap:visible')).toHaveCount(0);
-      await expect(page.locator('.ant-modal-mask:visible')).toHaveCount(0);
-      await expect(source).toBeVisible();await expect(remove).toBeFocused();
-    }
-    await page.keyboard.press('Escape');await expect(source).not.toBeVisible();
-    await expect(page.locator('.ant-drawer-mask:visible')).toHaveCount(0);
-    await expect(page.locator('.ant-drawer-content-wrapper:visible')).toHaveCount(0);
-    await expect(page.getByRole('searchbox',{name:'搜索当前层级'})).toBeEnabled();
-    await page.locator('.memory-item').first().getByRole('button',{name:'查看来源',exact:true}).click();
-    await expect(source).toBeVisible();await source.getByRole('button',{name:'Close',exact:true}).click();await expect(source).not.toBeVisible();
   });
 }
 
@@ -64,25 +42,6 @@ test('R1 full 脏角色 Esc 拒绝放弃继续保护，明确放弃才关闭',as
   await expect(modal).toBeVisible();await expect(name).toHaveValue('合成未保存角色');
   await Promise.all([page.waitForEvent('dialog').then(dialog=>dialog.accept()),page.keyboard.press('Escape')]);
   await gone(page);await expect(trigger).toBeFocused();
-});
-
-test('R2 390px质量样本的全部处置可见且键盘可达',async({page},info)=>{
-  await page.setViewportSize({width:390,height:844});
-  await page.route('**/api/**',route=>route.fulfill({json:syntheticResponse(new URL(route.request().url()).pathname+new URL(route.request().url()).search,true)}));
-  await page.goto('/memory-quality');
-  const actions=page.locator('.quality-list-card .ant-list-item-action');await expect(actions).toBeVisible();
-  for(const name of ['核对回答与证据','标为已处理','不是记忆问题']) {
-    const action=actions.getByRole(name==='核对回答与证据'?'link':'button',{name,exact:true});
-    await action.scrollIntoViewIfNeeded();await expect(action).toBeVisible();
-    const box=await action.boundingBox();expect(box!.x).toBeGreaterThanOrEqual(0);expect(box!.x+box!.width).toBeLessThanOrEqual(391);
-    await action.focus();await expect(action).toBeFocused();
-  }
-  expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
-  const descriptionBox=await page.locator('.quality-sample-description').boundingBox();
-  const actionsBox=await actions.boundingBox();
-  expect(actionsBox!.y-descriptionBox!.y-descriptionBox!.height).toBeLessThanOrEqual(24);
-  await info.attach('质量动作布局',{body:await page.screenshot({fullPage:true}),contentType:'image/png'});
-  await page.screenshot({path:info.outputPath('r2-quality-actions-390.png'),fullPage:true});
 });
 
 test('R3 自定义保存不沿用另一个对象的预览选择成功提示',async({page})=>{

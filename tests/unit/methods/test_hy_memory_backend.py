@@ -98,7 +98,7 @@ def test_management_read_only_and_unknown_times(tmp_path):
             runtime.administer("listing", "list_items", query="茶")
         with pytest.raises(LookupError):
             runtime.administer("detail", "get_item", "missing")
-        assert not runtime.legacy_sqlite
+        assert runtime.identity()["legacy_sqlite"] is False
     finally:
         runtime.close()
 
@@ -241,7 +241,7 @@ def test_hy_same_u_http_boundary_and_unsupported_legacy_routes(tmp_path):
                 source = await (await client.get(base + "/api/memory-engine/sources/" + item["source_event_ids"][0])).json()
                 assert source["role"] == "user"
                 for path in ("/api/memories","/api/personas","/api/scenarios","/api/proactive-policy"):
-                    assert (await client.get(base + path)).status == 501
+                    assert (await client.get(base + path)).status == 404
                 url = base + "/api/memory-engine/items/" + item["item_id"]
                 assert (await client.post(url + "/corrections",headers=headers,json={"content":"修改","revision":item["revision"]})).status == 501
                 assert (await client.delete(url,headers=headers,json={"revision":item["revision"]})).status == 501

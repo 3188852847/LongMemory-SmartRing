@@ -34,7 +34,6 @@ EXPECTED_SANOTTS_FINGERPRINT = "e7adac23b8ae2aefa1623eaa24f6f8049ddfd97e30efd5a3
 WALLPAPER_DELIVERY_PORT = 8768
 DEFAULT_CHAT_PATH = "/chat-react"
 CONSOLE_PATHS = {"overview": "/overview", "chat": DEFAULT_CHAT_PATH, "device": "/device", "memories": "/memories", "settings": "/settings"}
-DEFAULT_BGE_MODEL = LOCAL_ROOT / "runtime/models/bge-small-zh-v1.5/7999e1d3359715c523056ef9478215996d62a620"
 DEFAULT_FFMPEG_DIR = LOCAL_ROOT / "tools/ffmpeg/bin"
 LAUNCHER_STATUS_NAME = "launcher-status.json"
 
@@ -74,13 +73,7 @@ class Options:
     database: Path = ROOT / "data/databases/xiaozhi-demo-v1.db"
     port: int = 8767
     role: str = "elysia_v1"
-    memory_extraction: str = "rules"
-    memory_retrieval: str = "keyword"
     allow_memory_delete: bool = False
-    enable_memory_consolidation: bool = False
-    enable_l1_sufficiency_shadow: bool = False
-    enable_l2_sufficiency_shadow: bool = False
-    embedding_model_dir: Path = DEFAULT_BGE_MODEL
     voice: bool = False
     voice_mode: str = "pipeline"
     voice_latency_mode: str = "realtime"
@@ -95,7 +88,7 @@ class Options:
     consent: bool = False
     model_profile: str = "campus"
     voice_model_profile: str = "campus"
-    memory_backend: str = "longmemory"
+    memory_backend: str = "hy_memory"
     ffmpeg_dir: Path | None = None
     cosy_delivery_mode: str = "buffered"
 
@@ -168,7 +161,7 @@ def build_commands(options, uv=None):
         raise ValueError("未知圆屏响应策略。")
     if type(options.cosy_delivery_mode) is not str or options.cosy_delivery_mode not in {"buffered", "incremental", "adaptive"}:
         raise ValueError("未知声音交付策略。")
-    if options.memory_backend not in {"longmemory", "hy_memory", "xiaozhi_local", "none"}:
+    if options.memory_backend != "hy_memory":
         raise ValueError("未知圆屏记忆后端。")
     if (options.model_profile == "campus" or
             (options.voice and options.voice_mode == "pipeline"
@@ -178,23 +171,17 @@ def build_commands(options, uv=None):
         raise ValueError("控制台端口需在 1024–65535 且不占用小智端口。")
     if options.role not in {"plain_v1", "elysia_v1"}:
         raise ValueError("未知助手角色。")
-    if options.memory_extraction not in {"rules", "llm"}:
-        raise ValueError("未知记忆提取策略。")
-    if options.memory_retrieval not in {"keyword", "hybrid"}:
-        raise ValueError("未知记忆召回策略。")
     if options.tts_backend not in {"edge", "voxcpm2", "sanotts", "cosyvoice3"}:
         raise ValueError("未知语音后端。")
     if options.vad_profile not in {"normal", "noisy", "close_talk"}:
         raise ValueError("未知拾音环境档位。")
     root = options.root.resolve()
-    hy_selected = options.memory_backend == "hy_memory"
-    if hy_selected:
-        if options.voice and options.voice_mode != "pipeline":
-            raise ValueError("Hy 圆屏接入仅支持原语音主链路。")
-        from longmemory.infrastructure.config.hy_deployment import load_hy_deployment
-        deployment = load_hy_deployment(root)
-        if not deployment.source_path.is_file() or not (deployment.state_directory / "hy-state.json").is_file():
-            raise ValueError("Hy 新库尚未由受控切换初始化；普通启动不会建库。")
+    if options.voice and options.voice_mode != "pipeline":
+        raise ValueError("Hy 圆屏接入仅支持原语音主链路。")
+    from longmemory.infrastructure.config.hy_deployment import load_hy_deployment
+    deployment = load_hy_deployment(root)
+    if not deployment.source_path.is_file() or not (deployment.state_directory / "hy-state.json").is_file():
+        raise ValueError("Hy 新库尚未由受控切换初始化；普通启动不会建库。")
     if not options.database.is_file():
         raise ValueError("请选择已有日常数据库；启动器不会创建或迁移数据库。")
     env_file = {"campus": "local/config/.env", "official": "local/config/.env.deepseek.local"}[options.model_profile]
@@ -208,18 +195,13 @@ def build_commands(options, uv=None):
     console = [str(uv), "run", "--offline", "--no-sync", "--env-file", env_file,
                "python", "-m", "longmemory.entrypoints.api", "--port", str(options.port),
                "--database", str(options.database.resolve()), "--enable-chat",
-               "--chat-provider", "openai_compatible", "--assistant-role", options.role,
-               "--memory-extraction", "rules" if hy_selected else options.memory_extraction,
-               "--memory-retrieval", "keyword" if hy_selected else options.memory_retrieval,
+               "--assistant-role", options.role,
                "--tts-backend", options.tts_backend,
                "--xiaozhi-server", str(options.voice_root.resolve()),
                "--launcher-status-file", str(root / "data/control" / LAUNCHER_STATUS_NAME),
                "--memory-audit-log", str(root / "data/logs/xiaozhi-demo-v1.jsonl")]
     console.extend(["--model-profile", options.model_profile])
-    console.extend(["--memory-backend", options.memory_backend])
-    if not options.voice or hy_selected:
-        # 文字模式保留圆屏联系设置，但不启动无法投递的圆屏定时任务。
-        console.append("--disable-proactive-schedule")
+    console.extend(["--memory-backend", "hy_memory"])
     # 媒体工具是用户已安装的本地依赖。启动器只发现并传递路径，
     # 不下载、不改 PATH；找不到时其他控制台功能仍可启动。
     ffmpeg_dir = options.ffmpeg_dir or DEFAULT_FFMPEG_DIR
@@ -228,27 +210,8 @@ def build_commands(options, uv=None):
     # 人工纠正每次都需要在网页中核对旧内容并再次确认；日常入口默认开放这一
     # 可追溯写入能力。不可恢复的硬删除仍保持关闭。
     console.append("--allow-memory-correction")
-    console.append("--allow-scenario-management")
-    # L3 只能由本机页面显式创建候选并复核；尚不参与回答。
-    console.append("--allow-persona-management")
-    if options.enable_memory_consolidation and not hy_selected:
-        console.append("--enable-memory-consolidation")
-    if options.enable_l1_sufficiency_shadow and not hy_selected:
-        # 只观测 L1 候选是否足以回答；默认关闭且不修改正式上下文。
-        console.append("--enable-l1-sufficiency-shadow")
-    if options.enable_l2_sufficiency_shadow and not hy_selected:
-        # 影子审计只旁路记录 L2 证据是否足够，不改变本轮注入和回答。
-        # 默认关闭，因为每个存在 L2 候选的用户问题会增加一次模型请求。
-        console.append("--enable-l2-sufficiency-shadow")
     if options.allow_memory_delete:
-        # 这里只授予服务端能力；浏览器仍需打开具体 L1 并二次确认。
-        # 当前删除保留 L0 原话，因此不能显示成“彻底遗忘”。
         console.append("--allow-memory-delete")
-    if options.memory_retrieval == "hybrid" and not hy_selected:
-        if not options.embedding_model_dir.is_dir():
-            raise ValueError("混合召回需要已有的本地 BGE 快照目录。")
-        console.extend(["--embedding-model-dir", str(options.embedding_model_dir.resolve())])
-    # 实验启动默认关闭；L1 删除只能由面板显式勾选，不能隐式开启。
     commands = [("console", console, root)]
     if options.voice:
         try:
@@ -492,14 +455,10 @@ class Manager:
                     network_config_action(options.voice_root, options.lan_ip, apply=True, **network_apply)
             else:
                 from tts import config_action as tts_config_action
-                from model import config_action as model_config_action
                 from memory import config_action as memory_config_action
                 from vad import config_action as vad_config_action
                 tts_checked = tts_config_action(
                     options.voice_root, options.root, options.tts_backend
-                )
-                model_checked = {"config_matches": True} if options.memory_backend == "hy_memory" else model_config_action(
-                    options.voice_root, options.root, options.voice_model_profile
                 )
                 memory_checked = memory_config_action(
                     options.voice_root, options.root, options.memory_backend
@@ -511,7 +470,7 @@ class Manager:
                 if network_checked["changed"]:
                     network_config_action(options.voice_root, options.lan_ip, apply=True, **network_apply)
                     config_changed = True
-                # 五个配置域共用同一个私有 YAML。上一个域一旦写入，后面预检时
+                # 各配置域共用同一个私有 YAML。上一个域一旦写入，后面预检时
                 # 取得的摘要就已经陈旧；写入前重新检查既保留“全部先预检”的安全
                 # 边界，也避免启动器被自己的前序修改触发并发保护。
                 if config_changed:
@@ -524,17 +483,6 @@ class Manager:
                         apply=True, expected_digest=tts_checked["digest"],
                     )
                     config_changed = True
-                if config_changed and options.memory_backend != "hy_memory":
-                    model_checked = model_config_action(
-                        options.voice_root, options.root, options.voice_model_profile
-                    )
-                if not model_checked["config_matches"]:
-                    model_config_action(options.voice_root, options.root,
-                                        options.voice_model_profile, apply=True,
-                                        expected_digest=model_checked["digest"])
-                    config_changed = True
-                # 记忆后端与模型/TTS 一样只在端口空闲后同步。切换只改变提供器
-                # 指针及缺失的内置配置，不读取、迁移或删除任何后端数据。
                 if config_changed:
                     memory_checked = memory_config_action(
                         options.voice_root, options.root, options.memory_backend
@@ -569,12 +517,10 @@ class Manager:
         env.update(
             PYTHONUTF8="1",
             LONGMEMORY_LAUNCHER_INSTANCE=self.instance,
-            LONGMEMORY_MEMORY_TRANSPORT="runtime",
             LONGMEMORY_RUNTIME_URL=(
                 f"http://127.0.0.1:{options.port}/api/internal/memory/prepare"
             ),
             LONGMEMORY_RUNTIME_TOKEN=runtime_token,
-            LONGMEMORY_MEMORY_BACKEND=options.memory_backend,
         )
         try:
             for name, command, cwd in commands:
@@ -585,7 +531,7 @@ class Manager:
                 if name == "voice" and options.voice_mode == "doubao_realtime":
                     # 云端备用入口不领取个人记忆内部接口凭据。
                     child_env = {key: value for key, value in env.items() if key not in {
-                        "LONGMEMORY_MEMORY_TRANSPORT", "LONGMEMORY_RUNTIME_URL",
+                        "LONGMEMORY_RUNTIME_URL",
                         "LONGMEMORY_RUNTIME_TOKEN",
                     }}
                 self.services[name] = OwnedService(command, cwd, child_env)

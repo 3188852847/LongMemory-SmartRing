@@ -29,7 +29,7 @@ async function mockWorkspace(page:Page) {
     if (request.method() !== 'GET') writes.push({path,body});
     let response:unknown;
     if (path === '/api/session') response = {csrf:'synthetic-token'};
-    else if (path === '/api/memory-engine/identity') response = {schema_version:1,configured:true,method:'longmemory_v1',representation:'atomic_fact',legacy_sqlite:true,state:'available'};
+    else if (path === '/api/memory-engine/identity') response = {schema_version:1,configured:true,method:'hy_memory_pro_chat',representation:'method_defined',legacy_sqlite:false,state:'available'};
     else if (path === '/api/chat-config') response = {enabled:true,model:'fake',role:'合成助手',provider:'fake'};
     else if (path === '/api/otto-preview') response = {commit:'synthetic',valid_count:0,items:[]};
     else if (path === '/api/voice-profile' && request.method() === 'GET') response = snapshot();
@@ -56,7 +56,7 @@ for (const viewport of [{width:1366,height:768},{width:1440,height:900},{width:3
     await page.setViewportSize(viewport);
     const {writes,unexpected} = await mockWorkspace(page);
     await page.goto('/settings?tab=voice');
-    for (const name of ['设置总览','模型与服务','记忆后端','助手表达','声音与克隆','外观与阅读','主动交流']) {
+    for (const name of ['设置总览','模型与服务','记忆后端','助手表达','声音与克隆','外观与阅读']) {
       const tab = page.getByRole('tab',{name,exact:true});
       await expect(tab).toBeVisible();
       if (viewport.width > 600) {

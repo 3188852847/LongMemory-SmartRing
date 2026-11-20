@@ -28,7 +28,7 @@ def modules(monkeypatch):
 
 
 @pytest.fixture
-def options(tmp_path, modules):
+def options(tmp_path, modules, monkeypatch):
     root = tmp_path / "合成项目 path"
     (root / ".venv/Scripts").mkdir(parents=True)
     (root / ".venv/Scripts/python.exe").touch()
@@ -40,6 +40,15 @@ def options(tmp_path, modules):
     (voice_root / ".venv/Scripts/python.exe").touch()
     (root / "local/config/.env.doubao.local").parent.mkdir(parents=True, exist_ok=True)
     (root / "local/config/.env.doubao.local").write_text('DOUBAO_API_KEY="synthetic-secret"\n', encoding="utf-8")
+    from longmemory.infrastructure.config import hy_deployment
+    source = root / "data/databases/hy-sources.db"
+    source.parent.mkdir(parents=True)
+    source.touch()
+    state = root / "data/memory/hy-daily"
+    state.mkdir(parents=True)
+    (state / "hy-state.json").write_text("{}")
+    monkeypatch.setattr(hy_deployment, "load_hy_deployment", lambda root: SimpleNamespace(
+        source_path=source, state_directory=state))
     return modules.runtime.Options(
         root=root, database=root / "synthetic.db", model_profile="official",
         voice=True, voice_mode="doubao_realtime", voice_root=voice_root,
@@ -62,65 +71,9 @@ def test_mode_is_saved_without_credentials_and_legacy_defaults_to_pipeline(tmp_p
         modules.preferences.save_preferences(path, {"voice_mode": "automatic_cloud"})
 
 
-def test_cloud_commands_skip_local_models_and_voice_campus_consent(options, modules):
-    commands = modules.runtime.build_commands(options, uv="synthetic-uv")
-    assert [name for name, _, _ in commands] == ["console", "voice"]
-    web, voice = commands[0][1], commands[1][1]
-    assert web[web.index("--model-profile") + 1] == "official"
-    assert web[web.index("--memory-backend") + 1] == "longmemory"
-    assert voice[voice.index("--voice-mode") + 1] == "doubao_realtime"
-    assert voice[voice.index("--doubao-env") + 1] == str(options.root / "local/config/.env.doubao.local")
-    assert "synthetic-secret" not in repr(commands)
-
-
-def test_cloud_mode_preserves_web_campus_acknowledgment(options, modules):
-    with pytest.raises(ValueError, match="HTTP"):
-        modules.runtime.build_commands(replace(options, model_profile="campus"), uv="synthetic-uv")
-
-
-def test_missing_cloud_configuration_blocks_before_services(options, modules, monkeypatch):
-    missing = replace(options, doubao_env=options.root / "missing.env")
-    calls = []
-    monkeypatch.setattr(modules.runtime.shutil, "which", lambda _: "synthetic-uv")
-    monkeypatch.setattr(modules.runtime, "OwnedService", lambda *args: calls.append(args))
-    with pytest.raises(ValueError, match="豆包实时语音尚未完成配置"):
-        modules.runtime.Manager().start(missing)
-    assert calls == []
-
-
-def test_cloud_manager_only_syncs_network_and_does_not_pass_memory_token(options, modules, monkeypatch):
-    network_calls, spawned = [], []
-    monkeypatch.setattr(modules.runtime.shutil, "which", lambda _: "synthetic-uv")
-    monkeypatch.setattr(modules.runtime, "require_free", lambda *args: None)
-    monkeypatch.setattr(modules.runtime, "require_no_listener", lambda *args: pytest.fail("local TTS port queried"))
-    def network_action(*args, **kwargs):
-        network_calls.append(kwargs.get("apply", False))
-        return {"changed": True, 'digest': 'a' * 64}
-    monkeypatch.setitem(sys.modules, "network", SimpleNamespace(config_action=network_action))
-    for name in ("tts", "model", "memory", "vad"):
-        monkeypatch.setitem(sys.modules, name, SimpleNamespace(
-            config_action=lambda *a, **kw: pytest.fail("pipeline provider configuration accessed")
-        ))
-    def owned(command, cwd, env):
-        spawned.append((command, dict(env)))
-        return SimpleNamespace(process=SimpleNamespace(poll=lambda: None), stop=lambda: None)
-    monkeypatch.setattr(modules.runtime, "OwnedService", owned)
-    manager = modules.runtime.Manager()
-    manager.start(options)
-    assert network_calls == [False, True]
-    assert set(manager.services) == {"console", "voice"}
-    assert "LONGMEMORY_RUNTIME_TOKEN" in spawned[0][1]
-    assert "LONGMEMORY_RUNTIME_TOKEN" not in spawned[1][1]
-    assert "LONGMEMORY_RUNTIME_URL" not in spawned[1][1]
-    status = json.loads(manager.status_path.read_text(encoding="utf-8"))
-    assert status["schema_version"] == 5
-    assert status["startup"]["voice_mode"] == "doubao_realtime"
-    assert status["startup"]["tts_backend"] is None
-    assert status["startup"]["vad_profile"] is None
-    assert manager.local_tts_ready() is False
-    with pytest.raises(ValueError, match="请先停止"):
-        manager.start(replace(options, voice_mode="pipeline"))
-    manager.stop()
+def test_hy_screen_rejects_nonmemory_voice_chain(options, modules):
+    with pytest.raises(ValueError, match="Hy 圆屏"):
+        modules.runtime.build_commands(options, uv="synthetic-uv")
 
 
 def test_voice_wrapper_routes_cloud_without_loading_yaml_or_providers(options, modules, monkeypatch):
@@ -147,8 +100,8 @@ def test_voice_wrapper_routes_cloud_without_loading_yaml_or_providers(options, m
 
 def test_cloud_presentation_does_not_claim_local_or_cloud_connection_ready(modules):
     view = modules.view_model
-    summary = view.summary_text(True, "chat", "plain_v1", "rules", "keyword", "cosyvoice3",
-                                False, False, model_profile="official", voice_mode="doubao_realtime")
+    summary = view.summary_text(True, "chat", "plain_v1", "cosyvoice3",
+                                False, model_profile="official", voice_mode="doubao_realtime")
     assert "语音发往云端" in summary and "长期记忆暂不接入" in summary
     assert "CosyVoice" not in summary
     starting = view.starting_services(voice=True, tts_backend="cosyvoice3", model_profile="official",

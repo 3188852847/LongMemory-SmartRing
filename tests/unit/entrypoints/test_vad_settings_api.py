@@ -6,14 +6,12 @@ from test_console import console, login
 from longmemory.adapters.llm.fake import FakeAnswerGenerator
 from longmemory.entrypoints.api import server
 from longmemory.entrypoints.api.vad_settings import _public_status
-from longmemory.entrypoints.api.chat_backend import ChatBackend
-from longmemory.methods.longmemory_v1.method import LongMemoryV1
+from test_chat_console import synthetic_backend
 
 
 def test_vad_api_requires_xiaozhi_and_accepts_only_whitelisted_profile(tmp_path, monkeypatch):
     database = tmp_path / "synthetic.db"
-    LongMemoryV1(database).close()
-    chat = ChatBackend(database, FakeAnswerGenerator())
+    chat = synthetic_backend(database, FakeAnswerGenerator())
     calls = []
 
     class Fake:
