@@ -1,0 +1,126 @@
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -15,5 +15,5 @@
+ # "Trim" the build. Include the minimal set of components, main, and anything it depends on.
+ idf_build_set_property(MINIMAL_BUILD ON)
+ 
+-set(PROJECT_VER "2.2.3-otto0016")
++set(PROJECT_VER "2.2.3-whale0017")
+ project(xiaozhi)
+--- a/main/boards/viewe-smartring-plus/viewe-smartring-plus.cc
++++ b/main/boards/viewe-smartring-plus/viewe-smartring-plus.cc
+@@ -1,3 +1,4 @@
++#include "pet_touch.h"
+ #include "wifi_board.h"
+ #include "codecs/es8311_audio_codec.h"
+ #include "display/lcd_display.h"
+@@ -1051,6 +1052,8 @@
+     bool otto_view_styles_ = false;
+     std::string active_gif_;
+     std::string active_face_;
++    const char* touch_face_ = nullptr;
++    uint32_t touch_started_ = 0;
+     std::string attempted_face_;
+     uint32_t attempted_at_ = 0;
+     otto::RetryGate retry_gate_;
+@@ -1183,8 +1186,13 @@
+             attempted_face_.clear();
+         }
+         if (!wallpaper_view_) {
+-            const char* face = otto_state_.Face(lv_tick_get());
+             const uint32_t now = lv_tick_get();
++            const char* face = otto_state_.Face(now);
++            if (touch_face_ && interaction_ == round_face::Interaction::Idle && now - touch_started_ < 1800) {
++                face = touch_face_;
++            } else {
++                touch_face_ = nullptr;
++            }
+             if (attempted_face_ != face || uint32_t(now - attempted_at_) >= 1000) {
+                 attempted_face_ = face;
+                 attempted_at_ = now;
+@@ -1500,6 +1508,15 @@
+         ApplyFace(current_emotion_.c_str());
+     }
+ 
++    bool ShowTouchFace(const char* face) {
++        DisplayLockGuard lock(this);
++        if (wallpaper_view_ || !setup_ui_called_ || interaction_ != round_face::Interaction::Idle) return false;
++        touch_face_ = face;
++        touch_started_ = lv_tick_get();
++        // The existing face timer renders the gesture and restores idle.
++        return true;
++    }
++
+     void SetServerEmotion(const char* emotion) override {
+         if (!setup_ui_called_) return;
+         DisplayLockGuard lock(this);
+@@ -1664,8 +1681,10 @@
+             vTaskDelete(NULL);
+             return;
+         }
++        PetTouch gesture;
+         while (true) {
+-            if (touchpad->WaitForTouchEvent()) {
++            // Some panels only interrupt on press/release. Sample during contact.
++            if (touchpad->WaitForTouchEvent(gesture.tracking ? pdMS_TO_TICKS(25) : portMAX_DELAY) || gesture.tracking) {
+                 auto& app = Application::GetInstance();
+                 auto& board = static_cast<ViewESmartRingPlus&>(Board::GetInstance());
+ 
+@@ -1674,7 +1693,17 @@
+                 }
+                 auto touch_event = touchpad->CheckTouchEvent();
+ 
+-                if (touch_event == Cst816s::TOUCH_RELEASE) {
++                const auto& point = touchpad->GetTouchPoint();
++                if (touch_event == Cst816s::TOUCH_PRESS) {
++                    gesture.begin(point.x, point.y, app.GetDeviceState() == kDeviceStateIdle);
++                } else if (touch_event == Cst816s::TOUCH_HOLD) {
++                    gesture.move(point.x, point.y);
++                } else if (touch_event == Cst816s::TOUCH_RELEASE) {
++                    const char* face = gesture.finish();
++                    auto* display = static_cast<SmartRingFaceDisplay*>(board.GetDisplay());
++                    if (face && app.GetDeviceState() == kDeviceStateIdle && display && display->ShowTouchFace(face)) {
++                        continue;
++                    }
+                     if (app.GetDeviceState() == kDeviceStateStarting &&
+                         !WifiManager::GetInstance().IsConnected()) {
+                         board.EnterWifiConfigMode();
+--- /dev/null
++++ b/main/boards/viewe-smartring-plus/pet_touch.h
+@@ -0,0 +1,36 @@
++#pragma once
++#include <cstdlib>
++
++// 360px screen, 240px centred character. Track a change in stroke direction
++// so a quick straight swipe does not register as rubbing.
++struct PetTouch {
++    int start_x = 0, start_y = 0, peak_x = 0, direction = 0;
++    bool tracking = false, eligible = false, rubbed = false;
++    void begin(int x, int y, bool idle) {
++        start_x = peak_x = x;
++        start_y = y;
++        direction = 0;
++        rubbed = false;
++        tracking = true;
++        eligible = idle && x >= 101 && x <= 255 && y >= 85 && y <= 213;
++    }
++    void move(int x, int y) {
++        if (!eligible) return;
++        if (x < 82 || x > 275 || y < 65 || y > 233) { eligible = false; return; }
++        if (!direction) {
++            if (std::abs(x - start_x) < 14) return;
++            direction = x > start_x ? 1 : -1;
++            peak_x = x;
++        } else if ((x - peak_x) * direction > 0) {
++            peak_x = x;
++        } else if ((peak_x - x) * direction >= 14) {
++            rubbed = true;
++        }
++    }
++    const char* finish() {
++        tracking = false;
++        if (!eligible) return nullptr;
++        if (rubbed) return "sleepy";
++        return start_y < 151 ? "happy" : "winking";
++    }
++};
