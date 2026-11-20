@@ -20,8 +20,8 @@ def _supported(connection) -> bool:
 
 
 def install_persistent_device_session(
-    connection_class, receive_audio_module, *, heartbeat_seconds=45,
-    feature_wait_seconds=10,
+    connection_class, receive_audio_module, listen_handler_class=None, *,
+    heartbeat_seconds=45, feature_wait_seconds=10,
 ):
     """协商后把“结束采音”与“关闭 WebSocket”拆开。
 
@@ -55,6 +55,9 @@ def install_persistent_device_session(
         if getattr(connection, "_longmemory_session_idle", False):
             return None
         await connection.websocket.send(IDLE_MESSAGE)
+        # 发送期间同一连接可能已经开始下一轮采音，让新一轮继续计时。
+        if connection.last_activity_time != last_activity:
+            return None
         connection._longmemory_session_idle = True
         connection.logger.bind(tag="persistent-session").info(
             "圆屏静默会话已回到待机；控制连接保持在线"
@@ -78,7 +81,7 @@ def install_persistent_device_session(
                     break
                 await connection.websocket.send(HEARTBEAT_MESSAGE)
                 # 新固件会把 heartbeat 作为协议消息消费，不呈现给用户。这里不能
-                # 改写 last_activity_time：它表示用户语音活动，空闲切换依赖该时间。
+                # 改写 last_activity_time：静默窗口从开始采音或最近一次语音活动起算。
         except Exception:
             # WebSocket 主接收循环负责记录并释放断线；心跳不创建第二套重试。
             connection.logger.bind(tag="persistent-session").warning(
@@ -90,6 +93,16 @@ def install_persistent_device_session(
                 "圆屏持久在线心跳已退出"
             )
 
+    if listen_handler_class is not None:
+        original_listen = listen_handler_class.handle
+
+        async def handle_listen(self, conn, msg_json):
+            if _supported(conn) and msg_json.get("state") == "start":
+                conn.last_activity_time = time.time() * 1000
+                conn._longmemory_session_idle = False
+            return await original_listen(self, conn, msg_json)
+
+        listen_handler_class.handle = handle_listen
     receive_audio_module.no_voice_close_connect = no_voice_close_connect
     connection_class._check_timeout = check_timeout
     connection_class._longmemory_persistent_session_installed = True

@@ -229,6 +229,84 @@ def test_provider_uses_runtime_transport_without_starting_subprocess(provider_cl
     assert completion_body["answer"] == "这是最终回答"
 
 
+@pytest.mark.parametrize("protocol", [1, 2])
+def test_full_unicode_completion_provider_and_utf8_replay(protocol, provider_class, config, tmp_path, monkeypatch):
+    from aiohttp import web
+    from aiohttp.test_utils import TestClient, TestServer
+    from urllib.request import build_opener, ProxyHandler
+
+    from longmemory.adapters.llm.fake import FakeAnswerGenerator
+    from longmemory.bootstrap import build_memory_runtime
+    from longmemory.entrypoints.api.chat_backend import ChatBackend
+    from longmemory.entrypoints.api.routes.memory_runtime import _COMPLETION_BODY_BYTES, register_memory_runtime_routes
+    from longmemory.methods.contracts import MemorySupport, RetrievedTrace
+    from longmemory.methods.longmemory_v1.method import LongMemoryV1
+    from tests.unit.entrypoints.test_platform_roundscreen import open_runtime
+
+    # 只替换召回引擎输出。正式 prepare 生成证据，独立小智提供器读取并回传给真实账本。
+    rows = tuple(RetrievedTrace("𠀀" * 30 + str(i), "合成内容", ("源" * 17 + str(i),)) for i in range(100))
+    support = MemorySupport("synthetic-call", "合成上下文", rows, "synthetic")
+    if protocol == 1:
+        database = tmp_path / "rounds.db"
+        LongMemoryV1(database).close()
+        monkeypatch.setattr(LongMemoryV1, "recall", lambda self, query: support)
+        runtime = build_memory_runtime(database)
+    else:
+        runtime, engine = open_runtime(tmp_path)
+        monkeypatch.setattr(engine, "recall", lambda query: support)
+    backend = ChatBackend(runtime.database, FakeAnswerGenerator(), runtime=runtime)
+    provider = provider_class(config)
+    provider.init_memory(config["allowed_device_id"], None)
+    sent = []
+    local_opener = build_opener(ProxyHandler({}))
+
+    def open_request(request, timeout):
+        if request.full_url.endswith("/complete"):
+            sent.append(request.data)
+        return local_opener.open(request, timeout=timeout)
+
+    monkeypatch.setattr("urllib.request.urlopen", open_request)
+    monkeypatch.setenv("LONGMEMORY_MEMORY_TRANSPORT", "runtime")
+    monkeypatch.setenv("LONGMEMORY_RUNTIME_TOKEN", "a" * 64)
+
+    async def run():
+        app = web.Application(client_max_size=1024)
+        register_memory_runtime_routes(app, backend)
+        async with TestClient(TestServer(app)) as client:
+            monkeypatch.setenv("LONGMEMORY_RUNTIME_URL", str(client.make_url("/api/internal/memory/prepare")))
+            answer = "𠀀" * 15_999 + "汉"
+            key, token = provider.begin_turn()
+            try:
+                assert "合成上下文" in await provider.query_memory("合成问题")
+                assert await asyncio.to_thread(provider.record_completed_turn, answer, turn_key=key)
+            finally:
+                provider.end_turn(token)
+            wire, = sent
+            assert wire.isascii() and len(wire) > 250_000
+            body = json.loads(wire)
+            assert body["answer"] == answer
+            assert body.get("memory_protocol", 1) == protocol
+            evidence = body["retrieval_evidence"] if protocol == 1 else body["memory_receipt"]["evidence"]
+            assert 60_000 < len(json.dumps(evidence)) < 65_536
+            assert [row["item_id"] for row in evidence] == [row.item_id for row in rows]
+            if protocol == 2:
+                assert [row["source_event_ids"] for row in evidence] == [list(row.source_event_ids) for row in rows]
+
+            # 直接用 UTF-8 重放，必须识别为同一已持久化回答和证据。
+            path = "/api/internal/memory/complete"
+            replay = await client.post(path, data=json.dumps(body, ensure_ascii=False).encode("utf-8"),
+                                       headers={"Content-Type": "application/json"})
+            assert replay.status == 200 and (await replay.json())["created"] is False
+            assert (await client.post(path, json={**body, "answer": answer + "字"})).status == 400
+            oversized = wire.ljust(_COMPLETION_BODY_BYTES + 1, b" ")
+            assert (await client.post(path, data=oversized)).status == 413
+
+    try:
+        asyncio.run(run())
+    finally:
+        backend.close()
+
+
 def test_provider_rejects_invalid_temporal_evidence(provider_class, config, monkeypatch):
     provider = provider_class(config)
     provider.init_memory(config["allowed_device_id"], None)

@@ -5,6 +5,7 @@
 """
 
 import asyncio
+from contextvars import ContextVar
 import re
 from uuid import uuid4
 from functools import lru_cache
@@ -42,6 +43,7 @@ def _user_text(query):
 
 
 COSYVOICE_URL = "http://127.0.0.1:18770/v1/audio/speech"
+PRESET_MEMORY_QUERY = ContextVar("preset_memory_query", default=False)
 FAST_RESPONSE_ASSETS = {
     "你好呀我在呢": "hello.wav",
     "我在听得到": "present.wav",
@@ -89,6 +91,15 @@ def _uses_cosyvoice3(connection):
     return selected == "CustomTTS" and custom.get("url") == COSYVOICE_URL
 
 
+async def _query_preset_memory(memory, query):
+    # 快捷通道在查询结束后才发送 FIRST，并自行结束播报。标记只跟随本次查询。
+    token = PRESET_MEMORY_QUERY.set(True)
+    try:
+        return await memory.query_memory(query)
+    finally:
+        PRESET_MEMORY_QUERY.reset(token)
+
+
 def install_fast_voice_responses(connection_class):
     """在模型前回答封闭寒暄，同时复用原有 TTS 生命周期和记忆归档。"""
 
@@ -121,7 +132,7 @@ def install_fast_voice_responses(connection_class):
         if memory is not None and callable(getattr(memory, "query_memory", None)):
             try:
                 future = asyncio.run_coroutine_threadsafe(
-                    memory.query_memory(query), connection.loop
+                    _query_preset_memory(memory, query), connection.loop
                 )
                 future.result()
                 fixed = getattr(memory, "fixed_reply_for_current_turn", None)
