@@ -126,7 +126,8 @@ def test_main_applies_qos_before_model_and_exposes_result(monkeypatch, system_qo
 
     qos_module.apply_current_process_high_qos = configure
     monkeypatch.setitem(sys.modules, "windows_qos", qos_module)
-    synth = SimpleNamespace(runtime_info={}, load_seconds=0, warmup_seconds=0)
+    synth = SimpleNamespace(runtime_info={}, load_seconds=0, warmup_seconds=0,
+                            close=lambda: events.append("synth_close"))
 
     def create_synth(*args, **kwargs):
         events.append("model")
@@ -142,13 +143,13 @@ def test_main_applies_qos_before_model_and_exposes_result(monkeypatch, system_qo
             events.append("serve")
 
         def server_close(self):
-            events.append("close")
+            events.append("server_close")
 
     monkeypatch.setattr(service, "CosyVoiceSynthesizer", create_synth)
     monkeypatch.setattr(service, "CosyVoiceHTTPServer", Server)
     monkeypatch.setattr(sys, "argv", ["service.py"] + (["--system-qos"] if system_qos else []))
     service.main()
-    assert events == ([] if system_qos else ["qos"]) + ["model", "server", "serve", "close"]
+    assert events == ([] if system_qos else ["qos"]) + ["model", "server", "serve", "server_close", "synth_close"]
     if system_qos:
         assert synth.runtime_info["windows_qos"]["reason"] == "disabled"
     else:
