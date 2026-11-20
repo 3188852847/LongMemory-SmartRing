@@ -11,7 +11,7 @@ from longmemory.core.conversation.models import (
 
 
 class SQLiteConversationStore:
-    """使用 SQLite 实现 ConversationStore 契约。"""
+    """读写平台来源库中的原始对话消息。"""
 
     def __init__(self, connection: Connection, *, commit_changes: bool = True) -> None:
         self._connection = connection

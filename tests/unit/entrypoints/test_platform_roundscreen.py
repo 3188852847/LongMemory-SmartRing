@@ -263,7 +263,7 @@ def test_real_http_neutral_prepare_completion_cancel_and_authentication(tmp_path
         port = sock.getsockname()[1]
         assert port not in {8767, 8000, 8003, 8766, 8768}
         base = f"http://127.0.0.1:{port}"
-        app = create_app(port=port, database=runtime.database, chat_backend=backend,
+        app = create_app(port=port, chat_backend=backend,
             memory_runtime=runtime, memory_runtime_token="d" * 64, bridge=Bridge(), observability_root=tmp_path)
         runner = web.AppRunner(app, access_log=None)
         try:
@@ -326,7 +326,7 @@ def test_formal_server_selects_hy_sources_and_preserves_original_sidecar_base(tm
         "--memory-backend", "hy_memory", "--database", str(original)])
     server.main()
     backend = selected["chat_backend"]
-    assert selected["database"] == runtime.database
+    assert backend.database == runtime.database
     assert backend.sidecar_database == original
     assert backend.roles.path == tmp_path / "original-personal.db.role.sqlite3"
     assert original.read_bytes() == before

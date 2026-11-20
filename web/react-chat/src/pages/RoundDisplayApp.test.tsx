@@ -36,7 +36,7 @@ describe('圆屏状态协议与模拟器', () => {
     });
     let payload={enabled:true,selected_skin:'rose-night-v1',custom_skin_id:'local-custom-v1',
       skins:[makeSkin('rose-night-v1','合成默认','a'),makeSkin('local-custom-v1','合成自定义','b')]};
-    const request=vi.spyOn(ChatApi.prototype,'request').mockImplementation(async(path,method,body)=>{
+    const request=vi.spyOn(ChatApi.prototype,'request').mockImplementation(async(path,_method,body)=>{
       if(path==='/api/round-skins/selection') {
         payload={...payload,selected_skin:(body as {skin_id:string}).skin_id};
         return structuredClone(payload);

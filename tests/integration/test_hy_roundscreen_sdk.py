@@ -183,7 +183,7 @@ print('python310-neutral-completion-ok')
         port = sock.getsockname()[1]
         assert port not in {8767, 8000, 8003, 8766, 8768, 18770}
         token = "e" * 64
-        app = create_app(port=port, database=runtime.database, memory_runtime=runtime,
+        app = create_app(port=port, memory_runtime=runtime,
             chat_backend=backend, memory_runtime_token=token, bridge=Bridge(), observability_root=tmp_path)
         runner = web.AppRunner(app, access_log=None)
         try:

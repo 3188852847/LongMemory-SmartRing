@@ -49,7 +49,7 @@ STATIC_FILES = {
 }
 
 
-def create_app(*, port=8765, bridge=None, web_root=None, database=None, allow_memory_delete=False,
+def create_app(*, port=8765, bridge=None, web_root=None, allow_memory_delete=False,
                allow_memory_correction=False,
                chat_backend=None, instance_id=None,
                xiaozhi_server=None, memory_runtime_token=None,
@@ -287,7 +287,7 @@ def main():
             )):
                 parser.error("壁纸投递只允许明确的 RFC1918 局域网 IPv4")
             wallpaper_delivery = RoundWallpaperDeliveryService(str(address))
-        web.run_app(create_app(port=args.port, database=chat_backend.database if chat_backend else args.database, allow_memory_delete=args.allow_memory_delete,
+        web.run_app(create_app(port=args.port, allow_memory_delete=args.allow_memory_delete,
                                allow_memory_correction=args.allow_memory_correction,
                                chat_backend=chat_backend,
                                instance_id=os.environ.get("LONGMEMORY_LAUNCHER_INSTANCE"), xiaozhi_server=args.xiaozhi_server,

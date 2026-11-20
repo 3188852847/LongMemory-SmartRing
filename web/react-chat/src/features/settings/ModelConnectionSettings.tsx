@@ -1,6 +1,6 @@
 import {useEffect, useMemo, useState} from 'react';
 import {Alert, Button, Descriptions, Divider, Form, Input, InputNumber, Select, Space, Switch, Tag} from 'antd';
-import {type ChatApi, type Config, type ModelHealth, type ModelProfile, type ModelProfiles, type VoiceModelHealth} from '../../api';
+import {type ChatApi, type Config, type ModelHealth, type ModelProfiles, type VoiceModelHealth} from '../../api';
 import {modelFailure} from './modelHealth';
 import {settingsFailure} from './settingsFailure';
 

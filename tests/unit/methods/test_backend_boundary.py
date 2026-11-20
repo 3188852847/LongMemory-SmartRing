@@ -328,7 +328,7 @@ def test_neutral_http_management_chat_and_legacy_rejection(tmp_path, writes_allo
         assert port not in {8767, 8000, 8003}
         base = f"http://127.0.0.1:{port}"
         app = create_app(port=port, bridge=Bridge(), chat_backend=chat,
-                         memory_runtime=runtime, database=tmp_path / "sources.sqlite3",
+                         memory_runtime=runtime,
                          allow_memory_correction=writes_allowed, allow_memory_delete=writes_allowed,
                          observability_root=tmp_path)
         runner = web.AppRunner(app, access_log=None)

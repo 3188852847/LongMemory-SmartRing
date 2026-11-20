@@ -125,14 +125,6 @@ class MemoryMethod(Protocol):
     def close(self) -> None: ...
 
 
-def require_capability(method: MemoryMethod, capability: str) -> None:
-    """协议运行前检查能力；不以调用成功推测方法是否支持冻结或学习。"""
-    if capability not in MethodCapabilities.__dataclass_fields__:
-        raise ValueError("未知的方法能力名称。")
-    if not getattr(method.capabilities, capability):
-        raise UnsupportedCapabilityError(f"方法不支持能力：{capability}")
-
-
 def require_management(administration, capability: str):
     """管理能力守卫也属于中立契约；应用层不依赖具体适配器。"""
     if capability not in {"listing", "detail", "correction", "deletion",

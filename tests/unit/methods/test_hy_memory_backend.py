@@ -220,7 +220,7 @@ def test_hy_same_u_http_boundary_and_unsupported_legacy_routes(tmp_path):
         assert port not in {8767,8000,8003}
         base = f"http://127.0.0.1:{port}"
         app = create_app(port=port,bridge=Bridge(),chat_backend=chat,memory_runtime=runtime,
-            database=tmp_path / "sources.db",allow_memory_delete=True,allow_memory_correction=True,
+            allow_memory_delete=True,allow_memory_correction=True,
             observability_root=tmp_path)
         runner = web.AppRunner(app,access_log=None)
         try:

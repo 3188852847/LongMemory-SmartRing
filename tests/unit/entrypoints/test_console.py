@@ -134,7 +134,7 @@ class FakeBridge:
 
 
 @asynccontextmanager
-async def console(database=None, allow_memory_delete=False, chat_backend=None,
+async def console(allow_memory_delete=False, chat_backend=None,
                   allow_memory_correction=False,
                   xiaozhi_server=None, memory_runtime_token=None,
                   model_profile_store=None, voice_model_profiles=None,
@@ -146,7 +146,7 @@ async def console(database=None, allow_memory_delete=False, chat_backend=None,
     sock.bind(("127.0.0.1", 0))
     port = sock.getsockname()[1]
     bridge = FakeBridge()
-    runner = web.AppRunner(create_app(port=port, bridge=bridge, database=database,
+    runner = web.AppRunner(create_app(port=port, bridge=bridge,
                                      allow_memory_delete=allow_memory_delete, chat_backend=chat_backend,
                                      allow_memory_correction=allow_memory_correction,
                                      xiaozhi_server=xiaozhi_server,

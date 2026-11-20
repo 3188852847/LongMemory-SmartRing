@@ -72,7 +72,6 @@ def main():
             app = create_app(
                 port=args.port,
                 bridge=OfflineBridge(),
-                database=database,
                 chat_backend=backend,
                 round_skin_store=skins,
                 round_wallpaper_library=RoundWallpaperLibrary(root / "wallpapers"),

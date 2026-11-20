@@ -4,7 +4,6 @@ import math
 import os
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from pathlib import Path
 from urllib.parse import urlsplit
 
 
@@ -75,7 +74,3 @@ def load_model_settings(
         max_tokens=tokens,
         allow_http=allow_http == "true",
     )
-
-
-def database_path_from_env() -> Path:
-    return Path(os.environ.get("LONGMEMORY_DATABASE_PATH", "data/databases/longmemory.db"))
