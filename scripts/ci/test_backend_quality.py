@@ -25,6 +25,25 @@ class ReportAuditTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "未经声明"):
             self.audit('<testcase classname="tests.unit.entrypoints.test_console" name="test_console"><skipped message="aiohttp missing" /></testcase>')
 
+    def test_only_fixed_cosy_cpu_suite_can_skip_when_its_environment_is_missing(self):
+        module = "tests.unit.development.test_external_weights"
+        suite = "test_fixed_environment_cpu_suite"
+        reason = "fixed Cosy environment unavailable; no installation"
+        reviewed = {key: value for key, value in SKIP_REASON_SUBSTRINGS.items() if key[0] == module}
+        self.assertEqual(reviewed, {(module, suite): reason})
+
+        def report(name, message):
+            return ('<testcase classname="synthetic" name="passing" />'
+                    f'<testcase classname="{module}" name="{name}"><skipped message="{message}"/></testcase>')
+
+        self.assertEqual(self.audit(report(suite, reason)), (1, 1))
+        with self.assertRaisesRegex(ValueError, "原因与声明不符"):
+            self.audit(report(suite, "missing numpy"))
+        for name in ("test_import_does_not_load_inference_libraries",
+                     "test_controller_hash_verification_needs_only_stdlib", suite + "[other]"):
+            with self.subTest(name=name), self.assertRaisesRegex(ValueError, "未经声明"):
+                self.audit(report(name, reason))
+
     def test_missing_declared_synthetic_dependencies_cannot_use_old_yaml_exceptions(self):
         for classname, name in (
             ('', 'tests.unit.development.test_sync_role'),

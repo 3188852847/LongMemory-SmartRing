@@ -36,7 +36,8 @@ def test_controller_hash_verification_needs_only_stdlib(tmp_path):
 
 @pytest.mark.skipif(sys.platform!="win32",reason="uses existing fixed Windows Cosy environment and owned CPU Job")
 def test_fixed_environment_cpu_suite(tmp_path):
-    python=ROOT.parents[2]/"local/runtime/CosyVoice/.venv/Scripts/python.exe"
+    main = ROOT.parents[2] if ROOT.parent.name == "worktrees" and ROOT.parent.parent.name == "local" else ROOT
+    python = main / "local/runtime/CosyVoice/.venv/Scripts/python.exe"
     if not python.is_file():pytest.skip("fixed Cosy environment unavailable; no installation")
     fixture=ROOT/"tests/fixtures/external_weights_cpu_suite.py"
     env=dict(os.environ,CUDA_VISIBLE_DEVICES="",HF_HUB_OFFLINE="1",TRANSFORMERS_OFFLINE="1",OMP_NUM_THREADS="2",MKL_NUM_THREADS="2",TMP=str(tmp_path),TEMP=str(tmp_path))

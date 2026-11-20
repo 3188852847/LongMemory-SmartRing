@@ -324,6 +324,9 @@ RESOURCE_GROUPS = (
          'test_real_cpu_module_replacement_preserves_registered_original',
          'test_real_cpu_quantization_keeps_baseline_and_checks_ranking',
      )),
+    ('tests.unit.development.test_external_weights',
+     'fixed Cosy environment unavailable; no installation',
+     ('test_fixed_environment_cpu_suite',)),
     ('tests.unit.development.test_cosyvoice_continuous_pcm',
      'owner-installed voice interpreter unavailable',
      (
