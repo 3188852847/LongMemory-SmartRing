@@ -2,7 +2,7 @@ import {afterEach, describe, expect, test, vi} from 'vitest';
 import {fireEvent, render, screen, waitFor, within} from '@testing-library/react';
 import {MemoryRouter} from 'react-router-dom';
 import {QueryClient, QueryClientProvider} from '@tanstack/react-query';
-import {ChatApi, type Snapshot, type Turn} from '../api';
+import {ApiError, ChatApi, type Snapshot, type Turn} from '../api';
 import {ChatApp} from './ChatApp';
 import {KnownMemoryEngine} from '../tests/memoryEngine';
 
@@ -85,6 +85,35 @@ describe('聊天工作区', () => {
     expect(request.mock.calls.find(([path]) => path.endsWith('/memory-feedback'))?.[2]).toEqual({kind:'recall_miss',expected_revision:0});
   });
 
+  test('聊天写入后运行状态显示新计数，仅追加来源时复用计数', async () => {
+    let total = 2;
+    let sent = 0;
+    const request = mount({chat_id:'chat-synthetic', title:'合成会话', pending:false, turns:[]}, (path, method, body) => {
+      if (path.startsWith('/api/memories?')) return {total,items:[]};
+      if (path.endsWith('/messages') && method === 'POST') {
+        sent += 1;
+        if (sent === 1) total += 1;
+        return {...turn(sent), request_id:(body as {request_id:string}).request_id,
+          writes:[{operation:sent === 1 ? 'add' : 'noop',item_id:'synthetic-fact'}]};
+      }
+    });
+    await screen.findByText('会话已恢复，可以继续聊。');
+    fireEvent.click(screen.getByRole('button', {name:'运行状态'}));
+    await screen.findByText('2 条有效 L1');
+
+    const input = screen.getByRole('textbox', {name:'消息'});
+    const send = screen.getByRole('button', {name:'发送'});
+    fireEvent.change(input, {target:{value:'新增合成事实'}});
+    fireEvent.click(send);
+    await screen.findByText('3 条有效 L1');
+
+    fireEvent.change(input, {target:{value:'重复合成事实'}});
+    fireEvent.click(send);
+    await screen.findByText('合成回答 2');
+    expect(screen.getByText('3 条有效 L1')).toBeTruthy();
+    expect(request.mock.calls.filter(([path]) => path.startsWith('/api/memories?'))).toHaveLength(2);
+  });
+
   test('40 轮限制明确显示，仍可以进入会话和新聊天', async () => {
     mount({chat_id:'chat-synthetic', title:'合成会话', pending:false, turns:Array.from({length:40}, (_,i) => turn(i))});
     await screen.findByText('合成回答 39');
@@ -101,5 +130,69 @@ describe('聊天工作区', () => {
     fireEvent.click(query);
     await screen.findByText('后台仍在处理，没有重发。');
     expect(request.mock.calls.every(([,method]) => method === undefined || method === 'GET')).toBe(true);
+  });
+
+  test.each([false, true])('其他标签的同文消息保留本页草稿，显式发送时按内容复用请求号（编辑=%s）', async edited => {
+    const snapshot: Snapshot = {chat_id:'chat-synthetic', title:'合成会话', pending:false, turns:[]};
+    const posts: Array<{text:string; request_id:string}> = [];
+    const draft = '同一条合成消息';
+    mount(snapshot, (path, method, body) => {
+      if (method !== 'POST' || !path.endsWith('/messages')) return;
+      const post = body as typeof posts[number];
+      posts.push(post);
+      if (posts.length === 1) throw new ApiError('chat_busy', 409);
+      return {...turn(2), input:post.text, request_id:post.request_id};
+    });
+    await screen.findByText('会话已恢复，可以继续聊。');
+    const input = screen.getByRole<HTMLTextAreaElement>('textbox', {name:'消息'});
+    const send = screen.getByRole('button', {name:'发送'});
+    fireEvent.change(input, {target:{value:draft}});
+    fireEvent.click(send);
+    const query = await screen.findByRole('button', {name:'只查询结果，不重发'});
+    snapshot.turns = [{...turn(1), input:draft}];
+    fireEvent.click(query);
+    await screen.findByText('合成回答 1');
+    expect(input.value).toBe(draft);
+    expect(posts).toHaveLength(1);
+    if (edited) fireEvent.change(input, {target:{value:'编辑后的合成消息'}});
+    fireEvent.click(send);
+    await screen.findByText('合成回答 2');
+    expect(posts).toHaveLength(2);
+    expect(posts[0].request_id).toBeTruthy();
+    expect(posts[1].request_id === posts[0].request_id).toBe(!edited);
+    expect(input.value).toBe('');
+  });
+
+  test('断线后即使其他请求仍在处理也能认出自己的轮次，连续查询只读', async () => {
+    const snapshot: Snapshot = {chat_id:'chat-synthetic', title:'合成会话', pending:false, turns:[]};
+    let requestId: string | undefined;
+    const request = mount(snapshot, (path, method, body) => {
+      if (path.startsWith('/api/memories?')) return {total:2 + snapshot.turns.length, items:[]};
+      if (method === 'POST' && path.endsWith('/messages')) {
+        requestId = (body as {request_id:string}).request_id;
+        throw new TypeError('synthetic disconnect');
+      }
+    });
+    await screen.findByText('会话已恢复，可以继续聊。');
+    fireEvent.click(screen.getByRole('button', {name:'运行状态'}));
+    await screen.findByText('2 条有效 L1');
+    const input = screen.getByRole<HTMLTextAreaElement>('textbox', {name:'消息'});
+    fireEvent.change(input, {target:{value:'合成输入 1'}});
+    fireEvent.click(screen.getByRole('button', {name:'发送'}));
+    const query = await screen.findByRole('button', {name:'只查询结果，不重发'});
+    snapshot.pending = true;
+    fireEvent.click(query);
+    await screen.findByText('后台仍在处理，没有重发。');
+    expect(input.value).toBe('合成输入 1');
+    snapshot.turns = [{...turn(1), request_id:requestId, writes:[{operation:'add'}]}];
+    fireEvent.click(query);
+    await screen.findByText('合成回答 1');
+    await screen.findByText('3 条有效 L1');
+    expect(input.value).toBe('');
+    expect(input.disabled).toBe(true);
+    snapshot.pending = false;
+    fireEvent.click(query);
+    await waitFor(() => expect(input.disabled).toBe(false));
+    expect(request.mock.calls.filter(([,method]) => method === 'POST')).toHaveLength(1);
   });
 });

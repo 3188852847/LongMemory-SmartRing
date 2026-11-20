@@ -62,10 +62,12 @@ export function MemoryEngineProvider({children}:{children:ReactNode}) {
   return <MemoryEngineContext.Provider value={value}>{children}</MemoryEngineContext.Provider>;
 }
 
+export const legacyMemorySummaryKey = ['legacy-memory-entry-summary'] as const;
+
 /** 只保留已确认旧引擎的兼容统计；Hy 总览/聊天绝不为计数进入 SDK 或共享锁。 */
 export function useMemorySummary(enabled=true) {
   const engine=useMemoryEngine();
-  return useQuery({queryKey:['legacy-memory-entry-summary',engine.identity?.method],retry:false,staleTime:30000,
+  return useQuery({queryKey:[...legacyMemorySummaryKey,engine.identity?.method],retry:false,staleTime:30000,
     enabled:enabled&&engine.phase==='ready'&&engine.kind==='legacy',
     queryFn:async()=>{const data=await api.request<{total:number}>('/api/memories?q=&state=active&offset=0&limit=1');if(!Number.isInteger(data.total)||data.total<0)throw new Error('memory_count_invalid');return data;},
   });

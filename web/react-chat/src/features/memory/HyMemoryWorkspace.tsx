@@ -9,6 +9,7 @@ import {useUnsavedChanges} from '../../app/UnsavedChanges';
 import './hy-memory.css';
 
 type View='items'|'profile'|'activity'|'status';
+const correctionCharacterLimit = 1000;
 const views:Array<{key:View;label:string}>=[{key:'items',label:'记忆条目'},{key:'profile',label:'基本画像'},{key:'activity',label:'记录与变化'},{key:'status',label:'处理状态'}];
 const kinds:Record<string,string>={l0_basic_info:'基本信息',l1_raw:'原始记录',l2_fact:'记住的事情',l3_summary:'对话摘要',l4_identity:'身份认识（保留层）',l5_knowledge:'知识（保留层）',l6_schema:'认知结构（未启用）',l7_intention:'意图（未启用）'};
 const states:Record<string,string>={active:'当前',ACTIVE:'当前',archived:'已归档',pending:'等待处理',running:'处理中',completed:'已完成',uncertain:'结果不确定',failed:'处理失败',not_run:'尚未运行',source_only:'仅保存原话'};
@@ -93,7 +94,44 @@ export function HyMemoryWorkspace({api,method,capabilities}:{api:ChatApi;method?
     finally {if(version===detailVersion.current)setHistoryBusy(false);}
   }
   function beginAction(value:'correct'|'delete') {if(!detail)return;setDraft(detail.content);setAction(value);setUnderstood(false);setWriteError('');setWriteUnknown(false);}
-  async function save() {if(lock.current||!detail||!action||writeUnknown)return;lock.current=true;setSaving(true);setWriteError('');const id=crypto.randomUUID();try{const result=action==='correct'?await engine.correct(detail.item_id,detail.revision,draft.trim(),id):await engine.delete(detail.item_id,detail.revision,id);if(result.state!=='completed'||result.request_id!==id||result.platform_sources_preserved!==true)throw new Error('not confirmed');setNotice(`${action==='correct'?'纠正已完成':'引擎条目已删除'}。平台原话保留。操作编号：${result.request_id}`);setAction(undefined);if(action==='delete')navigate({item:undefined});else setDetailReload(v=>v+1);setReload(v=>v+1);}catch(error){setWriteError(`${failure(error)} 操作编号：${id}`);setWriteUnknown(!(error instanceof ApiError&&[400,401,403,404,409,501].includes(error.status)));setDetailReload(v=>v+1);}finally{lock.current=false;setSaving(false);}}
+  const correctionContent = draft.trim();
+  // 后端按 Unicode 码点校验；浏览器原生 maxLength 会把一个扩展汉字计为两位。
+  const correctionLength = [...correctionContent].length;
+  const invalidCorrection = action === 'correct' && (
+    !correctionContent || correctionContent === detail?.content || correctionLength > correctionCharacterLimit
+  );
+  async function save() {
+    if (lock.current || !detail || !action || writeUnknown || !understood || invalidCorrection) return;
+    lock.current = true;
+    setSaving(true);
+    setWriteError('');
+    const id = crypto.randomUUID();
+    try {
+      const result = action === 'correct'
+        ? await engine.correct(detail.item_id, detail.revision, correctionContent, id)
+        : await engine.delete(detail.item_id, detail.revision, id);
+      if (result.state !== 'completed' || result.request_id !== id || result.platform_sources_preserved !== true) {
+        throw new Error('not confirmed');
+      }
+      setNotice(`${action === 'correct' ? '纠正已完成' : '引擎条目已删除'}。平台原话保留。操作编号：${result.request_id}`);
+      setAction(undefined);
+      if (action === 'delete') navigate({item:undefined});
+      else setDetailReload(v => v + 1);
+      setReload(v => v + 1);
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 413) {
+        const message = action === 'correct' ? '纠正请求过大，请缩短内容后再保存。' : '删除请求过大。';
+        setWriteError(`${message} 操作编号：${id}`);
+      } else {
+        setWriteError(`${failure(error)} 操作编号：${id}`);
+        setWriteUnknown(!(error instanceof ApiError && [400, 401, 403, 404, 409, 501].includes(error.status)));
+        setDetailReload(v => v + 1);
+      }
+    } finally {
+      lock.current = false;
+      setSaving(false);
+    }
+  }
   const visible=page?.items.filter(item=>(kind==='all'||item.kind===kind)&&item.content.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()))??[];
   const blocked=writeUnknown||itemOperations?.items.some(item=>item.state==='uncertain'||item.state==='running');
   const manageable=detail&&['l2_fact','l3_summary'].includes(detail.kind);
@@ -133,8 +171,8 @@ export function HyMemoryWorkspace({api,method,capabilities}:{api:ChatApi;method?
       <details className="hy-technical"><summary>查看引擎标识与修订</summary><dl><dt>条目编号</dt><dd>{detail.item_id}</dd><dt>原生类型</dt><dd>{detail.kind}</dd><dt>当前修订指纹</dt><dd>{detail.revision}</dd></dl></details>
     </>}
   </Drawer>
-  <Modal aria-labelledby={actionHeading} title={<span id={actionHeading}>{action==='correct'?'纠正这条记忆':'删除这条引擎记忆'}</span>} open={Boolean(action)} okText={action==='correct'?'保存纠正':'确认删除条目'} cancelText="取消" confirmLoading={saving} mask={{closable:!saving}} keyboard={!saving} closable={!saving} onCancel={()=>{if(!saving)setAction(undefined);}} onOk={()=>void save()} okButtonProps={{danger:action==='delete',disabled:saving||writeUnknown||!detail||!understood||(action==='correct'&&(!draft.trim()||draft.trim()===detail?.content||draft.length>1000))}}>
-    {action==='correct'?<><p>把这条记忆改成你确认的内容。这次明确指令会保存为用户来源。</p><label htmlFor="hy-correction">正确的内容</label><Input.TextArea id="hy-correction" value={draft} onChange={event=>setDraft(event.target.value)} maxLength={1000} autoSize={{minRows:4,maxRows:10}} disabled={saving}/><p className="hy-action-hint">最多 1000 字。</p></>:<><p>仅删除没有历史变化链的当前独立条目。链上的条目不能单独删除，以免恢复旧事实。平台原话、历史及备份保留；这不是全部隐私数据擦除，也不承诺它不会从后续对话再次形成。</p><p className="hy-delete-preview">{detail?.content}</p></>}
+  <Modal aria-labelledby={actionHeading} title={<span id={actionHeading}>{action==='correct'?'纠正这条记忆':'删除这条引擎记忆'}</span>} open={Boolean(action)} okText={action==='correct'?'保存纠正':'确认删除条目'} cancelText="取消" confirmLoading={saving} mask={{closable:!saving}} keyboard={!saving} closable={!saving} onCancel={()=>{if(!saving)setAction(undefined);}} onOk={()=>void save()} okButtonProps={{danger:action==='delete',disabled:saving||writeUnknown||!detail||!understood||invalidCorrection}}>
+    {action==='correct'?<><p>把这条记忆改成你确认的内容。这次明确指令会保存为用户来源。</p><label htmlFor="hy-correction">正确的内容</label><Input.TextArea id="hy-correction" aria-describedby="hy-correction-length" aria-invalid={correctionLength > correctionCharacterLimit} value={draft} onChange={event=>setDraft(event.target.value)} autoSize={{minRows:4,maxRows:10}} disabled={saving}/><p id="hy-correction-length" className="hy-action-hint">已输入 {correctionLength} 字，最多 {correctionCharacterLimit} 字。</p></>:<><p>仅删除没有历史变化链的当前独立条目。链上的条目不能单独删除，以免恢复旧事实。平台原话、历史及备份保留；这不是全部隐私数据擦除，也不承诺它不会从后续对话再次形成。</p><p className="hy-delete-preview">{detail?.content}</p></>}
     <Checkbox checked={understood} onChange={event=>setUnderstood(event.target.checked)} disabled={saving}>我已核对这条记忆，理解操作范围和失败可能部分提交</Checkbox>{writeError&&<Alert type="error" title={writeUnknown?'操作结果未确认':'操作未执行'} description={writeError}/>} {writeUnknown&&<p role="status">结果未确认，已禁止重复提交。关闭此窗口后到“记录与变化”核对操作。</p>}
   </Modal></>;
 }
