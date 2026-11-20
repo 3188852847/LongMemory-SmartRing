@@ -156,11 +156,19 @@ class MemoryRuntime:
                    else "screen" if re.fullmatch("[0-9a-f]{24,32}", session_id) else None)
         rows = read(12, for_context=True, before_id=before_id)
         # 本端已有自己的聊天历史，仅补其他端和主动消息，避免重复计算同一轮。
-        history = [{"端": row["channel"], "角色": row["role"], "时间": row["at"], "原话": row["text"][:360]}
+        labels = {"qq": "QQ", "screen": "圆屏", "web": "网页"}
+        history = [{"来源": labels[row["channel"]], "发言者": "用户" if row["role"] == "user" else "大肥鱼",
+                    "方式": "主动联系" if row["proactive"] else "聊天", "时间": row["at"], "原话": row["text"][:360]}
                    for row in rows if row["channel"] != channel or row["proactive"]]
         if not history:
             return support
-        block = "跨端近期对话（原话用于接续话题，助手曾说的话不能当作用户事实）：\n" + json.dumps(history, ensure_ascii=False)
+        block = ("跨端近期对话按时间先后排列。接续主动联系时，按每条消息自己的来源和原话回答。"
+                 "大肥鱼说过的话不能当作用户事实。\n" + json.dumps(history, ensure_ascii=False))
+        latest = {item["来源"]: item["原话"] for item in history if item["方式"] == "主动联系"}
+        if latest:
+            block += "\n你（大肥鱼）最近一次在各端主动发给用户的原话：\n" + "\n".join(
+                f"你在{channel}对用户说：{json.dumps(text, ensure_ascii=False)}" for channel, text in latest.items()
+            )
         return replace(support, context="\n\n".join(filter(None, (support.context, block))))
 
     def outreach_context(self, query):

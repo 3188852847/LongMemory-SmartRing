@@ -461,6 +461,7 @@ def test_shared_dialogue_provenance_chronology_and_controls(tmp_path):
         assert len(runtime._method.journal.events()) == count
         web_turn = runtime.prepare_user("接着聊", session_id="web:demo")
         assert "画好分享呀" in web_turn.support.context and "独立来源" not in web_turn.support.context
+        assert '"来源": "网页", "发言者": "大肥鱼", "方式": "主动联系"' in web_turn.support.context
         runtime._method.archive(MemoryEvent("hy-management:change", "user", "纠错", NOW, None))
         assert "画好分享呀" not in runtime.outreach_context("画画")
         runtime.configure(write_enabled=False, use_enabled=False)
