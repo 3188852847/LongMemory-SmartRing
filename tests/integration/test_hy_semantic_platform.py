@@ -83,6 +83,30 @@ def test_initialization_and_changes_sync_actual_method_gate_and_failure_pauses(t
         runtime.close()
 
 
+@pytest.mark.parametrize("retry_enabled", [False, True], ids=["pause", "resume"])
+def test_failed_background_pause_requires_confirmation_on_retry(tmp_path, retry_enabled):
+    runtime, method, _ = make_runtime(tmp_path)
+    try:
+        method.failure = True
+        for _ in range(2):
+            with pytest.raises(RuntimeError, match="^memory_background_write_gate_failed$"):
+                runtime.configure(write_enabled=False, use_enabled=False)
+            status = runtime.status()
+            assert status["write_enabled"] is False
+            assert status["use_enabled"] is True
+        assert method.calls == [True, False, False]
+
+        method.failure = False
+        status = runtime.configure(write_enabled=retry_enabled, use_enabled=False)
+        assert status["write_enabled"] is retry_enabled
+        assert status["use_enabled"] is False
+        assert method.calls == [True, False, False, retry_enabled]
+        runtime.configure(write_enabled=retry_enabled, use_enabled=True)
+        assert method.calls == [True, False, False, retry_enabled]
+    finally:
+        runtime.close()
+
+
 def test_enqueue_uses_write_gate_cancel_does_not_and_read_never_calls_status(tmp_path):
     runtime, _, admin = make_runtime(tmp_path)
     try:

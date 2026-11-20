@@ -1,12 +1,16 @@
 """合成旁库恢复，不读日常数据库，不请求校园模型。"""
 import asyncio
+from contextlib import closing
 from dataclasses import asdict
+import sqlite3
+from unittest.mock import Mock
 from uuid import uuid4
 
 import pytest
 from test_console import console, login
 from test_chat_console import backend
 from longmemory.entrypoints.api.chat_store import ChatStore
+from longmemory.entrypoints.api.contracts import ChatMessageRequest
 from longmemory.entrypoints.api.routes.chat import Chat, OWNER_COOKIE
 
 
@@ -145,4 +149,185 @@ def test_interrupted_turn_recovered_without_reexecution(backend):
             replay = await (await client.post(base+f'/api/chats/{key}/messages',
                 json={'text':body['input'], 'request_id':body['request_id']}, headers=headers)).json()
             assert replay['status'] == 'interrupted'
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("recover_via", ["query", "replay", "restart"])
+def test_final_save_failure_never_reexecutes_or_exposes_uncommitted_turn(
+    backend, monkeypatch, recover_via,
+):
+    generate = Mock(return_value="合成回答")
+    monkeypatch.setattr(backend.generator, "generate", generate)
+    save = ChatStore.save
+    storage_down = True
+
+    def save_with_fault(store, key, payload):
+        if storage_down and payload["turns"] and not payload["pending"]:
+            raise sqlite3.OperationalError("synthetic final write failure")
+        save(store, key, payload)
+
+    monkeypatch.setattr(ChatStore, "save", save_with_fault)
+    body = {"request_id": str(uuid4()), "text": "合成输入"}
+
+    async def run():
+        nonlocal storage_down
+        async with console(chat_backend=backend) as (client, base, _):
+            headers = await login(client, base)
+            key = (await (await client.post(base + "/api/chats", headers=headers)).json())["chat_id"]
+            detail = f"/api/chats/{key}"
+            send = base + detail + "/messages"
+            for _ in range(2):
+                response = await client.post(send, json=body, headers=headers)
+                assert response.status == 503
+                assert await response.json() == {"error": "chat_archive_unavailable"}
+                snapshot = await (await client.get(base + detail)).json()
+                assert snapshot["pending"] and snapshot["turns"] == []
+            listing = await (await client.get(base + "/api/chats")).json()
+            assert listing["chats"][0]["turn_count"] == 0
+            for change, error in [({"text": "改过的内容"}, "chat_request_conflict"),
+                                  ({"request_id": str(uuid4())}, "chat_busy")]:
+                response = await client.post(send, json={**body, **change}, headers=headers)
+                assert response.status == 409 and (await response.json())["error"] == error
+
+            if recover_via != "restart":
+                storage_down = False
+                if recover_via == "replay":
+                    response = await client.post(send, json=body, headers=headers)
+                    assert response.status == 200 and (await response.json())["answer"] == "合成回答"
+                snapshot = await (await client.get(base + detail)).json()
+                assert not snapshot["pending"] and len(snapshot["turns"]) == 1
+                assert snapshot["turns"][0]["status"] == "completed"
+                assert snapshot["turns"][0]["request_id"] == body["request_id"]
+            cookie = next(c.value for c in client.cookie_jar if c.key == OWNER_COOKIE)
+
+        storage_down = False
+        async with console(chat_backend=backend) as (client, base, _):
+            client.cookie_jar.update_cookies({OWNER_COOKIE: cookie})
+            headers = await login(client, base)
+            saved = await (await client.get(base + detail)).json()
+            assert not saved["pending"] and len(saved["turns"]) == 1
+            turn = saved["turns"][0]
+            if recover_via == "restart":
+                assert turn["status"] == "interrupted" and turn["error"] == "interrupted_write_state_unknown"
+            else:
+                assert turn == snapshot["turns"][0]
+            response = await client.post(base + detail + "/messages", json=body, headers=headers)
+            assert response.status == 200 and await response.json() == turn
+            generate.assert_called_once()
+
+    asyncio.run(run())
+
+
+def test_unexpected_backend_interruption_reserves_request_id(backend, monkeypatch):
+    interrupted = Mock(side_effect=RuntimeError("synthetic interruption"))
+    monkeypatch.setattr(backend, "run", interrupted)
+
+    async def run():
+        async with console(chat_backend=backend) as (client, base, _):
+            headers = await login(client, base)
+            key = (await (await client.post(base + "/api/chats", headers=headers)).json())["chat_id"]
+            body = {"request_id": str(uuid4()), "text": "合成输入"}
+            for _ in range(2):
+                response = await client.post(base + f"/api/chats/{key}/messages", json=body, headers=headers)
+                turn = await response.json()
+                assert turn["status"] == "interrupted" and turn["error"] == "interrupted_write_state_unknown"
+            interrupted.assert_called_once()
+
+    asyncio.run(run())
+
+
+def test_query_and_same_request_share_slow_final_save(backend, monkeypatch):
+    generate = Mock(return_value="合成回答")
+    monkeypatch.setattr(backend.generator, "generate", generate)
+    save = ChatStore.save
+    attempts = []
+
+    async def run():
+        entered = asyncio.Event()
+        loop = asyncio.get_running_loop()
+
+        def slow_final_save(store, key, payload):
+            if payload["turns"] and not payload["pending"]:
+                attempts.append(key)
+                if len(attempts) == 1:
+                    raise sqlite3.OperationalError("synthetic first failure")
+                loop.call_soon_threadsafe(entered.set)
+            save(store, key, payload)
+
+        monkeypatch.setattr(ChatStore, "save", slow_final_save)
+        async with console(chat_backend=backend) as (client, base, _):
+            headers = await login(client, base)
+            key = (await (await client.post(base + "/api/chats", headers=headers)).json())["chat_id"]
+            detail = base + f"/api/chats/{key}"
+            send = detail + "/messages"
+            body = {"request_id": str(uuid4()), "text": "合成输入"}
+            assert (await client.post(send, json=body, headers=headers)).status == 503
+            replay_parsed = asyncio.Event()
+            validate = ChatMessageRequest.model_validate
+
+            def validate_replay(data):
+                message = validate(data)
+                replay_parsed.set()
+                return message
+
+            monkeypatch.setattr(ChatMessageRequest, "model_validate", staticmethod(validate_replay))
+            with closing(sqlite3.connect(ChatStore(backend.database).path)) as locker:
+                locker.execute("BEGIN IMMEDIATE")
+                query = asyncio.create_task(client.get(detail))
+                await asyncio.wait_for(entered.wait(), timeout=5)
+                replay = asyncio.create_task(client.post(send, json=body, headers=headers))
+                await asyncio.wait_for(replay_parsed.wait(), timeout=5)
+                rename = await client.post(detail + "/title", json={"title": "暂缓改名"}, headers=headers)
+                assert rename.status == 409
+                assert (await client.get(base + "/api/chats")).status == 200
+                assert not query.done() and not replay.done()
+            snapshot = await (await query).json()
+            turn = await (await replay).json()
+            assert turn["status"] == "completed" and snapshot["turns"] == [turn]
+            assert not snapshot["pending"]
+            assert attempts == [key, key]
+            generate.assert_called_once()
+
+    asyncio.run(run())
+
+
+def test_shutdown_retries_final_save_independently_for_each_chat(backend, monkeypatch):
+    save = ChatStore.save
+    healthy = set()
+    attempts = []
+    generate = Mock(return_value="合成回答")
+    monkeypatch.setattr(backend.generator, "generate", generate)
+
+    def partial_outage(store, key, payload):
+        if payload["turns"] and not payload["pending"]:
+            attempts.append(key)
+            if key not in healthy:
+                raise sqlite3.OperationalError("synthetic final write failure")
+        save(store, key, payload)
+
+    monkeypatch.setattr(ChatStore, "save", partial_outage)
+
+    async def run():
+        keys = []
+        async with console(chat_backend=backend) as (client, base, _):
+            headers = await login(client, base)
+            for _ in range(2):
+                key = (await (await client.post(base + "/api/chats", headers=headers)).json())["chat_id"]
+                keys.append(key)
+                body = {"request_id": str(uuid4()), "text": "合成输入"}
+                response = await client.post(base + f"/api/chats/{key}/messages", json=body, headers=headers)
+                assert response.status == 503
+            cookie = next(c.value for c in client.cookie_jar if c.key == OWNER_COOKIE)
+            healthy.add(keys[1])  # 两个会话均未手动查询；第二个在退出前恢复可写。
+
+        assert all(attempts.count(key) == 2 for key in keys)
+        async with console(chat_backend=backend) as (client, base, _):
+            client.cookie_jar.update_cookies({OWNER_COOKIE: cookie})
+            await login(client, base)
+            for key, status in zip(keys, ["interrupted", "completed"], strict=True):
+                snapshot = await (await client.get(base + f"/api/chats/{key}")).json()
+                assert not snapshot["pending"] and len(snapshot["turns"]) == 1
+                assert snapshot["turns"][0]["status"] == status
+        assert generate.call_count == 2
+
     asyncio.run(run())

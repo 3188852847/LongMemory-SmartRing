@@ -1,7 +1,7 @@
 """会话归属、限额、幂等提交。浏览器不能指定数据库、角色或模型目标。"""
 
 import asyncio
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from datetime import UTC, date, datetime, timedelta
 import hashlib
 import secrets
@@ -35,15 +35,19 @@ class Chat:
     active_request: dict | None = None
 
 
+def interrupted_turn(active_request):
+    return dict(active_request, status='interrupted', answer=None, writes=None,
+                retrieved=None, memory_context=None, user_saved=False, assistant_saved=False,
+                duration_ms=0, error='interrupted_write_state_unknown')
+
+
 def register_chat_routes(app, backend):
     store = ChatStore(getattr(backend, "sidecar_database", backend.database)) if backend else None
     chats = {key: Chat(**value) for key, value in store.load().items()} if store else {}
     # 崩溃中断不是模型失败或“未写入”：保留请求号，禁止自动重复执行。
     for chat in chats.values():
         if chat.pending and chat.active_request:
-            result = dict(chat.active_request, status='interrupted', answer=None, writes=None,
-                          retrieved=None, memory_context=None, user_saved=False, assistant_saved=False,
-                          duration_ms=0, error='interrupted_write_state_unknown')
+            result = interrupted_turn(chat.active_request)
             chat.turns.append(result)
             chat.request_ids[result['request_id']] = result
         # JSON 会把 turns 与 request_ids 中的同一轮反序列化为两个 dict。
@@ -54,6 +58,9 @@ def register_chat_routes(app, backend):
         chat.pending = False
         chat.active_request = None
     tasks = set()
+    # 每个会话至多一份已执行、尚待旁库确认的结果。重启时仍以持久档案为准。
+    unsaved_turns = {}
+    saving_turns = {}
 
     def owner(request):
         token = request.cookies.get(OWNER_COOKIE, '')
@@ -61,6 +68,35 @@ def register_chat_routes(app, backend):
 
     def persist(key, chat):
         store.save(key, asdict(chat))
+
+    async def save_final_turn(key, chat):
+        result = unsaved_turns[key]
+        finished = replace(chat, turns=[*chat.turns, result],
+                           request_ids={**chat.request_ids, result["request_id"]: result},
+                           pending=False, active_request=None)
+        try:
+            # 线程只拿独立快照；SQLite 等锁或提交期间，其它 HTTP 请求仍可处理。
+            await asyncio.to_thread(store.save, key, asdict(finished))
+        except Exception:
+            return False
+        finally:
+            del saving_turns[key]
+        # 保留 Chat 的对象身份，已开始解析请求正文的处理函数也会看到提交后的状态。
+        chat.turns, chat.request_ids = finished.turns, finished.request_ids
+        chat.pending, chat.active_request = False, None
+        del unsaved_turns[key]
+        return True
+
+    def shared_save(key, chat):
+        if key not in saving_turns:
+            saving_turns[key] = asyncio.create_task(save_final_turn(key, chat))
+        return asyncio.shield(saving_turns[key])
+
+    async def final_response(key, chat):
+        result = unsaved_turns[key]
+        if not await shared_save(key, chat):
+            return web.json_response({"error": "chat_archive_unavailable"}, status=503)
+        return web.json_response(result)
 
     def prune():
         pass  # 持久会话不按短期认证 cookie 的寿命删除。
@@ -73,7 +109,7 @@ def register_chat_routes(app, backend):
         return chat
 
     async def config(request):
-        return web.json_response(backend.info() if backend else {"enabled": False})
+        return web.json_response(await asyncio.to_thread(backend.info) if backend else {"enabled": False})
 
     async def check_model(request):
         if backend is None:
@@ -104,8 +140,6 @@ def register_chat_routes(app, backend):
 
     async def rename(request):
         chat = selected(request)
-        if chat.pending:
-            return web.json_response({'error': 'chat_busy'}, status=409)
         try:
             body = await request.json()
             title = body['title']
@@ -113,6 +147,8 @@ def register_chat_routes(app, backend):
                 raise ValueError
         except (ValueError, TypeError, KeyError):
             return web.json_response({'error': 'invalid_title'}, status=400)
+        if chat.pending:
+            return web.json_response({'error': 'chat_busy'}, status=409)
         old = chat.title
         chat.title = title.strip()
         try:
@@ -124,14 +160,15 @@ def register_chat_routes(app, backend):
 
     async def get(request):
         chat = selected(request)
-        return web.json_response({"chat_id": request.match_info["chat_id"],
+        key = request.match_info["chat_id"]
+        if key in unsaved_turns:
+            await shared_save(key, chat)
+        return web.json_response({"chat_id": key,
                                   "title": chat.title, "turns": chat.turns, "pending": chat.pending, "limit": MAX_TURNS})
 
     async def memory_feedback(request):
         """记录人工复核，不修改记忆、不调用模型，也不自动重跑当前回答。"""
         chat = selected(request)
-        if chat.pending:
-            return web.json_response({"error": "chat_busy"}, status=409)
         try:
             request_id = request.match_info["request_id"]
             # 路径也坚持 canonical UUID，避免旁库中出现同一 ID 的不同文本形式。
@@ -142,6 +179,8 @@ def register_chat_routes(app, backend):
             body = ChatMemoryFeedbackRequest.model_validate(await request.json())
         except (ValidationError, ValueError, TypeError, UnicodeError):
             return web.json_response({"error": "invalid_memory_feedback"}, status=400)
+        if chat.pending:
+            return web.json_response({"error": "chat_busy"}, status=409)
         turn = chat.request_ids.get(request_id)
         if turn is None or turn.get("status") != "completed" or not turn.get("answer"):
             return web.json_response({"error": "feedback_turn_unavailable"}, status=404)
@@ -439,17 +478,15 @@ def register_chat_routes(app, backend):
             metadata = {"session_id": "web:" + key} if getattr(backend, "_runtime", None) is not None and not backend.memory_runtime().legacy_sqlite else {}
             result = await asyncio.to_thread(backend.run, text, history, **metadata)
             result["request_id"] = request_id
-            chat.turns.append(result)
-            chat.request_ids[request_id] = result
-            chat.pending = False
-            chat.active_request = None
-            persist(key, chat)
-            return result
-        finally:
-            chat.pending = False
+        except Exception:
+            # 后端未交回终态，沿用崩溃恢复的结果，保留请求号和写入状态的不确定性。
+            result = interrupted_turn(chat.active_request)
+        unsaved_turns[key] = result
+        return await final_response(key, chat)
 
     async def send(request):
         chat = selected(request)
+        key = request.match_info["chat_id"]
         if request.content_type != "application/json":
             raise web.HTTPBadRequest()
         # 仅聊天正文放宽到 8 KiB；设备操作仍沿用应用的 1 KiB 限制。
@@ -465,6 +502,11 @@ def register_chat_routes(app, backend):
             if previous["input"] != text:
                 return web.json_response({"error": "chat_request_conflict"}, status=409)
             return web.json_response(previous)
+        if chat.active_request and chat.active_request["request_id"] == request_id:
+            if chat.active_request["input"] != text:
+                return web.json_response({"error": "chat_request_conflict"}, status=409)
+            if key in unsaved_turns:
+                return await final_response(key, chat)
         if chat.pending or len(tasks) >= 2:
             return web.json_response({"error": "chat_busy"}, status=409)
         if len(chat.turns) >= MAX_TURNS:
@@ -483,20 +525,26 @@ def register_chat_routes(app, backend):
         chat.pending = True
         chat.active_request = {'request_id': request_id, 'input': text}
         try:
-            persist(request.match_info['chat_id'], chat)
+            persist(key, chat)
         except Exception:
             chat.pending = False
             chat.active_request = None
             raise
-        task = asyncio.create_task(finish(request.match_info['chat_id'], chat, request_id, text, history))
+        task = asyncio.create_task(finish(key, chat, request_id, text, history))
         tasks.add(task)
         task.add_done_callback(tasks.discard)
         # 断网/关闭页面不取消已经开始的写入，更不会自动重试模型。
-        return web.json_response(await asyncio.shield(task))
+        return await asyncio.shield(task)
 
     async def cleanup(_app):
         if tasks:
             await asyncio.gather(*tuple(tasks), return_exceptions=True)
+        if saving_turns:
+            await asyncio.gather(*tuple(saving_turns.values()), return_exceptions=True)
+        # 退出前给仍在内存中的终态最后一次提交机会。个别旁库失败沿用中断恢复。
+        await asyncio.gather(*(shared_save(key, chats[key]) for key in tuple(unsaved_turns)),
+                             return_exceptions=True)
+        unsaved_turns.clear()
         chats.clear()
         if store:
             store.close()

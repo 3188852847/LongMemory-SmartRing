@@ -136,6 +136,8 @@ class MemoryRuntime:
         self._lock = RLock()
         self._closed = False
         self._write_enabled = True
+        # 后台同步抛错时结果未知，前台的暂停状态不能充当后台回执。
+        self._confirmed_background_write_enabled: bool | None = None
         self._use_enabled = True
         # 候选票据只在本Runtime实例和当前设置版本内有效，重启不能复用旧版本。
         from secrets import token_hex
@@ -989,7 +991,7 @@ class MemoryRuntime:
             proposal_changed = (write_enabled != self._write_enabled or use_enabled != self._use_enabled
                 or (scenario_use_enabled is not None and scenario_use_enabled != self._scenario_use_enabled)
                 or (persona_use_enabled is not None and persona_use_enabled != self._persona_use_enabled))
-            if write_enabled != self._write_enabled:
+            if write_enabled != self._confirmed_background_write_enabled:
                 self._sync_background_writes(write_enabled)
             self._write_enabled = write_enabled
             self._use_enabled = use_enabled
@@ -1008,9 +1010,11 @@ class MemoryRuntime:
                 gate(write_enabled=write_enabled)
             except Exception:
                 # 未能证明后台屏障已更新时，前台至少保持暂停；不伪报任务回滚。
+                self._confirmed_background_write_enabled = None
                 self._write_enabled = False
                 self._proposal_revision += 1
                 raise RuntimeError("memory_background_write_gate_failed") from None
+        self._confirmed_background_write_enabled = write_enabled
 
     def candidate_memory_snapshot(self, query, *, limit=5):
         """宿主候选专用读取；绝不调用prepare/recall/reserve/归档或派生接口。
