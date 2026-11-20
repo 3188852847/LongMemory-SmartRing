@@ -9,6 +9,7 @@ import {PageHeader} from '../components/PageHeader';
 import {ApiError, ChatApi, type RoundDeviceSkin, type RoundSkin, type RoundSkinApply, type RoundSkins, type RoundWallpaperDeployment, type RoundWallpaperDeviceStatus} from '../api';
 import {readRoundObservations, roundObservationKey, roundObservationStates, type RoundObservations, type RoundObservationState, writeRoundObservations} from '../features/device/roundDisplayObservations';
 import {RoundWallpaperLibrary} from '../features/device/RoundWallpaperLibrary';
+import {WhalePreview} from '../features/device/WhalePreview';
 import {OttoPreview} from '../features/device/OttoPreview';
 
 export type InteractionState = 'booting' | 'idle' | 'wake_acknowledged' | 'listening' | 'thinking' | 'speaking' | 'interrupted' | 'no_speech' | 'error';
@@ -139,7 +140,6 @@ export function RoundDisplayApp() {
   };
   const [interaction, setInteraction] = useState<InteractionState>('idle');
   const [renderer, setRenderer] = useState('whale');
-  const [whaleAvailable, setWhaleAvailable] = useState(true);
   const showWhale = activeTab === 'expression' && renderer === 'whale';
   const showOtto = activeTab === 'expression' && renderer === 'otto';
   const [emotion, setEmotion] = useState<EmotionState>('warm');
@@ -241,15 +241,12 @@ export function RoundDisplayApp() {
   const sidebar = <ConsoleNav active="display" legacyPath="/"/>;
 
   return <AppShell subtitle="智能圆屏交互实验台" className="display-preview-shell" sidebar={sidebar}>
-    <PageHeader eyebrow="体验设计" title="圆屏状态预览" description="在电脑查看大肥鱼、Otto 或几何皮肤。网页状态选择只做模拟；皮肤回读、下发和实机观察各自核对。"/>
+    <PageHeader eyebrow="体验设计" title="圆屏状态预览" description="在网页上和大肥鱼互动，预览圆屏的表情与对话状态。"/>
 
     <div className="display-preview-layout">
       <section className={`display-stage${showOtto ? ' has-otto' : ''}`} aria-label="圆屏模拟画布">
-        <div className="display-preview-caption"><h2>{activeTab === 'wallpaper' ? '电脑皮肤预览' : '电脑预览'}</h2><Tag color={draft ? 'gold' : 'blue'}>{draft ? '未保存草稿' : '预览选择'}</Tag></div>
-        {showWhale ? <div className="round-display" style={{background:'black',display:'grid',placeItems:'center'}}>
-          <img onError={() => {setWhaleAvailable(false); setRenderer('otto');}} alt="大肥鱼" width="240" height="240" style={{maxWidth:'74%',height:'auto'}} src={`/pet/whale/${blocked ? 'neutral' : ['listening','thinking','speaking'].includes(interaction) ? interaction : interaction === 'wake_acknowledged' ? 'happy' : 'neutral'}.gif`}/>
-          <div className="round-caption">{view.title}</div>
-        </div> : showOtto ? <OttoPreview ready={session.isSuccess} interaction={interaction} system={system} caption={view.title}/> : <><div style={skinStyle(previewSkin)} className={`round-display tone-${view.tone} state-${interaction} emotion-${emotion} focus-${view.focus}`}>
+        <div className="display-preview-caption"><h2>{activeTab === 'wallpaper' ? '电脑皮肤预览' : showWhale ? '大肥鱼 · 触摸预览' : '电脑预览'}</h2><Tag color={draft ? 'gold' : 'blue'}>{draft ? '未保存草稿' : '预览选择'}</Tag></div>
+        {showWhale ? <WhalePreview interaction={interaction} blocked={blocked} caption={view.title} change={setInteraction}/> : showOtto ? <OttoPreview ready={session.isSuccess} interaction={interaction} system={system} caption={view.title}/> : <><div style={skinStyle(previewSkin)} className={`round-display tone-${view.tone} state-${interaction} emotion-${emotion} focus-${view.focus}`}>
           {showSafeArea && <div className="round-safe-area" aria-label="中央安全区"/>}
           <div className="round-topline">{view.title}</div>
           {powerLabel && <div className={`round-power ${system}`}>{powerLabel}</div>}
@@ -268,7 +265,7 @@ export function RoundDisplayApp() {
       <section className="display-controls" aria-label="预览控制">
         <Tabs className="display-task-tabs" activeKey={activeTab} onChange={selectTab} items={[
           {key:'expression', label:'表情', children:<div className="display-task-content">
-        <Card title="电脑显示方式"><Radio.Group aria-label="电脑显示方式" value={renderer} onChange={event=>setRenderer(event.target.value)} options={[{value:'whale',label:'大肥鱼',disabled:!whaleAvailable},{value:'otto',label:'Otto 原图'},{value:'geometry',label:'几何皮肤'}]}/><p className="subtle">仅切换网页画布，不发送设备指令。皮肤页始终预览几何效果；Otto 原图有固定黑底与颜色。</p></Card>
+        <Card title="电脑显示方式"><Radio.Group aria-label="电脑显示方式" value={renderer} onChange={event=>setRenderer(event.target.value)} options={[{value:'whale',label:'大肥鱼'},{value:'otto',label:'Otto 原图'},{value:'geometry',label:'几何皮肤'}]}/><p className="subtle">这里只模拟圆屏，不会唤醒设备或打开麦克风。</p></Card>
         <Card title="交互阶段"><p className="subtle">描述系统正在做什么，是圆屏的主状态。</p>
           <Radio.Group className="round-interaction-options" aria-label="交互阶段" optionType="button" buttonStyle="solid"
             options={interactionOptions} value={interaction} onChange={event => setInteraction(event.target.value as InteractionState)}/>

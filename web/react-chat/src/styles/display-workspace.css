@@ -76,3 +76,8 @@
   .display-preview-shell .display-task-content .ant-card-head-wrapper { flex-wrap: wrap; gap: 8px; padding-block: 10px; }
   .display-preview-shell .round-skin-color-grid, .display-preview-shell .wallpaper-import-grid { grid-template-columns: 1fr; }
 }
+.whale-touch-screen { position: relative; touch-action: none; user-select: none; cursor: pointer; }
+.whale-touch-screen img, .whale-caption { pointer-events: none; }
+.whale-caption { position:absolute; bottom:8%; color:white; font-size:.875rem; }
+.whale-actions { display:flex; flex-wrap:wrap; gap:8px; justify-content:center; }
+.whale-actions button { border:1px solid var(--border); background:var(--surface); color:var(--text); border-radius:16px; padding:6px 12px; cursor:pointer; }
