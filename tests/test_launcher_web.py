@@ -218,6 +218,74 @@ def test_stop_can_be_queued_while_starting(panel):
     assert panel.snapshot()['state'] == 'stopped'
 
 
+def test_cli_stop_supersedes_queued_start_before_reporting_stopped(panel):
+    panel.action('start')
+    assert panel.dispatch_control('stop') == {'ok': True, 'state': 'stopped'}
+    assert panel.snapshot()['state'] == 'stopped'
+    assert panel.manager.options is None  # 过期的启动没有拉起任何进程。
+    assert panel.manager.stop_count == 1
+    panel.perform_pending()
+    assert not panel.manager.services
+    assert panel.manager.stop_count == 1
+    assert panel.dispatch_control('stop') == {'ok': True, 'state': 'already_stopped'}
+
+
+def test_cli_stop_waits_for_pending_http_stop_and_reports_its_failure(panel):
+    assert panel.dispatch_control('start') == {'ok': True, 'state': 'starting'}
+    panel.action('stop', request_id='e' * 24)
+    panel.manager.stop_failure = True
+    assert panel.dispatch_control('stop') == {'ok': False, 'state': 'stop_failed'}
+    assert panel.snapshot()['state'] == 'failed'
+    assert panel.manager.services
+    assert panel.manager.stop_count == 1
+    assert panel.dispatch_control('start') == {'ok': False, 'state': 'start_failed'}
+    last_event = panel.events.snapshot()['events'][0]
+    assert (last_event['request_id'], last_event['code']) == ('e' * 24, 'stop_unconfirmed')
+    panel.manager.stop_failure = False
+    assert panel.dispatch_control('stop') == {'ok': True, 'state': 'stopped'}
+    assert not panel.manager.services
+
+
+def test_cli_stop_needs_no_web_snapshot_after_request_is_queued(panel, monkeypatch):
+    panel.dispatch_control('start')
+
+    def unavailable():
+        raise controller.ControllerError('合成配置暂不可读', 503)
+
+    monkeypatch.setattr(panel, 'snapshot', unavailable)
+    assert panel.dispatch_control('stop') == {'ok': True, 'state': 'stopped'}
+    assert not panel.manager.services
+
+
+@pytest.mark.parametrize('action', ['stop', 'shutdown'])
+@pytest.mark.parametrize('during_cleanup', [False, True])
+def test_start_failure_preserves_newer_stop_until_it_finishes(panel, action, during_cleanup, monkeypatch):
+    start_service, stop_services = panel.manager.start, panel.manager.stop
+
+    def fail_after_partial_start(options):
+        start_service(options)
+        if not during_cleanup:
+            panel.action(action)
+        raise RuntimeError('synthetic partial start')
+
+    def stop_during_cleanup():
+        stop_services()
+        if during_cleanup and panel.state == 'starting':
+            panel.action(action)
+
+    monkeypatch.setattr(panel.manager, 'start', fail_after_partial_start)
+    monkeypatch.setattr(panel.manager, 'stop', stop_during_cleanup)
+    panel.action('start')
+    panel.perform_pending()
+    assert panel.snapshot()['state'] == 'stopping'
+    with pytest.raises(controller.ControllerError):
+        panel.action('start')
+    assert panel.dispatch_control('stop') == {'ok': True, 'state': 'stopped'}
+    assert panel.manager.stop_count == (2 if during_cleanup else 1)
+    assert panel.snapshot()['shutdown_complete'] == (action == 'shutdown')
+    assert not panel.manager.services
+
+
 def test_settings_preserve_paths_choices_and_versioned_consent(panel):
     settings = panel.snapshot()
     panel.update_settings({'voice': True, 'model_profile': 'official',

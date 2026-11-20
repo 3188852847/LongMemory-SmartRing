@@ -80,6 +80,12 @@ export function LauncherApp({api, pollMs = 1200}: {api: LauncherApi; pollMs?: nu
     return () => {active = false; mounted.current = false; clearTimeout(timer); abort.abort();};
   }, [api, pollMs, closed, refreshKey]);
 
+  function refreshStatus() {
+    // 手动刷新后，由下一次成功的状态读取清除操作错误。
+    mutationError.current = false;
+    setRefreshKey(value => value + 1);
+  }
+
   async function mutate(path: 'settings' | 'actions', body: unknown) {
     if (operation.current) return;
     generation.current += 1; operation.current = true; mutationError.current = false; setPending(true); setError('');
@@ -167,7 +173,7 @@ export function LauncherApp({api, pollMs = 1200}: {api: LauncherApi; pollMs?: nu
             : <Button type="primary" size="large" aria-label={snapshot?.state === 'failed' ? '重新启动' : '开启陪伴'} disabled={!snapshot?.can_start || busy || closed || Boolean(error)} onClick={() => void action('start')} loading={snapshot?.state === 'starting' || pending}>{snapshot?.state === 'failed' ? '重新启动' : '开启陪伴'}</Button>}
         </div>
       </section>
-      {error && <Alert className="launcher-error" type="error" title="需要处理" description={error} showIcon action={<Button disabled={pending || closed} onClick={() => setRefreshKey(value => value + 1)}>刷新状态</Button>}/>}
+      {error && <Alert className="launcher-error" type="error" title="需要处理" description={error} showIcon action={<Button disabled={pending || closed} onClick={refreshStatus}>刷新状态</Button>}/>}
       {snapshot?.settings.network_auto && snapshot.network && <div role="status" aria-live="polite"><Alert type={snapshot.network.state === 'network_stable' ? 'info' : 'warning'} title="圆屏网络自动跟踪" description={<>{snapshot.network.message}{snapshot.network.address && <span> 当前检测地址：{snapshot.network.address}</span>}</>} showIcon/></div>}
       <SciFiSurface className="launcher-services">
         <div className="launcher-services-heading"><h2>连接状态</h2><span>来自本机服务</span></div>

@@ -209,6 +209,26 @@ def test_stopped_sync_debounces_and_does_not_launch_services(system):
     assert panel.state == 'stopped' and load_preferences(path)['lan_ip'] == '192.168.1.4'
 
 
+@pytest.mark.parametrize('action', ['stop', 'shutdown'])
+def test_stopped_network_sync_preserves_stop_requested_during_copy(system, action, monkeypatch):
+    panel, manager, path, rows, now = system
+    start(system)
+    panel.dispatch_control('stop')
+    sync = manager.sync_network_only
+
+    def sync_with_stop(options):
+        panel.action(action)
+        sync(options)
+
+    monkeypatch.setattr(manager, 'sync_network_only', sync_with_stop)
+    rows[:] = [adapter('192.168.1.4')]
+    poll(system, 5)
+    poll(system, 20)
+    assert panel.state == 'stopping'
+    assert panel.dispatch_control('stop') == {'ok': True, 'state': 'stopped'}
+    assert panel.snapshot()['shutdown_complete'] == (action == 'shutdown')
+
+
 def test_initial_stopped_detection_does_not_write_without_established_ownership(system):
     panel, manager, path, rows, now = system
     before = path.read_bytes()

@@ -139,6 +139,53 @@ describe('React 启动面板', () => {
     await waitFor(() => expect(button.hasAttribute('disabled')).toBe(false)); fireEvent.click(button);
     await waitFor(() => expect(request).toHaveBeenCalledWith('settings', {settings: {voice: true}, expected_revision: 'rev-1'}));
   });
+  test('保存失败后轮询保留提示，手动刷新成功才恢复启动', async () => {
+    const {api, request} = fake();
+    let status = stopped;
+    const saveError = '设置已被其他页面修改，请刷新后重新编辑。';
+    request.mockImplementation(async path => {
+      if (path === 'settings') {
+        status = {...stopped, message: '已轮询到最新状态'};
+        throw new LauncherError(409, saveError);
+      }
+      return status;
+    });
+    render(<LauncherApp api={api} pollMs={40}/>);
+    await screen.findByText(stopped.message);
+    fireEvent.click(screen.getByRole('button', {name: /圆屏陪伴/}));
+    await screen.findByText('已轮询到最新状态');
+    expect(screen.getByText(saveError)).toBeTruthy();
+    const start = screen.getByRole('button', {name: '开启陪伴'});
+    expect(start.hasAttribute('disabled')).toBe(true);
+
+    fireEvent.click(screen.getByRole('button', {name: '刷新状态'}));
+    await waitFor(() => expect(start.hasAttribute('disabled')).toBe(false));
+    expect(screen.queryByText(saveError)).toBeNull();
+    expect(request.mock.calls.filter(([path]) => path !== 'status')).toEqual([
+      ['settings', {settings: {voice: true}, expected_revision: 'rev-1'}],
+    ]);
+    fireEvent.click(start);
+    await waitFor(() => expect(request).toHaveBeenCalledWith('actions', {action: 'start'}));
+  });
+  test('手动刷新失败显示读取错误，成功后仍按服务端状态决定是否可启动', async () => {
+    const {api, request} = fake();
+    render(<LauncherApp api={api} pollMs={60_000}/>);
+    await screen.findByText(stopped.message);
+    request.mockRejectedValueOnce(new Error());
+    fireEvent.click(screen.getByRole('button', {name: /圆屏陪伴/}));
+    const refresh = await screen.findByRole('button', {name: '刷新状态'});
+    request.mockRejectedValueOnce(new Error());
+    fireEvent.click(refresh);
+    expect(await screen.findByText('无法连接启动面板，请重新打开启动入口。')).toBeTruthy();
+    const start = screen.getByRole('button', {name: '开启陪伴'});
+    expect(start.hasAttribute('disabled')).toBe(true);
+
+    request.mockResolvedValue({...stopped, can_start: false});
+    fireEvent.click(refresh);
+    await waitFor(() => expect(screen.queryByRole('button', {name: '刷新状态'})).toBeNull());
+    expect(start.hasAttribute('disabled')).toBe(true);
+    expect(request.mock.calls.some(([path]) => path === 'actions')).toBe(false);
+  });
   test('启动后显示真实 starting 状态并禁止重复操作', async () => {
     const {api, request} = fake(); render(<LauncherApp api={api}/>);
     const start = await screen.findByRole('button', {name: '开启陪伴'});

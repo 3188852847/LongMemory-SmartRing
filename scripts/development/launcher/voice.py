@@ -2,8 +2,6 @@
 
 from pathlib import Path
 import argparse
-import http.client
-import json
 import sys
 import time
 from voice_ports import port_arguments
@@ -57,20 +55,17 @@ def tts_matches(config, backend):
 
 
 def wait_for_local_tts(backend, timeout=90):
+    # 此脚本由小智独立解释器运行，探测只需本项目的纯标准库适配器。
+    sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "src"))
+    try:
+        from longmemory.adapters.tts.health import ready_health
+    finally:
+        sys.path.pop(0)
     port = {"voxcpm2": 18768, "sanotts": 18769, "cosyvoice3": 18770}[backend]
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        connection = http.client.HTTPConnection("127.0.0.1", port, timeout=0.5)
-        try:
-            connection.request("GET", "/health")
-            response = connection.getresponse()
-            body = json.loads(response.read(4096))
-            if response.status == 200 and body.get("ready") is True and body.get("provider") == backend:
-                return True
-        except (OSError, http.client.HTTPException, json.JSONDecodeError):
-            pass
-        finally:
-            connection.close()
+        if ready_health(backend, port, timeout=0.5):
+            return True
         time.sleep(0.25)
     return False
 
