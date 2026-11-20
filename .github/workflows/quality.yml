@@ -3,6 +3,14 @@ name: Quality
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - 'docs/**/*.md'
+      - 'docs/documentation-manifest.json'
+      - 'web/README.md'
+      - 'README.md'
+      - 'AGENTS.md'
+      - 'CHANGELOG.md'
+      - 'ROADMAP.md'
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -11,7 +19,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: quality-${{ github.workflow }}-${{ github.ref }}
+  group: quality-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
 env:
@@ -34,14 +42,35 @@ jobs:
           version: '0.12.23'
           enable-cache: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        if: github.event_name != 'push'
         with:
           node-version-file: web/react-chat/.node-version
       - name: Install locked console and test dependencies
         run: uv sync --locked --extra console --group dev
       - name: Test quality report guard
+        if: github.event_name != 'push'
         run: uv run --no-sync python scripts/ci/test_backend_quality.py
       - name: Run isolated backend tests
+        if: github.event_name != 'push'
         run: uv run --no-sync python scripts/ci/backend_quality.py
+      - name: Test daily chat, memory, launcher and voice paths
+        if: github.event_name == 'push'
+        run: >-
+          uv run --no-sync python -m pytest -q "--junitxml=$env:RUNNER_TEMP/quick.xml"
+          tests/unit/entrypoints/test_chat_persistence.py::test_restart_list_rename_history_and_replay
+          tests/e2e/test_process_and_evaluation.py::test_two_cli_processes_recall_persistent_memory
+          tests/unit/methods/test_hy_memory_backend.py::test_u_runtime_archives_assistant_and_replays_completed_after_restart
+          tests/test_launcher_web.py::test_start_readiness_stop_and_console
+          tests/unit/development/test_direct_ws_v2.py::test_installer_preserves_v1_and_decodes_v2_with_aec
+          tests/integration/test_voice_combination_boundaries.py
+      - &check-quick-report
+        name: Require passing cases with no skips
+        if: github.event_name == 'push'
+        run: |
+          [xml]$report = Get-Content -Raw -LiteralPath "$env:RUNNER_TEMP/quick.xml"
+          if (-not $report.SelectSingleNode('//testcase') -or $report.SelectSingleNode('//skipped | //failure | //error')) {
+            throw 'Quick checks require executed, passing tests with no skips.'
+          }
 
   frontend:
     name: Frontend and browser tests
@@ -62,19 +91,31 @@ jobs:
       - name: Install locked frontend dependencies
         run: pnpm install --frozen-lockfile
       - name: Run component tests
+        if: github.event_name != 'push'
         # 托管 runner 的 CPU 有限，避免多个 jsdom/Ant Design 任务挤占流程用例。
         # 保留所有断言、默认 5 秒用例限制和零重试。
         run: pnpm test --maxWorkers=1
+      - name: Test daily chat, memory and launcher components
+        if: github.event_name == 'push'
+        run: |
+          $files = 'src/pages/ChatApp.test.tsx', 'src/features/memory/HyMemoryWorkspace.test.tsx', 'src/features/launcher/LauncherApp.test.tsx'
+          Get-Item -LiteralPath $files -ErrorAction Stop | Out-Null
+          pnpm test --maxWorkers=1 --reporter=default --reporter=junit "--outputFile=$env:RUNNER_TEMP/quick.xml" @files
+      - *check-quick-report
       - name: Type check and build
         run: pnpm build
       - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
+        if: github.event_name != 'push'
         with:
           version: '0.12.23'
           enable-cache: false
       - name: Prepare synthetic browser backend
+        if: github.event_name != 'push'
         working-directory: .
         run: uv sync --locked --extra console --group dev
       - name: Install Chromium for isolated browser tests
+        if: github.event_name != 'push'
         run: pnpm exec playwright install chromium
       - name: Run browser tests against temporary Fake console
+        if: github.event_name != 'push'
         run: node ../../scripts/ci/browser_quality.mjs

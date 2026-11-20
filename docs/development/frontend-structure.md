@@ -34,10 +34,9 @@
 
 ## 验证与日常命令
 
-在 `web/react-chat/` 的既有前端环境中运行：
+在 `web/react-chat/` 的既有前端环境中，`pnpm.cmd test` 运行组件测试，`pnpm.cmd build` 检查类型并构建生产页面。需要连同浏览器一起验收时，`test:e2e` 已包含构建，运行以下两条即可。
 
 ```powershell
-pnpm.cmd build
 pnpm.cmd test
 pnpm.cmd test:e2e
 ```
