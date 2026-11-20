@@ -801,7 +801,7 @@
         "候选",
         "研究"
       ],
-      "review": "verified 2026-11-21：日用聊天、记忆和圆屏的当前优先级；研究与历史阶段按需查阅。"
+      "review": "verified 2026-11-21：当前重心为陪伴产品，先单会话梳理代码；双端桌宠、续聊的建议顺序见路线图。"
     },
     {
       "id": "authorization",
@@ -817,7 +817,7 @@
         "规则",
         "授权"
       ],
-      "review": "verified 2026-11-21：按影响验证、工作树复用、个人数据和硬件写入边界；精简前规则在版本历史可追溯。"
+      "review": "verified 2026-11-21：本阶段本地单会话梳理，设备与个人数据仍沿用原授权范围。"
     },
     {
       "id": "daily-use",
@@ -1083,10 +1083,15 @@
     },
     {
       "id": "repository-layout",
-      "scope": "源码、测试、数据集与文档职责位置",
+      "scope": "按日常陪伴体验定位源码、存储与实验边界",
       "authority": "docs/architecture/repository-structure.md",
       "sources": [
-        "src/longmemory/__init__.py"
+        "scripts/development/launcher/runtime.py",
+        "src/longmemory/entrypoints/api/server.py",
+        "src/longmemory/entrypoints/api/routes/chat.py",
+        "scripts/development/xiaozhi/longmemory_provider.py",
+        "web/react-chat/src/features/device/OttoPreview.tsx",
+        "scripts/development/otto_firmware/otto_state.h"
       ],
       "related": [
         "docs/development/frontend-structure.md",
@@ -1096,7 +1101,7 @@
         "目录",
         "源码"
       ],
-      "review": "pending: 本轮只建立维护归属，未完成全篇实现核对"
+      "review": "verified 2026-11-21：入口和双端行为按 00691b2c 静态核对；未运行服务、模型或设备。"
     },
     {
       "id": "frontend-layout",
@@ -2740,8 +2745,8 @@
       "review": {
         "state": "verified",
         "date": "2026-11-21",
-        "scope": "日常维护、验证范围、数据和设备授权",
-        "evidence": "精简前规则 1ac2172f、2026-11-21 所有者维护要求及当前质量工作流"
+        "scope": "项目重心转向个人日常陪伴；当前代码梳理使用单一会话",
+        "evidence": "2026-11-21 所有者对产品重心和现阶段协作方式的明确说明。"
       },
       "tags": []
     },
@@ -2779,8 +2784,8 @@
       "review": {
         "state": "verified",
         "date": "2026-11-21",
-        "scope": "当前日用维护与按需研究边界",
-        "evidence": "2026-11-21 所有者精简要求、1ac2172f 既有主线及研究边界"
+        "scope": "先做代码地图；双端伙伴呈现和同一段对话为建议开发顺序",
+        "evidence": "2026-11-21 所有者方向、产品需求说明书 V1.3 第 8、19 章以及现有代码地图。"
       },
       "tags": []
     },
@@ -5027,16 +5032,9 @@
       "basis": "按 ROADMAP、恢复/工程约定及本轮任务确定的维护入口；仅限定对应事实范围，语义核对另列",
       "review": {
         "state": "verified",
-        "date": "2026-10-19",
-        "scope": "仅U新增的后端装配、来源所有权、管理能力与未切换边界；未对历史章节或全篇作语义验收；X仅核对新增平台圆屏/可信装配段落与引用，未重验整篇历史结论",
-        "evidence": [
-          "b52e0e3",
-          "77c7342",
-          "tests/unit/methods/test_backend_boundary.py",
-          "docs/development/parallel/U-memory-boundary-20261019.md",
-          "docs/development/parallel/X-hy-roundscreen-20261019.md",
-          "docs/guides/Hy-Memory圆屏与日用装配-20261019.md"
-        ]
+        "date": "2026-11-21",
+        "scope": "更新产品定位和代码地图入口，其余历史运行记录未重新验收",
+        "evidence": "所有者当前产品方向、docs/architecture/repository-structure.md。"
       },
       "tags": [
         "architecture"
@@ -5060,7 +5058,10 @@
       "status": "current",
       "basis": "按 ROADMAP、恢复/工程约定及本轮任务确定的维护入口；仅限定对应事实范围，语义核对另列",
       "review": {
-        "state": "pending"
+        "state": "verified",
+        "date": "2026-11-21",
+        "scope": "现有启动、网页、圆屏、记忆、角色、表情、跟进及模型的静态代码路径；产品建议与实机验收分开",
+        "evidence": "源码 00691b2c；server.py、routes/chat.py、longmemory_provider.py、assistant_role.py、OttoPreview.tsx、otto_state.h、model_profiles.py。"
       },
       "tags": [
         "architecture"
