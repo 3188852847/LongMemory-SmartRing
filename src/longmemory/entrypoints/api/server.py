@@ -81,6 +81,8 @@ def create_app(*, port=8765, bridge=None, web_root=None, allow_memory_delete=Fal
     ])
     if qq_directory and runtime is not None:
         register_qq_memory(app, runtime, qq_directory)
+        from .routes.companion_outreach import register_outreach
+        register_outreach(app, runtime, qq_directory, client)
     app.router.add_post(MAINTENANCE_PATH, maintenance.handle)
     register_observability(app, observer)
 

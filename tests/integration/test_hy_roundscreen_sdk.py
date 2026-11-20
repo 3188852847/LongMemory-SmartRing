@@ -276,7 +276,8 @@ def test_confirmed_qq_web_and_roundscreen_share_memory(tmp_path, source):
             assert "乌龙茶" in web_turn.support.context
             screen, _ = runtime.prepare_round_screen("合成用户喜欢什么茶", client_round_id="e"*32, session_id="f"*32)
             assert "乌龙茶" in screen.support.context
-            assert "红茶" not in screen.support.context
+            assert "助手建议红茶" in screen.support.context
+            assert all("红茶" not in item.content for item in screen.support.retrieved)
     runtime = open_runtime(tmp_path, create=True)
     try:
         asyncio.run(exercise(runtime))

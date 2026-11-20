@@ -41,7 +41,7 @@ def security_middleware(authority: str, sessions: Sessions, internal_token: str 
     async def protect(request, handler):
         response = None
         try:
-            qq_memory = request.path == "/api/internal/qq-memory"
+            qq_memory = request.path in {"/api/internal/qq-memory", "/api/internal/companion-outreach"}
             token = qq_token if qq_memory else internal_token
             internal = (qq_memory or request.path.startswith("/api/internal/memory/")
                         or request.path == '/api/internal/network-maintenance')

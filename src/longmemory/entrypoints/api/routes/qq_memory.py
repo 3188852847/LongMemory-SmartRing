@@ -16,9 +16,20 @@ def qq_token(directory):
     return hmac.digest(key.encode(), b"qq-memory-v1", "sha256").hex() if key else None
 
 
-def register_qq_memory(app, runtime, directory):
+def confirmed_owner(directory):
     binding = directory / "data/plugin_data/astrbot_plugin_private_companion/setup/binding.json"
+    try:
+        owner = json.loads(binding.read_text("utf-8"))
+    except (OSError, ValueError):
+        return None
+    if (not isinstance(owner, dict) or owner.get("schema_version") != 2 or owner.get("confirmed") is not True
+            or not owner.get("platform_id") or owner.get("platform_id") != owner.get("account_id")
+            or not owner.get("participant_id")):
+        return None
+    return owner["platform_id"], owner["participant_id"]
 
+
+def register_qq_memory(app, runtime, directory):
     async def exchange(request):
         try:
             body = await request.clone(client_max_size=128000).json()
@@ -32,13 +43,7 @@ def register_qq_memory(app, runtime, directory):
                 raise ValueError
         except (KeyError, ValueError, TypeError):
             raise web.HTTPBadRequest()
-        try:
-            owner = json.loads(binding.read_text("utf-8"))
-        except (OSError, ValueError):
-            owner = {}
-        if not (isinstance(owner, dict) and owner.get("schema_version") == 2 and owner.get("confirmed") is True
-                and platform == owner.get("platform_id") == owner.get("account_id")
-                and sender == owner.get("participant_id")):
+        if confirmed_owner(directory) != (platform, sender):
             raise web.HTTPForbidden()
         session = "qq-" + hashlib.sha256(json.dumps([platform, sender]).encode()).hexdigest()[:32]
         event_id = str(uuid5(NAMESPACE_URL, json.dumps([session, message, role])))

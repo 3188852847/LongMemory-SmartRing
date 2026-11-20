@@ -18,6 +18,7 @@
 .shell.workspace-shell.chat-shell .chat-workspace.has-panel { grid-template-columns: minmax(0, 1fr) minmax(280px, 34%); }
 .shell.workspace-shell.chat-shell .messages { min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; padding: 4px 12px 12px 4px; scroll-padding-block: 12px; }
 .shell.workspace-shell.chat-shell .messages > article { max-width: 78ch; margin: 0 auto 24px; overflow-wrap: anywhere; }
+.shell.workspace-shell.chat-shell .messages > .web-user-turn { margin-bottom: 4px; }
 .shell.workspace-shell.chat-shell .messages .empty { min-height: 0; padding: 28px 4px; }
 .shell.workspace-shell.chat-shell .turn-evidence-action { max-width: 100%; height: auto; min-height: 36px; white-space: normal; text-align: left; color: var(--muted-strong); font-size: .8rem; }
 .shell.workspace-shell.chat-shell .chat-aux-panel { position: static; order: initial; min-height: 0; min-width: 0; display: flex; flex-direction: column; padding: 0; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); box-shadow: none; }

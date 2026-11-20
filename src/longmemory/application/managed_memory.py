@@ -99,6 +99,20 @@ class ManagedMemoryMethod:
             return {**self.source_status(event_id), "content": event.content,
                     "session_id": event.session_id}
 
+    def import_dialogue(self, events):
+        with self._lock:
+            self._check()
+            return self.journal.archive_many(events)
+
+    def dialogue_activity(self):
+        with self._lock:
+            return self.journal.dialogue_activity()
+
+    def recent_dialogue(self, limit, **options):
+        with self._lock:
+            self._check()
+            return self.journal.recent_dialogue(limit, **options)
+
     def recall(self, query):
         with self._lock:
             self._check()

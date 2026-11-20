@@ -27,6 +27,7 @@ function mount(snapshot: Snapshot, override?: (path: string, method: string, bod
     if (path === '/api/chat-config') return {enabled:true, database:'synthetic.db', provider:'fake', model:'Fake', role:'测试'};
     if (path === '/api/chats') return {chats:[{chat_id:snapshot.chat_id, title:snapshot.title, turn_count:snapshot.turns.length}]};
     if (path === `/api/chats/${snapshot.chat_id}`) return snapshot;
+    if (path.startsWith('/api/companion/dialogue')) return {enabled:true, messages:[]};
     if (path === '/api/device') return {ready:false, connection_count:0};
     throw new Error(`unexpected synthetic request: ${method} ${path}`);
   });
@@ -77,6 +78,81 @@ describe('聊天工作区', () => {
     const link = await screen.findByRole('link', {name:'核对条目与平台来源'});
     expect(link.getAttribute('href')).toBe('/memories?item=memory-1');
     expect(identity).toHaveBeenCalledTimes(2);
+  });
+
+  test('共享历史按实际时间穿插三端消息，网页证据仍绑定原轮次', async () => {
+    const local = {...turn(1), event_id:'local-u', assistant_event_id:'local-a'};
+    const rows = [
+      {id:'local-u', role:'user', text:local.input, at:'2026-11-20T10:00:00Z', channel:'web'},
+      {id:'qq-reply', role:'assistant', text:'合成 QQ 主动问候', at:'2026-11-20T10:01:00Z', channel:'qq', proactive:true},
+      {id:'local-a', role:'assistant', text:local.answer, at:'2026-11-20T10:02:00Z', channel:'web'},
+      {id:'screen-u', role:'user', text:'合成圆屏原话', at:'2026-11-20T10:03:00Z', channel:'screen'},
+    ];
+    mount({chat_id:'shared', title:'合成会话', pending:false, turns:[local]}, path =>
+      path === '/api/companion/dialogue?active=1' ? {enabled:true, messages:rows} : undefined);
+    await screen.findByText('合成圆屏原话');
+    const messages = screen.getByRole('region', {name:'聊天记录'});
+    expect(Array.from(messages.querySelectorAll('.bubble p'), p => p.textContent)).toEqual(rows.map(row => row.text));
+    expect(within(messages).getByText(/QQ · 主动联系/)).toBeTruthy();
+    expect(within(messages).getByRole('button',{name:'查看第 1 轮记忆证据'})).toBeTruthy();
+  });
+
+  test('向前翻页保留阅读锚点，刷新消息后保留读过的页和滚出首页的消息', async () => {
+    const row = (n: number) => ({id:`r${n}`, role:'assistant', text:`共享行 ${n}`,
+      channel:'qq', proactive:false, at:new Date(Date.UTC(2026,10,21,10,0,n)).toISOString()});
+    let first = 1;
+    const hidden = vi.spyOn(document, 'hidden', 'get').mockReturnValue(false);
+    const request = mount({chat_id:'pages', title:'合成会话', pending:false, turns:[]}, path => {
+      if (path.endsWith('?active=1')) return {enabled:true, messages:Array.from({length:60}, (_, i) => row(first + i))};
+      if (path.endsWith('?before=r1&limit=60')) return {enabled:true, messages:[row(-1), row(0)]};
+    });
+    await screen.findByText('共享行 60');
+    const viewport = screen.getByRole('region', {name:'聊天记录'});
+    const top = screen.getByText('共享行 1').closest('article')!;
+    const original = top.getBoundingClientRect();
+    vi.spyOn(top, 'getBoundingClientRect').mockImplementation(() =>
+      ({...original, top: screen.queryByText('共享行 -1') ? 120 : 0, bottom:180}) as DOMRect);
+    fireEvent.click(screen.getByRole('button',{name:'更早的对话'}));
+    await screen.findByText('共享行 -1');
+    expect(viewport.scrollTop).toBe(120);
+    expect(request.mock.calls.some(([p]) => p.includes('before=') && p.includes('active='))).toBe(false);
+    expect(screen.queryByRole('button',{name:'更早的对话'})).toBeNull();
+    first = 2;
+    hidden.mockReturnValue(true); fireEvent(document, new Event('visibilitychange'));
+    hidden.mockReturnValue(false); fireEvent(document, new Event('visibilitychange'));
+    await screen.findByText('共享行 61');
+    expect(screen.getAllByText('共享行 1')).toHaveLength(1);
+    expect(screen.getAllByText('共享行 -1')).toHaveLength(1);
+    expect(viewport.scrollTop).toBe(120);
+  });
+
+  test('切换会话时丢弃上一会话的慢速翻页结果', async () => {
+    const rows = Array.from({length:60}, (_, i) => ({id:`r${i}`, role:'user', text:`合成 ${i}`, channel:'qq',
+      at:new Date(Date.UTC(2026,10,21,10,0,i)).toISOString()}));
+    let finish!: (page: unknown) => void;
+    mount({chat_id:'first', title:'合成会话', pending:false, turns:[]}, (path, method) => {
+      if (path.endsWith('?active=1')) return {enabled:true, messages:rows};
+      if (path.includes('before=r0')) return new Promise(resolve => {finish = resolve;});
+      if (path === '/api/chats' && method === 'POST') return {chat_id:'next'};
+      if (path === '/api/chats/next') return {chat_id:'next', title:'另一个会话', pending:false, turns:[]};
+    });
+    fireEvent.click(await screen.findByRole('button',{name:'更早的对话'}));
+    await waitFor(() => expect(finish).toBeTypeOf('function'));
+    fireEvent.click(screen.getByRole('button',{name:'新聊天'}));
+    await screen.findByText('另一个会话');
+    finish({enabled:true,messages:[{...rows[0],id:'late',text:'上一次翻页'}]});
+    await waitFor(() => expect(screen.getByRole('button',{name:'更早的对话'}).hasAttribute('disabled')).toBe(false));
+    expect(screen.queryByText('上一次翻页')).toBeNull();
+  });
+
+  test('后台打开聊天页不会登记网页可接收消息，回到前台后开始同步', async () => {
+    const hidden = vi.spyOn(document, 'hidden', 'get').mockReturnValue(true);
+    const request = mount({chat_id:'visibility', title:'合成会话', pending:false, turns:[]});
+    await screen.findByText('会话已恢复，可以继续聊。');
+    expect(request.mock.calls.some(([path]) => path.startsWith('/api/companion/dialogue'))).toBe(false);
+    hidden.mockReturnValue(false);
+    fireEvent(document, new Event('visibilitychange'));
+    await waitFor(() => expect(request.mock.calls.some(([path]) => path === '/api/companion/dialogue?active=1')).toBe(true));
   });
 
   test('回看时新回答不拉底，明确返回最新后恢复跟随', async () => {

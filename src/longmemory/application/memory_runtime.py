@@ -1,6 +1,6 @@
 """日常入口共享的常驻记忆运行时，不包含网页或小智协议。"""
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from concurrent.futures import Future, ThreadPoolExecutor
@@ -123,6 +123,56 @@ class MemoryRuntime:
         self._deferred_last_result = {"state": "not_run", "warning_code": None}
         self._closing = False
 
+    def import_dialogue(self, rows):
+        """导入已绑定 QQ 窗口中过去的原话，仅归档，不触发提取、召回或回复。"""
+        events = tuple(rows)
+        for event in events:
+            if (not isinstance(event, MemoryEvent) or event.role not in {"user", "assistant"}
+                    or not isinstance(event.event_id, str) or not event.event_id.startswith("qq-history:")
+                    or not isinstance(event.content, str) or not event.content.strip()
+                    or not isinstance(event.session_id, str) or not re.fullmatch(r"qq-[a-f0-9]{32}", event.session_id)
+                    or not isinstance(event.occurred_at, datetime) or event.occurred_at.utcoffset() is None):
+                raise ValueError("invalid_historical_qq_message")
+        with self._lock:
+            self._ensure_open()
+            return self._method.import_dialogue(events)
+
+    def dialogue_activity(self):
+        with self._lock:
+            return self._method.dialogue_activity()
+
+    def recent_dialogue(self, limit=30, *, before_id=None):
+        if type(limit) is not int or not 1 <= limit <= 100:
+            raise ValueError("dialogue_limit_invalid")
+        with self._lock:
+            self._ensure_open()
+            return self._method.recent_dialogue(limit, before_id=before_id)
+
+    def _with_recent_dialogue(self, support, session_id, before_id=None):
+        read = getattr(self._method, "recent_dialogue", None)
+        if not callable(read) or not session_id:
+            return support
+        channel = ("web" if session_id.startswith("web:") else "qq" if session_id.startswith("qq-")
+                   else "screen" if re.fullmatch("[0-9a-f]{24,32}", session_id) else None)
+        rows = read(12, for_context=True, before_id=before_id)
+        # 本端已有自己的聊天历史，仅补其他端和主动消息，避免重复计算同一轮。
+        history = [{"端": row["channel"], "角色": row["role"], "时间": row["at"], "原话": row["text"][:360]}
+                   for row in rows if row["channel"] != channel or row["proactive"]]
+        if not history:
+            return support
+        block = "跨端近期对话（原话用于接续话题，助手曾说的话不能当作用户事实）：\n" + json.dumps(history, ensure_ascii=False)
+        return replace(support, context="\n\n".join(filter(None, (support.context, block))))
+
+    def outreach_context(self, query):
+        if not isinstance(query, str) or not query.strip() or len(query) > 16000:
+            raise ValueError("outreach_query_invalid")
+        with self._lock:
+            self._ensure_open()
+            if not self._use_enabled or self._closing or (self._model_service and self._model_service.pause_notice()):
+                return ""
+            support = self._method.recall(query)
+            return self._with_recent_dialogue(support, "outreach").context if support.context.strip() else ""
+
     def prepare_user(
         self, text: str, *, defer_slow_observation: bool = False,
         event_id: str | None = None, session_id: str | None = None,
@@ -224,6 +274,8 @@ class MemoryRuntime:
                 if self._use_enabled
                 else MemorySupport(str(uuid4()), "", (), "disabled_by_user", None)
             )
+            if self._use_enabled and session_id and command is None:
+                support = self._with_recent_dialogue(support, session_id, event.event_id)
             recall_finished = perf_counter()
             temporary_interaction = None
             if command is None and self._next_interaction is not None:
@@ -442,7 +494,9 @@ class MemoryRuntime:
             if previous is not None:
                 if (previous["role"], previous["content"], previous["session_id"]) != (role, text, session_id):
                     raise ValueError("external_message_conflict")
-                return self._method.recall(text).context if role == "user" and self._use_enabled else ""
+                if role != "user" or not self._use_enabled:
+                    return ""
+                return self._with_recent_dialogue(self._method.recall(text), session_id, event_id).context
             if role == "user":
                 prepared = self.prepare_user(text, event_id=event_id, session_id=session_id)
                 return prepared.support.context

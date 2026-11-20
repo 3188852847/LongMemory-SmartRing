@@ -257,6 +257,9 @@ RESOURCE_GROUPS = (
          'test_real_http_sdk_correction_source_replay_pause_and_isolated_delete',
          'test_real_sdk_readback_failure_remains_uncertain_after_restart',
      )),
+    ('tests.integration.test_astrbot_shared_outreach',
+     'requires installed private companion',
+     ('test_private_companion_shared_contact',)),
     ('tests.integration.test_hy_roundscreen_sdk',
      'explicit existing Hy and voice interpreters required',
      (
@@ -269,6 +272,8 @@ RESOURCE_GROUPS = (
          'test_actual_runtime_version_mismatch_rejects_and_releases_both_owners',
          'test_optional_profile_add_and_search_observations_share_scope_without_extra_model_calls',
          'test_real_sdk_context_reaches_synthetic_answer_and_assistant_archive_separately',
+         'test_confirmed_qq_web_and_roundscreen_share_memory[qq]',
+         'test_confirmed_qq_web_and_roundscreen_share_memory[web]',
      )),
     ('tests.integration.test_hy_semantic_platform_sdk',
      'explicit owner-installed fixed SDK required',

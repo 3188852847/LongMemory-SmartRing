@@ -440,3 +440,47 @@ def test_assistant_cannot_be_correction_authority(tmp_path):
             runtime.source_detail("assistant-correction")
     finally:
         runtime.close()
+
+
+def test_shared_dialogue_provenance_chronology_and_controls(tmp_path):
+    runtime, _ = directory_runtime(tmp_path)
+    try:
+        session = "qq-" + "9" * 32
+        runtime.external_text("user", "明早去画画", session_id=session, event_id="qq-user")
+        runtime.external_text("assistant", "画好分享呀", session_id=session, event_id="qq-answer")
+        # 同毫秒的先后顺序和迟到的旧消息都能正确翻页。
+        from datetime import timedelta
+        runtime._method.archive(MemoryEvent("old", "assistant", "昨天的问候", NOW - timedelta(days=1), "outreach-web"))
+        runtime._method.archive(MemoryEvent("unknown", "user", "独立来源", NOW, None))
+        first = runtime.recent_dialogue(2)
+        assert [(row["channel"], row["id"]) for row in first] == [("qq", "qq-user"), ("qq", "qq-answer")]
+        older = runtime.recent_dialogue(2, before_id=first[0]["id"])
+        assert [(row["channel"], row["proactive"], row["id"]) for row in older] == [("web", True, "old")]
+        count = len(runtime._method.journal.events())
+        assert "画好分享呀" in runtime.outreach_context("画画")
+        assert len(runtime._method.journal.events()) == count
+        web_turn = runtime.prepare_user("接着聊", session_id="web:demo")
+        assert "画好分享呀" in web_turn.support.context and "独立来源" not in web_turn.support.context
+        runtime._method.archive(MemoryEvent("hy-management:change", "user", "纠错", NOW, None))
+        assert "画好分享呀" not in runtime.outreach_context("画画")
+        runtime.configure(write_enabled=False, use_enabled=False)
+        assert runtime.outreach_context("画画") == ""
+        assert not runtime.prepare_user("晚安", session_id="web:demo").support.context
+    finally:
+        runtime.close()
+
+def test_imported_qq_dialogue_is_atomic_and_never_observed(tmp_path):
+    runtime, engine = directory_runtime(tmp_path)
+    try:
+        session = "qq-" + "8" * 32
+        first = MemoryEvent("qq-history:1", "user", "旧消息", NOW, session)
+        second = MemoryEvent("qq-history:2", "assistant", "旧回答", NOW, session)
+        assert runtime.import_dialogue([first]) == 1
+        assert runtime.import_dialogue([first]) == 0
+        with pytest.raises(ValueError, match="source_event_conflict"):
+            runtime.import_dialogue([second, replace(first, content="改写")])
+        assert runtime.import_dialogue([first, second]) == 1
+        assert [row["text"] for row in runtime.recent_dialogue()] == ["旧消息", "旧回答"]
+        assert engine.data["events"] == []
+    finally:
+        runtime.close()

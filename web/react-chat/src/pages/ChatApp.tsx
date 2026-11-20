@@ -1,5 +1,5 @@
 import {useMemoryEngine, memoryEngineLabel, retrievalLabel} from '../app/MemoryEngineProvider';
-import {useEffect, useRef, useState} from 'react';
+import {useEffect, useLayoutEffect, useRef, useState} from 'react';
 import {Button} from '../components/Button';
 import {Alert, Input, Modal, Select} from 'antd';
 import {useQuery} from '@tanstack/react-query';
@@ -15,6 +15,8 @@ import {loadSendShortcut, saveSendShortcut, shouldSendFromKeyboard, type SendSho
 import {organizeChats, readPinnedChats, togglePinnedChat, writePinnedChats} from '../features/chat/chatSessions';
 import {ConsoleStatusRail, MemoryFeedbackControls, TurnMemoryEvidence} from '../features/chat/ChatObservability';
 import {chatFailure} from '../features/chat/chatFailure';
+import {dialogueLabel, mergeDialogue} from '../features/chat/sharedDialogue';
+import {useSharedDialogue} from '../features/chat/useSharedDialogue';
 import '../styles/chat-workspace.css';
 
 const api = new ChatApi();
@@ -65,6 +67,9 @@ export function ChatApp() {
   const panelHeading = useRef<HTMLHeadingElement>(null);
   const deviceStatus = useQuery({queryKey:['device-status'], enabled:Boolean(config?.enabled), retry:false,
     queryFn:() => api.request<DeviceStatus>('/api/device'), refetchInterval:5000});
+  const shared = useSharedDialogue(api, config?.enabled ? config.database : undefined, chat?.chat_id, !panel);
+  const timeline = mergeDialogue(chat?.turns ?? [], shared.messages);
+  const latestEntry = timeline.at(-1)?.key;
   const memoryEngine=useMemoryEngine();
   const checkedChatMethod = useRef<string | null>(null);
   useEffect(() => {
@@ -94,7 +99,25 @@ export function ChatApp() {
       followLatest.current = true;
       setAwayFromLatest(false);
     }
-  }, [chat?.chat_id, chat?.turns.length, focusedRequestId]);
+  }, [chat?.chat_id, latestEntry, focusedRequestId]);
+  const anchor = useRef<{article: HTMLElement; top: number; chatId: string} | null>(null);
+  function readEarlier() {
+    const viewport = messages.current;
+    if (!viewport || !chat || shared.readingEarlier) return;
+    const top = viewport.getBoundingClientRect().top;
+    const article = Array.from(viewport.querySelectorAll('article')).find(item => item.getBoundingClientRect().bottom >= top);
+    if (article) anchor.current = {article, top: article.getBoundingClientRect().top, chatId: chat.chat_id};
+    followLatest.current = false;
+    setAwayFromLatest(true);
+    void shared.readEarlier();
+  }
+  useLayoutEffect(() => {
+    const previous = anchor.current;
+    if (previous && previous.chatId === chat?.chat_id && previous.article.isConnected && messages.current) {
+      messages.current.scrollTop += previous.article.getBoundingClientRect().top - previous.top;
+    }
+    anchor.current = null;
+  }, [chat?.chat_id, shared.oldestPage]);
   function returnToLatest() {
     if (messages.current) messages.current.scrollTop = messages.current.scrollHeight;
     followLatest.current = true; setAwayFromLatest(false);
@@ -274,10 +297,26 @@ export function ChatApp() {
       </div>
       <div className={`chat-workspace${panel ? ' has-panel' : ''}`}><section ref={messages} className="messages" aria-label="聊天记录" tabIndex={0} onScroll={event => {
         const viewport = event.currentTarget;
+        if (anchor.current) anchor.current.top = anchor.current.article.getBoundingClientRect().top;
         followLatest.current = viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop < 48;
         setAwayFromLatest(!followLatest.current);
-      }}>{!chat?.turns.length && <div className="empty"><h2>今天想聊些什么？</h2><p>可以说说今天的事，也可以继续上次的话题。</p></div>}
-        {chat?.turns.map((turn, i) => <article id={turn.request_id ? `turn-${turn.request_id}` : undefined} className={turn.request_id === focusedRequestId ? 'focused-chat-turn' : undefined} key={turn.request_id ?? i}><div className="bubble user"><strong>你</strong><p>{turn.input}</p></div><div className="bubble assistant"><strong>助手</strong><p>{turn.answer ?? '未获得完整回答。'}</p></div>
+      }}>{shared.canReadEarlier && <Button isLoading={shared.readingEarlier} onClick={readEarlier} label="更早的对话"/>}
+        {shared.earlierFailed && <p role="status">更早的对话暂时无法读取，请重试。</p>}
+        {shared.failed && <p role="status">共享对话暂时无法更新。</p>}
+        {!timeline.length && <div className="empty"><h2>今天想聊些什么？</h2><p>可以说说今天的事，也可以继续上次的话题。</p></div>}
+        {timeline.map(entry => {
+          if (entry.kind === 'shared') {
+            const {message} = entry;
+            return <article key={entry.key}><div className={`bubble ${message.role}`}>
+              <strong>{message.role === 'user' ? '你' : '大肥鱼'}</strong>{' · '}{dialogueLabel(message.channel, message.proactive)}
+              <p>{message.text}</p>
+            </div></article>;
+          }
+          const {turn, index: i} = entry;
+          if (entry.kind === 'user') return <article key={entry.key} id={turn.request_id ? `turn-${turn.request_id}` : undefined}
+            className={turn.request_id === focusedRequestId ? 'focused-chat-turn web-user-turn' : 'web-user-turn'}>
+            <div className="bubble user"><strong>你 · 网页</strong><p>{turn.input}</p></div></article>;
+          return <article key={entry.key}><div className="bubble assistant"><strong>大肥鱼 · 网页</strong><p>{turn.answer ?? '未获得完整回答。'}</p></div>
           {turn.memory_command && <Alert className="memory-command-result" showIcon type={memoryCommandAlert(turn.memory_command.status)} title="实际记忆操作结果" description={turn.memory_command.notice}/>}
           {turn.memory_processing === 'source_only' && <p className="memory-warning">{memoryWarning(turn)} 可继续聊天，之后需要重新整理这条来源。</p>}
           {turn.retrieval_warning === 'dense_retrieval_failed' && <p className="memory-warning">本轮本地 BGE 检索失败，已使用关键词结果继续回答；展开过程可查看实际策略。</p>}
@@ -286,7 +325,8 @@ export function ChatApp() {
             if (event.currentTarget.open) setLoadedActionTurns(current=>current.includes(i)?current:[...current,i]);
           }}><summary aria-label={`第 ${i + 1} 轮朗读与反馈`}>朗读与反馈{turn.memory_feedback ? ' · 已记录' : ''}</summary>
             {loadedActionTurns.includes(i) && <>{turn.answer&&<SpeechPlayer api={api} text={turn.answer}/>}<MemoryFeedbackControls turn={turn} disabled={busy || unknown} onSelect={kind => void setMemoryFeedback(turn,kind)}/></>}
-          </details><Button className="turn-evidence-action" tooltip={turnSummary(turn)} onClick={() => {setEvidenceIndex(i); setPanel('evidence');}} label={`查看第 ${i + 1} 轮记忆证据`}>记忆详情{turn.status !== 'completed' ? ' · 未完成' : ''}</Button></div></article>)}</section>
+          </details><Button className="turn-evidence-action" tooltip={turnSummary(turn)} onClick={() => {setEvidenceIndex(i); setPanel('evidence');}} label={`查看第 ${i + 1} 轮记忆证据`}>记忆详情{turn.status !== 'completed' ? ' · 未完成' : ''}</Button></div></article>;
+        })}</section>
         {panel && <aside id="chat-aux-panel" className="chat-aux-panel" aria-label={panel === 'sessions' ? '会话管理' : panel === 'evidence' ? '记忆证据面板' : '运行状态面板'} onKeyDown={event => {if (event.key === 'Escape') {event.stopPropagation(); closePanel();}}}>
           <div className="chat-panel-heading"><h2 ref={panelHeading} tabIndex={-1}>{panel === 'sessions' ? '会话管理' : panel === 'evidence' ? evidenceIndex === undefined ? '本轮记忆证据' : `第 ${evidenceIndex + 1} 轮记忆证据` : '运行状态'}</h2><Button onClick={closePanel} label="收起面板"/></div>
           <div className="chat-panel-content">{panel === 'sessions' ? sessions : panel === 'evidence' ? <TurnMemoryEvidence turn={evidenceTurn}/> : <>
