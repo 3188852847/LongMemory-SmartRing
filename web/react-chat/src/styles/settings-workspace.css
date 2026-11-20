@@ -61,3 +61,12 @@
   .settings-shell .voice-workflow { display: block; }
   .settings-shell .voice-workflow li + li { margin-top: 4px; }
 }
+.settings-shell .settings-workspace .ant-card { background: var(--surface); color: var(--text); }
+.settings-shell .settings-workspace .ant-card-head { padding-inline: clamp(16px, 3vw, 32px); color: var(--text-strong); }
+.settings-shell .settings-workspace .ant-card-body { padding: clamp(16px, 3vw, 32px); }
+.settings-shell .role-editor { display: grid; max-width: 76ch; gap: 10px; line-height: 1.65; color: var(--text); }
+.settings-shell .role-editor p { margin: 0 0 8px; color: var(--muted-strong); }
+.settings-shell .role-editor label { display: block; color: var(--text-strong); font-weight: 600; }
+.settings-shell .role-editor .ant-input { color: var(--text); background: var(--surface-soft); line-height: 1.7; padding: 10px 14px; }
+.settings-shell .role-editor details, .settings-shell .role-editor > section { border-top: 1px solid var(--border-strong); padding-top: 12px; }
+.settings-shell .role-editor summary { cursor: pointer; padding-block: 6px; }

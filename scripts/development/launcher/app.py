@@ -370,7 +370,7 @@ def main():
     database = tk.StringVar(value=saved["database"] or str(ROOT / "data/databases/xiaozhi-demo-v1.db"))
     server = tk.StringVar(value=saved["voice_root"] or str(VOICE_ROOT))
     ip = tk.StringVar(value=saved["lan_ip"])
-    role_labels = {"爱莉希雅风格": "elysia_v1", "普通助手": "plain_v1"}
+    role_labels = {"大肥鱼": "大肥鱼", "爱莉希雅风格": "elysia_v1", "普通助手": "plain_v1"}
     role = tk.StringVar(value=next(
         label for label, value in role_labels.items() if value == saved["role"]
     ))

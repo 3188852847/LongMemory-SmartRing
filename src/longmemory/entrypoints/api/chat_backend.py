@@ -16,7 +16,7 @@ from .role_settings import RoleSettings
 
 class ChatBackend:
     def __init__(self, database: Path, generator, *, provider="fake", model="fake",
-                 role="plain_v1", runtime: MemoryRuntime, model_endpoint=None, insecure_model_transport=False,
+                 role="大肥鱼", runtime: MemoryRuntime, model_endpoint=None, insecure_model_transport=False,
                  sidecar_database=None):
         self.database = database.resolve()
         self.sidecar_database = (sidecar_database or database).resolve()

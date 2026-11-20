@@ -56,7 +56,7 @@ for (const viewport of [{width:1366,height:768},{width:1440,height:900},{width:3
     await page.setViewportSize(viewport);
     const {writes,unexpected} = await mockWorkspace(page);
     await page.goto('/settings?tab=voice');
-    for (const name of ['设置总览','模型与服务','记忆后端','助手表达','声音与克隆','外观与阅读']) {
+    for (const name of ['设置总览','模型与服务','记忆后端','角色设置','声音与克隆','外观与阅读']) {
       const tab = page.getByRole('tab',{name,exact:true});
       await expect(tab).toBeVisible();
       if (viewport.width > 600) {
@@ -65,7 +65,7 @@ for (const viewport of [{width:1366,height:768},{width:1440,height:900},{width:3
       }
     }
     await page.getByLabel('表达指令（可留空）').fill('温柔亲切地说话');
-    await page.getByRole('tab',{name:'助手表达',exact:true}).click();
+    await page.getByRole('tab',{name:'角色设置',exact:true}).click();
     await page.goBack();
     await expect(page.getByLabel('表达指令（可留空）')).toHaveValue('温柔亲切地说话');
     await page.getByText('添加参考录音',{exact:true}).click();

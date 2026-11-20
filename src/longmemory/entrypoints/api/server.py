@@ -215,7 +215,7 @@ def main():
                         default=os.environ.get("LONGMEMORY_PREEMPTIVE_ENABLED") == "1",
                         help="显式开启受限语音候选宿主；只经原免费网关，不改变正式EOU")
     parser.add_argument("--memory-audit-log", type=Path, help="共享记忆 Runtime 的脱敏审计日志")
-    parser.add_argument("--assistant-role", choices=("plain_v1", "elysia_v1"), default="plain_v1")
+    parser.add_argument("--assistant-role", choices=("大肥鱼", "plain_v1", "elysia_v1"), default="大肥鱼")
     parser.add_argument("--xiaozhi-server", type=Path, help="允许用户确认后同步角色到此小智目录；不会自动修改配置或重启")
     parser.add_argument("--model-profile", choices=("campus", "official"), default="campus",
                         help="标记本进程实际加载的本机模型配置档")

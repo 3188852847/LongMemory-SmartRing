@@ -57,8 +57,7 @@ export function SettingsApp() {
           ? '当前服务正在使用 Hy-Memory。网页聊天和圆屏对话共享长期记忆。'
           : engine.phase === 'loading' ? '正在读取记忆服务状态…' : '当前未连接到 Hy-Memory。'}/>
       </Card>},
-      {key:'role', label:'助手表达', children:<Card title="性格与回答方式" extra={<span className="setting-scope">网页＋可选圆屏同步</span>}>
-        <p>编辑角色名称与系统提示词。网页从下一轮开始使用；圆屏必须在弹窗里单独预检和同步。</p>
+      {key:'role', label:'角色设置', children:<Card title="角色设置" extra={<span className="setting-scope">网页＋可选圆屏同步</span>}>
         <RoleEditor api={api} disabled={!enabled} onSaved={() => {void queryClient.invalidateQueries({queryKey:['chat-config']});}}/>
       </Card>},
       {key:'voice', label:'声音与克隆', children:<Card title="声音与克隆" extra={<span className="setting-scope">网页与圆屏共用声线</span>}>

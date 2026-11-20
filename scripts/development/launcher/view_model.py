@@ -34,7 +34,7 @@ def summary_text(
         "memories": "记忆管理",
         "settings": "设置中心",
     }[start_page]
-    role_label = "爱莉希雅风格" if role == "elysia_v1" else "普通助手"
+    role_label = {"大肥鱼": "大肥鱼", "elysia_v1": "爱莉希雅风格"}.get(role, "普通助手")
     sound_label = {
         "edge": "EdgeTTS 联网声音",
         "voxcpm2": "VoxCPM2 本地声音",

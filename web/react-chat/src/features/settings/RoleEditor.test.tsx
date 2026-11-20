@@ -14,7 +14,7 @@ describe('助手角色设置', () => {
       presets:[],web:'next_turn',device:'not_synced',
     });
     render(<RoleEditor api={new ChatApi()} disabled={false} onSaved={() => undefined}/>);
-    fireEvent.click(screen.getByRole('button', {name:/助手角色设置/}));
+    fireEvent.click(screen.getByText('预设、历史与表达偏好'));
     await waitFor(() => expect(screen.getByDisplayValue('自定义角色')).toBeTruthy());
     expect(screen.getByRole('combobox', {name:'载入角色历史版本'})).toBeTruthy();
     fireEvent.click(screen.getByRole('switch', {name:'启用结构化表达偏好'}));

@@ -7,7 +7,7 @@ from contextlib import closing
 from datetime import UTC, datetime
 from pathlib import Path
 
-PRESETS = ('plain_v1', 'elysia_v1')
+PRESETS = ('大肥鱼', 'plain_v1', 'elysia_v1')
 
 
 def preset_prompt(name):

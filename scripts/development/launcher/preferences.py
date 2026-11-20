@@ -24,7 +24,7 @@ DEFAULTS = {
     "voice_http_port": 8003,
     "network_auto": False,
     "lan_interface_id": "",
-    "role": "elysia_v1",
+    "role": "大肥鱼",
     # 当前 V1 日用声音以 CosyVoice 3 为正式选择；Edge 仍是显式联网回退，
     # sanoTTS 只保留作速度基线。已有共享指针始终优先于这个首次默认值。
     "tts_backend": "cosyvoice3",
@@ -38,7 +38,7 @@ _CHOICES = {
     "voice_latency_mode": {"realtime", "original"},
     "cosy_delivery_mode": {"buffered", "incremental", "adaptive"},
     "start_page": {"overview", "chat", "device", "memories", "settings"},
-    "role": {"elysia_v1", "plain_v1"},
+    "role": {"大肥鱼", "elysia_v1", "plain_v1"},
     "tts_backend": {"edge", "voxcpm2", "sanotts", "cosyvoice3"},
     "vad_profile": {"normal", "noisy", "close_talk"},
 }

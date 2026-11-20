@@ -72,7 +72,7 @@ class Options:
     root: Path = ROOT
     database: Path = ROOT / "data/databases/xiaozhi-demo-v1.db"
     port: int = 8767
-    role: str = "elysia_v1"
+    role: str = "大肥鱼"
     allow_memory_delete: bool = False
     voice: bool = False
     voice_mode: str = "pipeline"
@@ -169,7 +169,7 @@ def build_commands(options, uv=None):
         raise ValueError("请先确认聊天写入及当前 HTTP 传输风险。")
     if not 1024 <= options.port <= 65535 or options.port in {options.voice_ws_port, options.voice_http_port, 8766, WALLPAPER_DELIVERY_PORT}:
         raise ValueError("控制台端口需在 1024–65535 且不占用小智端口。")
-    if options.role not in {"plain_v1", "elysia_v1"}:
+    if options.role not in {"大肥鱼", "plain_v1", "elysia_v1"}:
         raise ValueError("未知助手角色。")
     if options.tts_backend not in {"edge", "voxcpm2", "sanotts", "cosyvoice3"}:
         raise ValueError("未知语音后端。")

@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[3]
 PERSONAS = ROOT / 'src/longmemory/prompts/personas'
 
 
-@pytest.mark.parametrize('name', ['elysia_v1.txt', 'plain_v1.txt'])
+@pytest.mark.parametrize('name', ['大肥鱼.txt', 'elysia_v1.txt', 'plain_v1.txt'])
 def test_persona_has_one_replaceable_memory_slot(name):
     text = (PERSONAS / name).read_text(encoding='utf-8')
     assert text.count('<memory>') == text.count('</memory>') == 1
