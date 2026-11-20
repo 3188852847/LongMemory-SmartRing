@@ -410,16 +410,31 @@ def test_stop_request_during_slow_ready_check_keeps_stopping(panel):
     assert panel.snapshot()['state'] == 'stopped'
 
 
-def test_shutdown_status_is_observed_only_after_stop(host):
+def test_shutdown_status_is_observed_only_after_stop(host, monkeypatch):
     host.controller.action('start')
     host.controller.perform_pending()
     host.controller.action('shutdown')
     assert not host.controller.shutdown_requested.is_set()
+    pending = json.loads(request(host, 'GET', '/api/launcher/status')[2])
+    assert pending['state'] == 'stopping' and pending['shutdown_complete'] is False
     host.controller.perform_pending()
-    status = json.loads(request(host, 'GET', '/api/launcher/status')[2])
-    assert status['state'] == 'stopped' and status['shutdown_complete'] is True
-    assert host.shutdown_observed.is_set()
-    assert status['can_start'] is False
+    resume_handler = threading.Event()
+
+    class PausedStatusHandler(web_app.LauncherHandler):
+        def _json(self, code, body):
+            super()._json(code, body)
+            # 固定线程顺序：让客户端先读完响应，再让处理器返回并记录确认。
+            resume_handler.wait()
+
+    monkeypatch.setattr(host, 'RequestHandlerClass', PausedStatusHandler)
+    try:
+        status = json.loads(request(host, 'GET', '/api/launcher/status')[2])
+        assert status['state'] == 'stopped' and status['shutdown_complete'] is True
+        assert status['can_start'] is False
+        assert not host.shutdown_observed.is_set()
+    finally:
+        resume_handler.set()
+    assert host.shutdown_observed.wait(timeout=5)
 
 
 def test_settings_http_conflict_and_actions(host):
