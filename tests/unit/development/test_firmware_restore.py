@@ -231,8 +231,6 @@ def test_registry_short_root_still_rejects_missing_or_outside_paths(invalid_path
 def test_installer_restores_proxy_and_sdk_environment_after_early_failure():
     with tempfile.TemporaryDirectory(prefix="smart-ring-environment-check-") as directory:
         root = Path(directory)
-        if not str(root).isascii() or " " in str(root):
-            pytest.skip("Integration fixture needs an ASCII no-space path")
         # 提前失败必须从代理开启后的空 EIM 分支触发，不能碰巧因当前检出
         # 缺少 .venv 而在代理之前退出。只复制入口与清单到一次性合成项目；
         # Python 占位不会执行（不存在的 EIM 先使 SDK 阶段失败）。
@@ -252,12 +250,27 @@ def test_installer_restores_proxy_and_sdk_environment_after_early_failure():
             "function Enable-DevProxy { [IO.File]::AppendAllText(" + literal(marker) + ", 'enable,'); $env:IDF_PATH='temporary-value' }\n"
             "function Disable-DevProxy { [IO.File]::AppendAllText(" + literal(marker) + ", 'disable') }\n", encoding="utf-8-sig")
         harness = root / "check.ps1"
-        source = "$ErrorActionPreference='Stop'; $env:IDF_PATH='original-value'; try { & "
-        source += literal(wrapper)
-        source += " -ProxyScript " + literal(proxy) + " -Stage Sdk -EspRoot " + literal(root / "empty-esp")
-        source += " -WorkRoot " + literal(root / "work") + "; exit 2 } catch {"
-        source += "if($env:IDF_PATH -ne 'original-value') {exit 3}; if([IO.File]::ReadAllText("
-        source += literal(marker) + ") -ne 'enable,disable') {exit 4}; exit 0 }"
+        # 只有 SDK/WorkRoot 参数要求绝对 ASCII 路径。临时盘名只在子 PowerShell
+        # 内有效，合成项目、空 SDK 及标记文件仍全部位于同一个测试目录。
+        source = f"""
+$ErrorActionPreference = 'Stop'
+$env:IDF_PATH = 'original-value'
+$drive = 'ZYXWVUTSRQPONMLKJIHGFEDCBA'.ToCharArray() |
+    Where-Object {{ -not (Get-PSDrive -Name $_ -ErrorAction SilentlyContinue) }} |
+    Select-Object -First 1
+$null = New-PSDrive -Name $drive -PSProvider FileSystem -Root {literal(root)}
+$esp = Join-Path "${{drive}}:" 'empty-esp'
+$work = Join-Path "${{drive}}:" 'work'
+try {{
+    & {literal(wrapper)} -ProxyScript {literal(proxy)} -Stage Sdk -EspRoot $esp -WorkRoot $work
+    exit 2
+}} catch {{
+    if ($_.Exception.Message -notlike '*EIM 0.19.0*') {{ exit 5 }}
+    if ($env:IDF_PATH -ne 'original-value') {{ exit 3 }}
+    if ([IO.File]::ReadAllText({literal(marker)}) -ne 'enable,disable') {{ exit 4 }}
+    exit 0
+}}
+"""
         harness.write_text(source, encoding="utf-8-sig")
         result = subprocess.run(["powershell.exe","-NoProfile","-ExecutionPolicy","Bypass","-File",str(harness)],
                                 capture_output=True,timeout=30)
