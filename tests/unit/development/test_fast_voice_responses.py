@@ -1,3 +1,4 @@
+import asyncio
 import importlib.util
 import json
 from pathlib import Path
@@ -104,7 +105,12 @@ def test_asr_envelope_preserves_recursion_and_exact_backend_guards(monkeypatch, 
 
 @pytest.mark.parametrize('query', ['你好！', json.dumps(
     {'content': '你好。', 'language': 'zh', 'emotion': 'neutral'}, ensure_ascii=False)])
-def test_cosyvoice_greeting_archives_l0_and_queues_preset_without_model(monkeypatch, query):
+@pytest.mark.parametrize('memory_failure', [False, True])
+def test_cosyvoice_greeting_queries_once_and_queues_one_preset_sequence(monkeypatch, query, memory_failure):
+    monkeypatch.syspath_prepend(str(SCRIPT.parent))
+    import fast_voice_responses as fast
+    import launch_with_memory as launch
+
     class DTO:
         def __init__(self, **values): self.__dict__.update(values)
 
@@ -122,19 +128,17 @@ def test_cosyvoice_greeting_archives_l0_and_queues_preset_without_model(monkeypa
     monkeypatch.setitem(sys.modules, "core.providers.tts.dto.dto", dto)
     monkeypatch.setitem(sys.modules, "core.utils.dialogue", dialogue)
 
-    class Completed:
-        def result(self): return ""
+    queries = []
+    async def query_memory(query):
+        queries.append(query)
+        if memory_failure:
+            raise RuntimeError("synthetic unavailable")
+        return ""
 
-    archived = []
-    def query_memory(query):
-        archived.append(query)
-        return SimpleNamespace(close=lambda: None)
+    async def greet(query):
+        connection.loop = asyncio.get_running_loop()
+        return await asyncio.to_thread(connection.chat, query)
 
-    def submit(coroutine, _loop):
-        coroutine.close()
-        return Completed()
-
-    monkeypatch.setattr(fast.asyncio, "run_coroutine_threadsafe", submit)
     original = []
 
     class Connection:
@@ -144,15 +148,17 @@ def test_cosyvoice_greeting_archives_l0_and_queues_preset_without_model(monkeypa
     queued, messages, logs = [], [], []
     connection = Connection()
     connection.config = {
-        "selected_module": {"TTS": "CustomTTS"},
+        "selected_module": {"TTS": "CustomTTS", "Memory": "Synthetic"},
         "TTS": {"CustomTTS": {"url": fast.COSYVOICE_URL}},
     }
-    connection.loop = object()
-    connection.memory = SimpleNamespace(query_memory=query_memory)
+    connection.memory = SimpleNamespace(query_memory=query_memory, save_memory=None)
     connection.dialogue = SimpleNamespace(put=messages.append)
     connection.tts = SimpleNamespace(tts_text_queue=SimpleNamespace(put=queued.append))
-    paths = []
-    connection._longmemory_voice_latency = SimpleNamespace(set_response_path=paths.append)
+    paths, failures = [], []
+    connection._longmemory_voice_latency = SimpleNamespace(
+        set_response_path=paths.append, bind_sentence=lambda _id: None, mark=lambda *_a, **_kw: None,
+        fail=lambda code, *, stage: failures.append((code, stage)),
+    )
     connection.logger = SimpleNamespace(bind=lambda **_kw: SimpleNamespace(
         info=logs.append, warning=logs.append,
     ))
@@ -160,9 +166,11 @@ def test_cosyvoice_greeting_archives_l0_and_queues_preset_without_model(monkeypa
     connection.system_introduced_speakers = {'existing-speaker'}
 
     monkeypatch.setattr(fast, 'default_voice_active', lambda: True)
-    assert connection.chat(query) is True
+    launch.observe_memory_operations(connection)
+    assert asyncio.run(greet(query)) is True
     assert original == []
-    assert archived == [query]
+    assert queries == [query]
+    assert failures == ([("memory_runtime_failed", "memory")] if memory_failure else [])
     assert paths == ["preset"]
     assert [item.role for item in messages] == ["user", "assistant"]
     expected_text = json.loads(query)['content'] if query.startswith('{') else query
@@ -170,10 +178,14 @@ def test_cosyvoice_greeting_archives_l0_and_queues_preset_without_model(monkeypa
     assert connection.current_speaker == 'upstream-speaker'
     assert connection.system_introduced_speakers == {'existing-speaker'}
     assert [item.sentence_type for item in queued] == ["first", "middle", "last"]
+    assert {item.sentence_id for item in queued} == {connection.sentence_id}
     assert queued[1].content_detail == "你好呀，我在呢。"
     second = json.dumps({'content': '谢谢。', 'speaker': 'different-payload-speaker', 'emotion': 'happy'})
-    assert connection.chat(second) is True
-    assert archived == [query, second]
+    assert asyncio.run(greet(second)) is True
+    assert queries == [query, second]
+    assert [item.sentence_type for item in queued[3:]] == ["first", "middle", "last"]
+    assert {item.sentence_id for item in queued[3:]} == {connection.sentence_id}
+    assert queued[0].sentence_id != queued[3].sentence_id
     assert [item.content for item in messages[2:]] == ['谢谢。', '不用客气。']
     assert connection.current_speaker == 'upstream-speaker'
     assert paths == ['preset', 'preset']

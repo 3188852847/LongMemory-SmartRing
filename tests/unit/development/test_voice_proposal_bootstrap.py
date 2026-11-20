@@ -112,7 +112,7 @@ def test_formal_main_adapter_wraps_all_chat_paths_before_connections_are_created
         'core': NS(handle=NS(receiveAudioHandle=receive, sendAudioHandle=send)),
         'core.connection': NS(ConnectionHandler=connection),
         'core.handle': NS(receiveAudioHandle=receive, sendAudioHandle=send, helloHandle=NS()),
-        'core.handle.textHandler': NS(listenMessageHandler=NS()),
+        'core.handle.textHandler': NS(listenMessageHandler=NS(ListenTextMessageHandler=object)),
         'voice_output_protocol': NS(install_tts_interrupt_protocol=lambda *_a, **_k: calls.append('wire')),
         'core.handle.receiveAudioHandle': receive,
         'core.providers.asr': NS(base=base, fun_local=fun),

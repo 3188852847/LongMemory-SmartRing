@@ -11,6 +11,7 @@ import runpy
 import sys
 import time
 from threading import Lock
+from fast_voice_responses import PRESET_MEMORY_QUERY
 from voice_diagnostics import CURRENT
 
 
@@ -207,12 +208,11 @@ def observe_memory_operations(connection):
                 if tracker is not initial_tracker:
                     tracker.bind_sentence(sentence_id)
                 tracker.fail(code, stage="memory")
-            # 固定上游在查询记忆前已发送 FIRST，却会在这里的异常分支直接
-            # return，遗漏 LAST。补发同一 sentence_id 的结束动作，避免圆屏
-            # 永久停留在“说话中”；不把异常正文送往设备或控制台。
+            # 固定 SDK 的普通回答已发送 FIRST，查询失败后直接返回，需要补 LAST。
+            # 快捷寒暄由调用方在查询后一次排入 FIRST、正文和 LAST。
             tts = getattr(connection, "tts", None)
             queue = getattr(tts, "tts_text_queue", None)
-            if queue is not None and sentence_id is not None:
+            if queue is not None and sentence_id is not None and not PRESET_MEMORY_QUERY.get():
                 from core.providers.tts.dto.dto import (
                     ContentType, SentenceType, TTSMessageDTO,
                 )
@@ -570,11 +570,13 @@ def main():
     # 第一版只做无正文、无播放的封闭分支影子统计，为是否值得预合成提供证据。
     install_voice_prediction_shadow(ConnectionHandler)
     install_internal_end_prompt_boundary(receive_audio_handle)
-    install_persistent_device_session(ConnectionHandler, receive_audio_handle)
+    from core.handle.textHandler import listenMessageHandler
+    install_persistent_device_session(
+        ConnectionHandler, receive_audio_handle, listenMessageHandler.ListenTextMessageHandler,
+    )
     # 所有既有ASR/等待音/AE等包装完成后装配，保留各自别名；普通candidate OFF也有效。
     install_voice_output_revocation_policy(ConnectionHandler, receive_audio_handle, asr_base)
     from core.handle import sendAudioHandle, helloHandle
-    from core.handle.textHandler import listenMessageHandler
     from voice_output_protocol import install_tts_interrupt_protocol
     install_tts_interrupt_protocol(ConnectionHandler, sendAudioHandle,
         hello_module=helloHandle, listen_module=listenMessageHandler, upstream_root=root)

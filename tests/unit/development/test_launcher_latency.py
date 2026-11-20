@@ -223,7 +223,8 @@ def test_pipeline_bootstrap_installs_input_timing_before_response_policy(tmp_pat
     monkeypatch.setitem(sys.modules, "core.connection", SimpleNamespace(ConnectionHandler=connection_class))
     monkeypatch.setitem(sys.modules, "direct_ws_v2", SimpleNamespace(install_direct_ws_v2=lambda _: None))
     receive_audio = SimpleNamespace()
-    send_audio, hello, listen = SimpleNamespace(), SimpleNamespace(), SimpleNamespace()
+    send_audio, hello = SimpleNamespace(), SimpleNamespace()
+    listen = SimpleNamespace(ListenTextMessageHandler=type("ListenTextMessageHandler", (), {}))
     handle = SimpleNamespace(receiveAudioHandle=receive_audio, sendAudioHandle=send_audio, helloHandle=hello)
     monkeypatch.setitem(sys.modules, "core.handle.textHandler", SimpleNamespace(listenMessageHandler=listen))
     def install_wire(cls, sender, *, hello_module, listen_module, upstream_root):
@@ -244,8 +245,13 @@ def test_pipeline_bootstrap_installs_input_timing_before_response_policy(tmp_pat
     monkeypatch.setitem(sys.modules, "voice_input_latency", SimpleNamespace(
         install_voice_input_latency=lambda _: calls.append("input_timing")))
     monkeypatch.setitem(sys.modules, "voice_prediction", SimpleNamespace(install_voice_prediction_shadow=lambda _: None))
+    def install_persistent(cls, receive, listen_handler):
+        assert cls is connection_class and receive is receive_audio
+        assert listen_handler is listen.ListenTextMessageHandler
+        calls.append("persistent_session")
+
     monkeypatch.setitem(sys.modules, "voice_persistent_session", SimpleNamespace(
-        install_persistent_device_session=lambda *_args: calls.append("persistent_session")))
+        install_persistent_device_session=install_persistent))
     monkeypatch.setitem(sys.modules, "core.providers.asr", SimpleNamespace(base=object))
     monkeypatch.setattr(module, "isolate_memory_initialization", lambda *args: None)
     monkeypatch.setattr(module, "install_answer_completion", lambda *args: None)

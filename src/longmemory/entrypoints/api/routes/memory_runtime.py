@@ -16,6 +16,13 @@ from longmemory.application.round_screen_turns import memory_receipt
 from longmemory.methods.hy_memory.observation import DETAIL_VERSION, Observation, span, response_headers
 
 
+_MAX_ANSWER_CHARS = 16_000
+# 小智默认以一对 JSON 代理项编码非 BMP 字符，每字符最多 12 字节。
+# prepare 默认使用 ASCII JSON，小智最多读取 64 KiB，两版协议仅回传其中的证据。
+# 使用同样的 JSON 编码回传，或直接发送 UTF-8，均在此预算内；另留 1 KiB 给固定字段。
+_COMPLETION_BODY_BYTES = _MAX_ANSWER_CHARS * 12 + 64 * 1024 + 1024
+
+
 def _retrieval_evidence(prepared):
     """生成不含正文的召回索引；指纹用于发现条目后来是否发生变化。"""
 
@@ -220,14 +227,14 @@ def register_memory_runtime_routes(app, backend):
         """接收同机小智的最终助手文本；不代表音频已在设备播放完成。"""
 
         bind_voice_request(request)
-        request = request.clone(client_max_size=32768)
+        request = request.clone(client_max_size=_COMPLETION_BODY_BYTES)
         try:
             body = await request.json()
             if isinstance(body, dict) and body.get("memory_protocol") == 2:
                 required_v2 = {"version", "memory_protocol", "turn_id", "answer", "memory_receipt", "client_round_id"}
                 if (set(body) != required_v2 or body["version"] != 1
                         or not isinstance(body["answer"], str) or not body["answer"].strip()
-                        or len(body["answer"]) > 16000 or not isinstance(body["turn_id"], str)
+                        or len(body["answer"]) > _MAX_ANSWER_CHARS or not isinstance(body["turn_id"], str)
                         or str(UUID(body["turn_id"])) != body["turn_id"]
                         or not isinstance(body["client_round_id"], str)
                         or re.fullmatch(r"[0-9a-f]{24,32}", body["client_round_id"]) is None
@@ -258,7 +265,7 @@ def register_memory_runtime_routes(app, backend):
             retrieval_strategy = body.get("retrieval_strategy")
             if (not isinstance(turn_id, str) or str(UUID(turn_id)) != turn_id
                     or not isinstance(answer, str) or not answer.strip()
-                    or len(answer) > 16000 or not isinstance(counts, dict)
+                    or len(answer) > _MAX_ANSWER_CHARS or not isinstance(counts, dict)
                     or set(counts) != {"l1", "l2", "l3"}
                     or any(type(value) is not int or not 0 <= value <= 100
                            for value in counts.values())):
