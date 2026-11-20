@@ -14,7 +14,6 @@ const MemoryQualityApp = lazy(() => import('../pages/MemoryQualityApp').then(mod
 const ScenarioApp = lazy(() => import('../pages/ScenarioApp').then(module => ({default: module.ScenarioApp})));
 const PersonaApp = lazy(() => import('../pages/PersonaApp').then(module => ({default: module.PersonaApp})));
 const SettingsApp = lazy(() => import('../pages/SettingsApp').then(module => ({default: module.SettingsApp})));
-const ExperimentApp = lazy(() => import('../pages/ExperimentApp').then(module => ({default: module.ExperimentApp})));
 const RoundDisplayApp = lazy(() => import('../pages/RoundDisplayApp').then(module => ({default: module.RoundDisplayApp})));
 const OverviewApp = lazy(() => import('../pages/OverviewApp').then(module => ({default: module.OverviewApp})));
 
@@ -32,7 +31,6 @@ const router = createBrowserRouter(createRoutesFromElements(
     <Route path="/scenarios" element={<MemoryDomainRoute view="items" legacy={<Suspense fallback={<p className="page-loading">正在加载生活场景…</p>}><ScenarioApp/></Suspense>}/>}/>
     <Route path="/personas" element={<MemoryDomainRoute view="profile" legacy={<Suspense fallback={<p className="page-loading">正在加载用户画像…</p>}><PersonaApp/></Suspense>}/>}/>
     <Route path="/settings" element={<Suspense fallback={<p className="page-loading">正在加载个性化设置…</p>}><SettingsApp/></Suspense>}/>
-    <Route path="/experiments-react" element={<Suspense fallback={<p className="page-loading">正在加载实验档案…</p>}><ExperimentApp/></Suspense>}/>
     <Route path="*" element={<Navigate to="/chat-react" replace/>}/>
   </Route>));
 

@@ -7,7 +7,7 @@ async function preferences(page:Page,size='normal',motion='full') {
 async function chooseRadio(page:Page,name:string) {const radio=page.getByRole('radio',{name,exact:true});await radio.locator('xpath=ancestor::label').click();await expect(radio).toBeChecked();}
 async function fits(page:Page) {expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);}
 
-for(const [width,height] of [[1366,768],[1440,900],[390,844]]) test(`日常聊天与实验准备 ${width}×${height}`,async({page},info)=>{
+for(const [width,height] of [[1366,768],[1440,900],[390,844]]) test(`日常聊天 ${width}×${height}`,async({page},info)=>{
   await page.setViewportSize({width,height});await preferences(page);
   const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
   await page.goto('/chat-react');
@@ -38,15 +38,6 @@ for(const [width,height] of [[1366,768],[1440,900],[390,844]]) test(`日常聊�
   expect(await messages.evaluate(node=>node.scrollTop)).toBeLessThan(60);
   const box=await input.boundingBox();expect(box!.y).toBeGreaterThanOrEqual(0);expect(box!.y+box!.height).toBeLessThanOrEqual(height);
   await fits(page);await page.screenshot({path:info.outputPath('chat-lookback.png')});
-  await page.goto('/experiments-react');
-  await page.getByRole('button',{name:'查看准备步骤与命令'}).click();
-  await expect(page.getByRole('heading',{name:'准备实验档案',exact:true})).toBeFocused();
-  await expect(page.locator('.experiment-preparation-command').first()).toContainText('--provider fake --split dev');
-  await expect(page.locator('.experiment-preparation-command').last()).toContainText('请替换为上一步输出的实际编号');
-  await fits(page);await page.screenshot({path:info.outputPath('experiment-preparation.png')});
-  await page.getByRole('button',{name:'前往运行实验核对能力'}).click();
-  await expect(page.getByRole('button',{name:'没有可用来源？查看准备步骤'})).toBeVisible();
-  await expect(page.getByRole('button',{name:'预检与核对预算'})).toBeDisabled();
   expect(errors).toEqual([]);
 });
 

@@ -10,7 +10,6 @@ const pages=[
   {path:'/scenarios',task:'场景与候选',normal:'合成场景',empty:'尚无 L2 生活场景',failure:'无法读取记忆服务'},
   {path:'/personas',task:'统一画像',normal:'合成画像',empty:'尚无已接受的画像认识',failure:'无法读取记忆服务'},
   {path:'/device',task:'常用控制',normal:'应用音量',empty:'不可控',failure:'不可控'},
-  {path:'/experiments-react',task:'档案与逐题对照',normal:'合成模型',empty:'没有匹配的实验',failure:'实验档案读取失败'},
 ];
 
 async function syntheticPage(page:Page,mode:'normal'|'empty'|'failure') {
@@ -69,20 +68,4 @@ test('场景搜索、抽屉、刷新与浏览器返回保留浏览坐标',async(
   await page.goBack();await expect(page.getByRole('button',{name:'整理状态',exact:true})).toHaveAttribute('aria-pressed','true');
   await page.goForward();await expect(search).toHaveValue('合成');
   expect(writes).toEqual([]);
-});
-
-test('放大字号、减少动画与键盘切换仍可找到任务，实验同题并排',async({page})=>{
-  await syntheticPage(page,'normal');await page.setViewportSize({width:1440,height:900});
-  await page.emulateMedia({reducedMotion:'reduce'});await page.goto('/experiments-react');
-  await page.evaluate(()=>document.documentElement.style.fontSize='20px');
-  await expect(page.getByText('合成回答 no_memory')).toBeVisible();
-  await expect(page.getByText('合成回答 longmemory_v1')).toBeVisible();
-  const columns=page.locator('.question-grid-react > .ant-card');expect(await columns.count()).toBe(2);
-  const left=await columns.nth(0).boundingBox(),right=await columns.nth(1).boundingBox();
-  // 1440px 主从布局应给逐题比较足够宽度；坐标证明两组实际并排。
-  expect(right!.x).toBeGreaterThan(left!.x);expect(Math.abs(right!.y-left!.y)).toBeLessThan(2);
-  const first=page.getByRole('button',{name:'档案与逐题对照',exact:true});await first.focus();await page.keyboard.press('Tab');
-  await expect(page.getByRole('button',{name:'准备档案',exact:true})).toBeFocused();await page.keyboard.press('Tab');
-  await expect(page.getByRole('button',{name:'运行实验',exact:true})).toBeFocused();await page.keyboard.press('Enter');
-  await expect(page.getByRole('button',{name:'运行实验',exact:true})).toHaveAttribute('aria-pressed','true');
 });

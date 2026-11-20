@@ -30,12 +30,6 @@ export function syntheticResponse(path:string, populated:boolean):unknown {
     case '/api/l1-extraction-audit':return {items:[],counts:{noop:0,added:0,reused:0,extraction_failed:0,persistence_failed:0,incomplete:0}};
     case '/api/l1-sufficiency-shadow':case '/api/l2-sufficiency-shadow':return null;
     case '/api/device':return {ready:populated,connection_count:populated?1:0,reason:populated?null:'device_offline',read_volume_supported:populated,set_volume_supported:populated,read_status_supported:false,set_brightness_supported:false,set_theme_supported:false,stop_speech_supported:false,allowed_volume:{minimum:5,maximum:100}};
-    case '/api/experiments':return {items:populated?[{id:'synthetic-run',kind:'answers',provider:'fake',model:'合成模型',dataset:'synthetic',split:'dev',status:'completed',completed:1,total:1,started_at:now}]:[],skipped:0,limited:false};
-    case '/api/experiments/synthetic-run':return {kind:'answers',started_at:now,split:'dev',status:'completed',groups:[],reviews:[],questions:[{id:'synthetic-question',query:'合成比较题'}],report_sha256:'a'.repeat(64),review_enabled:false};
-    case '/api/experiments/synthetic-run/question':return {source_note:'合成验收',rows:['no_memory','longmemory_v1'].map(group=>({group,status:'completed',answer:`合成回答 ${group}`,injected_context:'合成证据',context:'合成检索上下文',retrieved:[],sources:[],answer_proxy_pass:null,evidence_complete:null}))};
-    case '/api/experiment-jobs/options':return {enabled:false,real_available:false,retrievals:[],context_default:4000,context_max:16000};
-    case '/api/experiment-jobs':return {items:[]};
-    case '/api/l1-policy-replay':return {sources:[],replays:[],skipped:0};
     default:throw new Error(`Unmapped synthetic endpoint: ${url.pathname}`);
   }
 }

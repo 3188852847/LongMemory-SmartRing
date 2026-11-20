@@ -104,7 +104,7 @@ test('窄屏大字号、键盘与其余页面冷加载的全局导航',async({pa
   await page.setViewportSize({width:390,height:844});await page.emulateMedia({reducedMotion:'reduce'});const state=await synthetic(page);
   await page.goto('/memories?view=mechanisms');await expect(page.getByText('本次装配声明')).toBeVisible();await largerReading(page);await expect(page.locator('html')).toHaveAttribute('data-reading','larger');await noOverflow(page);
   await page.getByRole('button',{name:'模式与能力边界',exact:true}).focus();await page.keyboard.press('Enter');await expect(page.getByRole('heading',{name:'模式与场景'})).toBeVisible();await noOverflow(page);await page.screenshot({animations:'disabled',path:info.outputPath('mechanisms-mobile-large.png')});
-  for(const path of ['/chat-react','/settings','/device','/display-preview','/experiments-react']) {
+  for(const path of ['/chat-react','/settings','/device','/display-preview']) {
     await page.goto(path);await expect(page.getByRole('link',{name:'我的记忆',exact:true,includeHidden:true})).toHaveCount(1);await openNav(page);await expect(page.getByRole('link',{name:'我的记忆',exact:true})).toBeVisible();await expect(page.getByRole('link',{name:'记忆机制',exact:true})).toBeVisible();await expect(page.getByRole('link',{name:'用户画像',exact:true})).toHaveCount(0);
   }
   expect(state.calls.some(call=>call.path==='/api/memory-engine/items'||call.path==='/api/memories'||call.path==='/api/memory-config')).toBe(false);expect(state.calls.filter(call=>call.method!=='GET')).toEqual([]);expect(state.errors).toEqual([]);

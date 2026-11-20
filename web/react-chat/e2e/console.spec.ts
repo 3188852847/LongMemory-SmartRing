@@ -191,9 +191,6 @@ test('文字聊天可保存并在刷新后恢复，React 页面可统一导航',
   await expect(page.getByRole('heading', {name:'用户画像（L3）'})).toBeVisible();
   await expect(page.getByText('我的统一画像')).toBeVisible();
   await expect(page.getByText(/尚无已接受的画像认识/)).toBeVisible();
-  await page.getByRole('link', {name:'实验中心'}).click();
-  await expect(page).toHaveURL(/\/experiments-react$/);
-  await expect(page.getByRole('heading', {name:'实验中心'})).toBeVisible();
 
   expect(external).toEqual([]);
 });
@@ -205,25 +202,12 @@ test('窄窗口保留全部主导航且页面不产生横向溢出', async ({pag
   await page.getByRole('button', {name:'展开导航'}).click();
   await expect(page.getByRole('link', {name:'设备状态'})).toBeVisible();
   await expect(page.getByRole('link', {name:'圆屏预览'})).toBeVisible();
-  await expect(page.getByRole('link', {name:'实验中心'})).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 
   await page.getByRole('link', {name:'设置中心'}).click();
   await expect(page.getByRole('heading', {name:'助手设置'})).toBeVisible();
   await expect(page.getByRole('button', {name:'展开导航'})).toHaveAttribute('aria-expanded', 'false');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
-});
-
-test('只读实验服务不能误启动模型作业', async ({page}) => {
-  const starts:string[] = [];
-  page.on('request', request => {
-    if (request.method() === 'POST' && request.url().endsWith('/api/experiment-jobs/start')) starts.push(request.url());
-  });
-  await page.goto('/experiments-react');
-  await page.getByRole('button', {name:'运行实验', exact:true}).click();
-  await expect(page.getByText(/当前服务仅查看档案/)).toBeVisible();
-  await expect(page.getByRole('button', {name:'预检与核对预算'})).toBeDisabled();
-  expect(starts).toEqual([]);
 });
 
 test('所有者可合并并恢复重复 L1，矛盾候选没有合并入口', async ({page}) => {

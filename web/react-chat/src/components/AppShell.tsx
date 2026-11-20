@@ -4,7 +4,7 @@ import {OrbitMark, StatusIndicator} from './SciFiSurface';
 import {AmbientMotionToggle} from './DigitalAtmosphere';
 import {useMemoryEngine, memoryEngineLabel} from '../app/MemoryEngineProvider';
 
-type Page = 'overview' | 'device' | 'display' | 'chat' | 'memories' | 'mechanisms' | 'quality' | 'scenarios' | 'personas' | 'settings' | 'experiments';
+type Page = 'overview' | 'device' | 'display' | 'chat' | 'memories' | 'mechanisms' | 'quality' | 'scenarios' | 'personas' | 'settings';
 
 const NAV_GROUPS: Array<{label: string; items: Array<{
   page: Page; icon: string; label: string; description: string; to: string;
@@ -23,7 +23,6 @@ const NAV_GROUPS: Array<{label: string; items: Array<{
   ]},
   {label: '控制与观察', items: [
     {page: 'settings', icon: '设', label: '设置中心', description: '角色、声音与主动交流', to: '/settings'},
-    {page: 'experiments', icon: '验', label: '实验中心', description: '对照运行与结果复核', to: '/experiments-react'},
   ]},
 ];
 

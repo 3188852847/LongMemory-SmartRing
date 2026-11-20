@@ -9,7 +9,6 @@ from aiohttp import web
 
 from longmemory.adapters.llm.fake import FakeAnswerGenerator
 from longmemory.entrypoints.api.chat_backend import ChatBackend
-from longmemory.entrypoints.api.experiment_backend import ExperimentBackend
 from longmemory.entrypoints.api.server import create_app
 from longmemory.infrastructure.config.round_skins import RoundSkinStore
 from longmemory.infrastructure.media.round_wallpaper_library import RoundWallpaperLibrary
@@ -102,7 +101,6 @@ def main():
                 bridge=OfflineBridge(),
                 database=database,
                 chat_backend=backend,
-                experiment_backend=ExperimentBackend(root / "experiments"),
                 round_skin_store=skins,
                 round_wallpaper_library=RoundWallpaperLibrary(root / "wallpapers"),
                 proactive_schedule_enabled=False,

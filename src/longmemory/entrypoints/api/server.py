@@ -14,7 +14,6 @@ from .security import COOKIE, MAX_AGE, Sessions, security_middleware
 from .memory_backend import MemoryBackend
 from .routes.memories import register_memory_routes
 from .routes.chat import register_chat_routes
-from .routes.experiments import register_research_routes
 from .react_assets import register_react_routes
 from .otto_preview import register_otto_preview
 from .routes.assistant_role import register_role_routes
@@ -50,11 +49,6 @@ STATIC_FILES = {
     "/": ("index.html", "text/html"),
     "/memories-legacy": ("memories.html", "text/html"),
     "/chat": ("chat.html", "text/html"),
-    "/experiments": ("experiments.html", "text/html"),
-    "/assets/experiments.js": ("assets/experiments.js", "text/javascript"),
-    "/assets/experiment-jobs.mjs": ("assets/experiment-jobs.mjs", "text/javascript"),
-    "/assets/experiment-view.mjs": ("assets/experiment-view.mjs", "text/javascript"),
-    "/assets/experiments.css": ("assets/experiments.css", "text/css"),
     "/assets/chat.js": ("assets/chat.js", "text/javascript"),
     "/assets/appearance.js": ("assets/appearance.js", "text/javascript"),
     "/assets/appearance.mjs": ("assets/appearance.mjs", "text/javascript"),
@@ -72,7 +66,7 @@ STATIC_FILES = {
 def create_app(*, port=8765, bridge=None, web_root=None, database=None, allow_memory_delete=False,
                allow_memory_correction=False, allow_scenario_management=False,
                allow_persona_management=False,
-               chat_backend=None, experiment_backend=None, job_backend=None, instance_id=None,
+               chat_backend=None, instance_id=None,
                xiaozhi_server=None, memory_runtime_token=None, scenario_producer=None,
                scenario_model=None, persona_producer=None, persona_model=None,
                consolidation_background_enabled=False, proactive_clock=None,
@@ -283,10 +277,8 @@ def create_app(*, port=8765, bridge=None, web_root=None, database=None, allow_me
 
         app.on_startup.append(start_wallpaper_delivery)
         app.on_cleanup.append(stop_wallpaper_delivery)
-    register_research_routes(app, ROOT / "experiments", experiment_backend, job_backend)
     # 不能证明后台算法空闲时，自动重开保守拒绝；当前Hy日用已暂停这些后台入口。
-    maintenance.supported = (not legacy_sqlite and not proactive_schedule_enabled and not consolidation_background_enabled
-                             and (job_backend is None or getattr(job_backend, 'enabled', True) is False))
+    maintenance.supported = (not legacy_sqlite and not proactive_schedule_enabled and not consolidation_background_enabled)
     app.on_cleanup.append(close)
     return app
 
@@ -327,7 +319,6 @@ def main():
                         help="hybrid 使用的已校验本地 BGE 快照目录")
     parser.add_argument("--assistant-role", choices=("plain_v1", "elysia_v1"), default="plain_v1")
     parser.add_argument("--xiaozhi-server", type=Path, help="允许用户确认后同步角色到此小智目录；不会自动修改配置或重启")
-    parser.add_argument("--enable-experiment-runs", action="store_true", help="允许网页确认后运行冻结检索回答对照；默认只读实验")
     parser.add_argument("--model-profile", choices=("campus", "official"), default="campus",
                         help="标记本进程实际加载的本机模型配置档")
     parser.add_argument("--memory-backend", choices=("longmemory", "hy_memory", "xiaozhi_local", "none"),
@@ -343,7 +334,6 @@ def main():
     args = parser.parse_args()
     if args.memory_backend == "hy_memory" and (
             not args.enable_chat or args.enable_memory_consolidation
-            or args.enable_experiment_runs
             or args.enable_l1_sufficiency_shadow or args.enable_l2_sufficiency_shadow
             or args.memory_extraction != "rules" or args.memory_retrieval != "keyword"):
         parser.error("Hy 使用独立模型/召回设置，不接受旧提取、召回、整理或影子开关")
@@ -380,7 +370,6 @@ def main():
     if (args.memory_retrieval == "hybrid") != (args.embedding_model_dir is not None):
         parser.error("hybrid 必须且只有 hybrid 可以指定 --embedding-model-dir")
     chat_backend = None
-    job_backend = None
     scenario_producer = None
     scenario_model = None
     persona_producer = None
@@ -389,17 +378,6 @@ def main():
     l2_sufficiency_shadow = None
     semantic_relation_previewer = None
     proactive_greeting_composer = None
-    if args.enable_experiment_runs:
-        from .experiment_backend import ExperimentBackend
-        from .experiment_jobs import ExperimentJobs
-        from longmemory.infrastructure.config.settings import load_model_settings
-        try:
-            experiment_settings = load_model_settings(provider="openai_compatible")
-        except ValueError:
-            experiment_settings = None
-        job_backend = ExperimentJobs(ExperimentBackend(ROOT / "experiments"), enabled=True, settings=experiment_settings)
-        print("实验作业已启用；仅用户在网页预检并确认后执行。" +
-              ("兼容模型配置可用（未联网验证）。" if experiment_settings else "未配置兼容模型，目前仅能运行 Fake。"))
     if args.enable_chat:
         from longmemory.adapters.llm.fake import FakeAnswerGenerator
         from longmemory.adapters.llm.candidate_extractor import (
@@ -633,7 +611,7 @@ def main():
                                allow_memory_correction=args.allow_memory_correction,
                                allow_scenario_management=args.allow_scenario_management,
                                allow_persona_management=args.allow_persona_management,
-                               chat_backend=chat_backend, job_backend=job_backend,
+                               chat_backend=chat_backend,
                                instance_id=os.environ.get("LONGMEMORY_LAUNCHER_INSTANCE"), xiaozhi_server=args.xiaozhi_server,
                                memory_runtime_token=runtime_token,
                                voice_proposals_enabled=args.enable_voice_preemptive,

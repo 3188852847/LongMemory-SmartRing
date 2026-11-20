@@ -17,15 +17,7 @@
 .data-workspace-panel .scenario-toolbar .ant-input { flex: 1 1 220px; }
 .data-workspace-panel .ant-select { min-width: 160px; }
 .data-workspace-panel .ant-table-wrapper { overflow-x: auto; }
-.data-workspace-panel .question-grid-react { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 16px; }
-.data-workspace-panel .question-grid-react > * { min-width: 0; }
-.data-workspace-panel .question-grid-react pre { white-space: pre-wrap; }
-.data-workspace-panel .experiment-layout { display: grid; grid-template-columns: minmax(240px, .7fr) minmax(0, 2fr); gap: 20px; align-items: start; }
 .data-workspace-panel .device-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
-@media (max-width: 1100px) {
-  .data-workspace-panel .experiment-layout { grid-template-columns: 1fr; }
-  .data-workspace-panel .experiment-run-list { max-height: 220px; overflow: auto; }
-}
 @media (max-width: 700px) {
   /* 处置属于每条样本：窄屏独占一行再换行，保留全部动作及键盘入口。 */
   .data-workspace-panel .quality-list-card .ant-list-item { flex-direction: column; align-items: stretch; }
@@ -41,7 +33,7 @@
   .memory-source-drawer .ant-drawer-extra { margin-inline-start: 0; max-width: 100%; }
   .memory-source-drawer .ant-drawer-extra .ant-btn { min-height: 44px; }
   .data-workspace-panel { max-height: none; overflow: visible; padding-inline: 0; }
-  .data-workspace-panel .question-grid-react, .data-workspace-panel .device-grid { grid-template-columns: 1fr; }
+  .data-workspace-panel .device-grid { grid-template-columns: 1fr; }
   .data-workspace-panel .ant-list-item { flex-wrap: wrap; }
   .data-workspace-panel .ant-list-item-action { margin-inline-start: 0; }
   .data-workspace-nav button { flex: 1 1 auto; }

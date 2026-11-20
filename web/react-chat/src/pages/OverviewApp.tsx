@@ -112,11 +112,10 @@ export function OverviewApp() {
         <p className="subtle">小智进程存在不等于圆屏已连接；最终以当前活动连接和设备工具回执为准。</p>
         <Link className="overview-detail-link" to="/device">打开设备诊断</Link>
       </Card>
-      <Card title="配置与研究入口">
+      <Card title="设置与记忆">
         <div className="overview-actions compact">
           <Link to="/settings"><strong>设置中心</strong><span>模型、记忆后端、角色、声音、外观与主动交流</span></Link>
           {engine.kind==='legacy'?<Link to="/memory-quality"><strong>记忆质量</strong><span>漏记、错记和召回问题样本</span></Link>:<Link to={engine.kind==='hy'?'/memories?view=mechanisms':'/memories'}><strong>{engine.kind==='hy'?'记忆机制':'记忆管理'}</strong><span>当前引擎、可得证据与观测边界</span></Link>}
-          <Link to="/experiments-react"><strong>实验中心</strong><span>冻结对照、运行预算和逐题复核</span></Link>
         </div>
       </Card>
     </section>
