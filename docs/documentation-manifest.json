@@ -13,6 +13,25 @@
   },
   "topics": [
     {
+      "id": "web-chat-archive-and-replay",
+      "scope": "网页会话终轮保存、按本次请求查询与保留草稿",
+      "authority": "docs/guides/聊天会话.md",
+      "sources": [
+        "src/longmemory/entrypoints/api/routes/chat.py",
+        "src/longmemory/entrypoints/api/chat_backend.py",
+        "web/react-chat/src/pages/ChatApp.tsx",
+        "web/react-chat/src/pages/ChatApp.test.tsx",
+        "tests/unit/entrypoints/test_chat_persistence.py"
+      ],
+      "related": [
+        "docs/guides/使用说明.md",
+        "docs/development/parallel/review-memory-20261121.md",
+        "docs/development/parallel/review-web-20261121.md",
+        "docs/development/parallel/review-integration-20261121.md"
+      ],
+      "review": "verified 2026-11-21：合成旁库保存失败、重启中断与多标签同文查询。"
+    },
+    {
       "id": "embedding-resource-startup-preparation",
       "scope": "公开AsyncEmbeddings类在worker ready前导入的候选及离线收益；非旧4.6秒根因或日用提速",
       "authority": "docs/development/parallel/AI-embedding-resource-review-20261021.md",
@@ -804,15 +823,22 @@
       "id": "daily-use",
       "scope": "日常任务入口与使用步骤",
       "authority": "docs/guides/使用说明.md",
-      "sources": [],
+      "sources": [
+        "src/longmemory/application/memory_runtime.py",
+        "src/longmemory/entrypoints/api/routes/memory_engine.py",
+        "web/react-chat/src/features/memory/HyMemoryWorkspace.tsx",
+        "scripts/development/xiaozhi/voice_persistent_session.py"
+      ],
       "related": [
-        "docs/guides/统一启动.md"
+        "docs/guides/统一启动.md",
+        "docs/guides/聊天会话.md",
+        "docs/development/parallel/review-integration-20261121.md"
       ],
       "tags": [
         "操作",
         "日常"
       ],
-      "review": "pending: 本轮只建立维护归属，未完成全篇实现核对"
+      "review": "verified 2026-11-21：仅核对暂停后台写入、网页纠正上限与修订冲突、重新聆听的静默窗口。"
     },
     {
       "id": "launcher-lifecycle",
@@ -825,7 +851,10 @@
         "web/react-chat/src/app/launcher-main.tsx",
         "tests/test_launcher_web.py",
         "tests/unit/development/test_launcher.py",
-        "tests/unit/development/test_launcher_events.py"
+        "tests/unit/development/test_launcher_events.py",
+        "src/longmemory/adapters/tts/health.py",
+        "scripts/development/cosyvoice/service.py",
+        "src/longmemory/entrypoints/api/voice_settings.py"
       ],
       "related": [
         "docs/development/launcher-contract.md",
@@ -833,7 +862,8 @@
         "docs/adr/0177-react-local-launcher.md",
         "docs/development/troubleshooting.md",
         "docs/development/parallel/X-hy-roundscreen-20261019.md",
-        "docs/guides/圆屏独立端口与IP自动跟踪-20261020.md"
+        "docs/guides/圆屏独立端口与IP自动跟踪-20261020.md",
+        "docs/development/parallel/review-launcher-20261121.md"
       ],
       "tags": [
         "启动",
@@ -843,7 +873,7 @@
         "局域网地址变化",
         "端口冲突"
       ],
-      "review": "verified 2026-10-20: 仅核对绑定脱敏提示、独立端口/自动物理IP及安全重开候选04f92df+8b347be，393/1 Tk初始化失败、隔离43通过、浏览器5通过；正式部署/设备重连未执行，其余全篇核对仍pending"
+      "review": "verified 2026-10-20: 仅核对绑定脱敏提示、独立端口/自动物理IP及安全重开候选04f92df+8b347be，393/1 Tk初始化失败、隔离43通过、浏览器5通过；正式部署/设备重连未执行，其余全篇核对仍pending。2026-11-21 核对声音就绪摘要、手动刷新及停止回执。"
     },
     {
       "id": "machine-layout",
@@ -1775,6 +1805,104 @@
     }
   ],
   "documents": [
+    {
+      "path": "docs/development/parallel/review-memory-20261121.md",
+      "title": "网页聊天归档与记忆写入回归",
+      "status": "reference",
+      "basis": "本轮提交的隔离验收记录，范围限于报告列出的环境与用例",
+      "review": {
+        "state": "verified",
+        "date": "2026-11-21",
+        "scope": "后台暂停重试、配置读取、旁库保存与模型状态",
+        "evidence": [
+          "docs/development/parallel/review-memory-20261121.md",
+          "tests/unit/entrypoints/test_chat_persistence.py"
+        ]
+      },
+      "tags": [
+        "审查修复",
+        "后台暂停重试"
+      ]
+    },
+    {
+      "path": "docs/development/parallel/review-web-20261121.md",
+      "title": "聊天草稿恢复、记忆计数与纠正请求",
+      "status": "reference",
+      "basis": "本轮提交的隔离验收记录，范围限于报告列出的环境与用例",
+      "review": {
+        "state": "verified",
+        "date": "2026-11-21",
+        "scope": "发送请求号、计数刷新、纠正字符与字节限制",
+        "evidence": [
+          "docs/development/parallel/review-web-20261121.md",
+          "web/react-chat/src/pages/ChatApp.test.tsx"
+        ]
+      },
+      "tags": [
+        "审查修复",
+        "发送请求号"
+      ]
+    },
+    {
+      "path": "docs/development/parallel/review-voice-20261121.md",
+      "title": "圆屏待机、快捷播报与长回答回执修复",
+      "status": "reference",
+      "basis": "本轮提交的隔离验收记录，范围限于报告列出的环境与用例",
+      "review": {
+        "state": "verified",
+        "date": "2026-11-21",
+        "scope": "重复静默待机、快捷查询失败的播报顺序、两版回答回执",
+        "evidence": [
+          "docs/development/parallel/review-voice-20261121.md",
+          "tests/integration/memory_pipeline/test_xiaozhi_bridge.py"
+        ]
+      },
+      "tags": [
+        "审查修复",
+        "重复静默待机"
+      ]
+    },
+    {
+      "path": "docs/development/parallel/review-launcher-20261121.md",
+      "title": "启动器与声音服务修复（2026-11-21）",
+      "status": "reference",
+      "basis": "本轮提交的隔离验收记录，范围限于报告列出的环境与用例",
+      "review": {
+        "state": "verified",
+        "date": "2026-11-21",
+        "scope": "就绪与诊断、刷新状态、并发停止及服务关闭",
+        "evidence": [
+          "docs/development/parallel/review-launcher-20261121.md",
+          "tests/test_launcher_web.py"
+        ]
+      },
+      "tags": [
+        "审查修复",
+        "就绪与诊断"
+      ]
+    },
+    {
+      "path": "docs/development/parallel/review-integration-20261121.md",
+      "title": "智慧圆屏审查修复整合验收",
+      "status": "reference",
+      "basis": "本轮提交的隔离验收记录，范围限于报告列出的环境与用例",
+      "review": {
+        "state": "verified",
+        "date": "2026-11-21",
+        "scope": "四组修复在同一工作树的离线组合回归与验收范围",
+        "evidence": [
+          "docs/development/parallel/review-integration-20261121.md",
+          "docs/development/parallel/review-memory-20261121.md",
+          "docs/development/parallel/review-web-20261121.md",
+          "docs/development/parallel/review-voice-20261121.md",
+          "docs/development/parallel/review-launcher-20261121.md"
+        ]
+      },
+      "tags": [
+        "审查修复",
+        "组合验收"
+      ]
+    },
     {
       "path": "docs/development/parallel/AI-embedding-resource-review-20261021.md",
       "title": "AI：embedding 公开资源启动预备候选审查",
@@ -5181,9 +5309,10 @@
       "basis": "按 ROADMAP、恢复/工程约定及本轮任务确定的维护入口；仅限定对应事实范围，语义核对另列",
       "review": {
         "state": "verified",
-        "date": "2026-10-20",
-        "scope": "X仅核对新增平台圆屏/可信装配段落与引用，未重验整篇历史结论；2026-10-20仅核对独立端口/自动IP候选04f92df+8b347be及受控副本保护、393/1 Tk组合失败与隔离43通过；未部署或验收设备/双设备共存，其余全篇核对不扩张；2026-10-21仅增Cosy候选协议8/三层状态/512字节与重启语义，前端CI待ROOT",
+        "date": "2026-11-21",
+        "scope": "命令行停止回执和声音服务精简就绪响应与诊断。既有核对记录：X仅核对新增平台圆屏/可信装配段落与引用，未重验整篇历史结论；2026-10-20仅核对独立端口/自动IP候选04f92df+8b347be及受控副本保护、393/1 Tk组合失败与隔离43通过；未部署或验收设备/双设备共存，其余全篇核对不扩张；2026-10-21仅增Cosy候选协议8/三层状态/512字节与重启语义，前端CI待ROOT",
         "evidence": [
+          "docs/development/parallel/review-launcher-20261121.md",
           "docs/development/parallel/X-hy-roundscreen-20261019.md",
           "docs/guides/Hy-Memory圆屏与日用装配-20261019.md",
           "docs/guides/圆屏独立端口与IP自动跟踪-20261020.md",
@@ -5494,10 +5623,11 @@
       "status": "current",
       "basis": "按 ROADMAP、恢复/工程约定及本轮任务确定的维护入口；仅限定对应事实范围，语义核对另列",
       "review": {
-        "state": "pending",
-        "date": "2026-10-20",
-        "scope": "2026-10-20仅核对独立端口/自动IP候选04f92df+8b347be及受控副本保护、393/1 Tk组合失败与隔离43通过；未部署或验收设备/双设备共存，其余全篇核对不扩张",
+        "state": "verified",
+        "date": "2026-11-21",
+        "scope": "手动刷新与自动轮询的错误反馈、声音就绪与试听。既有核对记录：2026-10-20仅核对独立端口/自动IP候选04f92df+8b347be及受控副本保护、393/1 Tk组合失败与隔离43通过；未部署或验收设备/双设备共存，其余全篇核对不扩张",
         "evidence": [
+          "docs/development/parallel/review-launcher-20261121.md",
           "docs/guides/圆屏独立端口与IP自动跟踪-20261020.md",
           "docs/adr/0187-roundscreen-network-coexistence-and-auto-lan.md",
           "8b347be37409481d8639ce18b7c38b7ebb5166df"
@@ -5576,11 +5706,18 @@
     },
     {
       "path": "docs/guides/使用说明.md",
-      "title": "LongMemory 使用说明：启动命令与网页操作",
+      "title": "智慧圆屏使用说明",
       "status": "current",
       "basis": "按 ROADMAP、恢复/工程约定及本轮任务确定的维护入口；仅限定对应事实范围，语义核对另列",
       "review": {
-        "state": "pending"
+        "state": "verified",
+        "date": "2026-11-21",
+        "scope": "Hy 后台暂停重试、纠正规则与持久连接的静默窗口",
+        "evidence": [
+          "docs/development/parallel/review-memory-20261121.md",
+          "docs/development/parallel/review-voice-20261121.md",
+          "docs/development/parallel/review-integration-20261121.md"
+        ]
       },
       "tags": [
         "guides"
@@ -5769,10 +5906,16 @@
     {
       "path": "docs/guides/聊天会话.md",
       "title": "聊天会话：关闭后继续聊",
-      "status": "pending",
-      "basis": "已盘点路径与标题，尚无本轮充分证据确定现行用途；保留原文等待任务核对",
+      "status": "current",
+      "basis": "网页会话的维护入口，终轮归档和请求回放已按本轮实现核对",
       "review": {
-        "state": "pending"
+        "state": "verified",
+        "date": "2026-11-21",
+        "scope": "会话终轮持久化、按请求号回放与草稿保留",
+        "evidence": [
+          "docs/development/parallel/review-memory-20261121.md",
+          "docs/development/parallel/review-web-20261121.md"
+        ]
       },
       "tags": [
         "guides"
