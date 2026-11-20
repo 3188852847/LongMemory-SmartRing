@@ -61,6 +61,8 @@ spawn EPERM` 结束。使用相同提交、pnpm 锁、Chromium 和 `pnpm test:e2
 - 定位：Tcl/Tk 文件实际完整存在于当前 uv Python 的 `sys.base_prefix/tcl`；显式设置 `TCL_LIBRARY` 与 `TK_LIBRARY` 后失败项通过，不是启动面板业务回归。
 - 修复：`tests/conftest.py` 在 Windows 且目录真实存在时，为 pytest 子进程补全这两个变量；不覆盖调用者配置，不修改系统环境变量，也不影响正式应用进程。
 
+若报错指向正确路径，且全新解释器可读同一文件，同一 pytest 进程的多次建窗还可能受标准流句柄复用影响。旧面板的 Tk 用例现使用独立进程，内部采用 `--capture=sys`，避免测试期间切换 Windows 标准流句柄。复现条件和对照结果见[整合验收记录](parallel/review-integration-20261121.md)。
+
 ## Windows PowerShell 5.1 误读中文防火墙脚本
 
 - 发现时间：2026-09-03，执行小智局域网演示的 `firewall.ps1 -Action Allow` 时。

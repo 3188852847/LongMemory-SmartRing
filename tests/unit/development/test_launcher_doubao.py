@@ -168,7 +168,9 @@ def test_text_only_does_not_require_cloud_configuration(options, modules):
 
 
 @pytest.mark.skipif(os.name != "nt", reason="Windows Tk panel")
-def test_secret_dialog_is_blank_and_saves_only_on_user_action(tmp_path, modules, monkeypatch):
+def test_secret_dialog_is_blank_and_saves_only_on_user_action(in_tk_subprocess, tmp_path, modules, monkeypatch):
+    if not in_tk_subprocess:
+        return
     import tkinter as tk
     from tkinter import ttk
     monkeypatch.setitem(sys.modules, "runtime", modules.runtime)

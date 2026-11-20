@@ -992,7 +992,9 @@ def test_owned_console_instance_ready_and_shutdown(tmp_path):
 
 
 @pytest.mark.skipif(os.name != "nt", reason="Windows Tk panel")
-def test_panel_constructs_without_starting_services(monkeypatch):
+def test_panel_constructs_without_starting_services(in_tk_subprocess, monkeypatch):
+    if not in_tk_subprocess:
+        return
     monkeypatch.syspath_prepend(str(DIRECTORY))
     import tkinter as tk
     spec = importlib.util.spec_from_file_location("launcher_app_test", DIRECTORY / "app.py")
@@ -1018,7 +1020,9 @@ def test_panel_constructs_without_starting_services(monkeypatch):
 
 
 @pytest.mark.skipif(os.name != "nt", reason="Windows Tk panel")
-def test_boolean_option_uses_explicit_live_state_instead_of_checkbox_glyph(monkeypatch):
+def test_boolean_option_uses_explicit_live_state_instead_of_checkbox_glyph(in_tk_subprocess, monkeypatch):
+    if not in_tk_subprocess:
+        return
     monkeypatch.syspath_prepend(str(DIRECTORY))
     import tkinter as tk
     from tkinter import ttk

@@ -2,12 +2,41 @@
 
 import os
 import shutil
+import subprocess
 import sys
 import uuid
+import xml.etree.ElementTree as ET
 from pathlib import Path
+
+import pytest
 
 
 _owned_test_temp: Path | None = None
+
+
+@pytest.fixture
+def in_tk_subprocess(request, tmp_path):
+    """父进程校验子用例成功，窗口和全部 UI 断言仅在子进程执行。"""
+    case = request.node.nodeid
+    if os.environ.get("LONGMEMORY_TK_TEST_CASE") == case:
+        return True
+
+    # Windows Tcl 会保留标准通道；pytest 在用例之间切换 fd 可导致已有的
+    # init.tcl 或 icons.tcl 读取失败。让这一个场景独占解释器和稳定的标准流。
+    report = tmp_path / "tk-result.xml"
+    env = dict(os.environ, LONGMEMORY_TK_TEST_CASE=case, PYTEST_ADDOPTS="", PYTHONIOENCODING="utf-8")
+    result = subprocess.run(
+        [
+            sys.executable, "-m", "pytest", "-q", "--capture=sys",
+            "--rootdir", str(request.config.rootpath), f"--junitxml={report}", case,
+        ],
+        cwd=request.config.rootpath, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+        encoding="utf-8", errors="replace", timeout=30,
+    )
+    assert result.returncode == 0, result.stdout
+    cases = list(ET.parse(report).iter("testcase"))
+    assert len(cases) == 1 and cases[0].find("skipped") is None, result.stdout
+    return False
 
 
 def pytest_configure(config):

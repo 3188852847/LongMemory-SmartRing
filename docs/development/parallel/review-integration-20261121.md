@@ -42,3 +42,9 @@ Windows 的正常关闭流程可以独立复现旁库文件仍被占用。现由
 主会话在 `88c7f236` 的全量回归中记录了 4,221 项通过、208 项跳过、2 项失败。本节复核其中的 Windows Job 正常退出用例。原测试仅在放行后分配 8 MiB 并写出结果。本机用同一基础解释器运行合成短任务，复现了进程正常退出且 Job 用户态、内核态时间均为零。Job 统计关联进程实际占用的 CPU 时间，包含已退出进程，单位为 100 纳秒。[Windows Job 记账字段](https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-jobobject_basic_accounting_information)
 
 用例现在直接启动基础解释器。父进程将其加入 Job，子进程经管道核对自己的 PID，再按进程 CPU 时钟完成至少 125 毫秒的计算。退出后要求 Job 至少记到 62.5 毫秒，并在确认 Job 终止后保有同一累计值。正常退出、拒绝超限内存分配和子进程异常三种模式连续 8 组共 24/24 通过。将真实快照的两项 CPU 计数注入为零时，正常用例在预期断言失败。记账、准入及资源限制定向回归 51/51 通过。两份 JUnit 报告在本树 `data/test-tmp/ci/windows-job-cpu.xml` 和 `data/test-tmp/ci/windows-job-cpu-series.xml`。
+
+## Windows 旧面板的 Tk 测试
+
+`55f03d64` 的全量报告中，豆包对话框在读取实际存在的 `icons.tcl` 时失败。10 个全新解释器都能用现有的中文路径初始化 Tk。在本机 Python 3.12.13、Tcl/Tk 8.6.12 下，探针模拟 pytest 切换标准流，4 个独立进程得到相同结果。旧的输出句柄值被占住时，Tcl 能读取图标脚本。释放该值供下一次打开文件复用后，Tcl 读取同一路径失败。该版本 Tcl 按 Windows 句柄查找已有通道，读写模式不匹配时返回空值。探针在本树 `data/test-tmp/ci/tk-stdio-handle-probe.py`。[Tcl 8.6.12 Windows 通道实现](https://github.com/tcltk/tcl/blob/core-8-6-12/win/tclWinChan.c#L1286-L1297)
+
+修正前，按顺序重复主面板、开关和豆包对话框共 72 项，1 项在读取 `spinbox.tcl` 时失败。修正后三个场景分别在全新解释器内运行，只捕获 Python 输出，保留原有控件与保存断言，相同顺序 72/72 通过。原已隔离的响应策略面板也复用该夹具。给定向运行补齐小智脚本目录后，启动器、豆包、防火墙、响应策略和 pytest 临时目录共 139/139 通过。独立注入断言失败和意外跳过，父测试均报错。报告在本树 `data/test-tmp/ci/tk-ordered-fixed.xml` 与 `data/test-tmp/ci/tk-launcher-verified.xml`。

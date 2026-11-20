@@ -293,21 +293,8 @@ def test_each_cli_rejects_unknown_mode_before_loading_private_configuration(monk
 
 
 @pytest.mark.skipif(os.name != "nt", reason="Windows Tk panel")
-def test_panel_response_choice_saves_and_disables_in_cloud(tmp_path, modules, monkeypatch):
-    # 与防火墙面板验收一致：日用面板在独立进程创建 Tk。Windows Tcl 会在
-    # 第一次销毁 root 后缓存含中文的库路径，第二次 Tk 构造可能乱码化。
-    # 将整个合成 UI 场景隔离，避免其他面板测试的进程状态影响配置路径验收。
-    if os.environ.get("LONGMEMORY_TEST_LATENCY_PANEL_CHILD") != "1":
-        import subprocess
-        env = os.environ.copy()
-        env["LONGMEMORY_TEST_LATENCY_PANEL_CHILD"] = "1"
-        result = subprocess.run(
-            [sys.executable, "-m", "pytest", str(Path(__file__).resolve()) + "::test_panel_response_choice_saves_and_disables_in_cloud",
-             "--basetemp", str(tmp_path / "panel-child"), "-q"],
-            cwd=Path(__file__).resolve().parents[3], env=env,
-            capture_output=True, timeout=30,
-        )
-        assert result.returncode == 0, result.stdout.decode("utf-8", errors="replace")
+def test_panel_response_choice_saves_and_disables_in_cloud(in_tk_subprocess, tmp_path, modules, monkeypatch):
+    if not in_tk_subprocess:
         return
     import tkinter as tk
     from tkinter import ttk
