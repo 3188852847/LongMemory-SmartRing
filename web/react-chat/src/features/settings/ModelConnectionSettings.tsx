@@ -20,12 +20,14 @@ export function ModelConnectionSettings({api, config, disabled, onHealth}: {
   const [profiles, setProfiles] = useState<ModelProfiles>();
   const [selected, setSelected] = useState<'campus'|'official'>('official');
   const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
+  const [saved, setSaved] = useState('');
   const [voiceSelected, setVoiceSelected] = useState<'campus'|'official'>('official');
   const [voiceSaving, setVoiceSaving] = useState(false);
   const [voiceChecking, setVoiceChecking] = useState(false);
   const [voiceHealth, setVoiceHealth] = useState<VoiceModelHealth>();
   const [form] = Form.useForm();
+  const editedUrl = Form.useWatch('base_url', form);
+  const editedKey = Form.useWatch('api_key', form);
   const allowHttp = Form.useWatch('allow_http', form);
   const health = config?.model_health;
   const profile = useMemo(() => profiles?.profiles?.find(item => item.id === selected), [profiles, selected]);
@@ -46,8 +48,8 @@ export function ModelConnectionSettings({api, config, disabled, onHealth}: {
   useEffect(() => {
     if (!profile) return;
     form.setFieldsValue({...profile, api_key:''});
-    setSaved(false);
   }, [form, profile]);
+  const liveCampus = selected === 'campus' && profiles?.live_campus === true;
   async function check() {
     if (checking || config?.provider !== 'openai_compatible') return;
     setChecking(true); setRequestError('');
@@ -55,11 +57,11 @@ export function ModelConnectionSettings({api, config, disabled, onHealth}: {
     catch (error) {setRequestError(settingsFailure(error, 'read'));}
     finally {setChecking(false);}
   }
-  async function save(values: {base_url:string; model:string; api_key?:string; timeout_seconds:number; max_tokens:number; allow_http:boolean}) {
-    setSaving(true); setSaved(false); setRequestError('');
+  async function save(values: {base_url:string; model:string; api_key?:string; timeout_seconds:number; max_tokens:number; allow_http:boolean}, applyNow = liveCampus) {
+    setSaving(true); setSaved(''); setRequestError('');
     try {
-      const result = await api.request<ModelProfiles>(`/api/model-profiles/${selected}`, 'PUT', {...values, activate:true});
-      setProfiles(result); form.setFieldValue('api_key', ''); setSaved(true);
+      const result = await api.request<ModelProfiles>(`/api/model-profiles/${selected}`, 'PUT', {...values, activate:true, confirm_free_and_apply:applyNow});
+      setProfiles(result); form.setFieldValue('api_key', ''); setSaved(result.applied ? '新连接已生效，下一轮网页和圆屏对话将使用新地址。' : '配置已保存，下次启动生效。');
     } catch (error) {setRequestError(settingsFailure(error, 'write'));}
     finally {setSaving(false);}
   }
@@ -95,7 +97,7 @@ export function ModelConnectionSettings({api, config, disabled, onHealth}: {
       检测当前模型连接
     </Button>
     <p className="subtle">检测只发送固定合成短句，不读取或写入个人记忆，不自动重试，也不代表圆屏语音链路已经可用。</p>
-    <Divider>网页服务：下次启动配置</Divider>
+    <Divider>网页模型连接</Divider>
     {profiles?.enabled === false && <Alert type="warning" showIcon title="当前启动方式未开放模型配置管理"/>}
     {profiles?.enabled && <>
       <Space wrap>
@@ -121,9 +123,10 @@ export function ModelConnectionSettings({api, config, disabled, onHealth}: {
           <Form.Item label="允许 HTTP 明文" name="allow_http" valuePropName="checked"><Switch/></Form.Item>
         </Space>
         {allowHttp && <Alert type="warning" showIcon title="HTTP 会明文传输 Key、对话和记忆证据" description="只应为已知的校园网服务开启；官方 DeepSeek 应使用 HTTPS。"/>}
-        <Button htmlType="submit" type="primary" loading={saving} disabled={disabled}>保存并设为下次启动</Button>
+        <Button htmlType="submit" type="primary" loading={saving} disabled={disabled}>{liveCampus ? '确认学校服务仍免费，保存并立即应用' : '保存并设为下次启动'}</Button>
+        {liveCampus && editedUrl === profile?.base_url && !editedKey && <Button disabled={disabled || saving} onClick={() => void form.validateFields().then(values => save(values, false), () => {})}>仅保存到下次启动</Button>}
       </Form>
-      {saved && <Alert className="settings-model-alert" type="success" showIcon title="网页模型配置已保存" description="请从启动面板重新启动服务。当前进程不会热切换；圆屏使用下方独立选择。"/>}
+      {saved && <Alert className="settings-model-alert" type="success" showIcon title="网页模型配置已保存" description={saved}/>}
       {profiles.restart_required && <Alert className="settings-model-alert" type="info" showIcon title="等待重启生效" description={`当前进程：${profiles.current_profile === 'official' ? '官方 DeepSeek' : '学校模型'}；下次启动：${profiles.next_start_profile === 'official' ? '官方 DeepSeek' : '学校模型'}。`}/>}
       <Divider>圆屏语音：下次启动配置</Divider>
       <Space wrap>

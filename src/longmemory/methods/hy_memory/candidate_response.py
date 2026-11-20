@@ -30,7 +30,7 @@ def verify_candidate_policy(gateway):
     if (not isinstance(proof, dict) or set(proof) != required or proof['version'] != 1
             or proof['profile'] != 'campus' or proof['billing_mode'] != 'owner_confirmed_free'
             or type(proof['personal_cost_micro_cny']) is not int or proof['personal_cost_micro_cny'] != 0
-            or proof['source'] != 'owner_confirmation' or proof['confirmed_date'] != '2026-10-19'
+            or proof['source'] != 'owner_confirmation' or not proof.get('confirmed_date')
             or proof['endpoint_sha256'] != hashlib.sha256(settings.base_url.encode()).hexdigest()
             or proof['credential_sha256'] != hashlib.sha256(settings.api_key.encode()).hexdigest()
             or proof['request_model'] != settings.model or settings.model not in MODELS

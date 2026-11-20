@@ -1,5 +1,6 @@
 """受控日用Hy模型装配；复用V网关/设置/预算，不运行实验或创建新费用池。"""
 
+from contextlib import contextmanager
 from dataclasses import replace
 import hashlib
 import json
@@ -31,6 +32,28 @@ class OwnedHyModels:
         if phase not in {"answer", "voice"} or self.closed:
             raise ValueError("owned_model_phase_unavailable")
         return self.gateway.local_settings(phase, max_tokens=min(8192, self.gateway.settings.max_tokens))
+
+    @contextmanager
+    def apply_campus_connection(self, model):
+        from longmemory.infrastructure.config.campus_calls import FreeCampusCalls, open_campus_calls
+        from longmemory.methods.hy_memory.provider_transport import PersistentProviderTransport
+        gateway = self.gateway
+        if not isinstance(self.budget, FreeCampusCalls) or model.model != gateway.settings.model:
+            raise ValueError("campus_model_must_match")
+        if (model.timeout_seconds, model.max_tokens) != (gateway.settings.timeout_seconds, gateway.settings.max_tokens):
+            raise ValueError("live_connection_limits_changed")
+        if not gateway._paid_lock.acquire(blocking=False):
+            raise ValueError("live_model_busy")
+        try:
+            budget = open_campus_calls(self.root, model, confirm_rotation=True)
+            transport = PersistentProviderTransport(model)
+            yield
+            previous = gateway._provider_transport
+            gateway.settings, gateway._provider_transport = model, transport
+            gateway.budget = self.budget = budget
+            previous.close()
+        finally:
+            gateway._paid_lock.release()
 
     def voice_configuration(self):
         model = self.model_settings("voice")
@@ -67,6 +90,7 @@ def build_owned_daily_runtime(root, deployment, *, create=False, encoder_loader=
     if identity.get("profile") == "campus":
         from longmemory.infrastructure.config.campus_calls import open_campus_calls
         budget = open_campus_calls(root, model, create=create)
+        identity = dict(identity, endpoint_sha256=getattr(budget, "original_endpoint_sha256", identity["endpoint_sha256"]))
     else:
         budget = ExistingCampaignBudget(root / CAMPAIGN_RELATIVE)
         if budget.policy.model != model.model:
@@ -94,6 +118,7 @@ def build_owned_daily_runtime(root, deployment, *, create=False, encoder_loader=
                  if identity.get("profile") == "campus" else {"currency_verified": True})
     gateway = gateway_factory(settings=model, budget=budget, encoder=encoder, **authority)
     owned = OwnedHyModels(gateway, budget)
+    owned.root = root
     runtime = None
     try:
         gateway.__enter__()

@@ -4,11 +4,13 @@ from aiohttp import web
 from longmemory.infrastructure.config.model_profiles import ModelKeyRequired
 
 
-def register_model_profile_routes(app, store, voice=None):
+def register_model_profile_routes(app, store, voice=None, live=None):
+    def available():
+        return live is not None and store.selected("web") == store.selected("voice") == "campus"
     async def listing(_request):
         if store is None:
             return web.json_response({"enabled": False})
-        result = {"enabled": True, **store.describe()}
+        result = {"enabled": True, **store.describe(), "live_campus": available()}
         if voice is not None:
             result["voice"] = await voice.describe()
         return web.json_response(result)
@@ -19,12 +21,20 @@ def register_model_profile_routes(app, store, voice=None):
         if request.content_type != "application/json":
             return web.json_response({"error": "invalid_body"}, status=400)
         try:
-            result = store.save(request.match_info["profile"], await request.json())
+            body = await request.json()
+            apply = isinstance(body, dict) and body.pop("confirm_free_and_apply", False) is True
+            profile = request.match_info["profile"]
+            if apply and (not available() or profile != "campus"):
+                raise ValueError("live_model_unavailable")
+            result = store.save(profile, body, apply=live) if apply else store.save(profile, body)
         except ModelKeyRequired:
             return web.json_response({"error": "model_key_required_for_new_origin"}, status=400)
-        except (ValueError, TypeError, UnicodeError, OSError):
+        except (ValueError, TypeError, UnicodeError, OSError) as exc:
+            code = str(exc)
+            if code in {"live_model_busy", "campus_model_must_match", "live_connection_limits_changed"}:
+                return web.json_response({"error": code}, status=409)
             return web.json_response({"error": "invalid_model_profile"}, status=400)
-        payload = {"enabled": True, **result}
+        payload = {"enabled": True, **result, "live_campus": available(), "applied": apply}
         if voice is not None:
             payload["voice"] = await voice.describe()
         return web.json_response(payload)

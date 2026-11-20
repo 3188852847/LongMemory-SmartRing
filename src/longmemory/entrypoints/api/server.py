@@ -236,7 +236,9 @@ def create_app(*, port=8765, bridge=None, web_root=None, database=None, allow_me
             model_settings_factory=(lambda: runtime.external_model_settings("answer")) if runtime is not None and not legacy_sqlite else None)
         if xiaozhi_server and model_profile_store else None
     )
-    register_model_profile_routes(app, model_profile_store, voice_profiles)
+    service = getattr(runtime, "_model_service", None)
+    live = getattr(service, "apply_campus_connection", None) if getattr(model_profile_store, "current_profile", None) == "campus" else None
+    register_model_profile_routes(app, model_profile_store, voice_profiles, live)
     memory_backends = xiaozhi_memory_backends or (
         XiaozhiMemoryBackends(ROOT, xiaozhi_server, memory_backend_store)
         if xiaozhi_server and memory_backend_store else None

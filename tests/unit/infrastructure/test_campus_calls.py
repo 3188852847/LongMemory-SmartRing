@@ -57,3 +57,30 @@ def test_campus_selection_preserves_case_http_consent_port_and_prefix(tmp_path):
     settings, identity = selected_model(tmp_path)
     assert settings.model == "DeepSeek-V4-Flash" and settings.base_url == model.base_url
     assert identity["billing_policy"] == "owner_confirmed_free"
+
+
+def test_confirmed_rotation_applies_to_existing_gateway_and_survives_restart(tmp_path):
+    from dataclasses import replace
+    from types import SimpleNamespace
+    from longmemory.bootstrap_hy_daily import OwnedHyModels
+    from longmemory.methods.hy_memory.model_gateway import ModelGateway
+
+    old, proof = arrange(tmp_path)
+    old_calls = open_campus_calls(tmp_path, old, create=True)
+    new = replace(old, base_url="http://127.0.0.1:24567/v1", api_key="new-synthetic")
+    with pytest.raises(ValueError, match="campus_free_policy_identity_mismatch"):
+        open_campus_calls(tmp_path, new)
+    gateway = ModelGateway(settings=old, budget=old_calls, encoder=SimpleNamespace(), free_policy_verified=True)
+    with gateway:
+        owned = OwnedHyModels(gateway, old_calls)
+        owned.root = tmp_path
+        transport = gateway._provider_transport
+        with gateway._paid_lock, pytest.raises(ValueError, match="live_model_busy"):
+            with owned.apply_campus_connection(new):
+                pytest.fail("busy gateway cannot change")
+        with owned.apply_campus_connection(new):
+            assert gateway.settings == old
+        assert gateway.settings == new and gateway._provider_transport is not transport
+        assert open_campus_calls(tmp_path, new).identity == gateway.budget.identity
+        assert gateway.budget.original_endpoint_sha256 == proof["endpoint_sha256"]
+        assert open_campus_calls(tmp_path, old).identity == old_calls.identity

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextlib import nullcontext
 import json
 import os
 from pathlib import Path
@@ -125,7 +126,7 @@ class ModelProfileStore:
         except (TypeError, ValueError):
             return fallback
 
-    def save(self, profile: str, body: dict) -> dict:
+    def save(self, profile: str, body: dict, *, apply=None) -> dict:
         profile = self._profile(profile)
         required = {"base_url", "model", "timeout_seconds", "max_tokens", "allow_http", "activate"}
         allowed = required | {"api_key"}
@@ -158,9 +159,10 @@ class ModelProfileStore:
             "LONGMEMORY_LLM_MAX_TOKENS": str(settings.max_tokens),
             "LONGMEMORY_LLM_ALLOW_HTTP": str(settings.allow_http).lower(),
         }
-        self._replace_managed_lines(self.path(profile), values)
-        if body["activate"]:
-            self.activate(profile, target="web")
+        with apply(settings) if apply else nullcontext():
+            self._replace_managed_lines(self.path(profile), values)
+            if body["activate"]:
+                self.activate(profile, target="web")
         return self.describe()
 
     @staticmethod

@@ -1,6 +1,7 @@
 """所有者确认校园免费后的调用审计；不是另一个付费预算池，不接触官方账本。"""
 
-from contextlib import contextmanager
+from contextlib import contextmanager, closing
+from datetime import date
 import hashlib
 import json
 from pathlib import Path
@@ -77,7 +78,7 @@ class FreeCampusCalls(GatewayDiagnostics):
             return {"state": "paused", "reason": "campus_call_ledger_unavailable", "billing_policy": self.billing_mode}
 
 
-def open_campus_calls(root, model, *, create=False):
+def open_campus_calls(root, model, *, create=False, confirm_rotation=False):
     from .hy_deployment import _path
     root = Path(root).resolve()
     path = root / "local/config/hy-memory/provider-policy.json"
@@ -90,9 +91,30 @@ def open_campus_calls(root, model, *, create=False):
             or proof["profile"] != "campus" or proof["billing_mode"] != "owner_confirmed_free"
             or type(proof["personal_cost_micro_cny"]) is not int or proof["personal_cost_micro_cny"] != 0
             or proof["source"] != "owner_confirmation" or proof["confirmed_date"] != "2026-10-19"
-            or proof["endpoint_sha256"] != hashlib.sha256(model.base_url.encode()).hexdigest()
-            or proof["credential_sha256"] != hashlib.sha256(model.api_key.encode()).hexdigest()
             or proof["request_model"] != model.model):
         raise ValueError("campus_free_policy_identity_mismatch")
     ledger = _path(root, proof["ledger_path"], parent="data/databases")
-    return FreeCampusCalls(ledger, proof=proof, create=create)
+    endpoint = hashlib.sha256(model.base_url.encode()).hexdigest()
+    credential = hashlib.sha256(model.api_key.encode()).hexdigest()
+    if endpoint == proof["endpoint_sha256"] and credential == proof["credential_sha256"]:
+        return FreeCampusCalls(ledger, proof=proof, create=create)
+    if create:
+        raise ValueError("campus_free_policy_identity_mismatch")
+    # 原凭据的账本与记忆库身份保留；每个获确认的新连接有自己的费用记录。
+    FreeCampusCalls(ledger, proof=proof)
+    binding = hashlib.sha256((endpoint + credential + proof["request_model"]).encode()).hexdigest()
+    relative = f"data/databases/hy-campus-{binding}.sqlite3"
+    path = _path(root, relative, parent="data/databases")
+    updated = dict(proof, endpoint_sha256=endpoint, credential_sha256=credential, ledger_path=relative)
+    if not path.exists():
+        if not confirm_rotation:
+            raise ValueError("campus_free_policy_identity_mismatch")
+        updated["confirmed_date"] = date.today().isoformat()
+        calls = FreeCampusCalls(path, proof=updated, create=True)
+    else:
+        with closing(sqlite3.connect(path.as_uri() + "?mode=ro", uri=True)) as db:
+            recorded = json.loads(db.execute("SELECT body FROM policy").fetchone()[0])
+        updated["confirmed_date"] = date.fromisoformat(recorded["confirmed_date"]).isoformat()
+        calls = FreeCampusCalls(path, proof=updated)
+    calls.original_endpoint_sha256 = proof["endpoint_sha256"]
+    return calls
