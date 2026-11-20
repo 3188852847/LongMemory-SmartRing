@@ -619,7 +619,7 @@ def main():
                                persona_producer=persona_producer, persona_model=persona_model,
                                consolidation_background_enabled=args.enable_memory_consolidation,
                                model_profile_store=ModelProfileStore(ROOT, current_profile=args.model_profile),
-                               memory_backend_store=MemoryBackendStore(ROOT, current_backend=args.memory_backend),
+                               memory_backend_store=MemoryBackendStore(current_backend=args.memory_backend),
                                tts_backend_store=TTSBackendStore(ROOT, current_backend=args.tts_backend),
                                round_wallpaper_library=RoundWallpaperLibrary(
                                    ROOT / "data" / "round-screen" / "wallpapers",

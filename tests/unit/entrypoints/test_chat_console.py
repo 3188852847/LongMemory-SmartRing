@@ -161,33 +161,17 @@ def test_voice_model_selection_and_check_are_explicit_and_keyless(tmp_path):
     asyncio.run(run())
 
 
-def test_round_screen_memory_backend_selection_is_deferred_and_csrf_protected(tmp_path):
-    store = MemoryBackendStore(tmp_path, current_backend="longmemory")
-
-    class XiaozhiMemory:
-        async def describe(self):
-            selected = store.selected()
-            return {"enabled": True, "selected_backend": selected,
-                    "status": "configured" if selected == "longmemory" else "restart_pending"}
-
-        async def select(self, backend):
-            store.select(backend)
-            return await self.describe()
+def test_daily_memory_backend_is_read_only():
+    store = MemoryBackendStore(current_backend="hy_memory")
 
     async def run():
-        async with console(memory_backend_store=store,
-                           xiaozhi_memory_backends=XiaozhiMemory()) as (client, base, _):
+        async with console(memory_backend_store=store) as (client, base, _):
             headers = await login(client, base)
-            url = base + "/api/memory-backends/selection"
-            assert (await client.put(url, json={"backend": "xiaozhi_local"})).status == 403
-            response = await client.put(url, json={"backend": "xiaozhi_local"}, headers=headers)
-            assert response.status == 200
-            result = await response.json()
-            assert result["current_backend"] == "longmemory"
-            assert result["next_start_backend"] == "xiaozhi_local"
-            assert result["restart_required"] is True
-            assert result["xiaozhi"]["status"] == "restart_pending"
-            assert (await client.put(url, json={"backend": "unknown"}, headers=headers)).status == 400
+            result = await (await client.get(base + "/api/memory-backends")).json()
+            assert [item["id"] for item in result["backends"]] == ["hy_memory"]
+            response = await client.put(base + "/api/memory-backends/selection",
+                                        json={"backend": "none"}, headers=headers)
+            assert response.status == 404
 
     asyncio.run(run())
 

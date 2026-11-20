@@ -14,11 +14,9 @@ from runtime import (
 from network import local_addresses, config_action
 from preferences import (
     DEFAULT_SESSION_ALLOW_MEMORY_DELETE,
-    load_memory_backend,
     load_model_profile,
     load_preferences,
     load_tts_backend,
-    save_memory_backend,
     save_model_profile,
     save_preferences,
     save_tts_backend,
@@ -315,7 +313,6 @@ def main():
     box.pack(fill="both", expand=True)
     choice_path = ROOT / 'local/config/preferences/launcher.json'
     model_profile_path = ROOT / 'local/config/preferences/model-profile.json'
-    memory_backend_path = ROOT / 'local/config/preferences/memory-backend.json'
     tts_backend_path = ROOT / 'local/config/preferences/tts-backend.json'
     control = LauncherControl(lock.socket, ROOT / 'data/control' / CONTROL_FILE_NAME)
     saved = load_preferences(choice_path)
@@ -423,19 +420,6 @@ def main():
         "web": active_model_profile,
         "voice": active_voice_model_profile,
     }
-    memory_backend_labels = {
-        "Hy-Memory（独立新库，主动暂停）": "hy_memory",
-        "LongMemory（分层、可追溯）": "longmemory",
-        "小智本地摘要（轻量对照）": "xiaozhi_local",
-        "无长期记忆（速度基线）": "none",
-    }
-    active_memory_backend = load_memory_backend(memory_backend_path)
-    memory_backend = tk.StringVar(value=next(
-        label for label, value in memory_backend_labels.items()
-        if value == active_memory_backend
-    ))
-    memory_backend_pointer_seen = {"backend": active_memory_backend}
-
     def selected_model_profile():
         return model_profile_labels[model_profile.get()]
 
@@ -450,15 +434,6 @@ def main():
 
     def selected_voice_latency_mode():
         return voice_latency_labels[voice_latency_mode.get()]
-
-    def selected_memory_backend():
-        return memory_backend_labels[memory_backend.get()]
-
-    def set_memory_backend(value):
-        label = next((label for label, backend in memory_backend_labels.items()
-                      if backend == value), None)
-        if label is not None:
-            memory_backend.set(label)
 
     def selected_extraction():
         return "llm" if memory_extraction.get().startswith("模型") else "rules"
@@ -546,7 +521,6 @@ def main():
             label for label, value in model_profile_labels.items()
             if value == recommended["voice_model_profile"]
         ))
-        set_memory_backend(recommended["memory_backend"])
         memory_extraction.set(extraction_labels[recommended["memory_extraction"]])
         memory_retrieval.set(retrieval_labels[recommended["memory_retrieval"]])
         set_tts_backend(recommended["tts_backend"])
@@ -670,26 +644,7 @@ def main():
                                         values=tuple(model_profile_labels), state="readonly", width=31)
     voice_model_selector.pack(side="left")
     ttk.Label(voice_model_row, text="  启动语音前自动备份并同步小智配置").pack(side="left")
-    backend_row = ttk.Frame(behavior_box)
-    backend_row.pack(fill="x", pady=8)
-    ttk.Label(backend_row, text="现有链路记忆：").pack(side="left")
-    memory_backend_selector = ttk.Combobox(backend_row, textvariable=memory_backend,
-                                           values=tuple(memory_backend_labels), state="readonly", width=31)
-    memory_backend_selector.pack(side="left")
-    ttk.Label(backend_row, text="  下次启动生效；各后端数据隔离").pack(side="left")
-    memory_row = ttk.Frame(behavior_box)
-    memory_row.pack(fill="x", pady=8)
-    ttk.Label(memory_row, text="长期记忆提取：").pack(side="left")
-    ttk.Combobox(memory_row, textvariable=memory_extraction,
-                 values=("规则提取（基础/对照）", "模型辅助提取（日常推荐）"),
-                 state="readonly", width=36).pack(side="left")
-    ttk.Label(memory_row, text="  模型失败仍保留 L0，不静默回退").pack(side="left")
-    retrieval_row = ttk.Frame(behavior_box)
-    retrieval_row.pack(fill="x", pady=8)
-    ttk.Label(retrieval_row, text="长期记忆召回：").pack(side="left")
-    ttk.Combobox(retrieval_row, textvariable=memory_retrieval,
-                 values=("关键词召回（基础/对照）", "关键词＋BGE 混合召回（日常推荐）"),
-                 state="readonly", width=36).pack(side="left")
+    ttk.Label(behavior_box, text="记忆系统：Hy-Memory").pack(anchor="w")
     _boolean_option(
         behavior_box,
         allow_memory_delete,
@@ -819,13 +774,6 @@ def main():
         except (OSError, ValueError):
             settings_status.set("模型选择未能保存；请勿关闭面板，并检查 local/config 是否可写。")
 
-    def persist_memory_backend(*_):
-        try:
-            save_memory_backend(memory_backend_path, selected_memory_backend())
-            settings_status.set("圆屏记忆后端已保存；下次启动生效。")
-        except (OSError, ValueError):
-            settings_status.set("圆屏记忆后端未能保存；请检查 local/config 是否可写。")
-
     def persist_tts_backend(*_):
         try:
             save_tts_backend(tts_backend_path, selected_tts())
@@ -845,7 +793,6 @@ def main():
         variable.trace_add("write", persist_launcher_choices)
     model_profile.trace_add("write", lambda *_: persist_model_profile("web"))
     voice_model_profile.trace_add("write", lambda *_: persist_model_profile("voice"))
-    memory_backend.trace_add("write", persist_memory_backend)
     tts_backend.trace_add("write", persist_tts_backend)
 
     def sync_tts():
@@ -898,7 +845,7 @@ def main():
 
     def update_voice_controls(*_):
         selector_state = "readonly" if selected_voice_mode() == "pipeline" else "disabled"
-        for selector in (voice_model_selector, memory_backend_selector, tts_selector, vad_selector, latency_selector):
+        for selector in (voice_model_selector, tts_selector, vad_selector, latency_selector):
             selector.configure(state=selector_state)
 
     voice_mode.trace_add("write", update_voice_controls)
@@ -947,7 +894,7 @@ def main():
         summary.set(_summary_text(
             voice.get(), start_page_labels[start_page.get()], selected_role(), selected_extraction(), selected_retrieval(),
             selected_tts(), allow_memory_delete.get(), memory_consolidation.get(),
-            selected_memory_backend(),
+            "hy_memory",
             selected_vad_profile(),
             l2_sufficiency_shadow.get(),
             l1_sufficiency_shadow.get(),
@@ -966,7 +913,7 @@ def main():
     ).pack(anchor="w", pady=(4, 0))
     for variable in (voice, voice_mode, start_page, role, model_profile, voice_model_profile,
                      memory_extraction, memory_retrieval, tts_backend, vad_profile,
-                     memory_backend, allow_memory_delete,
+                     allow_memory_delete,
                      memory_consolidation, l1_sufficiency_shadow,
                      l2_sufficiency_shadow):
         variable.trace_add("write", update_summary)
@@ -1058,11 +1005,6 @@ def main():
             return False
         # 网页可在服务运行时保存“下次启动”项。只有面板下拉框仍等于本次
         # 运行值时才吸收网页选择；若用户已在面板手动改过，则保留面板意图。
-        running_backend = (manager.options.memory_backend
-                           if manager.options is not None
-                           and manager.options.voice_mode == "pipeline" else None)
-        panel_unchanged = (running_backend is not None
-                           and selected_memory_backend() == running_backend)
         running_tts = (manager.options.tts_backend if manager.options is not None
                        and manager.options.voice_mode == "pipeline" else None)
         tts_panel_unchanged = running_tts is not None and selected_tts() == running_tts
@@ -1072,10 +1014,6 @@ def main():
             set_status("停止未完全确认，请关闭面板并检查服务，不要重复启动。", "error")
             return False
         state.update(opened=False, failed=False)
-        if panel_unchanged:
-            next_memory_backend = load_memory_backend(memory_backend_path)
-            set_memory_backend(next_memory_backend)
-            memory_backend_pointer_seen["backend"] = next_memory_backend
         if tts_panel_unchanged:
             next_tts = load_tts_backend(tts_backend_path, running_tts)
             set_tts_backend(next_tts)
@@ -1138,11 +1076,6 @@ def main():
                 ))
                 model_pointer_seen["voice"] = next_voice_model
             if (selected_voice_mode() == "pipeline"
-                    and selected_memory_backend() == memory_backend_pointer_seen["backend"]):
-                next_memory_backend = load_memory_backend(memory_backend_path)
-                set_memory_backend(next_memory_backend)
-                memory_backend_pointer_seen["backend"] = next_memory_backend
-            if (selected_voice_mode() == "pipeline"
                     and selected_tts() == tts_pointer_seen["backend"]):
                 next_tts = load_tts_backend(tts_backend_path, selected_tts())
                 set_tts_backend(next_tts)
@@ -1167,18 +1100,16 @@ def main():
                               embedding_model_dir=Path(embedding_model.get()),
                               model_profile=selected_model_profile(),
                               voice_model_profile=selected_voice_model_profile(),
-                              memory_backend=selected_memory_backend())
+                              memory_backend="hy_memory")
             manager.start(options)
             try:
                 save_preferences(choice_path, current_preferences())
                 save_model_profile(model_profile_path, selected_model_profile())
                 if selected_voice_mode() == "pipeline":
                     save_model_profile(model_profile_path, selected_voice_model_profile(), "voice")
-                    save_memory_backend(memory_backend_path, selected_memory_backend())
                     save_tts_backend(tts_backend_path, selected_tts())
                 model_pointer_seen["web"] = selected_model_profile()
                 model_pointer_seen["voice"] = selected_voice_model_profile()
-                memory_backend_pointer_seen["backend"] = selected_memory_backend()
                 tts_pointer_seen["backend"] = selected_tts()
             except OSError:
                 settings_status.set("服务已启动，但本机首选项未保存；下次仍可手动选择。")
@@ -1190,7 +1121,7 @@ def main():
                 tts_backend=selected_tts(),
                 model_profile=selected_model_profile(),
                 voice_model_profile=selected_voice_model_profile(),
-                memory_backend=selected_memory_backend(),
+                memory_backend="hy_memory",
             ))
             return True
         except ValueError as error:
@@ -1219,7 +1150,7 @@ def main():
                     "start_page": start_page_labels[start_page.get()],
                     "model_profile": selected_model_profile(),
                     "voice_model_profile": selected_voice_model_profile(),
-                    "memory_backend": selected_memory_backend(),
+                    "memory_backend": "hy_memory",
                     "memory_extraction": selected_extraction(),
                     "memory_retrieval": selected_retrieval(),
                     "tts_backend": selected_tts(),

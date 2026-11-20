@@ -9,7 +9,7 @@ afterEach(() => {localStorage.removeItem(AMBIENT_KEY);});
 const stopped: LauncherSnapshot = {
   state: 'stopped', message: '可以开启陪伴', services: [{id: 'console', label: '文字服务', state: '尚未启动'}],
   console_url: null, settings_revision: 'rev-1', can_start: true, can_stop: false,
-  settings: {voice: false, model_profile: 'official', voice_model_profile: 'official', voice_mode: 'pipeline', voice_latency_mode: 'realtime', memory_extraction: 'llm', memory_retrieval: 'hybrid', memory_backend: 'longmemory', vad_profile: 'normal', start_page: 'chat', lan_ip: '', http_risk_ack: false, tts_backend: 'cosyvoice3'},
+  settings: {voice: false, model_profile: 'official', voice_model_profile: 'official', voice_mode: 'pipeline', voice_latency_mode: 'realtime', memory_extraction: 'llm', memory_retrieval: 'hybrid', memory_backend: 'hy_memory', vad_profile: 'normal', start_page: 'chat', lan_ip: '', http_risk_ack: false, tts_backend: 'cosyvoice3'},
 };
 function fake(snapshot = stopped) {
   const api = new LauncherApi('a'.repeat(32));
@@ -106,7 +106,7 @@ describe('React 启动面板', () => {
     expect(await screen.findByText('Hy-Memory', {exact: false, selector: '.launcher-config-summary'})).toBeTruthy();
     fireEvent.click(screen.getByRole('button', {name: /启动设置/}));
     fireEvent.click(await screen.findByText('记忆', {exact: true}));
-    expect(screen.getByLabelText('记忆系统')).toBeTruthy();
+    expect(screen.queryByLabelText('记忆系统')).toBeNull();
     expect(screen.queryByLabelText('记忆提取')).toBeNull();
     expect(screen.queryByLabelText('记忆召回')).toBeNull();
   });
@@ -117,7 +117,7 @@ describe('React 启动面板', () => {
     fireEvent.click(await screen.findByRole('button', {name: /启动设置/}));
     fireEvent.change(await screen.findByLabelText('电脑局域网 IP'), {target: {value: '192.168.1.22'}});
     fireEvent.click(screen.getByText('记忆', {exact: true}));
-    expect(screen.getByLabelText('记忆召回')).toBeTruthy();
+    expect(screen.queryByLabelText('记忆召回')).toBeNull();
     expect(screen.queryByLabelText('电脑局域网 IP')).toBeNull();
     fireEvent.click(screen.getByText('语音', {exact: true}));
     expect(screen.getByLabelText('聆听环境')).toBeTruthy();

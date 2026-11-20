@@ -18,7 +18,7 @@ from uuid import uuid4
 from preferences import (
     DEFAULT_SESSION_ALLOW_MEMORY_DELETE, _CHOICES, _PATH_FIELDS,
     load_preferences, save_preferences, load_model_profile, save_model_profile,
-    load_memory_backend, save_memory_backend, load_tts_backend, save_tts_backend,
+    load_tts_backend, save_tts_backend,
 )
 from runtime import AddressBindingError, Manager, Options, console_url
 from view_model import (
@@ -48,7 +48,7 @@ class LauncherController:
         self.readiness_seconds = readiness_seconds
         self.paths = {name: self.root / 'local/config/preferences' / filename for name, filename in (
             ('launcher', 'launcher.json'), ('model', 'model-profile.json'),
-            ('memory', 'memory-backend.json'), ('tts', 'tts-backend.json'))}
+            ('tts', 'tts-backend.json'))}
         self._lock = threading.RLock()
         self._queue = queue.Queue()
         self._closed = threading.Event()
@@ -81,7 +81,7 @@ class LauncherController:
                 values[key] = str(default)
         values.update(model_profile=load_model_profile(self.paths['model']),
                       voice_model_profile=load_model_profile(self.paths['model'], 'voice'),
-                      memory_backend=load_memory_backend(self.paths['memory']),
+                      memory_backend='hy_memory',
                       allow_memory_delete=self.allow_memory_delete)
         values['tts_backend'] = load_tts_backend(self.paths['tts'], values['tts_backend'])
         return values
@@ -157,7 +157,7 @@ class LauncherController:
                 raise ControllerError('设置含有不支持的字段。')
             choices = {**_CHOICES, 'model_profile': {'campus', 'official'},
                        'voice_model_profile': {'campus', 'official'},
-                       'memory_backend': {'longmemory', 'hy_memory', 'xiaozhi_local', 'none'}}
+                       'memory_backend': {'hy_memory'}}
             for key, value in values.items():
                 if key in _PATH_FIELDS:
                     if value != current[key]:
@@ -204,8 +204,6 @@ class LauncherController:
                 written['model'] = self.paths['model'].read_bytes()
                 save_model_profile(self.paths['model'], current['voice_model_profile'], 'voice')
                 written['model'] = self.paths['model'].read_bytes()
-                save_memory_backend(self.paths['memory'], current['memory_backend'])
-                written['memory'] = self.paths['memory'].read_bytes()
                 save_tts_backend(self.paths['tts'], current['tts_backend'])
                 written['tts'] = self.paths['tts'].read_bytes()
             except OSError:

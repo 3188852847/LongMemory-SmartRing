@@ -46,7 +46,3 @@ class XiaozhiMemoryBackends:
             "status": "configured" if inspected["config_matches"] else "restart_pending",
             **inspected,
         }
-
-    async def select(self, backend: str) -> dict:
-        self.store.select(backend)
-        return await self.describe()

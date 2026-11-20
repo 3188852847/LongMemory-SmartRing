@@ -390,7 +390,7 @@ def test_settings_write_failure_rolls_back_only_owned_bytes(panel, monkeypatch):
         # 模拟另一个页面在失败前已保存新 model 指针；回退不覆盖它。
         save_model_profile(panel.paths['model'], 'official')
         raise OSError('synthetic failure')
-    monkeypatch.setattr(controller, 'save_memory_backend', failed_write)
+    monkeypatch.setattr(controller, 'save_tts_backend', failed_write)
     with pytest.raises(controller.ControllerError, match='完整保存'):
         panel.update_settings({'voice': True}, panel.revision())
     assert panel.paths['launcher'].read_bytes() == before

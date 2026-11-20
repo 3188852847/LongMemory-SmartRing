@@ -17,7 +17,7 @@ export interface HyWorkspace {protocol:1;profile:boolean;history:boolean;operati
 export interface HyHistory {items:Array<{event:string|null;old_memory:string|null;new_memory:string|null;created_at:string|number|null}>;limited:boolean;recording_complete:false}
 export interface HyOperation {request_id:string;action:'correct'|'delete';item_id:string;source_event_id:string;revision:string;state:'running'|'completed'|'uncertain';occurred_at:string;error_code:string|null}
 export interface HyMutationResult {request_id:string;state:'completed';replayed:boolean;platform_sources_preserved:true}
-export interface MemoryBackendOption {id:'longmemory'|'xiaozhi_local'|'none';label:string;provider:string;description:string;persistent:boolean}
+export interface MemoryBackendOption {id:'hy_memory'|'longmemory'|'xiaozhi_local'|'none';label:string;provider:string;description:string;persistent:boolean}
 export interface MemoryBackends {enabled:boolean;current_backend?:MemoryBackendOption['id'];next_start_backend?:MemoryBackendOption['id'];restart_required?:boolean;backends?:MemoryBackendOption[];xiaozhi?:{enabled:boolean;selected_backend:string;status:'configured'|'restart_pending'|'configuration_unavailable';configured_provider?:string;provider_name?:string}}
 export interface L2SufficiencyShadowRuntime {enabled:boolean;state:string;submitted?:number;completed?:number;failed?:number;running_or_queued?:number;last_error_code?:string|null}
 export type L2SufficiencyShadowVerdict='correct'|'incorrect'|'uncertain';

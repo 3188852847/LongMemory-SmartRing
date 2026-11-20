@@ -52,8 +52,7 @@ export function SettingsApp() {
         <ModelConnectionSettings api={api} config={config.data} disabled={!enabled}
           onHealth={health => queryClient.setQueryData<Config>(['chat-config'], current => current ? {...current, model_health:health} : current)}/>
       </Card>},
-      {key:'memory-backend', label:'记忆后端', children:<Card title="圆屏记忆后端" extra={<span className="setting-scope">下次统一启动</span>}>
-        <p>在保持圆屏、模型、角色和声音不变的情况下切换长期记忆实现，用于日常体验和受控对照。</p>
+      {key:'memory-backend', label:'记忆后端', children:<Card title="长期记忆" extra={<span className="setting-scope">网页与圆屏</span>}>
         <MemoryBackendSettings api={api} disabled={!enabled}/>
       </Card>},
       {key:'role', label:'助手表达', children:<Card title="性格与回答方式" extra={<span className="setting-scope">网页＋可选圆屏同步</span>}>

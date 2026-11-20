@@ -21,9 +21,6 @@ const cosyFailures = {
 const fields: Array<{key: keyof LauncherSettings; label: string; options: Array<{value: string; label: string}>}> = [
   {key: 'model_profile', label: '文字模型', options: models},
   {key: 'voice_model_profile', label: '圆屏模型', options: models},
-  {key: 'memory_extraction', label: '记忆提取', options: [{value: 'llm', label: '模型辅助提取'}, {value: 'rules', label: '规则提取'}]},
-  {key: 'memory_retrieval', label: '记忆召回', options: [{value: 'hybrid', label: '关键词 + BGE 混合召回'}, {value: 'keyword', label: '关键词召回'}]},
-  {key: 'memory_backend', label: '记忆系统', options: [{value: 'hy_memory', label: 'Hy-Memory（新库，主动交流暂停）'}, {value: 'longmemory', label: '原智慧圆屏长期记忆'}, {value: 'xiaozhi_local', label: '小智本地记忆'}, {value: 'none', label: '不启用记忆'}]},
   {key: 'voice_mode', label: '语音链路', options: [{value: 'pipeline', label: '本地语音链路'}, {value: 'doubao_realtime', label: '豆包实时语音（备用）'}]},
   {key: 'voice_latency_mode', label: '语音响应', options: [{value: 'realtime', label: '实时优先'}, {value: 'original', label: '原策略（对照）'}]},
   {key: 'cosy_delivery_mode', label: '声音交付方式', options: [{value: 'buffered', label: '缓冲播放（默认）'}, {value: 'incremental', label: '分段播放（候选）'}, {value: 'adaptive', label: '自适应缓冲（候选）'}]},
@@ -32,7 +29,7 @@ const fields: Array<{key: keyof LauncherSettings; label: string; options: Array<
 ];
 const settingsGroups = [
   {value: 'daily', label: '常用', keys: ['model_profile', 'voice_model_profile']},
-  {value: 'memory', label: '记忆', keys: ['memory_extraction', 'memory_retrieval', 'memory_backend']},
+  {value: 'memory', label: '记忆', keys: []},
   {value: 'voice', label: '语音', keys: ['voice_mode', 'voice_latency_mode', 'cosy_delivery_mode', 'vad_profile']},
   {value: 'display', label: '显示', keys: ['start_page']},
 ];
@@ -176,7 +173,7 @@ export function LauncherApp({api, pollMs = 1200}: {api: LauncherApi; pollMs?: nu
             </button>
           </div>
         </fieldset>
-        {snapshot && <p className="launcher-config-summary">{snapshot.settings.memory_backend === 'hy_memory' ? 'Hy-Memory' : snapshot.settings.memory_retrieval === 'hybrid' ? '混合记忆召回' : '关键词记忆召回'}<span> / </span>{snapshot.settings.model_profile === 'official' ? '官方模型' : '学校模型'}{snapshot.settings.voice && <> / {snapshot.settings.tts_backend === 'cosyvoice3' ? 'CosyVoice 3' : '已保存的声音引擎'}</>}</p>}
+        {snapshot && <p className="launcher-config-summary">Hy-Memory<span> / </span>{snapshot.settings.model_profile === 'official' ? '官方模型' : '学校模型'}{snapshot.settings.voice && <> / {snapshot.settings.tts_backend === 'cosyvoice3' ? 'CosyVoice 3' : '已保存的声音引擎'}</>}</p>}
       </section>
       <section className={`launcher-control state-${snapshot?.state ?? 'unknown'}`} aria-label="服务控制">
         <StateCore state={coreState}/>
@@ -223,9 +220,9 @@ export function LauncherApp({api, pollMs = 1200}: {api: LauncherApi; pollMs?: nu
             <p role="status">{resetDone ? '已切换到空记忆库，下次开启陪伴时使用。' : '停止陪伴服务后，可一次清空 Hy 的记忆、画像和记忆来源。'}</p>
           </>}
           {settingsGroup === 'daily' && <div className="launcher-switch-row"><label htmlFor="launcher-voice">连接圆屏语音</label><Switch id="launcher-voice" checked={draft.voice} disabled={settingsLocked} onChange={voice => setDraft({...draft, voice})}/></div>}
-          {fields.filter(field => !(draft.memory_backend === 'hy_memory' && ['memory_extraction', 'memory_retrieval'].includes(field.key)) && settingsGroups.find(group => group.value === settingsGroup)?.keys.includes(field.key)).map(field => <div className="launcher-field" key={field.key}><label htmlFor={`launcher-${field.key}`}>{field.label}</label><Select id={`launcher-${field.key}`} options={field.options} value={String(draft[field.key] ?? (field.key === 'cosy_delivery_mode' ? 'buffered' : ''))} disabled={settingsLocked || (field.key === 'cosy_delivery_mode' && (draft.voice_mode !== 'pipeline' || draft.tts_backend !== 'cosyvoice3'))} onChange={value => setDraft({...draft, [field.key]: value})}/></div>)}
+          {fields.filter(field => settingsGroups.find(group => group.value === settingsGroup)?.keys.includes(field.key)).map(field => <div className="launcher-field" key={field.key}><label htmlFor={`launcher-${field.key}`}>{field.label}</label><Select id={`launcher-${field.key}`} options={field.options} value={String(draft[field.key] ?? (field.key === 'cosy_delivery_mode' ? 'buffered' : ''))} disabled={settingsLocked || (field.key === 'cosy_delivery_mode' && (draft.voice_mode !== 'pipeline' || draft.tts_backend !== 'cosyvoice3'))} onChange={value => setDraft({...draft, [field.key]: value})}/></div>)}
           {settingsGroup === 'voice' && <p>声音交付方式仅用于本地链路的 CosyVoice 3，不改变声线。缓冲播放为默认，另两种方式仍在验证。保存后需停止服务并重新启动，不会在说话中途切换。</p>}
-          {settingsGroup === 'memory' && draft.memory_backend === 'hy_memory' && <Alert type="info" showIcon title="Hy-Memory 会自动整理对话中值得记住的信息，并在聊天时查找相关记忆。切换记忆系统后，重新启动陪伴服务生效。"/>}
+          {settingsGroup === 'memory' && <Alert type="info" showIcon title="Hy-Memory 会自动整理对话中值得记住的信息，并在聊天时查找相关记忆。"/>}
           {settingsGroup === 'daily' && <div className="launcher-field"><label htmlFor="launcher-ip">电脑局域网 IP</label><Input id="launcher-ip" value={draft.lan_ip} placeholder="填写圆屏可访问的电脑 IPv4 地址" maxLength={64} disabled={settingsLocked} onChange={event => setDraft({...draft, lan_ip: event.target.value})}/></div>}
           {settingsGroup === 'daily' && <><div className="launcher-switch-row"><label htmlFor="launcher-network-auto">自动跟踪电脑 IP</label><Switch id="launcher-network-auto" checked={draft.network_auto ?? false} disabled={settingsLocked} onChange={network_auto => setDraft({...draft, network_auto})}/></div><p>只跟踪已确认的物理网卡。多网卡有歧义时会等待；运行中的聊天和设备连接未结束时不会自动重开。圆屏保存的旧连接地址仍需在设备配网页更新。</p>
             <div className="launcher-field"><label htmlFor="launcher-ws-port">圆屏语音端口</label><Input id="launcher-ws-port" type="number" min={1024} max={65535} value={draft.voice_ws_port ?? 8000} disabled={settingsLocked} onChange={event => setDraft({...draft, voice_ws_port: Number(event.target.value)})}/></div>

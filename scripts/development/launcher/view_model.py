@@ -7,7 +7,7 @@ def daily_recommendation():
         "model_profile": "campus",
         "voice_model_profile": "campus",
         "voice_mode": "pipeline",
-        "memory_backend": "longmemory",
+        "memory_backend": "hy_memory",
         "memory_extraction": "llm",
         "memory_retrieval": "hybrid",
         "tts_backend": "cosyvoice3",
