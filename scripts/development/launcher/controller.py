@@ -348,20 +348,20 @@ class LauncherController:
             self._save_network(choice, revision)
             self.running_revision = self.revision()
             self.started, self.opened = self.clock(), False
-            self.state = 'starting' if was_running else 'stopped'
-            self._phase_event(code='network_updated')
-            self.presentation = (starting_services(**{key: values[key] for key in (
-                'voice', 'voice_mode', 'tts_backend', 'model_profile', 'voice_model_profile', 'memory_backend')})
-                if was_running else stopped_services())
-            self._network_status('network_updated', '电脑配置已更新；圆屏旧 OTA 地址不会自动改写，请按配网步骤核对。', choice)
+            with self._lock:
+                if not self._stop_pending():
+                    self.state = 'starting' if was_running else 'stopped'
+                    self._phase_event(code='network_updated')
+                    self.presentation = (starting_services(**{key: values[key] for key in (
+                        'voice', 'voice_mode', 'tts_backend', 'model_profile', 'voice_model_profile', 'memory_backend')})
+                        if was_running else stopped_services())
+                self._network_status('network_updated', '电脑配置已更新；圆屏旧 OTA 地址不会自动改写，请按配网步骤核对。', choice)
         except Exception as error:
             if was_running:
                 self.manager.release_network_restart()
             if not stop_confirmed:
                 # Job停止不确定时不立即再停一次，也不修改配置或启动新实例。
-                self.state = 'failed'
-                self.presentation = {**failed_services([]), 'message': '网络更新已暂停：原服务停止未确认，请核对原服务。'}
-                self._phase_event(code='stop_unconfirmed')
+                self._publish_failure('网络更新已暂停：原服务停止未确认，请核对原服务。', 'stop_unconfirmed')
             else:
                 if isinstance(error, (AddressBindingError, NetworkSelectionError)):
                     self._fail(str(error), error.code)
@@ -370,82 +370,110 @@ class LauncherController:
 
     def action(self, action, *, request_id=None):
         with self._lock:
-            if action not in {'start', 'stop', 'open_console', 'shutdown'}:
-                raise ControllerError('不支持此操作。')
-            if self.shutdown_requested.is_set():
-                raise ControllerError('启动面板已退出，请从日常入口重新打开。', 409)
-            if self.state == 'stopping' or (self.state == 'starting' and action not in {'stop', 'shutdown'}):
-                raise ControllerError('当前操作尚未完成，请稍后重试。', 409)
-            if action == 'open_console':
-                if self.state != 'ready':
-                    raise ControllerError('请先启动并等待控制台就绪。', 409)
-                self.opener(self.snapshot()['console_url'])
-                self.opened = True
-                return self.snapshot()
-            if action == 'start':
-                if self.manager.services:
-                    raise ControllerError('已有受管服务，请先停止。', 409)
-                self.state = 'starting'
-                settings = self.settings()
-                self.presentation = starting_services(**{key: settings[key] for key in (
-                    'voice', 'voice_mode', 'tts_backend', 'model_profile', 'voice_model_profile', 'memory_backend')})
-                self.network_attempted = None
-            else:
-                self.state = 'stopping'
-                self.presentation = {**stopped_services(), 'message': '正在停止本面板拥有的服务，请稍候。'}
-            operation_id = request_id or secrets.token_hex(12)
-            self.operation_request_id = operation_id
-            self.operation_started = self.clock()
-            self.events.record(operation_id, event='phase_changed', action=action, phase=self.state)
-            self._queue.put((action, operation_id, self.operation_started))
+            self._request_action(action, request_id)
             return self.snapshot()
+
+    def _request_action(self, action, request_id=None):
+        """持有控制器锁时接收操作；排队操作返回可供 CLI 等待的请求 ID。"""
+        if action not in {'start', 'stop', 'open_console', 'shutdown'}:
+            raise ControllerError('不支持此操作。')
+        if self.shutdown_requested.is_set():
+            raise ControllerError('启动面板已退出，请从日常入口重新打开。', 409)
+        if self.state == 'stopping' or (self.state == 'starting' and action not in {'stop', 'shutdown'}):
+            raise ControllerError('当前操作尚未完成，请稍后重试。', 409)
+        if action == 'open_console':
+            if self.state != 'ready':
+                raise ControllerError('请先启动并等待控制台就绪。', 409)
+            self.opener(self.snapshot()['console_url'])
+            self.opened = True
+            return
+        if action == 'start':
+            if self.manager.services:
+                raise ControllerError('已有受管服务，请先停止。', 409)
+            settings = self.settings()
+            self.state = 'starting'
+            self.presentation = starting_services(**{key: settings[key] for key in (
+                'voice', 'voice_mode', 'tts_backend', 'model_profile', 'voice_model_profile', 'memory_backend')})
+            self.network_attempted = None
+        else:
+            self.state = 'stopping'
+            self.presentation = {**stopped_services(), 'message': '正在停止本面板拥有的服务，请稍候。'}
+        operation_id = request_id or secrets.token_hex(12)
+        self.operation_request_id = operation_id
+        self.operation_started = self.clock()
+        self.events.record(operation_id, event='phase_changed', action=action, phase=self.state)
+        self._queue.put((action, operation_id, self.operation_started))
+        return operation_id
 
     def _phase_event(self, *, code=None):
         self.events.record(self.operation_request_id, event='phase_changed', phase=self.state,
                            code=code, duration_ms=max(0, round((self.clock() - self.operation_started) * 1000)))
 
+    def _stop_pending(self):
+        """在控制器锁内判断停止或退出是否已接管状态，并等待工作线程执行。"""
+        return self.state == 'stopping' and not self._queue.empty()
+
     def _fail(self, message, code='operation_failed'):
+        with self._lock:
+            if self._stop_pending():
+                return  # 已接受的请求会执行停止并发布自己的结果。
         try:
             self.manager.stop()
         except Exception:
             message += ' 停止未完全确认，请勿重复启动；请核对原服务。'
             code = 'stop_unconfirmed'
+        self._publish_failure(message, code)
+
+    def _publish_failure(self, message, code):
         with self._lock:
+            if self._stop_pending():
+                return  # 清理过程中也可能收到新的停止或退出。
             self.state = 'failed'
             self.presentation = {**failed_services([]), 'message': message}
             self._phase_event(code=code)
 
     def perform_pending(self):
-        """工作线程执行一次操作；测试使用合成 Manager 调用，不接触日用服务。"""
+        """工作线程处理一项请求，返回该请求的 ID 和执行结果。"""
         try:
             action, operation_id, operation_started = self._queue.get_nowait()
         except queue.Empty:
             return
         with self._lock:
+            if action == 'start' and self.state == 'stopping':
+                # 停止或退出已排队，前一个尚未执行的启动无需拉起进程。
+                return operation_id, False
             self.operation_request_id = operation_id
             self.operation_started = operation_started
-        try:
-            if action == 'start':
-                self.network_stopped_owned = False
-                self._start_with_network()
-                self.started = self.clock()
-                self.opened = False
-            else:
-                had_services = bool(self.manager.services)
+        if action in {'stop', 'shutdown'}:
+            had_services = bool(self.manager.services)
+            try:
                 self.manager.stop()
-                self.network_stopped_owned = had_services
-                with self._lock:
-                    self.state, self.presentation, self.opened = 'stopped', stopped_services(), False
-                    self.operation_request_id = operation_id
-                    self._phase_event()
+                if self.manager.services:
+                    raise RuntimeError('stop_unconfirmed')
+            except Exception:
+                self._publish_failure('停止未完全确认，请核对原服务后重试停止。', 'stop_unconfirmed')
+                return operation_id, False
+            self.network_stopped_owned = had_services
+            with self._lock:
+                self.state, self.presentation, self.opened = 'stopped', stopped_services(), False
+                self._phase_event()
                 if action == 'shutdown':
                     self.shutdown_requested.set()
+            return operation_id, True
+        try:
+            self.network_stopped_owned = False
+            self._start_with_network()
+            self.started = self.clock()
+            self.opened = False
         except (AddressBindingError, NetworkSelectionError) as error:
             self._fail(str(error), error.code)
         except ValueError:
             self._fail('受管服务配置检查未通过，请核对启动设置与恢复指南。', 'configuration_rejected')
         except Exception:
             self._fail('无法完成受管服务操作。未关闭外部程序；请查看启动指南。')
+        else:
+            return operation_id, True
+        return operation_id, False
 
     def tick(self):
         if self.state not in {'starting', 'ready'} or not self.manager.services:
@@ -486,20 +514,28 @@ class LauncherController:
                     'ready': snapshot['state'] == 'ready',
                     'selection': {key: value for key, value in snapshot['settings'].items()
                                   if key not in _PATH_FIELDS and key != 'lan_ip' and key != 'http_risk_ack'}}
-        if action == 'start' and self.manager.services:
-            return {'ok': True, 'state': 'already_running'}
-        if action == 'stop' and not self.manager.services and self.state != 'starting':
-            return {'ok': True, 'state': 'already_stopped'}
-        try:
-            result = self.action(action)
-            # 原 socket 客户端的 stop 返回已停止事实；长操作超时仍沿用
-            # LauncherControl 的“已运行结果未知”语义，不假称失败后再执行。
-            self.perform_pending()
-            failed = self.state == 'failed'
-            return {'ok': not failed, 'state': action + '_failed' if failed else
-                    ('stopped' if action == 'stop' else 'starting')}
-        except ControllerError:
-            return {'ok': False, 'state': action + '_failed'}
+        with self._lock:
+            if action == 'start' and self.manager.services and self.state in {'starting', 'ready'}:
+                return {'ok': True, 'state': 'already_running'}
+            if action == 'stop' and self.state == 'stopping':
+                # 复用已接受的停止或退出，CLI 与网页观察同一次停止结果。
+                request_id = self.operation_request_id
+            elif action == 'stop' and not self.manager.services and self.state in {'stopped', 'failed'}:
+                return {'ok': True, 'state': 'already_stopped'}
+            else:
+                try:
+                    request_id = self._request_action(action)
+                except ControllerError:
+                    return {'ok': False, 'state': action + '_failed'}
+        # 这里只在 Manager 工作线程上运行；按 ID 取到本次回执即止，
+        # 避免把队首旧请求的执行结果报给 socket 客户端。
+        while completed := self.perform_pending():
+            operation_id, ok = completed
+            if operation_id == request_id:
+                if ok:
+                    return {'ok': True, 'state': 'stopped' if action == 'stop' else 'starting'}
+                break
+        return {'ok': False, 'state': action + '_failed'}
 
     def run(self):
         while not self._closed.wait(.25):

@@ -214,6 +214,48 @@ def test_health_capabilities_and_synthesis_contract(local_service):
     assert synth.calls[-1] == ("分块测试", "stream", False)
 
 
+def test_readiness_with_full_request_history(local_service, monkeypatch):
+    from longmemory.entrypoints.api.voice_settings import VoiceSettings
+    monkeypatch.syspath_prepend(str(ROOT / "scripts/development/launcher"))
+    import runtime
+    from voice import wait_for_local_tts
+
+    port, synth = local_service
+    for _ in range(100):
+        assert request(port, "POST", "/v1/audio/speech", {"input": "合成测试"})[0] == 200
+    _, _, full = request(port, "GET", "/health")
+    assert len(full) > 16384 and len(json.loads(full)["speech_requests"]) == 100
+
+    # 日用探测只取就绪状态；完整端点仍保留逐请求诊断。
+    snapshots = []
+    def diagnostic_snapshot():
+        snapshots.append(True)
+        return {}
+
+    synth.runtime_diagnostics = SimpleNamespace(snapshot=diagnostic_snapshot)
+    _, _, compact = request(port, "GET", "/health", headers={"Prefer": "return=minimal"})
+    assert len(compact) < 4096 and "speech_requests" not in json.loads(compact)
+
+    # 所有生产读者只允许接到本测试随机端口，覆盖原来两种读取上限。
+    connect = http.client.HTTPConnection
+    def isolated_connection(host, requested_port, timeout):
+        assert (host, requested_port) == ("127.0.0.1", 18770)
+        return connect(host, port, timeout=timeout)
+    monkeypatch.setattr(http.client, "HTTPConnection", isolated_connection)
+    manager = runtime.Manager()
+    manager.options = SimpleNamespace(voice_mode="pipeline", tts_backend="cosyvoice3")
+    manager.services = {"cosyvoice3": SimpleNamespace(process=SimpleNamespace(poll=lambda: None))}
+    assert manager.local_tts_ready()
+    assert wait_for_local_tts("cosyvoice3", timeout=1)
+    assert VoiceSettings.local_ready("cosyvoice3")
+    assert VoiceSettings.cosy_profile_service_state() == "ready"
+
+    synth.requires_restart = True
+    assert not manager.local_tts_ready()
+    assert VoiceSettings.cosy_profile_service_state() == "unavailable"
+    assert snapshots == []
+
+
 @pytest.mark.parametrize("adapted,forced,restart,usable", [
     (False, False, False, False), (True, False, False, True),
     (True, True, False, False), (True, False, True, False),
@@ -459,6 +501,7 @@ def constructor_health(synth):
     """复用真实 health 处理器，只替换 HTTP 输出，避免重复启动监听线程。"""
     handler = object.__new__(service.CosyVoiceHandler)
     handler.path = "/health"
+    handler.headers = {}
     handler.server = SimpleNamespace(synthesizer=synth, generation_gate=threading.Lock())
     responses = []
     handler._json = lambda status, body: responses.append((status, body))

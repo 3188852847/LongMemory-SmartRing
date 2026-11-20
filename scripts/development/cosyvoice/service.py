@@ -549,9 +549,13 @@ class CosyVoiceHandler(BaseHTTPRequestHandler):
             return
         requires_restart = bool(getattr(self.server.synthesizer, 'requires_restart', False))
         body = {"ready": not requires_restart, "requires_restart": requires_restart,
-                "restart_reason": getattr(self.server.synthesizer, 'restart_reason', None),
-                "provider": "cosyvoice3", "capabilities": backend_capabilities(self.server.synthesizer),
-                "voice_profile_contract_version": 1}
+                "provider": "cosyvoice3", "voice_profile_contract_version": 1}
+        # 轮询和试听仅依赖这几个字段，跳过读档案、运行时统计和最近请求复制。
+        if self.headers.get("Prefer") == "return=minimal":
+            self._json(200, body)
+            return
+        body["restart_reason"] = getattr(self.server.synthesizer, "restart_reason", None)
+        body["capabilities"] = backend_capabilities(self.server.synthesizer)
         body['generation_in_flight'] = self.server.generation_gate.locked()
         store = getattr(self.server.synthesizer, '_profiles', None)
         if store is not None:

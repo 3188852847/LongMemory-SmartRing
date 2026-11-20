@@ -12,6 +12,7 @@ import binascii
 from aiohttp import web
 
 from longmemory.adapters.tts import capabilities_for
+from longmemory.adapters.tts.health import ready_health
 from longmemory.application.voice_benchmark import CASES, case_by_id, measure_buffered_speech
 from longmemory.infrastructure.config.tts_benchmark_history import TTSBenchmarkHistory
 from longmemory.infrastructure.config.cosyvoice_profiles import profile_module
@@ -121,16 +122,7 @@ class VoiceSettings:
     @staticmethod
     def local_ready(backend):
         """只读取固定环回健康端点；失败表示未就绪，不把底层异常返回页面。"""
-        connection = http.client.HTTPConnection('127.0.0.1', LOCAL_TTS[backend], timeout=0.5)
-        try:
-            connection.request('GET', '/health')
-            response = connection.getresponse()
-            body = json.loads(response.read(4096))
-            return response.status == 200 and body.get('ready') is True and body.get('provider') == backend
-        except (OSError, http.client.HTTPException, json.JSONDecodeError):
-            return False
-        finally:
-            connection.close()
+        return bool(ready_health(backend, LOCAL_TTS[backend], timeout=0.5))
 
     @staticmethod
     def voxcpm_ready():
@@ -139,18 +131,10 @@ class VoiceSettings:
 
     @staticmethod
     def cosy_profile_service_state():
-        connection = http.client.HTTPConnection('127.0.0.1', LOCAL_TTS['cosyvoice3'], timeout=0.5)
-        try:
-            connection.request('GET', '/health')
-            response = connection.getresponse()
-            value = json.loads(response.read(16384))
-            if response.status != 200 or not isinstance(value, dict) or value.get('provider') != 'cosyvoice3' or value.get('ready') is not True:
-                return 'unavailable'
-            return 'ready' if value.get('voice_profile_contract_version') == 1 else 'needs_restart'
-        except (OSError, ValueError, http.client.HTTPException):
+        value = ready_health('cosyvoice3', LOCAL_TTS['cosyvoice3'], timeout=0.5)
+        if not value:
             return 'unavailable'
-        finally:
-            connection.close()
+        return 'ready' if value.get('voice_profile_contract_version') == 1 else 'needs_restart'
 
     async def call(self, body):
         if self.lock.locked():

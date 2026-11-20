@@ -733,16 +733,8 @@ class Manager:
                 "cosyvoice3": COSYVOICE_PORT}.get(backend)
         if port is None or backend not in self.services or self.services[backend].process.poll() is not None:
             return False
-        conn = http.client.HTTPConnection("127.0.0.1", port, timeout=0.25)
-        try:
-            conn.request("GET", "/health")
-            response = conn.getresponse()
-            body = json.loads(response.read(4096))
-            return response.status == 200 and body.get("ready") is True and body.get("provider") == backend
-        except (OSError, http.client.HTTPException, json.JSONDecodeError):
-            return False
-        finally:
-            conn.close()
+        from longmemory.adapters.tts.health import ready_health
+        return bool(ready_health(backend, port, timeout=0.25))
 
     def current_cosy_delivery(self):
         """只读最近一次既有控制面采样，不在网页轮询线程另发HTTP。"""

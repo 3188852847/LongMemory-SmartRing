@@ -11,12 +11,17 @@ from longmemory.entrypoints.api.voice_settings import VoiceSettings
     ([], 'unavailable'),
 ])
 def test_profile_feature_version_requires_actual_running_service(monkeypatch, body, expected):
+    # 老服务忽略 Prefer，使用已有长诊断响应和真实读取上限验证兼容性。
+    if isinstance(body, dict):
+        body = {**body, 'speech_requests': [{'stages': ['synthetic'] * 20}] * 100}
+    raw = json.dumps(body).encode()
     class Response:
         status = 200
-        def read(self, maximum): return json.dumps(body).encode()
+        def read(self, maximum): return raw[:maximum]
     class Connection:
         def __init__(self, host, port, timeout): assert (host, port) == ('127.0.0.1', 18770)
-        def request(self, method, path): assert (method, path) == ('GET', '/health')
+        def request(self, method, path, headers):
+            assert (method, path, headers) == ('GET', '/health', {'Prefer': 'return=minimal'})
         def getresponse(self): return Response()
         def close(self): pass
     monkeypatch.setattr('longmemory.entrypoints.api.voice_settings.http.client.HTTPConnection', Connection)
