@@ -365,16 +365,17 @@ def test_neutral_http_management_chat_and_legacy_rejection(tmp_path, writes_allo
                 source = await (await client.get(base + "/api/memory-engine/sources/" + item["source_event_ids"][0])).json()
                 assert source["role"] == "user" and source["state"] == "completed"
                 url = base + "/api/memory-engine/items/" + item["item_id"]
+                content = "猫叫年糕" * 250
                 response = await client.post(url + "/corrections", headers=headers,
-                    json={"content": "猫叫年糕", "revision": item["revision"]})
+                    json={"content": content, "revision": item["revision"]})
                 assert response.status == (200 if writes_allowed else 403)
                 if writes_allowed:
                     corrected = await response.json()
-                    assert corrected["content"] == "猫叫年糕"
+                    assert corrected["content"] == content
                     assert (await client.delete(url, json={"revision": corrected["revision"]})).status == 403
                     assert (await client.delete(url, json={"revision": item["revision"]}, headers=headers)).status == 409
                     assert (await client.delete(url, json={"revision": corrected["revision"]}, headers=headers)).status == 200
-                    assert runtime.source_detail(corrected["source_event_ids"][0])["content"] == "猫叫年糕"
+                    assert runtime.source_detail(corrected["source_event_ids"][0])["content"] == content
                 else:
                     assert (await client.delete(url, json={"revision": item["revision"]}, headers=headers)).status == 403
                 assert (await client.get(base + "/api/memory-engine/items?limit=999")).status == 400

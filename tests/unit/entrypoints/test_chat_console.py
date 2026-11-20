@@ -203,15 +203,22 @@ def test_busy_request_is_not_reexecuted_and_history_stays_local(backend):
             chat_id = (await (await client.post(base + "/api/chats", headers=headers)).json())["chat_id"]
             url = base + f"/api/chats/{chat_id}/messages"
             body = {"text": "我喜欢猫", "request_id": str(uuid4())}
+            other_tab = {**body, "request_id": str(uuid4())}
             first = asyncio.create_task(client.post(url, json=body, headers=headers))
             try:
                 assert await asyncio.to_thread(entered.wait, 3)
                 assert (await client.post(url, json=body, headers=headers)).status == 409
+                busy = await client.post(url, json=other_tab, headers=headers)
+                assert busy.status == 409 and (await busy.json())["error"] == "chat_busy"
                 assert (await client.delete(base + f"/api/chats/{chat_id}", headers=headers)).status == 409
                 assert (await client.get(base + "/api/device")).status == 200
             finally:
                 release.set()
             assert (await first).status == 200
+            snapshot = await (await client.get(base + f"/api/chats/{chat_id}")).json()
+            assert [turn["request_id"] for turn in snapshot["turns"]] == [body["request_id"]]
+            replay = await client.post(url, json=body, headers=headers)
+            assert await replay.json() == snapshot["turns"][0]
             assert len(calls) == 1 and calls[0]["history"] == ()
             response = await client.post(url, json={"text": "继续", "request_id": str(uuid4())}, headers=headers)
             assert (await response.json())["status"] == "completed"

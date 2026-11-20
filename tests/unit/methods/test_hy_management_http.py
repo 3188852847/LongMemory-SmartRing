@@ -2,6 +2,7 @@
 
 import asyncio
 from datetime import datetime
+import json
 import socket
 from uuid import uuid4
 
@@ -38,7 +39,7 @@ async def serve(check, *, correction=True, deletion=True, runtime=None):
     assert port not in {8767, 8000, 8003}
     base = f"http://127.0.0.1:{port}"
     sessions = Sessions()
-    app = web.Application(middlewares=[security_middleware(f"127.0.0.1:{port}", sessions)])
+    app = web.Application(client_max_size=1024, middlewares=[security_middleware(f"127.0.0.1:{port}", sessions)])
     async def bootstrap(request):
         session, csrf = sessions.create()
         response = web.json_response({"csrf": csrf})
@@ -75,6 +76,37 @@ def test_session_origin_csrf_strict_body_and_real_user_source():
         delete = {"request_id": str(uuid4()), "revision": "a" * 64, "confirmation": "删除这条记忆"}
         assert (await client.post(prefix + "/items/synthetic-item/deletion", headers=headers, json=delete)).status == 200
         assert runtime.calls[-1][2]["source"].content == "删除这条记忆：synthetic-item"
+    asyncio.run(serve(check))
+
+
+def test_correction_accepts_1000_unicode_characters_and_rejects_oversize_before_writing():
+    async def check(client, base, runtime):
+        csrf = await (await client.get(base + "/api/session", headers={"X-Console-Bootstrap": "1"})).json()
+        headers = {"Origin": base, "X-Console-CSRF": csrf["csrf"], "Content-Type": "application/json"}
+        item_url = base + "/api/memory-engine/hy/items/synthetic-item"
+        body = {"revision": "a" * 64, "content": "记忆📖。" * 250}
+        for escaped in (False, True):
+            body["request_id"] = str(uuid4())
+            encoded = json.dumps(body, ensure_ascii=escaped).encode("utf-8")
+            response = await client.post(item_url + "/corrections", headers=headers, data=encoded)
+            assert response.status == 200
+            assert runtime.calls[-1][2]["source"].content == body["content"]
+
+        for invalid in ({"content": body["content"] + "。"}, {"role": "user"}, {"revision": "x" * 64},
+                        {"request_id": "invalid"}):
+            response = await client.post(item_url + "/corrections", headers=headers, json={**body, **invalid})
+            assert response.status == 400
+        # 字段均有效；过量 JSON 空白只触发传输上限，不应派发写入。
+        response = await client.post(item_url + "/corrections", headers=headers, data=encoded + b" " * 32768)
+        assert response.status == 413
+        assert await response.json() == {"error": "request_rejected"}
+        assert len(runtime.calls) == 2
+
+        deletion = {"request_id": str(uuid4()), "revision": "a" * 64, "confirmation": "删除这条记忆"}
+        response = await client.post(item_url + "/deletion", headers=headers,
+                                     data=json.dumps(deletion).encode("utf-8") + b" " * 1024)
+        assert response.status == 413
+        assert len(runtime.calls) == 2
     asyncio.run(serve(check))
 
 

@@ -120,6 +120,64 @@ test('不确定写入禁用重复提交，绝不显示成功',async()=>{
   expect(screen.queryByText(/引擎条目已删除/)).toBeNull();
 });
 
+test('纠正表单按 Unicode 字符校验上限，完整提交 1000 个扩展汉字', async () => {
+  const content = '𠮷'.repeat(1000);
+  const request = setup('/memories?item=synthetic-1', (path, _method, body) => {
+    if (path.endsWith('/corrections')) {
+      return {request_id:(body as {request_id:string}).request_id, state:'completed', platform_sources_preserved:true};
+    }
+  });
+  fireEvent.click(await screen.findByRole('button', {name:'纠正这条记忆'}));
+  const input = await screen.findByLabelText('正确的内容');
+  const modal = within(input.closest('[role=dialog]') as HTMLElement);
+  const save = modal.getByRole('button', {name:'保存纠正'});
+  fireEvent.click(modal.getByRole('checkbox'));
+  fireEvent.change(input, {target:{value:content + '字'}});
+  expect(input.getAttribute('aria-invalid')).toBe('true');
+  expect(save.hasAttribute('disabled')).toBe(true);
+  fireEvent.click(save);
+  expect(request.mock.calls.filter(([path]) => path.endsWith('/corrections'))).toHaveLength(0);
+
+  fireEvent.change(input, {target:{value:content}});
+  expect(save.hasAttribute('disabled')).toBe(false);
+  fireEvent.click(save);
+  await screen.findByText(/纠正已完成/);
+  const writes = request.mock.calls.filter(([path]) => path.endsWith('/corrections'));
+  expect(writes).toHaveLength(1);
+  expect(writes[0][2]).toMatchObject({content});
+});
+
+test('收到 HTTP 413 后保留草稿并显示操作未执行，用户缩短内容后可保存', async () => {
+  const contents:string[] = [];
+  setup('/memories?item=synthetic-1', (path, _method, body) => {
+    if (path.endsWith('/corrections')) {
+      const {content, request_id} = body as {content:string;request_id:string};
+      contents.push(content);
+      if (contents.length === 1) throw new ApiError('http_413', 413);
+      return {request_id, state:'completed', platform_sources_preserved:true};
+    }
+  });
+  fireEvent.click(await screen.findByRole('button', {name:'纠正这条记忆'}));
+  const input = await screen.findByLabelText('正确的内容') as HTMLTextAreaElement;
+  const modal = within(input.closest('[role=dialog]') as HTMLElement);
+  const save = modal.getByRole('button', {name:'保存纠正'});
+  const draft = '合成纠正内容'.repeat(160);
+  fireEvent.change(input, {target:{value:draft}});
+  fireEvent.click(modal.getByRole('checkbox'));
+  fireEvent.click(save);
+  await modal.findByText('操作未执行');
+  expect(modal.getByText(/纠正请求过大，请缩短内容后再保存/)).toBeTruthy();
+  expect(modal.queryByText(/结果未确认/)).toBeNull();
+  expect(input.value).toBe(draft);
+  expect(contents).toEqual([draft]);
+
+  const shorter = '用户确认的简短事实。';
+  fireEvent.change(input, {target:{value:shorter}});
+  fireEvent.click(save);
+  await screen.findByText(/纠正已完成/);
+  expect(contents).toEqual([draft, shorter]);
+});
+
 test('时间未知及无效格式如实呈现',()=>{expect(memoryTime(null)).toBe('时间未记录');expect(memoryTime('invalid')).toBe('时间格式未知');});
 
 test('确定性删除拒绝保留说明，不误报不确定或永久锁住条目',async()=>{

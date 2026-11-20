@@ -79,6 +79,9 @@ def register_memory_engine_routes(app, runtime, *, allow_delete=False, allow_cor
     async def body(request, fields):
         if request.content_type != "application/json":
             raise web.HTTPBadRequest()
+        if "content" in fields:
+            # 纠正正文和中立引擎的版本字段各允许 1000 字符；JSON 转义后每字符最多占 12 字节。
+            request = request.clone(client_max_size=32 * 1024)
         try:
             value = await request.json()
         except (ValueError, UnicodeError):

@@ -1,4 +1,4 @@
-import {useMemoryEngine, useMemorySummary, memoryEngineLabel, retrievalLabel} from '../app/MemoryEngineProvider';
+import {useMemoryEngine, useMemorySummary, legacyMemorySummaryKey, memoryEngineLabel, retrievalLabel} from '../app/MemoryEngineProvider';
 import {useEffect, useRef, useState} from 'react';
 import {Alert, Button, Input, Modal, Select} from 'antd';
 import {useQuery, useQueryClient} from '@tanstack/react-query';
@@ -51,6 +51,7 @@ export function ChatApp() {
   const [loadedActionTurns, setLoadedActionTurns] = useState<number[]>([]);
   // ref 在同一事件循环内立即锁定，避免 React 尚未重绘时的双击重复写入。
   const locked = useRef(false);
+  const submitted = useRef<{chatId: string; text: string; requestId: string} | null>(null);
   const selectionKey = useRef('');
   const pinnedKey = useRef('');
   const messages = useRef<HTMLElement>(null);
@@ -120,20 +121,28 @@ export function ChatApp() {
   }
   function changeChat(id?: string) {
     if (busy || unknown || (draft && !confirm('这会清空尚未发送的草稿，继续吗？'))) return;
-    void action(async () => {if (id) await load(id); else await create(); setDraft(''); setNotice('会话已切换；长期记忆保留。');});
+    void action(async () => {if (id) await load(id); else await create(); submitted.current = null; setDraft(''); setNotice('会话已切换；长期记忆保留。');});
+  }
+  function refreshMemoryCountAfter(turn: Turn) {
+    // NOOP 只增加来源。仅在服务确认实际记忆变更后重新读取有效条数。
+    if (turn.writes?.some(item => item.operation !== 'noop')) {
+      void queryClient.invalidateQueries({queryKey:legacyMemorySummaryKey});
+    }
   }
   async function send() {
     if (!chat || busy || unknown || !draft.trim() || chat.turns.length >= 40) return;
     await action(async () => {
       setNotice('正在处理，请勿重复发送…');
       try {
-        const turn = await api.request<Turn>(`/api/chats/${chat.chat_id}/messages`, 'POST', {text: draft, request_id: crypto.randomUUID()});
+        // 断线后手动重发相同草稿，沿用原请求号，让服务端识别已处理的消息。
+        if (submitted.current?.chatId !== chat.chat_id || submitted.current.text !== draft) {
+          submitted.current = {chatId: chat.chat_id, text: draft, requestId: crypto.randomUUID()};
+        }
+        const turn = await api.request<Turn>(`/api/chats/${chat.chat_id}/messages`, 'POST', {text: draft, request_id: submitted.current.requestId});
+        submitted.current = null;
         setChat({...chat, turns: [...chat.turns, turn]}); setDraft('');
         setChats(rows => rows.map(row => row.chat_id === chat.chat_id ? {...row, turn_count: chat.turns.length + 1} : row));
-        if (turn.writes?.some(item => item.operation !== 'noop')) {
-          // 只在服务明确报告实际变更后刷新数量；NOOP 只是增加来源，不增加有效 L1。
-          void queryClient.invalidateQueries({queryKey:['chat-active-memory-count']});
-        }
+        refreshMemoryCountAfter(turn);
         const modelProblem=modelFailure(turn.error);
         if(modelProblem)setConfig(current=>current?{...current,model_health:{state:'unavailable',code:String(turn.error),checked_at:new Date().toISOString()}}:current);
         setNotice(modelProblem
@@ -144,6 +153,25 @@ export function ChatApp() {
             ? '回答已完成，但本地 BGE 检索失败，本轮已明确降级为关键词检索。'
           : turn.status === 'completed' ? '本轮完成，可展开查看记忆证据。' : '本轮未完成；输入可能已保存，请查看过程。');
       } catch (error) {setUnknown(true); setNotice(chatFailure(error, 'write'));}
+    });
+  }
+  async function checkSendResult() {
+    if (!chat) return;
+    await action(async () => {
+      const result = await load(chat.chat_id);
+      const attempt = submitted.current;
+      const ownTurn = attempt?.chatId === result.chat_id
+        ? result.turns.find(turn => turn.request_id === attempt.requestId)
+        : undefined;
+      if (attempt && ownTurn) {
+        setDraft(current => current === attempt.text ? '' : current);
+        submitted.current = null;
+        refreshMemoryCountAfter(ownTurn);
+      }
+      if (result.pending) setNotice('后台仍在处理，没有重发。');
+      else if (ownTurn) setNotice('已找到本次发送的记录，可查看该轮处理结果。');
+      else if (attempt) setNotice('尚未查到本次发送的记录，已保留草稿。请核对会话再决定是否发送。');
+      else setNotice('已查询最新会话记录。');
     });
   }
   async function checkModel(){if(checkingModel||config?.provider!=='openai_compatible')return;setCheckingModel(true);
@@ -238,7 +266,7 @@ export function ChatApp() {
           options={[{value:'enter',label:'Enter 发送 · Shift+Enter 换行'},{value:'ctrl_enter',label:'Ctrl+Enter 发送 · Enter 换行'}]}
           onChange={value => {setSendShortcut(value); saveSendShortcut(value);}}/><Button aria-label="发送" type="primary" htmlType="submit" loading={busy && Boolean(chat)} disabled={disabled || !draft.trim() || (chat?.turns.length ?? 0) >= 40}>发送</Button></div>
         <p className="chat-status" role="status" aria-label="聊天操作状态">{(chat?.turns.length ?? 0) >= 40 ? '本会话已达 40 轮，请新建聊天；长期记忆保留。' : notice}{config?.model_health?.state === 'unavailable' && ' 模型最近验证失败，可在运行状态中检测连接。'}</p>
-        {unknown && <Button disabled={busy} onClick={() => void action(async () => {if (!chat) return; const result = await load(chat.chat_id); if (!result.pending && result.turns.length > chat.turns.length) setDraft(''); setNotice(result.pending ? '后台仍在处理，没有重发。' : '已查询。服务中断时不能据此保证未写入，请检查过程。');})}>只查询结果，不重发</Button>}
+        {unknown && <Button disabled={busy} onClick={() => void checkSendResult()}>只查询结果，不重发</Button>}
       </form>
     </AppShell>
     <Modal title="重命名聊天" open={rename} onCancel={() => setRename(false)} confirmLoading={busy} okText="保存" cancelText="取消" okButtonProps={{disabled: !title.trim() || busy}}
