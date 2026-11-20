@@ -36,3 +36,9 @@
 Windows 的正常关闭流程可以独立复现旁库文件仍被占用。现由 `ChatStore.load/save/remove` 在每次操作结束时显式关闭 SQLite 连接。写入成功先提交，抛出异常先回滚。控制台使用的独占锁文件仍由 `ChatStore.close()` 释放。
 
 两项新增合成回归在修复前均因连接仍可执行 SQL 而失败。修复后，测试保留三个操作各自的真实连接，验证其返回后均已关闭；正常停止后立即将旁库改名并读回已提交的删除结果。另一项测试注入删除异常，观察到实际回滚、连接关闭和原记录保留。主项目 Python 3.12.13 在本树运行旁库持久化、聊天接口、聊天后端与反馈存储回归，60 项全部通过，报告位于 `data/test-tmp/ci/chat-store-close.xml`。
+
+## Windows 子进程 CPU 记账
+
+主会话在 `88c7f236` 的全量回归中记录了 4,221 项通过、208 项跳过、2 项失败。本节复核其中的 Windows Job 正常退出用例。原测试仅在放行后分配 8 MiB 并写出结果。本机用同一基础解释器运行合成短任务，复现了进程正常退出且 Job 用户态、内核态时间均为零。Job 统计关联进程实际占用的 CPU 时间，包含已退出进程，单位为 100 纳秒。[Windows Job 记账字段](https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-jobobject_basic_accounting_information)
+
+用例现在直接启动基础解释器。父进程将其加入 Job，子进程经管道核对自己的 PID，再按进程 CPU 时钟完成至少 125 毫秒的计算。退出后要求 Job 至少记到 62.5 毫秒，并在确认 Job 终止后保有同一累计值。正常退出、拒绝超限内存分配和子进程异常三种模式连续 8 组共 24/24 通过。将真实快照的两项 CPU 计数注入为零时，正常用例在预期断言失败。记账、准入及资源限制定向回归 51/51 通过。两份 JUnit 报告在本树 `data/test-tmp/ci/windows-job-cpu.xml` 和 `data/test-tmp/ci/windows-job-cpu-series.xml`。

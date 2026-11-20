@@ -23,9 +23,15 @@ admission = importlib.import_module(spec.name+".window_admission")
 @pytest.mark.parametrize("mode", ["normal", "denied_commit", "exception"])
 def test_real_cpu_job_keeps_peak_limits_and_counts_after_exit_and_termination(mode):
     # 超限测试一次请求2GiB > 1GiB Job硬限，必须立即拒绝；不实际提交大缓冲区。
-    code = r'''import sys,json,ctypes
+    cpu_budget_ns = 125_000_000
+    code = r'''import ctypes, json, os, sys, time
 from ctypes import wintypes
-sys.stdin.buffer.read()
+if int(sys.stdin.buffer.read()) != os.getpid():
+    raise RuntimeError('worker PID differs from the process assigned to the Job')
+budget_ns = int(sys.argv[2])
+start_ns = time.process_time_ns()
+while time.process_time_ns() - start_ns < budget_ns:
+    sum(range(10_000))
 buffer=bytearray(8*2**20)
 result={'mode':sys.argv[1]}
 if sys.argv[1]=='denied_commit':
@@ -41,10 +47,15 @@ print(json.dumps(result),flush=True)
 if sys.argv[1]=='exception':raise RuntimeError('synthetic_cpu_child_failure')
 '''
     with flow.WindowsResourceJob(memory_limit_mib=1024) as job:
-        child=subprocess.Popen([sys.executable,"-I","-B","-c",code,mode],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+        # Windows venv 的启动器会转发给另一 PID。此标准库负载直接使用基础解释器。
+        child = subprocess.Popen(
+            [sys._base_executable, "-I", "-B", "-c", code, mode, str(cpu_budget_ns)],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        )
         try:
             job.assign(child)
-            stdout,stderr=child.communicate(b"owned CPU only",timeout=10)
+            stdout, stderr = child.communicate(str(child.pid).encode("ascii"), timeout=10)
+            assert stdout, stderr.decode(errors="replace")
             report=json.loads(stdout)
             before=job.snapshot()
             assert before["active_processes"]==0 and before["total_processes"]>=1
@@ -52,7 +63,9 @@ if sys.argv[1]=='exception':raise RuntimeError('synthetic_cpu_child_failure')
             assert before["peak_process_memory_bytes"]>0
             assert before["job_memory_limit_bytes"]==1024*2**20
             assert before["affinity_mask"].bit_count()<=2
-            assert before["cpu_user_time_100ns"]+before["cpu_kernel_time_100ns"]>0
+            # 为进程与 Job 计数的粒度留余量，同时要求 Job 确实记到这段计算。
+            job_cpu_100ns = before["cpu_user_time_100ns"] + before["cpu_kernel_time_100ns"]
+            assert job_cpu_100ns * 100 >= cpu_budget_ns // 2
             assert before["io_write_bytes"]>0
             if mode=="denied_commit":assert report["allocation_denied"] and report["winerror"]!=0
             if mode=="exception":assert child.returncode!=0 and b"synthetic_cpu_child_failure" in stderr
@@ -60,10 +73,12 @@ if sys.argv[1]=='exception':raise RuntimeError('synthetic_cpu_child_failure')
             assert job.terminate_and_confirm()
             after=job.snapshot()
             assert after["active_processes"]==0
+            assert after["cpu_user_time_100ns"] + after["cpu_kernel_time_100ns"] == job_cpu_100ns
             assert after["peak_job_memory_bytes"]==before["peak_job_memory_bytes"]
             assert not after["memory_failure_cause_proven"]
         finally:
-            if child.poll() is None:job.terminate_and_confirm()
+            if child.poll() is None:
+                child.kill()
             child.wait(timeout=5)
 
 
