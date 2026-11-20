@@ -167,27 +167,38 @@ def test_wrapper_sources_keep_python310_syntax():
 
 def test_observation_redirect_is_not_followed_with_bearer():
     visits = []
+
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *args):
             pass
+
         def do_POST(self):
-            visits.append(self.path)
+            # urllib 分开发送请求头和正文。先读完正文，再返回无响应体的 302。
+            body = self.rfile.read(int(self.headers["Content-Length"]))
+            visits.append((self.command, self.path, self.headers.get("Authorization"), body))
             self.send_response(302)
             self.send_header("Location", "/must-not-visit")
+            self.send_header("Content-Length", "0")
             self.end_headers()
+
         def do_GET(self):
-            visits.append(self.path)
+            visits.append((self.command, self.path, self.headers.get("Authorization"), b""))
             self.send_response(200)
+            self.send_header("Content-Length", "0")
             self.end_headers()
+
     server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
     worker = threading.Thread(target=server.serve_forever, daemon=True)
     worker.start()
     try:
         request = Request(f"http://127.0.0.1:{server.server_address[1]}/observe", data=b"{}",
                           headers={"Authorization": "Bearer synthetic"})
-        with pytest.raises(HTTPError):
+        with pytest.raises(HTTPError) as rejected:
             build_opener(ProxyHandler({}), diagnostic.NoRedirect()).open(request, timeout=2)
-        assert visits == ["/observe"]
+        with rejected.value as response:
+            assert response.code == 302
+            assert response.headers["Location"] == "/must-not-visit"
+        assert visits == [("POST", "/observe", "Bearer synthetic", b"{}")]
     finally:
         server.shutdown()
         server.server_close()
