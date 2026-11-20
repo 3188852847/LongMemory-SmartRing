@@ -100,6 +100,17 @@ test('网络变化等待状态可见，不把电脑地址同步当作设备重�
   expect(request.mock.calls.every(([path]) => path === 'status')).toBe(true);
 });
 describe('React 启动面板', () => {
+  test('Hy 模式显示引擎名称并隐藏旧提取和召回设置', async () => {
+    const {api} = fake({...stopped, settings: {...stopped.settings, memory_backend: 'hy_memory'}});
+    render(<LauncherApp api={api}/>);
+    expect(await screen.findByText('Hy-Memory', {exact: false, selector: '.launcher-config-summary'})).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', {name: /启动设置/}));
+    fireEvent.click(await screen.findByText('记忆', {exact: true}));
+    expect(screen.getByLabelText('记忆系统')).toBeTruthy();
+    expect(screen.queryByLabelText('记忆提取')).toBeNull();
+    expect(screen.queryByLabelText('记忆召回')).toBeNull();
+  });
+
   test('设置分类保留草稿，分类与光效开关不会写启动配置', async () => {
     const {api, request} = fake(); render(<LauncherApp api={api}/>);
     fireEvent.click(screen.getByRole('button', {name: '持续光效'}));
