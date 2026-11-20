@@ -431,6 +431,26 @@ class MemoryRuntime:
             for future in futures:
                 future.result()
 
+    def external_text(self, role, text, *, event_id, session_id):
+        """同一条平台消息在重投或工具多轮调用时只观察一次。"""
+        with self._lock:
+            self._ensure_open()
+            try:
+                previous = self._method.source_detail(event_id)
+            except LookupError:
+                previous = None
+            if previous is not None:
+                if (previous["role"], previous["content"], previous["session_id"]) != (role, text, session_id):
+                    raise ValueError("external_message_conflict")
+                return self._method.recall(text).context if role == "user" and self._use_enabled else ""
+            if role == "user":
+                prepared = self.prepare_user(text, event_id=event_id, session_id=session_id)
+                return prepared.support.context
+            if role != "assistant":
+                raise ValueError("external_role_invalid")
+            self._method.archive(MemoryEvent(event_id, role, text, self._clock(), session_id))
+            return ""
+
     def record_assistant(self, text: str, *, session_id=None) -> ObservationResult:
         event = MemoryEvent(str(uuid4()), "assistant", text, self._clock(), session_id)
         with self._lock:

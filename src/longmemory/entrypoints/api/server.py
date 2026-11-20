@@ -59,12 +59,13 @@ def create_app(*, port=8765, bridge=None, web_root=None, allow_memory_delete=Fal
                round_wallpaper_delivery=None, launcher_status_file=None,
                diagnostics=None, observability_root=None,
                otto_asset_root=None, memory_runtime=None,
-               voice_proposals_enabled=False, voice_proposal_host=None):
+               voice_proposals_enabled=False, voice_proposal_host=None, qq_directory=None):
     # 显式新后端必须同时支配聊天和管理，禁止管理悄悄打开另一套旧库。
     if memory_runtime is not None and chat_backend is not None:
         if chat_backend.memory_runtime() is not memory_runtime:
             raise ValueError("chat_and_management_runtime_mismatch")
     runtime = memory_runtime or (getattr(chat_backend, "_runtime", None) if chat_backend else None)
+    from .routes.qq_memory import qq_token, register_qq_memory
     sessions = Sessions()
     assets = web_root or ROOT / "web"
     client = bridge if bridge is not None else XiaozhiControlClient(ROOT / "data/control/device-control.token")
@@ -74,9 +75,12 @@ def create_app(*, port=8765, bridge=None, web_root=None, allow_memory_delete=Fal
     maintenance = NetworkMaintenance(instance_id)
     app = web.Application(client_max_size=1024, middlewares=[
         observability_middleware(observer),
-        security_middleware(f"127.0.0.1:{port}", sessions, memory_runtime_token),
+        security_middleware(f"127.0.0.1:{port}", sessions, memory_runtime_token,
+                            qq_token=qq_token(qq_directory) if qq_directory else None),
         maintenance.middleware,
     ])
+    if qq_directory and runtime is not None:
+        register_qq_memory(app, runtime, qq_directory)
     app.router.add_post(MAINTENANCE_PATH, maintenance.handle)
     register_observability(app, observer)
 
@@ -293,7 +297,7 @@ def main():
                                allow_memory_correction=args.allow_memory_correction,
                                chat_backend=chat_backend,
                                instance_id=os.environ.get("LONGMEMORY_LAUNCHER_INSTANCE"), xiaozhi_server=args.xiaozhi_server,
-                               memory_runtime_token=runtime_token,
+                               memory_runtime_token=runtime_token, qq_directory=ROOT / "local/runtime/companion",
                                voice_proposals_enabled=args.enable_voice_preemptive,
                                model_profile_store=ModelProfileStore(ROOT, current_profile=args.model_profile),
                                tts_backend_store=TTSBackendStore(ROOT, current_backend=args.tts_backend),

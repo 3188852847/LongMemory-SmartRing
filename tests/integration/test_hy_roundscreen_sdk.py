@@ -232,3 +232,53 @@ print('python310-neutral-completion-ok')
             backend.close()
             sock.close()
     asyncio.run(run())
+
+@pytest.mark.skipif(not SDK_PYTHON.is_file(), reason="explicit owner-installed Hy interpreter required")
+@pytest.mark.parametrize("source", ["qq", "web"])
+def test_confirmed_qq_web_and_roundscreen_share_memory(tmp_path, source):
+    import aiohttp
+    from aiohttp.test_utils import TestServer
+    from longmemory.entrypoints.api.routes.qq_memory import register_qq_memory, qq_token
+    from longmemory.entrypoints.api.security import Sessions, security_middleware
+
+    async def exercise(runtime):
+        directory = tmp_path / "companion"
+        binding = directory / "data/plugin_data/astrbot_plugin_private_companion/setup/binding.json"
+        binding.parent.mkdir(parents=True)
+        owner = dict(schema_version=2, confirmed=False, platform_id="qq", account_id="qq", participant_id="owner")
+        binding.write_text(json.dumps(owner))
+        (directory / "console-plugin.key").write_text("synthetic")
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = sock.getsockname()[1]
+        app = web.Application(middlewares=[security_middleware(f"127.0.0.1:{port}", Sessions(), qq_token=qq_token(directory))])
+        register_qq_memory(app, runtime, directory)
+        async with TestServer(app, port=port) as server, aiohttp.ClientSession() as client:
+            url = server.make_url("/api/internal/qq-memory")
+            headers = {"Authorization": "Bearer " + qq_token(directory)}
+            message = dict(platform="qq", sender="owner", message="first", role="user", text="合成用户喜欢无糖乌龙茶")
+            assert (await client.post(url, json=message)).status == 401
+            assert (await client.post(url, json=message, headers=headers)).status == 403
+            binding.write_text(json.dumps(dict(owner, confirmed=True)))
+            assert (await client.post(url, json=dict(message, sender="other"), headers=headers)).status == 403
+            if source == "web":
+                runtime.prepare_user(message["text"], session_id="web")
+                runtime.configure(write_enabled=False, use_enabled=True)
+                response = await client.post(url, json=dict(message, text="合成用户喜欢什么茶"), headers=headers)
+                assert "乌龙茶" in (await response.json())["context"]
+                return
+            for _ in range(2):
+                assert (await client.post(url, json=message, headers=headers)).status == 200
+            assert len(runtime._method.journal.events()) == 1
+            assert (await client.post(url, json=dict(message, role="assistant", text="助手建议红茶"), headers=headers)).status == 200
+            runtime.configure(write_enabled=False, use_enabled=True)
+            web_turn = runtime.prepare_user("合成用户喜欢什么茶", session_id="web")
+            assert "乌龙茶" in web_turn.support.context
+            screen, _ = runtime.prepare_round_screen("合成用户喜欢什么茶", client_round_id="e"*32, session_id="f"*32)
+            assert "乌龙茶" in screen.support.context
+            assert "红茶" not in screen.support.context
+    runtime = open_runtime(tmp_path, create=True)
+    try:
+        asyncio.run(exercise(runtime))
+    finally:
+        runtime.close()
