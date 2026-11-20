@@ -66,8 +66,8 @@ test('大字号、长内容、减少动态、键盘与纠正草稿',async({page}
   await modal.getByLabel('正确的内容').fill('周末现在更喜欢去植物园散步。');
   await page.screenshot({animations:'disabled',path:testInfo.outputPath('hy-correction-large.png')});
   await page.keyboard.press('Tab');expect(await modal.evaluate(el=>el.contains(document.activeElement))).toBe(true);
-  await modal.getByRole('checkbox').check();await modal.getByRole('button',{name:'保存纠正'}).dblclick();
-  await expect(page.getByText(/纠正已完成。平台原话保留/)).toBeVisible();expect(state.writes).toHaveLength(1);expect(state.errors).toEqual([]);
+  await modal.getByRole('button',{name:'保存纠正'}).dblclick();
+  await expect(page.getByText(/纠正已完成/)).toBeVisible();expect(state.writes).toHaveLength(1);expect(state.errors).toEqual([]);
 });
 
 test('画像、变化、处理状态和旧书签守卫',async({page},testInfo)=>{

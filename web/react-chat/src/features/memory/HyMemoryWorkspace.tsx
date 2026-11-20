@@ -1,6 +1,6 @@
 import {useEffect, useId, useMemo, useRef, useState} from 'react';
 import {Button} from '../../components/Button';
-import {Alert, Checkbox, Descriptions, Drawer, Empty, Input, Modal, Select, Skeleton, Space, Tag} from 'antd';
+import {Alert, Descriptions, Drawer, Empty, Input, Modal, Select, Skeleton, Space, Tag} from 'antd';
 import {Link, useSearchParams} from 'react-router-dom';
 import {ApiError, ChatApi, type EngineItem, type EnginePage, type EngineSource, type EngineStatus, type HyWorkspace, type HyHistory, type HyOperation} from '../../api';
 import {MemoryEngineApi} from '../../api/memoryEngine';
@@ -61,13 +61,14 @@ export function HyMemoryWorkspace({api,method,capabilities}:{api:ChatApi;method?
   const [operationsError,setOperationsError]=useState('');
   const [operationsBusy,setOperationsBusy]=useState(false);
   const [itemOperations,setItemOperations]=useState<EnginePage<HyOperation>>();
-  const [editing, setEditing] = useState<{kind:'correct'|'delete'; item:EngineItem}>();
+  const [editing, setEditing] = useState<{kind:'correct'; item:EngineItem}>();
   const action = editing?.kind;
   const [draft,setDraft]=useState('');
-  const [understood,setUnderstood]=useState(false);
+
   const [saving,setSaving]=useState(false);
   const [writeError,setWriteError]=useState('');
-  const [writeUnknown,setWriteUnknown]=useState(false);
+  const [unknownItem,setUnknownItem]=useState<string>();
+  const writeUnknown = Boolean(selectedId && unknownItem === selectedId);
   const [notice,setNotice]=useState('');
   const lock=useRef(false);
   const detailVersion=useRef(0);
@@ -95,14 +96,15 @@ export function HyMemoryWorkspace({api,method,capabilities}:{api:ChatApi;method?
     } catch(error) {if(version===detailVersion.current)setHistoryError(failure(error));}
     finally {if(version===detailVersion.current)setHistoryBusy(false);}
   }
-  function beginAction(kind:'correct'|'delete') {
+  useEffect(() => {setWriteError('');}, [selectedId]);
+  function beginAction(kind:'correct') {
     if (!detail) return;
     // 这次确认只授权打开表单时看到的版本，即使详情被刷新也保留原目标。
     setEditing({kind, item:detail});
     setDraft(detail.content);
-    setUnderstood(false);
+
     setWriteError('');
-    setWriteUnknown(false);
+
   }
   const sameRevision = editing && detail && editing.item.item_id === detail.item_id
     && editing.item.revision === detail.revision;
@@ -112,23 +114,24 @@ export function HyMemoryWorkspace({api,method,capabilities}:{api:ChatApi;method?
   const invalidCorrection = action === 'correct' && (
     !correctionContent || correctionContent === editing?.item.content || correctionLength > correctionCharacterLimit
   );
-  async function save() {
-    if (lock.current || !editing || !sameRevision || writeUnknown || !understood || invalidCorrection) return;
-    const {item} = editing;
+  async function save(action: 'correct' | 'delete', item: EngineItem) {
+    if (lock.current || blocked || item.item_id !== selectedId) return;
+    if (action === 'correct' && (!sameRevision || invalidCorrection)) return;
     lock.current = true;
     setSaving(true);
     setWriteError('');
     const id = crypto.randomUUID();
     try {
+      await api.bootstrap();
       const result = action === 'correct'
         ? await engine.correct(item.item_id, item.revision, correctionContent, id)
         : await engine.delete(item.item_id, item.revision, id);
       if (result.state !== 'completed' || result.request_id !== id || result.platform_sources_preserved !== true) {
         throw new Error('not confirmed');
       }
-      setNotice(`${action === 'correct' ? '纠正已完成' : '引擎条目已删除'}。平台原话保留。操作编号：${result.request_id}`);
+      setNotice(action === 'correct' ? '纠正已完成。' : '记忆已删除。');
       setEditing(undefined);
-      if (action === 'delete') navigate({item:undefined});
+      if (action === 'delete') navigate({item:undefined, offset:page?.items.length === 1 && offset > 0 ? String(Math.max(0,offset-25)) : params.get('offset') ?? undefined});
       else setDetailReload(v => v + 1);
       setReload(v => v + 1);
     } catch (error) {
@@ -137,7 +140,7 @@ export function HyMemoryWorkspace({api,method,capabilities}:{api:ChatApi;method?
         setWriteError(`${message} 操作编号：${id}`);
       } else {
         setWriteError(`${failure(error)} 操作编号：${id}`);
-        setWriteUnknown(!(error instanceof ApiError && [400, 401, 403, 404, 409, 501].includes(error.status)));
+        setUnknownItem(error instanceof ApiError && [400, 401, 403, 404, 409, 501].includes(error.status) ? undefined : item.item_id);
         setDetailReload(v => v + 1);
       }
     } finally {
@@ -175,19 +178,30 @@ export function HyMemoryWorkspace({api,method,capabilities}:{api:ChatApi;method?
   <Drawer title="记忆详情" open={Boolean(selectedId)} onClose={()=>{if(!saving&&!action)navigate({item:undefined,profile_detail:undefined});}} size="large" className="hy-detail" maskClosable={!saving&&!action} keyboard={!saving&&!action}>
     {detailBusy?<Skeleton active/>:detailError?<Alert type="error" title="详情读取失败" description={detailError} action={<Button onClick={()=>setDetailReload(v=>v+1)} label="重新读取详情"/>}/>:detail&&<>
       <Tag>{kinds[detail.kind]??'引擎条目'}</Tag><p className="hy-detail-content">{detail.content}</p><Descriptions column={1} size="small" items={[{key:'time',label:'记录时间',children:memoryTime(detail.recorded_at)},{key:'valid',label:'事实有效区间',children:detail.valid_from||detail.valid_to?`${memoryTime(detail.valid_from)} 至 ${memoryTime(detail.valid_to)}`:'引擎未提供，不从记录时间推断'},{key:'state',label:'当前状态',children:detail.state?(states[detail.state]??detail.state):'引擎未提供'}]}/>
+      <section className="hy-detail-section"><h3>管理这条记忆</h3>
+        {blocked && !writeError && <p role="status">这条记忆有未确认操作</p>}
+        {manageable && workspace && <Space wrap>
+          {workspace.correction && <Button onClick={()=>beginAction('correct')} isDisabled={saving||blocked} label="纠正这条记忆"/>}
+          {workspace.deletion && <Button variant="destructive" onClick={()=>void save('delete', detail)} isDisabled={saving||blocked} label="删除这条记忆"/>}
+        </Space>}
+        {manageable && !workspace && (extensionBusy ? <p>正在读取操作权限…</p> : <Button onClick={()=>setReload(v=>v+1)} label="重新读取操作权限"/>)}
+        {manageable && workspace && !workspace.correction && !workspace.deletion && <p>{workspace.write_enabled ? '当前服务仅支持查看这条记忆。' : '记忆写入已暂停。'}</p>}
+        {!manageable && <p>这是引擎汇总的资料，可在“记忆条目”里管理对应的事实。</p>}
+        {!action && writeError && <Alert type="error" title={writeUnknown?'操作结果未确认':'操作未执行'} description={writeError}/>}
+      </section>
       <section className="hy-detail-section"><h3>依据是什么</h3><p>{sourceSummary(detail)}</p>{sources.length>0&&<><label htmlFor="hy-source">选择一条来源回看</label><select id="hy-source" aria-label="选择一条来源回看" className="hy-source-picker" value={sourceId} onChange={event=>void showSource(event.target.value)}><option value="" disabled>选择来源编号</option>{sources.map(id=><option key={id} value={id}>{id}</option>)}</select></>}
         {correctionSources.length>0&&<details><summary>查看管理纠正的明确指令来源（本页 {correctionSources.length} 条）</summary><p className="hy-hint">这些来源由平台操作记录关联；不表示 SDK 已改写原始来源字段。</p>{correctionSources.map(item=><Button key={item.request_id} onClick={()=>void showSource(item.source_event_id)} label={`回看纠正指令 ${memoryTime(item.occurred_at)}`}/>)}</details>}
         {sourceBusy?<p role="status">正在读取选中的原话…</p>:sourceError?<Alert type="warning" title="这条来源未读到" description={sourceError} action={<Button onClick={()=>void showSource(sourceId)} label="重读这一条来源"/>}/>:source&&<blockquote className="hy-source"><strong>{source.role==='user'?'用户原话':source.role==='assistant'?'助手原话（不是用户事实）':'原始角色未知'}</strong><p>{source.content}</p><footer>{memoryTime(source.occurred_at)}<span>{states[source.state]??'处理状态未知'}</span></footer></blockquote>}
         {detail.source_event_ids===null&&<p className="hy-hint">引擎没有提供来源关联。不能据此推断没有原话，也不能补造来源。</p>}
       </section>
       <section className="hy-detail-section"><h3>这条记忆怎样变化</h3>{workspace?.history&&!profileDetail?<><Button aria-busy={historyBusy} onClick={()=>void showHistory()} label={historyBusy?'正在核对 SDK 历史…':history?'刷新 SDK 历史':'核对并读取 SDK 历史'}/>{historyError&&<Alert type="error" title="SDK 历史读取失败" description={historyError}/>} {historyDeclaration&&<Alert type="info" title={historyDeclaration}/>} <p className="hy-hint"><Link to="/memories?view=mechanisms&mechanism=sdk_history">核对 SDK 历史机制</Link>；<Link to="/memories?view=activity">查看平台管理审计</Link>。两者不是同一份记录。</p>{history&&<>{history.items.length?<ol className="hy-history">{history.items.map((item,index)=><li key={index}><strong>{item.event??'引擎变更'}</strong><span>{memoryTime(item.created_at)}</span>{item.old_memory&&<p>此前：{item.old_memory}</p>}{item.new_memory&&<p>此后：{item.new_memory}</p>}</li>)}</ol>:<p>未读到变化记录。可能尚无变化，也可能引擎未开启历史记录。</p>}{history.limited&&<p>仅展示最近 100 条返回记录。</p>}</>}</>:<p className="hy-hint">引擎变化历史尚未接通。当前正文和记录时间不能替代历史。</p>}</section>
-      <section className="hy-detail-section"><h3>发现记错了</h3>{blocked&&<Alert type="warning" title="这条记忆有未确认操作" description="先核对当前内容和操作记录，暂不再次提交。"/>}{manageable&&(workspace?.correction||workspace?.deletion)?<><p>按唯一引擎拥有者串行核对修订后执行。操作失败可能部分提交，不提供自动回滚。</p><Space wrap>{workspace.correction&&<Button onClick={()=>beginAction('correct')} isDisabled={saving||blocked} label="纠正这条记忆"/>}{workspace.deletion&&<Button variant="destructive" onClick={()=>beginAction('delete')} isDisabled={saving||blocked} label="删除这条记忆"/>}</Space></>:<p className="hy-hint">{manageable?'当前还不能安全提交纠正或删除：需要管理接线、唯一拥有者修订核对与写入权限。':'这类条目目前仅供核对；不直接修改汇总画像、原始记录或保留层。'}保留当前内容，接通后再操作。</p>}</section>
+
       <details className="hy-technical"><summary>查看引擎标识与修订</summary><dl><dt>条目编号</dt><dd>{detail.item_id}</dd><dt>原生类型</dt><dd>{detail.kind}</dd><dt>当前修订指纹</dt><dd>{detail.revision}</dd></dl></details>
     </>}
   </Drawer>
-  <Modal aria-labelledby={actionHeading} title={<span id={actionHeading}>{action==='correct'?'纠正这条记忆':'删除这条引擎记忆'}</span>} open={Boolean(action)} okText={action==='correct'?'保存纠正':'确认删除条目'} cancelText="取消" confirmLoading={saving} mask={{closable:!saving}} keyboard={!saving} closable={!saving} onCancel={()=>{if(!saving)setEditing(undefined);}} onOk={()=>void save()} okButtonProps={{danger:action==='delete',disabled:saving||writeUnknown||!sameRevision||!understood||invalidCorrection}}>
-    {action==='correct'?<><p>把这条记忆改成你确认的内容。这次明确指令会保存为用户来源。</p><label htmlFor="hy-correction">正确的内容</label><Input.TextArea id="hy-correction" aria-describedby="hy-correction-length" aria-invalid={correctionLength > correctionCharacterLimit} value={draft} onChange={event=>setDraft(event.target.value)} autoSize={{minRows:4,maxRows:10}} disabled={saving}/><p id="hy-correction-length" className="hy-action-hint">已输入 {correctionLength} 字，最多 {correctionCharacterLimit} 字。</p></>:<><p>仅删除没有历史变化链的当前独立条目。链上的条目不能单独删除，以免恢复旧事实。平台原话、历史及备份保留；这不是全部隐私数据擦除，也不承诺它不会从后续对话再次形成。</p><p className="hy-delete-preview">{editing?.item.content}</p></>}
+  <Modal aria-labelledby={actionHeading} title={<span id={actionHeading}>纠正这条记忆</span>} open={Boolean(action)} okText="保存纠正" cancelText="取消" confirmLoading={saving} mask={{closable:!saving}} keyboard={!saving} closable={!saving} onCancel={()=>{if(!saving)setEditing(undefined);}} onOk={()=>editing && void save('correct', editing.item)} okButtonProps={{disabled:saving||writeUnknown||!sameRevision||invalidCorrection}}>
+    <p>把这条记忆改成你确认的内容。这次明确指令会保存为用户来源。</p><label htmlFor="hy-correction">正确的内容</label><Input.TextArea id="hy-correction" aria-describedby="hy-correction-length" aria-invalid={correctionLength > correctionCharacterLimit} value={draft} onChange={event=>setDraft(event.target.value)} autoSize={{minRows:4,maxRows:10}} disabled={saving}/><p id="hy-correction-length" className="hy-action-hint">已输入 {correctionLength} 字，最多 {correctionCharacterLimit} 字。</p>
     {editing && detail && !sameRevision && <p role="status">条目已更新。请关闭窗口，核对最新内容后重新操作。</p>}
-    <Checkbox checked={understood} onChange={event=>setUnderstood(event.target.checked)} disabled={saving}>我已核对这条记忆，理解操作范围和失败可能部分提交</Checkbox>{writeError&&<Alert type="error" title={writeUnknown?'操作结果未确认':'操作未执行'} description={writeError}/>} {writeUnknown&&<p role="status">结果未确认，已禁止重复提交。关闭此窗口后到“记录与变化”核对操作。</p>}
+    {writeError&&<Alert type="error" title={writeUnknown?'操作结果未确认':'操作未执行'} description={writeError}/>} {writeUnknown&&<p role="status">结果未确认，已禁止重复提交。关闭此窗口后到“记录与变化”核对操作。</p>}
   </Modal></>;
 }

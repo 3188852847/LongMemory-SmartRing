@@ -12,6 +12,7 @@ const item:EngineItem={item_id:'synthetic-1',content:'合成用户周末照顾�
 const status={method:'hy_memory_pro_chat',write_enabled:true,use_enabled:true,management_capabilities:{listing:true,detail:true},deferred_observation:{supported:true,awaiting_completion:2,running_or_queued:1,last_result:{state:'uncertain',warning_code:'synthetic-warning'}}};
 const workspace={protocol:1,profile:false,history:true,operations:true,correction:true,deletion:true,write_enabled:true,use_enabled:true};
 function setup(route='/memories',override?:(path:string,method:string,body:unknown)=>unknown|Promise<unknown>) {
+  vi.spyOn(ChatApi.prototype,'bootstrap').mockResolvedValue(undefined);
   const request=vi.spyOn(ChatApi.prototype,'request').mockImplementation(async(path,method='GET',body)=>{
     const custom=await override?.(path,method,body);if(custom!==undefined)return custom as never;
     if(path==='/api/memory-engine/hy/mechanisms')return mechanismFixture as never;
@@ -97,12 +98,11 @@ test('更正明确来源、阻止双击；成功后真实回读',async()=>{
   // rc 组件在 NODE_ENV=test 时统一生成 test-id，嵌套弹层标题 ID 冲突；从可见表单定位。
   const modal=(await screen.findByLabelText('正确的内容')).closest('[role=dialog]') as HTMLElement;
   fireEvent.change(within(modal).getByLabelText('正确的内容'),{target:{value:'合成用户现在照顾一只狗。'}});
-  fireEvent.click(within(modal).getByRole('checkbox'));
   const save=within(modal).getByRole('button',{name:'保存纠正'});
   fireEvent.click(save);fireEvent.click(save);
   await waitFor(()=>expect(writes).toBe(1));
   resolveWrite({request_id:lastRequestId,state:'completed',replayed:false,platform_sources_preserved:true});
-  expect(await screen.findByText(/纠正已完成。平台原话保留/)).toBeTruthy();
+  expect(await screen.findByText(/纠正已完成/)).toBeTruthy();
   await waitFor(()=>expect(request.mock.calls.filter(([path])=>path==='/api/memory-engine/items/synthetic-1').length).toBeGreaterThan(1));
 });
 
@@ -110,12 +110,8 @@ test('不确定写入禁用重复提交，绝不显示成功',async()=>{
   let writes=0;
   setup('/memories?item=synthetic-1',(path)=>{if(path.endsWith('/deletion')){writes++;throw new ApiError('hy_management_outcome_uncertain',503);}});
   fireEvent.click(await screen.findByRole('button',{name:'删除这条记忆'}));
-  const modal=(await screen.findByText('删除这条引擎记忆',{selector:'.ant-modal-title span'})).closest('[role=dialog]') as HTMLElement;
-  expect(within(modal).getByText(/不是全部隐私数据擦除/)).toBeTruthy();
-  fireEvent.click(within(modal).getByRole('checkbox'));
-  fireEvent.click(within(modal).getByRole('button',{name:/确认删除条目/}));
-  expect(await within(modal).findByText(/操作结果不确定/)).toBeTruthy();
-  expect(within(modal).getByRole('button',{name:/确认删除条目/}).hasAttribute('disabled')).toBe(true);
+  expect(await screen.findByText(/操作结果不确定/)).toBeTruthy();
+  expect(screen.getByRole('button',{name:'删除这条记忆'}).hasAttribute('disabled')).toBe(true);
   expect(writes).toBe(1);
   expect(screen.queryByText(/引擎条目已删除/)).toBeNull();
 });
@@ -131,7 +127,6 @@ test('纠正表单按 Unicode 字符校验上限，完整提交 1000 个扩展�
   const input = await screen.findByLabelText('正确的内容');
   const modal = within(input.closest('[role=dialog]') as HTMLElement);
   const save = modal.getByRole('button', {name:'保存纠正'});
-  fireEvent.click(modal.getByRole('checkbox'));
   fireEvent.change(input, {target:{value:content + '字'}});
   expect(input.getAttribute('aria-invalid')).toBe('true');
   expect(save.hasAttribute('disabled')).toBe(true);
@@ -163,7 +158,6 @@ test('收到 HTTP 413 后保留草稿并显示操作未执行，用户缩短内�
   const save = modal.getByRole('button', {name:'保存纠正'});
   const draft = '合成纠正内容'.repeat(160);
   fireEvent.change(input, {target:{value:draft}});
-  fireEvent.click(modal.getByRole('checkbox'));
   fireEvent.click(save);
   await modal.findByText('操作未执行');
   expect(modal.getByText(/纠正请求过大，请缩短内容后再保存/)).toBeTruthy();
@@ -180,7 +174,6 @@ test('收到 HTTP 413 后保留草稿并显示操作未执行，用户缩短内�
 
 test.each([
   {open:'纠正这条记忆', confirm:'保存纠正', suffix:'/corrections'},
-  {open:'删除这条记忆', confirm:'确认删除条目', suffix:'/deletion'},
 ])('另一标签修改记忆后，$open 需要重新核对新修订', async ({open, confirm, suffix}) => {
   const nextItem = {...item, content:'另一标签保存的新内容', revision:'b'.repeat(64)};
   const revisions:string[] = [];
@@ -202,7 +195,6 @@ test.each([
     const modal = within(button.closest('[role=dialog]') as HTMLElement);
     const input = modal.queryByLabelText('正确的内容');
     if (input) fireEvent.change(input, {target:{value:'本标签的草稿'}});
-    fireEvent.click(modal.getByRole('checkbox'));
     fireEvent.click(button);
     return {button, modal, dialog:button.closest('[role=dialog]') as HTMLElement};
   }
@@ -225,17 +217,10 @@ test('确定性删除拒绝保留说明，不误报不确定或永久锁住条�
   let writes=0;
   setup('/memories?item=synthetic-1',path=>{if(path.endsWith('/deletion')){writes++;throw new ApiError('hy_management_delete_evolution_refused',409);}});
   fireEvent.click(await screen.findByRole('button',{name:'删除这条记忆'}));
-  const modal=(await screen.findByText('删除这条引擎记忆',{selector:'.ant-modal-title span'})).closest('[role=dialog]') as HTMLElement;
-  fireEvent.click(within(modal).getByRole('checkbox'));
-  fireEvent.click(within(modal).getByRole('button',{name:/确认删除条目/}));
-  expect(await within(modal).findByText('操作未执行')).toBeTruthy();
-  expect(within(modal).getByText(/不能单独删除，以免恢复旧事实。当前有效条目/)).toBeTruthy();
-  expect(within(modal).queryByText(/结果未确认，已禁止重复提交/)).toBeNull();
+  expect(await screen.findByText('操作未执行')).toBeTruthy();
+  expect(screen.getByText(/不能单独删除，以免恢复旧事实/)).toBeTruthy();
   expect(writes).toBe(1);
-  const cancel=within(modal).getByRole('button',{name:/取\s*消/});
-  await waitFor(()=>expect(cancel.hasAttribute('disabled')).toBe(false));
-  fireEvent.click(cancel);
-  await waitFor(()=>expect(screen.getByRole('button',{name:'纠正这条记忆'}).hasAttribute('disabled')).toBe(false));
+  await waitFor(()=>expect(screen.getByRole('button',{name:'删除这条记忆'}).hasAttribute('disabled')).toBe(false));
 });
 
 test('组装画像在自己的详情核对，不把聚合编号交给普通条目 get',async()=>{
@@ -248,4 +233,19 @@ test('组装画像在自己的详情核对，不把聚合编号交给普通条�
   expect(await within(dialog).findByText('基本信息')).toBeTruthy();
   expect(within(dialog).queryByRole('button',{name:'纠正这条记忆'})).toBeNull();
   expect(request.mock.calls.some(([path])=>path.includes('/items/assembled-profile'))).toBe(false);
+});
+
+test('点击删除直接提交所选条目和版本，成功关闭详情',async()=>{
+  const calls:string[]=[];
+  setup('/memories?item=synthetic-1',(path,method,body)=>{
+    if(method==='POST' && path.endsWith('/deletion')){
+      const request=body as {revision:string;request_id:string};
+      calls.push(path);
+      expect(request.revision).toBe(item.revision);
+      return {state:'completed',request_id:request.request_id,platform_sources_preserved:true};
+    }
+  });
+  fireEvent.click(await screen.findByRole('button',{name:'删除这条记忆'}));
+  await screen.findByText('记忆已删除。');
+  expect(calls).toEqual(['/api/memory-engine/hy/items/synthetic-1/deletion']);
 });
