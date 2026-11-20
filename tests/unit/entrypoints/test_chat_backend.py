@@ -34,6 +34,7 @@ def test_web_and_other_method_share_memory_without_sharing_session_history(datab
     web = ChatBackend(database, FakeAnswerGenerator())
     first = web.run("我养了一只叫豆包的猫", ())
     assert first["status"] == "completed" and first["user_saved"] and first["assistant_saved"]
+    assert web.model_health() == {"state": "not_applicable", "code": None, "checked_at": None}
     assert first["writes"][0]["operation"] == "add"
     other = LongMemoryV1(database)
     assert "豆包" in other.recall("我的猫叫什么").context
@@ -132,7 +133,9 @@ def test_model_failure_preserves_actual_write_trace_but_not_assistant_fact(datab
     class Broken:
         def generate(self, **kwargs):
             raise AnswerGenerationError("secret-should-not-leak")
-    result = ChatBackend(database, Broken()).run("我养了一只叫豆包的猫", ())
+    backend = ChatBackend(database, Broken())
+    result = backend.run("我养了一只叫豆包的猫", ())
+    assert backend.model_health() == {"state": "not_applicable", "code": None, "checked_at": None}
     assert result["status"] == "failed" and result["user_saved"]
     assert result["writes"][0]["operation"] == "add"
     assert result["answer"] is None and not result["assistant_saved"]
@@ -230,6 +233,35 @@ def test_model_health_records_safe_failure_and_explicit_probe_does_not_write_mem
     result = backend.run("我叫小林", ())
     assert result["error"] == "model_authentication_failed"
     assert "private upstream body" not in json.dumps(result)
+
+
+def test_only_valid_model_reply_restores_health_after_failed_turn(database):
+    answers = iter(["", "合成回答"])
+
+    class Generator:
+        def generate_turn(self, **_kwargs):
+            return next(answers)
+
+    backend = ChatBackend(database, Generator(), provider="openai_compatible", model="synthetic")
+    try:
+        failed = backend.run("你好", ())
+        assert failed["error"] == "model_response_invalid"
+        health = backend.model_health()
+        assert health["state"] == "unavailable" and health["code"] == failed["error"]
+        assert health["checked_at"] is not None
+
+        for text in ("不要记住：我今天想喝茉莉花茶", "我明天下午三点要提交毕业设计汇报，到时候问我汇报进展"):
+            receipt = backend.run(text, ())
+            assert receipt["status"] == "completed" and receipt["answer_source"] == "application_command"
+            assert backend.model_health() == health
+
+        answered = backend.run("聊聊今天的天气", ())
+        assert answered["status"] == "completed" and answered["answer"] == "合成回答"
+        recovered = backend.model_health()
+        assert recovered["state"] == "available" and recovered["code"] is None
+        assert recovered["checked_at"] is not None
+    finally:
+        backend.close()
 
 
 def test_model_info_exposes_endpoint_but_never_credentials(database):

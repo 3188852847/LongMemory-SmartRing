@@ -33,6 +33,32 @@ def test_chat_disabled_and_static_security():
     asyncio.run(run())
 
 
+def test_slow_chat_config_allows_another_http_request(backend, monkeypatch):
+    async def run():
+        entered, release = asyncio.Event(), threading.Event()
+        loop = asyncio.get_running_loop()
+
+        def slow_info():
+            loop.call_soon_threadsafe(entered.set)
+            assert release.wait(timeout=5), "配置读取阻塞了 HTTP 事件循环"
+            return {"enabled": True}
+
+        monkeypatch.setattr(backend, "info", slow_info)
+        async with console(chat_backend=backend) as (client, base, _):
+            await login(client, base)
+            config = asyncio.create_task(client.get(base + "/api/chat-config"))
+            try:
+                await asyncio.wait_for(entered.wait(), timeout=5)
+                response = await client.get(base + "/api/chats")
+                assert response.status == 200 and not config.done()
+            finally:
+                release.set()
+            response = await config
+            assert response.status == 200 and await response.json() == {"enabled": True}
+
+    asyncio.run(run())
+
+
 def test_chat_replay_reset_and_owner_isolation(backend):
     async def run():
         async with console(chat_backend=backend) as (client, base, _):

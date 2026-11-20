@@ -268,6 +268,7 @@ class ChatBackend:
         为整轮成功。异常仅返回固定代码，不泄漏供应商正文或密钥。
         """
         started = monotonic()
+        checking_model = False
         result = {"status": "failed", "input": text, "answer": None,
                   "answer_source": None,
                   "started_at": datetime.now(UTC).isoformat(), "method": None,
@@ -359,17 +360,21 @@ class ChatBackend:
                 answer = generator.generate(query=text, memory_context=support.context)
                 result["answer_source"] = "model"
             else:
+                checking_model = True
                 answer = generator.generate_turn(query=text, memory_context=support.context, history=history)
                 result["answer_source"] = "model"
             if not isinstance(answer, str) or not answer.strip() or len(answer) > 16000:
                 raise AnswerGenerationError("empty_answer", code="model_response_invalid")
-            self._record_model_health("available")
+            if checking_model:
+                self._record_model_health("available")
+                checking_model = False
             result["answer"] = answer
             assistant = runtime.record_assistant(answer, session_id=session_id if not runtime.legacy_sqlite else None)
             result.update(status="completed", assistant_saved=True, assistant_event_id=assistant.event_id)
         except AnswerGenerationError as error:
             result["error"] = error.code
-            self._record_model_health("unavailable", error.code)
+            if checking_model:
+                self._record_model_health("unavailable", error.code)
         except sqlite3.Error as error:
             code = getattr(error, "sqlite_errorcode", 0) & 0xFF
             result["error"] = "memory_busy" if code in {sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED} else "chat_database_unavailable"
