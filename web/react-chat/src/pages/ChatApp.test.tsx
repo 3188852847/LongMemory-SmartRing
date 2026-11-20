@@ -4,13 +4,15 @@ import {MemoryRouter} from 'react-router-dom';
 import {QueryClient, QueryClientProvider} from '@tanstack/react-query';
 import {ApiError, ChatApi, type Snapshot, type Turn} from '../api';
 import {ChatApp} from './ChatApp';
-import {KnownMemoryEngine} from '../tests/memoryEngine';
+import {MemoryEngineProvider} from '../app/MemoryEngineProvider';
+import {KnownMemoryEngine, legacyIdentity} from '../tests/memoryEngine';
 
 const turn = (index: number): Turn => ({request_id:`synthetic-${index}`, input:`合成输入 ${index}`,
   answer:`合成回答 ${index}`, status:'completed', writes:[], user_saved:true, duration_ms:1,
   retrieved:[{item_id:`memory-${index}`, content:`合成证据 ${index}`, source_event_ids:['synthetic-source']}]});
 
-function mount(snapshot: Snapshot, override?: (path: string, method: string, body: unknown) => unknown) {
+function mount(snapshot: Snapshot, override?: (path: string, method: string, body: unknown) => unknown,
+  Engine: typeof MemoryEngineProvider = KnownMemoryEngine) {
   localStorage.clear();
   vi.spyOn(ChatApi.prototype, 'bootstrap').mockResolvedValue(undefined);
   const request = vi.spyOn(ChatApi.prototype, 'request').mockImplementation(async (path, method = 'GET', body) => {
@@ -24,13 +26,54 @@ function mount(snapshot: Snapshot, override?: (path: string, method: string, bod
     throw new Error(`unexpected synthetic request: ${method} ${path}`);
   });
   render(<QueryClientProvider client={new QueryClient({defaultOptions:{queries:{retry:false}}})}>
-    <MemoryRouter><KnownMemoryEngine kind="legacy"><ChatApp/></KnownMemoryEngine></MemoryRouter></QueryClientProvider>);
+    <MemoryRouter><Engine><ChatApp/></Engine></MemoryRouter></QueryClientProvider>);
   return request;
 }
 
 afterEach(() => vi.restoreAllMocks());
 
 describe('聊天工作区', () => {
+  test.each([
+    {order:'冷身份先于配置', configFirst:false, ready:false},
+    {order:'配置先于冷身份', configFirst:true, ready:false},
+    {order:'身份已就绪', configFirst:false, ready:true},
+  ])('聊天配置与引擎身份协调：$order', async ({configFirst, ready}) => {
+    let release!: () => void;
+    const delayedResponse = new Promise<void>(resolve => {release = resolve;});
+    const coldIdentity = {...legacyIdentity,method:null,state:'not_initialized'};
+    const identity = vi.fn().mockResolvedValue(legacyIdentity);
+    if (!ready) identity.mockReturnValueOnce(configFirst ? delayedResponse.then(() => coldIdentity) : coldIdentity);
+    const config = {enabled:true, database:'synthetic.db', provider:'fake', model:'Fake', role:'测试', method:legacyIdentity.method};
+    mount({chat_id:'synthetic-cold', title:'合成会话', pending:false, turns:[turn(1)]}, path => {
+      if (path === '/api/memory-engine/identity') return identity();
+      if (path === '/api/chat-config') return configFirst ? config : delayedResponse.then(() => config);
+    }, MemoryEngineProvider);
+
+    if (configFirst) await screen.findByText('合成回答 1');
+    else if (ready) await screen.findByRole('link', {name:'原话与事实'});
+    else await screen.findByText('记忆已配置，尚未初始化');
+    expect(identity).toHaveBeenCalledTimes(1);
+    release();
+    await screen.findByText('合成回答 1');
+    fireEvent.click(screen.getByRole('button', {name:'查看第 1 轮记忆证据'}));
+    const link = await screen.findByRole('link', {name:'核对 L0 原话'});
+    expect(link.getAttribute('href')).toBe('/memories?memory_id=memory-1');
+    expect(identity).toHaveBeenCalledTimes(ready ? 1 : 2);
+  });
+
+  test('重新核对仍未初始化时保留中立入口，后续操作不循环查询', async () => {
+    const identity = vi.fn().mockResolvedValue({...legacyIdentity, method:null, state:'not_initialized'});
+    mount({chat_id:'synthetic-cold', title:'合成会话', pending:false, turns:[turn(1)]}, path => {
+      if (path === '/api/memory-engine/identity') return identity();
+      if (path === '/api/chat-config') return {enabled:true, database:'synthetic.db', method:legacyIdentity.method};
+    }, MemoryEngineProvider);
+    await waitFor(() => expect(identity).toHaveBeenCalledTimes(2));
+    fireEvent.click(await screen.findByRole('button', {name:'查看第 1 轮记忆证据'}));
+    const link = await screen.findByRole('link', {name:'核对条目与平台来源'});
+    expect(link.getAttribute('href')).toBe('/memories?item=memory-1');
+    expect(identity).toHaveBeenCalledTimes(2);
+  });
+
   test('回看时新回答不拉底，明确返回最新后恢复跟随', async () => {
     mount({chat_id:'chat-synthetic',title:'合成会话',pending:false,turns:[turn(1)]}, (path, method) => {
       if (path.endsWith('/messages') && method === 'POST') return turn(2);
