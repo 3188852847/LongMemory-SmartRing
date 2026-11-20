@@ -10,6 +10,7 @@
 
 ## 隔离验证
 
-- 主仓 Python 3.12.13 解释器，导入路径核对为本树 `src` 和开发脚本。13 个相关 Python 测试文件合并执行，300 项通过。另有 `test_main_applies_qos_before_model_and_exposes_result` 的 3 组参数在基线和修改后均因合成服务缺少 `close()` 失败，合并复跑时仅排除这 3 项。
+- 使用主仓 Python 3.12.13 解释器，已核对服务及 `longmemory` 均从本树导入。13 个相关 Python 测试文件无筛选复跑，303 项全部通过。
+- 首轮发现 QoS（进程服务质量）测试的合成器替身缺少生产对象的 `close()`。补齐替身后，3 组参数均验证了 HTTP 服务先关闭、合成器随后关闭，且各执行一次。与 Windows QoS 专项测试一同运行，21 项全部通过，其中包含上述 3 项。
 - 前端使用本树的独立依赖副本。`vitest run src/features/launcher/LauncherApp.test.tsx src/features/launcher/api.test.ts` 通过 23 项，`tsc --noEmit` 通过。
 - 采用临时配置、随机回环端口、合成语音和进程替身。真实模型试听、日用服务和圆屏体验留待实机验收。
