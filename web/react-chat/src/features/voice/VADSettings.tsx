@@ -1,5 +1,6 @@
 import {useEffect, useState} from 'react';
-import {Alert, Button, Radio, Space} from 'antd';
+import {Button} from '../../components/Button';
+import {Alert, Radio, Space} from 'antd';
 import {ApiError, ChatApi} from '../../api';
 
 type Profile='normal'|'noisy'|'close_talk';
@@ -59,8 +60,8 @@ export function VADSettings({api,disabled}:{api:ChatApi;disabled:boolean}) {
       </Space>
     </Radio.Group>
     <Space wrap>
-      <Button disabled={disabled||busy} onClick={()=>void load()}>重新读取</Button>
-      <Button type="primary" disabled={disabled||busy||!status||draft===status.profile} onClick={()=>void save()}>保存拾音档位</Button>
+      <Button isDisabled={disabled||busy} onClick={()=>void load()} label="重新读取"/>
+      <Button variant="primary" isDisabled={disabled||busy||!status||draft===status.profile} onClick={()=>void save()} label="保存拾音档位"/>
     </Space>
   </section>;
 }

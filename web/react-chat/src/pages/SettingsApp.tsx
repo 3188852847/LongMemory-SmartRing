@@ -1,8 +1,11 @@
 import {useQuery, useQueryClient} from '@tanstack/react-query';
-import {Alert, Button, Card, Select, Space, Tabs} from 'antd';
+import {Button} from '../components/Button';
+import {Panel} from '../components/Panel';
+import {Alert, Select, Space, Tabs} from 'antd';
 import {useSearchParams} from 'react-router-dom';
 import {ChatApi, type Config} from '../api';
 import {AppShell, ConsoleNav} from '../components/AppShell';
+import {CompanionHome} from '../features/settings/CompanionHome';
 import {RoleEditor} from '../features/settings/RoleEditor';
 import {VoiceSettings} from '../features/voice/VoiceSettings';
 import {useAppearance} from '../app/AppearanceProvider';
@@ -29,7 +32,7 @@ export function SettingsApp() {
   const config = useQuery({queryKey:['chat-config'], queryFn:() => api.request<Config>('/api/chat-config'), enabled:session.isSuccess});
   const enabled = session.isSuccess && config.data?.enabled === true;
   const requestedTab=searchParams.get('tab');
-  const activeTab=['overview','model','memory-backend','role','voice','appearance'].includes(requestedTab??'')?requestedTab!:'role';
+  const activeTab=['companion','overview','model','memory-backend','role','voice','appearance'].includes(requestedTab??'')?requestedTab!:'role';
   const selectTab=(tab:string)=>{const next=new URLSearchParams(searchParams);if(tab==='role')next.delete('tab');else next.set('tab',tab);setSearchParams(next);};
   const sidebar = <ConsoleNav active="settings"/>;
 
@@ -37,6 +40,7 @@ export function SettingsApp() {
     <PageHeader eyebrow="控制与观察" title="助手设置" description="在这里调整助手表达、参考声线和页面外观。声音与性格分别保存，事实记忆保持独立。"/>
     {(session.isError || config.isError) && <Alert type="error" showIcon title="设置服务当前不可用" description="请确认统一启动的文字服务仍在运行，再刷新本页。"/>}
     <Tabs className="settings-tabs settings-workspace" activeKey={activeTab} onChange={selectTab} items={[
+      {key:'companion', label:'陪伴小屋', children:<Panel title="陪伴小屋"><CompanionHome api={api} active={session.isSuccess && activeTab === 'companion'}/></Panel>},
       {key:'overview', label:'设置总览', children:<>
         <section className="settings-overview" aria-label="当前设置摘要">
       <div><small>设置服务</small><strong className={enabled ? 'is-positive' : ''}>{enabled ? '可用' : session.isError || config.isError ? '读取失败' : config.data ? '未启用' : '连接中'}</strong></div>
@@ -47,28 +51,28 @@ export function SettingsApp() {
     <PersonalizationOverview api={api} ready={enabled} prefs={prefs} onSelectTab={selectTab}
       availability={session.isError || config.isError ? 'failed' : session.isPending || config.isPending ? 'loading' : enabled ? 'ready' : 'disabled'}/>
       </>},
-      {key:'model', label:'模型与服务', children:<Card title="模型与服务" extra={<span className="setting-scope">当前服务进程</span>}>
+      {key:'model', label:'模型与服务', children:<Panel title="模型与服务" extra={<span className="setting-scope">当前服务进程</span>}>
         <p>核对当前进程，并管理学校/官方两个本机配置档。页面永远不读取或显示已有 API Key，切换在重启后生效。</p>
         <ModelConnectionSettings api={api} config={config.data} disabled={!enabled}
           onHealth={health => queryClient.setQueryData<Config>(['chat-config'], current => current ? {...current, model_health:health} : current)}/>
-      </Card>},
-      {key:'memory-backend', label:'记忆后端', children:<Card title="长期记忆" extra={<span className="setting-scope">网页与圆屏</span>}>
+      </Panel>},
+      {key:'memory-backend', label:'记忆后端', children:<Panel title="长期记忆" extra={<span className="setting-scope">网页与圆屏</span>}>
         <Alert type="info" showIcon title="Hy-Memory" description={engine.kind === 'hy'
           ? '当前服务正在使用 Hy-Memory。网页聊天和圆屏对话共享长期记忆。'
           : engine.phase === 'loading' ? '正在读取记忆服务状态…' : '当前未连接到 Hy-Memory。'}/>
-      </Card>},
-      {key:'role', label:'角色设置', children:<Card title="角色设置" extra={<span className="setting-scope">网页＋可选圆屏同步</span>}>
+      </Panel>},
+      {key:'role', label:'角色设置', children:<Panel title="角色设置" extra={<span className="setting-scope">网页＋可选圆屏同步</span>}>
         <RoleEditor api={api} disabled={!enabled} onSaved={() => {void queryClient.invalidateQueries({queryKey:['chat-config']});}}/>
-      </Card>},
-      {key:'voice', label:'声音与克隆', children:<Card title="声音与克隆" extra={<span className="setting-scope">网页与圆屏共用声线</span>}>
+      </Panel>},
+      {key:'voice', label:'声音与克隆', children:<Panel title="声音与克隆" extra={<span className="setting-scope">网页与圆屏共用声线</span>}>
         <Tabs className="voice-task-tabs" defaultActiveKey="profile" items={[
           {key:'profile', label:'我的声音', children:<CosyVoiceProfileSettings api={api} disabled={!enabled}/>},
           {key:'vad', label:'拾音与判停', children:<VADSettings api={api} disabled={!enabled}/>},
           {key:'backend', label:'启动声音引擎', children:<TTSBackendSettings api={api} disabled={!enabled}/>},
           {key:'advanced', label:'兼容与测量', children:<><VoiceSettings api={api} disabled={!enabled}/><TTSBenchmarkPanel api={api} enabled={enabled}/></>},
         ]}/>
-      </Card>},
-      {key:'appearance', label:'外观与阅读', children:<Card title="外观与阅读" extra={<span className="setting-scope">当前浏览器</span>}>
+      </Panel>},
+      {key:'appearance', label:'外观与阅读', children:<Panel title="外观与阅读" extra={<span className="setting-scope">当前浏览器</span>}>
         <p>只保存主题、字号、阅读密度、聊天宽度和动画偏好，不保存聊天正文或个人记忆。</p>
         <Space orientation="vertical" style={{width:'100%'}}>
           <label>主题</label><Select className="wide" aria-label="主题" value={prefs.theme} onChange={theme => update({...prefs, theme})} options={[{value:'future',label:'未来控制台（推荐）'},{value:'system',label:'跟随系统'},{value:'light',label:'平静浅色'},{value:'dark',label:'经典深色'}]}/>
@@ -76,9 +80,9 @@ export function SettingsApp() {
           <label>阅读密度</label><Select className="wide" aria-label="阅读密度" value={prefs.density} onChange={density => update({...prefs, density})} options={[{value:'comfortable',label:'舒展（推荐）'},{value:'compact',label:'紧凑'}]}/>
           <label>聊天内容宽度</label><Select className="wide" aria-label="聊天内容宽度" value={prefs.chatWidth} onChange={chatWidth => update({...prefs, chatWidth})} options={[{value:'focused',label:'聚焦阅读（推荐）'},{value:'wide',label:'充分利用宽屏'}]}/>
           <label>界面动画</label><Select className="wide" aria-label="界面动画" value={prefs.motion} onChange={motion => update({...prefs, motion})} options={[{value:'system',label:'跟随系统'},{value:'reduce',label:'减少动画'},{value:'full',label:'完整动画'}]}/>
-          <Button onClick={() => reset()}>恢复默认</Button>
+          <Button onClick={() => reset()} label="恢复默认"/>
         </Space>
-      </Card>},
+      </Panel>},
     ]}/>
     {!enabled && !session.isError && !config.isError && <p role="status">正在读取设置能力；未启用文字服务时角色和声音设置不可操作。</p>}
   </AppShell>;

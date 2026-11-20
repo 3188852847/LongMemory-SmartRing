@@ -1,6 +1,8 @@
 import {useState} from 'react';
 import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
-import {Alert, Button, Card, Descriptions, InputNumber, Select, Space, Tag} from 'antd';
+import {Button} from '../../components/Button';
+import {Panel} from '../../components/Panel';
+import {Alert, Descriptions, InputNumber, Select, Space, Tag} from 'antd';
 import {ApiError, ChatApi, type RoundWallpaperDeployment, type RoundWallpaperDeviceStatus, type RoundWallpaperLibrary as Library, type RoundWallpaperUploadOptions} from '../../api';
 
 const errorCopy:Record<string,string> = {
@@ -37,7 +39,7 @@ export function RoundWallpaperLibrary({api,sessionReady}:{api:ChatApi;sessionRea
     ? errorCopy[(publish.error instanceof ApiError?publish.error:rollback.error as ApiError).code]??'圆屏没有完成壁纸操作；原壁纸仍可回退。'
     : '圆屏没有完成壁纸操作；原壁纸仍可回退。';
   const deviceReady=library.data?.device_delivery.enabled&&device.isSuccess;
-  return <Card title="6. 动态壁纸素材库" extra={<Space><Tag color="cyan">local media</Tag><Button size="small" disabled={!deviceReady||!device.data.rollback_available} loading={rollback.isPending} onClick={()=>rollback.mutate()}>{device.data?.active_valid?'回退上一壁纸':'恢复保留的壁纸'}</Button></Space>}>
+  return <Panel title="6. 动态壁纸素材库" extra={<Space><Tag color="cyan">local media</Tag><Button size="sm" isDisabled={!deviceReady||!device.data.rollback_available} isLoading={rollback.isPending} onClick={()=>rollback.mutate()} label={device.data?.active_valid?'回退上一壁纸':'恢复保留的壁纸'}/></Space>}>
     <p className="subtle">上传原视频后，本机会验证内容并产生 360×360 GIF。活动壁纸会覆盖几何皮肤；切换为皮肤显示只停用活动指针，不会擦除这里的 A/B 壁纸槽。</p>
     {library.isError&&<Alert type="error" showIcon title="素材库不可用" description="请刷新页面；其他圆屏功能不受影响。"/>}
     {library.data&&!library.data.enabled&&<Alert type="warning" showIcon title="没有找到本机 FFmpeg" description="从启动面板重新启动后再试；控制台不会自动下载依赖。"/>}
@@ -49,7 +51,7 @@ export function RoundWallpaperLibrary({api,sessionReady}:{api:ChatApi;sessionRea
       <label><span>帧率</span><Select aria-label="壁纸帧率" value={options.frame_rate} options={[8,10,12].map(value=>({value,label:`${value} fps`}))} onChange={value=>setOptions(current=>({...current,frame_rate:value}))}/></label>
       <label><span>颜色数</span><Select aria-label="壁纸颜色数" value={options.colors} options={[64,96,128].map(value=>({value,label:String(value)}))} onChange={value=>setOptions(current=>({...current,colors:value}))}/></label>
     </div>
-    <Space wrap className="wallpaper-actions"><Button type="primary" disabled={!file||!library.data?.enabled} loading={upload.isPending} onClick={()=>upload.mutate()}>导入并生成预览</Button><span className="subtle">{upload.isPending?'正在上传和转码，大文件需要等待…':'当前仅生成预览，不会改动真机。'}</span></Space>
+    <Space wrap className="wallpaper-actions"><Button variant="primary" isDisabled={!file||!library.data?.enabled} isLoading={upload.isPending} onClick={()=>upload.mutate()} label="导入并生成预览"/><span className="subtle">{upload.isPending?'正在上传和转码，大文件需要等待…':'当前仅生成预览，不会改动真机。'}</span></Space>
     {upload.isError&&<Alert className="settings-model-alert" type="error" showIcon title="素材没有导入" description={error}/>}
     {upload.isSuccess&&<Alert className="settings-model-alert" type="success" showIcon title="素材已导入" description="预览已通过尺寸、时长和哈希校验；尚未发布到圆屏。"/>}
     {(publish.isError||rollback.isError)&&<Alert className="settings-model-alert" type="error" showIcon title="壁纸操作未完成" description={deliveryError}/>}
@@ -59,6 +61,6 @@ export function RoundWallpaperLibrary({api,sessionReady}:{api:ChatApi;sessionRea
         {key:'source',label:'源视频',children:`${item.source.width}×${item.source.height} · ${item.source.duration_seconds.toFixed(1)} 秒 · ${item.source.video_codec}`},
         {key:'clip',label:'预览裁切',children:`${item.clip.start_seconds} 秒起 · ${item.clip.duration_seconds} 秒 · ${item.clip.frame_rate} fps · ${item.clip.colors} 色`},
         {key:'size',label:'预览大小',children:size(item.preview.size_bytes)},{key:'hash',label:'素材指纹',children:<code>{item.preview.sha256.slice(0,16)}…</code>},{key:'state',label:'真机状态',children:device.data?.active_valid&&device.data.active_wallpaper_id===item.id&&device.data.active_sha256===item.preview.sha256?<Tag color="success">圆屏已回读</Tag>:<Tag>本机素材</Tag>},
-      ]}/><Button type="primary" disabled={!deviceReady} loading={publish.isPending&&publish.variables===item.id} onClick={()=>publish.mutate(item.id)}>发布到圆屏（会重启）</Button></div></article>)}</div>
-  </Card>;
+      ]}/><Button variant="primary" isDisabled={!deviceReady} isLoading={publish.isPending&&publish.variables===item.id} onClick={()=>publish.mutate(item.id)} label="发布到圆屏（会重启）"/></div></article>)}</div>
+  </Panel>;
 }

@@ -1,6 +1,7 @@
 import {useMemoryEngine, memoryEngineLabel, retrievalLabel} from '../app/MemoryEngineProvider';
 import {useEffect, useRef, useState} from 'react';
-import {Alert, Button, Input, Modal, Select} from 'antd';
+import {Button} from '../components/Button';
+import {Alert, Input, Modal, Select} from 'antd';
 import {useQuery} from '@tanstack/react-query';
 import {Link, useSearchParams} from 'react-router-dom';
 import {useUnsavedChanges} from '../app/UnsavedChanges';
@@ -242,19 +243,18 @@ export function ChatApp() {
     setNotice(saved ? (next.includes(chat.chat_id) ? '当前会话已置顶。' : '当前会话已取消置顶。') : '置顶已在本页生效，但浏览器未能保存。');
   }
   const sessions = <section className="chat-sidebar-panel" aria-labelledby="chat-session-heading">
-        <div className="chat-sidebar-heading"><h2 id="chat-session-heading">会话</h2><Button size="small" disabled={disabled} onClick={() => changeChat()}>新建</Button></div>
+        <div className="chat-sidebar-heading"><h2 id="chat-session-heading">会话</h2><Button size="sm" isDisabled={disabled} onClick={() => changeChat()} label="新建"/></div>
         <label htmlFor="chat-search">查找会话</label><Input id="chat-search" name="chat-search" autoComplete="off" allowClear aria-label="查找会话" value={chatSearch} onChange={event => setChatSearch(event.target.value)} placeholder="按名称搜索…"/>
         <label htmlFor="conversation">当前会话</label><Select id="conversation" className="wide" aria-label="最近会话" value={chat?.chat_id} disabled={busy || unknown}
           notFoundContent="没有匹配的会话" options={visibleChats.map(c => ({value: c.chat_id, label: `${pinnedChats.includes(c.chat_id) ? '★ ' : ''}${c.title} · ${c.turn_count} 轮`}))} onChange={changeChat}/>
-        <div className="chat-session-actions"><Button size="small" disabled={disabled} onClick={() => {setTitle(chat?.title ?? ''); setRename(true);}}>重命名</Button>
-          <Button size="small" disabled={disabled} onClick={toggleCurrentPin}>{chat && pinnedChats.includes(chat.chat_id) ? '取消置顶' : '置顶'}</Button></div>
+        <div className="chat-session-actions"><Button size="sm" isDisabled={disabled} onClick={() => {setTitle(chat?.title ?? ''); setRename(true);}} label="重命名"/>
+          <Button size="sm" isDisabled={disabled} onClick={toggleCurrentPin} label={chat && pinnedChats.includes(chat.chat_id) ? '取消置顶' : '置顶'}/></div>
       </section>;
   const evidenceTurn = evidenceIndex === undefined ? chat?.turns.at(-1) : chat?.turns[evidenceIndex];
   const modelCheck = config?.provider==='openai_compatible'&&<Alert showIcon type={config.model_health?.state==='available'?'success':config.model_health?.state==='unavailable'?'error':'info'}
         title={config.model_health?.state==='available'?'模型服务最近验证可用':config.model_health?.state==='unavailable'?'模型服务最近验证失败':'模型服务尚未验证'}
         description={config.model_health?.state==='unavailable'?(modelFailure(config.model_health.code)??'模型调用失败。'):'检测只发送固定合成短句，不读取或写入个人记忆，也不自动重试。'}
-        action={<Button loading={checkingModel} disabled={busy||unknown}
-          onClick={()=>void checkModel()}>检测模型连接</Button>}/>;
+        action={<Button isLoading={checkingModel} isDisabled={busy||unknown} onClick={()=>void checkModel()} label="检测模型连接"/>}/>;
   function closePanel() {
     if (panel) document.getElementById(`chat-tool-${panel}`)?.focus();
     setPanel(null);
@@ -266,11 +266,11 @@ export function ChatApp() {
       </button>}<span>{chat?.turns.length ?? 0} / 40 轮</span></div>}/>
       <div className="chat-tools" aria-label="聊天工作区工具">
         <span className="chat-current-title" title={chat?.title}>{chat?.title ?? '正在打开会话…'}</span>
-        <Button id="chat-tool-sessions" aria-label="会话" aria-expanded={panel === 'sessions'} aria-controls={panel ? 'chat-aux-panel' : undefined} onClick={() => togglePanel('sessions')}>会话</Button>
-        <Button id="chat-tool-evidence" aria-expanded={panel === 'evidence'} aria-controls={panel ? 'chat-aux-panel' : undefined} onClick={() => {setEvidenceIndex(undefined); togglePanel('evidence');}}>记忆证据</Button>
-        <Button id="chat-tool-runtime" danger={config?.model_health?.state === 'unavailable'} aria-expanded={panel === 'runtime'} aria-controls={panel ? 'chat-aux-panel' : undefined} onClick={() => togglePanel('runtime')}>运行状态</Button>
-        <Button disabled={disabled} onClick={() => changeChat()}>新聊天</Button>
-        {awayFromLatest && <Button onClick={returnToLatest}>回到最新</Button>}
+        <Button id="chat-tool-sessions" aria-expanded={panel === 'sessions'} aria-controls={panel ? 'chat-aux-panel' : undefined} onClick={() => togglePanel('sessions')} label="会话"/>
+        <Button id="chat-tool-evidence" aria-expanded={panel === 'evidence'} aria-controls={panel ? 'chat-aux-panel' : undefined} onClick={() => {setEvidenceIndex(undefined); togglePanel('evidence');}} label="记忆证据"/>
+        <Button id="chat-tool-runtime" variant={config?.model_health?.state === 'unavailable' ? 'destructive' : 'secondary'} aria-expanded={panel === 'runtime'} aria-controls={panel ? 'chat-aux-panel' : undefined} onClick={() => togglePanel('runtime')} label="运行状态"/>
+        <Button isDisabled={disabled} onClick={() => changeChat()} label="新聊天"/>
+        {awayFromLatest && <Button onClick={returnToLatest} label="回到最新"/>}
       </div>
       <div className={`chat-workspace${panel ? ' has-panel' : ''}`}><section ref={messages} className="messages" aria-label="聊天记录" tabIndex={0} onScroll={event => {
         const viewport = event.currentTarget;
@@ -286,9 +286,9 @@ export function ChatApp() {
             if (event.currentTarget.open) setLoadedActionTurns(current=>current.includes(i)?current:[...current,i]);
           }}><summary aria-label={`第 ${i + 1} 轮朗读与反馈`}>朗读与反馈{turn.memory_feedback ? ' · 已记录' : ''}</summary>
             {loadedActionTurns.includes(i) && <>{turn.answer&&<SpeechPlayer api={api} text={turn.answer}/>}<MemoryFeedbackControls turn={turn} disabled={busy || unknown} onSelect={kind => void setMemoryFeedback(turn,kind)}/></>}
-          </details><Button className="turn-evidence-action" title={turnSummary(turn)} aria-label={`查看第 ${i + 1} 轮记忆证据`} onClick={() => {setEvidenceIndex(i); setPanel('evidence');}}>记忆详情{turn.status !== 'completed' ? ' · 未完成' : ''}</Button></div></article>)}</section>
+          </details><Button className="turn-evidence-action" tooltip={turnSummary(turn)} onClick={() => {setEvidenceIndex(i); setPanel('evidence');}} label={`查看第 ${i + 1} 轮记忆证据`}>记忆详情{turn.status !== 'completed' ? ' · 未完成' : ''}</Button></div></article>)}</section>
         {panel && <aside id="chat-aux-panel" className="chat-aux-panel" aria-label={panel === 'sessions' ? '会话管理' : panel === 'evidence' ? '记忆证据面板' : '运行状态面板'} onKeyDown={event => {if (event.key === 'Escape') {event.stopPropagation(); closePanel();}}}>
-          <div className="chat-panel-heading"><h2 ref={panelHeading} tabIndex={-1}>{panel === 'sessions' ? '会话管理' : panel === 'evidence' ? evidenceIndex === undefined ? '本轮记忆证据' : `第 ${evidenceIndex + 1} 轮记忆证据` : '运行状态'}</h2><Button onClick={closePanel}>收起面板</Button></div>
+          <div className="chat-panel-heading"><h2 ref={panelHeading} tabIndex={-1}>{panel === 'sessions' ? '会话管理' : panel === 'evidence' ? evidenceIndex === undefined ? '本轮记忆证据' : `第 ${evidenceIndex + 1} 轮记忆证据` : '运行状态'}</h2><Button onClick={closePanel} label="收起面板"/></div>
           <div className="chat-panel-content">{panel === 'sessions' ? sessions : panel === 'evidence' ? <TurnMemoryEvidence turn={evidenceTurn}/> : <>
             <ConsoleStatusRail config={config} device={deviceStatus.data} deviceFailed={deviceStatus.isError} memoryCountState="unavailable"/>
             {modelCheck}<section className="chat-runtime-info"><h3>运行配置与记忆说明</h3><p>{config?.enabled ? `${config.model} · ${config.role} · ${config.provider}` : '聊天未启用'}</p>{config?.provider === 'fake' && <p>Fake 是离线工程替身，不具备角色和多轮理解能力。</p>}<p>引擎：{memoryEngineLabel(memoryEngine)}；检索：{retrievalLabel(config?.retrieval)}。{memoryEngine.kind==='hy'?'Hy 提取与冲突协调的逐项决策尚不可观测。':''}网页不自动驱动圆屏播放。</p>{memoryEngine.kind==='hy'&&<Link to="/memories?view=mechanisms">核对记忆机制与证据边界</Link>}{config?.enabled && <p>记忆库：{config.database}</p>}<p>发送会先保存原始输入，再按当前提取策略生成长期记忆。</p></section>
@@ -301,9 +301,9 @@ export function ChatApp() {
         placeholder="写下想说的话…"/>
         <div className="send-row"><Select size="small" aria-label="发送快捷键" value={sendShortcut}
           options={[{value:'enter',label:'Enter 发送 · Shift+Enter 换行'},{value:'ctrl_enter',label:'Ctrl+Enter 发送 · Enter 换行'}]}
-          onChange={value => {setSendShortcut(value); saveSendShortcut(value);}}/><Button aria-label="发送" type="primary" htmlType="submit" loading={busy && Boolean(chat)} disabled={disabled || !draft.trim() || (chat?.turns.length ?? 0) >= 40}>发送</Button></div>
+          onChange={value => {setSendShortcut(value); saveSendShortcut(value);}}/><Button variant="primary" type="submit" isLoading={busy && Boolean(chat)} isDisabled={disabled || !draft.trim() || (chat?.turns.length ?? 0) >= 40} label="发送"/></div>
         <p className="chat-status" role="status" aria-label="聊天操作状态">{(chat?.turns.length ?? 0) >= 40 ? '本会话已达 40 轮，请新建聊天；长期记忆保留。' : notice}{config?.model_health?.state === 'unavailable' && ' 模型最近验证失败，可在运行状态中检测连接。'}</p>
-        {unknown && <Button disabled={busy} onClick={() => void checkSendResult()}>只查询结果，不重发</Button>}
+        {unknown && <Button isDisabled={busy} onClick={() => void checkSendResult()} label="只查询结果，不重发"/>}
       </form>
     </AppShell>
     <Modal title="重命名聊天" open={rename} onCancel={() => setRename(false)} confirmLoading={busy} okText="保存" cancelText="取消" okButtonProps={{disabled: !title.trim() || busy}}

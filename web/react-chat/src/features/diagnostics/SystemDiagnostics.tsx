@@ -1,4 +1,5 @@
-import {Alert, Card, Tag} from 'antd';
+import {Panel} from '../../components/Panel';
+import {Alert, Tag} from 'antd';
 import {Link} from 'react-router-dom';
 import type {Config, DeviceStatus, RuntimeStatus} from '../../api';
 
@@ -40,12 +41,12 @@ export function diagnoseSystem(runtime?:RuntimeStatus, config?:Config, device?:D
 
 export function SystemDiagnostics(props:{runtime?:RuntimeStatus;config?:Config;device?:DeviceStatus;failures?:{runtime?:boolean;config?:boolean;device?:boolean}}) {
   const items = diagnoseSystem(props.runtime, props.config, props.device, props.failures);
-  return <Card className="overview-diagnostics-card" title="当前诊断"
+  return <Panel className="overview-diagnostics-card" title="当前诊断"
     extra={<Tag color={items.some(x => x.tone === 'error') ? 'red' : items.some(x => x.tone === 'warning') ? 'gold' : 'cyan'}>{items.length} 项结论</Tag>}>
     <div className="overview-diagnostics-list">
       {items.length === 0 && <Alert type="info" showIcon title="暂无可判断结论" description="状态仍在读取，或当前模式没有足够事实。"/>}
       {items.map(item => <Alert key={item.code} type={item.tone} showIcon title={item.title}
         description={<span>{item.detail}{item.path && <Link to={item.path}>{item.action}</Link>}</span>}/>) }
     </div>
-  </Card>;
+  </Panel>;
 }

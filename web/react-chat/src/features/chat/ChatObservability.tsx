@@ -1,5 +1,6 @@
 import {useMemoryEngine, memoryEngineLabel, retrievalLabel} from '../../app/MemoryEngineProvider';
-import {Button, Space, Tag} from 'antd';
+import {Button} from '../../components/Button';
+import {Space, Tag} from 'antd';
 import {Link} from 'react-router-dom';
 import type {Config, DeviceStatus, MemoryFeedbackKind, Turn} from '../../api';
 
@@ -75,12 +76,7 @@ export function MemoryFeedbackControls({turn,disabled,onSelect}:{
   if (turn.status !== 'completed' || !turn.answer || !turn.request_id) return null;
   return <section className="memory-feedback-controls" aria-label="标记本轮记忆表现">
     <small>这轮记忆表现</small>
-    <Space size={[6,6]} wrap>{feedbackOptions.map(option => <Button
-      key={option.kind} size="small" disabled={disabled}
-      type={turn.memory_feedback?.kind === option.kind ? 'primary' : 'default'}
-      aria-pressed={turn.memory_feedback?.kind === option.kind}
-      onClick={() => onSelect(option.kind)}
-    >{option.label}</Button>)}</Space>
+    <Space size={[6,6]} wrap>{feedbackOptions.map(option => <Button key={option.kind} size="sm" isDisabled={disabled} variant={turn.memory_feedback?.kind === option.kind ? 'primary' : 'secondary'} aria-pressed={turn.memory_feedback?.kind === option.kind} onClick={() => onSelect(option.kind)} label={option.label}/>)}</Space>
     <em>{turn.memory_feedback ? `已复核 · 修订 ${turn.memory_feedback.revision}` : '仅记录标记，不会重答或修改记忆'}</em>
     {turn.memory_feedback&&<p className="memory-feedback-diagnosis">{memoryFeedbackDiagnosis(turn)}</p>}
   </section>;

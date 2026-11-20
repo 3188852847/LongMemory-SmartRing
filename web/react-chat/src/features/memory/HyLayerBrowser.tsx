@@ -1,6 +1,7 @@
 import {useLayoutEffect,useRef,useState} from 'react';
 import {useQuery} from '@tanstack/react-query';
-import {Alert,Button,Drawer,Empty,Skeleton,Tag} from 'antd';
+import {Button} from '../../components/Button';
+import {Alert, Drawer, Empty, Skeleton, Tag} from 'antd';
 import {useSearchParams} from 'react-router-dom';
 import {ApiError,ChatApi} from '../../api';
 import {MemoryEngineApi} from '../../api/memoryEngine';
@@ -50,7 +51,7 @@ function RecordTimes({item}:{item:HyStoredRecord}) {
 function ProfileFields({item,onVersion}:{item:HyStoredRecord;onVersion:(id:string)=>void}) {
   return <dl className="hy-profile-fields">{Object.entries(item.basic_info??{}).map(([key,value])=>{
     const origin=item.field_sources?.[key];
-    return <div key={key}><dt>{key}</dt><dd><p>{value===null?'空值（null）':value===''?'空文本（已保存）':typeof value==='boolean'?(value?'是':'否'):String(value)}</p>{origin?<>{origin.native_id?<Button type="link" onClick={()=>onVersion(origin.native_id!)}>核对该字段的原生版本</Button>:<small>该字段原生版本来源未提供</small>}<small>{origin.source_event_ids===null?'该字段的平台来源未提供':`该字段关联 ${origin.source_event_ids.length} 条平台来源`}</small></>:<small>该字段来源未提供</small>}</dd></div>;
+    return <div key={key}><dt>{key}</dt><dd><p>{value===null?'空值（null）':value===''?'空文本（已保存）':typeof value==='boolean'?(value?'是':'否'):String(value)}</p>{origin?<>{origin.native_id?<Button variant="ghost" onClick={()=>onVersion(origin.native_id!)} label="核对该字段的原生版本"/>:<small>该字段原生版本来源未提供</small>}<small>{origin.source_event_ids===null?'该字段的平台来源未提供':`该字段关联 ${origin.source_event_ids.length} 条平台来源`}</small></>:<small>该字段来源未提供</small>}</dd></div>;
   })}</dl>;
 }
 
@@ -98,12 +99,12 @@ export function HyLayerBrowser({layer,title,revealRequest=0,capabilities,runtime
   const count=page.isFetching?'正在读取数量':page.isError?'本次数量未确认':data?.total===null?'总数未知':data?.total===undefined?'尚未读取数量':`${data.total} ${layer==='l0_basic_info'?'份聚合画像':'条记录'}`;
 
   return <section className="hy-layer-browser" aria-labelledby="hy-layer-content-heading">
-    <header className="hy-layer-content-heading"><div><h2 id="hy-layer-content-heading" ref={heading} tabIndex={-1}>{title}：已保存内容</h2><p>{layer==='l0_basic_info'?'由完整可读版本合并的基本信息，不是原话列表或链头差异。':layer==='l1_raw'?'SDK 中实际保存的 RAW 原始记忆，独立于平台原话账本。':'读取当前层原生存储记录，保留各自状态与可得关联。'}</p></div><Button disabled={!enabled} loading={page.isFetching} onClick={()=>void page.refetch()}>刷新本层</Button></header>
+    <header className="hy-layer-content-heading"><div><h2 id="hy-layer-content-heading" ref={heading} tabIndex={-1}>{title}：已保存内容</h2><p>{layer==='l0_basic_info'?'由完整可读版本合并的基本信息，不是原话列表或链头差异。':layer==='l1_raw'?'SDK 中实际保存的 RAW 原始记忆，独立于平台原话账本。':'读取当前层原生存储记录，保留各自状态与可得关联。'}</p></div><Button isDisabled={!enabled} isLoading={page.isFetching} onClick={()=>void page.refetch()} label="刷新本层"/></header>
     <div className="hy-layer-controls"><label>记录状态 <select aria-label="本层记录状态" value={state} disabled={layer==='l0_basic_info'} onChange={event=>choose({layer_state:event.target.value,layer_offset:undefined,layer_item:undefined})}>{HY_LAYER_STATES.map(value=><option key={value} value={value}>{states[value]}</option>)}</select></label><strong>{count}</strong></div>
     {layer==='l0_basic_info'&&<p className="hy-layer-caption">聚合画像不使用状态筛选；聚合份数与原生存储版本数分别展示。</p>}
     {data&&!hiddenOld&&<ReadBoundary data={data}/>}
     <div className="hy-layer-result">
-    {enabled&&page.isError&&<Alert type="error" showIcon title="本层内容读取失败" description={failure(page.error)} action={<Button onClick={()=>void page.refetch()}>重试本层</Button>}/>}
+    {enabled&&page.isError&&<Alert type="error" showIcon title="本层内容读取失败" description={failure(page.error)} action={<Button onClick={()=>void page.refetch()} label="重试本层"/>}/>}
     {page.isFetching&&<div role="status" aria-label="正在读取本层内容"><Skeleton active paragraph={{rows:5}}/></div>}
     {!hiddenOld&&data&&data.read_status!=='unavailable'&&<>
       {data.items.length?<ol className="hy-layer-records">{data.items.map(record=><li key={record.item_id}>
@@ -112,9 +113,9 @@ export function HyLayerBrowser({layer,title,revealRequest=0,capabilities,runtime
         {record.content_truncated&&<p className="hy-layer-caption">列表正文已截断；原文共 {record.content_chars} 字符，详情最多显示 32768 字符。</p>}
         <HySemanticRecord item={record}/>
         <HyRecordProvenance item={record}/>
-        <RecordTimes item={record}/><Button onClick={()=>showVersion(record.item_id)}>{record.kind==='aggregate_profile'?'核对聚合来源与原生版本':'查看全文与来源'}</Button>
+        <RecordTimes item={record}/><Button onClick={()=>showVersion(record.item_id)} label={record.kind==='aggregate_profile'?'核对聚合来源与原生版本':'查看全文与来源'}/>
       </li>)}</ol>:<Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={data.data_state==='empty'&&data.coverage==='vdb_complete'?(state==='all'?'本层尚无已保存内容':'当前状态下没有记录'):'当前页没有返回记录，整层是否为空尚不能确认'}><p>{data.coverage==='vdb_only_graph_unopened'?'本次只覆盖向量存储；图库未读，不能当作整层为空。':data.coverage==='graph_only_legacy_vdb_present'?'本页未包含旧向量存储 L6；未返回图记录不能判定整层为空。':data.coverage==='graph_complete'?'本次图页未返回记录；派生隔离、其他状态和分页范围须分别核对。':offset>0?'可返回上一页；空末页不能反推整层没有数据。':'生成关闭或保留层状态本身不证明没有历史数据。'}</p></Empty>}
-      <div className="hy-layer-pager" aria-label="本层服务端分页"><span>第 {offset/20+1} 页{data.items.length?` · 当前显示 ${offset+1}–${offset+data.items.length}`:''} · {count}</span><Button disabled={offset===0} onClick={()=>choose({layer_offset:String(Math.max(0,offset-20)),layer_item:undefined})}>上一页</Button><Button disabled={data.has_more!==true||offset>=10000} onClick={()=>choose({layer_offset:String(offset+20),layer_item:undefined})}>下一页</Button></div>
+      <div className="hy-layer-pager" aria-label="本层服务端分页"><span>第 {offset/20+1} 页{data.items.length?` · 当前显示 ${offset+1}–${offset+data.items.length}`:''} · {count}</span><Button isDisabled={offset===0} onClick={()=>choose({layer_offset:String(Math.max(0,offset-20)),layer_item:undefined})} label="上一页"/><Button isDisabled={data.has_more!==true||offset>=10000} onClick={()=>choose({layer_offset:String(offset+20),layer_item:undefined})} label="下一页"/></div>
       {data.has_more===null&&<p className="hy-layer-caption">是否还有下一页未知，未猜测分页边界。</p>}
       {offset>=10000&&data.has_more===true&&<p className="hy-layer-caption">已到本次浏览上限，后续记录尚未读取，不代表全层结束。可返回前页或刷新本层。</p>}
       <details className="hy-layer-scope"><summary>读取范围与分页说明</summary><p>{data.count_scope==='aggregate_profile'?'计数单位是当前聚合画像，不是 L0 原生存储行数。':data.count_scope==='owner_agent_source_layer_state_graph'?'计数范围限当前拥有者、助手、来源、本层、所选状态和原生图库；旧向量记录不包含在内，未知总数保持未知。':'计数范围限当前拥有者、助手、来源、本层、所选状态和向量存储；未知总数保持未知。'}</p><p>按原生存储顺序有界分页，不是全库时间排序；跨页不冻结快照，期间写入或刷新可能改变后续页。本页没有全库扫描、启用机制或写入操作。</p></details>
@@ -129,7 +130,7 @@ export function HyLayerBrowser({layer,title,revealRequest=0,capabilities,runtime
       {!enabled&&<Alert type="info" title="当前引擎身份尚未确认，未读取或展示分层详情"/>}
       {!validId&&<Alert type="error" title="记录链接格式无效"/>}
       {detail.isFetching&&<div role="status" aria-label="正在读取分层详情"><Skeleton active/></div>}
-      {enabled&&detail.isError&&<Alert type="error" title="详情读取失败" description={failure(detail.error)} action={<Button onClick={()=>void detail.refetch()}>重试详情</Button>}/>}
+      {enabled&&detail.isError&&<Alert type="error" title="详情读取失败" description={failure(detail.error)} action={<Button onClick={()=>void detail.refetch()} label="重试详情"/>}/>}
       {enabled&&detail.data&&!detail.isFetching&&!detail.isError&&<><ReadBoundary data={detail.data}/>{item?<>
         <p className="hy-layer-native-id">{item.kind==='aggregate_profile'?'聚合句柄：profile；实际链头':'原生记录 ID'} <code>{item.native_id}</code></p>
         {item.kind==='aggregate_profile'?<><ProfileFields item={item} onVersion={showVersion}/><p>聚合使用 {item.stored_version_count} 个原生版本；不以链头字段冒充完整画像。</p></>:<p className="hy-layer-record-content">{item.content||'（已保存正文为空）'}</p>}
@@ -139,9 +140,9 @@ export function HyLayerBrowser({layer,title,revealRequest=0,capabilities,runtime
         <p>状态：{item.status===null?'未提供':states[item.status]??item.status}；{item.is_latest===null?'版本位置未提供':item.is_latest?'当前版本':'历史版本'}。</p><RecordTimes item={item}/>
         <h3>可得平台来源</h3>{item.source_event_ids===null?<p>来源关联未提供，不能按零来源解释。</p>:item.source_event_ids.length?<label>选择一条平台来源<select aria-label="分层详情平台来源" value={sourceId} onChange={event=>setSourceId(event.target.value)}><option value="">选择后按单条读取</option>{item.source_event_ids.map(id=><option key={id} value={id}>{id}</option>)}</select></label>:<p>该记录没有返回平台来源关联。</p>}
         {sourceId&&<section className="hy-layer-source" aria-label="分层来源正文">{source.isFetching?<Skeleton active/>:source.isError?<Alert type="error" title="单条来源读取失败" description={failure(source.error)}/>:source.data&&<><p>{source.data.role==='user'?'用户原话':source.data.role==='assistant'?'助手回复':source.data.role} · {memoryTime(source.data.occurred_at)}</p><p className="hy-layer-record-content">{source.data.content}</p><p>平台处理状态：{source.data.state??'未提供'}；不等于 SDK 分层记录。</p></>}</section>}
-        {item.source_raw_memory_id&&<Button onClick={()=>choose({layer:'l1_raw',layer_item:item.source_raw_memory_id!,layer_state:undefined,layer_offset:undefined})}>核对关联的 Hy RAW 原始记忆</Button>}
-        <h3>原生版本关联</h3>{item.supersedes.length+item.superseded_by.length===0?<p>当前记录未返回版本关联；不能据此证明从未变化。</p>:<div className="hy-layer-version-links">{item.supersedes.map(id=><Button key={`old-${id}`} onClick={()=>showVersion(id)}>查看被取代版本 {id}</Button>)}{item.superseded_by.map(id=><Button key={`new-${id}`} onClick={()=>showVersion(id)}>查看后续版本 {id}</Button>)}</div>}{item.version_links_limited&&<p>版本关联已受数量限制，不是完整历史。</p>}
-        {detail.data.versions!==null&&<section aria-label="L0 原生存储版本"><h3>L0 原生存储版本</h3><ol className="hy-layer-profile-versions">{detail.data.versions.map(version=><li key={version.item_id}><span>{memoryTime(version.recorded_at)}</span><p>{version.content||'（正文为空）'}</p>{version.content_truncated&&<small>版本摘要已截断，打开后核对有界详情。</small>}<Button onClick={()=>showVersion(version.item_id)}>查看原生版本 {version.item_id}</Button></li>)}</ol></section>}
+        {item.source_raw_memory_id&&<Button onClick={()=>choose({layer:'l1_raw',layer_item:item.source_raw_memory_id!,layer_state:undefined,layer_offset:undefined})} label="核对关联的 Hy RAW 原始记忆"/>}
+        <h3>原生版本关联</h3>{item.supersedes.length+item.superseded_by.length===0?<p>当前记录未返回版本关联；不能据此证明从未变化。</p>:<div className="hy-layer-version-links">{item.supersedes.map(id=><Button key={`old-${id}`} onClick={()=>showVersion(id)} label={`查看被取代版本 ${id}`}/>)}{item.superseded_by.map(id=><Button key={`new-${id}`} onClick={()=>showVersion(id)} label={`查看后续版本 ${id}`}/>)}</div>}{item.version_links_limited&&<p>版本关联已受数量限制，不是完整历史。</p>}
+        {detail.data.versions!==null&&<section aria-label="L0 原生存储版本"><h3>L0 原生存储版本</h3><ol className="hy-layer-profile-versions">{detail.data.versions.map(version=><li key={version.item_id}><span>{memoryTime(version.recorded_at)}</span><p>{version.content||'（正文为空）'}</p>{version.content_truncated&&<small>版本摘要已截断，打开后核对有界详情。</small>}<Button onClick={()=>showVersion(version.item_id)} label={`查看原生版本 ${version.item_id}`}/></li>)}</ol></section>}
       </>:detail.data.read_status!=='unavailable'&&<Empty description="没有可显示的记录，未从其他层补读"/>}</>}
       <p className="hy-layer-caption">这里是只读存储内容，不提供纠正/删除，也不因查看而开启生成、检索或模型。</p>
     </Drawer>

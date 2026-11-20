@@ -20,7 +20,7 @@
 
 /* 总览的首屏由当前状态、操作和异常组成；研究/链路细节由用户展开。 */
 .shell.workspace-shell.overview-shell .overview-start { margin-bottom: 18px; }
-.shell.workspace-shell.overview-shell .overview-start .ant-card-body { padding: 16px; }
+.shell.workspace-shell.overview-shell .overview-start .companion-panel-body { padding: 16px; }
 .shell.workspace-shell.overview-shell .overview-actions { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .shell.workspace-shell.overview-shell .overview-actions a { min-width: 0; overflow-wrap: anywhere; }
 .shell.workspace-shell.overview-shell .overview-diagnostics-card { margin-bottom: 18px; }

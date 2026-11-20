@@ -1,5 +1,6 @@
 import {useQuery} from '@tanstack/react-query';
-import {Button, Tag} from 'antd';
+import {Button} from '../../components/Button';
+import {Tag} from 'antd';
 import type {ChatApi, RoundSkins, TTSBackendId, TTSBackends} from '../../api';
 import type {AppearancePreferences} from '../../app/AppearanceProvider';
 import {readRolePreferences} from './rolePreferences';
@@ -91,13 +92,13 @@ export function PersonalizationOverview({api, ready, prefs, onSelectTab, availab
         <div><small>{row.title}</small><strong>{row.value}</strong></div>
         <div className="personalization-boundary"><Tag>{row.scope}</Tag><span>{row.timing}</span></div>
         {row.action === 'display'
-          ? <Button href="/display-preview" size="small">打开圆屏外观</Button>
-          : <Button size="small" onClick={() => onSelectTab(row.action)}>设置</Button>}
+          ? <Button href="/display-preview" size="sm" label="打开圆屏外观"/>
+          : <Button size="sm" onClick={() => onSelectTab(row.action)} label="设置"/>}
       </article>)}
     </div>
     <div className="personalization-voice-read">
       <span>声音状态需要检查小智本地配置，因此不在打开页面时自动运行。</span>
-      <Button size="small" disabled={!ready} loading={voice.isFetching} onClick={() => void voice.refetch()}>读取声音状态</Button>
+      <Button size="sm" isDisabled={!ready} isLoading={voice.isFetching} onClick={() => void voice.refetch()} label="读取声音状态"/>
     </div>
   </section>;
 }

@@ -23,8 +23,8 @@
 .settings-shell .settings-workspace .ant-space-item { max-width: 100%; min-width: 0; }
 .settings-shell .settings-workspace .ant-select { max-width: 100%; min-width: 0 !important; }
 .settings-shell .settings-workspace .ant-btn { max-width: 100%; min-height: 44px; height: auto; white-space: normal; }
-.settings-shell .settings-workspace .ant-card-head { flex-wrap: wrap; }
-.settings-shell .settings-workspace .ant-card-head-title { white-space: normal; }
+.settings-shell .settings-workspace .companion-panel-head { flex-wrap: wrap; }
+.settings-shell .settings-workspace .companion-panel-head-title { white-space: normal; }
 .settings-shell .settings-workspace .setting-scope { white-space: normal; text-align: right; }
 .settings-shell .voice-task-tabs > .ant-tabs-nav .ant-tabs-nav-list { flex-wrap: wrap; gap: 8px; }
 .settings-shell .voice-task-tabs > .ant-tabs-nav .ant-tabs-tab { margin: 0; min-height: 44px; padding: 10px 8px; }
@@ -52,18 +52,18 @@
   .settings-shell .voice-audition { position: static; }
 }
 @media (max-width: 600px) {
-  .settings-shell .settings-workspace .ant-card-body { padding: 16px; }
-  .settings-shell .settings-workspace .ant-card-head-wrapper { flex-wrap: wrap; gap: 8px; padding-block: 12px; }
-  .settings-shell .settings-workspace .ant-card-extra { margin-inline-start: 0; }
+  .settings-shell .settings-workspace .companion-panel-body { padding: 16px; }
+  .settings-shell .settings-workspace .companion-panel-head-wrapper { flex-wrap: wrap; gap: 8px; padding-block: 12px; }
+  .settings-shell .settings-workspace .companion-panel-extra { margin-inline-start: 0; }
   .settings-shell .voice-task-tabs > .ant-tabs-nav .ant-tabs-nav-wrap { overflow: visible; }
   .settings-shell .voice-task-tabs > .ant-tabs-nav .ant-tabs-nav-list { display: grid; grid-template-columns: 1fr 1fr; width: 100%; transform: none !important; }
   .settings-shell .voice-task-tabs > .ant-tabs-nav .ant-tabs-nav-operations { display: none; }
   .settings-shell .voice-workflow { display: block; }
   .settings-shell .voice-workflow li + li { margin-top: 4px; }
 }
-.settings-shell .settings-workspace .ant-card { background: var(--surface); color: var(--text); }
-.settings-shell .settings-workspace .ant-card-head { padding-inline: clamp(16px, 3vw, 32px); color: var(--text-strong); }
-.settings-shell .settings-workspace .ant-card-body { padding: clamp(16px, 3vw, 32px); }
+.settings-shell .settings-workspace .companion-panel { background: var(--surface); color: var(--text); }
+.settings-shell .settings-workspace .companion-panel-head { padding-inline: clamp(16px, 3vw, 32px); color: var(--text-strong); }
+.settings-shell .settings-workspace .companion-panel-body { padding: clamp(16px, 3vw, 32px); }
 .settings-shell .role-editor { display: grid; max-width: 76ch; gap: 10px; line-height: 1.65; color: var(--text); }
 .settings-shell .role-editor p { margin: 0 0 8px; color: var(--muted-strong); }
 .settings-shell .role-editor label { display: block; color: var(--text-strong); font-weight: 600; }

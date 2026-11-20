@@ -1,3 +1,4 @@
+import {Heading} from '@astryxdesign/core/Heading';
 import type {ReactNode} from 'react';
 import {SciFiSurface} from './SciFiSurface';
 
@@ -17,7 +18,7 @@ export function PageHeader({eyebrow, title, description, meta, action}: PageHead
   return <header className="page-header">
     <div className="page-heading">
       <p className="page-kicker">{eyebrow}</p>
-      <h1>{title}</h1>
+      <Heading level={1}>{title}</Heading>
       {description && <p className="page-description">{description}</p>}
       {meta && <SciFiSurface className="page-meta">{meta}</SciFiSurface>}
     </div>

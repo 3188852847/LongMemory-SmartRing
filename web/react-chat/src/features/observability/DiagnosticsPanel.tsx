@@ -1,5 +1,7 @@
 import {useId} from 'react';
-import {Alert, Button, Card, Empty, Space, Tag} from 'antd';
+import {Button} from '../../components/Button';
+import {Panel} from '../../components/Panel';
+import {Alert, Empty, Space, Tag} from 'antd';
 import type {DiagnosticOutcome, DiagnosticSnapshot} from './types';
 import './observability.css';
 
@@ -41,8 +43,8 @@ export interface DiagnosticsPanelProps {
 export function DiagnosticsPanel({snapshot, loading = false, error = false, onRefresh}: DiagnosticsPanelProps) {
   const headingId = useId();
   return <section className="observability-panel" aria-labelledby={headingId}>
-    <Card title={<span id={headingId}>安全故障摘要</span>} extra={
-      <Button aria-label="刷新摘要" onClick={onRefresh} loading={loading}>刷新摘要</Button>
+    <Panel title={<span id={headingId}>安全故障摘要</span>} extra={
+      <Button onClick={onRefresh} isLoading={loading} label="刷新摘要"/>
     }>
       <p>摘要仅包含当前 API 进程观测到的请求。请求返回不代表后台任务完成，设备播放仍未确认。</p>
       {error && <Alert role="alert" type="error" showIcon title="摘要暂不可读取"
@@ -103,6 +105,6 @@ export function DiagnosticsPanel({snapshot, loading = false, error = false, onRe
           {!!snapshot.log_retention.unresolved_bytes && <p role="status">仍有 {bytes(snapshot.log_retention.unresolved_bytes)} 超出预算且受保护；需要先确认日志写入者和证据保留要求。</p>}
         </> : <p>当前服务尚未提供累计保留元数据。</p>}
       </details>
-    </Card>
+    </Panel>
   </section>;
 }

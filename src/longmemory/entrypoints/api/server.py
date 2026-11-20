@@ -155,6 +155,8 @@ def create_app(*, port=8765, bridge=None, web_root=None, allow_memory_delete=Fal
             existing_memory_runtime, enabled=voice_proposals_enabled)
         register_voice_proposal_routes(app, proposal_host)
     device_role = DeviceRole(xiaozhi_server, chat_backend.roles, chat_backend.sidecar_database, ROOT) if xiaozhi_server and chat_backend else None
+    from .routes.companion import register_companion
+    register_companion(app, ROOT / "local/runtime/companion")
     register_role_routes(app, chat_backend, device_role)
     register_voice_routes(app, VoiceSettings(xiaozhi_server, chat_backend.sidecar_database, ROOT) if xiaozhi_server and chat_backend else None)
     register_vad_routes(app, VadSettings(

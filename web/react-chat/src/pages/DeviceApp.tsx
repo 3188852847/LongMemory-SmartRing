@@ -1,7 +1,9 @@
 import {DataWorkspace, useWorkspaceParam} from '../features/data-workspace/DataWorkspace';
 import {useEffect, useState} from 'react';
 import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
-import {Alert, Button, Card, Descriptions, InputNumber, Select, Slider, Space, Tag} from 'antd';
+import {Button} from '../components/Button';
+import {Panel} from '../components/Panel';
+import {Alert, Descriptions, InputNumber, Select, Slider, Space, Tag} from 'antd';
 import {ApiError, ChatApi, type DeviceStatus, type NaturalInterruptionDiagnostic, type VoiceAsrPrefetch, type VoiceLatency, type VoicePredictionShadow} from '../api';
 import {AppShell, ConsoleNav} from '../components/AppShell';
 import {PageHeader} from '../components/PageHeader';
@@ -51,7 +53,7 @@ function VoiceLatencyCard({value,prefetch}:{value:VoiceLatency;prefetch?:VoiceAs
     {label:'音频发送准备',value:timing.first_audio_sent_ms === null || timing.audio_ready_ms === null ? null : Math.max(0,timing.first_audio_sent_ms-timing.audio_ready_ms)},
   ].filter((item):item is {label:string;value:number}=>item.value !== null);
   const longest=measuredStages.reduce<{label:string;value:number}|undefined>((current,item)=>!current||item.value>current.value?item:current,undefined);
-  return <Card className="device-latency-card" title="最近一次圆屏首句时序" extra={<Space wrap>{preset&&<Tag color="cyan">本地预置语音</Tag>}<Tag color={value.state==='failed'?'red':value.state==='first_audio_sent'?'green':'processing'}>{stateLabels[value.state]}</Tag></Space>}>
+  return <Panel className="device-latency-card" title="最近一次圆屏首句时序" extra={<Space wrap>{preset&&<Tag color="cyan">本地预置语音</Tag>}<Tag color={value.state==='failed'?'red':value.state==='first_audio_sent'?'green':'processing'}>{stateLabels[value.state]}</Tag></Space>}>
     {preset&&<Alert showIcon type="success" title="本轮命中封闭寒暄快速通道" description="用户原话仍进入记忆归档；回答模型和实时 TTS 已跳过，音频来自同一 CosyVoice3 声线的本地预置文件。"/>}
     {value.failure&&<Alert
       showIcon type="error" title={failureLabels[value.failure.code].title}
@@ -85,13 +87,13 @@ function VoiceLatencyCard({value,prefetch}:{value:VoiceLatency;prefetch?:VoiceAs
       <p className="subtle">这里只记录每段进入 TTS 到完成音频编码的时间，不保存该段文字或音频。连续多段都慢，通常表示短句固定开销被重复支付。</p>
     </div>}
     <p className="subtle">样本开始于 {new Date(value.started_at).toLocaleString('zh-CN', {hour12:false})}。V5 样本从最后语音帧估算停嘴到 VAD 结束，并测量 ASR 处理；旧样本仍从识别文本进入回答流程开始。不包含设备上行网络，也不代表扬声器真正开始出声。当前后端：{value.tts_backend==='edge'?'EdgeTTS':value.tts_backend==='voxcpm2'?'VoxCPM2':value.tts_backend==='sanotts'?'sanoTTS':value.tts_backend==='cosyvoice3'?'CosyVoice 3':'其他'}。</p>
-  </Card>;
+  </Panel>;
 }
 
 function VoicePredictionShadowCard({value}:{value:VoicePredictionShadow}) {
   const rate=value.evaluated===0?null:Math.round(value.hits/value.evaluated*100);
   const latest={none:'尚无样本',pending:'等待下一句',hit_affirmative:'命中肯定分支',hit_negative:'命中否定分支',miss:'未命中封闭分支'}[value.last_result];
-  return <Card className="device-latency-card" title="预测式语音 · 影子观察" extra={<Tag color={value.state==='candidate_waiting'?'processing':'default'}>{value.state==='candidate_waiting'?'已有候选':'观察中'}</Tag>}>
+  return <Panel className="device-latency-card" title="预测式语音 · 影子观察" extra={<Tag color={value.state==='candidate_waiting'?'processing':'default'}>{value.state==='candidate_waiting'?'已有候选':'观察中'}</Tag>}>
     <Alert showIcon type="info" title="当前不会提前播放" description="系统只观察助手提出封闭问题后，下一句是否为肯定或否定短答；不保存对话正文，也不调用额外模型或占用 TTS。"/>
     <Descriptions column={{xs:1,sm:2,lg:4}} size="small" items={[
       {key:'opportunities',label:'候选机会',children:value.opportunities},
@@ -101,7 +103,7 @@ function VoicePredictionShadowCard({value}:{value:VoicePredictionShadow}) {
       {key:'latest',label:'最近结果',children:latest},
     ]}/>
     <p className="subtle">影子结果只用于判断是否值得进入预合成阶段。候选足够多且命中稳定后，才会评估空闲时合成和命中校验。</p>
-  </Card>;
+  </Panel>;
 }
 
 function NaturalInterruptionCard({value}:{value:NaturalInterruptionDiagnostic}) {
@@ -116,7 +118,7 @@ function NaturalInterruptionCard({value}:{value:NaturalInterruptionDiagnostic}) 
   const result=reason[value.reason];
   const yes=(flag:boolean)=>flag?'满足':'未满足';
   const mode={auto:'自动停录',manual:'手动停录',realtime:'实时拾音',unknown:'未知'}[value.listen_mode];
-  return <Card className="device-control-card" title="自然说话打断" extra={<Tag color={value.state==='trial_ready'?'green':value.state==='blocked'?'gold':'default'}>{value.state==='trial_ready'?'可试验':value.state==='blocked'?'有阻塞':'不可用'}</Tag>}>
+  return <Panel className="device-control-card" title="自然说话打断" extra={<Tag color={value.state==='trial_ready'?'green':value.state==='blocked'?'gold':'default'}>{value.state==='trial_ready'?'可试验':value.state==='blocked'?'有阻塞':'不可用'}</Tag>}>
     <Alert showIcon type={value.state==='trial_ready'?'success':'warning'} title={result.title} description={result.description}/>
     <Descriptions className="device-help" column={1} size="small" items={[
       {key:'device',label:'设备 AEC 声明',children:yes(value.device_aec_advertised)},
@@ -125,7 +127,7 @@ function NaturalInterruptionCard({value}:{value:NaturalInterruptionDiagnostic}) 
       {key:'listen',label:'当前拾音模式',children:mode},
     ]}/>
     <p className="subtle">这里只显示能力证据，不会自动开启 AEC，也不会把控制台按钮停止算作自然语音打断。</p>
-  </Card>;
+  </Panel>;
 }
 
 /**
@@ -208,7 +210,7 @@ export function DeviceApp() {
   const busy = readVolume.isPending || setVolume.isPending || readSnapshot.isPending || setScreen.isPending || stopSpeech.isPending;
   const operationView = operation ? resultView(operation.error ? {error:operation.error} : operation.data, operation.action) : null;
   const operationDetails = (operationView?.details ?? []) as Array<[string, unknown]>;
-  const sidebar = <><ConsoleNav active="device"/><Card size="small" className="device-boundary-card" title="控制边界"><p>开放音量、亮度和明暗主题；电池、网络与温度只读。</p><p>重启、配网和刷写仍不开放。</p></Card></>;
+  const sidebar = <><ConsoleNav active="device"/><Panel size="small" className="device-boundary-card" title="控制边界"><p>开放音量、亮度和明暗主题；电池、网络与温度只读。</p><p>重启、配网和刷写仍不开放。</p></Panel></>;
   const unread = '尚未读取';
   const unsupported = '固件未上报';
   const snapshotValue = (available: boolean, value: React.ReactNode) => snapshot ? (available ? value : unsupported) : unread;
@@ -216,9 +218,9 @@ export function DeviceApp() {
   return <AppShell subtitle="智能圆屏终端管理" className="device-shell" sidebar={sidebar}>
     <PageHeader eyebrow="日常使用" title="设备与状态" description="查看 SmartRing-Plus 圆屏终端，并控制固件已上报且可回读核对的基础能力。"
       meta="连接状态每 5 秒检查；设备详细状态只在你点击读取时更新。"
-      action={<Button loading={readSnapshot.isPending} disabled={!session.isSuccess || busy || !status.data?.read_status_supported} onClick={() => readSnapshot.mutate()}>读取设备快照</Button>}/>
+      action={<Button isLoading={readSnapshot.isPending} isDisabled={!session.isSuccess || busy || !status.data?.read_status_supported} onClick={() => readSnapshot.mutate()} label="读取设备快照"/>}/>
     {session.isError && <Alert type="error" showIcon title="无法建立控制台会话" description="请确认本机网页服务仍在运行，再刷新页面。没有自动重发设备指令。"/>}
-    <Card className={`device-summary-card tone-${view.tone}`}>
+    <Panel className={`device-summary-card tone-${view.tone}`}>
       <div className="device-status-hero"><span className="device-status-dot" aria-hidden="true"/><div><small>SMART RING TERMINAL</small><h2>SmartRing-Plus B V2</h2><p>{view.help}</p></div><Tag color={view.tone === 'good' ? 'green' : view.tone === 'warning' ? 'gold' : 'red'}>{view.badge}</Tag></div>
       <details className="device-connection-details"><summary>连接能力与服务状态</summary><div className="device-status-grid">
         <div><small>小智控制服务</small><strong>{view.bridge}</strong></div>
@@ -226,55 +228,55 @@ export function DeviceApp() {
         <div><small>设备工具</small><strong>{view.tools}</strong></div>
         <div><small>说话打断基础</small><strong>{status.data?.aec_advertised?'固件已上报 AEC':'未上报 AEC'}</strong></div>
       </div></details><div className="device-refresh-meta"><span>{status.data?.connection_count ?? '—'} 个活动连接</span><span>{status.dataUpdatedAt ? `刷新于 ${new Date(status.dataUpdatedAt).toLocaleTimeString('zh-CN', {hour12:false})}` : '尚未刷新'}</span><span>每 5 秒检查连接，不轮询音量</span></div>
-    </Card>
+    </Panel>
     <DataWorkspace label="设备工作区" activeKey={workspace} onChange={setWorkspace} items={[
       {key:'controls',label:'常用控制',children:<>    <div className="device-grid">
-      <Card className="device-control-card" title="扬声器音量" extra={<Tag color={view.set ? 'green' : 'default'}>{view.set ? '可控' : '不可控'}</Tag>}>
-        <div className="device-card-action"><Button disabled={!view.read || busy} loading={readVolume.isPending} onClick={() => readVolume.mutate()}>读取当前值</Button></div>
+      <Panel className="device-control-card" title="扬声器音量" extra={<Tag color={view.set ? 'green' : 'default'}>{view.set ? '可控' : '不可控'}</Tag>}>
+        <div className="device-card-action"><Button isDisabled={!view.read || busy} isLoading={readVolume.isPending} onClick={() => readVolume.mutate()} label="读取当前值"/></div>
         <div className="volume-value"><strong>{reading?.value ?? '—'}</strong><span>/ {volumeMaximum}</span></div>
         <p className="subtle">{reading ? `最近读取于 ${new Date(reading.at).toLocaleTimeString('zh-CN', {hour12:false})}；不是持续监测。` : '还没有可用的设备音量读数。'}</p>
         <label htmlFor="device-volume">目标音量</label>
         <Space.Compact block><Slider id="device-volume" className="volume-slider" min={volumeMinimum} max={volumeMaximum} value={target ?? 30} disabled={!view.set || busy} onChange={setTarget}/><InputNumber min={volumeMinimum} max={volumeMaximum} value={target} disabled={!view.set || busy} onChange={setTarget}/></Space.Compact>
         <p className="subtle">选择数值不会发送；点击后才设置。范围 {volumeMinimum}–{volumeMaximum}，不改变语速或音色。</p>
-        <Button type="primary" loading={setVolume.isPending} disabled={!view.set || busy || !validTarget(target)} onClick={() => {if (validTarget(target)) setVolume.mutate(target!);}}>应用音量</Button>
-      </Card>
-      <Card className="device-control-card" title="屏幕显示" extra={<Tag color={status.data?.set_brightness_supported || status.data?.set_theme_supported ? 'green' : 'default'}>{status.data?.set_brightness_supported || status.data?.set_theme_supported ? '部分可控' : '不可控'}</Tag>}>
+        <Button variant="primary" isLoading={setVolume.isPending} isDisabled={!view.set || busy || !validTarget(target)} onClick={() => {if (validTarget(target)) setVolume.mutate(target!);}} label="应用音量"/>
+      </Panel>
+      <Panel className="device-control-card" title="屏幕显示" extra={<Tag color={status.data?.set_brightness_supported || status.data?.set_theme_supported ? 'green' : 'default'}>{status.data?.set_brightness_supported || status.data?.set_theme_supported ? '部分可控' : '不可控'}</Tag>}>
         <label htmlFor="device-brightness">目标亮度</label>
         <Space.Compact block><Slider id="device-brightness" className="volume-slider" min={5} max={100} value={brightness ?? 50} disabled={!status.data?.set_brightness_supported || busy} onChange={setBrightness}/><InputNumber min={5} max={100} value={brightness} disabled={!status.data?.set_brightness_supported || busy} onChange={setBrightness}/></Space.Compact>
-        <Button disabled={!status.data?.set_brightness_supported || busy || !Number.isInteger(brightness)} onClick={() => setScreen.mutate({brightness:brightness!})}>应用亮度</Button>
+        <Button isDisabled={!status.data?.set_brightness_supported || busy || !Number.isInteger(brightness)} onClick={() => setScreen.mutate({brightness:brightness!})} label="应用亮度"/>
         <label htmlFor="device-theme">明暗主题</label>
         <Select id="device-theme" className="wide" value={theme} disabled={!status.data?.set_theme_supported || busy} options={[{value:'light',label:'浅色'},{value:'dark',label:'深色'}]} onChange={setTheme}/>
-        <Button disabled={!status.data?.set_theme_supported || busy} onClick={() => setScreen.mutate({theme})}>应用主题</Button>
+        <Button isDisabled={!status.data?.set_theme_supported || busy} onClick={() => setScreen.mutate({theme})} label="应用主题"/>
         <p className="subtle">按钮不可用表示当前圆屏没有实时上报对应工具；页面不会根据源码猜测。</p>
-      </Card>
-      <Card className="device-control-card" title="当前回答" extra={<Tag color={status.data?.stop_speech_supported ? 'green' : 'default'}>{status.data?.stop_speech_supported ? '可中止' : '不可用'}</Tag>}>
+      </Panel>
+      <Panel className="device-control-card" title="当前回答" extra={<Tag color={status.data?.stop_speech_supported ? 'green' : 'default'}>{status.data?.stop_speech_supported ? '可中止' : '不可用'}</Tag>}>
         <p>在圆屏回答过长、语音生成过慢或你想换个话题时，立即停止当前轮。</p>
-        <Button danger type="primary" loading={stopSpeech.isPending} disabled={!status.data?.ready || !status.data?.stop_speech_supported || busy} onClick={() => stopSpeech.mutate()}>停止当前回答</Button>
+        <Button variant="destructive" isLoading={stopSpeech.isPending} isDisabled={!status.data?.ready || !status.data?.stop_speech_supported || busy} onClick={() => stopSpeech.mutate()} label="停止当前回答"/>
         {stopResult && <Alert className="device-help" showIcon type={stopResult.state==='stop_sent'?'success':'info'} title={stopResult.state==='stop_sent'?'已中止服务端回答':'当前已经处于空闲'} description={stopResult.state==='stop_sent'?'已清空模型与 TTS 队列，并向圆屏发送停止指令。设备协议没有播放停止回执，因此不写成“硬件已确认”。':'没有正在生成或播放的回答，本次未发送停止指令。'}/>}
         {stopError && <Alert className="device-help" showIcon type="error" title="未能中止当前回答" description={errorMessage(stopError)}/>}
         <p className="subtle">这不会删除对话或记忆，也不会断开圆屏。不等待亮度、音量等 MCP 工具回执。</p>
-      </Card>
-      <Card className="device-operation-card" title="最近一次操作">
+      </Panel>
+      <Panel className="device-operation-card" title="最近一次操作">
         {operationView ? <><h3>{operationView.title}</h3><p>{operationView.description}</p><Descriptions column={1} size="small" items={[...operationDetails.map(([label, value], index) => ({key:String(index), label, children:String(value)})), {key:'time',label:'操作时间',children:operation!.at}]}/></> : <><h3>尚未发送指令</h3><p>先读取当前音量，或选择目标音量后应用。</p></>}
         <p className="subtle">若请求超时，音量可能已经改变。先读取核对，不要连续重试。</p>
-      </Card>
+      </Panel>
     </div>
-    <Card className="device-snapshot-card" title="设备快照" extra={<Tag color={snapshot ? (status.data?.ready && !status.error ? 'blue' : 'gold') : 'default'}>{readSnapshot.isPending?'读取中':snapshot?(status.data?.ready && !status.error?'单次读取':'历史读数'):'等待读取'}</Tag>}><Descriptions column={{xs:1,sm:3}} items={[
+    <Panel className="device-snapshot-card" title="设备快照" extra={<Tag color={snapshot ? (status.data?.ready && !status.error ? 'blue' : 'gold') : 'default'}>{readSnapshot.isPending?'读取中':snapshot?(status.data?.ready && !status.error?'单次读取':'历史读数'):'等待读取'}</Tag>}><Descriptions column={{xs:1,sm:3}} items={[
       {key:'battery',label:'电池与充电',children:snapshotValue(Boolean(snapshot?.battery), snapshot?.battery ? `${snapshot.battery.level}% · ${snapshot.battery.charging?'充电中':'未充电'}` : unsupported)},
       {key:'network',label:'Wi‑Fi 信号',children:snapshotValue(Boolean(snapshot?.network), snapshot?.network?.signal === 'strong'?'强':snapshot?.network?.signal === 'medium'?'中':snapshot?.network?.signal === 'weak'?'弱':unsupported)},
       {key:'temperature',label:'芯片温度',children:snapshotValue(Boolean(snapshot?.chip), snapshot?.chip ? `${snapshot.chip.temperature} ℃` : unsupported)},
       {key:'brightness',label:'屏幕亮度',children:snapshotValue(Number.isInteger(snapshot?.brightness), snapshot?.brightness ?? unsupported)},
       {key:'theme',label:'屏幕主题',children:snapshotValue(Boolean(snapshot?.theme), snapshot?.theme === 'dark'?'深色':snapshot?.theme === 'light'?'浅色':unsupported)},
-    ]}/><p className="subtle">{snapshotAt ? `读取于 ${new Date(snapshotAt).toLocaleTimeString('zh-CN', {hour12:false})}。` : '点击页面右上角“读取设备快照”取得当前值。'} 这是一次主动读取，不是持续监测；为保护隐私不显示 Wi‑Fi 名称。{snapshot && (!status.data?.ready || status.error) ? ' 当前连接不可用，上述内容只代表上一次成功快照。' : ''}</p></Card>
+    ]}/><p className="subtle">{snapshotAt ? `读取于 ${new Date(snapshotAt).toLocaleTimeString('zh-CN', {hour12:false})}。` : '点击页面右上角“读取设备快照”取得当前值。'} 这是一次主动读取，不是持续监测；为保护隐私不显示 Wi‑Fi 名称。{snapshot && (!status.data?.ready || status.error) ? ' 当前连接不可用，上述内容只代表上一次成功快照。' : ''}</p></Panel>
     <Alert className="device-help" type="info" showIcon title="待机时可能暂不可控" description="圆屏进入聆听状态后才可能建立活动连接。显示“请唤醒圆屏”时，先轻触设备，再刷新状态；不需要重新配网。"/>
     {operation?.error && <p role="status">{errorMessage(operation.error)}</p>}
 </>},
       {key:'diagnostics',label:'语音时序与诊断',children:<>
         <DiagnosticsPanel snapshot={diagnostics.data} loading={session.isPending || diagnostics.isFetching}
           error={session.isError || diagnostics.isError} onRefresh={() => {if (session.isSuccess) void diagnostics.refetch();}}/>
-        {status.data?.voice_latency ? <VoiceLatencyCard value={status.data.voice_latency} prefetch={status.data.voice_asr_prefetch}/> : <Card className="device-latency-card" title="最近一次圆屏首句时序"><p className="subtle">当前连接还没有可用的完整时序。与圆屏完成一轮语音对话后，本页会分开显示记忆、模型、首句组织、TTS 和发送等待。</p></Card>}
+        {status.data?.voice_latency ? <VoiceLatencyCard value={status.data.voice_latency} prefetch={status.data.voice_asr_prefetch}/> : <Panel className="device-latency-card" title="最近一次圆屏首句时序"><p className="subtle">当前连接还没有可用的完整时序。与圆屏完成一轮语音对话后，本页会分开显示记忆、模型、首句组织、TTS 和发送等待。</p></Panel>}
     {status.data?.voice_prediction_shadow&&<VoicePredictionShadowCard value={status.data.voice_prediction_shadow}/>}
-    {status.data?.voice_feedback&&<Card title="等待反馈与真正答案">
+    {status.data?.voice_feedback&&<Panel title="等待反馈与真正答案">
       <Descriptions column={3} items={[
         {key:'feedback',label:'入口 → 提示首包',children:elapsed(status.data.voice_feedback.first_feedback_ms)},
         {key:'answer',label:'入口 → 真正答案首包',children:elapsed(status.data.voice_feedback.first_answer_ms)},
@@ -282,7 +284,7 @@ export function DeviceApp() {
       ]}/>
       <p className="subtle">两项首包均在实际发送时记录，尚不包含设备缓冲。等待提示不算作真正答案；快速回答会跳过提示。联网时模型首次输出可能是搜索决定。</p>
       {status.data.voice_feedback.status==='query_failed'&&<Alert type="warning" title="本轮联网查询未成功，不能据此声称已查到最新信息。"/>}
-    </Card>}
+    </Panel>}
     {status.data?.natural_interruption && <NaturalInterruptionCard value={status.data.natural_interruption}/>}
 </>},
     ]}/>

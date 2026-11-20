@@ -1,5 +1,6 @@
 import {useEffect, useMemo, useState} from 'react';
-import {Alert, Button, Descriptions, Divider, Form, Input, InputNumber, Select, Space, Switch, Tag} from 'antd';
+import {Button} from '../../components/Button';
+import {Alert, Descriptions, Divider, Form, Input, InputNumber, Select, Space, Switch, Tag} from 'antd';
 import {type ChatApi, type Config, type ModelHealth, type ModelProfiles, type VoiceModelHealth} from '../../api';
 import {modelFailure} from './modelHealth';
 import {settingsFailure} from './settingsFailure';
@@ -93,9 +94,7 @@ export function ModelConnectionSettings({api, config, disabled, onHealth}: {
     {requestError && <Alert className="settings-model-alert" type="error" showIcon title="模型设置操作未完成" description={requestError}/>}
     {config?.insecure_model_transport && <Alert className="settings-model-alert" type="warning" showIcon
       title="当前配置使用 HTTP 明文传输" description="凭据、问题和检索证据可能被链路观察；只在你已接受风险的校园网使用。"/>}
-    <Button type="primary" loading={checking} disabled={disabled || config?.provider !== 'openai_compatible'} onClick={() => void check()}>
-      检测当前模型连接
-    </Button>
+    <Button variant="primary" isLoading={checking} isDisabled={disabled || config?.provider !== 'openai_compatible'} onClick={() => void check()} label="检测当前模型连接"/>
     <p className="subtle">检测只发送固定合成短句，不读取或写入个人记忆，不自动重试，也不代表圆屏语音链路已经可用。</p>
     <Divider>网页模型连接</Divider>
     {profiles?.enabled === false && <Alert type="warning" showIcon title="当前启动方式未开放模型配置管理"/>}
@@ -123,8 +122,8 @@ export function ModelConnectionSettings({api, config, disabled, onHealth}: {
           <Form.Item label="允许 HTTP 明文" name="allow_http" valuePropName="checked"><Switch/></Form.Item>
         </Space>
         {allowHttp && <Alert type="warning" showIcon title="HTTP 会明文传输 Key、对话和记忆证据" description="只应为已知的校园网服务开启；官方 DeepSeek 应使用 HTTPS。"/>}
-        <Button htmlType="submit" type="primary" loading={saving} disabled={disabled}>{liveCampus ? '确认学校服务仍免费，保存并立即应用' : '保存并设为下次启动'}</Button>
-        {liveCampus && editedUrl === profile?.base_url && !editedKey && <Button disabled={disabled || saving} onClick={() => void form.validateFields().then(values => save(values, false), () => {})}>仅保存到下次启动</Button>}
+        <Button type="submit" variant="primary" isLoading={saving} isDisabled={disabled} label={liveCampus ? '确认学校服务仍免费，保存并立即应用' : '保存并设为下次启动'}/>
+        {liveCampus && editedUrl === profile?.base_url && !editedKey && <Button isDisabled={disabled || saving} onClick={() => void form.validateFields().then(values => save(values, false), () => {})} label="仅保存到下次启动"/>}
       </Form>
       {saved && <Alert className="settings-model-alert" type="success" showIcon title="网页模型配置已保存" description={saved}/>}
       {profiles.restart_required && <Alert className="settings-model-alert" type="info" showIcon title="等待重启生效" description={`当前进程：${profiles.current_profile === 'official' ? '官方 DeepSeek' : '学校模型'}；下次启动：${profiles.next_start_profile === 'official' ? '官方 DeepSeek' : '学校模型'}。`}/>}
@@ -133,8 +132,8 @@ export function ModelConnectionSettings({api, config, disabled, onHealth}: {
         <span>圆屏模型</span>
         <Select aria-label="圆屏模型配置档" value={voiceSelected} onChange={setVoiceSelected} style={{minWidth:220}}
           options={profiles.profiles?.map(item => ({value:item.id, label:item.label}))}/>
-        <Button loading={voiceSaving} disabled={disabled || !profiles.voice?.enabled} onClick={() => void saveVoiceSelection()}>保存圆屏选择</Button>
-        <Button loading={voiceChecking} disabled={disabled || !profiles.voice?.enabled} onClick={() => void checkVoice()}>检测圆屏模型连接</Button>
+        <Button isLoading={voiceSaving} isDisabled={disabled || !profiles.voice?.enabled} onClick={() => void saveVoiceSelection()} label="保存圆屏选择"/>
+        <Button isLoading={voiceChecking} isDisabled={disabled || !profiles.voice?.enabled} onClick={() => void checkVoice()} label="检测圆屏模型连接"/>
       </Space>
       {profiles.voice?.enabled ? <Descriptions className="settings-model-alert" bordered size="small" column={1} items={[
         {key:'voice-state',label:'小智磁盘配置',children:profiles.voice.status === 'configured' ? <Tag color="success">已匹配所选档案</Tag> : <Tag color="warning">等待启动器同步</Tag>},

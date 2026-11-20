@@ -1,6 +1,7 @@
 import {useMemo, useState} from 'react';
 import {useMutation, useQuery} from '@tanstack/react-query';
-import {Alert, Button, Descriptions, Select, Space, Table, Tag} from 'antd';
+import {Button} from '../../components/Button';
+import {Alert, Descriptions, Select, Space, Table, Tag} from 'antd';
 import {ApiError, ChatApi, type TTSBenchmarkIndex, type TTSBenchmarkResult} from '../../api';
 import {SpeechPlayer} from './SpeechPlayer';
 import {buildTTSComparison} from './ttsBenchmarkComparison';
@@ -45,7 +46,7 @@ export function TTSBenchmarkPanel({api,enabled}:{api:ChatApi;enabled:boolean}) {
       <Select aria-label="TTS 测试文本" value={caseId} disabled={!index.data||run.isPending} style={{minWidth:220}}
         options={(index.data?.cases??[]).map(item=>({value:item.id,label:`${item.label} · ${item.text_chars} 字`}))}
         onChange={value=>{setCaseId(value);run.reset();}}/>
-      <Button type="primary" loading={run.isPending} disabled={!index.data||run.isPending} onClick={()=>run.mutate()}>运行一次测试</Button>
+      <Button variant="primary" isLoading={run.isPending} isDisabled={!index.data||run.isPending} onClick={()=>run.mutate()} label="运行一次测试"/>
     </Space>
     {index.data&&<p className="subtle">{index.data.cases.find(item=>item.id===caseId)?.text}<br/>{index.data.cases.find(item=>item.id===caseId)?.purpose}</p>}
     {index.data&&<div>

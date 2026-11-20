@@ -1,5 +1,6 @@
 import {useEffect, useRef, useState} from 'react';
-import {Alert, Button, Input, Modal, Select, Slider, Space} from 'antd';
+import {Button} from '../../components/Button';
+import {Alert, Input, Modal, Select, Slider, Space} from 'antd';
 import {ApiError, ChatApi} from '../../api';
 import {SpeechPlayer} from './SpeechPlayer';
 import {CosyVoiceProfileSettings} from './CosyVoiceProfileSettings';
@@ -40,7 +41,7 @@ export function VoiceSettings({api, disabled}: {api: ChatApi; disabled: boolean}
     finally {lock.current = false; setBusy(false);}
   }
   const load = () => run(async () => {setSettings(undefined); const value = await api.request<Settings>('/api/voice-settings'); setSettings(value); setVoice(value.voice ?? '');setProfile(value.profile);setSanoSpeed(value.speed ?? 1);});
-  return <><Button disabled={disabled} onClick={() => {setOpen(true); void load();}}>声音设置</Button>
+  return <><Button isDisabled={disabled} onClick={() => {setOpen(true); void load();}} label="声音设置"/>
     <Modal title="声音设置" open={open} footer={null} closable={!busy} maskClosable={!busy} onCancel={() => {clearAudio(); setOpen(false);}}>
       <Space orientation="vertical" style={{width: '100%'}}>
         {notice && <Alert type="warning" title={notice}/>}
@@ -55,11 +56,11 @@ export function VoiceSettings({api, disabled}: {api: ChatApi; disabled: boolean}
             <label>表达指令</label><Input maxLength={100} value={profile.style} placeholder="例如：年轻女性，声音温柔明亮，语速自然，带着微笑" onChange={event=>setProfile({...profile,style:event.target.value})}/>
             <label>指令强度：{profile.cfg_value.toFixed(1)}</label><Slider min={1} max={3} step={0.1} value={profile.cfg_value} onChange={cfg_value=>setProfile({...profile,cfg_value})}/>
             <label>生成质量</label><Select className="wide" value={profile.quality} options={[{value:'fast',label:'快速（6 步）'},{value:'balanced',label:'均衡（10 步）'},{value:'quality',label:'细致（20 步，更慢）'}]} onChange={quality=>setProfile({...profile,quality})}/>
-            <Space wrap><Button onClick={() => {clearAudio();setProfile({...profile,reference:null,style:'',cfg_value:2,quality:'balanced'});setNotice('已恢复 VoxCPM2 推荐值草稿；点击保存后才会生效。');}}>恢复推荐声音草稿</Button>
-            <Button type="primary" disabled={busy||!settings.service_ready} onClick={()=>void run(async()=>{
+            <Space wrap><Button onClick={() => {clearAudio();setProfile({...profile,reference:null,style:'',cfg_value:2,quality:'balanced'});setNotice('已恢复 VoxCPM2 推荐值草稿；点击保存后才会生效。');}} label="恢复推荐声音草稿"/>
+            <Button variant="primary" isDisabled={busy||!settings.service_ready} onClick={()=>void run(async()=>{
               const value=await api.request<{profile:VoxProfile;profile_digest:string;references:Settings['references']}>('/api/voice-settings','POST',{...profile,expected_profile_digest:settings.profile_digest});
               setProfile(value.profile);setSettings({...settings,profile:value.profile,profile_digest:value.profile_digest,references:value.references});setNotice('声音方案已保存，网页和圆屏下一次合成时使用。');
-            })}>保存声音方案</Button></Space>
+            })} label="保存声音方案"/></Space>
             <p>测试文本：{settings.text}</p><SpeechPlayer api={api} text={settings.text}/>
           </>}
         </>}
@@ -74,12 +75,12 @@ export function VoiceSettings({api, disabled}: {api: ChatApi; disabled: boolean}
             disabled={busy || !settings.editable} onChange={setSanoSpeed}/>
           <small>只改变 sanoTTS 的朗读速度，不改变模型、角色、记忆或圆屏扬声器音量。</small>
           <Space wrap>
-            <Button disabled={busy} onClick={()=>{setSanoSpeed(1);setNotice('已恢复标准语速草稿；点击保存后才会生效。');}}>恢复标准语速草稿</Button>
-            <Button type="primary" disabled={busy || !settings.service_ready || sanoSpeed === settings.speed} onClick={()=>void run(async()=>{
+            <Button isDisabled={busy} onClick={()=>{setSanoSpeed(1);setNotice('已恢复标准语速草稿；点击保存后才会生效。');}} label="恢复标准语速草稿"/>
+            <Button variant="primary" isDisabled={busy || !settings.service_ready || sanoSpeed === settings.speed} onClick={()=>void run(async()=>{
               const value=await api.request<Settings>('/api/voice-settings','POST',{speed:sanoSpeed,expected_digest:settings.digest});
               setSettings({...settings,...value,service_ready:settings.service_ready});setSanoSpeed(value.speed ?? sanoSpeed);
               setNotice('sanoTTS 语速已保存；网页朗读立即使用，圆屏语音重启后使用。');
-            })}>保存说话速度</Button>
+            })} label="保存说话速度"/>
           </Space>
           <p>测试文本：{settings.text}</p>
           <SpeechPlayer api={api} text={settings.text}/>
@@ -99,19 +100,19 @@ export function VoiceSettings({api, disabled}: {api: ChatApi; disabled: boolean}
           <Select aria-label="选择音色" style={{width: '100%'}} value={voice || undefined} disabled={busy || !settings.editable}
             options={settings.voices.map(value => ({value, label: value}))} onChange={value => {clearAudio(); setVoice(value);}}/>
           <p>试听文本：{settings.text}</p>
-          <Button disabled={busy || !settings.voices.includes(voice)} onClick={() => void run(async () => {
+          <Button isDisabled={busy || !settings.voices.includes(voice)} onClick={() => void run(async () => {
             clearAudio(); const blob = await api.voicePreview(voice); audioRef.current = URL.createObjectURL(blob); setAudio(audioRef.current);
-          })}>联网生成试听</Button>
+          })} label="联网生成试听"/>
           {audio && <audio controls src={audio} aria-label="音色试听"/>}
-          <Button type="primary" disabled={busy || !settings.voices.includes(voice) || voice === settings.voice} onClick={() => {
+          <Button variant="primary" isDisabled={busy || !settings.voices.includes(voice) || voice === settings.voice} onClick={() => {
             if (!window.confirm('保存到小智配置并创建原配置备份？不会自动重启小智。')) return;
             void run(async () => {try {
               const value = await api.request<Settings>('/api/voice-settings', 'POST', {voice, expected_digest: settings.digest});
               setSettings(value); setNotice('已保存配置。请停止并重新启动小智，圆屏重新连接后生效。');
             } catch (error) {setSettings(undefined); throw error;}});
-          }}>保存音色</Button>
+          }} label="保存音色"/>
         </>}
-        <Button disabled={busy} onClick={() => void load()}>重新读取配置</Button>
+        <Button isDisabled={busy} onClick={() => void load()} label="重新读取配置"/>
       </Space>
     </Modal></>;
 }

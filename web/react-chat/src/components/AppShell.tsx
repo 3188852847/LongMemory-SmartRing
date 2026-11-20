@@ -4,7 +4,7 @@ import {OrbitMark, StatusIndicator} from './SciFiSurface';
 import {AmbientMotionToggle} from './DigitalAtmosphere';
 import {useMemoryEngine} from '../app/MemoryEngineProvider';
 
-type Page = 'overview' | 'device' | 'display' | 'chat' | 'memories' | 'mechanisms' | 'settings';
+type Page = 'companion' | 'overview' | 'device' | 'display' | 'chat' | 'memories' | 'mechanisms' | 'settings';
 
 const NAV_GROUPS: Array<{label: string; items: Array<{
   page: Page; icon: string; label: string; description: string; to: string;
@@ -12,6 +12,7 @@ const NAV_GROUPS: Array<{label: string; items: Array<{
   {label: '日常使用', items: [
     {page: 'overview', icon: '总', label: '系统总览', description: '服务、模型、记忆与圆屏', to: '/overview'},
     {page: 'chat', icon: '聊', label: '文字聊天', description: '对话与记忆过程', to: '/chat-react'},
+    {page: 'companion', icon: '屋', label: '陪伴小屋', description: '日程、游戏与主动联系', to: '/settings?tab=companion'},
     {page: 'device', icon: '屏', label: '设备状态', description: '连接、快照与基础控制', to: '/device'},
     {page: 'display', icon: '显', label: '圆屏预览', description: '状态、情绪与异常', to: '/display-preview'},
   ]},
@@ -68,12 +69,15 @@ export function AppShell({subtitle, className = '', layout = 'page', sidebar, ch
 export function ConsoleNav({active}: {active: Page}) {
   const engine=useMemoryEngine();
   const location=useLocation();
-  const selected=location.pathname==='/memories'&&new URLSearchParams(location.search).get('view')==='mechanisms'?'mechanisms':active;
+  const params = new URLSearchParams(location.search);
+  const selected = location.pathname === '/settings' && params.get('tab') === 'companion' ? 'companion'
+    : location.pathname === '/memories' && params.get('view') === 'mechanisms' ? 'mechanisms' : active;
   return <>
     <nav className="console-nav" aria-label="控制台导航">
       {NAV_GROUPS.map(group => <section className="nav-group" key={group.label}>
         <h2>{group.label}</h2>
         {group.items.map(item => <NavItem key={item.page} item={item} active={selected === item.page}/>)}
+
       </section>)}
     </nav>
     {engine.phase!=='ready'&&<div className="memory-engine-notice" role="status"><p>{engine.phase==='error'?(engine.issue==='busy'?'引擎暂忙，未取得新身份；保留未知或上次确认的入口。':engine.identity?'记忆身份核对失败；保留上次确认的入口。':'未能确认当前引擎，入口保持中立。'):'正在确认引擎，其他功能可继续使用。'}</p>{engine.phase==='error'&&<button type="button" disabled={engine.refreshing} onClick={engine.refresh}>重新核对引擎</button>}</div>}

@@ -1,5 +1,6 @@
 import {useEffect, useRef, useState} from 'react';
-import {Button, Space, Switch} from 'antd';
+import {Button} from '../../components/Button';
+import {Space, Switch} from 'antd';
 import {Link} from 'react-router-dom';
 import {ApiError, ChatApi} from '../../api';
 import {claimSpeechPlayback} from './speechPlaybackCoordinator';
@@ -211,8 +212,8 @@ export function SpeechPlayer({api, text}: {api: ChatApi; text: string}) {
 
   return <div className="speech-player">
     <Space wrap>
-      <Button size="small" loading={busy} onClick={() => void play()}>网页朗读</Button>
-      <Button size="small" onClick={stop}>停止</Button>
+      <Button size="sm" isLoading={busy} onClick={() => void play()} label="网页朗读"/>
+      <Button size="sm" onClick={stop} label="停止"/>
       <span>说话打断</span>
       <Switch size="small" checked={speechInterrupt} onChange={value => void changeSpeechInterrupt(value)}/>
     </Space>

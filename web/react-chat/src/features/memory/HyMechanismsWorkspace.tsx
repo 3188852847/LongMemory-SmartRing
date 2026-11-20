@@ -1,6 +1,7 @@
 import {useMemo,useState} from 'react';
 import {useQuery} from '@tanstack/react-query';
-import {Alert, Button, Empty, Skeleton, Tag} from 'antd';
+import {Button} from '../../components/Button';
+import {Alert, Empty, Skeleton, Tag} from 'antd';
 import {Link, useSearchParams} from 'react-router-dom';
 import {ApiError, ChatApi} from '../../api';
 import {MemoryEngineApi} from '../../api/memoryEngine';
@@ -78,7 +79,7 @@ export function HyMechanismsWorkspace() {
 
   return <AppShell subtitle="理解记忆怎样形成与使用" className="hy-mechanisms-shell" sidebar={<ConsoleNav active="mechanisms"/>}>
     <PageHeader eyebrow="长期记忆" title="记忆机制" description={tab==='layers'?'选择一层，查看实际保存内容、状态、来源与原生版本。':'从一段原话到一次回答，区分固定版支持、当前接入和真正可得的证据。'}
-      action={<Button disabled={query.isFetching||engine.refreshing} onClick={()=>engine.phase!=='ready'?engine.refresh():void query.refetch()}>刷新声明</Button>}/>
+      action={<Button isDisabled={query.isFetching||engine.refreshing} onClick={()=>engine.phase!=='ready'?engine.refresh():void query.refetch()} label="刷新声明"/>}/>
     {engine.phase!=='ready'&&<Alert showIcon type={engine.phase==='error'?'error':'info'} title={engine.phase==='error'?'当前引擎身份尚未确认':'正在确认当前引擎'} description="其他功能可继续使用；确认前不加载旧引擎数据。"/>}
     {engine.phase==='ready'&&engine.kind!=='hy'&&<Empty description={`${memoryEngineLabel(engine)}，当前未选择 Hy`}><Link to="/memories">进入当前记忆管理</Link><p>本页不会为查看机制而切换引擎、模式或资源。</p></Empty>}
     {query.isError&&<Alert showIcon type="warning" title={data?'未取得新声明，以下保留上次快照':'暂时无法读取机制声明'} description={<>{readFailure(query.error)}{data&&<p>上次快照：{memoryTime(data.observed_at)}。以下状态不是本次实时确认。</p>}</>}/>}

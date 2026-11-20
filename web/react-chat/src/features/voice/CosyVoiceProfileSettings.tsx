@@ -1,6 +1,7 @@
 import {useEffect, useRef, useState} from 'react';
 import {useUnsavedChanges} from '../../app/UnsavedChanges';
-import {Alert, Button, Input, Select, Space} from 'antd';
+import {Button} from '../../components/Button';
+import {Alert, Input, Select, Space} from 'antd';
 import {ApiError, type ChatApi} from '../../api';
 
 export type CosyVoiceProfile = {version: 1; reference_id: string | null; transcript: string; style: string};
@@ -72,11 +73,11 @@ export function CosyVoiceProfileSettings({api, disabled}: {api: ChatApi; disable
         <label htmlFor="cosy-upload">参考录音文件</label><input id="cosy-upload" type="file" accept=".wav,audio/wav" disabled={locked} onChange={event => {const value = event.target.files?.[0]; setFile(value); if (value) setLabel(value.name.replace(/\.wav$/i, '').slice(0, 80));}}/>
         <label htmlFor="cosy-label">声线名称</label><Input id="cosy-label" maxLength={80} disabled={locked} value={label} onChange={event => setLabel(event.target.value)}/>
         <label htmlFor="cosy-upload-transcript">录音原文</label><Input.TextArea id="cosy-upload-transcript" maxLength={500} disabled={locked} rows={3} value={transcript} onChange={event => setTranscript(event.target.value)}/>
-        <Button disabled={locked || !snapshot || !file || !label.trim() || !transcript.trim()} onClick={() => void run(async () => {
+        <Button isDisabled={locked || !snapshot || !file || !label.trim() || !transcript.trim()} onClick={() => void run(async () => {
           if (!file || file.size > 4 * 1024 * 1024 || !/\.wav$/i.test(file.name)) throw new ApiError('invalid_voice_reference', 400);
           const data = await api.request<{item: Reference; references: Reference[]}>('/api/voice-references', 'POST', {audio_base64: await fileBase64(file), label, transcript});
           if (mounted.current && snapshot) {setSnapshot({...snapshot, references: data.references}); setDraft({...draft, reference_id: data.item.id, transcript: data.item.transcript}); clearAudio(); setNotice('录音已加入参考库，已选入草稿；试听并保存后才切换日用声线。');}
-        })}>上传到参考库</Button>
+        })} label="上传到参考库"/>
       </Space></details>
       <label htmlFor="cosy-reference">参考声线</label>
       <Select id="cosy-reference" aria-label="参考声线" className="wide" value={draft.reference_id ?? '__default__'} disabled={locked || !snapshot}
@@ -85,7 +86,7 @@ export function CosyVoiceProfileSettings({api, disabled}: {api: ChatApi; disable
       {draft.reference_id && <><label htmlFor="cosy-reference-transcript">参考录音中的原文</label><Input.TextArea id="cosy-reference-transcript" maxLength={500} rows={3} value={draft.transcript} disabled={locked} onChange={event => {clearAudio(); setDraft({...draft, transcript: event.target.value});}}/><small>不填写表达指令时，模型用这段原文匹配录音，请保持逐字准确。</small></>}
       <label htmlFor="cosy-style">表达指令（可留空）</label>
       <Input id="cosy-style" maxLength={200} value={draft.style} disabled={locked} placeholder="例如：温柔亲切地说话" onChange={event => {clearAudio(); setDraft({...draft, style: event.target.value});}}/>
-      <Space wrap>{styles.map(style => <Button key={style} size="small" disabled={locked} onClick={() => {clearAudio(); setDraft({...draft, style});}}>{style.replace('地说话', '')}</Button>)}</Space>
+      <Space wrap>{styles.map(style => <Button key={style} size="sm" isDisabled={locked} onClick={() => {clearAudio(); setDraft({...draft, style});}} label={style.replace('地说话', '')}/>)}</Space>
       <small>留空时使用参考原文克隆；填写后使用模型的指令合成模式。相似度与语气控制效果会随录音和指令变化。</small>
       </Space>
     </section>
@@ -93,16 +94,16 @@ export function CosyVoiceProfileSettings({api, disabled}: {api: ChatApi; disable
       <h4>试听与保存</h4>
       <p>试听只生成草稿音频。保存后，网页与圆屏共用这份声线；正在生成的语音保持开始时的声音。</p>
       <Space wrap>
-        <Button disabled={locked || !snapshot || snapshot.service_state !== 'ready' || Boolean(draft.reference_id && !draft.transcript.trim())} onClick={() => void run(async () => {clearAudio(); const blob = await api.cosyVoicePreview({...draft}); if (mounted.current) {audioRef.current = URL.createObjectURL(blob); setAudio(audioRef.current); setNotice('草稿试听已生成；尚未保存到日用声线。');}})}>试听草稿</Button>
-        <Button type="primary" disabled={locked || !snapshot || Boolean(draft.reference_id && !draft.transcript.trim())} onClick={() => void run(async () => {
+        <Button isDisabled={locked || !snapshot || snapshot.service_state !== 'ready' || Boolean(draft.reference_id && !draft.transcript.trim())} onClick={() => void run(async () => {clearAudio(); const blob = await api.cosyVoicePreview({...draft}); if (mounted.current) {audioRef.current = URL.createObjectURL(blob); setAudio(audioRef.current); setNotice('草稿试听已生成；尚未保存到日用声线。');}})} label="试听草稿"/>
+        <Button variant="primary" isDisabled={locked || !snapshot || Boolean(draft.reference_id && !draft.transcript.trim())} onClick={() => void run(async () => {
           const next = await api.request<Snapshot>('/api/voice-profile', 'POST', {profile: draft, expected_profile_digest: snapshot?.profile_digest});
           if (mounted.current) {setSnapshot(next); setDraft(next.profile); clearAudio(); setNotice(next.activation === 'next_synthesis' ? '声音档案已保存，网页和圆屏从下一次合成开始使用；当前语音保持原声线。' : '声音档案已保存；启动新版 CosyVoice 3 服务后生效，当前声线尚未切换。');}
-        })}>保存日用声线</Button>
-        <Button disabled={locked} onClick={() => {clearAudio(); setDraft({...defaultProfile}); setNotice('已恢复原日用声线草稿，保存后才会生效。');}}>恢复原声线草稿</Button>
-        <Button disabled={locked} onClick={() => dirty ? setReloadRequested(true) : void run(load)}>重新读取声音档案</Button>
+        })} label="保存日用声线"/>
+        <Button isDisabled={locked} onClick={() => {clearAudio(); setDraft({...defaultProfile}); setNotice('已恢复原日用声线草稿，保存后才会生效。');}} label="恢复原声线草稿"/>
+        <Button isDisabled={locked} onClick={() => dirty ? setReloadRequested(true) : void run(load)} label="重新读取声音档案"/>
       </Space>
       {reloadRequested && <Alert type="warning" title="重新读取会放弃当前草稿" description="其他页面已保存的档案会成为新的编辑起点。"
-        action={<Space wrap><Button disabled={locked} onClick={() => void run(load)}>放弃草稿并重新读取</Button><Button disabled={locked} onClick={() => setReloadRequested(false)}>保留草稿</Button></Space>}/>}
+        action={<Space wrap><Button isDisabled={locked} onClick={() => void run(load)} label="放弃草稿并重新读取"/><Button isDisabled={locked} onClick={() => setReloadRequested(false)} label="保留草稿"/></Space>}/>}
       {audio && <audio src={audio} controls aria-label="CosyVoice 声音草稿试听"/>}
       {snapshot && <small>固定试听文本：{snapshot.preview_text}</small>}
       <p className="voice-activation">{snapshot?.activation === 'next_synthesis' ? '生效时机：保存后的下一次合成。' : '生效时机：启动支持声音档案的服务后。'}录音相似度与实际语气仍需听感核对。</p>

@@ -1,4 +1,5 @@
-import {Alert,Button} from 'antd';
+import {Button} from '../../components/Button';
+import {Alert} from 'antd';
 import type {HyLayerPage} from '../../api/hyLayerData';
 import type {HySemanticStatus,HySemanticTask} from '../../api/hySemantic';
 import {memoryTime} from './HyMemoryWorkspace';
@@ -20,7 +21,7 @@ export function HyLayerStatus({page,capabilities,runtimeSnapshot,semanticSnapsho
   const gates=semanticSnapshot?{runtime:semanticSnapshot.runtime,observed_at:semanticSnapshot.observed_at,stale:Boolean(error)||loading}:runtimeSnapshot;
   return <details className="hy-layer-capability" aria-label="分层接入与运行证据">
     <summary>接入与运行证据 <span>配置：{labels[view.expected.state]}；内容：{labels[view.coverage.state]}</span></summary>
-    {onRead&&<Button aria-label={semanticSnapshot?'刷新实例状态':'读取实例状态'} loading={loading} disabled={readDisabled} onClick={onRead}>{semanticSnapshot?'刷新实例状态':'读取实例状态'}</Button>}
+    {onRead&&<Button isLoading={loading} isDisabled={readDisabled} onClick={onRead} label={semanticSnapshot?'刷新实例状态':'读取实例状态'}/>}
     {Boolean(error)&&<Alert type="warning" title={semanticSnapshot?'未取得新实例状态，以下保留上次快照':'实例能力尚未确认'} description={semanticReadFailure(error)}/>}
     {loading&&<p role="status">正在读取实例证据；已有状态为上次快照。</p>}
     <dl>{axes.map(([axis,title])=><div key={axis}><dt>{title}</dt><dd><strong>{labels[view[axis].state]}</strong><p>{view[axis].description}</p><small>{view[axis].observed_at?`证据读取于 ${memoryTime(view[axis].observed_at)}`:'该项证据时间未提供'}</small></dd></div>)}</dl>

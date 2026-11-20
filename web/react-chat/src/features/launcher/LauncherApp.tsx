@@ -1,5 +1,6 @@
 import {useEffect, useRef, useState} from 'react';
-import {Alert, Button, Checkbox, Drawer, Input, Modal, Segmented, Select, Switch} from 'antd';
+import {Button} from '../../components/Button';
+import {Alert, Checkbox, Drawer, Input, Modal, Segmented, Select, Switch} from 'antd';
 import {OrbitMark, SciFiSurface, StatusIndicator} from '../../components/SciFiSurface';
 import {AmbientMotionToggle} from '../../components/DigitalAtmosphere';
 import {StateCore} from '../../components/StateCore';
@@ -155,7 +156,7 @@ export function LauncherApp({api, pollMs = 1200}: {api: LauncherApi; pollMs?: nu
     <a className="skip-link" href="#launcher-main">跳到主要内容</a>
     <header className="launcher-header">
       <div className="launcher-brand"><OrbitMark/><span><strong>智慧圆屏</strong><small>你的陪伴，从这里开始</small></span></div>
-      <div className="launcher-header-actions"><AmbientMotionToggle/><Button type="text" className="launcher-settings-trigger" onClick={openSettings} disabled={!snapshot || pending || closed}>启动设置 <span aria-hidden="true">↗</span></Button></div>
+      <div className="launcher-header-actions"><AmbientMotionToggle/><Button variant="ghost" className="launcher-settings-trigger" onClick={openSettings} isDisabled={!snapshot || pending || closed} label="启动设置">启动设置 <span aria-hidden="true">↗</span></Button></div>
     </header>
     <main id="launcher-main" className="launcher-main">
       <section className="launcher-copy">
@@ -180,20 +181,20 @@ export function LauncherApp({api, pollMs = 1200}: {api: LauncherApi; pollMs?: nu
         <p className="launcher-state" aria-live="polite">{closed ? '服务已停止，面板已退出' : snapshot ? stateText[snapshot.state] : '正在读取本机状态'}</p>
         <p className="launcher-state-detail">{closed ? '下次双击启动入口即可回来。' : snapshot?.message || '仅检查状态，不会自动启动服务。'}</p>
         <div className="launcher-primary-actions">
-          {snapshot?.state === 'ready' ? <><Button type="primary" size="large" disabled={busy || closed || !snapshot.console_url} onClick={() => void action('open_console')}>进入陪伴空间 <span aria-hidden="true">↗</span></Button>
-            <Button type="text" disabled={!snapshot.can_stop || busy || closed} onClick={() => setConfirmation('stop')}>停止服务</Button></>
-            : snapshot?.state === 'failed' && snapshot.can_stop ? <Button type="primary" size="large" aria-label="重试停止" disabled={busy || closed} onClick={() => setConfirmation('stop')}>重试停止</Button>
-            : <Button type="primary" size="large" aria-label={snapshot?.state === 'failed' ? '重新启动' : '开启陪伴'} disabled={!snapshot?.can_start || busy || closed || Boolean(error)} onClick={() => void action('start')} loading={snapshot?.state === 'starting' || pending}>{snapshot?.state === 'failed' ? '重新启动' : '开启陪伴'}</Button>}
+          {snapshot?.state === 'ready' ? <><Button variant="primary" size="lg" isDisabled={busy || closed || !snapshot.console_url} onClick={() => void action('open_console')} label="进入陪伴空间">进入陪伴空间 <span aria-hidden="true">↗</span></Button>
+            <Button variant="ghost" isDisabled={!snapshot.can_stop || busy || closed} onClick={() => setConfirmation('stop')} label="停止服务"/></>
+            : snapshot?.state === 'failed' && snapshot.can_stop ? <Button variant="primary" size="lg" isDisabled={busy || closed} onClick={() => setConfirmation('stop')} label="重试停止"/>
+            : <Button variant="primary" size="lg" isDisabled={!snapshot?.can_start || busy || closed || Boolean(error)} onClick={() => void action('start')} isLoading={snapshot?.state === 'starting' || pending} label={snapshot?.state === 'failed' ? '重新启动' : '开启陪伴'}/>}
         </div>
       </section>
-      {error && <Alert className="launcher-error" type="error" title="需要处理" description={error} showIcon action={<Button disabled={pending || closed} onClick={refreshStatus}>刷新状态</Button>}/>}
+      {error && <Alert className="launcher-error" type="error" title="需要处理" description={error} showIcon action={<Button isDisabled={pending || closed} onClick={refreshStatus} label="刷新状态"/>}/>}
       {snapshot?.settings.network_auto && snapshot.network && <div role="status" aria-live="polite"><Alert type={snapshot.network.state === 'network_stable' ? 'info' : 'warning'} title="圆屏网络自动跟踪" description={<>{snapshot.network.message}{snapshot.network.address && <span> 当前检测地址：{snapshot.network.address}</span>}</>} showIcon/></div>}
       <SciFiSurface className="launcher-services">
         <div className="launcher-services-heading"><h2>连接状态</h2><span>来自本机服务</span></div>
         {snapshot?.settings.voice && <div className="launcher-state-detail">
           <strong>圆屏 OTA 地址</strong>
           {otaUrl ? <p><code style={{overflowWrap: 'anywhere'}}>{otaUrl}</code>{' '}
-            <Button size="small" onClick={() => void copyOtaUrl()}>复制地址</Button>{' '}
+            <Button size="sm" onClick={() => void copyOtaUrl()} label="复制地址"/>{' '}
             <span role="status">{copyResult.url === otaUrl && copyResult.message}</span></p>
             : <p>请在启动设置中确认电脑局域网 IP 和圆屏 OTA 端口。</p>}
         </div>}
@@ -207,16 +208,16 @@ export function LauncherApp({api, pollMs = 1200}: {api: LauncherApi; pollMs?: nu
         </div>}
       </SciFiSurface>
     </main>
-    <footer className="launcher-footer"><span>关闭此页面，服务仍会继续运行。</span><Button type="text" disabled={!snapshot || busy || closed} onClick={() => setConfirmation('shutdown')}>停止服务并退出面板</Button></footer>
+    <footer className="launcher-footer"><span>关闭此页面，服务仍会继续运行。</span><Button variant="ghost" isDisabled={!snapshot || busy || closed} onClick={() => setConfirmation('shutdown')} label="停止服务并退出面板"/></footer>
     <Drawer title="启动设置" open={settingsOpen} onClose={closeSettings} size={480} className="launcher-drawer"
-      footer={<div className="launcher-drawer-footer"><span>保存后，下次启动生效</span><Button type="primary" onClick={() => void saveSettings()} disabled={settingsLocked || pending || Boolean(needsConsent && !draft?.http_risk_ack)}>保存设置</Button></div>}>
+      footer={<div className="launcher-drawer-footer"><span>保存后，下次启动生效</span><Button variant="primary" onClick={() => void saveSettings()} isDisabled={settingsLocked || pending || Boolean(needsConsent && !draft?.http_risk_ack)} label="保存设置"/></div>}>
       {settingsLocked && <Alert type="info" title="请先停止服务，再修改启动设置。" showIcon/>}
-      {error && <Alert type="error" title={error} showIcon action={error.includes('其他页面') ? <Button onClick={openSettings}>载入最新设置</Button> : undefined}/>}
+      {error && <Alert type="error" title={error} showIcon action={error.includes('其他页面') ? <Button onClick={openSettings} label="载入最新设置"/> : undefined}/>}
       <Segmented className="launcher-settings-tabs" block aria-label="启动设置分类" options={settingsGroups.map(({value, label}) => ({value, label}))} value={settingsGroup} onChange={value => setSettingsGroup(String(value))}/>
       {draft && <div className="launcher-settings-form">
         <TransitionSurface identity={settingsGroup}>
           {settingsGroup === 'memory' && snapshot?.settings.memory_backend === 'hy_memory' && <>
-            <Button danger disabled={!snapshot.hy_reset_revision || settingsDirty || pending} onClick={() => {setResetDone(false); setResetRevision(snapshot.hy_reset_revision ?? ''); setResetPhrase('');}}>清空当前记忆库</Button>
+            <Button variant="destructive" isDisabled={!snapshot.hy_reset_revision || settingsDirty || pending} onClick={() => {setResetDone(false); setResetRevision(snapshot.hy_reset_revision ?? ''); setResetPhrase('');}} label="清空当前记忆库"/>
             <p role="status">{resetDone ? '已切换到空记忆库，下次开启陪伴时使用。' : '停止陪伴服务后，可一次清空 Hy 的记忆、画像和记忆来源。'}</p>
           </>}
           {settingsGroup === 'daily' && <div className="launcher-switch-row"><label htmlFor="launcher-voice">连接圆屏语音</label><Switch id="launcher-voice" checked={draft.voice} disabled={settingsLocked} onChange={voice => setDraft({...draft, voice})}/></div>}

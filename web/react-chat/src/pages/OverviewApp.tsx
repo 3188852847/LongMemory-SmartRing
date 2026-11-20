@@ -1,5 +1,6 @@
 import {useQuery} from '@tanstack/react-query';
-import {Alert, Card, Tag} from 'antd';
+import {Panel} from '../components/Panel';
+import {Alert, Tag} from 'antd';
 import {Link} from 'react-router-dom';
 import {ChatApi, type Config, type DeviceStatus, type RuntimeStatus} from '../api';
 import {AppShell, ConsoleNav} from '../components/AppShell';
@@ -62,14 +63,14 @@ export function OverviewApp() {
       action={<span className="overview-refresh-note">圆屏每 5 秒核对一次</span>}/>
     {session.isError && <Alert type="error" showIcon title="控制台会话不可用" description="网页后端可能已经停止。请回到启动面板查看受管服务状态；本页没有自动重启任何进程。"/>}
     <ConsoleStatusRail config={config.data} device={device.data} deviceFailed={device.isError} memoryCountState="unavailable"/>
-      <Card className="overview-start" title="开始使用" extra={<Tag color={consoleReady ? 'green' : session.isError || config.isError ? 'red' : 'gold'}>{consoleReady ? config.data?.provider === 'fake' ? '文字链路可测试（Fake）' : config.data?.enabled ? '网页控制台可用' : '聊天未启用' : session.isError || config.isError ? '读取失败' : '正在核对'}</Tag>}>
+      <Panel className="overview-start" title="开始使用" extra={<Tag color={consoleReady ? 'green' : session.isError || config.isError ? 'red' : 'gold'}>{consoleReady ? config.data?.provider === 'fake' ? '文字链路可测试（Fake）' : config.data?.enabled ? '网页控制台可用' : '聊天未启用' : session.isError || config.isError ? '读取失败' : '正在核对'}</Tag>}>
         <div className="overview-actions">
           <Link to="/chat-react"><strong>文字聊天</strong><span>输入、回答和本轮记忆证据</span></Link>
           <Link to="/device"><strong>设备与状态</strong><span>圆屏连接、音量、亮度和快照</span></Link>
           <Link to="/memories"><strong>记忆管理</strong><span>{engine.kind==='hy'?'真实条目、来源、画像与机制':'确认当前引擎后查看内容与来源'}</span></Link>
           <Link to="/display-preview"><strong>圆屏外观</strong><span>状态视觉、皮肤与动态壁纸</span></Link>
         </div>
-      </Card>
+      </Panel>
       <Alert className="overview-attention" showIcon type={attention.some(item => item.tone === 'error') ? 'error' : attention.length ? 'warning' : 'info'}
         title={attention.length ? `${attention.length} 项状态需要关注` : findings[0]?.title ?? '状态仍在读取，或当前模式没有足够事实'}
         description={attention.length ? <div>{attention.slice(0,2).map(item => <p key={item.code}>{item.title}{item.path && <Link to={item.path}>{item.action}</Link>}</p>)}{attention.length > 2 && <p>其余项目可在诊断详情中查看。</p>}</div> : '详细结论和生效边界可在下方展开核对。'}/>
@@ -79,7 +80,7 @@ export function OverviewApp() {
     </details>
     <details className="overview-details"><summary>查看服务、回答与圆屏链路详情</summary>
     <section className="overview-grid" aria-label="系统链路详情">
-      <Card className="overview-runtime-card" title="受管服务"
+      <Panel className="overview-runtime-card" title="受管服务"
         extra={<Tag color={runtimeTone(runtime.data?.state)}>{runtime.data?.state === 'ready' ? '启动面板在线' : runtime.data?.state === 'stale' ? '状态已过期' : runtime.data?.enabled === false ? '非启动面板模式' : '正在核对'}</Tag>}>
         <dl className="overview-facts">
           <div><dt>网页控制台</dt><dd>{serviceLabel(runtime.data?.services.console)}</dd></div>
@@ -90,8 +91,8 @@ export function OverviewApp() {
           <div><dt>状态新鲜度</dt><dd>{runtime.data?.age_seconds !== undefined ? `${runtime.data.age_seconds.toFixed(1)} 秒前` : '不可用'}</dd></div>
         </dl>
         <p className="subtle">这里只显示启动面板拥有的进程；手动终端启动会标为“非启动面板模式”。进程运行不代表模型、设备或声音已经可用，请结合独立状态判断。</p>
-      </Card>
-      <Card title="当前回答链路" extra={<Tag color={model.tone}>{model.label}</Tag>}>
+      </Panel>
+      <Panel title="当前回答链路" extra={<Tag color={model.tone}>{model.label}</Tag>}>
         <dl className="overview-facts">
           <div><dt>模型</dt><dd>{config.data?.model ?? '未知'}</dd></div>
           <div><dt>记忆方法</dt><dd>{memoryEngineLabel(engine)}</dd></div>
@@ -100,8 +101,8 @@ export function OverviewApp() {
         </dl>
         <p className="subtle">{model.detail}</p>
         <Link className="overview-detail-link" to="/settings?tab=model">打开模型与服务诊断</Link>
-      </Card>
-      <Card title="当前圆屏链路" extra={<Tag color={device.isError ? 'red' : device.data?.ready ? 'green' : 'gold'}>{device.isError ? '状态未知' : device.data?.ready ? '已连接' : '等待圆屏'}</Tag>}>
+      </Panel>
+      <Panel title="当前圆屏链路" extra={<Tag color={device.isError ? 'red' : device.data?.ready ? 'green' : 'gold'}>{device.isError ? '状态未知' : device.data?.ready ? '已连接' : '等待圆屏'}</Tag>}>
         <dl className="overview-facts">
           <div><dt>活动连接</dt><dd>{device.data?.connection_count ?? '未知'}</dd></div>
           <div><dt>设备快照</dt><dd>{device.data?.read_status_supported ? '可读取' : '当前不可读取'}</dd></div>
@@ -110,13 +111,13 @@ export function OverviewApp() {
         </dl>
         <p className="subtle">小智进程存在不等于圆屏已连接；最终以当前活动连接和设备工具回执为准。</p>
         <Link className="overview-detail-link" to="/device">打开设备诊断</Link>
-      </Card>
-      <Card title="设置与记忆">
+      </Panel>
+      <Panel title="设置与记忆">
         <div className="overview-actions compact">
           <Link to="/settings"><strong>设置中心</strong><span>模型、记忆后端、角色、声音与外观</span></Link>
           <Link to={engine.kind==='hy'?'/memories?view=mechanisms':'/memories'}><strong>{engine.kind==='hy'?'记忆机制':'记忆管理'}</strong><span>当前引擎、可得证据与观测边界</span></Link>
         </div>
-      </Card>
+      </Panel>
     </section>
     </details>
   </AppShell>;

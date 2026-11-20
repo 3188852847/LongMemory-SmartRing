@@ -29,7 +29,7 @@
 .display-preview-shell .round-interaction-options { display: flex; flex-wrap: wrap; gap: 8px; }
 .display-preview-shell .round-interaction-options .ant-radio-button-wrapper { display: inline-flex; align-items: center; justify-content: center; flex: 0 1 auto; max-width: 100%; min-height: 44px; height: auto; padding: 8px 14px; line-height: 1.5; white-space: normal; border-inline-start-width: 1px; border-radius: var(--radius-sm); }
 .display-preview-shell .round-interaction-options .ant-radio-button-wrapper::before { display: none; }
-.display-preview-shell .display-task-content .ant-card-head-title { white-space: normal; }
+.display-preview-shell .display-task-content .companion-panel-head-title { white-space: normal; }
 .display-preview-shell .round-skin-actions .ant-select { min-width: 0 !important; width: 100%; }
 .display-preview-shell .round-skin-actions { display: flex; }
 .display-preview-shell .round-skin-actions .ant-btn { height: auto; min-height: 44px; white-space: normal; }
@@ -72,8 +72,8 @@
   .display-preview-shell .display-stage .round-display { width: 110px; }
   .display-preview-shell .display-stage .subtle { display: none; }
   .display-preview-shell .display-preview-caption { flex-wrap: wrap; font-size: .8rem; }
-  .display-preview-shell .display-task-content .ant-card-body { padding: 14px; }
-  .display-preview-shell .display-task-content .ant-card-head-wrapper { flex-wrap: wrap; gap: 8px; padding-block: 10px; }
+  .display-preview-shell .display-task-content .companion-panel-body { padding: 14px; }
+  .display-preview-shell .display-task-content .companion-panel-head-wrapper { flex-wrap: wrap; gap: 8px; padding-block: 10px; }
   .display-preview-shell .round-skin-color-grid, .display-preview-shell .wallpaper-import-grid { grid-template-columns: 1fr; }
 }
 .whale-touch-screen { position: relative; touch-action: none; user-select: none; cursor: pointer; }

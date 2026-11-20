@@ -1,4 +1,9 @@
 import {createContext, type ReactNode, useContext, useEffect, useMemo, useState} from 'react';
+import '@astryxdesign/core/reset.css';
+import '@astryxdesign/core/astryx.css';
+import '@astryxdesign/theme-neutral/theme.css';
+import {Theme} from '@astryxdesign/core/theme';
+import {neutralTheme} from '@astryxdesign/theme-neutral/built';
 import {ConfigProvider, theme} from 'antd';
 import {KEY, normalize, read, save, apply} from '../../../assets/appearance.mjs';
 
@@ -87,6 +92,7 @@ export function AppearanceProvider({children}: {children: ReactNode}) {
   // Drawer/Modal 经 Portal 挂到 body，必须在组件库层关闭运动，不能只靠页面 CSS。
   const motion = !(prefs.motion === 'reduce' || (prefs.motion === 'system' && systemReducedMotion));
   return <AppearanceContext.Provider value={value}>
+    <Theme theme={neutralTheme} mode={dark ? 'dark' : 'light'}>
     <ConfigProvider csp={{nonce}} theme={{algorithm: dark ? theme.darkAlgorithm : theme.defaultAlgorithm,
       token: {
         motion,
@@ -119,6 +125,7 @@ export function AppearanceProvider({children}: {children: ReactNode}) {
     }}>
       {children}
     </ConfigProvider>
+    </Theme>
   </AppearanceContext.Provider>;
 }
 

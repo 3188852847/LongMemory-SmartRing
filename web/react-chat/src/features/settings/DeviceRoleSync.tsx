@@ -1,5 +1,5 @@
 import {useRef, useState} from 'react';
-import {Button} from 'antd';
+import {Button} from '../../components/Button';
 import {ChatApi} from '../../api';
 import {settingsFailure} from './settingsFailure';
 
@@ -27,7 +27,7 @@ export function DeviceRoleSync({api, disabled}: {api: ChatApi; disabled: boolean
     finally {setPreview(undefined); lock.current = false; setBusy(false);}
   }
   return <section aria-label="圆屏角色同步"><h3>圆屏角色同步</h3><p>仅同步已经保存的版本，不同步编辑框草稿。</p>
-    <Button disabled={disabled || busy} onClick={() => void check()}>检查小智配置</Button>{' '}
-    <Button disabled={disabled || busy || !preview || preview.config_matches} onClick={() => void sync()}>确认同步已保存角色</Button>
+    <Button isDisabled={disabled || busy} onClick={() => void check()} label="检查小智配置"/>{' '}
+    <Button isDisabled={disabled || busy || !preview || preview.config_matches} onClick={() => void sync()} label="确认同步已保存角色"/>
     <p role="status">{notice}</p></section>;
 }

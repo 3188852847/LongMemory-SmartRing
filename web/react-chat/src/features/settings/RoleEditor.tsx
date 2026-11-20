@@ -1,5 +1,6 @@
 import {useCallback, useEffect, useRef, useState} from 'react';
-import {Button, Input, Select, Space, Switch} from 'antd';
+import {Button} from '../../components/Button';
+import {Input, Select, Space, Switch} from 'antd';
 import {ChatApi} from '../../api';
 import {DeviceRoleSync} from './DeviceRoleSync';
 import {applyRolePreferences, DEFAULT_ROLE_PREFERENCES, readRolePreferences, type RolePreferences} from './rolePreferences';
@@ -58,8 +59,8 @@ export function RoleEditor({api, disabled, onSaved}: {api: ChatApi; disabled: bo
       <label htmlFor="role-prompt">人格卡</label>
       <Input.TextArea id="role-prompt" value={prompt} rows={9} maxLength={12000} disabled={disabled || busy || !settings} onChange={e => setPrompt(e.target.value)}/>
       <div>
-      <Button type="primary" disabled={disabled || busy || unknown || !settings || !name.trim() || !prompt.trim()} onClick={() => void save()}>保存并用于网页下一轮</Button>{' '}
-      <Button disabled={disabled || busy} onClick={() => {if (confirm('重新读取会替换当前草稿，继续吗？')) void load();}}>重新读取</Button>
+      <Button variant="primary" isDisabled={disabled || busy || unknown || !settings || !name.trim() || !prompt.trim()} onClick={() => void save()} label="保存并用于网页下一轮"/>{' '}
+      <Button isDisabled={disabled || busy} onClick={() => {if (confirm('重新读取会替换当前草稿，继续吗？')) void load();}} label="重新读取"/>
       <p role="status">{notice}</p>
       </div>
       <details><summary>预设、历史与表达偏好</summary>
@@ -77,7 +78,7 @@ export function RoleEditor({api, disabled, onSaved}: {api: ChatApi; disabled: bo
             <div><label>互动方式</label><Select aria-label="互动方式" value={preferences.interactionStyle} onChange={value=>setPreferences({...preferences,interactionStyle:value})} options={[{value:'listen_first',label:'倾听为主'},{value:'ask_before_advice',label:'先倾听，再问是否需要建议'},{value:'direct',label:'直接分析和解决'}]}/></div>
             <div><label>表情频率</label><Select aria-label="表情频率" value={preferences.emojiFrequency} onChange={value=>setPreferences({...preferences,emojiFrequency:value})} options={[{value:'none',label:'不使用'},{value:'occasional',label:'偶尔使用'},{value:'natural',label:'轻松聊天时自然使用'}]}/></div>
           </div>
-          <Button size="small" onClick={() => setPreferences({...DEFAULT_ROLE_PREFERENCES})}>恢复推荐表达草稿</Button>
+          <Button size="sm" onClick={() => setPreferences({...DEFAULT_ROLE_PREFERENCES})} label="恢复推荐表达草稿"/>
         </fieldset>
       </div>
       </details>

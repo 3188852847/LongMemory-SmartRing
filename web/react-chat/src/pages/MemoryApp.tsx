@@ -1,5 +1,6 @@
 import {lazy, Suspense} from 'react';
-import {Alert, Button} from 'antd';
+import {Button} from '../components/Button';
+import {Alert} from 'antd';
 import {useSearchParams} from 'react-router-dom';
 import {ChatApi} from '../api';
 import {useMemoryEngine, memoryEngineLabel} from '../app/MemoryEngineProvider';
@@ -15,7 +16,7 @@ export function MemoryApp() {
   if (engine.phase !== 'ready' || engine.kind !== 'hy') {
     return <AppShell subtitle="长期记忆" sidebar={<ConsoleNav active="memories"/>}>
       <Alert type="info" showIcon title={memoryEngineLabel(engine)}
-        action={engine.phase === 'error' && <Button onClick={engine.refresh}>重新核对引擎</Button>}/>
+        action={engine.phase === 'error' && <Button onClick={engine.refresh} label="重新核对引擎"/>}/>
     </AppShell>;
   }
   if (params.get('view') === 'mechanisms') {

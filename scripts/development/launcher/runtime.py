@@ -345,6 +345,7 @@ class Manager:
         self.instance = ""
         self.options = None
         self.status_path = None
+        self.companion = None
         self.runtime_token = None
         self._binding_next_check = 0
         self._binding_ready = False
@@ -536,6 +537,20 @@ class Manager:
                     }}
                 self.services[name] = OwnedService(command, cwd, child_env)
                 self.publish_status("starting")
+            # 陪伴小屋是可选本机服务，独立安装或已启动时不接管外部进程。
+            companion = options.root.resolve() / "local/runtime/companion"
+            python = companion / ".venv/Scripts/python.exe"
+            if python.is_file() and (companion / ".astrbot").is_file():
+                try:
+                    require_no_listener("127.0.0.1", 16185)
+                    child_env = {key: value for key, value in os.environ.items()
+                                 if key.upper() in {"PATH", "SYSTEMROOT", "WINDIR", "TEMP", "TMP", "USERPROFILE",
+                                                   "APPDATA", "LOCALAPPDATA", "PROGRAMDATA", "COMSPEC", "PATHEXT"}}
+                    child_env.update(ASTRBOT_ROOT=str(companion), DASHBOARD_HOST="127.0.0.1", PYTHONUTF8="1")
+                    self.companion = OwnedService(
+                        [str(python), "-m", "astrbot.cli", "run", "--port", "16185"], companion, child_env)
+                except (OSError, AddressBindingError):
+                    pass
         except Exception:
             self.stop()
             raise
@@ -696,6 +711,9 @@ class Manager:
 
     def stop(self):
         self.publish_status("stopping")
+        if self.companion is not None:
+            self.companion.stop()
+            self.companion = None
         errors = []
         for service in reversed(list(self.services.values())):
             try:
